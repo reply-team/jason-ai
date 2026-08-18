@@ -1,0 +1,27 @@
+# .NET build output
+bin/
+obj/
+artifacts/
+publish/
+*.binlog
+
+# Test and coverage results
+TestResults/
+coverage/
+*.trx
+*.coverage
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local environment
+*.local.json
+.env
