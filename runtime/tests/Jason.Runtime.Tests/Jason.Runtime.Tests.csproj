@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../../src/Jason.Runtime/Jason.Runtime.csproj" />
+  </ItemGroup>
+</Project>
