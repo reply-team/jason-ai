@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../../src/Jason.PluginHost/Jason.PluginHost.csproj" />
+  </ItemGroup>
+</Project>
