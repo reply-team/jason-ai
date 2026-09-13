@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- DTOs, operation names, shared JSON options and the discovery contract shared by server and clients.
+       Must stay free of server dependencies: no EF Core, no ASP.NET Core, no Serilog. -->
+</Project>

@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Jason.App/Jason.App.csproj" />
+    <Project Path="src/Jason.Cli/Jason.Cli.csproj" />
+    <Project Path="src/Jason.Contracts/Jason.Contracts.csproj" />
+    <Project Path="src/Jason.PluginHost/Jason.PluginHost.csproj" />
+    <Project Path="src/Jason.Runtime/Jason.Runtime.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Jason.Contracts.Tests/Jason.Contracts.Tests.csproj" />
+  </Folder>
+</Solution>
