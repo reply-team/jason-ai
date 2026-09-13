@@ -106,7 +106,7 @@ operations.
 
 ### 3.2 Existing public ecosystem
 
-The public ecosystem already contains valuable but separate components:
+The public ecosystem consists of these components, which users should meet as one product:
 
 - `reply-team/jason-ai` — this repository: the intended main public entry point for the
   open-source product, holding the runtime, the plugin marketplace, and the runtime and
@@ -117,7 +117,7 @@ The public ecosystem already contains valuable but separate components:
 - [`reply-team/reply-mcp`](https://github.com/reply-team/reply-mcp) — a curated Reply tool
   surface for MCP-capable agent clients.
 
-Users should discover one coherent product rather than mentally assemble independent CLI,
+Nobody should have to mentally assemble independent CLI,
 MCP, skills, runtime, and UI projects.
 
 ### 3.3 The missing product layer
