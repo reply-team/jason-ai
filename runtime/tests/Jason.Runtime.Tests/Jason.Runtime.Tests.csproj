@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="../../src/Jason.Runtime/Jason.Runtime.csproj" />
+    <!-- Tests only: exercises the real CLI against a real runtime in one process. The CLI itself still never references the runtime. -->
+    <ProjectReference Include="../../src/Jason.Cli/Jason.Cli.csproj" />
   </ItemGroup>
 </Project>
