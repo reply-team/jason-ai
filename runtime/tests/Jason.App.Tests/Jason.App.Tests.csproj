@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <!-- Referencing the executable copies jason.dll and its runtimeconfig next to the tests, so end-to-end tests can spawn it. -->
+    <ProjectReference Include="../../src/Jason.App/Jason.App.csproj" />
+  </ItemGroup>
+</Project>
