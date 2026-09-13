@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-publish:
+    name: ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: windows-latest
+            rid: win-x64
+          - os: macos-latest
+            rid: osx-arm64
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore runtime/Jason.slnx
+
+      - name: Build (warnings are errors)
+        run: dotnet build runtime/Jason.slnx --configuration Release --no-restore
+
+      - name: Test (offline)
+        run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build
+
+      - name: Publish self-contained single-file executable
+        run: dotnet publish runtime/src/Jason.App --configuration Release --runtime ${{ matrix.rid }} --self-contained -p:PublishSingleFile=true --output artifacts/publish/${{ matrix.rid }}
+
+      - name: Smoke-test the published executable
+        shell: pwsh
+        run: |
+          $exe = Join-Path "artifacts/publish/${{ matrix.rid }}" ($IsWindows ? "jason.exe" : "jason")
+          $env:JASON_DATA_DIR = Join-Path ([IO.Path]::GetTempPath()) "jason-ci-smoke"
+          $elapsed = Measure-Command { & $exe --version | Tee-Object -Variable version }
+          if ($LASTEXITCODE -ne 0) { throw "jason --version exited with $LASTEXITCODE" }
+          Write-Host "jason --version -> $version ($([int]$elapsed.TotalMilliseconds) ms cold start)"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jason-${{ matrix.rid }}
+          path: artifacts/publish/${{ matrix.rid }}
+          if-no-files-found: error
