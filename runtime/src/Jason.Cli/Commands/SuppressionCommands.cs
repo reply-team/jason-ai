@@ -26,7 +26,7 @@ public static class SuppressionCommands
     {
         var command = new Command("add", "Suppress a channel value. Suppressing one that is already suppressed returns the existing entry.");
         var channel = Channel("The channel the value belongs to, for example email.", required: true);
-        var value = Value("The address or handle to suppress; the runtime normalizes it.", required: true);
+        var value = Value("The channel value to suppress, such as an email address; the runtime normalizes it.", required: true);
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Options.Add(channel);
@@ -52,7 +52,7 @@ public static class SuppressionCommands
     {
         var command = new Command("remove", "Lift a suppression. Removing one that is not there is not an error.");
         var channel = Channel("The channel the value belongs to, for example email.", required: true);
-        var value = Value("The address or handle to stop suppressing.", required: true);
+        var value = Value("The channel value to stop suppressing.", required: true);
         var reason = new Option<string>("--reason")
         {
             Description = "Why the suppression is lifted; recorded in the journal. Required: lifting one is a deliberate act.",
