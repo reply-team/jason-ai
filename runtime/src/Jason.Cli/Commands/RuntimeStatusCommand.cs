@@ -93,5 +93,24 @@ public static class RuntimeStatusCommand
         output.WriteLine($"Started:    {info.StartedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture)}");
         output.WriteLine($"Data dir:   {info.DataDir}");
         output.WriteLine($"Migrations: {info.Database.AppliedMigrations.Count} applied");
+        output.WriteLine($"Dispatcher: {Dispatcher(info.Dispatcher)}");
+    }
+
+    /// <summary>A runtime older than the dispatcher reports no section at all; say so rather than invent a state.</summary>
+    private static string Dispatcher(DispatcherInfo? dispatcher)
+    {
+        if (dispatcher is null)
+        {
+            return "unknown";
+        }
+
+        var state = JsonNamingPolicy.SnakeCaseLower.ConvertName(dispatcher.State.ToString());
+        var lastScan = dispatcher.LastScanAt is null
+            ? "never"
+            : dispatcher.LastScanAt.Value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{state} · tick {dispatcher.TickSeconds} s · {dispatcher.RunningAttempts}/{dispatcher.MaxParallel} attempts · last scan {lastScan}");
     }
 }

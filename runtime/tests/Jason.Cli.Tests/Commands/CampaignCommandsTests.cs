@@ -359,9 +359,13 @@ internal sealed class CliRun : IDisposable
     private readonly TempPaths _paths = new();
     private readonly CliEnvironment _environment;
 
-    public CliRun(string response = "{}", string? standardInput = null)
+    public CliRun(string response = "{}", string? standardInput = null, HttpStatusCode status = HttpStatusCode.OK, bool descriptor = true)
     {
-        _paths.WriteDescriptor(Live);
+        if (descriptor)
+        {
+            _paths.WriteDescriptor(Live);
+        }
+
         _environment = new CliEnvironment(
             Output,
             Error,
@@ -370,7 +374,7 @@ internal sealed class CliRun : IDisposable
             {
                 Url = request.RequestUri!.ToString();
                 Sent = request.Content!.ReadAsStringAsync(CancellationToken.None).GetAwaiter().GetResult();
-                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(response, Encoding.UTF8, "application/json") };
+                return new HttpResponseMessage(status) { Content = new StringContent(response, Encoding.UTF8, "application/json") };
             }),
             standardInput is null ? null : new StringReader(standardInput));
     }

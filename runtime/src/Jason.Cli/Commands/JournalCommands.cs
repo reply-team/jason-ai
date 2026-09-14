@@ -65,12 +65,14 @@ public static class JournalCommands
     {
         var command = new Command("list", "Read the chronicle, newest entry first.");
         var campaign = new Option<string?>("--campaign") { Description = "Only entries of this campaign, as cmp_…." };
+        var workItem = new Option<string?>("--work-item") { Description = "Only entries about this work item, as wi_…." };
         var kind = new Option<string?>("--kind") { Description = "Only entries of this kind." };
         var since = new Option<string?>("--since") { Description = "Only entries at or after this moment, as ISO-8601 UTC — for example 2026-09-14T10:00:00Z." };
         var limit = VerbOptions.Limit();
         var cursor = VerbOptions.Cursor();
         var human = VerbOptions.Human();
         command.Options.Add(campaign);
+        command.Options.Add(workItem);
         command.Options.Add(kind);
         command.Options.Add(since);
         command.Options.Add(limit);
@@ -82,6 +84,7 @@ public static class JournalCommands
             ActorOption.Parse(parseResult.GetValue(actor));
             var body = RequestBody.Empty()
                 .Set("campaign_id", parseResult.GetValue(campaign))
+                .Set("work_item_id", parseResult.GetValue(workItem))
                 .Set("kind", parseResult.GetValue(kind))
                 .Set("since", parseResult.GetValue(since))
                 .Set("limit", parseResult.GetValue(limit))

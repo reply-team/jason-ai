@@ -91,6 +91,8 @@ public class JournalCommandsTests
             "list",
             "--campaign",
             "cmp_A",
+            "--work-item",
+            "wi_A",
             "--kind",
             "decision",
             "--since",
@@ -103,7 +105,18 @@ public class JournalCommandsTests
         Assert.Equal(ExitCodes.Success, exit);
         cli.AssertPosted(
             Operations.JournalList,
-            "{\"campaign_id\":\"cmp_A\",\"kind\":\"decision\",\"since\":\"2026-09-14T10:00:00Z\",\"limit\":5,\"cursor\":\"anJuX0E\"}");
+            "{\"campaign_id\":\"cmp_A\",\"work_item_id\":\"wi_A\",\"kind\":\"decision\",\"since\":\"2026-09-14T10:00:00Z\",\"limit\":5,\"cursor\":\"anJuX0E\"}");
+    }
+
+    [Fact]
+    public async Task List_can_follow_one_work_item_through_the_chronicle()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("journal", "list", "--work-item", "wi_A");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.JournalList, "{\"work_item_id\":\"wi_A\"}");
     }
 
     [Fact]
