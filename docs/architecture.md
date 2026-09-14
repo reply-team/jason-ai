@@ -1406,8 +1406,9 @@ jason-ai/
 ```
 
 Project references enforce two invariants at compile time: the CLI can only reach the runtime
-through the Runtime API (INV-API-001, INV-AUTH-002), and plugin JavaScript never executes inside
-the runtime process (INV-ADP-003) because the plugin-host mode lives in its own project.
+through the Runtime API (INV-API-001, INV-AUTH-002), and the runtime library references neither
+the plugin host nor the JavaScript engine — only the executable composes both — so plugin
+JavaScript has no path into the long-running runtime process (INV-ADP-003).
 
 ## 16. Cross-cutting architectural qualities
 
