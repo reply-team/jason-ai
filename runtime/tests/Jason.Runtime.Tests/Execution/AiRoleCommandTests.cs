@@ -43,7 +43,13 @@ public class AiRoleCommandTests
         var stderr = await File.ReadAllTextAsync(Path.Combine(workDir, "stderr.log"), Ct);
         Assert.Contains("behaviour=silent", stderr, StringComparison.Ordinal);
         Assert.Contains("data-dir=set", stderr, StringComparison.Ordinal);
-        Assert.Contains($"cwd={workDir}", stderr, StringComparison.OrdinalIgnoreCase);
+
+        // The host reports the directory it really runs in. On macOS the temporary directory is reached through
+        // a symbolic link, so the spelling can differ from the path the test built; the directory is the same
+        // one when the launcher's own files are visible through it.
+        var cwd = CurrentDirectoryReportedIn(stderr);
+        Assert.True(File.Exists(Path.Combine(cwd, "stderr.log")), $"The host ran in '{cwd}', not in the attempt's work directory '{workDir}'.");
+        Assert.EndsWith(Path.Combine(WorkItemId, AttemptId), cwd.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase);
         Assert.True(File.Exists(Path.Combine(workDir, "stdout.log")));
     }
 
@@ -188,6 +194,18 @@ public class AiRoleCommandTests
             kill?.Token ?? CancellationToken.None);
 
         return command.RunAsync(context, Ct);
+    }
+
+    /// <summary>The <c>cwd=</c> value of the host's diagnostic line, which runs up to the next field.</summary>
+    private static string CurrentDirectoryReportedIn(string stderr)
+    {
+        const string field = "cwd=";
+        const string next = " token-in-env=";
+        var start = stderr.IndexOf(field, StringComparison.Ordinal);
+        Assert.True(start >= 0, "The host's diagnostic line does not report its working directory.");
+        start += field.Length;
+        var end = stderr.IndexOf(next, start, StringComparison.Ordinal);
+        return (end < 0 ? stderr[start..] : stderr[start..end]).Trim();
     }
 
     private static void WriteDescriptor(JasonPaths paths)

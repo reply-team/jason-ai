@@ -104,7 +104,12 @@ public class WorkFlowEndToEndTests
             Assert.False((bool)first["eligible"]!);
             Assert.Equal("active", (string?)Json(await Ok(JasonAsync(root, "campaign", "start", campaign)))["status"]);
 
-            var done = await PollAsync(root, work, item => (string?)item["status"] == "succeeded");
+            // The host reports its result through the API and exits afterwards, and the launch record (pid, exit
+            // code) is written when the process has ended — so "succeeded" can be visible a moment before it.
+            var done = await PollAsync(
+                root,
+                work,
+                item => (string?)item["status"] == "succeeded" && item["attempts"]?.AsArray().FirstOrDefault()?["launch"]?["pid"] is not null);
             Assert.Equal("done", (string?)done["result"]!["summary"]);
             Assert.Equal(0, (int)done["attempt_count"]!);
             var attempt = Assert.Single(done["attempts"]!.AsArray())!;
