@@ -68,6 +68,7 @@ public static class CliApp
         root.Subcommands.Add(RoleCommands.Build(env, actor));
         root.Subcommands.Add(JournalCommands.Build(env, actor));
         root.Subcommands.Add(SuppressionCommands.Build(env, actor));
+        root.Subcommands.Add(PluginCommands.Build(env, actor));
 
         return root;
     }
