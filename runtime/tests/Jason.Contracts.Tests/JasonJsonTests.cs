@@ -29,6 +29,15 @@ public class JasonJsonTests
     }
 
     [Fact]
+    public void Enums_travel_as_snake_case_text_and_nothing_else()
+    {
+        var back = JsonSerializer.Deserialize<Envelope>("{\"kind\":\"awaiting_approval\",\"at\":\"1970-01-01T00:00:00.000Z\"}", JasonJson.Options)!;
+        Assert.Equal(Sample.AwaitingApproval, back.Kind);
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Envelope>("{\"kind\":0,\"at\":\"1970-01-01T00:00:00.000Z\"}", JasonJson.Options));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Envelope>("{\"kind\":\"not_a_kind\",\"at\":\"1970-01-01T00:00:00.000Z\"}", JasonJson.Options));
+    }
+
+    [Fact]
     public void Error_envelope_has_the_agreed_shape()
     {
         var json = JsonSerializer.Serialize(new ErrorResponse(new ErrorBody("not_found", "Unknown operation.", false)), JasonJson.Options);

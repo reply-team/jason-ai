@@ -1,3 +1,4 @@
+using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Runtime.Persistence;
 using Microsoft.Data.Sqlite;
@@ -19,7 +20,9 @@ public class JasonDbContextTests
         connection.Open();
         Assert.Contains("campaigns", Names(connection, "SELECT name FROM sqlite_master WHERE type = 'table'"));
         Assert.Contains("ix_campaigns_public_id", Names(connection, "SELECT name FROM sqlite_master WHERE type = 'index'"));
-        Assert.Equal(["id", "public_id", "name", "status", "created_at", "updated_at", "archived_at"], Names(connection, "SELECT name FROM pragma_table_info('campaigns')"));
+        // Adding the context column together with its json_valid check rebuilds the table on SQLite, which
+        // leaves the primary key first and the rest in name order. The names are what this test is about.
+        Assert.Equal(["id", "archived_at", "context_json", "created_at", "name", "public_id", "status", "updated_at"], Names(connection, "SELECT name FROM pragma_table_info('campaigns')"));
     }
 
     [Fact]

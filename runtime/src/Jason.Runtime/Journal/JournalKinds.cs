@@ -1,0 +1,47 @@
+using System.Text.RegularExpressions;
+
+namespace Jason.Runtime.Journal;
+
+/// <summary>
+/// The kinds the runtime writes itself. Callers append their own vocabulary through <c>journal.append</c> —
+/// a role's <c>plan_revision</c> or <c>observation</c> — but never one of these, so a chronicle line that claims
+/// the runtime changed something really was the runtime.
+/// </summary>
+public static partial class JournalKinds
+{
+    public const string CampaignCreated = "campaign_created";
+    public const string CampaignUpdated = "campaign_updated";
+    public const string CampaignStarted = "campaign_started";
+    public const string CampaignPaused = "campaign_paused";
+    public const string CampaignArchived = "campaign_archived";
+    public const string ContextUpdated = "context_updated";
+    public const string ContactsAdded = "contacts_added";
+    public const string ContactsRemoved = "contacts_removed";
+    public const string ContactCreated = "contact_created";
+    public const string ContactUpdated = "contact_updated";
+    public const string ContactArchived = "contact_archived";
+    public const string SuppressionAdded = "suppression_added";
+    public const string SuppressionRemoved = "suppression_removed";
+
+    public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
+    {
+        CampaignCreated,
+        CampaignUpdated,
+        CampaignStarted,
+        CampaignPaused,
+        CampaignArchived,
+        ContextUpdated,
+        ContactsAdded,
+        ContactsRemoved,
+        ContactCreated,
+        ContactUpdated,
+        ContactArchived,
+        SuppressionAdded,
+        SuppressionRemoved,
+    };
+
+    public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);
+
+    [GeneratedRegex("^[a-z][a-z0-9_]{0,63}$")]
+    private static partial Regex WellFormed();
+}

@@ -10,18 +10,67 @@ public static class Ulid
 {
     private const string Alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
-    public static string NewUlid(DateTimeOffset? now = null)
+    private static readonly Lock Gate = new();
+    private static readonly byte[] LastRandom = new byte[10];
+    private static long _lastMilliseconds = long.MinValue;
+
+    /// <summary>
+    /// Strictly increasing within the process: rows created in the same millisecond still sort in creation order,
+    /// which is what keyset pagination over public ids relies on.
+    /// </summary>
+    public static string NewUlid()
     {
-        var milliseconds = (now ?? DateTimeOffset.UtcNow).ToUnixTimeMilliseconds();
         Span<byte> bytes = stackalloc byte[16];
+        lock (Gate)
+        {
+            var milliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            if (milliseconds <= _lastMilliseconds)
+            {
+                // The clock stood still or went backwards: keep the last millisecond and walk the random tail up.
+                milliseconds = _lastMilliseconds;
+                Increment(LastRandom);
+            }
+            else
+            {
+                _lastMilliseconds = milliseconds;
+                RandomNumberGenerator.Fill(LastRandom);
+            }
+
+            WriteTimestamp(bytes, milliseconds);
+            LastRandom.CopyTo(bytes[6..]);
+        }
+
+        return Encode(bytes);
+    }
+
+    /// <summary>Encodes a given instant with a random tail. For tests and for ids whose time is not "now".</summary>
+    public static string NewUlid(DateTimeOffset now)
+    {
+        Span<byte> bytes = stackalloc byte[16];
+        WriteTimestamp(bytes, now.ToUnixTimeMilliseconds());
+        RandomNumberGenerator.Fill(bytes[6..]);
+        return Encode(bytes);
+    }
+
+    private static void WriteTimestamp(Span<byte> bytes, long milliseconds)
+    {
         bytes[0] = (byte)(milliseconds >> 40);
         bytes[1] = (byte)(milliseconds >> 32);
         bytes[2] = (byte)(milliseconds >> 24);
         bytes[3] = (byte)(milliseconds >> 16);
         bytes[4] = (byte)(milliseconds >> 8);
         bytes[5] = (byte)milliseconds;
-        RandomNumberGenerator.Fill(bytes[6..]);
-        return Encode(bytes);
+    }
+
+    private static void Increment(byte[] tail)
+    {
+        for (var i = tail.Length - 1; i >= 0; i--)
+        {
+            if (++tail[i] != 0)
+            {
+                return;
+            }
+        }
     }
 
     private static string Encode(ReadOnlySpan<byte> b)
