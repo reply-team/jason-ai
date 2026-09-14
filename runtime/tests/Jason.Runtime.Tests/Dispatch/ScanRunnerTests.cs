@@ -97,6 +97,53 @@ public class ScanRunnerTests
     }
 
     [Fact]
+    public async Task Two_scans_at_once_over_a_full_backlog_never_claim_more_than_the_pool_holds()
+    {
+        var gate = new TaskCompletionSource<CommandOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var command = new FakeCommand(WorkItemKind.AiRole, _ => gate.Task);
+        using var harness = new DispatchHarness(Noon, o => o.MaxParallel = 4, commands: command);
+        await using (var db = harness.Open())
+        {
+            // One item each, so the per-campaign rule never limits what a scan may take: the pool must.
+            for (var number = 0; number < 8; number++)
+            {
+                var campaign = WorkItemFactory.NewCampaign($"Campaign {number}", now: Noon);
+                db.Campaigns.Add(campaign);
+                db.WorkItems.Add(WorkItemFactory.NewAiRole(campaign, now: Noon));
+            }
+
+            await db.SaveChangesAsync(Ct);
+        }
+
+        // Both scans read the free slots before either hands its claims out, so an unsynchronized runner
+        // claims eight and then cannot place the second four.
+        var reports = await Task.WhenAll(
+            Task.Run(() => harness.Runner.ScanOnceAsync(Ct), Ct),
+            Task.Run(() => harness.Runner.ScanOnceAsync(Ct), Ct));
+
+        Assert.Equal(4, reports.Sum(r => r.Claimed));
+        await using (var db = harness.Open())
+        {
+            Assert.Equal(4, await db.Attempts.AsNoTracking().CountAsync(Ct));
+        }
+
+        Assert.True(await DispatchHarness.EventuallyAsync(() => command.Contexts.Count == 4, Ct));
+        Assert.Equal(0, harness.Pool.FreeSlots);
+
+        gate.SetResult(new CommandOutcome.Completed(null));
+        Assert.True(await harness.Pool.DrainAsync(TimeSpan.FromSeconds(5)));
+
+        // The other four were never lost: the next scan takes them now that the slots are back.
+        Assert.Equal(4, (await harness.Runner.ScanOnceAsync(Ct)).Claimed);
+        await using (var db = harness.Open())
+        {
+            Assert.Equal(8, await db.Attempts.AsNoTracking().CountAsync(Ct));
+        }
+
+        Assert.True(await harness.Pool.DrainAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
     public async Task Two_scans_at_once_over_one_item_produce_one_attempt()
     {
         var gate = new TaskCompletionSource<CommandOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);

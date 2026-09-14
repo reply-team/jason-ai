@@ -74,6 +74,47 @@ public class ExpirerTests
         Assert.Equal(WorkItemStatus.Processing, item.Status);
     }
 
+    [Fact]
+    public async Task An_item_changed_under_the_expirer_does_not_stop_the_rest_of_the_backlog()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        var first = WorkItemFactory.NewAiRole(campaign, now: Noon, configure: w => w.DueAt = Noon.AddMinutes(-1));
+        var second = WorkItemFactory.NewAiRole(campaign, now: Noon, configure: w => w.DueAt = Noon.AddMinutes(-1));
+        db.Campaigns.Add(campaign);
+        db.WorkItems.AddRange(first, second);
+        await db.SaveChangesAsync(Ct);
+        var (firstId, secondId) = (first.PublicId, second.PublicId);
+        db.ChangeTracker.Clear();
+
+        // A caller cancels the second item in the instant between the expirer reading the backlog and writing
+        // its first decision. The status is a concurrency token, so the expirer's write for that item can no
+        // longer land — and the first item, which nothing touched, must be expired all the same.
+        var interfered = false;
+        db.SavingChanges += (_, _) =>
+        {
+            if (interfered)
+            {
+                return;
+            }
+
+            interfered = true;
+            using var caller = database.Open();
+            caller.WorkItems.Single(w => w.PublicId == secondId).Status = WorkItemStatus.Cancelled;
+            caller.SaveChanges();
+        };
+
+        var expired = await NewExpirer().ExpireAsync(db, Ct);
+
+        Assert.Equal(1, expired);
+        await using var reader = database.Open();
+        Assert.Equal(WorkItemStatus.Expired, reader.WorkItems.Single(w => w.PublicId == firstId).Status);
+        Assert.Equal(WorkItemStatus.Cancelled, reader.WorkItems.Single(w => w.PublicId == secondId).Status);
+        var entry = Assert.Single(await reader.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.WorkItemExpired).ToListAsync(Ct));
+        Assert.Equal(firstId, entry.WorkItemId);
+    }
+
     private static Expirer NewExpirer()
     {
         var clock = new FixedClock(Noon);

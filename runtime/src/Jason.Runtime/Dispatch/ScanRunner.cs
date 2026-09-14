@@ -13,14 +13,18 @@ public sealed record ScanReport(int Expired, int Lost, int Claimed);
 /// One pass of the dispatcher: give up what is overdue, take back what is lost, hand out what is ready — in
 /// that order and in three short transactions, so no step holds the writer while another thinks. The scan hands
 /// claims to the pool and returns; waiting for a handler is what would turn a dispatcher into a queue of one.
+/// Scans run one at a time: the free slots are read before anything is handed out, so two scans in flight would
+/// each claim a full pool's worth and the second could not place what it had already taken.
 /// </summary>
 public sealed class ScanRunner(
     IServiceScopeFactory scopes,
     TimeProvider clock,
     HandlerPool pool,
     DispatcherStatus status,
-    ILogger<ScanRunner> logger)
+    ILogger<ScanRunner> logger) : IDisposable
 {
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
     private static readonly Action<ILogger, long, int, int, int, Exception?> Scanned = LoggerMessage.Define<long, int, int, int>(
         LogLevel.Debug,
         new EventId(1, nameof(Scanned)),
@@ -41,7 +45,23 @@ public sealed class ScanRunner(
         new EventId(4, nameof(Claimed)),
         "Dispatcher claimed work item {WorkItemId} as attempt {AttemptId}");
 
+    /// <summary>One scan, waiting first for any scan already under way — a tick and a caller never overlap.</summary>
     public async Task<ScanReport> ScanOnceAsync(CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return await ScanAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public void Dispose() => _gate.Dispose();
+
+    private async Task<ScanReport> ScanAsync(CancellationToken ct)
     {
         // Draining, stopped or disabled: a scan would claim work this process is not going to run.
         if (status.State != DispatcherState.Running)

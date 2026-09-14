@@ -23,6 +23,7 @@ covered here.
 - Test one method or class: append `-- --filter-method "*MethodName"` or `-- --filter-class "Namespace.ClassName"`
 - Run: `dotnet run --project runtime/src/Jason.App -- --version` · `-- runtime run` · `-- runtime status`
   · `-- runtime start` (background, no autostart registered) · `-- runtime stop` · `-- campaign list`
+  · `-- workitem list` · `-- role list`
 - Add a migration: `dotnet tool restore` once, then
   `dotnet ef migrations add <Name> --project runtime/src/Jason.Runtime --startup-project runtime/src/Jason.Runtime --output-dir Persistence/Migrations`
 - Publish: `dotnet publish runtime/src/Jason.App -c Release -r <rid> --self-contained -p:PublishSingleFile=true`
@@ -33,6 +34,7 @@ covered here.
   or SQLite: the CLI never touches the database, it talks to the Runtime API.
 - Plugin JavaScript never runs inside the long-lived runtime process; it runs in the plugin-host mode
   of the same executable.
+- The dispatcher is deterministic runtime code; it never reads the meaning of a work item's context.
 - Package versions live in `runtime/Directory.Packages.props` only.
 - Warnings are errors. Every test runs offline and uses an isolated temporary data directory.
 
@@ -45,8 +47,16 @@ covered here.
 - Runtime API: RPC style, `POST /v1/{noun}.{verb}` for everything, reads included. Success is 200
   with a bare DTO; errors are `{"error":{"code","message","retryable"}}` with snake_case codes.
   JSON is snake_case, enums are snake_case strings, timestamps are ISO-8601 UTC, public ids are
-  prefixed ULIDs (`cmp_…`, `wi_…`). Partial patches distinguish absent from null (`Optional<T>`);
-  lists paginate with `limit`/`cursor`; every mutating request may carry `actor` and `reason`.
+  prefixed ULIDs (`cmp_…`, `wi_…`, `att_…`, `rol_…`). Partial patches distinguish absent from null
+  (`Optional<T>`); lists paginate with `limit`/`cursor`; every mutating request may carry `actor`
+  and `reason`.
+- Work execution: work items move through one transition table (`WorkItemTransitions`) and end
+  through one routine (`AttemptOutcomes`); never write a status elsewhere. The attempt id is the
+  fencing token: executor operations change state through a single guarded UPDATE, never
+  read-then-write. The dispatcher claims inside `BEGIN IMMEDIATE`, at most as many items as it has
+  free handler slots, one per campaign per scan. The launch envelope goes to the child on stdin;
+  nothing goes on argv, and the capability token never reaches a child's environment, a
+  work-directory file or an attempt row (redacted). `docs/work-execution.md` is the contract.
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for
   people, stderr is diagnostics only. Exit codes: 0 success, 1 API business error, 2 usage error,
   3 runtime unreachable or unauthorized.
@@ -56,10 +66,14 @@ covered here.
   context, contact custom fields, channel data — is stored as JSON text through a converter, and
   channels live in `contact_channels`. Migrations apply automatically on runtime start after a
   pre-migration backup. Never edit a migration after it has been committed; raw SQL such as the
-  journal triggers is added to a new migration when it is created.
+  journal triggers is added to a new migration when it is created. `work_items.result_json` is
+  frozen by a trigger once the item is finished; a filtered unique index allows one live attempt
+  per item.
 - Configuration: strongly typed options only; user overrides in `~/.jason/config/settings.json`,
   environment variables `JASON_*`; the data directory itself comes from `JASON_DATA_DIR` or
-  defaults to `~/.jason`.
+  defaults to `~/.jason`. Settings are bound through `IOptions<T>` with validation on start; the
+  dispatcher reads `IOptionsMonitor<T>` each tick, so edits to `settings.json` apply live except
+  `Dispatcher:MaxParallel`, which sizes the handler pool when the runtime starts.
 - Logs are JSON Lines under `~/.jason/logs/` and never contain request bodies, prompts, work-item
   contexts or the capability token.
 - Everything in the repository is written in English.

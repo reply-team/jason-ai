@@ -175,7 +175,32 @@ public static class AttemptHandler
         catch (DbUpdateConcurrencyException)
         {
             OutcomeNotRecorded(logger, work.AttemptPublicId, null);
+            await RecordLaunchAsync(scopes, work, outcome).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// The verdict was someone else's — a cancellation stops the child before its own change is committed, so
+    /// the handler can reach the row believing the attempt is still running. How the attempt was actually run
+    /// is a fact either way, and it is written on its own where it contradicts nobody.
+    /// </summary>
+    private static async Task RecordLaunchAsync(IServiceScopeFactory scopes, ClaimedWork work, CommandOutcome outcome)
+    {
+        if (Launch(outcome) is not { } launch)
+        {
+            return;
+        }
+
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var attempt = await db.Attempts.FirstOrDefaultAsync(a => a.Id == work.AttemptId).ConfigureAwait(false);
+        if (attempt is null)
+        {
+            return;
+        }
+
+        attempt.Launch = launch;
+        await db.SaveChangesAsync().ConfigureAwait(false);
     }
 
     private static void Decide(AttemptOutcomes outcomes, JasonDbContext db, WorkItem item, Attempt attempt, CommandOutcome outcome)

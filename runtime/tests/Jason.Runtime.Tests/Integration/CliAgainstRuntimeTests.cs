@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Cli;
+using Jason.Contracts.Api;
 
 namespace Jason.Runtime.Tests.Integration;
 
@@ -124,6 +125,92 @@ public class CliAgainstRuntimeTests
 
         var unknown = await ErrorAsync(fixture, "campaign", "get", "cmp_nothing");
         Assert.Equal("campaign_not_found", (string?)unknown["error"]!["code"]);
+    }
+
+    [Fact]
+    public async Task Roles_and_work_items_are_driven_from_the_command_line()
+    {
+        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        var fixture = host.Fixture;
+
+        // A role the runtime can actually start, added the way a user adds one.
+        var role = await OkAsync(
+            fixture,
+            "role",
+            "add",
+            "fake",
+            "--entry-command",
+            "dotnet",
+            "--entry-command",
+            Execution.FakeAgentHost.Dll,
+            "--entry-command",
+            "hang");
+        Assert.StartsWith("rol_", (string)role["id"]!, StringComparison.Ordinal);
+        Assert.False((bool)role["builtin"]!);
+
+        // Nine builtins and the new one, with a header line above them.
+        var (_, listed, _) = await RunAsync(fixture, ["role", "list", "--human"]);
+        var rows = listed.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(10, rows.Count(row => row.Contains("rol_", StringComparison.Ordinal)));
+        Assert.StartsWith("manager", rows[2], StringComparison.Ordinal);
+        Assert.StartsWith("fake", rows[^1], StringComparison.Ordinal);
+
+        var campaign = await host.CampaignAsync(Ct);
+        var created = await OkAsync(
+            fixture,
+            "workitem",
+            "create",
+            campaign,
+            "--kind",
+            "ai_role",
+            "--role",
+            "fake",
+            "--priority",
+            "5",
+            "--context",
+            "{\"icp\":\"founders\"}");
+        var workItem = (string)created["id"]!;
+        host.Track(workItem);
+        Assert.StartsWith("wi_", workItem, StringComparison.Ordinal);
+        Assert.Equal(5, (int)created["priority"]!);
+        Assert.Equal("founders", (string?)created["context"]!["icp"]);
+
+        var eligible = await OkAsync(fixture, "workitem", "list", "--campaign", campaign, "--eligible");
+        Assert.Equal(workItem, (string?)Assert.Single(eligible["items"]!.AsArray())!["id"]);
+
+        // A planner sharpens the brief; both the field and the context key are written down under its name.
+        await OkAsync(fixture, "--actor", "role:planner", "workitem", "update", workItem, "--set", "{\"tone\":\"direct\"}", "--priority", "7");
+        var entries = (await OkAsync(fixture, "journal", "list", "--work-item", workItem))["items"]!.AsArray();
+        var priority = Single(entries, "workitem_updated");
+        Assert.Equal("priority", (string?)priority["key"]);
+        Assert.Equal(7, (int)priority["new"]!);
+        var tone = Single(entries, "workitem_context_updated");
+        Assert.Equal("tone", (string?)tone["key"]);
+        Assert.Equal("role", (string?)tone["actor"]!["type"]);
+        Assert.Equal("planner", (string?)tone["actor"]!["id"]);
+
+        // With the work claimed and a host holding it open, the executor verbs are the CLI's to drive.
+        await host.ScanAsync(Ct);
+        var running = await host.WaitForStatusAsync(workItem, WorkItemStatus.Processing, Ct);
+        var attempt = running.CurrentAttemptId!;
+
+        var beat = await OkAsync(fixture, "workitem", "heartbeat", workItem, "--attempt", attempt);
+        Assert.Equal(attempt, (string?)beat["attempt_id"]);
+        await OkAsync(fixture, "workitem", "set-result", workItem, "--attempt", attempt, "--result", "{\"x\":1}");
+        var done = await OkAsync(fixture, "workitem", "complete", workItem, "--attempt", attempt, "--status", "succeeded", "--result", "{\"done\":true}");
+        Assert.Equal("succeeded", (string?)done["status"]);
+        Assert.True((bool)done["result"]!["done"]!);
+
+        // The attempt is over, so the host still holding the work is talking to nobody.
+        var stale = await ErrorAsync(fixture, "workitem", "heartbeat", workItem, "--attempt", attempt);
+        Assert.Equal("stale_attempt", (string?)stale["error"]!["code"]);
+        var terminal = await ErrorAsync(fixture, "workitem", "cancel", workItem);
+        Assert.Equal("workitem_terminal", (string?)terminal["error"]!["code"]);
+
+        var (_, rendered, _) = await RunAsync(fixture, ["workitem", "get", workItem, "--snapshots", "--human"]);
+        Assert.Contains("Status:", rendered, StringComparison.Ordinal);
+        Assert.Contains(attempt, rendered, StringComparison.Ordinal);
+        Assert.Contains("succeeded", rendered, StringComparison.Ordinal);
     }
 
     private static JsonObject Single(JsonArray entries, string kind) =>

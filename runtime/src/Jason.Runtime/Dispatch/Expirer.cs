@@ -20,17 +20,25 @@ public sealed class Expirer(JournalWriter journal, TimeProvider clock)
     {
         ArgumentNullException.ThrowIfNull(db);
         var now = clock.GetUtcNow().UtcDateTime;
-        var overdue = await db.WorkItems
+        // The ids first, the rows one at a time: a caller who cancelled one of them a moment ago must not cost
+        // the rest of the backlog its expiry, and a whole batch that keeps failing would log an error a tick.
+        var overdue = await db.WorkItems.AsNoTracking()
             .Where(w => w.Status == WorkItemStatus.Created && w.DueAt != null && w.DueAt < now)
+            .Select(w => w.Id)
             .ToListAsync(ct)
             .ConfigureAwait(false);
-        if (overdue.Count == 0)
-        {
-            return 0;
-        }
 
-        foreach (var item in overdue)
+        var expired = 0;
+        foreach (var id in overdue)
         {
+            var item = await db.WorkItems
+                .FirstOrDefaultAsync(w => w.Id == id && w.Status == WorkItemStatus.Created, ct)
+                .ConfigureAwait(false);
+            if (item is null)
+            {
+                continue;
+            }
+
             var dueAt = item.DueAt;
             WorkItemTransitions.Apply(item, WorkItemStatus.Expired, now);
             journal.Append(
@@ -41,9 +49,21 @@ public sealed class Expirer(JournalWriter journal, TimeProvider clock)
                 key: "due_at",
                 old: JsonSerializer.SerializeToNode(WorkItemMapper.Utc(dueAt), JasonJson.Options),
                 workItem: item);
+
+            try
+            {
+                await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Someone else changed the item between the backlog read and this write; theirs stands.
+                db.ChangeTracker.Clear();
+                continue;
+            }
+
+            expired++;
         }
 
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return overdue.Count;
+        return expired;
     }
 }
