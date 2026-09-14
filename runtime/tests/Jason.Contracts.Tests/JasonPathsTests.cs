@@ -17,7 +17,17 @@ public class JasonPathsTests
         Assert.Equal(Path.Combine(paths.Root, "run", "runtime.lock"), paths.LockFile);
         Assert.Equal(Path.Combine(paths.Root, "plugins"), paths.PluginsDirectory);
         Assert.Equal(Path.Combine(paths.Root, "logs"), paths.LogsDirectory);
-        Assert.Equal(5, paths.Layout.Count());
+        Assert.Equal(6, paths.Layout.Count());
+    }
+
+    [Fact]
+    public void The_work_directory_holds_one_directory_per_attempt()
+    {
+        var paths = new JasonPaths(Path.Combine(Path.GetTempPath(), "jason-paths-test"));
+
+        Assert.Equal(Path.Combine(paths.Root, "work"), paths.WorkDirectory);
+        Assert.Equal(Path.Combine(paths.Root, "work", "wi_a", "att_b"), paths.AttemptWorkDirectory("wi_a", "att_b"));
+        Assert.Contains(paths.WorkDirectory, paths.Layout);
     }
 
     [Fact]

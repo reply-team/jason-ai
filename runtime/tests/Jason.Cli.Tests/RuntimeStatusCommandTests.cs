@@ -13,7 +13,15 @@ public class RuntimeStatusCommandTests
     private static readonly RuntimeDescriptor Descriptor = new("v1", "0.1.0-dev", "rt_LIVE", 77, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch);
 
     private static string InfoJson(string instanceId) => JsonSerializer.Serialize(
-        new SystemInfoResponse("0.1.0-dev", "v1", instanceId, 77, DateTimeOffset.UnixEpoch, "/home/u/.jason", new DatabaseInfo(["20260913225419_InitialCreate"])),
+        new SystemInfoResponse(
+            "0.1.0-dev",
+            "v1",
+            instanceId,
+            77,
+            DateTimeOffset.UnixEpoch,
+            "/home/u/.jason",
+            new DatabaseInfo(["20260913225419_InitialCreate"]),
+            new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0)),
         JasonJson.Options);
 
     [Fact]

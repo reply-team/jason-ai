@@ -27,6 +27,18 @@ public static class Operations
     public const string ContactUpdate = "contact.update";
     public const string ContactArchive = "contact.archive";
 
+    public const string WorkItemCreate = "workitem.create";
+    public const string WorkItemGet = "workitem.get";
+    public const string WorkItemList = "workitem.list";
+    public const string WorkItemUpdate = "workitem.update";
+    public const string WorkItemCancel = "workitem.cancel";
+    public const string WorkItemHeartbeat = "workitem.heartbeat";
+    public const string WorkItemSetResult = "workitem.set_result";
+    public const string WorkItemComplete = "workitem.complete";
+
+    public const string RoleList = "role.list";
+    public const string RoleAdd = "role.add";
+
     public const string JournalAppend = "journal.append";
     public const string JournalList = "journal.list";
 

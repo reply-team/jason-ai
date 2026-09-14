@@ -161,7 +161,7 @@ public class JournalServiceTests
         var first = await service.AppendAsync(new JournalAppendRequest(campaign, "observation", null, null, null, null), Ct);
         var second = await service.AppendAsync(new JournalAppendRequest(campaign, "decision", null, null, null, null), Ct);
 
-        var page = await service.ListAsync(new JournalListRequest(campaign, null, null, null, null), Ct);
+        var page = await service.ListAsync(new JournalListRequest(campaign, null, null, null, null, null), Ct);
 
         Assert.Equal([second.Id, first.Id], page.Items.Take(2).Select(e => e.Id));
         Assert.Equal(JournalKinds.CampaignCreated, page.Items[^1].Kind);
@@ -182,8 +182,8 @@ public class JournalServiceTests
         var late = await service.AppendAsync(new JournalAppendRequest(campaign, "observation", "late", null, null, null), Ct);
         await service.AppendAsync(new JournalAppendRequest(campaign, "decision", null, null, null, null), Ct);
 
-        var byKind = await service.ListAsync(new JournalListRequest(campaign, "observation", null, null, null), Ct);
-        var since = await service.ListAsync(new JournalListRequest(campaign, "observation", Noon.AddMinutes(30), null, null), Ct);
+        var byKind = await service.ListAsync(new JournalListRequest(campaign, null, "observation", null, null, null), Ct);
+        var since = await service.ListAsync(new JournalListRequest(campaign, null, "observation", Noon.AddMinutes(30), null, null), Ct);
 
         Assert.Equal(["late", "early"], byKind.Items.Select(e => e.Key));
         Assert.Equal(late.Id, Assert.Single(since.Items).Id);
@@ -204,8 +204,8 @@ public class JournalServiceTests
         new JournalWriter(clock).Append(db, Actors.Runtime, JournalKinds.SuppressionAdded, campaign: null, key: "email");
         await db.SaveChangesAsync(Ct);
 
-        var scoped = await service.ListAsync(new JournalListRequest(mine, "observation", null, null, null), Ct);
-        var everything = await service.ListAsync(new JournalListRequest(null, null, null, null, null), Ct);
+        var scoped = await service.ListAsync(new JournalListRequest(mine, null, "observation", null, null, null), Ct);
+        var everything = await service.ListAsync(new JournalListRequest(null, null, null, null, null, null), Ct);
 
         Assert.Equal(kept.Id, Assert.Single(scoped.Items).Id);
         Assert.Single(everything.Items, entry => entry.Kind == JournalKinds.SuppressionAdded && entry.CampaignId is null);
@@ -233,7 +233,7 @@ public class JournalServiceTests
         var pages = 0;
         do
         {
-            var page = await service.ListAsync(new JournalListRequest(campaign, "observation", null, 3, cursor), Ct);
+            var page = await service.ListAsync(new JournalListRequest(campaign, null, "observation", null, 3, cursor), Ct);
             seen.AddRange(page.Items.Select(e => e.Id));
             cursor = page.NextCursor;
             pages++;

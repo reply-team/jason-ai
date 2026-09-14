@@ -54,6 +54,8 @@ public sealed class JournalWriter(TimeProvider clock)
             new ActorRef(entry.ActorType, entry.ActorId),
             entry.Kind,
             campaignPublicId ?? entry.Campaign?.PublicId,
+            null,   // Task 3: the entity gains WorkItemId
+            null,   // Task 3: the entity gains AttemptId
             entry.Key,
             entry.Old,
             entry.New,

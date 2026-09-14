@@ -33,7 +33,8 @@ public static class SystemModule
                 runtimeInfo.Pid,
                 runtimeInfo.StartedAt,
                 dataPaths.Root,
-                new DatabaseInfo(report.AppliedMigrations))));
+                new DatabaseInfo(report.AppliedMigrations),
+                new DispatcherInfo(DispatcherState.Stopped, 0, 0, 0, null, 0))));
 
         app.MapOperation<ShutdownCoordinator, ShutdownRequest, ShutdownResponse>(
             Operations.SystemShutdown,
