@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace Jason.Runtime.Hosting;
@@ -12,6 +13,11 @@ namespace Jason.Runtime.Hosting;
 /// </summary>
 public static class ProcessDetacher
 {
+    private const string LibC = "libc";
+
+    /// <summary>glibc, then Apple's C library, then the plain names, so the first one the loader knows wins.</summary>
+    private static readonly string[] LibCCandidates = ["libc.so.6", "libSystem.dylib", "libc.so", LibC];
+
     private const int StandardInputHandle = -10;
     private const int StandardOutputHandle = -11;
     private const int StandardErrorHandle = -12;
@@ -83,22 +89,64 @@ public static class ProcessDetacher
 
     private static void DetachOnUnix()
     {
-        var nullDevice = Open("/dev/null", OpenReadWrite);
-        if (nullDevice >= 0)
+        try
         {
-            Duplicate(nullDevice, 0);
-            Duplicate(nullDevice, 1);
-            Duplicate(nullDevice, 2);
-            if (nullDevice > 2)
+            NativeLibrary.SetDllImportResolver(typeof(ProcessDetacher).Assembly, ResolveLibC);
+        }
+        catch (InvalidOperationException)
+        {
+            // A resolver is already in place for this assembly; the declarations below will use it.
+        }
+
+        try
+        {
+            var nullDevice = Open("/dev/null", OpenReadWrite);
+            if (nullDevice >= 0)
             {
-                Close(nullDevice);
+                Duplicate(nullDevice, 0);
+                Duplicate(nullDevice, 1);
+                Duplicate(nullDevice, 2);
+                if (nullDevice > 2)
+                {
+                    Close(nullDevice);
+                }
+            }
+
+            // -1 means this process already leads its own session, which is the state we wanted anyway.
+            SetSessionId();
+
+            _hangUp = PosixSignalRegistration.Create(PosixSignal.SIGHUP, context => context.Cancel = true);
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or PlatformNotSupportedException)
+        {
+            // No usable C library on this platform. The managed streams above are already silenced and the
+            // parent spawned this process with all three standard streams redirected, so it still runs with
+            // nothing attached to a terminal; it simply stays in its parent's session and can be hung up with
+            // it. Nothing is logged because this runs before the runtime has a logger to write to.
+        }
+    }
+
+    /// <summary>
+    /// The declarations below name the C library the way its manual pages do. That plain name is not what the
+    /// loader looks for on a glibc system, where the library the dynamic loader knows is <c>libc.so.6</c> and
+    /// the bare <c>libc.so</c> is a linker script it cannot open, so the candidates are tried in order.
+    /// </summary>
+    private static IntPtr ResolveLibC(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
+    {
+        if (!string.Equals(libraryName, LibC, StringComparison.Ordinal))
+        {
+            return IntPtr.Zero;
+        }
+
+        foreach (var candidate in LibCCandidates)
+        {
+            if (NativeLibrary.TryLoad(candidate, out var handle))
+            {
+                return handle;
             }
         }
 
-        // -1 means this process already leads its own session, which is the state we wanted anyway.
-        SetSessionId();
-
-        _hangUp = PosixSignalRegistration.Create(PosixSignal.SIGHUP, context => context.Cancel = true);
+        return IntPtr.Zero;
     }
 
     [DllImport("kernel32.dll", SetLastError = true)]
@@ -108,16 +156,15 @@ public static class ProcessDetacher
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr CreateFileW(string fileName, uint desiredAccess, uint shareMode, IntPtr securityAttributes, uint creationDisposition, uint flagsAndAttributes, IntPtr templateFile);
 
-    // The libc declarations keep the names of the manual pages they stand for.
-    [DllImport("libc", EntryPoint = "open", SetLastError = true)]
+    [DllImport(LibC, EntryPoint = "open", SetLastError = true)]
     private static extern int Open(string path, int flags);
 
-    [DllImport("libc", EntryPoint = "dup2", SetLastError = true)]
+    [DllImport(LibC, EntryPoint = "dup2", SetLastError = true)]
     private static extern int Duplicate(int oldFileDescriptor, int newFileDescriptor);
 
-    [DllImport("libc", EntryPoint = "close", SetLastError = true)]
+    [DllImport(LibC, EntryPoint = "close", SetLastError = true)]
     private static extern int Close(int fileDescriptor);
 
-    [DllImport("libc", EntryPoint = "setsid", SetLastError = true)]
+    [DllImport(LibC, EntryPoint = "setsid", SetLastError = true)]
     private static extern int SetSessionId();
 }
