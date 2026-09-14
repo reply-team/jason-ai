@@ -1,7 +1,12 @@
 using Jason.Contracts.Discovery;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Configuration;
+
+/// <summary>What the runtime needs before its host exists: the port to listen on, how to log, and how long to drain.</summary>
+public sealed record JasonSettings(RuntimeOptions Runtime, LoggingOptions Logging, DispatcherOptions Dispatcher);
 
 public static class JasonConfiguration
 {
@@ -21,17 +26,65 @@ public static class JasonConfiguration
         return builder.Build();
     }
 
-    public static JasonOptions Load(IConfiguration configuration)
+    /// <summary>
+    /// The pre-host load of what the host needs before it exists. Only the port and the logging settings are
+    /// validated here — everything else is validated on start by the same validators, so no rule is spelled
+    /// twice and a dispatcher setting is reported by the options system rather than by two different errors.
+    /// </summary>
+    public static JasonSettings Load(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        var options = new JasonOptions();
-        configuration.Bind(options);
-        var errors = options.Validate();
-        if (errors.Count > 0)
+        var runtime = Bind<RuntimeOptions>(configuration, RuntimeOptions.Section);
+        var logging = Bind<LoggingOptions>(configuration, LoggingOptions.Section);
+        var dispatcher = Bind<DispatcherOptions>(configuration, DispatcherOptions.Section);
+
+        var failures = new List<string>();
+        Collect(failures, new RuntimeOptionsValidator().Validate(null, runtime));
+        Collect(failures, new LoggingOptionsValidator().Validate(null, logging));
+        if (failures.Count > 0)
         {
-            throw new InvalidOperationException("Invalid Jason configuration: " + string.Join(" ", errors));
+            throw new InvalidOperationException("Invalid Jason configuration: " + string.Join(" ", failures));
         }
 
+        return new JasonSettings(runtime, logging, dispatcher);
+    }
+
+    /// <summary>
+    /// Binds every option class to its section with validation on start. Binding through
+    /// <see cref="OptionsBuilder{TOptions}.Bind(IConfiguration)"/> also registers the change-token source, so
+    /// the user's settings file — added with <c>reloadOnChange</c> — feeds <c>IOptionsMonitor</c> live.
+    /// </summary>
+    public static IServiceCollection AddJasonOptions(this IServiceCollection services, IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        services.AddSingleton<IValidateOptions<RuntimeOptions>, RuntimeOptionsValidator>();
+        services.AddSingleton<IValidateOptions<LoggingOptions>, LoggingOptionsValidator>();
+        services.AddSingleton<IValidateOptions<DispatcherOptions>, DispatcherOptionsValidator>();
+        services.AddSingleton<IValidateOptions<RolesOptions>, RolesOptionsValidator>();
+
+        services.AddOptions<RuntimeOptions>().Bind(configuration.GetSection(RuntimeOptions.Section)).ValidateOnStart();
+        services.AddOptions<LoggingOptions>().Bind(configuration.GetSection(LoggingOptions.Section)).ValidateOnStart();
+        services.AddOptions<DispatcherOptions>().Bind(configuration.GetSection(DispatcherOptions.Section)).ValidateOnStart();
+        services.AddOptions<RolesOptions>().Bind(configuration.GetSection(RolesOptions.Section)).ValidateOnStart();
+
+        return services;
+    }
+
+    private static T Bind<T>(IConfiguration configuration, string section)
+        where T : new()
+    {
+        var options = new T();
+        configuration.GetSection(section).Bind(options);
         return options;
+    }
+
+    private static void Collect(List<string> failures, ValidateOptionsResult result)
+    {
+        if (result.Failed && result.Failures is not null)
+        {
+            failures.AddRange(result.Failures);
+        }
     }
 }

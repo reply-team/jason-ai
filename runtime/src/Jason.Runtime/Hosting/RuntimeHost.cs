@@ -53,7 +53,7 @@ public static class RuntimeHost
             logger.Information("Database ready: {Applied} migrations applied, {New} newly applied, backup {Backup}", migration.AppliedMigrations.Count, migration.NewlyApplied.Count, migration.BackupFile ?? "none");
 
             var token = CapabilityToken.Generate();
-            app = BuildApplication(paths, settings, info, migration, token, logger);
+            app = BuildApplication(paths, configuration, settings, info, migration, token, logger);
             await app.StartAsync(cancellationToken).ConfigureAwait(false);
 
             var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()?.Addresses.FirstOrDefault()
@@ -102,19 +102,32 @@ public static class RuntimeHost
         return 0;
     }
 
-    private static WebApplication BuildApplication(JasonPaths paths, JasonOptions settings, RuntimeInfo info, MigrationReport migration, string token, Logger logger)
+    private static WebApplication BuildApplication(
+        JasonPaths paths,
+        IConfigurationRoot configuration,
+        JasonSettings settings,
+        RuntimeInfo info,
+        MigrationReport migration,
+        string token,
+        Logger logger)
     {
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = [], ContentRootPath = paths.Root });
 
-        // The runtime's own settings are already bound into JasonOptions, so the web host reads no ambient
-        // configuration: no DOTNET_/ASPNETCORE_ variables, no appsettings.json next to the binary. One empty
-        // in-memory source stays behind because UseUrls and friends write host settings through it.
+        // The runtime's own settings come from the standalone configuration root below, so the web host reads no
+        // ambient configuration: no DOTNET_/ASPNETCORE_ variables, no appsettings.json next to the binary. One
+        // empty in-memory source stays behind because UseUrls and friends write host settings through it.
         builder.Configuration.Sources.Clear();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
             [HostDefaults.ContentRootKey] = paths.Root,
         });
         builder.WebHost.UseUrls($"http://127.0.0.1:{settings.Runtime.Port}");
+
+        // The options bind against the standalone root, not builder.Configuration, which was cleared above.
+        builder.Services.AddJasonOptions(configuration);
+
+        // Stopping has to outlast the dispatcher's drain, or the host would cut short the very wait it asked for.
+        builder.Services.Configure<HostOptions>(host => host.ShutdownTimeout = TimeSpan.FromSeconds(Math.Max(0, settings.Dispatcher.DrainSeconds) + 5));
         builder.Services.AddSerilog(logger, dispose: false);
         builder.Services.ConfigureHttpJsonOptions(o => JasonJson.Apply(o.SerializerOptions));
         builder.Services.AddSingleton(info);

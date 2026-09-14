@@ -13,6 +13,31 @@ public class JasonConfigurationTests
         Assert.Equal("Information", options.Logging.MinimumLevel);
         Assert.Equal(14, options.Logging.RetainedFileCountLimit);
         Assert.Equal(200L * 1024 * 1024, options.Logging.FileSizeLimitBytes);
+        Assert.Equal(10, options.Dispatcher.TickSeconds);
+        Assert.Equal(60, options.Dispatcher.RetryDelaySeconds);
+    }
+
+    [Fact]
+    public void The_dispatcher_section_binds_from_the_user_file_and_from_the_environment()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(dir.Paths.UserSettingsFile, """{"Dispatcher":{"RetryDelaySeconds":0,"AiRole":{"MaxAttempts":2}}}""");
+        const string variable = "JASON_Dispatcher__TickSeconds";
+        Environment.SetEnvironmentVariable(variable, "3");
+        try
+        {
+            var options = JasonConfiguration.Load(JasonConfiguration.Build(dir.Paths, null));
+
+            Assert.Equal(3, options.Dispatcher.TickSeconds);
+            Assert.Equal(0, options.Dispatcher.RetryDelaySeconds);
+            Assert.Equal(2, options.Dispatcher.AiRole.MaxAttempts);
+            Assert.Equal(3600, options.Dispatcher.AiRole.TimeoutSeconds);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variable, null);
+        }
     }
 
     [Fact]

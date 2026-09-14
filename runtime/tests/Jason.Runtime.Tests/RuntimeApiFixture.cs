@@ -22,9 +22,16 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
 
     public RunningRuntime Runtime => _runtime!;
 
-    public static async Task<RuntimeApiFixture> StartAsync(CancellationToken cancellationToken)
+    /// <param name="prepare">Runs after the temporary data directory exists and before the runtime starts: write settings here.</param>
+    public static async Task<RuntimeApiFixture> StartAsync(CancellationToken cancellationToken, Action<JasonPaths>? prepare = null)
     {
         var fixture = new RuntimeApiFixture();
+        if (prepare is not null)
+        {
+            Directory.CreateDirectory(fixture._dir.Paths.ConfigDirectory);
+            prepare(fixture._dir.Paths);
+        }
+
         fixture._runtime = await RuntimeHost.StartAsync(fixture._dir.Paths, Quiet, cancellationToken);
         fixture._http = new HttpClient { BaseAddress = fixture._runtime.BaseUrl };
         fixture._http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", fixture._runtime.Token);

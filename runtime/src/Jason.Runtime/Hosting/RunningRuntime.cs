@@ -26,6 +26,9 @@ public sealed class RunningRuntime : IAsyncDisposable
 
     public RuntimeDescriptor Descriptor { get; }
 
+    /// <summary>The composed services of the running process, so a test can read what the runtime itself reads.</summary>
+    public IServiceProvider Services => _app.Services;
+
     public Uri BaseUrl => new(Descriptor.BaseUrl, UriKind.Absolute);
 
     public string Token => Descriptor.Token;
