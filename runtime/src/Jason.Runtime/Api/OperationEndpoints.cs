@@ -4,6 +4,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Runtime.Domain;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -52,6 +53,13 @@ public static class OperationEndpoints
             catch (DomainException ex)
             {
                 await ErrorResults.WriteAsync(context, ex.StatusCode, ex.Code, ex.Message, ex.Retryable, ex.Details).ConfigureAwait(false);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Losing a race is not a failure of the runtime: the caller read a row, someone else changed it
+                // first, and the honest answer is to say so and let them decide with the new state in hand.
+                var conflict = DomainErrors.ConcurrentUpdate();
+                await ErrorResults.WriteAsync(context, conflict.StatusCode, conflict.Code, conflict.Message, conflict.Retryable).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

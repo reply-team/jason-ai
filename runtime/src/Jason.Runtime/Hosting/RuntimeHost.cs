@@ -4,6 +4,7 @@ using Jason.Contracts.Json;
 using Jason.Runtime.Api;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
+using Jason.Runtime.Execution;
 using Jason.Runtime.Hosting.Modules;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Logging;
@@ -53,7 +54,7 @@ public static class RuntimeHost
             logger.Information("Database ready: {Applied} migrations applied, {New} newly applied, backup {Backup}", migration.AppliedMigrations.Count, migration.NewlyApplied.Count, migration.BackupFile ?? "none");
 
             var token = CapabilityToken.Generate();
-            app = BuildApplication(paths, configuration, settings, info, migration, token, logger);
+            app = BuildApplication(paths, configuration, settings, options, info, migration, token, logger);
             await app.StartAsync(cancellationToken).ConfigureAwait(false);
 
             var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()?.Addresses.FirstOrDefault()
@@ -106,6 +107,7 @@ public static class RuntimeHost
         JasonPaths paths,
         IConfigurationRoot configuration,
         JasonSettings settings,
+        RuntimeHostOptions options,
         RuntimeInfo info,
         MigrationReport migration,
         string token,
@@ -134,9 +136,18 @@ public static class RuntimeHost
         builder.Services.AddSingleton(migration);
         builder.Services.AddSingleton(paths);
         builder.Services.AddDbContext<JasonDbContext>(o => JasonDbContext.Configure(o, paths.DatabaseFile));
-        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton(options.Clock ?? TimeProvider.System);
+        builder.Services.AddSingleton(new RuntimeSecrets(token));
+        builder.Services.AddSingleton<TokenRedactor>();
+        builder.Services.AddSingleton<RunningAttemptRegistry>();
+        builder.Services.AddSingleton<DispatcherStatus>();
         builder.Services.AddScoped<JournalWriter>();
+        builder.Services.AddScoped<AttemptOutcomes>();
         builder.Services.AddSystemModule().AddCampaignModule().AddContactModule();
+        builder.Services.AddWorkItemModule().AddExecutorModule().AddRoleModule().AddDispatcherModule().AddCommandModule();
+
+        // Last, so a test's registration wins over the runtime's own for the services that resolve by "the last one".
+        options.ConfigureServices?.Invoke(builder.Services);
 
         var app = builder.Build();
 
@@ -149,6 +160,9 @@ public static class RuntimeHost
         app.MapSystemOperations();
         app.MapCampaignOperations();
         app.MapContactOperations();
+        app.MapWorkItemOperations();
+        app.MapExecutorOperations();
+        app.MapRoleOperations();
 
         // An explicit catch-all pattern: the default fallback pattern is "{*path:nonfile}", and every operation
         // name contains a dot, so a mistyped operation would look like a file request and escape the fallback.

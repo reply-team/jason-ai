@@ -6,6 +6,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Runtime.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests;
 
@@ -22,8 +23,18 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
 
     public RunningRuntime Runtime => _runtime!;
 
+    /// <summary>A service of the running runtime, so a test reads exactly what the runtime itself reads.</summary>
+    public T Resolve<T>()
+        where T : notnull => Runtime.Services.GetRequiredService<T>();
+
     /// <param name="prepare">Runs after the temporary data directory exists and before the runtime starts: write settings here.</param>
-    public static async Task<RuntimeApiFixture> StartAsync(CancellationToken cancellationToken, Action<JasonPaths>? prepare = null)
+    /// <param name="clock">The runtime's clock, so a test can move time.</param>
+    /// <param name="configureServices">Registered last while composing, so a test's service wins over the runtime's own.</param>
+    public static async Task<RuntimeApiFixture> StartAsync(
+        CancellationToken cancellationToken,
+        Action<JasonPaths>? prepare = null,
+        TimeProvider? clock = null,
+        Action<IServiceCollection>? configureServices = null)
     {
         var fixture = new RuntimeApiFixture();
         if (prepare is not null)
@@ -32,7 +43,8 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
             prepare(fixture._dir.Paths);
         }
 
-        fixture._runtime = await RuntimeHost.StartAsync(fixture._dir.Paths, Quiet, cancellationToken);
+        var options = Quiet with { Clock = clock, ConfigureServices = configureServices };
+        fixture._runtime = await RuntimeHost.StartAsync(fixture._dir.Paths, options, cancellationToken);
         fixture._http = new HttpClient { BaseAddress = fixture._runtime.BaseUrl };
         fixture._http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", fixture._runtime.Token);
         return fixture;
