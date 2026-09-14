@@ -40,7 +40,7 @@ public class DispatcherJournalTests
         Assert.True(await DispatchHarness.FirstScanDoneAsync(fixture.Resolve<DispatcherStatus>(), Ct));
         var campaign = await fixture.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Chronicle" }, Ct);
         await fixture.PostOkAsync<CampaignDto>(Operations.CampaignStart, new { campaign_id = campaign.Id }, Ct);
-        var itemId = await SeedAsync(fixture.Paths, campaign.Id, clock, Ct);
+        var itemId = await SeedAsync(fixture, campaign.Id, Ct);
 
         var runner = fixture.Resolve<ScanRunner>();
         Assert.Equal(1, (await runner.ScanOnceAsync(Ct)).Claimed);
@@ -103,7 +103,7 @@ public class DispatcherJournalTests
         Assert.True(await DispatchHarness.FirstScanDoneAsync(fixture.Resolve<DispatcherStatus>(), Ct));
         var campaign = await fixture.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Chronicle" }, Ct);
         await fixture.PostOkAsync<CampaignDto>(Operations.CampaignStart, new { campaign_id = campaign.Id }, Ct);
-        var itemId = await SeedAsync(fixture.Paths, campaign.Id, clock, Ct);
+        var itemId = await SeedAsync(fixture, campaign.Id, Ct);
 
         var runner = fixture.Resolve<ScanRunner>();
         await runner.ScanOnceAsync(Ct);
@@ -123,25 +123,14 @@ public class DispatcherJournalTests
         Assert.Equal(7, item.Items.Count);
     }
 
-    private static async Task<string> SeedAsync(JasonPaths paths, string campaignId, TimeProvider clock, CancellationToken ct)
+    /// <summary>The item is created the way a caller creates one, so the first line of the chronicle is real too.</summary>
+    private static async Task<string> SeedAsync(RuntimeApiFixture fixture, string campaignId, CancellationToken ct)
     {
-        await using var db = Open(paths);
-        var campaign = await db.Campaigns.SingleAsync(c => c.PublicId == campaignId, ct);
-        var item = WorkItemFactory.NewAiRole(campaign, now: Noon);
-        db.WorkItems.Add(item);
-        await db.SaveChangesAsync(ct);
-
-        // What the create operation writes; the dispatcher's own lines follow it.
-        new JournalWriter(clock).Append(
-            db,
-            new ActorRef(ActorType.Human),
-            JournalKinds.WorkItemCreated,
-            campaign: null,
-            key: "kind",
-            updated: JsonValue.Create("ai_role"),
-            workItem: item);
-        await db.SaveChangesAsync(ct);
-        return item.PublicId;
+        var item = await fixture.PostOkAsync<WorkItemDto>(
+            Operations.WorkItemCreate,
+            new { campaign_id = campaignId, kind = "ai_role", role = "researcher" },
+            ct);
+        return item.Id;
     }
 
     private static WorkItemStatus StatusOf(JasonPaths paths, string publicId)
