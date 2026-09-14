@@ -25,3 +25,8 @@ Thumbs.db
 # Local environment
 *.local.json
 .env
+
+# SQLite files produced by local runs and design-time tooling
+*.db
+*.db-wal
+*.db-shm

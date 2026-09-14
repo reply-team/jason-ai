@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The CLI is a pure client of the Runtime API. It may reference Jason.Contracts and the HTTP client
+       only — never Jason.Runtime, EF Core or SQLite. This keeps "the CLI never touches the database" a
+       compile-time property. -->
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Jason.Contracts/Jason.Contracts.csproj" />
+  </ItemGroup>
+</Project>

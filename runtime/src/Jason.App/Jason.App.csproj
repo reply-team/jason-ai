@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>jason</AssemblyName>
+    <RootNamespace>Jason.App</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Jason.Cli/Jason.Cli.csproj" />
+    <ProjectReference Include="../Jason.Runtime/Jason.Runtime.csproj" />
+    <ProjectReference Include="../Jason.PluginHost/Jason.PluginHost.csproj" />
+  </ItemGroup>
+</Project>
