@@ -8,6 +8,16 @@ public sealed record SystemInfoResponse(
     int Pid,
     DateTimeOffset StartedAt,
     string DataDir,
-    DatabaseInfo Database);
+    DatabaseInfo Database,
+    DispatcherInfo Dispatcher);
 
 public sealed record DatabaseInfo(IReadOnlyList<string> AppliedMigrations);
+
+/// <summary>What the dispatcher is doing right now: the cheapest way for an operator or a test to see the loop is alive.</summary>
+public sealed record DispatcherInfo(
+    DispatcherState State,
+    int TickSeconds,
+    int MaxParallel,
+    int RunningAttempts,
+    DateTimeOffset? LastScanAt,
+    long Scans);

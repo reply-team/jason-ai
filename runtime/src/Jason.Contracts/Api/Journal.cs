@@ -12,6 +12,8 @@ public sealed record JournalEntryDto(
     ActorRef Actor,
     string Kind,
     string? CampaignId,
+    string? WorkItemId,
+    string? AttemptId,
     string? Key,
     JsonNode? Old,
     JsonNode? New,
@@ -20,4 +22,4 @@ public sealed record JournalEntryDto(
 /// <summary>Kinds the runtime writes itself are refused here; roles append their own vocabulary.</summary>
 public sealed record JournalAppendRequest(string? CampaignId, string? Kind, string? Key, JsonNode? New, ActorRef? Actor, string? Reason);
 
-public sealed record JournalListRequest(string? CampaignId, string? Kind, DateTimeOffset? Since, int? Limit, string? Cursor);
+public sealed record JournalListRequest(string? CampaignId, string? WorkItemId, string? Kind, DateTimeOffset? Since, int? Limit, string? Cursor);

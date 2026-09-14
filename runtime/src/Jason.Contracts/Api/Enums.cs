@@ -18,12 +18,65 @@ public enum MembershipState
     Excluded,
 }
 
-/// <summary>Who performs an operation. <c>System</c> belongs to the runtime's own writes and is refused from callers.</summary>
+/// <summary>
+/// Who performs an operation. <c>System</c> belongs to the runtime's own writes and is refused from callers;
+/// <c>Attempt</c> is a running executor, so work it creates stays traceable to the attempt that asked for it.
+/// </summary>
 public enum ActorType
 {
     Human,
     Role,
     System,
+    Attempt,
+}
+
+/// <summary>What a work item is: a role doing its job, or one provider operation performed through a plugin.</summary>
+public enum WorkItemKind
+{
+    AiRole,
+    ProviderOp,
+}
+
+/// <summary>
+/// created → scheduled → processing → succeeded | failed, with cancelled and expired as the two ways an item
+/// ends without running. A retriable failure returns the item to created; an expired item can be reopened.
+/// </summary>
+public enum WorkItemStatus
+{
+    Created,
+    Scheduled,
+    Processing,
+    Succeeded,
+    Failed,
+    Cancelled,
+    Expired,
+}
+
+/// <summary>One run of one work item. <c>Interrupted</c> is a leftover of a runtime restart and is never counted.</summary>
+public enum AttemptStatus
+{
+    Scheduled,
+    Running,
+    Succeeded,
+    Failed,
+    Interrupted,
+    Cancelled,
+}
+
+/// <summary>How an executor says its attempt ended.</summary>
+public enum CompletionStatus
+{
+    Succeeded,
+    Failed,
+}
+
+/// <summary>What the dispatcher is doing: turned off, not started, scanning, or finishing what it has.</summary>
+public enum DispatcherState
+{
+    Disabled,
+    Stopped,
+    Running,
+    Draining,
 }
 
 /// <summary>Outcome of one item of <c>campaign.add_contacts</c>.</summary>

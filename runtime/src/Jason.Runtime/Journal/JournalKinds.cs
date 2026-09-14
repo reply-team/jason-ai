@@ -22,6 +22,24 @@ public static partial class JournalKinds
     public const string ContactArchived = "contact_archived";
     public const string SuppressionAdded = "suppression_added";
     public const string SuppressionRemoved = "suppression_removed";
+    public const string WorkItemCreated = "workitem_created";
+    public const string WorkItemUpdated = "workitem_updated";
+
+    /// <summary>Distinct from <see cref="ContextUpdated"/> so a campaign-context reader never filters item entries out.</summary>
+    public const string WorkItemContextUpdated = "workitem_context_updated";
+    public const string WorkItemScheduled = "workitem_scheduled";
+    public const string WorkItemProcessing = "workitem_processing";
+    public const string WorkItemSucceeded = "workitem_succeeded";
+    public const string WorkItemFailed = "workitem_failed";
+    public const string WorkItemCancelled = "workitem_cancelled";
+    public const string WorkItemExpired = "workitem_expired";
+
+    /// <summary>The item went back to <c>created</c>: its attempt was lost, or a restart interrupted it.</summary>
+    public const string WorkItemReleased = "workitem_released";
+
+    /// <summary>An expired item was given a future due date and is work again.</summary>
+    public const string WorkItemReopened = "workitem_reopened";
+    public const string RoleAdded = "role_added";
 
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -38,6 +56,18 @@ public static partial class JournalKinds
         ContactArchived,
         SuppressionAdded,
         SuppressionRemoved,
+        WorkItemCreated,
+        WorkItemUpdated,
+        WorkItemContextUpdated,
+        WorkItemScheduled,
+        WorkItemProcessing,
+        WorkItemSucceeded,
+        WorkItemFailed,
+        WorkItemCancelled,
+        WorkItemExpired,
+        WorkItemReleased,
+        WorkItemReopened,
+        RoleAdded,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);

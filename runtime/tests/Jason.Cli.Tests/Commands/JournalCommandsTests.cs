@@ -127,6 +127,8 @@ public class JournalCommandsTests
                 new ActorRef(ActorType.Role, "planner"),
                 "decision",
                 "cmp_A",
+                null,
+                null,
                 "pricing",
                 null,
                 JsonNode.Parse("{\"tier\":\"growth\"}"),
@@ -149,8 +151,8 @@ public class JournalCommandsTests
         var page = JsonSerializer.Serialize(
             new Page<JournalEntryDto>(
                 [
-                    new JournalEntryDto("jrn_B", Moment, new ActorRef(ActorType.System, null), "campaign_started", "cmp_A", null, null, null, null),
-                    new JournalEntryDto("jrn_A", Moment, new ActorRef(ActorType.Role, "planner"), "decision", "cmp_A", "pricing", null, null, "the pilot ended"),
+                    new JournalEntryDto("jrn_B", Moment, new ActorRef(ActorType.System, null), "campaign_started", "cmp_A", null, null, null, null, null, null),
+                    new JournalEntryDto("jrn_A", Moment, new ActorRef(ActorType.Role, "planner"), "decision", "cmp_A", null, null, "pricing", null, null, "the pilot ended"),
                 ],
                 "anJuX0E"),
             JasonJson.Options);

@@ -29,7 +29,15 @@ internal static class RuntimeVerbs
         new("v1", "0.1.0-dev", instanceId, pid, BaseUrl, Token, DateTimeOffset.UnixEpoch);
 
     public static string InfoJson(string instanceId, int pid = Pid) => JsonSerializer.Serialize(
-        new SystemInfoResponse("0.1.0-dev", "v1", instanceId, pid, DateTimeOffset.UnixEpoch, "/data", new DatabaseInfo(["20260913225419_InitialCreate"])),
+        new SystemInfoResponse(
+            "0.1.0-dev",
+            "v1",
+            instanceId,
+            pid,
+            DateTimeOffset.UnixEpoch,
+            "/data",
+            new DatabaseInfo(["20260913225419_InitialCreate"]),
+            new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0)),
         JasonJson.Options);
 
     public static string ShutdownJson(string instanceId, int pid = Pid) =>

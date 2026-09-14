@@ -33,7 +33,11 @@ public sealed class JasonPaths
     public string DescriptorFile => Path.Combine(RunDirectory, "runtime.json");
     public string LockFile => Path.Combine(RunDirectory, "runtime.lock");
     public string LogsDirectory => Path.Combine(Root, "logs");
+    public string WorkDirectory => Path.Combine(Root, "work");
+
+    /// <summary>The directory one attempt runs in; created by the launcher, never cleaned up in this version.</summary>
+    public string AttemptWorkDirectory(string workItemId, string attemptId) => Path.Combine(WorkDirectory, workItemId, attemptId);
 
     /// <summary>The directories the runtime creates on start.</summary>
-    public IEnumerable<string> Layout => [StateDirectory, ConfigDirectory, PluginsDirectory, RunDirectory, LogsDirectory];
+    public IEnumerable<string> Layout => [StateDirectory, ConfigDirectory, PluginsDirectory, RunDirectory, LogsDirectory, WorkDirectory];
 }

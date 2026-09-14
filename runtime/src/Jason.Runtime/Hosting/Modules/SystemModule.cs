@@ -1,12 +1,15 @@
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Runtime.Api;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
+using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Hosting.Modules;
 
@@ -25,15 +28,23 @@ public static class SystemModule
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        app.MapPost(Operations.Route(Operations.SystemInfo), (RuntimeInfo runtimeInfo, MigrationReport report, JasonPaths dataPaths) =>
-            TypedResults.Ok(new SystemInfoResponse(
-                runtimeInfo.RuntimeVersion,
-                ApiVersion.Current,
-                runtimeInfo.InstanceId,
-                runtimeInfo.Pid,
-                runtimeInfo.StartedAt,
-                dataPaths.Root,
-                new DatabaseInfo(report.AppliedMigrations))));
+        app.MapPost(
+            Operations.Route(Operations.SystemInfo),
+            (RuntimeInfo runtimeInfo,
+             MigrationReport report,
+             JasonPaths dataPaths,
+             DispatcherStatus dispatcher,
+             IOptionsMonitor<DispatcherOptions> dispatcherOptions,
+             RunningAttemptRegistry running) =>
+                TypedResults.Ok(new SystemInfoResponse(
+                    runtimeInfo.RuntimeVersion,
+                    ApiVersion.Current,
+                    runtimeInfo.InstanceId,
+                    runtimeInfo.Pid,
+                    runtimeInfo.StartedAt,
+                    dataPaths.Root,
+                    new DatabaseInfo(report.AppliedMigrations),
+                    dispatcher.Snapshot(dispatcherOptions.CurrentValue, running.Count))));
 
         app.MapOperation<ShutdownCoordinator, ShutdownRequest, ShutdownResponse>(
             Operations.SystemShutdown,
