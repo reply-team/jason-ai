@@ -14,6 +14,8 @@ public static class CliErrors
     public const string RuntimeUnreachable = "runtime_unreachable";
     public const string Unauthorized = "unauthorized";
     public const string StaleDescriptor = "stale_descriptor";
+    public const string ShutdownTimeout = "shutdown_timeout";
+    public const string RuntimeStartFailed = "runtime_start_failed";
 
     public static string Serialize(string code, string message, bool retryable) =>
         JsonSerializer.Serialize(new ErrorResponse(new ErrorBody(code, message, retryable)), JasonJson.Options);
