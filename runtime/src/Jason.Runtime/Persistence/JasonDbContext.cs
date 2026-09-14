@@ -1,3 +1,4 @@
+using Jason.Contracts.Api;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Persistence;

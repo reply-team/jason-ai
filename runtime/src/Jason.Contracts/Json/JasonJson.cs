@@ -18,7 +18,7 @@ public static class JasonJson
         target.PropertyNameCaseInsensitive = true;
         target.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
         target.WriteIndented = false;
-        target.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower));
+        target.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower, allowIntegerValues: false));
         target.Converters.Add(new UtcDateTimeOffsetConverter());
         return target;
     }

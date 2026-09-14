@@ -1,3 +1,5 @@
+using Jason.Contracts.Api;
+
 namespace Jason.Runtime.Persistence;
 
 /// <summary>
@@ -22,13 +24,4 @@ public sealed class Campaign
     public DateTime UpdatedAt { get; set; }
 
     public DateTime? ArchivedAt { get; set; }
-}
-
-/// <summary>draft → active → paused → archived. Stored as snake_case text.</summary>
-public enum CampaignStatus
-{
-    Draft,
-    Active,
-    Paused,
-    Archived,
 }
