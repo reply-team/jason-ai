@@ -7,7 +7,7 @@ description: The test double every plugin-host test drives; copy its shape.
 contracts:
   protocol: [1]
   operations: [1]
-operations: [echo.run, context.echo, exec.run, http.get, env.read, log.emit, fail.transient, fail.permanent, fail.validation, fail.ambiguous, hang, spew, throw.plain, return.bare, escape.clr, escape.eval, escape.function, escape.constructor, module.import]
+operations: [echo.run, context.echo, exec.run, http.get, env.read, log.emit, fail.transient, fail.permanent, fail.validation, fail.ambiguous, hang.forever, spew.bytes, throw.plain, return.bare, escape.clr, escape.eval, escape.function, escape.constructor, module.import]
 entry:
   module: main.js
   function: invoke

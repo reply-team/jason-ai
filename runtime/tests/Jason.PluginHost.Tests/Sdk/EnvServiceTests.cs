@@ -59,6 +59,25 @@ public sealed class EnvServiceTests : IDisposable
     }
 
     [Fact]
+    public void A_reserved_variable_stays_invisible_even_when_a_grant_names_it()
+    {
+        Environment.SetEnvironmentVariable("JASON_DATA_DIR_TEST", "should-not-be-readable");
+        try
+        {
+            using var harness = new SdkHarness(
+                _package.Root,
+                builder => builder.Grants = new InvocationGrants(null, null, new EnvGrants(["JASON_DATA_DIR_TEST"])));
+
+            Assert.Equal("undefined", harness.Evaluate("typeof host.env(\"JASON_DATA_DIR_TEST\")").AsString());
+            Assert.Equal("env_probe", Assert.Single(harness.Lines)["message"]!.GetValue<string>());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("JASON_DATA_DIR_TEST", null);
+        }
+    }
+
+    [Fact]
     public void A_name_that_is_not_a_string_is_a_type_error()
     {
         using var harness = new SdkHarness(_package.Root);

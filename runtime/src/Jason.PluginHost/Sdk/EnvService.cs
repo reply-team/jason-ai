@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Jason.Contracts.Plugins;
 using Jint;
 using Jint.Native;
 
@@ -29,7 +30,12 @@ public sealed class EnvService(HostServices services)
 
         var name = args[0].AsString();
         var granted = services.Grants.Env?.Variables ?? [];
-        if (!granted.Contains(name, StringComparer.Ordinal))
+
+        // A reserved name is never readable, whatever a grant says. Manifest validation already refuses to
+        // declare one, and the runtime never puts one in the child's environment; this is the same rule kept in
+        // the one other place that could hand one back.
+        if (name.StartsWith(BaseEnvironment.ReservedPrefix, StringComparison.OrdinalIgnoreCase)
+            || !granted.Contains(name, StringComparer.Ordinal))
         {
             services.Diagnostics.Host("debug", ProbeMessage, new JsonObject { ["variable"] = name });
             return JsValue.Undefined;
