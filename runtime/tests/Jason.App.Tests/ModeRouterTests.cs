@@ -37,7 +37,7 @@ public class ModeRouterTests
     }
 
     [Fact]
-    public async Task Plugin_host_stub_fails_honestly()
+    public async Task Plugin_host_without_arguments_is_a_usage_error()
     {
         var original = Console.Error;
         var error = new StringWriter();
@@ -45,8 +45,8 @@ public class ModeRouterTests
         try
         {
             var exit = await ModeRouter.RunAsync(["plugin-host"], TestContext.Current.CancellationToken);
-            Assert.Equal(1, exit);
-            Assert.Contains("not implemented", error.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(2, exit);
+            Assert.Contains("usage", error.ToString(), StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

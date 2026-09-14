@@ -37,7 +37,7 @@ public static class ModeRouter
     {
         Mode.Version => RunVersion(),
         Mode.RuntimeService => RunRuntimeService(args, cancellationToken),
-        Mode.PluginHost => RunPluginHost(args),
+        Mode.PluginHost => RunPluginHost(args, cancellationToken),
         _ => RunCli(args, cancellationToken),
     };
 
@@ -65,8 +65,8 @@ public static class ModeRouter
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static Task<int> RunPluginHost(string[] args) =>
-        Task.FromResult(PluginHostMode.Run(args[1..], Console.Error));
+    private static Task<int> RunPluginHost(string[] args, CancellationToken cancellationToken) =>
+        PluginHostMode.RunAsync(args[1..], Console.In, Console.Out, Console.Error, cancellationToken);
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Task<int> RunCli(string[] args, CancellationToken cancellationToken) =>

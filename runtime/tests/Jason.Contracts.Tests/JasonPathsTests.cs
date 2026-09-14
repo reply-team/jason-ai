@@ -31,6 +31,16 @@ public class JasonPathsTests
     }
 
     [Fact]
+    public void A_plugin_package_and_an_invocation_have_their_own_directories()
+    {
+        var paths = new JasonPaths(Path.Combine(Path.GetTempPath(), "jason-paths-test"));
+
+        Assert.Equal(Path.Combine(paths.Root, "plugins", "fake-provider"), paths.PluginPackageDirectory("fake-provider"));
+        Assert.Equal(Path.Combine(paths.Root, "work", "plugins"), paths.PluginWorkDirectory);
+        Assert.Equal(Path.Combine(paths.Root, "work", "plugins", "pin_a"), paths.PluginInvocationDirectory("pin_a"));
+    }
+
+    [Fact]
     public void Default_root_is_dot_jason_under_the_user_profile()
     {
         var previous = Environment.GetEnvironmentVariable(JasonPaths.DataDirectoryVariable);

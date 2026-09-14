@@ -30,7 +30,8 @@ public class RuntimeStatusCommandTests
             DateTimeOffset.UnixEpoch,
             "/home/u/.jason",
             new DatabaseInfo(["20260913225419_InitialCreate"]),
-            dispatcher),
+            dispatcher,
+            new PluginsInfo(0, "snp_NONE", DateTimeOffset.UnixEpoch, null)),
         JasonJson.Options);
 
     [Fact]
