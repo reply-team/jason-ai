@@ -25,7 +25,9 @@ public static class OutcomeClassification
             or ProtocolCodes.PluginUnavailable
             or ProtocolCodes.PluginOperationUnsupported
             or ProtocolCodes.PluginKindNotInvocable
-            or ProtocolCodes.PluginInvocationRejected => FailureClass.Permanent,
+            or ProtocolCodes.PluginInvocationRejected
+            or ProtocolCodes.PluginInputTooLarge
+            or ProtocolCodes.PluginBindingTooLarge => FailureClass.Permanent,
         _ => FailureClass.Ambiguous,
     };
 }

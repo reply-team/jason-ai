@@ -39,4 +39,10 @@ public static class ProtocolCodes
 
     /// <summary>The child wrote more than the invoker will read.</summary>
     public const string PluginOutputTooLarge = "plugin_output_too_large";
+
+    /// <summary>The caller's input is larger than an envelope may carry, so no child was started.</summary>
+    public const string PluginInputTooLarge = "plugin_input_too_large";
+
+    /// <summary>The caller's binding is larger than an envelope may carry, so no child was started.</summary>
+    public const string PluginBindingTooLarge = "plugin_binding_too_large";
 }

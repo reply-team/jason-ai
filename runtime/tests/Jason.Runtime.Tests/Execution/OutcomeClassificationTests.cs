@@ -21,6 +21,8 @@ public class OutcomeClassificationTests
     [InlineData(ProtocolCodes.PluginOperationUnsupported, FailureClass.Permanent)]
     [InlineData(ProtocolCodes.PluginKindNotInvocable, FailureClass.Permanent)]
     [InlineData(ProtocolCodes.PluginInvocationRejected, FailureClass.Permanent)]
+    [InlineData(ProtocolCodes.PluginInputTooLarge, FailureClass.Permanent)]
+    [InlineData(ProtocolCodes.PluginBindingTooLarge, FailureClass.Permanent)]
     [InlineData(ProtocolCodes.PluginTimeout, FailureClass.Ambiguous)]
     [InlineData(ProtocolCodes.PluginKilled, FailureClass.Ambiguous)]
     [InlineData(ProtocolCodes.PluginNoOutcome, FailureClass.Ambiguous)]

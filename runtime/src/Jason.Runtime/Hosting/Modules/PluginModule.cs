@@ -30,6 +30,7 @@ public static class PluginModule
         services.AddScoped<ExecutableResolver>();
         services.AddScoped<PluginLoader>();
         services.AddScoped<PluginService>();
+        services.AddScoped<PluginInvoker>();
         return services.AddHostedService<PluginStartupLoader>();
     }
 

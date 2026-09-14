@@ -1,0 +1,181 @@
+using System.Diagnostics;
+using System.Text.Json.Nodes;
+using Jason.Contracts.Discovery;
+using Jason.Contracts.Plugins;
+using Jason.Runtime.Execution;
+using Jason.Runtime.Plugins.Invocation;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Jason.Runtime.Tests.Plugins.Invocation;
+
+/// <summary>
+/// Everything that can go wrong around an invocation rather than inside it, each named distinctly. A correct
+/// plugin host can never produce most of these, so the child here is a scripted stand-in started through the
+/// same seam: the point is that the runtime survives a child that does not keep the protocol, and says which
+/// promise was broken.
+/// </summary>
+public class ProtocolFailureTests
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task A_child_that_writes_something_other_than_an_outcome_is_not_believed()
+    {
+        await using var api = await StartAsync(Child("stdout", "not json at all"));
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginMalformedOutcome, failure.Code);
+        Assert.Equal(FailureClass.Ambiguous, OutcomeClassification.ClassOf(failure.Code));
+    }
+
+    [Fact]
+    public async Task An_outcome_for_another_invocation_is_not_this_invocation_s_answer()
+    {
+        var foreign = new JsonObject
+        {
+            ["protocol_version"] = 1,
+            ["invocation_id"] = "pin_other",
+            ["status"] = "succeeded",
+            ["result"] = new JsonObject { ["stolen"] = true },
+            ["external_ids"] = null,
+            ["error"] = null,
+            ["diagnostics"] = new JsonObject
+            {
+                ["duration_ms"] = 1,
+                ["exec_calls"] = 0,
+                ["http_calls"] = 0,
+                ["log_lines"] = 0,
+            },
+        }.ToJsonString();
+        await using var api = await StartAsync(Child("stdout", foreign));
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginMalformedOutcome, failure.Code);
+        Assert.Contains("pin_other", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_child_that_floods_stdout_is_ended_rather_than_read()
+    {
+        await using var api = await StartAsync(
+            Child("spew", "5000000"),
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"OutcomeBytes":65536}}}""");
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginOutputTooLarge, failure.Code);
+        AssertGone(result.Launch!.Pid!.Value);
+    }
+
+    [Fact]
+    public async Task A_child_that_refuses_the_invocation_is_reported_as_a_refusal()
+    {
+        await using var api = await StartAsync(Child("exit", "3"));
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginInvocationRejected, failure.Code);
+        Assert.Equal(3, failure.ExitCode);
+        Assert.Equal(FailureClass.Permanent, OutcomeClassification.ClassOf(failure.Code));
+    }
+
+    [Fact]
+    public async Task A_child_that_broke_on_its_own_left_no_outcome()
+    {
+        await using var api = await StartAsync(Child("exit", "4"));
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginNoOutcome, failure.Code);
+        Assert.Equal(4, failure.ExitCode);
+        Assert.Contains("exiting", failure.StderrTail!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_child_that_exits_cleanly_without_writing_anything_left_no_outcome_either()
+    {
+        await using var api = await StartAsync(Child("exit", "0"));
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginNoOutcome, failure.Code);
+        Assert.Equal(0, failure.ExitCode);
+    }
+
+    [Fact]
+    public async Task A_child_that_never_exits_is_ended_when_the_budget_and_its_grace_are_spent()
+    {
+        await using var api = await StartAsync(
+            Child("sleep", "30000"),
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"KillGraceMs":500}}}""");
+        var watch = Stopwatch.StartNew();
+
+        var result = await InvokeAsync(api, TimeSpan.FromMilliseconds(500));
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginTimeout, failure.Code);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(20), $"the kill waited {watch.Elapsed} for a 500 ms budget");
+        AssertGone(result.Launch!.Pid!.Value);
+    }
+
+    [Fact]
+    public async Task A_host_that_cannot_be_started_at_all_is_a_launch_failure()
+    {
+        await using var api = await StartAsync(new CommandLocator("jason-plugin-host-that-does-not-exist"));
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginLaunchFailed, failure.Code);
+        Assert.Null(result.Launch);
+
+        // The one protocol failure worth trying again: nothing ran, and the next attempt may find the program.
+        Assert.Equal(FailureClass.Transient, OutcomeClassification.ClassOf(failure.Code));
+        Assert.True(OutcomeClassification.IsRetriable(OutcomeClassification.ClassOf(failure.Code)));
+    }
+
+    /// <summary>The stand-in vendor CLI, which ignores the protocol arguments the invoker appends to its own.</summary>
+    private static CommandLocator Child(params string[] behaviour) =>
+        new(["dotnet", FakeProviderCli.Dll, .. behaviour]);
+
+    private static Task<RuntimeApiFixture> StartAsync(IPluginHostLocator locator, string? settings = null) =>
+        RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                File.WriteAllText(paths.UserSettingsFile, settings ?? RuntimeApiFixture.DispatcherOff);
+                TestPlugins.InstallFakeProvider(paths);
+                TestPlugins.Grant(paths, TestPlugins.FakeProviderId, exec: ["*"]);
+            },
+            configureServices: services => services.AddSingleton(locator));
+
+    private static async Task<PluginInvocationResult> InvokeAsync(RuntimeApiFixture api, TimeSpan? timeout = null)
+    {
+        using var scope = api.Runtime.Services.CreateScope();
+        var invoker = scope.ServiceProvider.GetRequiredService<PluginInvoker>();
+        return await invoker.InvokeAsync(
+            new PluginInvocationRequest(TestPlugins.FakeProviderId, "echo.run", new JsonObject(), null, "att_01K0PROTOCOL", Timeout: timeout),
+            Ct);
+    }
+
+    private static void AssertGone(int pid)
+    {
+        try
+        {
+            using var child = Process.GetProcessById(pid);
+            Assert.True(child.HasExited, "the child outlived the kill");
+        }
+        catch (ArgumentException)
+        {
+            // Gone entirely, which is the same answer.
+        }
+    }
+}
