@@ -63,6 +63,9 @@ public static class CliApp
         root.Options.Add(actor);
         root.Subcommands.Add(RuntimeCommands.Build(env, actor));
         root.Subcommands.Add(CampaignCommands.Build(env, actor));
+        root.Subcommands.Add(ContactCommands.Build(env, actor));
+        root.Subcommands.Add(JournalCommands.Build(env, actor));
+        root.Subcommands.Add(SuppressionCommands.Build(env, actor));
 
         return root;
     }

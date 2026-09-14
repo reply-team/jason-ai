@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 
@@ -54,8 +55,15 @@ internal static class RenderText
         return (emails.Find(channel => channel.Primary) ?? emails.FirstOrDefault())?.Value;
     }
 
+    /// <summary>The actor as the <c>--actor</c> option spells it, so what is read can be written back.</summary>
+    public static string? Actor(ActorRef? actor) =>
+        actor is null ? null : actor.Id is null ? Snake(actor.Type) : Snake(actor.Type) + ":" + actor.Id;
+
+    /// <summary>A free-form JSON value as it travelled, compactly: there is no plainer way to show what was recorded.</summary>
+    public static string? Compact(JsonNode? value) => value?.ToJsonString(JasonJson.Options);
+
     /// <summary>The keys of a free-form JSON object, listed rather than printed: the object itself is in the JSON output.</summary>
-    public static string Keys(IEnumerable<KeyValuePair<string, System.Text.Json.Nodes.JsonNode?>>? properties)
+    public static string Keys(IEnumerable<KeyValuePair<string, JsonNode?>>? properties)
     {
         var keys = properties is null ? [] : properties.Select(property => property.Key).ToList();
         return keys.Count == 0 ? "none" : string.Join(", ", keys);

@@ -38,6 +38,23 @@ public class CliAppTests
         Assert.Contains("runtime", output.ToString(), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("runtime")]
+    [InlineData("campaign")]
+    [InlineData("contact")]
+    [InlineData("journal")]
+    [InlineData("suppression")]
+    public async Task Help_lists_every_command_group(string group)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        var exit = await CliApp.RunAsync(["--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains(group, output.ToString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Runtime_status_is_routed_to_the_command()
     {
