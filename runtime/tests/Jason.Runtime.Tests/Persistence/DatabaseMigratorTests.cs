@@ -13,8 +13,8 @@ public class DatabaseMigratorTests
         var report = new DatabaseMigrator(dir.Paths).Migrate();
 
         Assert.True(File.Exists(dir.Paths.DatabaseFile));
-        Assert.Single(report.AppliedMigrations);
         Assert.EndsWith("_InitialCreate", report.AppliedMigrations[0], StringComparison.Ordinal);
+        Assert.Contains(report.AppliedMigrations, m => m.EndsWith("_CampaignsContactsJournal", StringComparison.Ordinal));
         Assert.Equal(report.AppliedMigrations, report.NewlyApplied);
         Assert.Null(report.BackupFile);
         Assert.False(Directory.Exists(dir.Paths.BackupsDirectory) && Directory.EnumerateFiles(dir.Paths.BackupsDirectory).Any());
@@ -25,11 +25,11 @@ public class DatabaseMigratorTests
     public void Second_start_is_a_no_op()
     {
         using var dir = new TempDataDir();
-        new DatabaseMigrator(dir.Paths).Migrate();
+        var first = new DatabaseMigrator(dir.Paths).Migrate();
 
         var report = new DatabaseMigrator(dir.Paths).Migrate();
 
-        Assert.Single(report.AppliedMigrations);
+        Assert.Equal(first.AppliedMigrations, report.AppliedMigrations);
         Assert.Empty(report.NewlyApplied);
         Assert.Null(report.BackupFile);
     }
