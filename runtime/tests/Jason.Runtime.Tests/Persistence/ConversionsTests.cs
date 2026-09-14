@@ -1,5 +1,7 @@
 using System.Text.Json.Nodes;
+using Jason.Contracts.Api;
 using Jason.Runtime.Persistence;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Persistence;
@@ -67,5 +69,51 @@ public class ConversionsTests
             var nested = db.Journal.Single(e => e.PublicId == "jrn_O");
             Assert.Equal("{\"a\":[1,2]}", nested.New!.ToJsonString());
         }
+    }
+
+    [Fact]
+    public void A_status_stored_as_snake_case_text_reads_back_as_its_enum()
+    {
+        using var database = new TestDatabase();
+        var now = DateTime.UtcNow;
+        using (var db = database.Open())
+        {
+            db.Campaigns.Add(new Campaign { PublicId = "cmp_P", Name = "p", CreatedAt = now, UpdatedAt = now, Status = CampaignStatus.Paused });
+            db.SaveChanges();
+        }
+
+        using (var connection = new SqliteConnection($"Data Source={database.File}"))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT status FROM campaigns WHERE public_id = 'cmp_P'";
+            Assert.Equal("paused", (string?)command.ExecuteScalar());
+        }
+
+        using (var db = database.Open())
+        {
+            Assert.Equal(CampaignStatus.Paused, db.Campaigns.Single(c => c.PublicId == "cmp_P").Status);
+        }
+    }
+
+    [Fact]
+    public void Status_text_the_converter_does_not_know_stops_the_read_instead_of_being_guessed_at()
+    {
+        using var database = new TestDatabase();
+        using (var connection = new SqliteConnection($"Data Source={database.File}"))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+
+            // Written the way a hand-edited database or a future version of the runtime would write it.
+            command.CommandText =
+                "INSERT INTO campaigns (public_id, name, status, created_at, updated_at, context_json) "
+                + "VALUES ('cmp_U', 'u', 'pau_sed', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', '{}')";
+            command.ExecuteNonQuery();
+        }
+
+        using var db = database.Open();
+        var failure = Assert.Throws<InvalidOperationException>(() => db.Campaigns.ToList());
+        Assert.Contains("pau_sed", failure.Message, StringComparison.Ordinal);
     }
 }

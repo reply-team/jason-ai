@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Runtime.Campaigns;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -22,7 +23,7 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         ArgumentNullException.ThrowIfNull(request);
 
         var actor = Actors.Resolve(request.Actor);
-        var campaign = await LoadCampaignAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
+        var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
         if (campaign.ArchivedAt is not null)
         {
             throw DomainErrors.CampaignArchived(campaign.PublicId);
@@ -124,7 +125,7 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         ArgumentNullException.ThrowIfNull(request);
 
         var actor = Actors.Resolve(request.Actor);
-        var campaign = await LoadCampaignAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
+        var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
         if (campaign.ArchivedAt is not null)
         {
             throw DomainErrors.CampaignArchived(campaign.PublicId);
@@ -221,7 +222,7 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var campaign = await LoadCampaignAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
+        var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
         var limit = Paging.ResolveLimit(request.Limit);
         var after = Paging.DecodeCursor(request.Cursor);
 
@@ -255,19 +256,6 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
                 membership.State,
                 ContactMapper.ToOffset(membership.AddedAt),
                 ContactMapper.ToOffset(membership.UpdatedAt)));
-    }
-
-    /// <summary>The campaign this operation is about, or the error the caller is owed.</summary>
-    private static async Task<Campaign> LoadCampaignAsync(JasonDbContext db, string? publicId, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(publicId))
-        {
-            throw DomainErrors.Required("campaign_id");
-        }
-
-        var id = publicId.Trim();
-        return await db.Campaigns.SingleOrDefaultAsync(campaign => campaign.PublicId == id, cancellationToken).ConfigureAwait(false)
-            ?? throw DomainErrors.CampaignNotFound(id);
     }
 
     private async Task<AddContactsItemResult> AddByIdAsync(
