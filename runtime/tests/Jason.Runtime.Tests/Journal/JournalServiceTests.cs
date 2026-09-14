@@ -244,6 +244,65 @@ public class JournalServiceTests
         Assert.Equal(3, pages);
     }
 
+    [Fact]
+    public async Task The_chronicle_narrows_to_one_work_item()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var clock = new FixedClock(Noon);
+        var campaignId = await CreateAsync(NewCampaignService(db, clock));
+        var service = NewJournalService(db, clock);
+        var campaign = db.Campaigns.Single(c => c.PublicId == campaignId);
+        var writer = new JournalWriter(clock);
+
+        var mine = NewWorkItem(db, campaign, "wi_MINE");
+        var other = NewWorkItem(db, campaign, "wi_OTHER");
+        var attempt = new Attempt
+        {
+            PublicId = "att_A",
+            WorkItem = mine,
+            Number = 1,
+            Command = WorkItemKind.AiRole,
+            Status = AttemptStatus.Running,
+            ClaimedAt = Noon.UtcDateTime,
+            LockUntil = Noon.UtcDateTime.AddHours(1),
+        };
+        db.Attempts.Add(attempt);
+        await db.SaveChangesAsync(Ct);
+
+        writer.Append(db, Actors.Runtime, JournalKinds.WorkItemScheduled, campaign: null, key: "attempt", workItem: mine, attempt: attempt);
+        writer.Append(db, Actors.Runtime, JournalKinds.WorkItemExpired, campaign: null, key: "due_at", workItem: other);
+        await db.SaveChangesAsync(Ct);
+
+        var page = await service.ListAsync(new JournalListRequest(null, "wi_MINE", null, null, null, null), Ct);
+
+        var entry = Assert.Single(page.Items);
+        Assert.Equal(JournalKinds.WorkItemScheduled, entry.Kind);
+        Assert.Equal("wi_MINE", entry.WorkItemId);
+        Assert.Equal("att_A", entry.AttemptId);
+        Assert.Equal(campaignId, entry.CampaignId);
+
+        // Combines with the other filters rather than replacing them.
+        Assert.Empty((await service.ListAsync(new JournalListRequest(campaignId, "wi_MINE", JournalKinds.WorkItemExpired, null, null, null), Ct)).Items);
+        Assert.Single((await service.ListAsync(new JournalListRequest(campaignId, "wi_MINE", JournalKinds.WorkItemScheduled, null, null, null), Ct)).Items);
+    }
+
+    private static WorkItem NewWorkItem(JasonDbContext db, Campaign campaign, string publicId)
+    {
+        var item = new WorkItem
+        {
+            PublicId = publicId,
+            Campaign = campaign,
+            Kind = WorkItemKind.AiRole,
+            Role = "researcher",
+            CreatedAt = Noon.UtcDateTime,
+            UpdatedAt = Noon.UtcDateTime,
+        };
+        db.WorkItems.Add(item);
+        db.SaveChanges();
+        return item;
+    }
+
     private static async Task<string> CreateAsync(CampaignService campaigns) =>
         (await campaigns.CreateAsync(new CampaignCreateRequest("LatAm", null, null, null), Ct)).Id;
 

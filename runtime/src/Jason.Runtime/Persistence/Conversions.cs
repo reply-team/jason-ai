@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Json;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
@@ -37,3 +38,26 @@ public sealed class JsonNodeComparer() : ValueComparer<JsonNode>(
     (left, right) => JsonNode.DeepEquals(left, right),
     node => node.ToJsonString(null).GetHashCode(StringComparison.Ordinal),
     node => node.DeepClone());
+
+/// <summary>
+/// A DTO stored as JSON text in its own column. The comparer works on the serialized form rather than on
+/// record equality, because a record whose members include a list compares those by reference.
+/// </summary>
+public sealed class JsonTextConverter<T>() : ValueConverter<T, string>(
+    value => JsonSerializer.Serialize(value, JasonJson.Options),
+    text => JsonSerializer.Deserialize<T>(text, JasonJson.Options)!);
+
+public sealed class JsonTextComparer<T>() : ValueComparer<T>(
+    (left, right) => string.Equals(JsonSerializer.Serialize(left, JasonJson.Options), JsonSerializer.Serialize(right, JasonJson.Options), StringComparison.Ordinal),
+    value => JsonSerializer.Serialize(value, JasonJson.Options).GetHashCode(StringComparison.Ordinal),
+    value => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value, JasonJson.Options), JasonJson.Options)!);
+
+/// <summary>A list of strings stored as a JSON array. Order is part of the value: an entry command is a command line.</summary>
+public sealed class StringListConverter() : ValueConverter<List<string>, string>(
+    value => JsonSerializer.Serialize(value, JasonJson.Options),
+    text => JsonSerializer.Deserialize<List<string>>(text, JasonJson.Options)!);
+
+public sealed class StringListComparer() : ValueComparer<List<string>>(
+    (left, right) => left!.SequenceEqual(right!),
+    value => value.Aggregate(0, (hash, item) => HashCode.Combine(hash, item.GetHashCode(StringComparison.Ordinal))),
+    value => value.ToList());

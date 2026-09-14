@@ -88,6 +88,14 @@ public sealed class JournalService(JasonDbContext db, JournalWriter journal)
             query = query.Where(e => e.CampaignId == campaign.Id);
         }
 
+        if (!Blank(request.WorkItemId))
+        {
+            // The public id as written on the entry: an unknown one simply matches nothing, because the
+            // chronicle of a work item that never existed is legitimately empty.
+            var workItemId = request.WorkItemId!.Trim();
+            query = query.Where(e => e.WorkItemId == workItemId);
+        }
+
         if (!Blank(request.Kind))
         {
             var kind = request.Kind!.Trim();

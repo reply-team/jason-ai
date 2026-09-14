@@ -1,5 +1,7 @@
 using Jason.Runtime.Persistence;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Jason.Runtime.Tests.Persistence;
 
@@ -79,6 +81,38 @@ public class DatabaseMigratorTests
         Assert.Equal(1, DatabaseMigrator.RetainedBackups);
         Assert.Single(remaining);
         Assert.Equal(report.BackupFile, remaining[0]);
+    }
+
+    [Fact]
+    public async Task A_wave_two_database_migrates_to_head_without_losing_its_chronicle()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.StateDirectory);
+        await using (var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile)))
+        {
+            await db.GetService<IMigrator>().MigrateAsync("20260914051837_CampaignsContactsJournal", TestContext.Current.CancellationToken);
+        }
+
+        Execute(dir.Paths.DatabaseFile, "INSERT INTO campaigns (public_id, name, status, context_json, created_at, updated_at) VALUES ('cmp_OLD', 'old', 'active', '{}', '2026-01-01', '2026-01-01')");
+        Execute(dir.Paths.DatabaseFile, "INSERT INTO journal (public_id, ts, actor_type, kind, campaign_id) VALUES ('jrn_OLD', '2026-01-01', 'human', 'campaign_created', 1)");
+
+        var report = new DatabaseMigrator(dir.Paths).Migrate();
+
+        Assert.Contains(report.NewlyApplied, m => m.EndsWith("_WorkItemsAttemptsRoles", StringComparison.Ordinal));
+        Assert.Equal("1", Scalar(dir.Paths.DatabaseFile, "SELECT COUNT(*) FROM journal WHERE public_id = 'jrn_OLD'"));
+        Assert.Equal("9", Scalar(dir.Paths.DatabaseFile, "SELECT COUNT(*) FROM roles"));
+
+        var refused = Assert.Throws<SqliteException>(() => Execute(dir.Paths.DatabaseFile, "UPDATE journal SET reason = 'rewritten' WHERE public_id = 'jrn_OLD'"));
+        Assert.Contains("append-only", refused.Message, StringComparison.Ordinal);
+    }
+
+    private static void Execute(string databaseFile, string sql)
+    {
+        using var connection = new SqliteConnection($"Data Source={databaseFile}");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.ExecuteNonQuery();
     }
 
     private static string Scalar(string databaseFile, string sql)
