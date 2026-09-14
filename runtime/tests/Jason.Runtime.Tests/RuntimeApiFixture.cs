@@ -13,6 +13,14 @@ namespace Jason.Runtime.Tests;
 /// <summary>A real runtime on a temporary data directory plus an authenticated HTTP client that speaks the API's JSON.</summary>
 public sealed class RuntimeApiFixture : IAsyncDisposable
 {
+    /// <summary>
+    /// What a fixture writes when the test asked for no settings of its own. A shipped runtime dispatches by
+    /// default: it scans the moment it starts and then every tick, so a test that leaves claimable work lying
+    /// around for more than a tick would find it claimed out from under it. A test that wants the loop writes
+    /// its own settings and drives the scans.
+    /// </summary>
+    public const string DispatcherOff = """{"Dispatcher":{"Enabled":false}}""";
+
     private static readonly RuntimeHostOptions Quiet = new(ShippedSettingsDirectory: null, ConsoleLogging: false);
 
     private readonly TempDataDir _dir = new();
@@ -27,7 +35,10 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
     public T Resolve<T>()
         where T : notnull => Runtime.Services.GetRequiredService<T>();
 
-    /// <param name="prepare">Runs after the temporary data directory exists and before the runtime starts: write settings here.</param>
+    /// <param name="prepare">
+    /// Runs after the temporary data directory exists and before the runtime starts: write settings here. A
+    /// test that passes none gets <see cref="DispatcherOff"/> written for it.
+    /// </param>
     /// <param name="clock">The runtime's clock, so a test can move time.</param>
     /// <param name="configureServices">Registered last while composing, so a test's service wins over the runtime's own.</param>
     public static async Task<RuntimeApiFixture> StartAsync(
@@ -37,9 +48,13 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
         Action<IServiceCollection>? configureServices = null)
     {
         var fixture = new RuntimeApiFixture();
-        if (prepare is not null)
+        Directory.CreateDirectory(fixture._dir.Paths.ConfigDirectory);
+        if (prepare is null)
         {
-            Directory.CreateDirectory(fixture._dir.Paths.ConfigDirectory);
+            File.WriteAllText(fixture._dir.Paths.UserSettingsFile, DispatcherOff);
+        }
+        else
+        {
             prepare(fixture._dir.Paths);
         }
 

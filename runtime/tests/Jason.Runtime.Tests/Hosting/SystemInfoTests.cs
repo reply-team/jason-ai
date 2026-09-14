@@ -8,6 +8,18 @@ public class SystemInfoTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    public async Task A_fixture_the_test_wrote_no_settings_for_runs_without_a_dispatcher()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        // Nothing scans behind the test's back: work seeded here stays where the test put it.
+        Assert.Equal(DispatcherState.Disabled, info.Dispatcher.State);
+        Assert.Equal(0, info.Dispatcher.Scans);
+    }
+
+    [Fact]
     public async Task System_info_reports_the_dispatcher_even_when_it_is_turned_off()
     {
         await using var fixture = await RuntimeApiFixture.StartAsync(
