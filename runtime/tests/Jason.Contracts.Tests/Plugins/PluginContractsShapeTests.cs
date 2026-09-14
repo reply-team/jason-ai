@@ -94,7 +94,7 @@ public class PluginContractsShapeTests
             "pin_01J",
             OutcomeStatus.Succeeded,
             JsonNode.Parse("""{"id":"r_123"}"""),
-            new Dictionary<string, string> { ["contact"] = "r_123" },
+            new JsonObject { ["contact"] = "r_123", ["sequenceId"] = "s_9" },
             Error: null,
             new OutcomeDiagnostics(12, 0, 1, 0));
 
@@ -103,7 +103,12 @@ public class PluginContractsShapeTests
 
         Assert.Equal(OutcomeStatus.Succeeded, back.Status);
         Assert.Equal("r_123", back.Result!["id"]!.GetValue<string>());
-        Assert.Equal("r_123", back.ExternalIds!["contact"]);
+        Assert.Equal("r_123", back.ExternalIds!["contact"]!.GetValue<string>());
+
+        // The keys are the provider's names for its own identifiers: they travel exactly as the plugin wrote them,
+        // untouched by the snake_case policy that governs the runtime's own members.
+        Assert.Contains("\"external_ids\":{\"contact\":\"r_123\",\"sequenceId\":\"s_9\"}", json, StringComparison.Ordinal);
+        Assert.Equal("s_9", back.ExternalIds["sequenceId"]!.GetValue<string>());
         Assert.Null(back.Error);
     }
 
