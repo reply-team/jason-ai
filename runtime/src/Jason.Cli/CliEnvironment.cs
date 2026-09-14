@@ -1,9 +1,10 @@
+using Jason.Cli.Process;
 using Jason.Contracts.Discovery;
 
 namespace Jason.Cli;
 
 /// <summary>Everything the CLI touches outside itself, so tests can substitute all of it.</summary>
-public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null)
+public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null)
 {
-    public static CliEnvironment Default() => new(Console.Out, Console.Error, JasonPaths.FromEnvironment());
+    public static CliEnvironment Default() => new(Console.Out, Console.Error, JasonPaths.FromEnvironment(), null, Console.In, RuntimeProcessControl.Instance);
 }

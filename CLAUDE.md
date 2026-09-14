@@ -22,6 +22,7 @@ covered here.
 - Test one project: `dotnet test --project runtime/tests/Jason.Runtime.Tests`
 - Test one method or class: append `-- --filter-method "*MethodName"` or `-- --filter-class "Namespace.ClassName"`
 - Run: `dotnet run --project runtime/src/Jason.App -- --version` · `-- runtime run` · `-- runtime status`
+  · `-- runtime start` (background, no autostart registered) · `-- runtime stop` · `-- campaign list`
 - Add a migration: `dotnet tool restore` once, then
   `dotnet ef migrations add <Name> --project runtime/src/Jason.Runtime --startup-project runtime/src/Jason.Runtime --output-dir Persistence/Migrations`
 - Publish: `dotnet publish runtime/src/Jason.App -c Release -r <rid> --self-contained -p:PublishSingleFile=true`
@@ -39,17 +40,23 @@ covered here.
 
 - Terminology: **plugin** (not adapter), **WorkItem** (not Task), **channels** (not handles).
   Skills, campaign context, role notes and learned practice are four distinct knowledge concepts;
-  do not blur them.
+  do not blur them. Membership in a Jason campaign is local; `campaign.enroll` — a later,
+  provider-side, approval-gated act — is a different thing.
 - Runtime API: RPC style, `POST /v1/{noun}.{verb}` for everything, reads included. Success is 200
   with a bare DTO; errors are `{"error":{"code","message","retryable"}}` with snake_case codes.
   JSON is snake_case, enums are snake_case strings, timestamps are ISO-8601 UTC, public ids are
-  prefixed ULIDs (`cmp_…`, `wi_…`).
+  prefixed ULIDs (`cmp_…`, `wi_…`). Partial patches distinguish absent from null (`Optional<T>`);
+  lists paginate with `limit`/`cursor`; every mutating request may carry `actor` and `reason`.
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for
   people, stderr is diagnostics only. Exit codes: 0 success, 1 API business error, 2 usage error,
   3 runtime unreachable or unauthorized.
 - Persistence: EF Core over SQLite in WAL mode, snake_case tables and columns, integer primary keys
-  plus a unique public ULID. Migrations apply automatically on runtime start after a pre-migration
-  backup. Never hand-edit a generated migration; add a new one.
+  plus a unique public ULID. The `journal` table is append-only, enforced three times over: no API
+  path that changes an entry, an EF interceptor, and database triggers. Schema-less JSON — campaign
+  context, contact custom fields, channel data — is stored as JSON text through a converter, and
+  channels live in `contact_channels`. Migrations apply automatically on runtime start after a
+  pre-migration backup. Never edit a migration after it has been committed; raw SQL such as the
+  journal triggers is added to a new migration when it is created.
 - Configuration: strongly typed options only; user overrides in `~/.jason/config/settings.json`,
   environment variables `JASON_*`; the data directory itself comes from `JASON_DATA_DIR` or
   defaults to `~/.jason`.

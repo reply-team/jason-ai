@@ -24,9 +24,14 @@ public sealed class RuntimeClient : IDisposable
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", descriptor.Token);
     }
 
-    public async Task<RuntimeResponse> PostAsync(string operation, CancellationToken cancellationToken)
+    public Task<RuntimeResponse> PostAsync(string operation, CancellationToken cancellationToken) =>
+        PostAsync(operation, "{}", cancellationToken);
+
+    public async Task<RuntimeResponse> PostAsync(string operation, string jsonBody, CancellationToken cancellationToken)
     {
-        using var content = new StringContent("{}", Encoding.UTF8, "application/json");
+        ArgumentNullException.ThrowIfNull(jsonBody);
+
+        using var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
         using var response = await _http.PostAsync(Operations.Route(operation), content, cancellationToken).ConfigureAwait(false);
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         return new RuntimeResponse((int)response.StatusCode, body);

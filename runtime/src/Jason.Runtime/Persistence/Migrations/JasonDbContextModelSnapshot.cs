@@ -28,6 +28,13 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("archived_at");
 
+                    b.Property<string>("Context")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("context_json")
+                        .HasDefaultValueSql("'{}'");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("created_at");
@@ -61,7 +68,358 @@ namespace Jason.Runtime.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_campaigns_public_id");
 
-                    b.ToTable("campaigns");
+                    b.ToTable("campaigns", t =>
+                        {
+                            t.HasCheckConstraint("ck_campaigns_context_json", "json_valid(context_json)");
+                        });
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.CampaignContact", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("added_at");
+
+                    b.Property<int>("CampaignId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("campaign_id");
+
+                    b.Property<int>("ContactId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("contact_id");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("state");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_campaign_contacts");
+
+                    b.HasIndex("ContactId")
+                        .HasDatabaseName("ix_campaign_contacts_contact_id");
+
+                    b.HasIndex("CampaignId", "ContactId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_campaign_contacts_campaign_id_contact_id");
+
+                    b.ToTable("campaign_contacts");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.Contact", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("archived_at");
+
+                    b.Property<string>("Company")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("company");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Custom")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("custom_json")
+                        .HasDefaultValueSql("'{}'");
+
+                    b.Property<string>("FirstName")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("first_name");
+
+                    b.Property<string>("LastName")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_name");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.Property<string>("TimeZone")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("time_zone");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_contacts");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contacts_public_id");
+
+                    b.ToTable("contacts", t =>
+                        {
+                            t.HasCheckConstraint("ck_contacts_custom_json", "json_valid(custom_json)");
+                        });
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.ContactChannel", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("channel");
+
+                    b.Property<int>("ContactId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("contact_id");
+
+                    b.Property<string>("Data")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("data_json");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_primary");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("label");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id")
+                        .HasName("pk_contact_channels");
+
+                    b.HasIndex("Channel", "Value")
+                        .HasDatabaseName("ix_contact_channels_channel_value");
+
+                    b.HasIndex("ContactId", "Channel")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contact_channels_one_primary_per_channel")
+                        .HasFilter("is_primary = 1");
+
+                    b.HasIndex("ContactId", "Channel", "Value")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contact_channels_contact_id_channel_value");
+
+                    b.ToTable("contact_channels", t =>
+                        {
+                            t.HasCheckConstraint("ck_contact_channels_data_json", "data_json IS NULL OR json_valid(data_json)");
+                        });
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.JournalEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActorId")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("actor_id");
+
+                    b.Property<string>("ActorType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("actor_type");
+
+                    b.Property<int?>("CampaignId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("campaign_id");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("New")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("new_json");
+
+                    b.Property<string>("Old")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("old_json");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTime>("Ts")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ts");
+
+                    b.HasKey("Id")
+                        .HasName("pk_journal");
+
+                    b.HasIndex("Kind")
+                        .HasDatabaseName("ix_journal_kind");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_journal_public_id");
+
+                    b.HasIndex("CampaignId", "PublicId")
+                        .HasDatabaseName("ix_journal_campaign_id_public_id");
+
+                    b.ToTable("journal", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_journal_new_json", "new_json IS NULL OR json_valid(new_json)");
+
+                            t.HasCheckConstraint("ck_journal_old_json", "old_json IS NULL OR json_valid(old_json)");
+                        });
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.Suppression", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("channel");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id")
+                        .HasName("pk_suppressions");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_suppressions_public_id");
+
+                    b.HasIndex("Channel", "Value")
+                        .IsUnique()
+                        .HasDatabaseName("ix_suppressions_channel_value");
+
+                    b.ToTable("suppressions");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.CampaignContact", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.Campaign", "Campaign")
+                        .WithMany("Members")
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_campaign_contacts_campaigns_campaign_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.Contact", "Contact")
+                        .WithMany()
+                        .HasForeignKey("ContactId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_campaign_contacts_contacts_contact_id");
+
+                    b.Navigation("Campaign");
+
+                    b.Navigation("Contact");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.ContactChannel", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.Contact", "Contact")
+                        .WithMany("Channels")
+                        .HasForeignKey("ContactId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_contact_channels_contacts_contact_id");
+
+                    b.Navigation("Contact");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.JournalEntry", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.Campaign", "Campaign")
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_journal_campaigns_campaign_id");
+
+                    b.Navigation("Campaign");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.Campaign", b =>
+                {
+                    b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.Contact", b =>
+                {
+                    b.Navigation("Channels");
                 });
 #pragma warning restore 612, 618
         }
