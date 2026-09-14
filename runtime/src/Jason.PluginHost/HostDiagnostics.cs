@@ -33,6 +33,12 @@ public sealed class HostDiagnostics(
     /// <summary>How many lines the plugin itself wrote; the host's own lines are not the plugin's business.</summary>
     public int LogLines { get; private set; }
 
+    /// <summary>
+    /// Masks what this invocation's granted variables hold, for text that is about to leave the process by
+    /// another door than a log line — an outcome's message, an error's details. One redactor, one rule.
+    /// </summary>
+    public string Redact(string text) => redactor.Redact(text);
+
     public void Host(string level, string message, JsonNode? data = null) => Write(HostSource, level, message, data);
 
     public void Plugin(string level, string message, JsonNode? data = null) => Write(PluginSource, level, message, data);
