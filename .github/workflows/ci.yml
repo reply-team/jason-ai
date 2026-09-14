@@ -42,6 +42,36 @@ jobs:
       - name: Test (offline)
         run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build
 
+      # Temporary: the runtime test host has been unable to exit on this runner after every test passed.
+      # Run it on its own, and when it announces the wait for foreground threads, capture the managed stacks.
+      - name: Capture the stacks of a test host that cannot exit
+        if: always() && runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          dotnet tool install --global dotnet-stack | Out-Null
+          $exe = "runtime/tests/Jason.Runtime.Tests/bin/Release/net10.0/Jason.Runtime.Tests.exe"
+          $out = "diag-host.out.log"
+          $err = "diag-host.err.log"
+          $p = Start-Process $exe -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
+          $deadline = (Get-Date).AddMinutes(8)
+          $dumped = $false
+          while (-not $p.HasExited -and (Get-Date) -lt $deadline) {
+            Start-Sleep -Milliseconds 250
+            if (-not $dumped -and (Test-Path $out) -and (Select-String -Path $out -Pattern 'Waiting 10 seconds' -Quiet)) {
+              $dumped = $true
+              Write-Host "=== the host (pid $($p.Id)) is waiting for foreground threads; managed stacks: ==="
+              dotnet-stack report -p $p.Id
+              Write-Host "=== native threads ==="
+              (Get-Process -Id $p.Id).Threads | Select-Object Id, ThreadState, WaitReason, StartTime | Format-Table | Out-String | Write-Host
+            }
+          }
+          if (-not $p.HasExited) { Write-Host "host still alive after the deadline"; Stop-Process -Id $p.Id -Force }
+          Write-Host "=== host exit code: $($p.ExitCode); dumped: $dumped ==="
+          Get-Content $out | Select-String -Pattern 'Waiting 10|FATAL|Passed!|Failed!|total:|failed:' | ForEach-Object { $_.Line }
+          if (Test-Path $err) { Get-Content $err | Select-Object -Last 10 }
+          exit 0
+
       - name: Publish self-contained single-file executable
         run: dotnet publish runtime/src/Jason.App --configuration Release --runtime ${{ matrix.rid }} --self-contained -p:PublishSingleFile=true --output artifacts/publish/${{ matrix.rid }}
 
