@@ -219,6 +219,25 @@ public class PluginInvokerTests
     }
 
     [Fact]
+    public async Task A_capability_the_manifest_asks_for_but_nobody_granted_is_refused_as_not_granted()
+    {
+        // Declared, resolvable, and granted nothing: the plugin must hear "not granted", not "this program is
+        // not on your list" — the list exists only once a grant does.
+        await using var api = await StartAsync(paths => TestPlugins.Write(
+            paths,
+            "ungranted",
+            TestPlugins.Manifest("ungranted", operations: "[exec.run]", extra: "capabilities:\n  exec:\n    executables:\n      - name: dotnet\n"),
+            "export function invoke(operation, input) { return { result: host.exec({ executable: input.executable, args: input.args }) }; }"));
+
+        var result = await InvokeAsync(api, Request("exec.run", Exec(TokenVariable), plugin: "ungranted"), Ct);
+
+        var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
+        Assert.Equal("capability_not_granted", failed.Error.Code);
+        Assert.Equal(FailureClass.Permanent, failed.Error.Class);
+        Assert.Equal("exec", failed.Error.Details!["capability"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task A_plugin_of_a_kind_nothing_invokes_is_refused()
     {
         await using var api = await StartAsync(paths => TestPlugins.Write(

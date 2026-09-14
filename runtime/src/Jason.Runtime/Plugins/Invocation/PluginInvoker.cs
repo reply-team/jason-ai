@@ -394,12 +394,13 @@ public sealed partial class PluginInvoker(
             .Select(executable => new ExecutableGrant(executable.Name, executable.Path!))
             .ToList();
 
-        // A capability the manifest never asked for is absent rather than empty: the child then has no such
-        // function to refuse, which is a different thing from having one that always says no.
+        // A grant is absent, not empty, when the manifest never asked for the capability or the user granted none
+        // of what it asked for: the child then refuses a call as "not granted", which is the answer a plugin
+        // author can act on. An empty list would make it say "not on your list" about a list that does not exist.
         return new InvocationGrants(
-            capabilities.Exec is null ? null : new ExecGrants(executables),
-            capabilities.Http is null ? null : new HttpGrants(plugin.Grants.Http),
-            capabilities.Env is null ? null : new EnvGrants(plugin.Grants.Env));
+            capabilities.Exec is null || executables.Count == 0 ? null : new ExecGrants(executables),
+            capabilities.Http is null || plugin.Grants.Http.Count == 0 ? null : new HttpGrants(plugin.Grants.Http),
+            capabilities.Env is null || plugin.Grants.Env.Count == 0 ? null : new EnvGrants(plugin.Grants.Env));
     }
 
     private static InvocationLimits Limits(PluginsOptions settings, LoadedPlugin plugin, int timeoutMs) =>
