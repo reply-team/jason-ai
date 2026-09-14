@@ -8,9 +8,11 @@ durable outbound-sales operation.
 > [target architecture](docs/architecture.md) and the runtime as it stands: one executable that
 > hosts the local Runtime API, a CLI that talks to it, and a database layer that migrates itself
 > on start. The runtime now manages campaigns, their context and their append-only journal, a
-> contact directory with campaign membership, and a global suppression list — all through the
-> CLI and the Runtime API. Nothing here runs outreach yet. The runtime is being built in the
-> open, one self-contained increment at a time; no dates, no roadmap promises.
+> contact directory with campaign membership, a suppression list, and **work items: units of work
+> inside a campaign that a deterministic dispatcher claims under a lease and hands to a role's
+> entry command, which reports back through the API** — all through the CLI and the Runtime API.
+> Provider operations are not routed yet, so nothing here sends outreach. The runtime is being
+> built in the open, one self-contained increment at a time; no dates, no roadmap promises.
 
 ## What this is
 
@@ -71,17 +73,25 @@ really gone. Nothing about autostart is registered anywhere — starting the ser
 something you or your agent did. `jason runtime run` keeps the runtime in the foreground
 instead, and `jason runtime status` asks it for `system.info` through the Runtime API.
 
-Campaigns and the people in them are managed with one verb per API operation:
+Campaigns, the people in them, and the work to be done about them are managed with one verb per
+API operation:
 
 ```sh
 jason campaign create --name "Latin America"
 jason campaign add-contacts <id> --file contacts.json --match-by email
 jason campaign start <id>
+jason role list
+jason workitem create <id> --kind ai_role --role researcher
+jason workitem list --campaign <id> --status failed --status expired
 ```
 
 Every verb prints the exact API response as compact JSON on stdout (add `--human` for a readable
 rendering). The runtime keeps its data under `~/.jason` (override with the `JASON_DATA_DIR`
 environment variable).
+
+How work items are claimed, launched and reported on — the lifecycle, the launch envelope an
+executor is handed, the operations it reports through, and the settings that pace all of it — is
+documented in **[docs/work-execution.md](docs/work-execution.md)**.
 
 ## Ecosystem
 
