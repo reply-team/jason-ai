@@ -14,6 +14,7 @@ public static class ContactModule
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddScoped<ContactService>();
+        services.AddScoped<MembershipService>();
         return services;
     }
 
@@ -26,5 +27,11 @@ public static class ContactModule
         app.MapOperation<ContactService, ContactListRequest, Page<ContactDto>>(Operations.ContactList, (service, request, ct) => service.ListAsync(request, ct));
         app.MapOperation<ContactService, ContactUpdateRequest, ContactDto>(Operations.ContactUpdate, (service, request, ct) => service.UpdateAsync(request, ct));
         app.MapOperation<ContactService, ContactArchiveRequest, ContactDto>(Operations.ContactArchive, (service, request, ct) => service.ArchiveAsync(request, ct));
+
+        // Membership is addressed as a campaign verb — the campaign is what the caller is changing — but it
+        // belongs to the contact slice, which owns every rule about who a contact is.
+        app.MapOperation<MembershipService, AddContactsRequest, AddContactsResult>(Operations.CampaignAddContacts, (service, request, ct) => service.AddAsync(request, ct));
+        app.MapOperation<MembershipService, RemoveContactsRequest, RemoveContactsResult>(Operations.CampaignRemoveContacts, (service, request, ct) => service.RemoveAsync(request, ct));
+        app.MapOperation<MembershipService, ListContactsRequest, Page<MembershipItemDto>>(Operations.CampaignListContacts, (service, request, ct) => service.ListAsync(request, ct));
     }
 }
