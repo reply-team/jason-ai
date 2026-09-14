@@ -8,13 +8,15 @@ public class SystemInfoTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task System_info_reports_the_dispatcher_even_before_a_loop_exists()
+    public async Task System_info_reports_the_dispatcher_even_when_it_is_turned_off()
     {
-        await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false}}"""));
 
         var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
 
-        Assert.Equal(DispatcherState.Stopped, info.Dispatcher.State);
+        Assert.Equal(DispatcherState.Disabled, info.Dispatcher.State);
         Assert.Equal(10, info.Dispatcher.TickSeconds);
         Assert.Equal(4, info.Dispatcher.MaxParallel);
         Assert.Equal(0, info.Dispatcher.RunningAttempts);
@@ -27,7 +29,7 @@ public class SystemInfoTests
     {
         await using var fixture = await RuntimeApiFixture.StartAsync(
             Ct,
-            prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Dispatcher":{"TickSeconds":3}}"""));
+            prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false,"TickSeconds":3}}"""));
 
         var status = fixture.Resolve<DispatcherStatus>();
         status.State = DispatcherState.Running;
