@@ -15,6 +15,7 @@ public static class ContactModule
 
         services.AddScoped<ContactService>();
         services.AddScoped<MembershipService>();
+        services.AddScoped<SuppressionService>();
         return services;
     }
 
@@ -33,5 +34,9 @@ public static class ContactModule
         app.MapOperation<MembershipService, AddContactsRequest, AddContactsResult>(Operations.CampaignAddContacts, (service, request, ct) => service.AddAsync(request, ct));
         app.MapOperation<MembershipService, RemoveContactsRequest, RemoveContactsResult>(Operations.CampaignRemoveContacts, (service, request, ct) => service.RemoveAsync(request, ct));
         app.MapOperation<MembershipService, ListContactsRequest, Page<MembershipItemDto>>(Operations.CampaignListContacts, (service, request, ct) => service.ListAsync(request, ct));
+
+        app.MapOperation<SuppressionService, SuppressionAddRequest, SuppressionDto>(Operations.SuppressionAdd, (service, request, ct) => service.AddAsync(request, ct));
+        app.MapOperation<SuppressionService, SuppressionRemoveRequest, SuppressionRemovedDto>(Operations.SuppressionRemove, (service, request, ct) => service.RemoveAsync(request, ct));
+        app.MapOperation<SuppressionService, SuppressionListRequest, Page<SuppressionDto>>(Operations.SuppressionList, (service, request, ct) => service.ListAsync(request, ct));
     }
 }
