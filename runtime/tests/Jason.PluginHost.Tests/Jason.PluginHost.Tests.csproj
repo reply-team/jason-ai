@@ -1,5 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="../../src/Jason.PluginHost/Jason.PluginHost.csproj" />
+    <!-- Referencing the stand-in vendor CLI copies Jason.FakeProviderCli.dll, its apphost and its runtimeconfig
+         next to the tests, so host.exec can start a real foreign program. -->
+    <ProjectReference Include="../Jason.FakeProviderCli/Jason.FakeProviderCli.csproj" />
   </ItemGroup>
 </Project>

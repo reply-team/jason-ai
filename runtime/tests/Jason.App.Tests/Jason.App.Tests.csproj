@@ -4,5 +4,7 @@
     <ProjectReference Include="../../src/Jason.App/Jason.App.csproj" />
     <!-- The stand-in agent host, for the same reason: end-to-end work has to be performed by a real child process. -->
     <ProjectReference Include="../Jason.FakeAgentHost/Jason.FakeAgentHost.csproj" />
+    <!-- The stand-in vendor CLI: the end-to-end plugin flow runs a real program through host.exec. -->
+    <ProjectReference Include="../Jason.FakeProviderCli/Jason.FakeProviderCli.csproj" />
   </ItemGroup>
 </Project>

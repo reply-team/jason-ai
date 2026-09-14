@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The CI stand-in for a vendor's command-line tool: the program a plugin's host.exec starts. It behaves
+       exactly as badly as its first argument tells it to, which is how the exec limits, the environment
+       allowlist and the executable resolver are tested without installing anything. It is test scaffolding,
+       never published, and its name does not end in .Tests so the test-runner properties do not apply to it;
+       the test projects reference it only so its assembly — and its apphost, which is what an executable
+       resolver looks for on PATH — is copied next to theirs. It references nothing at all: a stand-in that
+       needed our own types would prove nothing about starting a foreign program. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Jason.FakeProviderCli</AssemblyName>
+    <RootNamespace>Jason.FakeProviderCli</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+</Project>
