@@ -24,13 +24,22 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<JournalEntry> Journal => Set<JournalEntry>();
 
+    /// <summary>
+    /// The one connection string for a database file. Spelled once because the provider pools connections per
+    /// connection string: anything that wants to release a file's pooled connections must name it exactly.
+    /// </summary>
+    public static string ConnectionString(string databaseFile)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(databaseFile);
+        return $"Data Source={databaseFile};Default Timeout=30";
+    }
+
     /// <summary>One place for the SQLite options and interceptors; used by CreateOptions, the migrator and the DI registration.</summary>
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder builder, string databaseFile)
     {
         ArgumentNullException.ThrowIfNull(builder);
-        ArgumentException.ThrowIfNullOrWhiteSpace(databaseFile);
         return builder
-            .UseSqlite($"Data Source={databaseFile};Default Timeout=30")
+            .UseSqlite(ConnectionString(databaseFile))
             .AddInterceptors(new AppendOnlyJournalInterceptor());
     }
 
