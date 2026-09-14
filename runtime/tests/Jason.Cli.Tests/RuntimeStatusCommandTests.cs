@@ -12,7 +12,7 @@ public class RuntimeStatusCommandTests
 {
     private static readonly RuntimeDescriptor Descriptor = new("v1", "0.1.0-dev", "rt_LIVE", 77, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch);
 
-    /// <summary>A runtime from before the dispatcher existed: the field is simply not in the body.</summary>
+    /// <summary>A runtime from before the dispatcher and the plugin registry existed: the fields are simply not in the body.</summary>
     private const string InfoWithoutADispatcher =
         "{\"runtime_version\":\"0.1.0-dev\",\"api_version\":\"v1\",\"instance_id\":\"rt_LIVE\",\"pid\":77,"
         + "\"started_at\":\"1970-01-01T00:00:00+00:00\",\"data_dir\":\"/home/u/.jason\","
@@ -21,7 +21,10 @@ public class RuntimeStatusCommandTests
     private static string InfoJson(string instanceId) =>
         InfoJson(instanceId, new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0));
 
-    private static string InfoJson(string instanceId, DispatcherInfo dispatcher) => JsonSerializer.Serialize(
+    private static string InfoJson(string instanceId, DispatcherInfo dispatcher) =>
+        InfoJson(instanceId, dispatcher, new PluginsInfo(2, "snp_01J4", new DateTimeOffset(2026, 9, 14, 12, 0, 0, TimeSpan.Zero), true));
+
+    private static string InfoJson(string instanceId, DispatcherInfo dispatcher, PluginsInfo plugins) => JsonSerializer.Serialize(
         new SystemInfoResponse(
             "0.1.0-dev",
             "v1",
@@ -31,7 +34,7 @@ public class RuntimeStatusCommandTests
             "/home/u/.jason",
             new DatabaseInfo(["20260913225419_InitialCreate"]),
             dispatcher,
-            new PluginsInfo(0, "snp_NONE", DateTimeOffset.UnixEpoch, null)),
+            plugins),
         JasonJson.Options);
 
     [Fact]
@@ -178,6 +181,50 @@ public class RuntimeStatusCommandTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains("Dispatcher: unknown", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_prints_what_the_plugin_registry_holds()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE"))));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains(
+            "Plugins:    2 active · snapshot snp_01J4 · loaded 2026-09-14 12:00:00 UTC",
+            output.ToString(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_says_that_the_last_load_was_refused()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var plugins = new PluginsInfo(0, "snp_EMPTY", DateTimeOffset.UnixEpoch, false);
+        var dispatcher = new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE", dispatcher, plugins))));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Plugins:    none active · last reload rejected", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_tolerates_a_runtime_that_reports_no_plugins()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoWithoutADispatcher)));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Plugins:    unknown", output.ToString(), StringComparison.Ordinal);
     }
 
     private static (CliEnvironment Env, StringWriter Out, StringWriter Error) Environment(TempPaths dir, HttpMessageHandler handler)

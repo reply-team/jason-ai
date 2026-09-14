@@ -94,6 +94,7 @@ public static class RuntimeStatusCommand
         output.WriteLine($"Data dir:   {info.DataDir}");
         output.WriteLine($"Migrations: {info.Database.AppliedMigrations.Count} applied");
         output.WriteLine($"Dispatcher: {Dispatcher(info.Dispatcher)}");
+        output.WriteLine($"Plugins:    {Plugins(info.Plugins)}");
     }
 
     /// <summary>A runtime older than the dispatcher reports no section at all; say so rather than invent a state.</summary>
@@ -112,5 +113,25 @@ public static class RuntimeStatusCommand
         return string.Create(
             CultureInfo.InvariantCulture,
             $"{state} · tick {dispatcher.TickSeconds} s · {dispatcher.RunningAttempts}/{dispatcher.MaxParallel} attempts · last scan {lastScan}");
+    }
+
+    /// <summary>
+    /// What the plugin registry holds. A runtime older than the registry reports no section at all, and an
+    /// empty registry after a refused load is the one state worth spelling out: nothing is loaded on purpose.
+    /// </summary>
+    private static string Plugins(PluginsInfo? plugins)
+    {
+        if (plugins is null)
+        {
+            return "unknown";
+        }
+
+        if (plugins is { ActiveCount: 0, LastReloadActivated: false })
+        {
+            return "none active · last reload rejected";
+        }
+
+        var loadedAt = plugins.LoadedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
+        return string.Create(CultureInfo.InvariantCulture, $"{plugins.ActiveCount} active · snapshot {plugins.SnapshotId} · loaded {loadedAt}");
     }
 }
