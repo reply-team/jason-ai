@@ -37,7 +37,8 @@ internal static class RuntimeVerbs
             DateTimeOffset.UnixEpoch,
             "/data",
             new DatabaseInfo(["20260913225419_InitialCreate"]),
-            new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0)),
+            new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0),
+            new PluginsInfo(0, "snp_NONE", DateTimeOffset.UnixEpoch, null)),
         JasonJson.Options);
 
     public static string ShutdownJson(string instanceId, int pid = Pid) =>

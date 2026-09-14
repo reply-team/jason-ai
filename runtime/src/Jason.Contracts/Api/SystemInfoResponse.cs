@@ -9,7 +9,8 @@ public sealed record SystemInfoResponse(
     DateTimeOffset StartedAt,
     string DataDir,
     DatabaseInfo Database,
-    DispatcherInfo Dispatcher);
+    DispatcherInfo Dispatcher,
+    PluginsInfo Plugins);
 
 public sealed record DatabaseInfo(IReadOnlyList<string> AppliedMigrations);
 
@@ -21,3 +22,13 @@ public sealed record DispatcherInfo(
     int RunningAttempts,
     DateTimeOffset? LastScanAt,
     long Scans);
+
+/// <summary>
+/// Whether the plugin registry is alive and what it holds, in four values: the cheapest way to see the active
+/// snapshot without a second call. The registry itself is read through <c>plugin.list</c>.
+/// </summary>
+public sealed record PluginsInfo(
+    int ActiveCount,
+    string SnapshotId,
+    DateTimeOffset LoadedAt,
+    bool? LastReloadActivated);

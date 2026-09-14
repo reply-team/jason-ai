@@ -44,7 +44,9 @@ public static class SystemModule
                     runtimeInfo.StartedAt,
                     dataPaths.Root,
                     new DatabaseInfo(report.AppliedMigrations),
-                    dispatcher.Snapshot(dispatcherOptions.CurrentValue, running.Count))));
+                    dispatcher.Snapshot(dispatcherOptions.CurrentValue, running.Count),
+                    // The registry does not exist yet; the section is answered from the snapshot once it does.
+                    new PluginsInfo(0, "snp_none", runtimeInfo.StartedAt, null))));
 
         app.MapOperation<ShutdownCoordinator, ShutdownRequest, ShutdownResponse>(
             Operations.SystemShutdown,
