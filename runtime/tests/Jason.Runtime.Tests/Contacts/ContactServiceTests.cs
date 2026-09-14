@@ -13,7 +13,7 @@ public class ContactServiceTests
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 14, 12, 0, 0, TimeSpan.Zero);
 
-    private static ContactService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock);
+    private static ContactService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
 
     private static ContactCreateRequest Create(
         string? firstName = null,

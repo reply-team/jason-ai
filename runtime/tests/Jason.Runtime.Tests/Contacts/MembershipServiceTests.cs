@@ -13,9 +13,9 @@ public class MembershipServiceTests
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 14, 12, 0, 0, TimeSpan.Zero);
 
-    private static MembershipService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock);
+    private static MembershipService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
 
-    private static ContactService NewContacts(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock);
+    private static ContactService NewContacts(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
 
     private static Campaign NewCampaign(JasonDbContext db, DateTime? archivedAt = null)
     {

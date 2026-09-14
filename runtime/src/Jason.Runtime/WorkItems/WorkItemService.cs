@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -18,7 +19,7 @@ namespace Jason.Runtime.WorkItems;
 /// item may run, and what happens when it does, belongs to the dispatcher and to
 /// <see cref="WorkItemTransitions"/>.
 /// </summary>
-public sealed class WorkItemService(JasonDbContext db, JournalWriter journal, TimeProvider clock)
+public sealed class WorkItemService(JasonDbContext db, JournalWriter journal, TimeProvider clock, WorkItemCanceller canceller)
 {
     public const int MaxRoleLength = 64;
 
@@ -162,6 +163,167 @@ public sealed class WorkItemService(JasonDbContext db, JournalWriter journal, Ti
         return Paging.ToPage(fetched, limit, w => w.PublicId, w => WorkItemMapper.ToSummary(w, now));
     }
 
+    /// <summary>
+    /// A partial patch of what a caller owns: the window, the priority, the per-item limits, the result format
+    /// and the context. What the item is — its campaign, contact, kind, role or operation — is not patchable;
+    /// work that should be something else is new work.
+    /// </summary>
+    public async Task<WorkItemDto> UpdateAsync(WorkItemUpdateRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var actor = Actors.Resolve(request.Actor);
+
+        var errors = new ValidationErrors();
+        WorkItemValidation.ValidateReason(request.Reason, errors);
+        errors.ThrowIfAny();
+        await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
+
+        var item = await LoadAsync(db, request.WorkItemId, cancellationToken).ConfigureAwait(false);
+        if (WorkItemTransitions.Final.Contains(item.Status))
+        {
+            throw DomainErrors.WorkItemTerminal(item.PublicId, item.Status);
+        }
+
+        var now = clock.GetUtcNow().UtcDateTime;
+        var notBefore = request.NotBefore.IsSet ? request.NotBefore.Value?.UtcDateTime : item.NotBefore;
+        var dueAt = request.DueAt.IsSet ? request.DueAt.Value?.UtcDateTime : item.DueAt;
+        var timeoutSeconds = request.TimeoutSeconds.IsSet ? request.TimeoutSeconds.Value : item.TimeoutSeconds;
+        var heartbeatSeconds = request.HeartbeatSeconds.IsSet ? request.HeartbeatSeconds.Value : item.HeartbeatSeconds;
+        var maxAttempts = request.MaxAttempts.IsSet ? request.MaxAttempts.Value : item.MaxAttempts;
+
+        WorkItemValidation.ValidateOverrides(timeoutSeconds, heartbeatSeconds, maxAttempts, errors);
+        WorkItemValidation.ValidateWindow(notBefore, dueAt, errors);
+        if (request.ResultFormat.IsSet)
+        {
+            if (item.Kind == WorkItemKind.ProviderOp)
+            {
+                errors.Add("result_format", "not_allowed", "result_format belongs to ai_role work; a provider operation answers in its own shape.");
+            }
+            else
+            {
+                WorkItemValidation.ValidateResultFormat(request.ResultFormat.Value, errors);
+            }
+        }
+
+        // Reopening is the only thing a patch can do to an expired item's status, and a deadline that has already
+        // passed would expire it again on the next scan.
+        if (item.Status == WorkItemStatus.Expired && request.DueAt.IsSet && (dueAt is null || dueAt <= now))
+        {
+            errors.Add("due_at", "in_the_past", "due_at must be a future moment to return an expired item to the queue.");
+        }
+
+        ValidateContextKeys(request.Set, request.Unset, errors);
+        errors.ThrowIfAny();
+
+        var changes = new List<FieldChange>();
+        if (request.NotBefore.IsSet && item.NotBefore != notBefore)
+        {
+            changes.Add(new FieldChange("not_before", Moment(item.NotBefore), Moment(notBefore)));
+            item.NotBefore = notBefore;
+        }
+
+        if (request.DueAt.IsSet && item.DueAt != dueAt)
+        {
+            changes.Add(new FieldChange("due_at", Moment(item.DueAt), Moment(dueAt)));
+            item.DueAt = dueAt;
+        }
+
+        if (request.Priority.IsSet && item.Priority != request.Priority.Value)
+        {
+            changes.Add(new FieldChange("priority", JsonValue.Create(item.Priority), JsonValue.Create(request.Priority.Value)));
+            item.Priority = request.Priority.Value;
+        }
+
+        if (request.TimeoutSeconds.IsSet && item.TimeoutSeconds != timeoutSeconds)
+        {
+            changes.Add(new FieldChange("timeout_seconds", Number(item.TimeoutSeconds), Number(timeoutSeconds)));
+            item.TimeoutSeconds = timeoutSeconds;
+        }
+
+        if (request.HeartbeatSeconds.IsSet && item.HeartbeatSeconds != heartbeatSeconds)
+        {
+            changes.Add(new FieldChange("heartbeat_seconds", Number(item.HeartbeatSeconds), Number(heartbeatSeconds)));
+            item.HeartbeatSeconds = heartbeatSeconds;
+        }
+
+        if (request.MaxAttempts.IsSet && item.MaxAttempts != maxAttempts)
+        {
+            changes.Add(new FieldChange("max_attempts", Number(item.MaxAttempts), Number(maxAttempts)));
+            item.MaxAttempts = maxAttempts;
+        }
+
+        if (request.ResultFormat.IsSet && !JsonNode.DeepEquals(item.ResultFormat, request.ResultFormat.Value))
+        {
+            changes.Add(new FieldChange("result_format", item.ResultFormat?.DeepClone(), request.ResultFormat.Value?.DeepClone()));
+            item.ResultFormat = request.ResultFormat.Value?.DeepClone();
+        }
+
+        var contextChanges = ApplyContext(item, request.Set, request.Unset);
+        if (changes.Count == 0 && contextChanges.Count == 0)
+        {
+            return WorkItemMapper.ToDto(item, now, item.Attempts, includeSnapshots: false);
+        }
+
+        var reason = NormalizeReason(request.Reason);
+        item.UpdatedAt = now;
+        foreach (var change in changes)
+        {
+            journal.Append(db, actor, JournalKinds.WorkItemUpdated, campaign: null, key: change.Key, old: change.Old, updated: change.New, reason: reason, workItem: item);
+        }
+
+        foreach (var change in contextChanges)
+        {
+            journal.Append(db, actor, JournalKinds.WorkItemContextUpdated, campaign: null, key: change.Key, old: change.Old, updated: change.New, reason: reason, workItem: item);
+        }
+
+        if (item.Status == WorkItemStatus.Expired && request.DueAt.IsSet)
+        {
+            var previous = item.Status;
+            WorkItemTransitions.Apply(item, WorkItemStatus.Created, now);
+            journal.Append(
+                db,
+                actor,
+                WorkItemTransitions.JournalKind(previous, WorkItemStatus.Created),
+                campaign: null,
+                key: "status",
+                old: Status(previous),
+                updated: Status(WorkItemStatus.Created),
+                reason: reason,
+                workItem: item);
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return WorkItemMapper.ToDto(item, now, item.Attempts, includeSnapshots: false);
+    }
+
+    /// <summary>Stops the work for good. Asking twice is how a retry after a lost response looks, so it is not a second event.</summary>
+    public async Task<WorkItemDto> CancelAsync(WorkItemCancelRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var actor = Actors.Resolve(request.Actor);
+
+        var errors = new ValidationErrors();
+        WorkItemValidation.ValidateReason(request.Reason, errors);
+        errors.ThrowIfAny();
+        await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
+
+        var item = await LoadAsync(db, request.WorkItemId, cancellationToken).ConfigureAwait(false);
+        var now = clock.GetUtcNow().UtcDateTime;
+        if (item.Status == WorkItemStatus.Cancelled)
+        {
+            return WorkItemMapper.ToDto(item, now, item.Attempts, includeSnapshots: false);
+        }
+
+        if (WorkItemTransitions.Final.Contains(item.Status))
+        {
+            throw DomainErrors.WorkItemTerminal(item.PublicId, item.Status);
+        }
+
+        canceller.Cancel(db, item, actor, NormalizeReason(request.Reason));
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return WorkItemMapper.ToDto(item, now, item.Attempts, includeSnapshots: false);
+    }
+
     /// <summary>The item with everything a change needs — campaign, contact and attempts — tracked, or the 404 the caller is owed.</summary>
     public static async Task<WorkItem> LoadAsync(JasonDbContext db, string? publicId, CancellationToken cancellationToken)
     {
@@ -221,8 +383,88 @@ public sealed class WorkItemService(JasonDbContext db, JournalWriter journal, Ti
         ["due_at"] = Moment(item.DueAt),
     };
 
+    /// <summary>
+    /// Exactly the campaign-context algorithm: set then unset, keys that would not move skipped, and the whole
+    /// result measured before it replaces what the item had. A claimed item's running attempt keeps its snapshot —
+    /// an edit reaches the next attempt, never the one already told something else.
+    /// </summary>
+    private static List<FieldChange> ApplyContext(WorkItem item, JsonObject? set, IReadOnlyList<string>? unset)
+    {
+        var changes = new List<FieldChange>();
+        if (set is null && unset is null)
+        {
+            return changes;
+        }
+
+        var context = item.Context.DeepClone().AsObject();
+        if (set is not null)
+        {
+            foreach (var (key, value) in set)
+            {
+                var present = context.TryGetPropertyValue(key, out var current);
+                if (present && JsonNode.DeepEquals(current, value))
+                {
+                    continue;
+                }
+
+                // A JSON node belongs to exactly one parent, and the entry must keep its value after the context
+                // moves on, so every node is cloned into its own tree.
+                changes.Add(new FieldChange(key, current?.DeepClone(), value?.DeepClone()));
+                context[key] = value?.DeepClone();
+            }
+        }
+
+        if (unset is not null)
+        {
+            foreach (var key in unset)
+            {
+                if (!context.TryGetPropertyValue(key, out var current))
+                {
+                    continue;
+                }
+
+                changes.Add(new FieldChange(key, current?.DeepClone(), null));
+                context.Remove(key);
+            }
+        }
+
+        if (changes.Count == 0)
+        {
+            return changes;
+        }
+
+        ContextRules.EnsureWithinLimits(context);
+        item.Context = context;
+        return changes;
+    }
+
+    private static void ValidateContextKeys(JsonObject? set, IReadOnlyList<string>? unset, ValidationErrors errors)
+    {
+        if (set is not null && set.Any(pair => string.IsNullOrWhiteSpace(pair.Key)))
+        {
+            errors.Add("set", "invalid", "context keys must not be blank.");
+        }
+
+        if (unset is null)
+        {
+            return;
+        }
+
+        for (var index = 0; index < unset.Count; index++)
+        {
+            if (string.IsNullOrWhiteSpace(unset[index]))
+            {
+                errors.Add(string.Create(CultureInfo.InvariantCulture, $"unset[{index}]"), "invalid", "context keys must not be blank.");
+            }
+        }
+    }
+
     private static JsonNode? Moment(DateTime? value) =>
         value is { } moment ? JsonSerializer.SerializeToNode(WorkItemMapper.Utc(moment), JasonJson.Options) : null;
+
+    private static JsonNode? Number(int? value) => value is { } number ? JsonValue.Create(number) : null;
+
+    private static JsonNode? Status(WorkItemStatus status) => JsonSerializer.SerializeToNode(status, JasonJson.Options);
 
     private static string RequireId(string? publicId) =>
         string.IsNullOrWhiteSpace(publicId) ? throw DomainErrors.Required("work_item_id") : publicId.Trim();
@@ -230,4 +472,7 @@ public sealed class WorkItemService(JasonDbContext db, JournalWriter journal, Ti
     private static string? Trimmed(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string? NormalizeReason(string? reason) => string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+
+    /// <summary>One field that moved, in the shape the chronicle records it.</summary>
+    private readonly record struct FieldChange(string Key, JsonNode? Old, JsonNode? New);
 }

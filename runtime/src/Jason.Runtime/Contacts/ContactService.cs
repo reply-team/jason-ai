@@ -4,6 +4,7 @@ using Jason.Contracts.Ids;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Contacts;
@@ -13,7 +14,7 @@ namespace Jason.Runtime.Contacts;
 /// Nothing here is campaign-scoped — one contact belongs to as many campaigns as the user puts it in, which
 /// is why archiving is a flag and never a delete.
 /// </summary>
-public sealed class ContactService(JasonDbContext db, JournalWriter journal, TimeProvider clock)
+public sealed class ContactService(JasonDbContext db, JournalWriter journal, TimeProvider clock, WorkItemCanceller canceller)
 {
     public async Task<ContactDto> CreateAsync(ContactCreateRequest request, CancellationToken cancellationToken)
     {
@@ -164,6 +165,10 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
         contact.ArchivedAt = now;
         contact.UpdatedAt = now;
         journal.Append(db, actor, JournalKinds.ContactArchived, campaign: null, key: contact.PublicId, reason: request.Reason);
+
+        // Archiving somebody means nothing may reach out to them any more, so work still open about them stops
+        // wherever it lives rather than running one last time.
+        await canceller.CancelOpenForContactAsync(db, contact.Id, actor, "contact archived", cancellationToken).ConfigureAwait(false);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return ContactMapper.ToDto(contact);

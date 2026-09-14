@@ -556,7 +556,7 @@ public class WorkItemServiceTests
         Assert.Equal("limit", Assert.Single(error.Details!).Field);
     }
 
-    private static WorkItemService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock);
+    private static WorkItemService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
 
     private static WorkItemCreateRequest Request(string? campaignId) =>
         new(campaignId, WorkItemKind.AiRole, "researcher", null, null, null, null, null, null, null, null, null, null, null, null, null);

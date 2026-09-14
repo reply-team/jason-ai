@@ -5,6 +5,7 @@ using Jason.Runtime.Campaigns;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Contacts;
@@ -14,7 +15,7 @@ namespace Jason.Runtime.Contacts;
 /// batch, because a thousand-line file with one broken address must not cost the caller the other 999.
 /// Removal is an exclusion rather than a deletion, so a re-import cannot quietly undo it.
 /// </summary>
-public sealed class MembershipService(JasonDbContext db, JournalWriter journal, TimeProvider clock)
+public sealed class MembershipService(JasonDbContext db, JournalWriter journal, TimeProvider clock, WorkItemCanceller canceller)
 {
     public const int MaxBatch = 1000;
 
@@ -153,6 +154,7 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
 
             var results = new List<RemoveContactsItemResult>(ids.Count);
             var removedIds = new List<string>();
+            var excludedContactIds = new List<int>();
             var removed = 0;
             var notMember = 0;
             var alreadyExcluded = 0;
@@ -193,7 +195,15 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
                 membership.UpdatedAt = now;
                 removed++;
                 removedIds.Add(contact.PublicId);
+                excludedContactIds.Add(contact.Id);
                 results.Add(new RemoveContactsItemResult(index, RemoveContactsItemStatus.Removed, contact.PublicId, null));
+            }
+
+            // Removing somebody is "stop touching this person here": their open work in this campaign would
+            // contradict that if it were left to run.
+            foreach (var contactId in excludedContactIds)
+            {
+                await canceller.CancelOpenAsync(db, campaign.Id, contactId, actor, "contact removed from campaign", cancellationToken).ConfigureAwait(false);
             }
 
             journal.Append(

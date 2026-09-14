@@ -184,5 +184,5 @@ public class CampaignTransitionTests
         return campaign.Id;
     }
 
-    private static CampaignService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock);
+    private static CampaignService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
 }
