@@ -54,7 +54,7 @@ public static class PluginRenderers
             {
                 foreach (var problem in candidate.Problems ?? [])
                 {
-                    lines.Add($"{candidate.Directory}/{problem.Path}: {problem.Code} — {problem.Message}");
+                    lines.Add($"{Location(candidate.Directory, problem.Path)}: {problem.Code} — {problem.Message}");
                 }
             }
         }
@@ -130,4 +130,12 @@ public static class PluginRenderers
         var hex = digest.StartsWith(DigestPrefix, StringComparison.Ordinal) ? digest[DigestPrefix.Length..] : digest;
         return hex.Length <= DigestShown ? hex : hex[..DigestShown];
     }
+
+    /// <summary>
+    /// Where a problem is, the way the runtime's own error details spell it: the file is named exactly once. A
+    /// field path (<c>kind</c>, <c>capabilities.http.hosts[1]</c>) gets the manifest in front of it; a YAML
+    /// syntax error already carries <c>plugin.yaml#line:col</c> and is left alone.
+    /// </summary>
+    private static string Location(string directory, string path) =>
+        path.StartsWith("plugin.yaml#", StringComparison.Ordinal) ? $"{directory}/{path}" : $"{directory}/plugin.yaml#{path}";
 }

@@ -195,7 +195,7 @@ public class PluginCommandsTests
                 new PluginCapabilitiesDto(new ExecCapabilityDto([new ExecutableDto("notify", null, null, "0.4.0")], ["notify"]), null, null),
                 new PluginLimitsDto(60000, 64),
                 PluginStatus.Unavailable,
-                [new PluginProblemDto("executable_missing", "plugin.yaml#capabilities.exec.executables[0]", "No 'notify' was found.")]),
+                [new PluginProblemDto("executable_missing", "capabilities.exec.executables[0]", "No 'notify' was found.")]),
         ],
         new ReloadReportDto(Moment, SnapshotSource.Reload, true, []),
         Activated: true);
@@ -232,8 +232,10 @@ public class PluginCommandsTests
                     null,
                     CandidateStatus.Invalid,
                     [
+                        // A syntax error names its position in the file; a field problem names the field. The
+                        // renderer spells both as one location without doubling the file name.
                         new PluginProblemDto("yaml_invalid", "plugin.yaml#3:1", "mapping values are not allowed here"),
-                        new PluginProblemDto("id_mismatch", "plugin.yaml#id", "the manifest says 'other', the directory says 'broken'"),
+                        new PluginProblemDto("id_mismatch", "id", "the manifest says 'other', the directory says 'broken'"),
                     ]),
             ]),
         Activated: false);
