@@ -16,6 +16,7 @@ namespace Jason.Runtime.Tests.Plugins.Invocation;
 /// plugin's code, that the child is told exactly what the user granted, and that every way an invocation can
 /// end comes back named.
 /// </summary>
+[Collection(ProcessEnvironmentCollection.Name)]
 public class PluginInvokerTests
 {
     /// <summary>The variable the fixture package declares; its value is the test's own, and never a real secret.</summary>

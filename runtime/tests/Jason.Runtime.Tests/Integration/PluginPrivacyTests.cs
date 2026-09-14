@@ -13,6 +13,7 @@ namespace Jason.Runtime.Tests.Integration;
 /// a command line every process on the machine can see. Distinctive canaries are used so a match cannot be a
 /// coincidence, and the credential is a value this test invents rather than any real secret.
 /// </summary>
+[Collection(ProcessEnvironmentCollection.Name)]
 public class PluginPrivacyTests
 {
     /// <summary>What the caller sent: the sort of thing an operation's input holds about a person.</summary>

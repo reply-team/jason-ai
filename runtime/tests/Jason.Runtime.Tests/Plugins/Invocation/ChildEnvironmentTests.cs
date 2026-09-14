@@ -9,6 +9,7 @@ namespace Jason.Runtime.Tests.Plugins.Invocation;
 /// inherited, so a child cannot find the data directory, the database or anything else this runtime holds —
 /// only the machine configuration every program needs and the variables the user granted this plugin.
 /// </summary>
+[Collection(ProcessEnvironmentCollection.Name)]
 public class ChildEnvironmentTests
 {
     [Fact]

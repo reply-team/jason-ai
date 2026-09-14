@@ -12,6 +12,7 @@ namespace Jason.Runtime.Tests.Plugins;
 /// only the plugin it belongs to. The distinction is the point — an autostarted runtime sees a different search
 /// path than a shell does, and one uninstalled vendor tool must never empty the registry.
 /// </summary>
+[Collection(ProcessEnvironmentCollection.Name)]
 public class PluginLoaderTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

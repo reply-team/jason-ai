@@ -12,6 +12,7 @@ namespace Jason.Runtime.Tests.Plugins;
 /// a reload either activates the whole candidate set or changes nothing at all, and what a plugin may do is
 /// always shown as requested against granted.
 /// </summary>
+[Collection(ProcessEnvironmentCollection.Name)]
 public class PluginServiceTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
