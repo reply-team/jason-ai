@@ -12,10 +12,16 @@ public static class DispatcherModule
     public static IServiceCollection AddDispatcherModule(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
-        return services
+        services
             .AddScoped<Expirer>()
             .AddScoped<LeaseEnforcer>()
             .AddScoped<EntryCommandResolver>()
-            .AddScoped<Claimer>();
+            .AddScoped<Claimer>()
+            .AddScoped<StartupRecovery>();
+
+        // The pool is sized once and the counters are one per process, so both outlive any request scope.
+        services.AddSingleton<HandlerPool>();
+        services.AddSingleton<ScanRunner>();
+        return services.AddHostedService<DispatcherService>();
     }
 }
