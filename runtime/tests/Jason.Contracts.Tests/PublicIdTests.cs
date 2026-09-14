@@ -32,6 +32,16 @@ public partial class PublicIdTests
     }
 
     [Fact]
+    public void Ulids_generated_in_one_process_are_strictly_increasing_even_within_a_millisecond()
+    {
+        var ids = Enumerable.Range(0, 5000).Select(_ => Ulid.NewUlid()).ToList();
+        for (var i = 1; i < ids.Count; i++)
+        {
+            Assert.True(string.CompareOrdinal(ids[i - 1], ids[i]) < 0, $"{ids[i - 1]} is not before {ids[i]}");
+        }
+    }
+
+    [Fact]
     public void Public_ids_are_prefixed_ulids()
     {
         var id = PublicId.New("cmp");
