@@ -5,6 +5,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins.Registry;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -35,7 +36,8 @@ public static class SystemModule
              JasonPaths dataPaths,
              DispatcherStatus dispatcher,
              IOptionsMonitor<DispatcherOptions> dispatcherOptions,
-             RunningAttemptRegistry running) =>
+             RunningAttemptRegistry running,
+             PluginRegistry plugins) =>
                 TypedResults.Ok(new SystemInfoResponse(
                     runtimeInfo.RuntimeVersion,
                     ApiVersion.Current,
@@ -45,8 +47,11 @@ public static class SystemModule
                     dataPaths.Root,
                     new DatabaseInfo(report.AppliedMigrations),
                     dispatcher.Snapshot(dispatcherOptions.CurrentValue, running.Count),
-                    // The registry does not exist yet; the section is answered from the snapshot once it does.
-                    new PluginsInfo(0, "snp_none", runtimeInfo.StartedAt, null))));
+                    new PluginsInfo(
+                        plugins.Snapshot.Plugins.Count,
+                        plugins.Snapshot.Id,
+                        PluginMapper.Utc(plugins.Snapshot.LoadedAt),
+                        plugins.LastReload?.Activated))));
 
         app.MapOperation<ShutdownCoordinator, ShutdownRequest, ShutdownResponse>(
             Operations.SystemShutdown,

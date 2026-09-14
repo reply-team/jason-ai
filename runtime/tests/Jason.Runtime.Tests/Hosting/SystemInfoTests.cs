@@ -20,6 +20,19 @@ public class SystemInfoTests
     }
 
     [Fact]
+    public async Task System_info_reports_the_plugin_registry_from_the_active_snapshot()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        Assert.StartsWith("snp_", info.Plugins.SnapshotId, StringComparison.Ordinal);
+        Assert.Equal(0, info.Plugins.ActiveCount);
+        Assert.True(info.Plugins.LastReloadActivated);
+        Assert.Equal(TimeSpan.Zero, info.Plugins.LoadedAt.Offset);
+    }
+
+    [Fact]
     public async Task System_info_reports_the_dispatcher_even_when_it_is_turned_off()
     {
         await using var fixture = await RuntimeApiFixture.StartAsync(
