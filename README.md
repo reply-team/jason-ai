@@ -5,9 +5,11 @@ turns your own AI agents, installed SDR skills, and external execution providers
 durable outbound-sales operation.
 
 > **Status: early implementation.** This repository publishes the product's
-> [target architecture](docs/architecture.md) and the first slice of the runtime: one
-> executable that hosts the local Runtime API, a CLI that talks to it, and a database layer that
-> migrates itself on start. Nothing here runs outreach yet. The runtime is being built in the
+> [target architecture](docs/architecture.md) and the runtime as it stands: one executable that
+> hosts the local Runtime API, a CLI that talks to it, and a database layer that migrates itself
+> on start. The runtime now manages campaigns, their context and their append-only journal, a
+> contact directory with campaign membership, and a global suppression list — all through the
+> CLI and the Runtime API. Nothing here runs outreach yet. The runtime is being built in the
 > open, one self-contained increment at a time; no dates, no roadmap promises.
 
 ## What this is
@@ -63,10 +65,23 @@ dotnet test --solution runtime/Jason.slnx
 dotnet run --project runtime/src/Jason.App -- --version
 ```
 
-`jason runtime run` starts the runtime in the foreground; `jason runtime status` asks it for
-`system.info` through the Runtime API and prints the answer as JSON (add `--human` for a
-readable summary). The runtime keeps its data under `~/.jason` (override with the
-`JASON_DATA_DIR` environment variable).
+`jason runtime start` launches the runtime in the background and prints the instance it ended up
+talking to; `jason runtime stop` asks that instance to shut down and returns only once it has
+really gone. Nothing about autostart is registered anywhere — starting the service is always
+something you or your agent did. `jason runtime run` keeps the runtime in the foreground
+instead, and `jason runtime status` asks it for `system.info` through the Runtime API.
+
+Campaigns and the people in them are managed with one verb per API operation:
+
+```sh
+jason campaign create --name "Latin America"
+jason campaign add-contacts <id> --file contacts.json --match-by email
+jason campaign start <id>
+```
+
+Every verb prints the exact API response as compact JSON on stdout (add `--human` for a readable
+rendering). The runtime keeps its data under `~/.jason` (override with the `JASON_DATA_DIR`
+environment variable).
 
 ## Ecosystem
 
