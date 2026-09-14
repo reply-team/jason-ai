@@ -58,6 +58,7 @@ public class DispatcherServiceTests
             Ct,
             prepare: Settings(Launchable),
             configureServices: services => services.AddSingleton<ICommand>(command));
+        Assert.True(await DispatchHarness.FirstScanDoneAsync(fixture.Resolve<DispatcherStatus>(), Ct));
         var item = SeedClaimable(fixture.Paths);
 
         var runner = fixture.Resolve<ScanRunner>();
@@ -83,8 +84,9 @@ public class DispatcherServiceTests
             configureServices: services => services.AddSingleton<ICommand>(command));
         await using (fixture)
         {
+            Assert.True(await DispatchHarness.FirstScanDoneAsync(fixture.Resolve<DispatcherStatus>(), Ct));
             SeedClaimable(fixture.Paths);
-            await fixture.Resolve<ScanRunner>().ScanOnceAsync(Ct);
+            Assert.Equal(1, (await fixture.Resolve<ScanRunner>().ScanOnceAsync(Ct)).Claimed);
             Assert.True(await fixture.Resolve<HandlerPool>().DrainAsync(TimeSpan.FromSeconds(5)));
 
             await fixture.Runtime.StopAsync();
@@ -105,8 +107,9 @@ public class DispatcherServiceTests
             configureServices: services => services.AddSingleton<ICommand>(command));
         await using (fixture)
         {
+            Assert.True(await DispatchHarness.FirstScanDoneAsync(fixture.Resolve<DispatcherStatus>(), Ct));
             SeedClaimable(fixture.Paths);
-            await fixture.Resolve<ScanRunner>().ScanOnceAsync(Ct);
+            Assert.Equal(1, (await fixture.Resolve<ScanRunner>().ScanOnceAsync(Ct)).Claimed);
             Assert.True(await DispatchHarness.EventuallyAsync(() => command.Contexts.Count == 1, Ct));
 
             var stopping = Stopwatch.StartNew();

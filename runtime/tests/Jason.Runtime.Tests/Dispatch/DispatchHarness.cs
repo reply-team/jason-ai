@@ -120,6 +120,16 @@ internal sealed class DispatchHarness : IDisposable
         return await db.Journal.AsNoTracking().Where(e => e.WorkItemId == workItemPublicId).OrderBy(e => e.Id).ToListAsync(ct);
     }
 
+    /// <summary>
+    /// Waits for the scan the loop runs the moment it starts, so a test that seeds work afterwards knows the
+    /// next scan is its own.
+    /// </summary>
+    public static Task<bool> FirstScanDoneAsync(DispatcherStatus status, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(status);
+        return EventuallyAsync(() => status.Scans >= 1, ct);
+    }
+
     /// <summary>Polls until the condition holds or the deadline passes; never sleeps the thread.</summary>
     public static async Task<bool> EventuallyAsync(Func<bool> condition, CancellationToken ct, int timeoutMilliseconds = 5000)
     {
