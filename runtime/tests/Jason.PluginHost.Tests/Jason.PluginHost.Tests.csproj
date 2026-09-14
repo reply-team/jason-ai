@@ -5,4 +5,8 @@
          next to the tests, so host.exec can start a real foreign program. -->
     <ProjectReference Include="../Jason.FakeProviderCli/Jason.FakeProviderCli.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The canonical plugin package, kept in one place and linked into every test project that runs it. -->
+    <None Include="../fixtures/plugins/**" LinkBase="Fixtures/plugins" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

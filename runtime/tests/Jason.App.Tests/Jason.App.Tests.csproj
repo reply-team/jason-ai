@@ -7,4 +7,8 @@
     <!-- The stand-in vendor CLI: the end-to-end plugin flow runs a real program through host.exec. -->
     <ProjectReference Include="../Jason.FakeProviderCli/Jason.FakeProviderCli.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The canonical plugin package, kept in one place and linked into every test project that installs it. -->
+    <None Include="../fixtures/plugins/**" LinkBase="Fixtures/plugins" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
