@@ -289,8 +289,11 @@ decide soon enough.
 
 ## Not here yet
 
-- **Provider operations.** `provider_op` items fail with `no_route`. Routing, plugins and the
-  pre-flight check arrive with the plugin work.
+- **Provider operations.** `provider_op` items fail with `no_route`. The mechanism that will run them
+  already exists and is documented in [docs/plugins.md](plugins.md): validated plugin packages, an
+  atomically reloaded registry, and a plugin host that runs one invocation in its own process.
+  Routing an item to a plugin, the binding it is given and the pre-flight check at claim arrive with
+  the next increment.
 - **Approvals.** Nothing pauses for a human decision yet.
 - **Execution profiles.** `execution_profile` is recorded verbatim as an opaque string; nothing
   resolves it.

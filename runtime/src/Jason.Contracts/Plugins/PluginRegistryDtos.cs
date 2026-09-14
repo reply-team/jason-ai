@@ -2,7 +2,12 @@ using Jason.Contracts.Api;
 
 namespace Jason.Contracts.Plugins;
 
-/// <summary>One thing wrong with a candidate, named where it is wrong: <c>plugin.yaml#capabilities.exec</c>.</summary>
+/// <summary>
+/// One thing wrong with a candidate, named where it is wrong. <c>Path</c> is the place inside the manifest
+/// (<c>kind</c>, <c>capabilities.exec.executables[0].name</c>) with no file name in front of it — the only
+/// exception is a YAML syntax error, which has no field to point at and reads <c>plugin.yaml#line:column</c>.
+/// Whoever renders a problem adds the package directory and the file once, so it is never named twice.
+/// </summary>
 public sealed record PluginProblemDto(string Code, string Path, string Message);
 
 /// <summary>

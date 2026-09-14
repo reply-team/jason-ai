@@ -23,7 +23,7 @@ covered here.
 - Test one method or class: append `-- --filter-method "*MethodName"` or `-- --filter-class "Namespace.ClassName"`
 - Run: `dotnet run --project runtime/src/Jason.App -- --version` · `-- runtime run` · `-- runtime status`
   · `-- runtime start` (background, no autostart registered) · `-- runtime stop` · `-- campaign list`
-  · `-- workitem list` · `-- role list`
+  · `-- workitem list` · `-- role list` · `-- plugin list` · `-- plugin reload`
 - Add a migration: `dotnet tool restore` once, then
   `dotnet ef migrations add <Name> --project runtime/src/Jason.Runtime --startup-project runtime/src/Jason.Runtime --output-dir Persistence/Migrations`
 - Publish: `dotnet publish runtime/src/Jason.App -c Release -r <rid> --self-contained -p:PublishSingleFile=true`
@@ -33,7 +33,9 @@ covered here.
 - `Jason.Cli` references only `Jason.Contracts` and the HTTP client. Never `Jason.Runtime`, EF Core
   or SQLite: the CLI never touches the database, it talks to the Runtime API.
 - Plugin JavaScript never runs inside the long-lived runtime process; it runs in the plugin-host mode
-  of the same executable.
+  of the same executable. `Jason.Runtime` references neither Jint nor `Jason.PluginHost`;
+  `Jason.PluginHost` never references `Jason.Runtime`; manifests are read with YamlDotNet in
+  `Jason.Runtime` only, so the contracts, the CLI and the host stay YAML-free.
 - The dispatcher is deterministic runtime code; it never reads the meaning of a work item's context.
 - Package versions live in `runtime/Directory.Packages.props` only.
 - Warnings are errors. Every test runs offline and uses an isolated temporary data directory.
@@ -57,6 +59,18 @@ covered here.
   free handler slots, one per campaign per scan. The launch envelope goes to the child on stdin;
   nothing goes on argv, and the capability token never reaches a child's environment, a
   work-directory file or an attempt row (redacted). `docs/work-execution.md` is the contract.
+- Plugins: a package is `~/.jason/plugins/<id>/` with `plugin.yaml`, `main.js` and optional modules;
+  the directory name is the id. The manifest is validated against one fixed vocabulary of problem
+  codes — package problems reject the whole reload and keep the previous snapshot, the four
+  `executable_*` ones are environmental and only make that plugin `unavailable`. Every package has a
+  `sha256:` content digest that the child recomputes before it runs anything. The invocation goes to
+  the child on stdin, exactly one outcome comes back on stdout, diagnostics are JSON Lines on stderr,
+  and the exit code says only whether the protocol completed (0 outcome, 2 usage, 3 rejected,
+  4 host failure). Declaration is not permission: capabilities are requested by the manifest and
+  granted under `Plugins:Grants:<id>`, resolved and frozen at each load. A failure carries one of
+  four classes — only `transient` is retried; `ambiguous` is final, because the provider may already
+  have acted. An activated load journals `plugins_reloaded`; there is no `plugin.invoke` operation.
+  `docs/plugins.md` is the contract.
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for
   people, stderr is diagnostics only. Exit codes: 0 success, 1 API business error, 2 usage error,
   3 runtime unreachable or unauthorized.
