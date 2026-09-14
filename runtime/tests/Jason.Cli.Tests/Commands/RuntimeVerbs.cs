@@ -1,0 +1,82 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using Jason.Cli.Discovery;
+using Jason.Cli.Process;
+using Jason.Cli.Tests.Process;
+using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
+using Jason.Contracts.Json;
+
+namespace Jason.Cli.Tests.Commands;
+
+/// <summary>The descriptor, the response bodies and the environment the runtime-verb tests all work against.</summary>
+internal static class RuntimeVerbs
+{
+    public const int Pid = 77;
+    public const string Token = "the-token";
+    public const string BaseUrl = "http://127.0.0.1:5000";
+
+    /// <summary>Long enough that a test waiting for a descriptor never expires by accident.</summary>
+    public static TimeSpan Timeout => TimeSpan.FromSeconds(5);
+
+    /// <summary>For the tests whose subject is the wait running out.</summary>
+    public static TimeSpan ShortTimeout => TimeSpan.FromMilliseconds(300);
+
+    public static TimeSpan Poll => TimeSpan.FromMilliseconds(20);
+
+    public static RuntimeDescriptor Descriptor(string instanceId, int pid = Pid) =>
+        new("v1", "0.1.0-dev", instanceId, pid, BaseUrl, Token, DateTimeOffset.UnixEpoch);
+
+    public static string InfoJson(string instanceId, int pid = Pid) => JsonSerializer.Serialize(
+        new SystemInfoResponse("0.1.0-dev", "v1", instanceId, pid, DateTimeOffset.UnixEpoch, "/data", new DatabaseInfo(["20260913225419_InitialCreate"])),
+        JasonJson.Options);
+
+    public static string ShutdownJson(string instanceId, int pid = Pid) =>
+        JsonSerializer.Serialize(new ShutdownResponse(instanceId, pid, Stopping: true), JasonJson.Options);
+
+    public static HttpResponseMessage Response(HttpStatusCode status, string json) =>
+        new(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+
+    public static ErrorBody Envelope(string stdout) =>
+        JsonSerializer.Deserialize<ErrorResponse>(stdout, JasonJson.Options)!.Error;
+
+    public static (CliEnvironment Env, StringWriter Out, StringWriter Error) Environment(
+        TempPaths dir,
+        HttpMessageHandler handler,
+        IRuntimeProcessControl processes)
+    {
+        var output = new StringWriter();
+        var error = new StringWriter();
+        return (new CliEnvironment(output, error, dir.Paths, handler, null, processes), output, error);
+    }
+
+    /// <summary>A runtime that answers <c>system.info</c> as whichever instance the descriptor on disk names.</summary>
+    public static HttpMessageHandler EchoesTheDescriptor(TempPaths dir, Func<string, string>? answeringAs = null) =>
+        new FakeHandler(_ =>
+        {
+            var current = new DescriptorReader(dir.Paths).Read()
+                ?? throw new HttpRequestException("connection refused");
+            return Response(HttpStatusCode.OK, InfoJson(answeringAs is null ? current.InstanceId : answeringAs(current.InstanceId)));
+        });
+
+    public static HttpMessageHandler NeverCalled() =>
+        new FakeHandler(_ => throw new InvalidOperationException("the runtime must not be called here"));
+
+    /// <summary>A launch that publishes a descriptor a moment later, the way a runtime coming up does.</summary>
+    public static Func<JasonPaths, IProcessHandle> PublishesAfterAWhile(TempPaths dir, RuntimeDescriptor descriptor) =>
+        paths =>
+        {
+            _ = paths;
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(60);
+                dir.WriteDescriptor(descriptor);
+            });
+            return new FakeProcessHandle(4242);
+        };
+
+    /// <summary>A launch whose child is gone by the time the CLI looks at it.</summary>
+    public static Func<JasonPaths, IProcessHandle> DiesWith(int exitCode) =>
+        _ => new FakeProcessHandle(4242) { HasExited = true, ExitCode = exitCode };
+}

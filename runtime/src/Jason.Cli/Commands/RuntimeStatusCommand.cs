@@ -83,7 +83,8 @@ public static class RuntimeStatusCommand
         return ExitCodes.RuntimeUnavailable;
     }
 
-    private static void RenderHuman(TextWriter output, SystemInfoResponse info, RuntimeDescriptor descriptor)
+    /// <summary>Shared with <c>runtime start</c>, which reports a running runtime exactly the way status does.</summary>
+    internal static void RenderHuman(TextWriter output, SystemInfoResponse info, RuntimeDescriptor descriptor)
     {
         output.WriteLine($"Runtime:    running (pid {info.Pid})");
         output.WriteLine($"Version:    {info.RuntimeVersion}");

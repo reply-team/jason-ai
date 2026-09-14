@@ -36,7 +36,7 @@ public static class ModeRouter
     public static Task<int> RunAsync(string[] args, CancellationToken cancellationToken = default) => Select(args) switch
     {
         Mode.Version => RunVersion(),
-        Mode.RuntimeService => RunRuntimeService(cancellationToken),
+        Mode.RuntimeService => RunRuntimeService(args, cancellationToken),
         Mode.PluginHost => RunPluginHost(args),
         _ => RunCli(args, cancellationToken),
     };
@@ -49,8 +49,20 @@ public static class ModeRouter
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static Task<int> RunRuntimeService(CancellationToken cancellationToken) =>
-        RuntimeHost.RunAsync(JasonPaths.FromEnvironment(), new RuntimeHostOptions(ShippedSettingsDirectory: AppContext.BaseDirectory, ConsoleLogging: true), cancellationToken);
+    private static Task<int> RunRuntimeService(string[] args, CancellationToken cancellationToken)
+    {
+        var arguments = RuntimeRunArguments.Parse(args);
+        if (arguments.Detached)
+        {
+            // Before anything opens a log file or a socket: from here on the process owns no console.
+            ProcessDetacher.Detach();
+        }
+
+        return RuntimeHost.RunAsync(
+            JasonPaths.FromEnvironment(),
+            new RuntimeHostOptions(ShippedSettingsDirectory: AppContext.BaseDirectory, ConsoleLogging: !arguments.Detached),
+            cancellationToken);
+    }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Task<int> RunPluginHost(string[] args) =>
