@@ -33,6 +33,21 @@ public class ActorOptionTests
     public void A_role_with_an_id_parses() =>
         Assert.Equal("{\"type\":\"role\",\"id\":\"planner\"}", Serialize(ActorOption.Parse("role:planner")));
 
+    [Fact]
+    public void A_running_attempt_may_claim_the_work_it_creates() =>
+        Assert.Equal(
+            "{\"type\":\"attempt\",\"id\":\"att_01K52JR0000000000000000001\"}",
+            Serialize(ActorOption.Parse("attempt:att_01K52JR0000000000000000001")));
+
+    [Fact]
+    public void An_attempt_without_an_id_is_a_usage_error()
+    {
+        var failure = Assert.Throws<UsageException>(() => ActorOption.Parse("attempt"));
+
+        Assert.Contains("--actor", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("attempt:", failure.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("system")]
     [InlineData("system:runtime")]
@@ -48,6 +63,7 @@ public class ActorOptionTests
     [InlineData("robot")]
     [InlineData("Human")]
     [InlineData("human:")]
+    [InlineData("attempt:")]
     public void Anything_else_is_a_usage_error(string text)
     {
         var failure = Assert.Throws<UsageException>(() => ActorOption.Parse(text));
