@@ -1,6 +1,7 @@
 using Jason.Contracts.Api;
 using Jason.Runtime.Api;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Journal;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -12,7 +13,7 @@ public static class CampaignModule
     public static IServiceCollection AddCampaignModule(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
-        return services.AddScoped<CampaignService>();
+        return services.AddScoped<CampaignService>().AddScoped<JournalService>();
     }
 
     public static void MapCampaignOperations(this IEndpointRouteBuilder app)
@@ -35,5 +36,10 @@ public static class CampaignModule
             Operations.CampaignArchive, (service, request, cancellationToken) => service.ArchiveAsync(request, cancellationToken));
         app.MapOperation<CampaignService, CampaignUpdateContextRequest, CampaignDto>(
             Operations.CampaignUpdateContext, (service, request, cancellationToken) => service.UpdateContextAsync(request, cancellationToken));
+
+        app.MapOperation<JournalService, JournalAppendRequest, JournalEntryDto>(
+            Operations.JournalAppend, (service, request, cancellationToken) => service.AppendAsync(request, cancellationToken));
+        app.MapOperation<JournalService, JournalListRequest, Page<JournalEntryDto>>(
+            Operations.JournalList, (service, request, cancellationToken) => service.ListAsync(request, cancellationToken));
     }
 }
