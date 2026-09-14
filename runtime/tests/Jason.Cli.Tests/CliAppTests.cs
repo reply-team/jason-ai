@@ -49,4 +49,43 @@ public class CliAppTests
         Assert.Equal(ExitCodes.RuntimeUnavailable, exit);
         Assert.Contains("\"code\":\"no_descriptor\"", output.ToString(), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task A_reserved_actor_is_a_usage_error()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        var exit = await CliApp.RunAsync(["runtime", "status", "--actor", "system"], new CliEnvironment(output, error, dir.Paths), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains("--actor", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Run 'jason --help' for usage.", error.ToString(), StringComparison.Ordinal);
+        Assert.Equal(string.Empty, output.ToString());
+    }
+
+    [Fact]
+    public async Task The_actor_option_is_accepted_before_and_after_the_subcommand()
+    {
+        using var dir = new TempPaths();
+
+        var before = await CliApp.RunAsync(["--actor", "role:planner", "runtime", "status"], new CliEnvironment(new StringWriter(), new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
+        var after = await CliApp.RunAsync(["runtime", "status", "--actor", "human:ada"], new CliEnvironment(new StringWriter(), new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ExitCodes.RuntimeUnavailable, before);
+        Assert.Equal(ExitCodes.RuntimeUnavailable, after);
+    }
+
+    [Fact]
+    public async Task Help_describes_the_global_actor_option()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        var exit = await CliApp.RunAsync(["--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("--actor", output.ToString(), StringComparison.Ordinal);
+    }
 }
