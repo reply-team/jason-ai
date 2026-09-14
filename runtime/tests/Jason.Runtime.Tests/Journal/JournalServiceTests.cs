@@ -306,7 +306,7 @@ public class JournalServiceTests
     private static async Task<string> CreateAsync(CampaignService campaigns) =>
         (await campaigns.CreateAsync(new CampaignCreateRequest("LatAm", null, null, null), Ct)).Id;
 
-    private static CampaignService NewCampaignService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock);
+    private static CampaignService NewCampaignService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
 
     private static JournalService NewJournalService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock));
 }
