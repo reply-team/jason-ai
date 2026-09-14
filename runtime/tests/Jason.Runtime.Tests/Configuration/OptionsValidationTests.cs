@@ -11,6 +11,94 @@ public class OptionsValidationTests
         Assert.True(new LoggingOptionsValidator().Validate(null, new LoggingOptions()).Succeeded);
         Assert.True(new DispatcherOptionsValidator().Validate(null, new DispatcherOptions()).Succeeded);
         Assert.True(new RolesOptionsValidator().Validate(null, new RolesOptions()).Succeeded);
+        Assert.True(new PluginsOptionsValidator().Validate(null, new PluginsOptions()).Succeeded);
+    }
+
+    [Fact]
+    public void The_plugin_defaults_are_the_ones_the_wave_decided()
+    {
+        var options = new PluginsOptions();
+
+        Assert.Empty(options.Grants);
+        Assert.Equal(60_000, options.Limits.TimeoutMs);
+        Assert.Equal(3_600_000, options.Limits.MaxTimeoutMs);
+        Assert.Equal(64, options.Limits.MemoryMb);
+        Assert.Equal(512, options.Limits.MaxMemoryMb);
+        Assert.Equal(10_000_000, options.Limits.MaxStatements);
+        Assert.Equal(64, options.Limits.MaxRecursion);
+        Assert.Equal(4_194_304, options.Exec.OutputBytes);
+        Assert.Equal(64, options.Exec.MaxCalls);
+        Assert.Equal(4_194_304, options.Http.ResponseBytes);
+        Assert.Equal(1_048_576, options.Http.RequestBytes);
+        Assert.Equal(64, options.Http.MaxCalls);
+        Assert.Equal(30_000, options.Http.TimeoutMs);
+        Assert.Equal(2_097_152, options.Invoker.OutcomeBytes);
+        Assert.Equal(4_194_304, options.Invoker.StderrBytes);
+        Assert.Equal(5_000, options.Invoker.KillGraceMs);
+        Assert.Equal(5_000, options.Invoker.VersionCheckTimeoutMs);
+        Assert.Equal(16_384, options.Invoker.LogLineBytes);
+    }
+
+    [Fact]
+    public void Every_out_of_range_plugin_limit_is_reported_with_its_rule()
+    {
+        var result = new PluginsOptionsValidator().Validate(null, new PluginsOptions
+        {
+            Limits = new PluginLimitsOptions { TimeoutMs = 999, MemoryMb = 8 },
+            Exec = new PluginExecOptions { MaxCalls = 0 },
+            Http = new PluginHttpOptions { TimeoutMs = 999 },
+            Invoker = new PluginInvokerOptions { KillGraceMs = 60_001 },
+        });
+
+        Assert.True(result.Failed);
+        Assert.Contains("Plugins:Limits:TimeoutMs must be between 1000 and 3600000; got 999.", result.Failures!);
+        Assert.Contains("Plugins:Limits:MemoryMb must be between 16 and 1024; got 8.", result.Failures!);
+        Assert.Contains("Plugins:Exec:MaxCalls must be between 1 and 1000; got 0.", result.Failures!);
+        Assert.Contains("Plugins:Http:TimeoutMs must be between 1000 and 300000; got 999.", result.Failures!);
+        Assert.Contains("Plugins:Invoker:KillGraceMs must be between 0 and 60000; got 60001.", result.Failures!);
+    }
+
+    [Fact]
+    public void A_ceiling_below_the_default_it_caps_is_refused()
+    {
+        var result = new PluginsOptionsValidator().Validate(null, new PluginsOptions
+        {
+            Limits = new PluginLimitsOptions { TimeoutMs = 60_000, MaxTimeoutMs = 30_000, MemoryMb = 64, MaxMemoryMb = 32 },
+        });
+
+        Assert.True(result.Failed);
+        Assert.Contains("Plugins:Limits:MaxTimeoutMs must be between 60000 and 86400000; got 30000.", result.Failures!);
+        Assert.Contains("Plugins:Limits:MaxMemoryMb must be between 64 and 4096; got 32.", result.Failures!);
+    }
+
+    [Fact]
+    public void A_grant_names_something_or_everything_and_nothing_else()
+    {
+        var result = new PluginsOptionsValidator().Validate(null, new PluginsOptions
+        {
+            Grants = new Dictionary<string, PluginGrant>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["fake"] = new PluginGrant { Exec = ["*"], Http = ["api.example.test", " "], Env = ["EXAMPLE_TOKEN"] },
+            },
+        });
+
+        Assert.True(result.Failed);
+        Assert.Single(result.Failures!);
+        Assert.Contains(result.Failures!, failure => failure.StartsWith("Plugins:Grants:fake:Http[1] must ", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Everything_a_manifest_can_request_is_a_valid_grant_entry()
+    {
+        var result = new PluginsOptionsValidator().Validate(null, new PluginsOptions
+        {
+            Grants = new Dictionary<string, PluginGrant>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["fake-provider"] = new PluginGrant { Exec = ["reply", "Jason.FakeProviderCli"], Http = ["api.example.test", "localhost:5555"], Env = ["EXAMPLE_TOKEN", "*"] },
+            },
+        });
+
+        Assert.True(result.Succeeded);
     }
 
     [Fact]

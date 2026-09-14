@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Configuration;
@@ -97,6 +98,75 @@ public sealed class DispatcherOptionsValidator : IValidateOptions<DispatcherOpti
 
         OptionRules.Range(failures, $"{section}:MaxAttempts", defaults.MaxAttempts, 1, 10);
     }
+}
+
+/// <summary>
+/// The plugin limits and the grants. Every ceiling is validated against the default it caps, so a settings file
+/// that lowers <c>MaxTimeoutMs</c> below <c>TimeoutMs</c> is caught before a plugin runs under an impossible
+/// budget; every grant entry must be something a manifest could have requested.
+/// </summary>
+public sealed partial class PluginsOptionsValidator : IValidateOptions<PluginsOptions>
+{
+    public ValidateOptionsResult Validate(string? name, PluginsOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var failures = new List<string>();
+
+        OptionRules.Range(failures, "Plugins:Limits:TimeoutMs", options.Limits.TimeoutMs, 1_000, 3_600_000);
+        OptionRules.Range(failures, "Plugins:Limits:MaxTimeoutMs", options.Limits.MaxTimeoutMs, options.Limits.TimeoutMs, 86_400_000);
+        OptionRules.Range(failures, "Plugins:Limits:MemoryMb", options.Limits.MemoryMb, 16, 1024);
+        OptionRules.Range(failures, "Plugins:Limits:MaxMemoryMb", options.Limits.MaxMemoryMb, options.Limits.MemoryMb, 4096);
+        OptionRules.Range(failures, "Plugins:Limits:MaxStatements", options.Limits.MaxStatements, 100_000, 1_000_000_000);
+        OptionRules.Range(failures, "Plugins:Limits:MaxRecursion", options.Limits.MaxRecursion, 8, 1024);
+
+        OptionRules.Range(failures, "Plugins:Exec:OutputBytes", options.Exec.OutputBytes, 65_536, 67_108_864);
+        OptionRules.Range(failures, "Plugins:Exec:MaxCalls", options.Exec.MaxCalls, 1, 1000);
+
+        OptionRules.Range(failures, "Plugins:Http:ResponseBytes", options.Http.ResponseBytes, 65_536, 67_108_864);
+        OptionRules.Range(failures, "Plugins:Http:RequestBytes", options.Http.RequestBytes, 1024, 16_777_216);
+        OptionRules.Range(failures, "Plugins:Http:MaxCalls", options.Http.MaxCalls, 1, 1000);
+        OptionRules.Range(failures, "Plugins:Http:TimeoutMs", options.Http.TimeoutMs, 1_000, 300_000);
+
+        OptionRules.Range(failures, "Plugins:Invoker:OutcomeBytes", options.Invoker.OutcomeBytes, 65_536, 16_777_216);
+        OptionRules.Range(failures, "Plugins:Invoker:StderrBytes", options.Invoker.StderrBytes, 65_536, 67_108_864);
+        OptionRules.Range(failures, "Plugins:Invoker:KillGraceMs", options.Invoker.KillGraceMs, 0, 60_000);
+        OptionRules.Range(failures, "Plugins:Invoker:VersionCheckTimeoutMs", options.Invoker.VersionCheckTimeoutMs, 1_000, 60_000);
+        OptionRules.Range(failures, "Plugins:Invoker:LogLineBytes", options.Invoker.LogLineBytes, 1024, 1_048_576);
+
+        foreach (var (pluginId, grant) in options.Grants)
+        {
+            if (grant is null)
+            {
+                failures.Add($"Plugins:Grants:{pluginId} must be an object with Exec, Http and Env lists.");
+                continue;
+            }
+
+            ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Exec", grant.Exec);
+            ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Http", grant.Http);
+            ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Env", grant.Env);
+        }
+
+        return OptionRules.Result(failures);
+    }
+
+    private static void ValidateGrantList(List<string> failures, string setting, List<string> entries)
+    {
+        for (var index = 0; index < entries.Count; index++)
+        {
+            var entry = entries[index];
+            if (entry is "*" || (entry is not null && GrantEntry().IsMatch(entry)))
+            {
+                continue;
+            }
+
+            failures.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"{setting}[{index}] must be \"*\" or the name of an executable, a host or a variable the manifest requests; got '{entry}'."));
+        }
+    }
+
+    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._:()-]{0,127}$")]
+    private static partial Regex GrantEntry();
 }
 
 public sealed class RolesOptionsValidator : IValidateOptions<RolesOptions>

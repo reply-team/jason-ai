@@ -34,6 +34,27 @@ public class OptionsHotReloadTests
     }
 
     [Fact]
+    public async Task An_edited_grant_is_seen_by_the_runtime_that_will_resolve_it_at_the_next_reload()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Plugins":{"Grants":{"fake":{"Env":["A"]}}}}"""));
+
+        var monitor = fixture.Runtime.Services.GetRequiredService<IOptionsMonitor<PluginsOptions>>();
+        Assert.Equal(["A"], monitor.CurrentValue.Grants["fake"].Env);
+
+        File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Plugins":{"Grants":{"fake":{"Env":["A","B"]}}}}""");
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (monitor.CurrentValue.Grants["fake"].Env.Count != 2 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(25, Ct);
+        }
+
+        Assert.Equal(["A", "B"], monitor.CurrentValue.Grants["fake"].Env);
+    }
+
+    [Fact]
     public async Task A_setting_the_runtime_cannot_work_with_stops_the_start_and_leaves_the_lock_free()
     {
         using var dir = new TempDataDir();
