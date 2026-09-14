@@ -183,6 +183,34 @@ public class AttemptHandlerTests
     }
 
     [Fact]
+    public async Task An_attempt_decided_while_its_verdict_is_being_written_still_records_how_it_ran()
+    {
+        DispatchHarness? harness = null;
+        var command = new FakeCommand(WorkItemKind.AiRole, context =>
+        {
+            // A cancellation stops the child before its own change is committed, so the handler can reach the
+            // row still believing the attempt is running; this puts the cancellation exactly there.
+            harness!.InterfereOnceBeforeSaving(() => CancelThroughTheApiAsync(harness!, context.AttemptId).GetAwaiter().GetResult());
+            return Task.FromResult<CommandOutcome>(new CommandOutcome.Killed(Launch(2718)));
+        });
+
+        using (harness = new DispatchHarness(Noon, commands: command))
+        {
+            var seeded = await harness.SeedClaimableAsync(Ct);
+            var work = Assert.Single(await harness.ClaimAsync(Ct));
+
+            await RunAsync(harness, work);
+
+            // The cancellation stands, and how the attempt was run is kept even though its verdict was not.
+            var item = await harness.ReadItemAsync(seeded.PublicId, Ct);
+            Assert.Equal(WorkItemStatus.Cancelled, item.Status);
+            var attempt = Assert.Single(item.Attempts);
+            Assert.Equal(AttemptStatus.Cancelled, attempt.Status);
+            Assert.Equal(2718, attempt.Launch!.Pid);
+        }
+    }
+
+    [Fact]
     public async Task An_attempt_cancelled_before_the_handler_started_is_never_run()
     {
         var command = FakeCommand.Returning(new CommandOutcome.Completed(null));
