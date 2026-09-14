@@ -7,6 +7,7 @@ using Jason.Contracts.Json;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Campaigns;
@@ -16,7 +17,7 @@ namespace Jason.Runtime.Campaigns;
 /// a transition, a context edit — is written to the chronicle in the same transaction as the change itself, so
 /// there is no state the journal cannot account for.
 /// </summary>
-public sealed class CampaignService(JasonDbContext db, JournalWriter journal, TimeProvider clock)
+public sealed class CampaignService(JasonDbContext db, JournalWriter journal, TimeProvider clock, WorkItemCanceller canceller)
 {
     public const int MaxNameLength = 200;
 
@@ -281,6 +282,14 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
             old: JsonSerializer.SerializeToNode(previous, JasonJson.Options),
             updated: JsonSerializer.SerializeToNode(target, JasonJson.Options),
             reason: NormalizeReason(request.Reason));
+
+        // An archived campaign can never run again, so work still queued for it is dead weight that would
+        // otherwise sit in the inbox for good.
+        if (target == CampaignStatus.Archived)
+        {
+            await canceller.CancelOpenAsync(db, campaign.Id, null, actor, "campaign archived", cancellationToken).ConfigureAwait(false);
+        }
+
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return CampaignMapper.ToDto(campaign);
     }

@@ -11,7 +11,11 @@ namespace Jason.Runtime.Journal;
 /// </summary>
 public sealed class JournalWriter(TimeProvider clock)
 {
-    /// <summary>Adds an entry to the context's change set (not saved here) so it commits with the change it describes.</summary>
+    /// <summary>
+    /// Adds an entry to the context's change set (not saved here) so it commits with the change it describes.
+    /// An entry about a work item inherits the item's campaign when no campaign is passed, so the campaign
+    /// chronicle stays one query.
+    /// </summary>
     public JournalEntry Append(
         JasonDbContext db,
         ActorRef actor,
@@ -20,7 +24,9 @@ public sealed class JournalWriter(TimeProvider clock)
         string? key = null,
         JsonNode? old = null,
         JsonNode? updated = null,
-        string? reason = null)
+        string? reason = null,
+        WorkItem? workItem = null,
+        Attempt? attempt = null)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(actor);
@@ -33,7 +39,13 @@ public sealed class JournalWriter(TimeProvider clock)
             ActorType = actor.Type,
             ActorId = actor.Id,
             Kind = kind,
+
+            // With a campaign in hand the navigation carries the key, including for a campaign that is itself
+            // still being inserted; without one the item's foreign key is the denormalized answer.
+            CampaignId = campaign is null ? workItem?.CampaignId : null,
             Campaign = campaign,
+            WorkItemId = workItem?.PublicId,
+            AttemptId = attempt?.PublicId,
             Key = key,
             Old = old,
             New = updated,
@@ -54,6 +66,8 @@ public sealed class JournalWriter(TimeProvider clock)
             new ActorRef(entry.ActorType, entry.ActorId),
             entry.Kind,
             campaignPublicId ?? entry.Campaign?.PublicId,
+            entry.WorkItemId,
+            entry.AttemptId,
             entry.Key,
             entry.Old,
             entry.New,

@@ -161,7 +161,7 @@ public class JournalServiceTests
         var first = await service.AppendAsync(new JournalAppendRequest(campaign, "observation", null, null, null, null), Ct);
         var second = await service.AppendAsync(new JournalAppendRequest(campaign, "decision", null, null, null, null), Ct);
 
-        var page = await service.ListAsync(new JournalListRequest(campaign, null, null, null, null), Ct);
+        var page = await service.ListAsync(new JournalListRequest(campaign, null, null, null, null, null), Ct);
 
         Assert.Equal([second.Id, first.Id], page.Items.Take(2).Select(e => e.Id));
         Assert.Equal(JournalKinds.CampaignCreated, page.Items[^1].Kind);
@@ -182,8 +182,8 @@ public class JournalServiceTests
         var late = await service.AppendAsync(new JournalAppendRequest(campaign, "observation", "late", null, null, null), Ct);
         await service.AppendAsync(new JournalAppendRequest(campaign, "decision", null, null, null, null), Ct);
 
-        var byKind = await service.ListAsync(new JournalListRequest(campaign, "observation", null, null, null), Ct);
-        var since = await service.ListAsync(new JournalListRequest(campaign, "observation", Noon.AddMinutes(30), null, null), Ct);
+        var byKind = await service.ListAsync(new JournalListRequest(campaign, null, "observation", null, null, null), Ct);
+        var since = await service.ListAsync(new JournalListRequest(campaign, null, "observation", Noon.AddMinutes(30), null, null), Ct);
 
         Assert.Equal(["late", "early"], byKind.Items.Select(e => e.Key));
         Assert.Equal(late.Id, Assert.Single(since.Items).Id);
@@ -204,8 +204,8 @@ public class JournalServiceTests
         new JournalWriter(clock).Append(db, Actors.Runtime, JournalKinds.SuppressionAdded, campaign: null, key: "email");
         await db.SaveChangesAsync(Ct);
 
-        var scoped = await service.ListAsync(new JournalListRequest(mine, "observation", null, null, null), Ct);
-        var everything = await service.ListAsync(new JournalListRequest(null, null, null, null, null), Ct);
+        var scoped = await service.ListAsync(new JournalListRequest(mine, null, "observation", null, null, null), Ct);
+        var everything = await service.ListAsync(new JournalListRequest(null, null, null, null, null, null), Ct);
 
         Assert.Equal(kept.Id, Assert.Single(scoped.Items).Id);
         Assert.Single(everything.Items, entry => entry.Kind == JournalKinds.SuppressionAdded && entry.CampaignId is null);
@@ -233,7 +233,7 @@ public class JournalServiceTests
         var pages = 0;
         do
         {
-            var page = await service.ListAsync(new JournalListRequest(campaign, "observation", null, 3, cursor), Ct);
+            var page = await service.ListAsync(new JournalListRequest(campaign, null, "observation", null, 3, cursor), Ct);
             seen.AddRange(page.Items.Select(e => e.Id));
             cursor = page.NextCursor;
             pages++;
@@ -244,10 +244,69 @@ public class JournalServiceTests
         Assert.Equal(3, pages);
     }
 
+    [Fact]
+    public async Task The_chronicle_narrows_to_one_work_item()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var clock = new FixedClock(Noon);
+        var campaignId = await CreateAsync(NewCampaignService(db, clock));
+        var service = NewJournalService(db, clock);
+        var campaign = db.Campaigns.Single(c => c.PublicId == campaignId);
+        var writer = new JournalWriter(clock);
+
+        var mine = NewWorkItem(db, campaign, "wi_MINE");
+        var other = NewWorkItem(db, campaign, "wi_OTHER");
+        var attempt = new Attempt
+        {
+            PublicId = "att_A",
+            WorkItem = mine,
+            Number = 1,
+            Command = WorkItemKind.AiRole,
+            Status = AttemptStatus.Running,
+            ClaimedAt = Noon.UtcDateTime,
+            LockUntil = Noon.UtcDateTime.AddHours(1),
+        };
+        db.Attempts.Add(attempt);
+        await db.SaveChangesAsync(Ct);
+
+        writer.Append(db, Actors.Runtime, JournalKinds.WorkItemScheduled, campaign: null, key: "attempt", workItem: mine, attempt: attempt);
+        writer.Append(db, Actors.Runtime, JournalKinds.WorkItemExpired, campaign: null, key: "due_at", workItem: other);
+        await db.SaveChangesAsync(Ct);
+
+        var page = await service.ListAsync(new JournalListRequest(null, "wi_MINE", null, null, null, null), Ct);
+
+        var entry = Assert.Single(page.Items);
+        Assert.Equal(JournalKinds.WorkItemScheduled, entry.Kind);
+        Assert.Equal("wi_MINE", entry.WorkItemId);
+        Assert.Equal("att_A", entry.AttemptId);
+        Assert.Equal(campaignId, entry.CampaignId);
+
+        // Combines with the other filters rather than replacing them.
+        Assert.Empty((await service.ListAsync(new JournalListRequest(campaignId, "wi_MINE", JournalKinds.WorkItemExpired, null, null, null), Ct)).Items);
+        Assert.Single((await service.ListAsync(new JournalListRequest(campaignId, "wi_MINE", JournalKinds.WorkItemScheduled, null, null, null), Ct)).Items);
+    }
+
+    private static WorkItem NewWorkItem(JasonDbContext db, Campaign campaign, string publicId)
+    {
+        var item = new WorkItem
+        {
+            PublicId = publicId,
+            Campaign = campaign,
+            Kind = WorkItemKind.AiRole,
+            Role = "researcher",
+            CreatedAt = Noon.UtcDateTime,
+            UpdatedAt = Noon.UtcDateTime,
+        };
+        db.WorkItems.Add(item);
+        db.SaveChanges();
+        return item;
+    }
+
     private static async Task<string> CreateAsync(CampaignService campaigns) =>
         (await campaigns.CreateAsync(new CampaignCreateRequest("LatAm", null, null, null), Ct)).Id;
 
-    private static CampaignService NewCampaignService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock);
+    private static CampaignService NewCampaignService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
 
     private static JournalService NewJournalService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock));
 }

@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -82,6 +83,18 @@ public class OperationEndpointsTests
 
         Assert.Equal("validation_failed", error.Code);
         Assert.Equal("name", Assert.Single(error.Details!).Field);
+    }
+
+    [Fact]
+    public async Task Losing_a_race_for_a_row_is_a_conflict_the_caller_can_retry()
+    {
+        await using var api = await ProbeApi.StartAsync(_ => throw new DbUpdateConcurrencyException("another writer got there first"), Ct);
+
+        var error = await api.PostErrorAsync("{}", HttpStatusCode.Conflict, Ct);
+
+        Assert.Equal("concurrent_update", error.Code);
+        Assert.True(error.Retryable);
+        Assert.DoesNotContain("another writer", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -29,6 +29,12 @@ public sealed class JournalEntry
 
     public Campaign? Campaign { get; init; }
 
+    /// <summary>The PUBLIC id of the work item the entry is about; plain text, indexed, deliberately not a foreign key.</summary>
+    public string? WorkItemId { get; init; }
+
+    /// <summary>The PUBLIC id of the attempt the entry is about.</summary>
+    public string? AttemptId { get; init; }
+
     public string? Key { get; init; }
 
     public JsonNode? Old { get; init; }

@@ -261,5 +261,5 @@ public class CampaignServiceTests
         Assert.Equal(Noon.AddHours(1), summary.ArchivedAt);
     }
 
-    private static CampaignService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock);
+    private static CampaignService NewService(JasonDbContext db, TimeProvider clock) => new(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
 }

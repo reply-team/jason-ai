@@ -17,6 +17,108 @@ namespace Jason.Runtime.Persistence.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.Attempt", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("ClaimedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("claimed_at");
+
+                    b.Property<string>("Command")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("command");
+
+                    b.Property<string>("ContextSnapshot")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("context_snapshot_json")
+                        .HasDefaultValueSql("'{}'");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("error_json");
+
+                    b.Property<string>("ExecutionProfile")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("execution_profile");
+
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("finished_at");
+
+                    b.Property<DateTime?>("LastHeartbeatAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_heartbeat_at");
+
+                    b.Property<string>("Launch")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("launch_json");
+
+                    b.Property<DateTime>("LockUntil")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("lock_until");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("number");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
+
+                    b.Property<int>("WorkItemId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("work_item_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_attempts");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_attempts_public_id");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_attempts_status");
+
+                    b.HasIndex("WorkItemId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_attempts_one_live_per_item")
+                        .HasFilter("status IN ('scheduled','running')");
+
+                    b.HasIndex("WorkItemId", "Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_attempts_work_item_id_number");
+
+                    b.ToTable("attempts", t =>
+                        {
+                            t.HasCheckConstraint("ck_attempts_context_snapshot_json", "json_valid(context_snapshot_json)");
+
+                            t.HasCheckConstraint("ck_attempts_error_json", "error_json IS NULL OR json_valid(error_json)");
+
+                            t.HasCheckConstraint("ck_attempts_launch_json", "launch_json IS NULL OR json_valid(launch_json)");
+                        });
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.Campaign", b =>
                 {
                     b.Property<int>("Id")
@@ -261,6 +363,11 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("actor_type");
 
+                    b.Property<string>("AttemptId")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("attempt_id");
+
                     b.Property<int?>("CampaignId")
                         .HasColumnType("INTEGER")
                         .HasColumnName("campaign_id");
@@ -299,6 +406,11 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("ts");
 
+                    b.Property<string>("WorkItemId")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("work_item_id");
+
                     b.HasKey("Id")
                         .HasName("pk_journal");
 
@@ -312,11 +424,83 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.HasIndex("CampaignId", "PublicId")
                         .HasDatabaseName("ix_journal_campaign_id_public_id");
 
+                    b.HasIndex("WorkItemId", "PublicId")
+                        .HasDatabaseName("ix_journal_work_item_id_public_id");
+
                     b.ToTable("journal", null, t =>
                         {
                             t.HasCheckConstraint("ck_journal_new_json", "new_json IS NULL OR json_valid(new_json)");
 
                             t.HasCheckConstraint("ck_journal_old_json", "old_json IS NULL OR json_valid(old_json)");
+                        });
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.Role", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Builtin")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("builtin");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
+
+                    b.Property<string>("EntryCommand")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("entry_command_json")
+                        .HasDefaultValueSql("'[]'");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<string>("ProfileDefaults")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("profile_defaults_json")
+                        .HasDefaultValueSql("'{}'");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_roles");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_roles_name");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_roles_public_id");
+
+                    b.ToTable("roles", t =>
+                        {
+                            t.HasCheckConstraint("ck_roles_entry_command_json", "json_valid(entry_command_json)");
+
+                            t.HasCheckConstraint("ck_roles_profile_defaults_json", "json_valid(profile_defaults_json)");
                         });
                 });
 
@@ -368,6 +552,172 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.ToTable("suppressions");
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.WorkItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("attempt_count");
+
+                    b.Property<int>("CampaignId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("campaign_id");
+
+                    b.Property<int?>("ContactId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("contact_id");
+
+                    b.Property<string>("Context")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("context_json")
+                        .HasDefaultValueSql("'{}'");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedById")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_by_id");
+
+                    b.Property<string>("CreatedByType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_by_type");
+
+                    b.Property<DateTime?>("DueAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("due_at");
+
+                    b.Property<string>("ExecutionProfile")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("execution_profile");
+
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("finished_at");
+
+                    b.Property<int?>("HeartbeatSeconds")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("heartbeat_seconds");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_error_json");
+
+                    b.Property<int?>("MaxAttempts")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("max_attempts");
+
+                    b.Property<DateTime?>("NotBefore")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("not_before");
+
+                    b.Property<string>("Operation")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("operation");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("priority");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.Property<string>("Result")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("result_json");
+
+                    b.Property<string>("ResultFormat")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("result_format_json");
+
+                    b.Property<DateTime?>("RetryAfter")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("retry_after");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("role");
+
+                    b.Property<string>("Status")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
+
+                    b.Property<int?>("TimeoutSeconds")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("timeout_seconds");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_work_items");
+
+                    b.HasIndex("ContactId")
+                        .HasDatabaseName("ix_work_items_contact_id");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_work_items_public_id");
+
+                    b.HasIndex("CampaignId", "Status")
+                        .HasDatabaseName("ix_work_items_campaign_id_status");
+
+                    b.HasIndex("Status", "DueAt")
+                        .HasDatabaseName("ix_work_items_status_due_at");
+
+                    b.HasIndex("Status", "NotBefore")
+                        .HasDatabaseName("ix_work_items_status_not_before");
+
+                    b.ToTable("work_items", t =>
+                        {
+                            t.HasCheckConstraint("ck_work_items_context_json", "json_valid(context_json)");
+
+                            t.HasCheckConstraint("ck_work_items_last_error_json", "last_error_json IS NULL OR json_valid(last_error_json)");
+
+                            t.HasCheckConstraint("ck_work_items_result_format_json", "result_format_json IS NULL OR json_valid(result_format_json)");
+
+                            t.HasCheckConstraint("ck_work_items_result_json", "result_json IS NULL OR json_valid(result_json)");
+                        });
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.Attempt", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.WorkItem", "WorkItem")
+                        .WithMany("Attempts")
+                        .HasForeignKey("WorkItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_attempts_work_items_work_item_id");
+
+                    b.Navigation("WorkItem");
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.CampaignContact", b =>
                 {
                     b.HasOne("Jason.Runtime.Persistence.Campaign", "Campaign")
@@ -412,6 +762,26 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Navigation("Campaign");
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.WorkItem", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.Campaign", "Campaign")
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_work_items_campaigns_campaign_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.Contact", "Contact")
+                        .WithMany()
+                        .HasForeignKey("ContactId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_work_items_contacts_contact_id");
+
+                    b.Navigation("Campaign");
+
+                    b.Navigation("Contact");
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.Campaign", b =>
                 {
                     b.Navigation("Members");
@@ -420,6 +790,11 @@ namespace Jason.Runtime.Persistence.Migrations
             modelBuilder.Entity("Jason.Runtime.Persistence.Contact", b =>
                 {
                     b.Navigation("Channels");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.WorkItem", b =>
+                {
+                    b.Navigation("Attempts");
                 });
 #pragma warning restore 612, 618
         }

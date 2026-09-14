@@ -8,10 +8,119 @@ namespace Jason.Runtime.Tests.Persistence;
 
 public class ConversionsTests
 {
+    private static readonly DateTime Noon = new(2026, 9, 14, 12, 0, 0, DateTimeKind.Utc);
+
     private enum Sample
     {
         AwaitingApproval,
         Done,
+    }
+
+    [Fact]
+    public void An_attempt_error_round_trips_through_its_json_column()
+    {
+        using var database = new TestDatabase();
+        var error = new AttemptErrorDto("rate_limited", "the provider asked for a pause", true, "exit 3", [new ErrorDetail("f", "c", "m")]);
+        var launch = new AttemptLaunchDto(["dotnet", "host.dll", "succeed"], "/work/wi_A/att_A", 4242, 0);
+
+        using (var db = database.Open())
+        {
+            var item = SeedWorkItem(db);
+            db.Attempts.Add(new Attempt
+            {
+                PublicId = "att_A",
+                WorkItem = item,
+                Number = 1,
+                Command = WorkItemKind.AiRole,
+                Status = AttemptStatus.Failed,
+                ClaimedAt = Noon,
+                LockUntil = Noon.AddHours(1),
+                Error = error,
+                Launch = launch,
+            });
+            db.SaveChanges();
+        }
+
+        using (var db = database.Open())
+        {
+            var attempt = db.Attempts.Single(a => a.PublicId == "att_A");
+            Assert.Equal(error.Code, attempt.Error!.Code);
+            Assert.Equal(error.Message, attempt.Error.Message);
+            Assert.True(attempt.Error.Retriable);
+            Assert.Equal("exit 3", attempt.Error.Trace);
+            Assert.Equal("m", Assert.Single(attempt.Error.Details!).Message);
+            Assert.Equal(launch.EntryCommand, attempt.Launch!.EntryCommand);
+            Assert.Equal(4242, attempt.Launch.Pid);
+        }
+    }
+
+    [Fact]
+    public void An_entry_command_round_trips_and_its_order_is_part_of_its_identity()
+    {
+        var comparer = new StringListComparer();
+        Assert.True(comparer.Equals(["a", "b"], ["a", "b"]));
+        Assert.False(comparer.Equals(["a", "b"], ["b", "a"]));
+        Assert.False(comparer.Equals(["a"], ["a", "b"]));
+
+        using var database = new TestDatabase();
+        using (var db = database.Open())
+        {
+            db.Roles.Add(new Role
+            {
+                PublicId = "rol_F",
+                Name = "fake",
+                EntryCommand = ["dotnet", "host.dll", "succeed"],
+                ProfileDefaults = new JsonObject { ["model"] = "small" },
+                CreatedAt = Noon,
+                UpdatedAt = Noon,
+            });
+            db.SaveChanges();
+        }
+
+        using (var db = database.Open())
+        {
+            var role = db.Roles.Single(r => r.Name == "fake");
+            Assert.Equal(["dotnet", "host.dll", "succeed"], role.EntryCommand);
+            Assert.Equal("small", (string?)role.ProfileDefaults["model"]);
+        }
+    }
+
+    [Fact]
+    public void A_work_item_status_is_stored_as_snake_case_text()
+    {
+        using var database = new TestDatabase();
+        using (var db = database.Open())
+        {
+            var item = SeedWorkItem(db);
+            item.Kind = WorkItemKind.ProviderOp;
+            item.Status = WorkItemStatus.Processing;
+            db.SaveChanges();
+        }
+
+        using var connection = new SqliteConnection($"Data Source={database.File}");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT kind || '/' || status FROM work_items";
+        Assert.Equal("provider_op/processing", (string?)command.ExecuteScalar());
+    }
+
+    private static WorkItem SeedWorkItem(JasonDbContext db)
+    {
+        var campaign = new Campaign { PublicId = "cmp_W", Name = "w", Status = CampaignStatus.Active, CreatedAt = Noon, UpdatedAt = Noon };
+        db.Campaigns.Add(campaign);
+        var item = new WorkItem
+        {
+            PublicId = "wi_W",
+            Campaign = campaign,
+            Kind = WorkItemKind.AiRole,
+            Role = "researcher",
+            CreatedByType = ActorType.Human,
+            CreatedAt = Noon,
+            UpdatedAt = Noon,
+        };
+        db.WorkItems.Add(item);
+        db.SaveChanges();
+        return item;
     }
 
     [Fact]
