@@ -65,6 +65,7 @@ public static class CliApp
         root.Subcommands.Add(CampaignCommands.Build(env, actor));
         root.Subcommands.Add(ContactCommands.Build(env, actor));
         root.Subcommands.Add(WorkItemCommands.Build(env, actor));
+        root.Subcommands.Add(RoleCommands.Build(env, actor));
         root.Subcommands.Add(JournalCommands.Build(env, actor));
         root.Subcommands.Add(SuppressionCommands.Build(env, actor));
 

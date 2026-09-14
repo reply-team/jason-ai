@@ -12,7 +12,16 @@ public class RuntimeStatusCommandTests
 {
     private static readonly RuntimeDescriptor Descriptor = new("v1", "0.1.0-dev", "rt_LIVE", 77, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch);
 
-    private static string InfoJson(string instanceId) => JsonSerializer.Serialize(
+    /// <summary>A runtime from before the dispatcher existed: the field is simply not in the body.</summary>
+    private const string InfoWithoutADispatcher =
+        "{\"runtime_version\":\"0.1.0-dev\",\"api_version\":\"v1\",\"instance_id\":\"rt_LIVE\",\"pid\":77,"
+        + "\"started_at\":\"1970-01-01T00:00:00+00:00\",\"data_dir\":\"/home/u/.jason\","
+        + "\"database\":{\"applied_migrations\":[\"20260913225419_InitialCreate\"]}}";
+
+    private static string InfoJson(string instanceId) =>
+        InfoJson(instanceId, new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0));
+
+    private static string InfoJson(string instanceId, DispatcherInfo dispatcher) => JsonSerializer.Serialize(
         new SystemInfoResponse(
             "0.1.0-dev",
             "v1",
@@ -21,7 +30,7 @@ public class RuntimeStatusCommandTests
             DateTimeOffset.UnixEpoch,
             "/home/u/.jason",
             new DatabaseInfo(["20260913225419_InitialCreate"]),
-            new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0)),
+            dispatcher),
         JasonJson.Options);
 
     [Fact]
@@ -125,6 +134,49 @@ public class RuntimeStatusCommandTests
         Assert.Contains("rt_LIVE", text, StringComparison.Ordinal);
         Assert.Contains("http://127.0.0.1:5000", text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_prints_what_the_dispatcher_is_doing()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var dispatcher = new DispatcherInfo(DispatcherState.Running, 10, 4, 2, new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.Zero), 41);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE", dispatcher))));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains(
+            "Dispatcher: running · tick 10 s · 2/4 attempts · last scan 2026-09-14 10:00:00 UTC",
+            output.ToString(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_says_the_dispatcher_has_not_scanned_yet()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE"))));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Dispatcher: running · tick 10 s · 0/4 attempts · last scan never", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_tolerates_a_runtime_that_reports_no_dispatcher()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoWithoutADispatcher)));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Dispatcher: unknown", output.ToString(), StringComparison.Ordinal);
     }
 
     private static (CliEnvironment Env, StringWriter Out, StringWriter Error) Environment(TempPaths dir, HttpMessageHandler handler)
