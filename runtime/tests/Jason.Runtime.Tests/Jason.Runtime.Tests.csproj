@@ -3,5 +3,7 @@
     <ProjectReference Include="../../src/Jason.Runtime/Jason.Runtime.csproj" />
     <!-- Tests only: exercises the real CLI against a real runtime in one process. The CLI itself still never references the runtime. -->
     <ProjectReference Include="../../src/Jason.Cli/Jason.Cli.csproj" />
+    <!-- Referencing the stand-in agent host copies Jason.FakeAgentHost.dll and its runtimeconfig next to the tests, so attempts can be run as real child processes. -->
+    <ProjectReference Include="../Jason.FakeAgentHost/Jason.FakeAgentHost.csproj" />
   </ItemGroup>
 </Project>

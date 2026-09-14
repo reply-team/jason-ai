@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The CI stand-in for an agent host: it reads the launch envelope from stdin and drives the executor
+       operations exactly as a real host would. It is test scaffolding, never published, and its name does not
+       end in .Tests so the test-runner properties do not apply to it; the test projects reference it only so
+       its assembly is copied next to theirs. It may reference Jason.Contracts and nothing else: a host that
+       needed the runtime's own types would not be proving anything about the public contract. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Jason.FakeAgentHost</AssemblyName>
+    <RootNamespace>Jason.FakeAgentHost</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Jason.Contracts/Jason.Contracts.csproj" />
+  </ItemGroup>
+</Project>

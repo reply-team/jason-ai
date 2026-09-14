@@ -10,6 +10,7 @@
     <Project Path="tests/Jason.App.Tests/Jason.App.Tests.csproj" />
     <Project Path="tests/Jason.Cli.Tests/Jason.Cli.Tests.csproj" />
     <Project Path="tests/Jason.Contracts.Tests/Jason.Contracts.Tests.csproj" />
+    <Project Path="tests/Jason.FakeAgentHost/Jason.FakeAgentHost.csproj" />
     <Project Path="tests/Jason.PluginHost.Tests/Jason.PluginHost.Tests.csproj" />
     <Project Path="tests/Jason.Runtime.Tests/Jason.Runtime.Tests.csproj" />
   </Folder>

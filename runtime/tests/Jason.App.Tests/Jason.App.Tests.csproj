@@ -2,5 +2,7 @@
   <ItemGroup>
     <!-- Referencing the executable copies jason.dll and its runtimeconfig next to the tests, so end-to-end tests can spawn it. -->
     <ProjectReference Include="../../src/Jason.App/Jason.App.csproj" />
+    <!-- The stand-in agent host, for the same reason: end-to-end work has to be performed by a real child process. -->
+    <ProjectReference Include="../Jason.FakeAgentHost/Jason.FakeAgentHost.csproj" />
   </ItemGroup>
 </Project>
