@@ -56,7 +56,8 @@ public static class WorkItemTransitions
             item.FinishedAt = null;
         }
 
-        if (to is WorkItemStatus.Scheduled or WorkItemStatus.Cancelled)
+        // The dispatcher's retry moment means nothing once the item is taken, given up, or past its due date.
+        if (to is WorkItemStatus.Scheduled or WorkItemStatus.Cancelled or WorkItemStatus.Expired)
         {
             item.RetryAfter = null;
         }

@@ -105,6 +105,10 @@ runtime that has just come up cannot hold an executor to beats it was never ther
 
 `heartbeat_seconds: 0` turns the check off for an item; the lease alone then decides.
 
+The per-item overrides and the kind defaults are read every time they are needed, so changing an item's
+`heartbeat_seconds` or `max_attempts` while an attempt is running takes effect at the next scan; the lease
+is the exception — `lock_until` stays where the claim put it until the attempt ends.
+
 When an attempt is lost and the child process is still this runtime's, it is stopped: a zombie's report
 would be refused by the fencing anyway, and letting it run on only burns tokens.
 
