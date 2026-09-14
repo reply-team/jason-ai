@@ -19,7 +19,7 @@ public static class PluginHostMode
     /// The seam the mode's own tests run against, and the one place the engine is reached from. Set by the
     /// process, never by a plugin: there is no way to reach it from JavaScript.
     /// </summary>
-    public static IInvocationRunner Runner { get; set; } = new NotImplementedRunner();
+    public static IInvocationRunner Runner { get; set; } = new InvocationRunner();
 
     public static async Task<int> RunAsync(
         IReadOnlyList<string> args,

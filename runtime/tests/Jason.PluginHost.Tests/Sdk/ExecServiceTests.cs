@@ -1,0 +1,203 @@
+using System.Text.Json.Nodes;
+using Jason.Contracts.Plugins;
+using Jason.PluginHost.Sdk;
+using Jason.PluginHost.Tests.Fixtures;
+using Jint;
+
+namespace Jason.PluginHost.Tests.Sdk;
+
+public sealed class ExecServiceTests : IDisposable
+{
+    private const string Cli = "fake-cli";
+
+    private readonly TempPackage _package = new();
+
+    public void Dispose() => _package.Dispose();
+
+    private static InvocationGrants Granted { get; } =
+        new(new ExecGrants([new ExecutableGrant(Cli, FakeProviderCli.ExecutablePath), new ExecutableGrant("dotnet", Executables.Dotnet)]), null, null);
+
+    private SdkHarness Harness(Action<InvocationBuilder>? configure = null) =>
+        new(_package.Root, builder =>
+        {
+            builder.Grants = Granted;
+            configure?.Invoke(builder);
+        });
+
+    private static JsonObject Exec(SdkHarness harness, string request) =>
+        (JsonObject)JsJson.ToJson(harness.Engine, harness.Evaluate("host.exec(" + request + ")"))!;
+
+    private static string Lines(JsonObject result) => result["stdout"]!.GetValue<string>().ReplaceLineEndings("\n");
+
+    [Fact]
+    public void A_granted_program_runs_with_the_arguments_it_was_given()
+    {
+        using var harness = Harness();
+
+        var result = Exec(harness, $"{{ executable: \"{Cli}\", args: [\"echo-args\", \"a\", \"b c\"] }}");
+
+        Assert.Equal(0, result["exit_code"]!.GetValue<int>());
+        Assert.Equal("a\nb c\n", Lines(result));
+        Assert.False(result["timed_out"]!.GetValue<bool>());
+        Assert.False(result["truncated"]!["stdout"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void The_dll_of_a_program_is_just_another_argument()
+    {
+        using var harness = Harness();
+
+        var result = Exec(harness, $"{{ executable: \"dotnet\", args: [{JsonValue.Create(FakeProviderCli.Dll)!.ToJsonString()}, \"echo-args\", \"hi\"] }}");
+
+        Assert.Equal(0, result["exit_code"]!.GetValue<int>());
+        Assert.Equal("hi\n", Lines(result));
+    }
+
+    [Fact]
+    public void An_exit_code_comes_back_as_it_is()
+    {
+        using var harness = Harness();
+
+        var result = Exec(harness, $"{{ executable: \"{Cli}\", args: [\"exit\", \"7\"] }}");
+
+        Assert.Equal(7, result["exit_code"]!.GetValue<int>());
+        Assert.Contains("exiting", result["stderr"]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Standard_input_reaches_the_program_and_is_then_closed()
+    {
+        using var harness = Harness();
+
+        var result = Exec(harness, $"{{ executable: \"{Cli}\", args: [\"stdin-length\"], stdin: \"x\".repeat(10000) }}");
+
+        Assert.Equal("10000\n", Lines(result));
+    }
+
+    [Fact]
+    public void Output_beyond_the_cap_is_cut_and_the_cut_is_flagged()
+    {
+        using var harness = Harness(builder => builder.Limits = builder.Limits with { Exec = new ExecLimits(65_536, 64) });
+
+        var result = Exec(harness, $"{{ executable: \"{Cli}\", args: [\"spew\", \"5000000\"] }}");
+
+        Assert.True(result["truncated"]!["stdout"]!.GetValue<bool>());
+        Assert.Equal(65_536, result["stdout"]!.GetValue<string>().Length);
+    }
+
+    [Fact]
+    public void A_program_that_outstays_its_timeout_is_killed_and_the_call_says_so()
+    {
+        using var harness = Harness();
+
+        var result = Exec(harness, $"{{ executable: \"{Cli}\", args: [\"sleep\", \"30000\"], timeout_ms: 300 }}");
+
+        Assert.True(result["timed_out"]!.GetValue<bool>());
+        Assert.True(result["duration_ms"]!.GetValue<long>() < 10_000, "the kill did not wait for the program");
+    }
+
+    [Fact]
+    public void A_variable_the_plugin_adds_reaches_that_child_and_nothing_else()
+    {
+        using var harness = Harness();
+
+        var result = Exec(harness, $"{{ executable: \"{Cli}\", args: [\"print-env\", \"FAKE_EXEC_VALUE\"], env: {{ FAKE_EXEC_VALUE: \"bar\" }} }}");
+
+        Assert.Equal("bar\n", Lines(result));
+        Assert.Null(Environment.GetEnvironmentVariable("FAKE_EXEC_VALUE"));
+    }
+
+    [Fact]
+    public void A_reserved_variable_is_not_a_plugin_s_to_set()
+    {
+        using var harness = Harness();
+
+        Assert.Equal("TypeError", harness.Caught($"host.exec({{ executable: \"{Cli}\", args: [\"echo-args\"], env: {{ JASON_X: \"1\" }} }})"));
+    }
+
+    [Theory]
+    [InlineData("sh")]
+    [InlineData("cmd")]
+    [InlineData("C:\\\\Windows\\\\System32\\\\cmd.exe")]
+    [InlineData("/bin/sh")]
+    [InlineData("./fake-cli")]
+    public void Anything_but_a_granted_name_is_refused(string executable)
+    {
+        using var harness = Harness();
+
+        var refused = Assert.Throws<HostRuleException>(() => harness.Evaluate($"host.exec({{ executable: \"{executable}\" }})"));
+
+        Assert.Equal(OutcomeCodes.ExecutableNotAllowed, refused.Code);
+    }
+
+    [Fact]
+    public void Without_the_capability_nothing_starts()
+    {
+        using var harness = new SdkHarness(_package.Root);
+
+        var refused = Assert.Throws<HostRuleException>(() => harness.Evaluate($"host.exec({{ executable: \"{Cli}\" }})"));
+
+        Assert.Equal(OutcomeCodes.CapabilityNotGranted, refused.Code);
+        Assert.Equal("exec", refused.Details!["capability"]!.GetValue<string>());
+        Assert.Equal(Cli, refused.Details!["requested"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void An_invocation_may_start_only_so_many_programs()
+    {
+        using var harness = Harness(builder => builder.Limits = builder.Limits with { Exec = new ExecLimits(4_194_304, 2) });
+
+        Exec(harness, $"{{ executable: \"{Cli}\", args: [\"echo-args\", \"one\"] }}");
+        Exec(harness, $"{{ executable: \"{Cli}\", args: [\"echo-args\", \"two\"] }}");
+        var refused = Assert.Throws<HostRuleException>(() => harness.Evaluate($"host.exec({{ executable: \"{Cli}\", args: [\"echo-args\"] }})"));
+
+        Assert.Equal(OutcomeCodes.ExecLimit, refused.Code);
+        Assert.Equal(2, harness.Budget.ExecCalls);
+    }
+
+    [Fact]
+    public void A_started_program_is_what_makes_a_later_timeout_ambiguous()
+    {
+        using var harness = Harness();
+
+        Exec(harness, $"{{ executable: \"{Cli}\", args: [\"echo-args\", \"one\"] }}");
+
+        Assert.Equal(1, harness.Budget.ExternalCallsStarted);
+    }
+
+    [Fact]
+    public void Every_program_the_plugin_starts_is_on_the_record()
+    {
+        using var harness = Harness();
+
+        Exec(harness, $"{{ executable: \"{Cli}\", args: [\"exit\", \"3\"] }}");
+
+        var line = Assert.Single(harness.Lines);
+        Assert.Equal("exec", line["message"]!.GetValue<string>());
+        Assert.Equal(Cli, line["data"]!["executable"]!.GetValue<string>());
+        Assert.Equal(3, line["data"]!["exit_code"]!.GetValue<int>());
+        Assert.Equal("exit", line["data"]!["args"]![0]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void An_option_the_call_does_not_have_is_a_type_error()
+    {
+        using var harness = Harness();
+
+        Assert.Equal("TypeError", harness.Caught($"host.exec({{ executable: \"{Cli}\", cwd: \"/tmp\" }})"));
+        Assert.Equal("TypeError", harness.Caught("host.exec({ })"));
+        Assert.Equal("TypeError", harness.Caught($"host.exec({{ executable: \"{Cli}\", args: \"echo-args\" }})"));
+        Assert.Equal("TypeError", harness.Caught($"host.exec({{ executable: \"{Cli}\", timeout_ms: 0 }})"));
+    }
+
+    [Fact]
+    public void A_key_the_plugin_left_undefined_is_simply_absent()
+    {
+        using var harness = Harness();
+
+        var result = Exec(harness, $"{{ executable: \"{Cli}\", args: [\"echo-args\", \"a\"], stdin: undefined, timeout_ms: undefined, env: undefined }}");
+
+        Assert.Equal(0, result["exit_code"]!.GetValue<int>());
+        Assert.Equal("a\n", Lines(result));
+    }
+}

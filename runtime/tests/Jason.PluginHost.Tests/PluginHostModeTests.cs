@@ -6,6 +6,7 @@ using Jason.PluginHost.Tests.Fixtures;
 
 namespace Jason.PluginHost.Tests;
 
+[Collection(ModeCollection.Name)]
 public sealed class PluginHostModeTests : IDisposable
 {
     private readonly IInvocationRunner _original = PluginHostMode.Runner;

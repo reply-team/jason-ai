@@ -11,24 +11,3 @@ public interface IInvocationRunner
 {
     PluginOutcome Run(PluginInvocation invocation, HostDiagnostics diagnostics, CancellationToken deadline);
 }
-
-/// <summary>
-/// The stand-in until the engine is wired in: it answers honestly rather than pretending to have run anything.
-/// A failed outcome, not an exception, because the protocol did complete.
-/// </summary>
-internal sealed class NotImplementedRunner : IInvocationRunner
-{
-    public PluginOutcome Run(PluginInvocation invocation, HostDiagnostics diagnostics, CancellationToken deadline)
-    {
-        ArgumentNullException.ThrowIfNull(invocation);
-
-        return new PluginOutcome(
-            PluginProtocol.CurrentVersion,
-            invocation.InvocationId,
-            OutcomeStatus.Failed,
-            Result: null,
-            ExternalIds: null,
-            new OutcomeError(FailureClass.Permanent, "not_implemented", "This build cannot run a plugin's JavaScript yet.", null, null),
-            new OutcomeDiagnostics(0, 0, 0, diagnostics?.LogLines ?? 0));
-    }
-}

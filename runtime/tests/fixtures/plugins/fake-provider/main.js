@@ -70,12 +70,12 @@ export function invoke(operation, input, context) {
       host.log(input.level ?? "info", input.message, input.data);
       return { result: { logged: true } };
 
-    case "hang":
+    case "hang.forever":
       for (;;) {
         // Never ends: the engine's own limits are what stop this.
       }
 
-    case "spew":
+    case "spew.bytes":
       return { result: "x".repeat(input.bytes) };
 
     case "throw.plain":
