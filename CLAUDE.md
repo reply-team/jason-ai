@@ -73,7 +73,8 @@ covered here.
   environment variables `JASON_*`; the data directory itself comes from `JASON_DATA_DIR` or
   defaults to `~/.jason`. Settings are bound through `IOptions<T>` with validation on start; the
   dispatcher reads `IOptionsMonitor<T>` each tick, so edits to `settings.json` apply live except
-  `Dispatcher:MaxParallel`, which sizes the handler pool when the runtime starts.
+  `Dispatcher:MaxParallel`, which sizes the handler pool when the runtime starts, and
+  `Dispatcher:Enabled`, which decides at start whether this runtime has a dispatch loop at all.
 - Logs are JSON Lines under `~/.jason/logs/` and never contain request bodies, prompts, work-item
   contexts or the capability token.
 - Everything in the repository is written in English.
