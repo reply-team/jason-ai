@@ -4,6 +4,8 @@ using Jason.Contracts.Json;
 using Jason.Runtime.Api;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
+using Jason.Runtime.Hosting.Modules;
+using Jason.Runtime.Journal;
 using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
 using Microsoft.AspNetCore.Builder;
@@ -11,6 +13,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -117,6 +120,10 @@ public static class RuntimeHost
         builder.Services.AddSingleton(info);
         builder.Services.AddSingleton(migration);
         builder.Services.AddSingleton(paths);
+        builder.Services.AddDbContext<JasonDbContext>(o => JasonDbContext.Configure(o, paths.DatabaseFile));
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddScoped<JournalWriter>();
+        builder.Services.AddSystemModule().AddCampaignModule().AddContactModule();
 
         var app = builder.Build();
 
@@ -126,15 +133,9 @@ public static class RuntimeHost
         app.Use(LoopbackHostFilter.Middleware);
         app.Use(BearerTokenAuthentication.Middleware(token));
 
-        app.MapPost(Operations.Route(Operations.SystemInfo), (RuntimeInfo runtimeInfo, MigrationReport report, JasonPaths dataPaths) =>
-            TypedResults.Ok(new SystemInfoResponse(
-                runtimeInfo.RuntimeVersion,
-                ApiVersion.Current,
-                runtimeInfo.InstanceId,
-                runtimeInfo.Pid,
-                runtimeInfo.StartedAt,
-                dataPaths.Root,
-                new DatabaseInfo(report.AppliedMigrations))));
+        app.MapSystemOperations();
+        app.MapCampaignOperations();
+        app.MapContactOperations();
 
         // An explicit catch-all pattern: the default fallback pattern is "{*path:nonfile}", and every operation
         // name contains a dot, so a mistyped operation would look like a file request and escape the fallback.
