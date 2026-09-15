@@ -3,6 +3,12 @@
 **Version 1.** The machine-readable contract is [`campaign.get.json`](campaign.get.json); this page explains it.
 Where the two seem to differ, the document is right and this page is a bug.
 
+> **This version never runs it.** No `provider_op` work item reaches a plugin at all yet: every one of them fails
+> at the claim with `no_route`. What runs is the check on the work item itself — an operation no contract is
+> published for is refused when the item is written, and the arguments it carries are measured against this
+> operation's argument schema. The contract is published complete so that routing is the only thing left to add —
+> and so that a plugin author can implement and test the operation now.
+
 ## What it is for
 
 "Show me this campaign": the settings, the state and the count of people in each state, as the provider holds them.
