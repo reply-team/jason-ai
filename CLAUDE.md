@@ -77,8 +77,10 @@ covered here.
   and the exit code says only whether the protocol completed (0 outcome, 2 usage, 3 rejected,
   4 host failure). Declaration is not permission: capabilities are requested by the manifest and
   granted under `Plugins:Grants:<id>`, resolved and frozen at each load. A failure carries one of
-  four classes — only `transient` is retried; `ambiguous` is final, because the provider may already
-  have acted. An activated load journals `plugins_reloaded`; there is no `plugin.invoke` operation.
+  four classes — `transient` is retried, `permanent` and `validation` are final, and `ambiguous` says
+  the provider may already have acted, so it is repeated only where the operation's own contract
+  declares that repeating it is safe or that a recovery read makes it safe. An activated load journals
+  `plugins_reloaded`; there is no `plugin.invoke` operation.
   `docs/plugins.md` is the contract.
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for
   people, stderr is diagnostics only. Exit codes: 0 success, 1 API business error, 2 usage error,
