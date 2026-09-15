@@ -1,4 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- DTOs, operation names, shared JSON options and the discovery contract shared by server and clients.
        Must stay free of server dependencies: no EF Core, no ASP.NET Core, no Serilog. -->
+
+  <!-- The published operation contracts are embedded rather than copied, so the catalog the runtime enforces is
+       the very file under docs/contracts/ that a plugin author reads. The Link fixes the resource name, which is
+       what OperationCatalog looks for. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\docs\contracts\operations\*.json" Link="Operations\%(Filename)%(Extension)" />
+  </ItemGroup>
 </Project>
