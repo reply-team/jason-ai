@@ -1,0 +1,15 @@
+{
+  "operation": "campaign.get",
+  "version": 1,
+  "case": "the first read, where the planner supplies the provider's identifier",
+  "input": {
+    "args": { "campaign": { "external_id": "c_7714" } },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "draft",
+      "external_ids": {}
+    }
+  },
+  "expect": "valid"
+}

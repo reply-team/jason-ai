@@ -1,0 +1,23 @@
+{
+  "operation": "campaign.get",
+  "version": 1,
+  "case": "the campaign, its counts, and the provider's own answer alongside",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "campaign": {
+        "external_id": "c_7714",
+        "name": "Q3 LatAm founders",
+        "status": "live",
+        "counts": { "enrolled": 120, "active": 44, "finished": 76 }
+      },
+      "vendor": { "sending_profile": "q3-latam", "throttle_per_day": 80 }
+    },
+    "external_ids": { "campaign": "c_7714" },
+    "error": null,
+    "diagnostics": { "duration_ms": 412, "exec_calls": 1, "http_calls": 0, "log_lines": 3 }
+  },
+  "expect": { "status": "succeeded", "retriable": false }
+}

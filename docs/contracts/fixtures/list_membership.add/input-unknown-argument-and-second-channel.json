@@ -1,0 +1,36 @@
+{
+  "operation": "list_membership.add",
+  "version": 1,
+  "case": "an argument nobody declared, and a second channel the operation does not consume",
+  "input": {
+    "args": { "list": { "external_id": "L-1129" }, "channel": "email", "deduplicate": true },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": "Puerto Analytics",
+        "title": "Head of Growth",
+        "time_zone": "America/Bogota",
+        "channels": [
+          { "channel": "email", "value": "marta@example.com", "primary": true },
+          { "channel": "linkedin", "value": "https://www.linkedin.com/in/example", "primary": false }
+        ],
+        "external_ids": {}
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "invalid": [
+      { "pointer": "/args/deduplicate", "reason": "additional_properties" },
+      { "pointer": "/contacts/0/channels", "reason": "max_items" }
+    ]
+  }
+}

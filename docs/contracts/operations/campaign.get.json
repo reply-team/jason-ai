@@ -1,0 +1,160 @@
+{
+  "id": "campaign.get",
+  "version": 1,
+  "l1": { "name": "campaign.get", "contract_version": "2.0.0", "family": 5, "core": true },
+  "intent": "\"Show me this campaign\" — settings, senders, schedule and timezone policy, pacing, reply policy, declared successor, and the count of people in each state.",
+
+  "reach": "read",
+  "reversibility": "reversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "before_repeating": "nothing at stake",
+  "idempotency_key": "none",
+  "per_item_results": "not_applicable",
+  "accepts_collection": false,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": [],
+
+  "preflight": { "contact": "not_used", "channel": "none" },
+  "contact_projection": null,
+  "precondition": "none",
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:campaign.get:1:input",
+    "title": "campaign.get input",
+    "description": "A campaign is named either by the identifier Jason already holds for it or, the first time, by one the planner supplies.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "campaign"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "campaign": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["external_id"],
+            "properties": {
+              "external_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The provider's own identifier, given to link a campaign for the first time. Later calls work by the pin."
+              }
+            }
+          }
+        }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" }
+    },
+    "anyOf": [
+      {
+        "type": "object",
+        "required": ["args"],
+        "properties": { "args": { "type": "object", "required": ["campaign"] } }
+      },
+      {
+        "type": "object",
+        "required": ["campaign"],
+        "properties": {
+          "campaign": {
+            "type": "object",
+            "required": ["external_ids"],
+            "properties": { "external_ids": { "type": "object", "required": ["campaign"] } }
+          }
+        }
+      }
+    ],
+    "$defs": {
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it, so another provider's identifier is never visible here."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:campaign.get:1:output",
+    "title": "campaign.get result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["campaign"],
+    "properties": {
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["external_id", "name", "status", "counts"],
+        "properties": {
+          "external_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "name": { "type": "string", "maxLength": 500 },
+          "status": {
+            "type": "string",
+            "enum": ["draft", "live", "paused", "archived", "other"],
+            "description": "`other` is the honest answer for a provider state this vocabulary has no word for; the provider's own word belongs under `vendor`."
+          },
+          "counts": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "An empty object is a real answer: it says the provider reports no counts, which is not the same as reporting zero.",
+            "properties": {
+              "enrolled": { "type": "integer", "minimum": 0 },
+              "active": { "type": "integer", "minimum": 0 },
+              "finished": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      },
+      "vendor": {
+        "type": "object",
+        "description": "The provider's own answer, untranslated and untyped, so nothing is lost while the neutral part stays strict."
+      }
+    }
+  },
+
+  "external_ids": {
+    "campaign": {
+      "entity": "campaign",
+      "description": "The provider's identifier for the campaign this read resolved, pinned so every later operation works by it."
+    }
+  },
+
+  "recovery_read": null,
+  "repeat_after_ambiguous": "safe",
+
+  "failure_codes": [
+    { "code": "campaign_not_found", "class": "permanent", "when": "The provider holds no campaign under the identifier this call carried." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it read campaigns for this account." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the read for now and it may be asked again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived. A read changes nothing and costs nothing, so the next attempt simply asks again." }
+  ],
+
+  "timeout_ms": 60000,
+
+  "conformance": [
+    "A call carrying only `campaign.external_ids.campaign` answers, so a linked campaign never needs the planner to repeat the provider's identifier.",
+    "A call carrying only `args.campaign.external_id` answers and returns that identifier under `external_ids.campaign`, which is how the first link is made.",
+    "A campaign the provider does not hold fails `campaign_not_found` as permanent, rather than succeeding with an empty result.",
+    "A provider state this vocabulary has no word for is reported as `other`, with the provider's own word under `vendor`.",
+    "The result carries no field this contract does not declare, apart from whatever sits under `vendor`."
+  ]
+}

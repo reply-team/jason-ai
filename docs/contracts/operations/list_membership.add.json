@@ -1,0 +1,189 @@
+{
+  "id": "list_membership.add",
+  "version": 1,
+  "l1": { "name": "list_membership.add", "contract_version": "2.0.0", "family": 3, "core": false },
+  "intent": "\"Put these people on this list\"",
+
+  "reach": "control",
+  "reversibility": "reversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "before_repeating": "current membership for these people, and the per-item ledger under this key.",
+  "idempotency_key": "required",
+  "per_item_results": "required",
+  "accepts_collection": true,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": ["D3"],
+
+  "preflight": { "contact": "required", "channel": "from_args" },
+  "contact_projection": {
+    "fields": ["id", "first_name", "last_name", "company", "title", "time_zone"],
+    "channels": "consumed"
+  },
+  "precondition": "Ensure the provider's own contact exists before adding it: work by `contacts[0].external_ids.contact` when that pin is present, otherwise create the contact from the value of the channel named by `args.channel`, and return the provider's identifier under `external_ids.contact`.",
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:list_membership.add:1:input",
+    "title": "list_membership.add input",
+    "description": "One person, one list, one key. The list is the provider's own: Jason has no list entity, so the planner names it.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "contacts", "campaign", "idempotency_key"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["list", "channel"],
+        "properties": {
+          "list": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["external_id"],
+            "properties": { "external_id": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          },
+          "channel": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "description": "Which of the contact's channels this operation consumes. Exactly that one channel is projected into `contacts[0].channels`."
+          }
+        }
+      },
+      "contacts": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "This version addresses one person per work item, in the collection shape the level-1 contract uses.",
+        "items": { "$ref": "#/$defs/contact" }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" },
+      "idempotency_key": {
+        "type": "string",
+        "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+        "description": "The work item's own identifier: stable across every attempt, which is what makes a ledger under this key answerable."
+      }
+    },
+    "$defs": {
+      "contact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "first_name", "last_name", "company", "title", "time_zone", "channels", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "first_name": { "type": ["string", "null"], "maxLength": 200 },
+          "last_name": { "type": ["string", "null"], "maxLength": 200 },
+          "company": { "type": ["string", "null"], "maxLength": 200 },
+          "title": { "type": ["string", "null"], "maxLength": 200 },
+          "time_zone": { "type": ["string", "null"], "maxLength": 200 },
+          "channels": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "description": "Only the channel the operation consumes, never the person's whole reachability.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["channel", "value", "primary"],
+              "properties": {
+                "channel": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+                "value": { "type": "string", "minLength": 1, "maxLength": 500 },
+                "primary": { "type": "boolean" }
+              }
+            }
+          },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      },
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:list_membership.add:1:output",
+    "title": "list_membership.add result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "One outcome per person, with the reason. A partial success reported as a single verdict is a defect.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contact_id", "status"],
+          "properties": {
+            "contact_id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+            "status": { "type": "string", "enum": ["added", "already_member"] },
+            "external_ids": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "external_ids": {
+    "contact": {
+      "entity": "contact",
+      "description": "The provider's identifier for the contact this call ensured, pinned so no later call has to match the person by address again."
+    }
+  },
+
+  "recovery_read": {
+    "reads": "The membership of the pinned contact in the list named by `args.list.external_id`, and the ledger entry under this idempotency key.",
+    "justification": "A duplicate add is harmless at most providers, but the contact creation it implies may be metered, and a second contact is a merge nobody asked for. Consumption pricing is the general case: a repeat after a crash is a real charge, not a wasted round trip."
+  },
+  "repeat_after_ambiguous": "after_recovery_read",
+
+  "failure_codes": [
+    { "code": "contact_not_found", "class": "permanent", "when": "The identifier pinned for this person no longer resolves at the provider, so the operation cannot act on the person it was told to act on. Working by the pinned identifier is the rule, so this is reported rather than re-matched by address." },
+    { "code": "list_not_found", "class": "permanent", "when": "The provider holds no list under `args.list.external_id`." },
+    { "code": "suppressed", "class": "permanent", "when": "The provider's own suppression register holds this address, so it must not be added to an outreach list." },
+    { "code": "invalid_channel_value", "class": "validation", "when": "The provider will not accept the channel value for the channel named, so no later attempt can accept it either." },
+    { "code": "limit_reached", "class": "permanent", "when": "The account will not hold another contact, or another member of this list." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it write lists for this account." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the write for now and it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was written." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the add may already have happened. The next attempt performs the declared recovery read before it writes." }
+  ],
+
+  "timeout_ms": 120000,
+
+  "conformance": [
+    "A contact pinned under `contacts[0].external_ids.contact` is worked by that identifier, and never matched again by the channel value.",
+    "A contact with no pin is created from the channel value, and the provider's identifier comes back under `external_ids.contact`.",
+    "A second call under the same idempotency key answers `already_member` and performs no second effect.",
+    "An attempt after a lost answer reads the ledger under the key first, so one crash leaves one effect rather than two.",
+    "An address the provider suppresses fails `suppressed` as permanent, rather than being added.",
+    "The result carries exactly one item, and its `contact_id` is the identifier the call was given."
+  ]
+}

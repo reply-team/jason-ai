@@ -1,0 +1,28 @@
+{
+  "operation": "list_membership.add",
+  "version": 1,
+  "case": "a pin of a kind this operation never declared, which nothing later would know how to read",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "contact_id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+          "status": "added",
+          "external_ids": { "contact": "p_88421" }
+        }
+      ]
+    },
+    "external_ids": { "contact": "p_88421", "membership": "m_5512" },
+    "error": null,
+    "diagnostics": { "duration_ms": 660, "exec_calls": 2, "http_calls": 0, "log_lines": 4 }
+  },
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": false,
+    "invalid": [{ "pointer": "/external_ids/membership", "reason": "additional_properties" }]
+  }
+}
