@@ -80,10 +80,24 @@ public sealed partial class PluginInvoker(
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Input);
 
-        // One snapshot for the whole invocation: a reload that happens while a child runs never changes what
-        // that child was told, because the envelope was written from this reference.
-        var snapshot = registry.Snapshot;
-        var plugin = snapshot.Find(request.PluginId);
+        LoadedPlugin? plugin;
+        string snapshotId;
+        if (request.Pinned is { } pinned)
+        {
+            // The caller decided which package runs, so the registry is not consulted at all: a reload landing
+            // between that decision and this attempt cannot change what runs or what the provenance says ran.
+            plugin = pinned.Plugin;
+            snapshotId = pinned.SnapshotId;
+        }
+        else
+        {
+            // One snapshot for the whole invocation: a reload that happens while a child runs never changes what
+            // that child was told, because the envelope was written from this reference.
+            var snapshot = registry.Snapshot;
+            plugin = snapshot.Find(request.PluginId);
+            snapshotId = snapshot.Id;
+        }
+
         var invocationId = PublicId.New(PluginProtocol.InvocationIdPrefix);
         var provenance = new InvocationProvenance(
             request.PluginId,
@@ -93,7 +107,7 @@ public sealed partial class PluginInvoker(
             PluginProtocol.OperationContractVersion,
             invocationId,
             request.CorrelationId,
-            snapshot.Id);
+            snapshotId);
 
         if (plugin is null)
         {
