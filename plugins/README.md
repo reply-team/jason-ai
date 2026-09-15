@@ -4,6 +4,12 @@ Plugins are JavaScript packages that execute Jason's canonical provider operatio
 vendor tool — and, later, deliver notifications — inside a short-lived plugin-host process that the
 runtime starts from its own executable. Official and community plugins use the same mechanism.
 
+**Nothing routes to a plugin yet.** A `provider_op` work item fails at the claim with `no_route`, so
+no plugin here is invoked on a work item's behalf and no provider operation runs. What exists is
+everything around that call — the package rules, the registry, the invocation mechanism and the
+operation contracts a plugin implements — so the package you write today is the package routing
+will call; [docs/plugins.md](../docs/plugins.md) §13 lists the rest of the gap.
+
 This directory is the plugin marketplace of the repository. Each plugin lives in its own folder:
 
 ```text
