@@ -288,6 +288,22 @@ public class WorkItemContractTests
     }
 
     [Fact]
+    public async Task Writing_nothing_into_the_reserved_key_is_the_same_as_taking_the_arguments_away()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var item = SeedProviderOp(db, "list_membership.add", Membership());
+        var service = NewService(db);
+
+        var error = await Assert.ThrowsAsync<ValidationException>(
+            () => service.UpdateAsync(Patch(item.PublicId) with { Set = new JsonObject { ["input"] = null } }, Ct));
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal("context.input", detail.Field);
+        Assert.Equal("required", detail.Code);
+    }
+
+    [Fact]
     public async Task An_unset_wins_over_a_set_of_the_same_key_exactly_as_the_patch_applies_it()
     {
         using var database = new TestDatabase();
