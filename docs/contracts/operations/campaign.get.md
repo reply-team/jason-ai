@@ -41,7 +41,7 @@ never visible to you.
 
 A campaign has to be named one way or the other. Either `args.campaign.external_id` carries the provider's
 identifier — that is the first link, made deliberately by someone who verified it — or `campaign.external_ids
-.campaign` already holds it. An input with neither is refused before your code runs.
+.campaign` already holds it. An input with neither will be refused before your code runs.
 
 ## What to return
 
