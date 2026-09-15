@@ -91,6 +91,7 @@ public class FixtureTests
                 Assert.Equal(OutcomeStatus.Failed, outcome.Status);
                 Assert.NotNull(outcome.Error);
                 Assert.Equal(Class(expected), outcome.Error.Class);
+                TheFailureTheOperationDeclares(relative, contract, outcome.Error);
                 Assert.Equal(Retriable(outcome.Error.Class, contract), (bool)expected["retriable"]!);
                 break;
 
@@ -105,6 +106,25 @@ public class FixtureTests
                 Assert.Fail($"{relative} expects the unknown status `{status}`.");
                 break;
         }
+    }
+
+    /// <summary>
+    /// A failure a fixture shows is one its operation declares, filed under the class the document files it under.
+    /// The class is what the runtime reads, so a code the document never listed teaches a plugin author to report
+    /// something no operation accepts, and a code shown under the wrong class teaches the opposite of the document:
+    /// repeat where the contract says stop, or stop where it says repeat.
+    /// </summary>
+    private static void TheFailureTheOperationDeclares(string relative, OperationContract contract, OutcomeError error)
+    {
+        var declared = contract.FailureCodes.SingleOrDefault(code => string.Equals(code.Code, error.Code, StringComparison.Ordinal));
+
+        Assert.True(
+            declared is not null,
+            $"{relative} reports `{error.Code}`, which {contract.Id} does not declare. It declares "
+            + string.Join(", ", contract.FailureCodes.Select(code => "`" + code.Code + "`")) + ".");
+        Assert.True(
+            declared.Class == error.Class,
+            $"{relative} reports `{error.Code}` as `{Name(error.Class)}`; {contract.Id} declares it as `{Name(declared.Class)}`.");
     }
 
     /// <summary>
@@ -161,6 +181,10 @@ public class FixtureTests
 
     private static FailureClass Class(JsonObject expected) =>
         JsonSerializer.Deserialize<FailureClass>("\"" + (string)expected["class"]! + "\"", JasonJson.Options);
+
+    /// <summary>A class as the documents spell it, so a failure message reads in the vocabulary of the contract.</summary>
+    private static string Name(FailureClass failure) =>
+        JsonSerializer.Serialize(failure, JasonJson.Options).Trim('"');
 
     /// <summary>
     /// The retry rule as this version states it, kept here rather than in the runtime because 5a has nothing that

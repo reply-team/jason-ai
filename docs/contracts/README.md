@@ -151,6 +151,10 @@ entry is a JSON pointer, or `{"pointer": "…", "reason": "…"}` where the fixt
 reason being one of the codes above. The reported set must equal the stated set, so an answer broken somewhere
 other than where the fixture says fails instead of passing for a reason nobody wrote down.
 
+A `failed` fixture is held against the operation's own `failure_codes`: the code its error carries is one the
+document declares, under the class the document declares it with. A fixture may not teach a plugin author a code no
+operation accepts, nor the same code under a class that would have the runtime repeat what the document calls final.
+
 Retriability in an outcome fixture is stated per the operation's own rule, so that a plugin author reading the
 fixture sees what the runtime will do with that answer: `transient` is repeated; `permanent` and `validation` are
 final; `ambiguous` is repeated only where the operation says `safe` or `after_recovery_read`; and `result_invalid`
