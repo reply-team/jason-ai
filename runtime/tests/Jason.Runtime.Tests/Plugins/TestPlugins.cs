@@ -15,8 +15,13 @@ public static class TestPlugins
 {
     public const string FakeProviderId = "fake-provider";
 
+    /// <summary>The second checked-in package: a provider that implements only some of what the first does.</summary>
+    public const string OtherProviderId = "other-provider";
+
     /// <summary>The checked-in fixture package, as it is copied next to the tests.</summary>
     public static string FakeProviderSource => Path.Combine(AppContext.BaseDirectory, "Fixtures", "plugins", "fake-provider");
+
+    public static string OtherProviderSource => Path.Combine(AppContext.BaseDirectory, "Fixtures", "plugins", "other-provider");
 
     /// <summary>Where the stand-in vendor CLI's apphost lives, for a search path that has to find something real.</summary>
     public static string FakeCliDirectory => FakeProviderCli.Directory;
@@ -27,6 +32,18 @@ public static class TestPlugins
         ArgumentNullException.ThrowIfNull(paths);
         var root = paths.PluginPackageDirectory(FakeProviderId);
         Copy(FakeProviderSource, root);
+        return root;
+    }
+
+    /// <summary>
+    /// Copies the second checked-in package in, for a test that needs two providers to choose between: it
+    /// implements fewer operations than the first, asks for no capability at all, and answers from its input.
+    /// </summary>
+    public static string InstallOtherProvider(JasonPaths paths)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        var root = paths.PluginPackageDirectory(OtherProviderId);
+        Copy(OtherProviderSource, root);
         return root;
     }
 

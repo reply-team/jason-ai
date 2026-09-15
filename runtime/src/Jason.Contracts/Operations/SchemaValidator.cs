@@ -45,6 +45,11 @@ public static class SchemaValidator
     private const int MaxCachedPatterns = 512;
     private const string RefPrefix = "#/$defs/";
 
+    /// <summary>The range a double may be in before the cast to decimal would overflow.</summary>
+    private const double MinDecimal = -7.9e28;
+
+    private const double MaxDecimal = 7.9e28;
+
     private static readonly TimeSpan PatternTimeout = TimeSpan.FromMilliseconds(100);
     private static readonly ConcurrentDictionary<string, Regex?> CompiledPatterns = new(StringComparer.Ordinal);
 
@@ -1095,6 +1100,21 @@ public static class SchemaValidator
         if (candidate.TryGetValue(out decimal exact))
         {
             value = exact;
+            return true;
+        }
+
+        // A node parsed from text holds an element that converts to any numeric type; one built in memory — a
+        // manifest's binding schema, read from YAML — holds the CLR value it was given and converts to that type
+        // alone. Both are the same number, and a rule that ran for one has to run for the other.
+        if (candidate.TryGetValue(out long whole))
+        {
+            value = whole;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out double real) && double.IsFinite(real) && real is >= MinDecimal and <= MaxDecimal)
+        {
+            value = (decimal)real;
             return true;
         }
 

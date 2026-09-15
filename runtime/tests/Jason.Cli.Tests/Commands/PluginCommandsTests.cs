@@ -178,6 +178,7 @@ public class PluginCommandsTests
                     new ListCapabilityDto(["localhost:5555", "api.example.com"], []),
                     new ListCapabilityDto(["FAKE_TOKEN", "OTHER_TOKEN"], ["FAKE_TOKEN"])),
                 new PluginLimitsDto(60000, 64),
+                null,
                 PluginStatus.Valid,
                 []),
             new PluginDto(
@@ -194,6 +195,7 @@ public class PluginCommandsTests
                 new PluginEntry("main.js", "invoke"),
                 new PluginCapabilitiesDto(new ExecCapabilityDto([new ExecutableDto("notify", null, null, "0.4.0")], ["notify"]), null, null),
                 new PluginLimitsDto(60000, 64),
+                null,
                 PluginStatus.Unavailable,
                 [new PluginProblemDto("executable_missing", "capabilities.exec.executables[0]", "No 'notify' was found.")]),
         ],
@@ -218,6 +220,7 @@ public class PluginCommandsTests
                 new PluginEntry("main.js", "invoke"),
                 new PluginCapabilitiesDto(null, null, null),
                 new PluginLimitsDto(60000, 64),
+                null,
                 PluginStatus.Valid,
                 []),
         ],

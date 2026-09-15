@@ -48,6 +48,10 @@ public static class PluginMapper
                 manifest.Capabilities.Http is null ? null : new ListCapabilityDto(manifest.Capabilities.Http.Hosts, plugin.Grants.Http),
                 manifest.Capabilities.Env is null ? null : new ListCapabilityDto(manifest.Capabilities.Env.Variables, plugin.Grants.Env)),
             new PluginLimitsDto(plugin.Limits.TimeoutMs, plugin.Limits.MemoryMb),
+
+            // A copy, because the DTO is serialized on another thread than the snapshot it came from and a
+            // JsonNode belongs to exactly one parent.
+            manifest.Binding?.DeepClone().AsObject(),
             plugin.Status,
             [.. plugin.Problems.Select(ToDto)]);
     }

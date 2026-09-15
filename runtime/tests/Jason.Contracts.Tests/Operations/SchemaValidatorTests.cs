@@ -327,6 +327,31 @@ public class SchemaValidatorTests
     }
 
     [Fact]
+    public void A_schema_whose_numbers_were_built_rather_than_parsed_means_the_same_thing()
+    {
+        // A manifest arrives as YAML, so the reader hands the validator numbers that are plain CLR values rather
+        // than parsed elements. The two spellings of "1" have to mean the same rule, or a plugin's binding schema
+        // would be refused for saying what a published document is allowed to say.
+        var built = new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject
+            {
+                ["size"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1L, ["maximum"] = 10L },
+                ["name"] = new JsonObject { ["type"] = "string", ["minLength"] = 1L },
+                ["ratio"] = new JsonObject { ["type"] = "number", ["multipleOf"] = 0.5d },
+            },
+        };
+
+        Assert.Empty(SchemaValidator.CheckDialect(built));
+        Assert.Empty(SchemaValidator.Validate(JsonNode.Parse("""{"size":5,"name":"x","ratio":1.5}"""), built));
+
+        var problems = SchemaValidator.Validate(JsonNode.Parse("""{"size":0,"name":"","ratio":1.2}"""), built);
+
+        Assert.Equal(["min_length", "minimum", "multiple_of"], problems.Select(problem => problem.Reason).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void A_pointer_escapes_the_two_characters_json_pointer_reserves()
     {
         const string schema = """{"type":"object","properties":{"a/b":{"type":"string"},"c~d":{"type":"string"}}}""";

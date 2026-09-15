@@ -12,6 +12,13 @@ if (args.Length == 0)
     return UnknownBehaviour;
 }
 
+// The other half of the program: a provider account held in a directory, which is what the canonical operations
+// are implemented against. A plugin is given the directory by its binding and nothing else.
+if (args is ["--workspace", var workspaceRoot, .. var subcommand] && subcommand.Length > 0)
+{
+    return await Workspace.RunAsync(workspaceRoot, subcommand);
+}
+
 switch (args[0])
 {
     case "echo-args":
