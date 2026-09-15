@@ -44,12 +44,22 @@ public sealed class RunningRuntime : IAsyncDisposable
 
         _stopped = true;
         _logger.Information("Runtime {InstanceId} stopping", Descriptor.InstanceId);
-        await _app.StopAsync().ConfigureAwait(false);
-        new DescriptorPublisher(_paths).Remove();
-        _lock.Dispose();
-        await _app.DisposeAsync().ConfigureAwait(false);
-        _logger.Information("Runtime {InstanceId} stopped", Descriptor.InstanceId);
-        await _logger.DisposeAsync().ConfigureAwait(false);
+        try
+        {
+            await _app.StopAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            // Whatever stopping the host did — a hosted service that overran the shutdown timeout, an exception
+            // from a stop — the rest of the teardown still happens: the descriptor must not advertise an
+            // instance that is gone, the lock must not keep the next runtime out, and the host must be disposed
+            // so nothing of it lingers in the process. The caller still sees the exception afterwards.
+            new DescriptorPublisher(_paths).Remove();
+            _lock.Dispose();
+            await _app.DisposeAsync().ConfigureAwait(false);
+            _logger.Information("Runtime {InstanceId} stopped", Descriptor.InstanceId);
+            await _logger.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     public ValueTask DisposeAsync() => new(StopAsync());

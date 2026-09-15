@@ -9,6 +9,8 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Serilog.AspNetCore" />
+    <!-- A manifest is the one file a plugin author writes by hand, so it is YAML. The reader lives here and nowhere else. -->
+    <PackageReference Include="YamlDotNet" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Jason.Contracts/Jason.Contracts.csproj" />

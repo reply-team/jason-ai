@@ -102,6 +102,12 @@ public class WorkItemTransitionsTests
         cancelled.RetryAfter = Noon.AddMinutes(1);
         WorkItemTransitions.Apply(cancelled, WorkItemStatus.Cancelled, Noon);
         Assert.Null(cancelled.RetryAfter);
+
+        // Past its due date the dispatcher's retry moment means nothing either; a reopened item starts clean.
+        var expired = WorkItemFactory.NewAiRole(WorkItemFactory.NewCampaign(), now: Noon);
+        expired.RetryAfter = Noon.AddMinutes(1);
+        WorkItemTransitions.Apply(expired, WorkItemStatus.Expired, Noon);
+        Assert.Null(expired.RetryAfter);
     }
 
     [Fact]

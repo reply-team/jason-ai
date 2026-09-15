@@ -63,11 +63,13 @@ public static class JasonConfiguration
         services.AddSingleton<IValidateOptions<LoggingOptions>, LoggingOptionsValidator>();
         services.AddSingleton<IValidateOptions<DispatcherOptions>, DispatcherOptionsValidator>();
         services.AddSingleton<IValidateOptions<RolesOptions>, RolesOptionsValidator>();
+        services.AddSingleton<IValidateOptions<PluginsOptions>, PluginsOptionsValidator>();
 
         services.AddOptions<RuntimeOptions>().Bind(configuration.GetSection(RuntimeOptions.Section)).ValidateOnStart();
         services.AddOptions<LoggingOptions>().Bind(configuration.GetSection(LoggingOptions.Section)).ValidateOnStart();
         services.AddOptions<DispatcherOptions>().Bind(configuration.GetSection(DispatcherOptions.Section)).ValidateOnStart();
         services.AddOptions<RolesOptions>().Bind(configuration.GetSection(RolesOptions.Section)).ValidateOnStart();
+        services.AddOptions<PluginsOptions>().Bind(configuration.GetSection(PluginsOptions.Section)).ValidateOnStart();
 
         return services;
     }

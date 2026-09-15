@@ -144,7 +144,7 @@ public static class RuntimeHost
         builder.Services.AddScoped<JournalWriter>();
         builder.Services.AddScoped<AttemptOutcomes>();
         builder.Services.AddSystemModule().AddCampaignModule().AddContactModule();
-        builder.Services.AddWorkItemModule().AddExecutorModule().AddRoleModule().AddDispatcherModule().AddCommandModule();
+        builder.Services.AddWorkItemModule().AddExecutorModule().AddRoleModule().AddPluginModule().AddDispatcherModule().AddCommandModule();
 
         // Last, so a test's registration wins over the runtime's own for the services that resolve by "the last one".
         options.ConfigureServices?.Invoke(builder.Services);
@@ -163,6 +163,7 @@ public static class RuntimeHost
         app.MapWorkItemOperations();
         app.MapExecutorOperations();
         app.MapRoleOperations();
+        app.MapPluginOperations();
 
         // An explicit catch-all pattern: the default fallback pattern is "{*path:nonfile}", and every operation
         // name contains a dot, so a mistyped operation would look like a file request and escape the fallback.

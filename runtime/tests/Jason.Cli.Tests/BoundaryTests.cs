@@ -10,6 +10,8 @@ public class BoundaryTests
     [InlineData("Microsoft.EntityFrameworkCore")]
     [InlineData("Microsoft.Data.Sqlite")]
     [InlineData("Microsoft.AspNetCore")]
+    [InlineData("YamlDotNet")]
+    [InlineData("Jint")]
     public void The_cli_never_references_server_side_assemblies(string forbiddenPrefix)
     {
         var references = typeof(CliApp).Assembly.GetReferencedAssemblies().Select(a => a.Name!);

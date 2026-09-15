@@ -3,7 +3,15 @@
     <ProjectReference Include="../../src/Jason.Runtime/Jason.Runtime.csproj" />
     <!-- Tests only: exercises the real CLI against a real runtime in one process. The CLI itself still never references the runtime. -->
     <ProjectReference Include="../../src/Jason.Cli/Jason.Cli.csproj" />
+    <!-- Tests only: copies jason.dll next to the tests so the invoker can drive the shipped executable in plugin-host mode. The runtime itself still never references the plugin host. -->
+    <ProjectReference Include="../../src/Jason.App/Jason.App.csproj" />
     <!-- Referencing the stand-in agent host copies Jason.FakeAgentHost.dll and its runtimeconfig next to the tests, so attempts can be run as real child processes. -->
     <ProjectReference Include="../Jason.FakeAgentHost/Jason.FakeAgentHost.csproj" />
+    <!-- The stand-in vendor CLI, for the same reason: an executable resolver has to find a real program on a real search path. -->
+    <ProjectReference Include="../Jason.FakeProviderCli/Jason.FakeProviderCli.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The canonical plugin package, kept in one place and linked into every test project that installs it. -->
+    <None Include="../fixtures/plugins/**" LinkBase="Fixtures/plugins" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

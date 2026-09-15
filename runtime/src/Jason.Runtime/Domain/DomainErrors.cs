@@ -48,5 +48,17 @@ public static class DomainErrors
     public static DomainException ConcurrentUpdate() =>
         new(StatusCodes.Status409Conflict, "concurrent_update", "Another change reached the same row first; read it again and retry.", retryable: true);
 
+    /// <summary>
+    /// A reload that found something wrong with a package. The whole candidate set stays out and the previous
+    /// snapshot stays active: a registry that is only partly right hides the problem instead of showing it.
+    /// </summary>
+    public static DomainException PluginReloadRejected(IReadOnlyList<ErrorDetail> details) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "plugin_reload_rejected",
+            string.Create(CultureInfo.InvariantCulture, $"The plugin reload was rejected: {details.Count} problem(s) in the candidate set; the previous snapshot stays active."),
+            retryable: false,
+            details);
+
     public static ValidationException Required(string field) => new([new ErrorDetail(field, "required", $"{field} is required.")]);
 }

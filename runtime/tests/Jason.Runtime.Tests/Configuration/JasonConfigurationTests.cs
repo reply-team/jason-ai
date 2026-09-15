@@ -2,6 +2,7 @@ using Jason.Runtime.Configuration;
 
 namespace Jason.Runtime.Tests.Configuration;
 
+[Collection(ProcessEnvironmentCollection.Name)]
 public class JasonConfigurationTests
 {
     [Fact]

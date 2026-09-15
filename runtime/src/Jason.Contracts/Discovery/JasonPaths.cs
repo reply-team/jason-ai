@@ -38,6 +38,15 @@ public sealed class JasonPaths
     /// <summary>The directory one attempt runs in; created by the launcher, never cleaned up in this version.</summary>
     public string AttemptWorkDirectory(string workItemId, string attemptId) => Path.Combine(WorkDirectory, workItemId, attemptId);
 
+    /// <summary>Where one installed plugin lives: the directory name is the plugin's id, and the manifest must agree.</summary>
+    public string PluginPackageDirectory(string pluginId) => Path.Combine(PluginsDirectory, pluginId);
+
+    /// <summary>The parent of every plugin invocation's working directory.</summary>
+    public string PluginWorkDirectory => Path.Combine(WorkDirectory, "plugins");
+
+    /// <summary>The directory one invocation runs in; the child's cwd and the cwd of everything it starts.</summary>
+    public string PluginInvocationDirectory(string invocationId) => Path.Combine(PluginWorkDirectory, invocationId);
+
     /// <summary>The directories the runtime creates on start.</summary>
     public IEnumerable<string> Layout => [StateDirectory, ConfigDirectory, PluginsDirectory, RunDirectory, LogsDirectory, WorkDirectory];
 }

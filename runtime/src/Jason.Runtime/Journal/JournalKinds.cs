@@ -41,6 +41,9 @@ public static partial class JournalKinds
     public const string WorkItemReopened = "workitem_reopened";
     public const string RoleAdded = "role_added";
 
+    /// <summary>A new plugin snapshot became the active one: which packages, at which digests, from when.</summary>
+    public const string PluginsReloaded = "plugins_reloaded";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -68,6 +71,7 @@ public static partial class JournalKinds
         WorkItemReleased,
         WorkItemReopened,
         RoleAdded,
+        PluginsReloaded,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);
