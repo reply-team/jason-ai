@@ -3,6 +3,12 @@
 **Version 1.** The machine-readable contract is [`campaign.get.json`](campaign.get.json); this page explains it.
 Where the two seem to differ, the document is right and this page is a bug.
 
+> **This version never runs it.** No `provider_op` work item reaches a plugin at all yet: every one of them fails
+> at the claim with `no_route`. What runs is the check on the work item itself — an operation no contract is
+> published for is refused when the item is written, and the arguments it carries are measured against this
+> operation's argument schema. The contract is published complete so that routing is the only thing left to add —
+> and so that a plugin author can implement and test the operation now.
+
 ## What it is for
 
 "Show me this campaign": the settings, the state and the count of people in each state, as the provider holds them.
@@ -35,7 +41,7 @@ never visible to you.
 
 A campaign has to be named one way or the other. Either `args.campaign.external_id` carries the provider's
 identifier — that is the first link, made deliberately by someone who verified it — or `campaign.external_ids
-.campaign` already holds it. An input with neither is refused before your code runs.
+.campaign` already holds it. An input with neither will be refused before your code runs.
 
 ## What to return
 
@@ -58,13 +64,14 @@ reports no counts" and "the provider reports zero" are different facts and a cal
 stays strict.
 
 Return the provider's campaign identifier in `external_ids.campaign`. That is what makes the link, and the runtime
-keeps it.
+will keep it.
 
 ## When it fails
 
-Use the codes the document declares. The class is what the runtime reads: `transient` may be repeated,
+Use the codes the document declares. The class is what the runtime will read: `transient` may be repeated,
 `permanent` and `validation` are final, and `ambiguous` says the provider may already have acted — which, for a
-read, costs nothing, so this operation allows the repeat.
+read, costs nothing, so this operation allows the repeat. That reading arrives with routing: no plugin's class
+reaches the runtime in this version, so until then the rule is what your own tests hold you to.
 
 ## The properties
 
