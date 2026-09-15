@@ -22,6 +22,10 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<Role> Roles => Set<Role>();
 
+    public DbSet<ExternalId> ExternalIds => Set<ExternalId>();
+
+    public DbSet<CampaignRoute> CampaignRoutes => Set<CampaignRoute>();
+
     public DbSet<JournalEntry> Journal => Set<JournalEntry>();
 
     /// <summary>
@@ -172,11 +176,16 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             attempt.Property(a => a.ContextSnapshot).HasColumnName("context_snapshot_json").IsRequired().HasDefaultValueSql("'{}'");
             attempt.Property(a => a.Error).HasColumnName("error_json");
             attempt.Property(a => a.Launch).HasColumnName("launch_json");
+            attempt.Property(a => a.Provenance).HasColumnName("provenance_json");
             attempt.ToTable(t =>
             {
                 t.HasCheckConstraint("ck_attempts_context_snapshot_json", "json_valid(context_snapshot_json)");
                 t.HasCheckConstraint("ck_attempts_error_json", "error_json IS NULL OR json_valid(error_json)");
                 t.HasCheckConstraint("ck_attempts_launch_json", "launch_json IS NULL OR json_valid(launch_json)");
+
+                // provenance_json is guarded by triggers instead: SQLite cannot add a check constraint to a
+                // table that already exists without rebuilding it, and rewriting every attempt row of every
+                // database is too much to pay for a guarantee two triggers give exactly as well.
             });
             attempt.HasIndex(a => new { a.WorkItemId, a.Number }).IsUnique();
             attempt.HasIndex(a => a.Status);
@@ -200,6 +209,44 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
                 t.HasCheckConstraint("ck_roles_entry_command_json", "json_valid(entry_command_json)");
                 t.HasCheckConstraint("ck_roles_profile_defaults_json", "json_valid(profile_defaults_json)");
             });
+        });
+
+        modelBuilder.Entity<ExternalId>(pin =>
+        {
+            pin.HasKey(p => p.Id);
+            pin.Property(p => p.PluginId).HasMaxLength(64);
+            pin.Property(p => p.Kind).HasMaxLength(64);
+            pin.Property(p => p.Value).HasMaxLength(500);
+            pin.Property(p => p.DivergedValue).HasMaxLength(500);
+            pin.Property(p => p.RecordedByAttemptId).HasMaxLength(40);
+            pin.Property(p => p.DivergedByAttemptId).HasMaxLength(40);
+
+            // One plugin knows one entity by one identifier per kind; SQLite treats nulls as distinct, so the
+            // contact index ignores campaign pins and the campaign index ignores contact pins.
+            pin.HasIndex(p => new { p.ContactId, p.PluginId, p.Kind }).IsUnique();
+            pin.HasIndex(p => new { p.CampaignId, p.PluginId, p.Kind }).IsUnique();
+            pin.ToTable(t => t.HasCheckConstraint(
+                "ck_external_ids_one_entity",
+                "(contact_id IS NOT NULL AND campaign_id IS NULL) OR (contact_id IS NULL AND campaign_id IS NOT NULL)"));
+
+            // A pin is meaningless without the thing it names, so it goes when that goes.
+            pin.HasOne(p => p.Contact).WithMany().HasForeignKey(p => p.ContactId).OnDelete(DeleteBehavior.Cascade);
+            pin.HasOne(p => p.Campaign).WithMany().HasForeignKey(p => p.CampaignId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CampaignRoute>(route =>
+        {
+            route.HasKey(r => r.Id);
+            route.Property(r => r.Operation).HasMaxLength(200);
+            route.Property(r => r.PluginId).HasMaxLength(64);
+            route.Property(r => r.Binding).HasColumnName("binding_json");
+            route.ToTable(t => t.HasCheckConstraint("ck_campaign_routes_binding_json", "binding_json IS NULL OR json_valid(binding_json)"));
+            route.HasIndex(r => new { r.CampaignId, r.Operation }).IsUnique();
+
+            // The default route is the row with no operation, and nulls are distinct in the index above: only a
+            // filtered index can say "at most one of those per campaign".
+            route.HasIndex(r => r.CampaignId).IsUnique().HasFilter("operation IS NULL").HasDatabaseName("ix_campaign_routes_one_default_per_campaign");
+            route.HasOne(r => r.Campaign).WithMany().HasForeignKey(r => r.CampaignId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<JournalEntry>(entry =>

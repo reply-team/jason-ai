@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
@@ -113,6 +114,70 @@ public class AttemptOutcomesTests
         Assert.Equal(1, item.AttemptCount);
         Assert.False(attempt.Error!.Retriable);
         Assert.Null(item.RetryAfter);
+    }
+
+    /// <summary>
+    /// The default is the runtime's own rule set, unchanged: an agent failure is classified by its code and
+    /// carries no class, because nobody with the standing to name one was involved.
+    /// </summary>
+    [Fact]
+    public async Task A_failure_nobody_classified_is_judged_by_its_code_alone()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (outcomes, _) = NewOutcomes();
+        var (item, attempt) = await SeedAsync(db, AttemptStatus.Running, WorkItemStatus.Processing);
+
+        var status = outcomes.Fail(db, item, attempt, AttemptErrors.LeaseExpired, "the lease ran out", null, null, Actors.Dispatcher);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(WorkItemStatus.Created, status);
+        Assert.True(attempt.Error!.Retriable);
+        Assert.Null(attempt.Error.Class);
+    }
+
+    /// <summary>
+    /// A plugin's answer outranks the code table: the code is in <c>RetriableCodes</c> and the item still ends,
+    /// because what the provider said about this particular failure is better evidence than a name.
+    /// </summary>
+    [Fact]
+    public async Task A_caller_that_was_told_the_class_decides_instead_of_the_code()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (outcomes, _) = NewOutcomes();
+        var (item, attempt) = await SeedAsync(db, AttemptStatus.Running, WorkItemStatus.Processing);
+        Assert.Contains("timeout", FailureClassifier.RetriableCodes);
+
+        var status = outcomes.Fail(
+            db, item, attempt, "timeout", "the provider never answered", null, null, Actors.Dispatcher,
+            failureClass: FailureClass.Ambiguous, retriable: false);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(WorkItemStatus.Failed, status);
+        Assert.False(attempt.Error!.Retriable);
+        Assert.Equal(FailureClass.Ambiguous, attempt.Error.Class);
+        Assert.Equal(FailureClass.Ambiguous, item.LastError!.Class);
+        Assert.Null(item.RetryAfter);
+    }
+
+    /// <summary>A class on its own says what happened; whether to try again is still the code's answer.</summary>
+    [Fact]
+    public async Task A_class_without_a_verdict_leaves_the_retry_decision_where_it_was()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (outcomes, _) = NewOutcomes();
+        var (item, attempt) = await SeedAsync(db, AttemptStatus.Running, WorkItemStatus.Processing);
+
+        var status = outcomes.Fail(
+            db, item, attempt, "rate_limited", "the provider asked for a pause", null, null, Actors.Dispatcher,
+            failureClass: FailureClass.Transient);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(WorkItemStatus.Created, status);
+        Assert.True(attempt.Error!.Retriable);
+        Assert.Equal(FailureClass.Transient, attempt.Error.Class);
     }
 
     [Fact]

@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -48,6 +49,14 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, I
     /// The attempt fails. Whether the item follows it depends on one question — is the failure worth another
     /// attempt, and are there attempts left — and the answer is the item's new status, which is returned.
     /// </summary>
+    /// <param name="failureClass">
+    /// What kind of failure this was, where something could say: a plugin answering for a provider knows things
+    /// the code table cannot. Null for everything the runtime classifies itself, and the error carries no class.
+    /// </param>
+    /// <param name="retriable">
+    /// A verdict from the same source, overriding <see cref="FailureClassifier"/> for this one failure. Null
+    /// leaves the decision exactly where it was: the code decides, as it does for every agent attempt.
+    /// </param>
     public WorkItemStatus Fail(
         JasonDbContext db,
         WorkItem item,
@@ -57,13 +66,15 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, I
         string? trace,
         IReadOnlyList<ErrorDetail>? details,
         ActorRef actor,
-        string? reason = null)
+        string? reason = null,
+        FailureClass? failureClass = null,
+        bool? retriable = null)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(attempt);
         var now = clock.GetUtcNow().UtcDateTime;
-        var retriable = FailureClassifier.IsRetriable(code);
-        var error = new AttemptErrorDto(code, message, retriable, trace, details);
+        var worthRepeating = retriable ?? FailureClassifier.IsRetriable(code);
+        var error = new AttemptErrorDto(code, message, worthRepeating, trace, details, failureClass);
 
         attempt.Status = AttemptStatus.Failed;
         attempt.FinishedAt = now;
@@ -71,7 +82,7 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, I
         item.AttemptCount++;
 
         var limits = EffectiveLimits.For(item, options.CurrentValue);
-        if (retriable && item.AttemptCount < limits.MaxAttempts)
+        if (worthRepeating && item.AttemptCount < limits.MaxAttempts)
         {
             WorkItemTransitions.Apply(item, WorkItemStatus.Created, now);
 
