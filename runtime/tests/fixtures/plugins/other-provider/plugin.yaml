@@ -1,0 +1,15 @@
+manifest_version: 1
+id: other-provider
+version: 1.0.0
+kind: provider
+name: Other provider
+description: A second provider, so that choosing between two of them is something a test can do.
+contracts:
+  protocol: [1]
+  operations: [1]
+# Deliberately short of campaign.enroll: a provider that implements some of the catalog and not the rest is the
+# ordinary case, and refusing an operation nobody declared has to be visible.
+operations: [campaign.get, list_membership.add]
+entry:
+  module: main.js
+  function: invoke

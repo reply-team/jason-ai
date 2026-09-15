@@ -200,13 +200,15 @@ public sealed class PluginLoader(
                 && request.VersionCommand is not null
                 && grants.Exec.Contains(request.Name, StringComparer.Ordinal))
             {
+                var childEnvironment = BaseEnvironment.Build(environment, grants.Env);
                 executable = await resolver.CheckVersionAsync(
                     executable,
                     request,
                     index,
-                    BaseEnvironment.Build(environment, grants.Env),
+                    childEnvironment,
                     TimeSpan.FromMilliseconds(settings.Invoker.VersionCheckTimeoutMs),
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken,
+                    new Redactor(grants.Env.Select(name => childEnvironment.GetValueOrDefault(name)))).ConfigureAwait(false);
             }
 
             resolved.Add(executable);

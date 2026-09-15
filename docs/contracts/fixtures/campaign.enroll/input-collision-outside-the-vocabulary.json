@@ -1,0 +1,33 @@
+{
+  "operation": "campaign.enroll",
+  "version": 1,
+  "case": "a collision policy this contract does not define, which would otherwise be a silent guess about someone's participation",
+  "input": {
+    "args": {
+      "channel": "email",
+      "collision": "overwrite",
+      "start": { "position": "first_step" },
+      "first_touch": "immediately"
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": null,
+        "title": null,
+        "time_zone": null,
+        "channels": [{ "channel": "email", "value": "marta@example.com", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": { "invalid": [{ "pointer": "/args/collision", "reason": "enum" }] }
+}

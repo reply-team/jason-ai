@@ -72,6 +72,45 @@ public class ProtocolFailureTests
         AssertGone(result.Launch!.Pid!.Value);
     }
 
+    /// <summary>
+    /// The flood is ended by a kill like any other, so reading what is left of it is bounded like any other:
+    /// this child leaves a helper holding its pipes behind before it floods, and the answer still arrives.
+    /// </summary>
+    [Fact]
+    public async Task A_flood_that_left_a_helper_holding_the_pipes_is_answered_all_the_same()
+    {
+        await using var api = await StartAsync(
+            Child("spew-orphan", "5000000", "30000"),
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"OutcomeBytes":65536,"KillGraceMs":500}}}""");
+
+        var call = InvokeAsync(api);
+        var answered = await Task.WhenAny(call, Task.Delay(TimeSpan.FromSeconds(20), Ct)) == call;
+
+        Assert.True(answered, "the invocation was still reading a stream the process it killed no longer writes to");
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>((await call).Outcome);
+        Assert.Equal(ProtocolCodes.PluginOutputTooLarge, failure.Code);
+    }
+
+    [Fact]
+    public async Task A_child_that_floods_stderr_without_ever_ending_a_line_is_capped_and_still_answered()
+    {
+        await using var api = await StartAsync(Child("spew", "8388608", "stderr"));
+
+        var result = await InvokeAsync(api);
+
+        // Megabytes with no line ending in them are still only a line: the invocation ends with an answer, and
+        // nothing of the flood is kept — not in the file the user is left with, not in the trace the failure
+        // carries, and not in the memory it would take to assemble it.
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginNoOutcome, failure.Code);
+        Assert.Contains(StderrSink.DroppedLineNotice, failure.StderrTail!, StringComparison.Ordinal);
+        Assert.DoesNotContain('x', failure.StderrTail!);
+
+        var kept = await File.ReadAllTextAsync(Path.Combine(result.Launch!.WorkDir, "stderr.log"), Ct);
+        Assert.Contains(StderrSink.TruncationNotice, kept, StringComparison.Ordinal);
+        Assert.DoesNotContain('x', kept);
+    }
+
     [Fact]
     public async Task A_child_that_refuses_the_invocation_is_reported_as_a_refusal()
     {
@@ -83,6 +122,27 @@ public class ProtocolFailureTests
         Assert.Equal(ProtocolCodes.PluginInvocationRejected, failure.Code);
         Assert.Equal(3, failure.ExitCode);
         Assert.Equal(FailureClass.Permanent, OutcomeClassification.ClassOf(failure.Code));
+    }
+
+    /// <summary>
+    /// The reason a refusal carries is read from the last line of the child's stderr, and that line is the
+    /// child's own text: a host that broke in an unforeseen way, or something that is not the host at all,
+    /// can write anything there. None of it may throw out of an invocation that still has an answer to give.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"message":5}""")]
+    [InlineData("""{"message":"refused","data":5}""")]
+    [InlineData("""{"message":"refused","data":{"code":7}}""")]
+    public async Task A_diagnostic_shaped_unlike_a_diagnostic_is_read_as_one_no_further_than_it_goes(string line)
+    {
+        await using var api = await StartAsync(Child("stderr-exit", "3", line));
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginInvocationRejected, failure.Code);
+        Assert.Equal(3, failure.ExitCode);
+        Assert.Contains("refused the invocation", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -127,6 +187,76 @@ public class ProtocolFailureTests
     }
 
     [Fact]
+    public async Task A_child_that_never_reads_its_envelope_is_ended_rather_than_holding_the_write_open()
+    {
+        await using var api = await StartAsync(
+            Child("sleep", "30000"),
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"KillGraceMs":500}}}""");
+
+        // An envelope this size is far larger than any pipe buffer, so the write finishes only if the child
+        // reads it — and this one never reads a byte. Nothing may wait on that write that the budget cannot end.
+        var input = new JsonObject { ["big"] = new string('x', PluginProtocol.MaxInputBytes - 1024) };
+        var watch = Stopwatch.StartNew();
+
+        var result = await InvokeAsync(api, TimeSpan.FromMilliseconds(500), input).WaitAsync(TimeSpan.FromSeconds(60), Ct);
+
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(30), $"the envelope write outlived the budget: {watch.Elapsed}");
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginTimeout, failure.Code);
+        AssertGone(result.Launch!.Pid!.Value);
+    }
+
+    /// <summary>
+    /// A child may leave a helper running that inherited its standard handles, and the read end of a pipe only
+    /// ends once every writer has let go of it. Waiting for that would hold the invocation open long after the
+    /// tree it started was killed, and in time hold a handler slot with it. Whatever was captured by the end of
+    /// the kill grace is the answer.
+    /// </summary>
+    [Fact]
+    public async Task Something_the_killed_child_left_behind_does_not_hold_the_invocation_open()
+    {
+        await using var api = await StartAsync(
+            Child("spawn-orphan", "30000"),
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"KillGraceMs":500}}}""");
+
+        // The budget is generous so that the lingering process certainly exists by the time the tree is killed:
+        // the child starts a middle process which starts it and exits at once, and a kill never reaches it.
+        var call = InvokeAsync(api, TimeSpan.FromSeconds(5));
+        var answered = await Task.WhenAny(call, Task.Delay(TimeSpan.FromSeconds(20), Ct)) == call;
+
+        Assert.True(answered, "the invocation was still waiting for pipes the process it killed no longer holds");
+        var result = await call;
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginTimeout, failure.Code);
+        AssertGone(result.Launch!.Pid!.Value);
+    }
+
+    /// <summary>
+    /// The same helper, after a child that ended of its own accord. Nothing was killed, and the answer is
+    /// already in hand — so the read ends that are still open are held by something the child left, and waiting
+    /// for them would hold the invocation, and in time a handler slot, for a process nobody is coming back for.
+    /// A vendor CLI that detaches an update check does exactly this after writing a perfectly good outcome.
+    /// </summary>
+    [Fact]
+    public async Task Something_a_child_that_exited_left_behind_does_not_hold_the_invocation_open()
+    {
+        await using var api = await StartAsync(
+            Child("outcome-orphan", "30000"),
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"KillGraceMs":500}}}""");
+
+        // The budget is far longer than the child needs: it writes its outcome and exits in milliseconds, so
+        // nothing here is waiting on a deadline. Only the pipes are left, and only the grace bounds them.
+        var watch = Stopwatch.StartNew();
+        var call = InvokeAsync(api, TimeSpan.FromSeconds(30));
+        var answered = await Task.WhenAny(call, Task.Delay(TimeSpan.FromSeconds(20), Ct)) == call;
+
+        Assert.True(answered, "the invocation waited for pipes that only something the child left behind still holds");
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), $"the settle outlived the kill grace: {watch.Elapsed}");
+        var succeeded = Assert.IsType<InvocationOutcome.Succeeded>((await call).Outcome);
+        Assert.True(succeeded.Result!["ok"]!.GetValue<bool>());
+    }
+
+    [Fact]
     public async Task A_host_that_cannot_be_started_at_all_is_a_launch_failure()
     {
         await using var api = await StartAsync(new CommandLocator("jason-plugin-host-that-does-not-exist"));
@@ -157,12 +287,15 @@ public class ProtocolFailureTests
             },
             configureServices: services => services.AddSingleton(locator));
 
-    private static async Task<PluginInvocationResult> InvokeAsync(RuntimeApiFixture api, TimeSpan? timeout = null)
+    private static async Task<PluginInvocationResult> InvokeAsync(
+        RuntimeApiFixture api,
+        TimeSpan? timeout = null,
+        JsonObject? input = null)
     {
         using var scope = api.Runtime.Services.CreateScope();
         var invoker = scope.ServiceProvider.GetRequiredService<PluginInvoker>();
         return await invoker.InvokeAsync(
-            new PluginInvocationRequest(TestPlugins.FakeProviderId, "echo.run", new JsonObject(), null, "att_01K0PROTOCOL", Timeout: timeout),
+            new PluginInvocationRequest(TestPlugins.FakeProviderId, "echo.run", input ?? [], null, "att_01K0PROTOCOL", Timeout: timeout),
             Ct);
     }
 

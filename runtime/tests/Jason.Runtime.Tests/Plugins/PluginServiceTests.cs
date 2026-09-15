@@ -63,12 +63,40 @@ public class PluginServiceTests
         Assert.Equal(["dotnet"], plugin.Capabilities.Exec.Granted);
         Assert.Equal(["localhost:5555", "127.0.0.1:5555"], plugin.Capabilities.Http!.Requested);
         Assert.Empty(plugin.Capabilities.Http.Granted);
-        Assert.Equal(["FAKE_TOKEN", "FAKE_OTHER"], plugin.Capabilities.Env!.Requested);
+        Assert.Equal(["FAKE_TOKEN", "FAKE_OTHER", "FAKE_CLI_DLL"], plugin.Capabilities.Env!.Requested);
         Assert.Equal(["FAKE_TOKEN"], plugin.Capabilities.Env.Granted);
+
+        // What a route to this plugin has to carry, so an operator can see it before writing one.
+        Assert.Equal(["workspace"], plugin.BindingSchema!["required"]!.AsArray().Select(name => name!.GetValue<string>()));
 
         var listed = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, Ct);
         Assert.Equal(reloaded.Snapshot.Id, listed.Snapshot.Id);
         Assert.Equal(reloaded.Plugins[0].Digest, Assert.Single(listed.Plugins).Digest);
+    }
+
+    [Theory]
+    [InlineData(TestPlugins.BindingBoundTooLarge, "yaml_invalid")]
+    [InlineData(TestPlugins.BindingTypeAsAList, "field_invalid")]
+    public async Task A_manifest_the_reader_cannot_take_at_face_value_is_a_named_problem_rather_than_a_failure_of_the_runtime(
+        string fragment,
+        string expected)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        TestPlugins.Write(
+            api.Paths,
+            "unreadable",
+            TestPlugins.Manifest("unreadable", extra: fragment),
+            "export function invoke() { return { result: {} }; }");
+
+        var error = await api.PostErrorAsync(Operations.PluginReload, null, HttpStatusCode.Conflict, Ct);
+
+        // A deterministic fault in a stranger's package is theirs to fix, so it must never come back as ours to
+        // retry: the answer names the file, the place inside it and the rule instead.
+        Assert.Equal("plugin_reload_rejected", error.Code);
+        Assert.False(error.Retryable);
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(expected, detail.Code);
+        Assert.StartsWith("unreadable/plugin.yaml#", detail.Field, StringComparison.Ordinal);
     }
 
     [Fact]

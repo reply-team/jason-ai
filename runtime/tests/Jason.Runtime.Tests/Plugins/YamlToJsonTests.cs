@@ -90,6 +90,21 @@ public class YamlToJsonTests
         Assert.Equal("fake", (string?)root["id"]);
     }
 
+    [Theory]
+    [InlineData("v: 1e400")]
+    [InlineData("v: -1e400")]
+    [InlineData("v: 1.7976931348623157e309")]
+    public void A_number_too_large_to_write_back_is_refused_where_it_is_written(string yaml)
+    {
+        // Parsing a float that overflows answers with an infinity rather than failing, and an infinity is a value
+        // no JSON writer will write. Carried on into a binding schema it made every rule that reads the manifest
+        // throw instead of report, so it is refused here, in the one place the number is still on a line.
+        var error = Assert.Throws<YamlInvalidException>(() => YamlToJson.Convert(yaml));
+
+        Assert.Equal(1, error.Line);
+        Assert.Contains(yaml["v: ".Length..], error.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void A_duplicate_key_is_refused_where_it_is_written()
     {

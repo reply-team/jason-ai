@@ -1,0 +1,23 @@
+{
+  "operation": "list_membership.add",
+  "version": 1,
+  "case": "the contact was created and added, and its provider identifier comes back to be pinned",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "contact_id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+          "status": "added",
+          "external_ids": { "contact": "p_88421" }
+        }
+      ]
+    },
+    "external_ids": { "contact": "p_88421" },
+    "error": null,
+    "diagnostics": { "duration_ms": 640, "exec_calls": 2, "http_calls": 0, "log_lines": 4 }
+  },
+  "expect": { "status": "succeeded", "retriable": false }
+}

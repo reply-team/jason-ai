@@ -59,6 +59,15 @@ covered here.
   free handler slots, one per campaign per scan. The launch envelope goes to the child on stdin;
   nothing goes on argv, and the capability token never reaches a child's environment, a
   work-directory file or an attempt row (redacted). `docs/work-execution.md` is the contract.
+- Canonical operations: a contract is data, not code. One JSON document per operation lives under
+  `docs/contracts/operations/` and is embedded into `Jason.Contracts` as a resource, so the file a
+  plugin author reads is the file the runtime enforces — never write a second copy of a rule that
+  document already states. Schemas are the restricted JSON Schema dialect `SchemaValidator`
+  publishes; a keyword outside that vocabulary is refused rather than ignored. `context.input` is the
+  reserved work-item context key carrying an operation's arguments: it is validated at
+  `workitem.create`, and again at `workitem.update` whenever a patch names the key. The fixtures
+  under `docs/contracts/fixtures/` are executed by tests, so a document and the code cannot drift
+  apart. Nothing routes a work item to a plugin yet. `docs/contracts/README.md` is the contract.
 - Plugins: a package is `~/.jason/plugins/<id>/` with `plugin.yaml`, `main.js` and optional modules;
   the directory name is the id. The manifest is validated against one fixed vocabulary of problem
   codes — package problems reject the whole reload and keep the previous snapshot, the four
@@ -68,8 +77,10 @@ covered here.
   and the exit code says only whether the protocol completed (0 outcome, 2 usage, 3 rejected,
   4 host failure). Declaration is not permission: capabilities are requested by the manifest and
   granted under `Plugins:Grants:<id>`, resolved and frozen at each load. A failure carries one of
-  four classes — only `transient` is retried; `ambiguous` is final, because the provider may already
-  have acted. An activated load journals `plugins_reloaded`; there is no `plugin.invoke` operation.
+  four classes — `transient` is retried, `permanent` and `validation` are final, and `ambiguous` says
+  the provider may already have acted, so it is repeated only where the operation's own contract
+  declares that repeating it is safe or that a recovery read makes it safe. An activated load journals
+  `plugins_reloaded`; there is no `plugin.invoke` operation.
   `docs/plugins.md` is the contract.
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for
   people, stderr is diagnostics only. Exit codes: 0 success, 1 API business error, 2 usage error,

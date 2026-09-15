@@ -6,6 +6,10 @@ using Jason.Contracts.Plugins;
 
 namespace Jason.Contracts.Tests.Plugins;
 
+// The canonical operation contracts live in Jason.Contracts.Operations, whose name shadows the operation-name
+// class from inside this namespace, so that one name is bound here explicitly.
+using Operations = Jason.Contracts.Api.Operations;
+
 public class PluginContractsShapeTests
 {
     private static PluginInvocation SampleInvocation() => new(
@@ -136,6 +140,7 @@ public class PluginContractsShapeTests
                         new ListCapabilityDto(["api.example.test"], []),
                         null),
                     new PluginLimitsDto(60_000, 64),
+                    new JsonObject { ["type"] = "object" },
                     PluginStatus.Unavailable,
                     [new PluginProblemDto("executable_missing", "plugin.yaml#capabilities.exec.executables[0]", "reply was not found")])
             ],
@@ -151,6 +156,9 @@ public class PluginContractsShapeTests
         Assert.Contains("\"loaded_at\":\"1970-01-01T00:00:00.000Z\"", json, StringComparison.Ordinal);
         Assert.Contains("\"min_version\":\"0.4.0\"", json, StringComparison.Ordinal);
         Assert.Contains("\"last_reload\":{", json, StringComparison.Ordinal);
+
+        // The schema travels verbatim: its keywords are JSON Schema's own spelling, not Jason's snake_case.
+        Assert.Contains("\"binding_schema\":{\"type\":\"object\"}", json, StringComparison.Ordinal);
     }
 
     [Fact]

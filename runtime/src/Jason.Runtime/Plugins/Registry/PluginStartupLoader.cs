@@ -44,9 +44,8 @@ public sealed class PluginStartupLoader(
                 return;
             }
 
-            registry.Replace(load.Snapshot, load.Report);
-
-            // The runtime is the actor: nobody asked for this load, the process starting is what caused it.
+            // The runtime is the actor: nobody asked for this load, the process starting is what caused it. The
+            // record is written before the swap, like a reload's: a snapshot nobody could write down is not active.
             var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
             PluginService.JournalActivation(
                 scope.ServiceProvider.GetRequiredService<JournalWriter>(),
@@ -55,6 +54,7 @@ public sealed class PluginStartupLoader(
                 load.Snapshot,
                 reason: null);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            registry.Replace(load.Snapshot, load.Report);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

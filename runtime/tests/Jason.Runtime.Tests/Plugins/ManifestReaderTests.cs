@@ -45,7 +45,7 @@ public class ManifestReaderTests
         Assert.Equal("Fake provider", result.Manifest!.Name);
         Assert.Equal(["dotnet"], result.Manifest.Capabilities.Exec!.Executables.Select(e => e.Name));
         Assert.Equal(["localhost:5555", "127.0.0.1:5555"], result.Manifest.Capabilities.Http!.Hosts);
-        Assert.Equal(["FAKE_TOKEN", "FAKE_OTHER"], result.Manifest.Capabilities.Env!.Variables);
+        Assert.Equal(["FAKE_TOKEN", "FAKE_OTHER", "FAKE_CLI_DLL"], result.Manifest.Capabilities.Env!.Variables);
         Assert.Equal(20_000, result.Manifest.Limits.TimeoutMs);
         Assert.Equal(64, result.Manifest.Limits.MemoryMb);
     }
@@ -128,6 +128,19 @@ public class ManifestReaderTests
     [InlineData("limits:\n  memory_mb: 2048\n", "field_invalid", "limits.memory_mb")]
     [InlineData("limits:\n  timeout_ms: 5000\n  memory_mb: 128\n", null, null)]
 
+    // The binding schema: optional, additive, and held to the published dialect.
+    [InlineData("binding: workspace\n", "field_invalid", "binding")]
+    [InlineData("binding:\n  type: string\n", "field_invalid", "binding")]
+    [InlineData("binding:\n  type: object\n  unevaluatedProperties: false\n", "field_invalid", "binding#/unevaluatedProperties")]
+    [InlineData("binding:\n  type: object\n  properties:\n    workspace:\n      type: string\n      pattern: \"(?<=a)b\"\n", "field_invalid", "binding#/properties/workspace/pattern")]
+    [InlineData("binding:\n  type: object\n  properties:\n    api_token:\n      type: string\n", "binding_secret_like", "binding#/properties/api_token")]
+    // A binding is a schema of `type: object` exactly. The list form is good JSON Schema and good dialect, so the
+    // dialect check passes it through to this rule — which read the name with an accessor that throws on a list.
+    [InlineData("binding:\n  type: [object, \"null\"]\n  properties:\n    workspace:\n      type: string\n", "field_invalid", "binding")]
+    [InlineData("binding:\n  type: [object]\n", "field_invalid", "binding")]
+    [InlineData("binding:\n  properties:\n    workspace:\n      type: string\n", "field_invalid", "binding")]
+    [InlineData("binding:\n  type: object\n  properties:\n    workspace:\n      type: string\n", null, null)]
+
     // Typos are the common failure, so an unknown key is an error wherever it sits.
     [InlineData("capabilites:\n  env:\n    variables: [TOKEN]\n", "unknown_field", "capabilites")]
     [InlineData("entry:\n  modules: main.js\n", "unknown_field", "entry.modules")]
@@ -147,6 +160,88 @@ public class ManifestReaderTests
         Assert.Null(result.Manifest);
         var problem = Assert.Single(result.Problems, p => p.Code == code && p.Path == path);
         Assert.NotEmpty(problem.Message);
+    }
+
+    [Fact]
+    public void A_binding_schema_says_what_a_route_to_this_plugin_must_carry()
+    {
+        var result = Read(Merge("""
+            binding:
+              type: object
+              additionalProperties: false
+              required: [workspace]
+              properties:
+                workspace:
+                  type: string
+                  minLength: 1
+
+            """));
+
+        Assert.True(result.IsValid, string.Join("; ", result.Problems.Select(p => $"{p.Path}: {p.Code}")));
+        var binding = result.Manifest!.Binding;
+        Assert.NotNull(binding);
+        Assert.Equal("object", binding["type"]!.GetValue<string>());
+        Assert.Equal("string", binding["properties"]!["workspace"]!["type"]!.GetValue<string>());
+
+        // The key is optional and adds nothing an older runtime has to understand, so the version does not move.
+        Assert.Equal(1, PluginProtocol.ManifestVersion);
+    }
+
+    [Fact]
+    public void A_manifest_without_a_binding_asks_a_route_for_nothing()
+    {
+        var result = Read(TestPlugins.Manifest("fake"));
+
+        Assert.True(result.IsValid);
+        Assert.Null(result.Manifest!.Binding);
+    }
+
+    [Theory]
+    [InlineData("access_token")]
+    [InlineData("client_secret")]
+    [InlineData("Password")]
+    [InlineData("passwd")]
+    [InlineData("api_key")]
+    [InlineData("apikey")]
+    [InlineData("credentials")]
+    [InlineData("private_key")]
+    [InlineData("authorization")]
+    [InlineData("bearer_jwt")]
+    [InlineData("cookie")]
+    public void A_binding_may_not_declare_a_property_whose_name_reads_like_a_credential(string property)
+    {
+        var result = Read(Merge($"binding:\n  type: object\n  properties:\n    {property}:\n      type: string\n"));
+
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal("binding_secret_like", problem.Code);
+        Assert.Equal($"binding#/properties/{property}", problem.Path);
+        Assert.Contains(property, problem.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_credential_rule_reaches_every_depth_and_a_name_that_is_only_required()
+    {
+        // A nested definition and a bare `required` entry are both ways of saying a route must carry a field,
+        // so neither is a place the rule can be walked around.
+        var result = Read(Merge("""
+            binding:
+              type: object
+              properties:
+                account:
+                  $ref: "#/$defs/account"
+              required: [api_key]
+              $defs:
+                account:
+                  type: object
+                  properties:
+                    secret_name:
+                      type: string
+
+            """));
+
+        Assert.Equal(
+            ["binding#/$defs/account/properties/secret_name", "binding#/required/0"],
+            result.Problems.Where(p => p.Code == "binding_secret_like").Select(p => p.Path).Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -253,6 +348,89 @@ public class ManifestReaderTests
 
         Assert.Equal("field_invalid", Assert.Single(result.Problems).Code);
         Assert.Equal("limits.timeout_ms", Assert.Single(result.Problems).Path);
+    }
+
+    /// <summary>Every place a rule reads a value, including the ones only reachable inside a list item.</summary>
+    private static readonly string[] ReadableFields =
+    [
+        "manifest_version", "id", "version", "kind", "name", "description", "homepage",
+        "contracts", "contracts.protocol", "contracts.operations", "operations",
+        "entry", "entry.module", "entry.function",
+        "capabilities", "capabilities.exec", "capabilities.exec.executables",
+        "capabilities.http", "capabilities.http.hosts",
+        "capabilities.env", "capabilities.env.variables",
+        "limits", "limits.timeout_ms", "limits.memory_mb",
+        "binding", "binding.type", "binding.properties", "binding.required",
+    ];
+
+    /// <summary>
+    /// Shapes a rule might be handed instead of what it expects. Each one is written to look plausible rather than
+    /// obviously wrong, because an implausible value is stopped by an earlier rule and never reaches the read that
+    /// matters: `type: [object, "null"]` is good JSON Schema and good dialect, which is exactly why it got past
+    /// everything and reached a typed read that could not take a list.
+    /// </summary>
+    private static readonly string[] WrongShapes = ["[object, \"null\"]", "{ type: object }", "7", "\"object\"", "true", "~"];
+
+    /// <summary>The same question for the places a generated fragment cannot reach: inside a list.</summary>
+    private static readonly string[] WrongShapesInLists =
+    [
+        "operations: [[a, b]]\n",
+        "contracts:\n  protocol: [[1]]\n  operations: [1]\n",
+        "capabilities:\n  exec:\n    executables:\n      - name: [reply, other]\n",
+        "capabilities:\n  exec:\n    executables:\n      - name: reply\n        min_version: [1, 2]\n",
+        "capabilities:\n  exec:\n    executables:\n      - name: reply\n        version_command: { a: 1 }\n",
+        "capabilities:\n  http:\n    hosts: [[api.reply.test]]\n",
+        "capabilities:\n  env:\n    variables: [{ a: 1 }]\n",
+        "binding:\n  type: object\n  required: [[workspace]]\n",
+        "binding:\n  type: object\n  properties:\n    workspace: [a, b]\n",
+    ];
+
+    /// <summary>
+    /// The rule the whole reader is held to: no manifest, however malformed, makes it throw. Every bad value comes
+    /// back as a code at a path. A reader that throws takes the whole load with it — the reload answers 500 and a
+    /// package present when the runtime starts empties the registry with nothing naming the package at fault — so
+    /// this holds every place a rule reads a value, not only the ones a case above happens to name.
+    /// </summary>
+    [Fact]
+    public void No_manifest_however_malformed_makes_the_reader_throw()
+    {
+        var root = NewPackage(TestPlugins.Manifest("fake"), "fake");
+
+        foreach (var manifest in Malformed())
+        {
+            var thrown = Record.Exception(() => ManifestReader.Read(manifest, "fake", root, Bounds));
+
+            Assert.True(thrown is null, $"this manifest made the reader throw {thrown?.GetType().Name}: {thrown?.Message}\n\n{manifest}");
+        }
+    }
+
+    private static IEnumerable<string> Malformed()
+    {
+        foreach (var field in ReadableFields)
+        {
+            foreach (var shape in WrongShapes)
+            {
+                yield return Merge(Nested(field, shape));
+            }
+        }
+
+        foreach (var fragment in WrongShapesInLists)
+        {
+            yield return Merge(fragment);
+        }
+    }
+
+    /// <summary>A dotted field path and a value, written back out as the nested YAML mapping it stands for.</summary>
+    private static string Nested(string field, string shape)
+    {
+        var segments = field.Split('.');
+        var fragment = new System.Text.StringBuilder();
+        for (var level = 0; level < segments.Length - 1; level++)
+        {
+            fragment.Append(' ', level * 2).Append(segments[level]).Append(":\n");
+        }
+
+        return fragment.Append(' ', (segments.Length - 1) * 2).Append(segments[^1]).Append(": ").Append(shape).Append('\n').ToString();
     }
 
     /// <summary>Replaces the base manifest's lines that the fragment redefines, then appends the rest.</summary>

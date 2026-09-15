@@ -73,6 +73,15 @@ public static class OperationEndpoints
         return app.MapPost(Operations.Route(operation), operationHandler);
     }
 
+    /// <summary>
+    /// A property written twice is not a request this API can answer: the two values say different things and
+    /// nothing in the contract picks between them. It is refused here, at the door, and at every depth — the
+    /// serializer's own duplicate rule reads only the fields it binds, so a duplicate inside a work item's
+    /// context, which arrives as a node it hands on without reading, would go through unseen and throw at
+    /// whatever read it first.
+    /// </summary>
+    private static readonly JsonDocumentOptions Bodies = new() { AllowDuplicateProperties = false };
+
     private static async Task<TRequest> ReadRequestAsync<TRequest>(HttpContext context)
         where TRequest : class
     {
@@ -83,7 +92,8 @@ public static class OperationEndpoints
             text = "{}";
         }
 
-        return JsonSerializer.Deserialize<TRequest>(text, JasonJson.Options) ?? throw new JsonException("The request body must be a JSON object.");
+        using var document = JsonDocument.Parse(text, Bodies);
+        return document.Deserialize<TRequest>(JasonJson.Options) ?? throw new JsonException("The request body must be a JSON object.");
     }
 
     private static readonly Action<ILogger, string, Exception> OperationFailed =

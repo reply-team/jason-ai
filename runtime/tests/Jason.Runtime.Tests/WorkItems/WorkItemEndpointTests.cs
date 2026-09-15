@@ -1,6 +1,10 @@
+using System.Globalization;
 using System.Net;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
+using Jason.Contracts.Json;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -41,6 +45,64 @@ public class WorkItemEndpointTests
 
         Assert.Equal("validation_failed", error.Code);
         Assert.Equal("campaign_id", error.Details![0].Field);
+    }
+
+    [Fact]
+    public async Task A_property_written_twice_anywhere_in_the_body_is_refused_as_an_invalid_request()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var campaign = await ActiveCampaignAsync(api);
+
+        // The duplicate sits inside the work item's context, which the serializer hands on as a node without
+        // reading it, so the first read of that node was deep inside the validator — a deterministic fault in the
+        // caller's own body coming back as a retryable failure of the runtime.
+        const string request = """
+            {"campaign_id":"CAMPAIGN","kind":"provider_op","operation":"campaign.get",
+             "context":{"input":{"campaign":{"external_id":"a","external_id":"b"}}}}
+            """;
+
+        var (status, body) = await api.PostRawAsync(
+            Operations.WorkItemCreate,
+            request.Replace("CAMPAIGN", campaign.Id, StringComparison.Ordinal),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+        var error = JsonSerializer.Deserialize<ErrorResponse>(body, JasonJson.Options)!.Error;
+        Assert.Equal("invalid_request", error.Code);
+        Assert.False(error.Retryable);
+        Assert.Contains("external_id", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_body_wrong_in_twenty_thousand_places_answers_with_a_bounded_list_and_a_count()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var campaign = await ActiveCampaignAsync(api);
+        var input = new JsonObject();
+        for (var index = 0; index < 20_000; index++)
+        {
+            input["unknown_" + index.ToString(CultureInfo.InvariantCulture)] = index;
+        }
+
+        var (status, body) = await api.PostAsync(
+            Operations.WorkItemCreate,
+            new
+            {
+                CampaignId = campaign.Id,
+                Kind = "provider_op",
+                Operation = "campaign.get",
+                Context = new JsonObject { ["input"] = input },
+            },
+            Ct);
+
+        // Twenty thousand pointers say nothing the first fifty do not, and cost megabytes to say it.
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+        var error = JsonSerializer.Deserialize<ErrorResponse>(body, JasonJson.Options)!.Error;
+        Assert.Equal("validation_failed", error.Code);
+        Assert.Equal(50, error.Details!.Count);
+        Assert.Contains("19950", error.Message, StringComparison.Ordinal);
+        Assert.True(error.Message.Length < 500, $"the message is {error.Message.Length} characters long.");
+        Assert.True(body.Length < 32 * 1024, $"the answer is {body.Length} bytes long.");
     }
 
     [Fact]

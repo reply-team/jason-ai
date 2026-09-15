@@ -59,8 +59,8 @@ public sealed partial class PluginInvoker(
             new EventId(1, nameof(Started)),
             "Plugin {PluginId} {Version} {Digest} invocation {InvocationId} for {Operation} started as pid {Pid}");
 
-    private static readonly Action<ILogger, string, string, int, string, long, Exception?> Ended =
-        LoggerMessage.Define<string, string, int, string, long>(
+    private static readonly Action<ILogger, string, string, int?, string, long, Exception?> Ended =
+        LoggerMessage.Define<string, string, int?, string, long>(
             LogLevel.Information,
             new EventId(2, nameof(Ended)),
             "Plugin invocation {InvocationId} (correlation {CorrelationId}) ended: exit {ExitCode}, {Verdict} in {DurationMs} ms");
@@ -80,10 +80,24 @@ public sealed partial class PluginInvoker(
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Input);
 
-        // One snapshot for the whole invocation: a reload that happens while a child runs never changes what
-        // that child was told, because the envelope was written from this reference.
-        var snapshot = registry.Snapshot;
-        var plugin = snapshot.Find(request.PluginId);
+        LoadedPlugin? plugin;
+        string snapshotId;
+        if (request.Pinned is { } pinned)
+        {
+            // The caller decided which package runs, so the registry is not consulted at all: a reload landing
+            // between that decision and this attempt cannot change what runs or what the provenance says ran.
+            plugin = pinned.Plugin;
+            snapshotId = pinned.SnapshotId;
+        }
+        else
+        {
+            // One snapshot for the whole invocation: a reload that happens while a child runs never changes what
+            // that child was told, because the envelope was written from this reference.
+            var snapshot = registry.Snapshot;
+            plugin = snapshot.Find(request.PluginId);
+            snapshotId = snapshot.Id;
+        }
+
         var invocationId = PublicId.New(PluginProtocol.InvocationIdPrefix);
         var provenance = new InvocationProvenance(
             request.PluginId,
@@ -93,7 +107,7 @@ public sealed partial class PluginInvoker(
             PluginProtocol.OperationContractVersion,
             invocationId,
             request.CorrelationId,
-            snapshot.Id);
+            snapshotId);
 
         if (plugin is null)
         {
@@ -257,7 +271,12 @@ public sealed partial class PluginInvoker(
                 stderr.PumpAsync(process.StandardError),
             };
 
-            await WriteEnvelopeAsync(process, invocation).ConfigureAwait(false);
+            // The envelope is written alongside the wait, never before it. An envelope larger than a pipe buffer
+            // only finishes being written once the child reads it, and a child that reads nothing would
+            // otherwise hold this thread here with the deadline below not yet running — nothing able to kill it.
+            // The token ends a write that has not started; the kill ends one already in flight, by breaking the
+            // pipe the write is blocked on.
+            var envelope = WriteEnvelopeAsync(process, invocation, lifetime.Token);
 
             var timedOut = false;
             var killed = false;
@@ -268,14 +287,22 @@ public sealed partial class PluginInvoker(
             catch (OperationCanceledException)
             {
                 TryKill(process);
-                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
                 killed = kill.IsCancellationRequested;
                 timedOut = !killed;
+
+                // The kill is a request, not a guarantee. Waiting for a child it did not end would be a wait
+                // with nothing left to end it, so it is given the same grace as everything else that follows.
+                await ChildProcess.EndedWithinAsync(process, settings.Invoker.KillGraceMs).ConfigureAwait(false);
             }
 
-            await Task.WhenAll(pumps).ConfigureAwait(false);
+            // The wait for the pipes is bounded by the kill grace whichever way the child ended: after a kill —
+            // the caller's, the deadline's, or this invoker's own when the child floods — and equally after a
+            // child that exited by itself, which says nothing about what it left running on the same handles.
+            // What was captured by then is what the invocation is classified from.
+            await SettleAsync([.. pumps, envelope], settings.Invoker.KillGraceMs).ConfigureAwait(false);
+            Release(process);
 
-            var exitCode = process.ExitCode;
+            var exitCode = ExitCodeOf(process);
             var outcome = Classify(invocation, settings, stdout, stderr, tooLarge, killed, timedOut, exitCode, timeoutMs);
             var launch = new InvocationLaunch(command, process.Id, exitCode, startedAt, watch.ElapsedMilliseconds, workDir);
             Ended(
@@ -291,6 +318,67 @@ public sealed partial class PluginInvoker(
         }
     }
 
+    /// <summary>
+    /// Waits for the tasks that hold the child's pipes, for no longer than the kill grace. By the time this
+    /// runs the child has ended, and a child may leave something running that inherited its standard handles:
+    /// the read end of a pipe only ends once every writer has let go of it, so waiting for that would hold an
+    /// invocation open for as long as the helper lived — with its answer already in hand. Whether the child was
+    /// killed or exited by itself decides nothing here, because neither says what it left behind. An abandoned
+    /// task is left to finish on its own — its pipe ends when the last writer does — and its failure is
+    /// observed there rather than thrown here, where there is no longer anyone to tell.
+    /// </summary>
+    private static async Task SettleAsync(IReadOnlyList<Task> pipes, int killGraceMs)
+    {
+        var all = Task.WhenAll(pipes);
+        if (await Task.WhenAny(all, Task.Delay(killGraceMs)).ConfigureAwait(false) == all)
+        {
+            await all.ConfigureAwait(false);
+            return;
+        }
+
+        foreach (var pipe in pipes)
+        {
+            Observe(pipe);
+        }
+
+        Observe(all);
+    }
+
+    private static void Observe(Task abandoned) =>
+        _ = abandoned.ContinueWith(
+            static finished => _ = finished.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
+
+    /// <summary>
+    /// Lets go of the child's pipes. A stream the invoker asked for is not closed when the process is disposed,
+    /// because the caller could still be holding it, so an abandoned pump would otherwise keep both the handle
+    /// and the file it writes into alive for as long as anything the child left behind keeps the other end open.
+    /// </summary>
+    private static void Release(Process process)
+    {
+        Close(process.StandardInput);
+        Close(process.StandardOutput);
+        Close(process.StandardError);
+
+        static void Close(IDisposable pipe)
+        {
+            try
+            {
+                pipe.Dispose();
+            }
+            catch (IOException)
+            {
+                // A pipe whose other end is already gone. There is nothing left to flush it to.
+            }
+            catch (ObjectDisposedException)
+            {
+                // Closed once already, by the envelope's own writer.
+            }
+        }
+    }
+
     private static InvocationOutcome Classify(
         PluginInvocation invocation,
         PluginsOptions settings,
@@ -299,7 +387,7 @@ public sealed partial class PluginInvoker(
         bool tooLarge,
         bool killed,
         bool timedOut,
-        int exitCode,
+        int? exitCode,
         int timeoutMs)
     {
         InvocationOutcome Protocol(string code, string message) =>
@@ -326,16 +414,23 @@ public sealed partial class PluginInvoker(
                     $"The plugin host did not exit within {timeoutMs + settings.Invoker.KillGraceMs} ms and was ended."));
         }
 
-        if (exitCode is RejectedExitCode or UsageExitCode)
+        if (exitCode is not { } code)
+        {
+            // Only reachable where a kill did not take, and the two answers above have already covered every
+            // way of ending a child. Nothing this one could still write would be this invocation's answer.
+            return Protocol(ProtocolCodes.PluginNoOutcome, "The plugin host was ended and had not exited.");
+        }
+
+        if (code is RejectedExitCode or UsageExitCode)
         {
             return Protocol(ProtocolCodes.PluginInvocationRejected, RejectionMessage(stderr.Tail));
         }
 
-        if (exitCode != 0)
+        if (code != 0)
         {
             return Protocol(
                 ProtocolCodes.PluginNoOutcome,
-                string.Create(CultureInfo.InvariantCulture, $"The plugin host exited with {exitCode} without writing an outcome."));
+                string.Create(CultureInfo.InvariantCulture, $"The plugin host exited with {code} without writing an outcome."));
         }
 
         var text = stdout.Text;
@@ -414,11 +509,12 @@ public sealed partial class PluginInvoker(
             new LogLimits(settings.Invoker.LogLineBytes, settings.Invoker.StderrBytes));
 
     /// <summary>One JSON object, then end of file: the child reads until the stream ends rather than guessing.</summary>
-    private static async Task WriteEnvelopeAsync(Process process, PluginInvocation invocation)
+    private static async Task WriteEnvelopeAsync(Process process, PluginInvocation invocation, CancellationToken lifetime)
     {
         try
         {
-            await process.StandardInput.WriteAsync(JsonSerializer.Serialize(invocation, JasonJson.Options)).ConfigureAwait(false);
+            var json = JsonSerializer.Serialize(invocation, JasonJson.Options);
+            await process.StandardInput.WriteAsync(json.AsMemory(), lifetime).ConfigureAwait(false);
             process.StandardInput.Close();
         }
         catch (IOException)
@@ -428,6 +524,10 @@ public sealed partial class PluginInvoker(
         catch (ObjectDisposedException)
         {
             // The same story, seen from the other side of an already-closed pipe.
+        }
+        catch (OperationCanceledException)
+        {
+            // The invocation's lifetime ended first. The child is being killed; there is nothing left to tell it.
         }
     }
 
@@ -456,12 +556,12 @@ public sealed partial class PluginInvoker(
                 continue;
             }
 
-            if (parsed is not JsonObject diagnostic || diagnostic["message"]?.GetValue<string>() is not { } message)
+            if (parsed is not JsonObject diagnostic || Text(diagnostic, "message") is not { } message)
             {
                 continue;
             }
 
-            var code = diagnostic["data"]?["code"]?.GetValue<string>();
+            var code = diagnostic["data"] is JsonObject data ? Text(data, "code") : null;
             return code is null
                 ? $"The plugin host refused the invocation: {message}."
                 : $"The plugin host refused the invocation: {message} ({code}).";
@@ -469,6 +569,14 @@ public sealed partial class PluginInvoker(
 
         return "The plugin host refused the invocation before running any of the plugin's code.";
     }
+
+    /// <summary>
+    /// One string field of an object nothing in this runtime wrote. A field of another type, or of another
+    /// shape entirely, reads as absent rather than throwing: the child's stderr is text the child chose, and a
+    /// refusal still has to come back as a refusal.
+    /// </summary>
+    private static string? Text(JsonObject parent, string name) =>
+        parent[name] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 
     private static string Verdict(InvocationOutcome outcome) => outcome switch
     {
@@ -481,6 +589,19 @@ public sealed partial class PluginInvoker(
 
     private static string Codes(IReadOnlyList<ManifestProblem> problems) =>
         string.Join(", ", problems.Select(problem => problem.Code).Distinct(StringComparer.Ordinal));
+
+    /// <summary>The child's exit code, or nothing when it is still running: a kill it survived has none yet.</summary>
+    private static int? ExitCodeOf(Process process)
+    {
+        try
+        {
+            return process.ExitCode;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
 
     private static void TryKill(Process process)
     {

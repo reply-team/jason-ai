@@ -275,7 +275,7 @@ public class DispatcherWithFakeHostTests
         await using var host = await FakeHostRuntime.StartAsync(Ct);
         var campaign = await host.CampaignAsync(Ct);
         var created = await host.CreateAsync(
-            new { campaign_id = campaign, kind = "provider_op", operation = "contacts.enroll" },
+            new { campaign_id = campaign, kind = "provider_op", operation = "campaign.get" },
             Ct);
 
         // Failed inside the claim, so there is nothing to wait for and nothing was ever launched.

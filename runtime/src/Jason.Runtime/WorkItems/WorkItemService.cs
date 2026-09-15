@@ -21,6 +21,12 @@ namespace Jason.Runtime.WorkItems;
 /// </summary>
 public sealed class WorkItemService(JasonDbContext db, JournalWriter journal, TimeProvider clock, WorkItemCanceller canceller)
 {
+    /// <summary>
+    /// The one context key a provider operation's arguments live under. Everything else in a work item's context
+    /// is the planner's own and never reaches a plugin: what an operation takes is a typed input, not a note.
+    /// </summary>
+    public const string InputKey = "input";
+
     public const int MaxRoleLength = 64;
 
     public const int MaxOperationLength = 200;
@@ -213,6 +219,7 @@ public sealed class WorkItemService(JasonDbContext db, JournalWriter journal, Ti
         }
 
         ValidateContextKeys(request.Set, request.Unset, errors);
+        ValidateProviderInput(item, request.Set, request.Unset, errors);
         errors.ThrowIfAny();
 
         var changes = new List<FieldChange>();
@@ -436,6 +443,30 @@ public sealed class WorkItemService(JasonDbContext db, JournalWriter journal, Ti
         ContextRules.EnsureWithinLimits(context);
         item.Context = context;
         return changes;
+    }
+
+    /// <summary>
+    /// A patch that touches the reserved input key is the operation's arguments being rewritten, so the contract
+    /// reads them again exactly as it did at create. A patch that leaves the key alone is not re-measured: the
+    /// arguments were accepted once and nothing in this request moved them.
+    /// </summary>
+    private static void ValidateProviderInput(WorkItem item, JsonObject? set, IReadOnlyList<string>? unset, ValidationErrors errors)
+    {
+        if (item.Kind != WorkItemKind.ProviderOp || item.Operation is null)
+        {
+            return;
+        }
+
+        var removed = unset?.Any(key => string.Equals(key, InputKey, StringComparison.Ordinal)) == true;
+        var written = set?.ContainsKey(InputKey) == true;
+        if (!removed && !written)
+        {
+            return;
+        }
+
+        // The patch writes the set before it honours the unset, so a key named in both ends up gone; the contract
+        // has to read the arguments the item will actually hold, not the ones the request mentions first.
+        WorkItemValidation.ValidateProviderInput(item.Operation, removed ? null : set![InputKey], errors);
     }
 
     private static void ValidateContextKeys(JsonObject? set, IReadOnlyList<string>? unset, ValidationErrors errors)

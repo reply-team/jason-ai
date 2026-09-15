@@ -66,9 +66,12 @@ public sealed class PluginService(
                 throw DomainErrors.PluginReloadRejected(details);
             }
 
-            registry.Replace(load.Snapshot, load.Report);
+            // The record first, the swap second: the swap is in memory and cannot fail, the save can. A reload that
+            // could not be written down leaves the previous snapshot active and is simply repeated, instead of a new
+            // snapshot running with no trace of when it began.
             JournalActivation(journal, db, actor, load.Snapshot, reason);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            registry.Replace(load.Snapshot, load.Report);
             Activated(logger, load.Snapshot.Id, load.Snapshot.Plugins.Count, reason, null);
             return PluginMapper.ToDto(load.Snapshot, load.Report, activated: true);
         }

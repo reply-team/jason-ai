@@ -1,3 +1,4 @@
+using System.Globalization;
 using Jason.Contracts.Api;
 using Microsoft.AspNetCore.Http;
 
@@ -27,12 +28,19 @@ public sealed class InvalidRequestException(string code, string message) : Domai
 
 /// <summary>Field-level problems. The message repeats the field names and rule codes, never the submitted values.</summary>
 public sealed class ValidationException(IReadOnlyList<ErrorDetail> details)
-    : DomainException(
-        StatusCodes.Status400BadRequest,
-        "validation_failed",
-        "Validation failed: " + string.Join("; ", details.Select(d => $"{d.Field}: {d.Code}")) + ".",
-        false,
-        details);
+    : DomainException(StatusCodes.Status400BadRequest, "validation_failed", Summarise(details), false, details)
+{
+    /// <summary>How many fields the message itself names, because a message is a sentence and not a list.</summary>
+    private const int Named = 5;
+
+    private static string Summarise(IReadOnlyList<ErrorDetail> details)
+    {
+        var named = string.Join("; ", details.Take(Named).Select(detail => $"{detail.Field}: {detail.Code}"));
+        return details.Count <= Named
+            ? "Validation failed: " + named + "."
+            : string.Create(CultureInfo.InvariantCulture, $"Validation failed: {named}; and {details.Count - Named} more.");
+    }
+}
 
 /// <summary>Collects field problems so one response reports all of them. Messages name the rule, never the submitted value.</summary>
 public sealed class ValidationErrors

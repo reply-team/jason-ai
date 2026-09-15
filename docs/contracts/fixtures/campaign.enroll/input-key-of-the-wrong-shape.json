@@ -1,0 +1,33 @@
+{
+  "operation": "campaign.enroll",
+  "version": 1,
+  "case": "an idempotency key the runtime did not issue, so nothing could be answered from the prior run under it",
+  "input": {
+    "args": {
+      "channel": "email",
+      "collision": "skip",
+      "start": { "position": "first_step" },
+      "first_touch": "authored_delay"
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": null,
+        "title": null,
+        "time_zone": null,
+        "channels": [{ "channel": "email", "value": "marta@example.com", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "batch-2026-09-15"
+  },
+  "expect": { "invalid": [{ "pointer": "/idempotency_key", "reason": "pattern" }] }
+}

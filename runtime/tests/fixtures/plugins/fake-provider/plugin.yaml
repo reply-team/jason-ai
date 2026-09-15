@@ -7,7 +7,7 @@ description: The test double every plugin-host test drives; copy its shape.
 contracts:
   protocol: [1]
   operations: [1]
-operations: [echo.run, context.echo, exec.run, http.get, env.read, log.emit, fail.transient, fail.permanent, fail.validation, fail.ambiguous, hang.forever, spew.bytes, throw.plain, return.bare, escape.clr, escape.eval, escape.function, escape.constructor, module.import]
+operations: [echo.run, context.echo, exec.run, http.get, env.read, log.emit, fail.transient, fail.permanent, fail.validation, fail.ambiguous, hang.forever, spew.bytes, throw.plain, return.bare, escape.clr, escape.eval, escape.function, escape.constructor, module.import, campaign.get, list_membership.add, campaign.enroll]
 entry:
   module: main.js
   function: invoke
@@ -18,7 +18,16 @@ capabilities:
   http:
     hosts: ["localhost:5555", "127.0.0.1:5555"]
   env:
-    variables: [FAKE_TOKEN, FAKE_OTHER]
+    variables: [FAKE_TOKEN, FAKE_OTHER, FAKE_CLI_DLL]
 limits:
   timeout_ms: 20000
   memory_mb: 64
+binding:
+  type: object
+  additionalProperties: false
+  required: [workspace]
+  properties:
+    workspace:
+      type: string
+      minLength: 1
+      description: The directory holding the provider account this route acts in.

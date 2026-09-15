@@ -23,6 +23,216 @@ function probe(attempt) {
   }
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// The canonical operations, implemented against the stand-in vendor's account
+// ---------------------------------------------------------------------------------------------------------
+
+// What each of the provider's refusals means for a retry. The classes are the plugin's own judgement, which is
+// exactly the judgement a contract's failure-code table records: a caller must never have to guess.
+const FAILURE_CLASSES = {
+  campaign_not_found: "permanent",
+  campaign_not_enrollable: "permanent",
+  collision_refused: "permanent",
+  contact_not_found: "permanent",
+  invalid_channel_value: "validation",
+  limit_reached: "permanent",
+  list_not_found: "permanent",
+  rate_limited: "transient",
+  suppressed: "permanent",
+  unauthorized: "permanent",
+};
+
+// The provider's own words for a campaign's state, mapped onto the vocabulary the contract publishes. Anything
+// this table has no word for is `other`, and the provider's own word survives under `vendor`.
+const CAMPAIGN_STATUS = {
+  Draft: "draft",
+  Active: "live",
+  Paused: "paused",
+  Archived: "archived",
+};
+
+// The vendor program's own exit codes, and the two of them that say the call never became work: the host
+// answers -1 when it could not start the program at all, and the program answers 2 when it will not make
+// sense of the call or of the account it was pointed at. Neither can have had an effect at the provider.
+const NOT_STARTED = -1;
+const REFUSED_THE_CALL = 2;
+
+// One call to the vendor CLI: the request goes in on stdin and exactly one answer comes back on stdout.
+function cli(context, subcommand, request) {
+  const program = host.env("FAKE_CLI_DLL");
+  const workspace = context.binding && context.binding.workspace;
+  if (!program || !workspace) {
+    throw host.fail({
+      class: "permanent",
+      code: "unauthorized",
+      message: "This plugin needs a binding naming the account it should act in, and the vendor program to act with.",
+    });
+  }
+
+  const answer = host.exec({
+    executable: "dotnet",
+    args: [program, "--workspace", workspace, ...subcommand],
+    stdin: JSON.stringify(request),
+  });
+
+  if (answer.exit_code !== 0) {
+    // Not every non-zero exit is the same not-knowing. A program that never started, or that refused the call
+    // before touching the account, cannot have acted: that is a `permanent` failure and says so. A timeout, or
+    // an exit once the call was under way, may have acted — which is what `ambiguous` is for, and the
+    // contract's recovery read is how the next attempt finds out.
+    const acted = answer.timed_out === true
+      || (answer.exit_code !== NOT_STARTED && answer.exit_code !== REFUSED_THE_CALL);
+
+    throw host.fail({
+      class: acted ? "ambiguous" : "permanent",
+      code: acted ? "provider_answer_lost" : "provider_call_failed",
+      message: acted
+        ? "The provider was called and no answer came back."
+        : "The provider was never called: the program would not start, or refused the call it was given.",
+      details: {
+        subcommand: subcommand.join(" "),
+        exit_code: answer.exit_code,
+        timed_out: answer.timed_out === true,
+      },
+    });
+  }
+
+  const parsed = JSON.parse(answer.stdout);
+  if (parsed.error) {
+    throw host.fail({
+      class: FAILURE_CLASSES[parsed.error.code] || "permanent",
+      code: parsed.error.code,
+      message: parsed.error.message,
+    });
+  }
+
+  return parsed;
+}
+
+// The provider's own campaign identifier: the pin when there is one, otherwise the one the planner supplied to
+// make the first link.
+function campaignOf(input) {
+  return (input.args && input.args.campaign && input.args.campaign.external_id)
+    || (input.campaign && input.campaign.external_ids && input.campaign.external_ids.campaign);
+}
+
+// The one channel this operation consumes. The projection carries exactly that channel and no other, so a
+// person who arrives without it is a call that no later attempt could accept either.
+function channelOf(contact, name) {
+  for (const channel of contact.channels) {
+    if (channel.channel === name) {
+      return channel;
+    }
+  }
+
+  throw host.fail({
+    class: "validation",
+    code: "invalid_channel_value",
+    message: "The contact carries no " + name + " channel.",
+  });
+}
+
+// The precondition every write shares: the provider's own contact must exist, worked by the pin when there is
+// one and created from the channel value only when there is not.
+function ensureContact(context, input, channel) {
+  const contact = input.contacts[0];
+  const pinned = contact.external_ids && contact.external_ids.contact;
+  return cli(context, ["contact", "ensure"], compact({
+    channel: channel.channel,
+    value: channel.value,
+    external_id: pinned,
+  }));
+}
+
+// The recovery read the contract obliges: on any attempt after the first, the ledger under this key is read
+// before anything is written, so a lost answer costs a round trip rather than a second effect.
+function recover(context, key) {
+  if (!context.attempt_number || context.attempt_number < 2) {
+    return null;
+  }
+
+  const recorded = cli(context, ["ledger", "get"], { key: key });
+  return recorded.found ? recorded.entry : null;
+}
+
+function membershipResult(contactId, status, providerContact) {
+  return {
+    result: { items: [{ contact_id: contactId, status: status, external_ids: { contact: providerContact } }] },
+    external_ids: { contact: providerContact },
+  };
+}
+
+function enrollmentResult(contactId, status, providerContact, providerCampaign, live) {
+  return {
+    result: {
+      items: [{ contact_id: contactId, status: status, external_ids: { contact: providerContact } }],
+      campaign_live: live === true,
+    },
+    external_ids: { contact: providerContact, campaign: providerCampaign },
+  };
+}
+
+function campaignGet(input, context) {
+  const answer = cli(context, ["campaign", "get"], { external_id: campaignOf(input) });
+
+  return {
+    result: {
+      campaign: {
+        external_id: answer.id,
+        name: answer.name,
+        status: CAMPAIGN_STATUS[answer.status] || "other",
+        counts: answer.counts,
+      },
+      vendor: answer.vendor,
+    },
+    external_ids: { campaign: answer.id },
+  };
+}
+
+function listMembershipAdd(input, context) {
+  const contact = input.contacts[0];
+  const key = input.idempotency_key;
+
+  const already = recover(context, key);
+  if (already) {
+    return membershipResult(contact.id, "already_member", already.contact_id);
+  }
+
+  const channel = channelOf(contact, input.args.channel);
+  const ensured = ensureContact(context, input, channel);
+  const added = cli(context, ["list", "add"], {
+    list_id: input.args.list.external_id,
+    contact_id: ensured.id,
+    key: key,
+  });
+
+  return membershipResult(contact.id, added.status, ensured.id);
+}
+
+function campaignEnroll(input, context) {
+  const contact = input.contacts[0];
+  const key = input.idempotency_key;
+  const campaign = campaignOf(input);
+
+  const already = recover(context, key);
+  if (already) {
+    return enrollmentResult(contact.id, "already_enrolled", already.contact_id, campaign, already.live);
+  }
+
+  const channel = channelOf(contact, input.args.channel);
+  const ensured = ensureContact(context, input, channel);
+  const enrolled = cli(context, ["campaign", "enroll"], {
+    campaign_id: campaign,
+    contact_id: ensured.id,
+    key: key,
+    collision: input.args.collision,
+    start: input.args.start.position === "step" ? "step:" + input.args.start.step : "first_step",
+    first_touch: input.args.first_touch,
+  });
+
+  return enrollmentResult(contact.id, enrolled.status, ensured.id, campaign, enrolled.live);
+}
+
 export function invoke(operation, input, context) {
   if (operation.startsWith("fail.")) {
     throw host.fail(compact({
@@ -35,6 +245,15 @@ export function invoke(operation, input, context) {
   }
 
   switch (operation) {
+    case "campaign.get":
+      return campaignGet(input, context);
+
+    case "list_membership.add":
+      return listMembershipAdd(input, context);
+
+    case "campaign.enroll":
+      return campaignEnroll(input, context);
+
     case "echo.run":
       return { result: { echo: input } };
 

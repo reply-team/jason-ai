@@ -82,7 +82,9 @@ public sealed partial class ExecService(HostServices services)
         var environment = ArgumentReader.OptionalStringMap(engine, options, "env", Function, MaxEnv, MaxEnvValueBytes);
         foreach (var (name, _) in environment)
         {
-            if (!VariableName().IsMatch(name) || name.StartsWith(BaseEnvironment.ReservedPrefix, StringComparison.OrdinalIgnoreCase))
+            // Naming a variable is naming what runs: a loader or interpreter hook would let the plugin choose the
+            // code executed inside a program the user granted, which is not the permission the user gave.
+            if (!VariableName().IsMatch(name) || !BaseEnvironment.MayAPluginSet(name))
             {
                 throw ArgumentReader.TypeError(engine, $"{Function}: '{name}' is not a variable a plugin may set.");
             }
@@ -174,8 +176,13 @@ public sealed partial class ExecService(HostServices services)
                 }
             }
 
-            pumps.GetAwaiter().GetResult();
-            written.GetAwaiter().GetResult();
+            // The wait for the pipes is bounded by the kill grace whether the program was ended or exited of
+            // its own accord. A program may leave something running that inherited its standard handles, and
+            // the read end only reports the end of the stream once every writer has let go of it: waiting for
+            // that would hold this call open for as long as the helper lived, and a program exiting cleanly
+            // says nothing about what it left behind. What was captured by then is what the plugin is told.
+            Settle(pumps);
+            Settle(written);
 
             var exitCode = ExitCodeOf(process);
             var result = new JsonObject
@@ -224,6 +231,28 @@ public sealed partial class ExecService(HostServices services)
         {
             // Same story, seen from the other side of an already-closed pipe.
         }
+    }
+
+    /// <summary>
+    /// Waits for one of the pipe tasks, giving up after the kill grace. The program has ended by the time this
+    /// is called, so anything still holding its pipes open is something it left behind rather than the program
+    /// itself. An abandoned task is left to finish on its own — its pipe ends when the last writer does — and
+    /// its failure is observed there rather than thrown here, where there is no longer anyone to tell.
+    /// </summary>
+    private static void Settle(Task work)
+    {
+        Task.WhenAny(work, Task.Delay(KillGrace)).GetAwaiter().GetResult();
+        if (!work.IsCompleted)
+        {
+            work.ContinueWith(
+                static abandoned => _ = abandoned.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
+            return;
+        }
+
+        work.GetAwaiter().GetResult();
     }
 
     private static void TryKill(Process process)

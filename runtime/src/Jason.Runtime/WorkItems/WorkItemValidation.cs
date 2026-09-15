@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Domain;
 
@@ -16,10 +17,13 @@ namespace Jason.Runtime.WorkItems;
 /// </summary>
 internal static partial class WorkItemValidation
 {
+    /// <summary>Where an argument problem is reported: the reserved context key, with the failing JSON pointer appended.</summary>
+    private const string InputField = "context." + WorkItemService.InputKey;
+
     /// <summary>Role names are the roster's own spelling: lowercase with hyphens, as in <c>deliverability-specialist</c>.</summary>
     public static Regex RoleName { get; } = RoleNamePattern();
 
-    /// <summary>A vendor-neutral operation is dotted lowercase, as in <c>contacts.enroll</c>.</summary>
+    /// <summary>A vendor-neutral operation is dotted lowercase, as in <c>campaign.get</c>.</summary>
     public static Regex OperationName { get; } = OperationNamePattern();
 
     public static void ValidateCreate(WorkItemCreateRequest request, bool roleExists, ValidationErrors errors)
@@ -46,7 +50,11 @@ internal static partial class WorkItemValidation
         }
         else
         {
-            ValidateOperation(request.Operation, errors);
+            if (ValidateOperation(request.Operation, errors) is { } operation)
+            {
+                ValidateProviderOperation(operation, request.Context?[WorkItemService.InputKey], errors);
+            }
+
             if (request.Role is not null)
             {
                 errors.Add("role", "not_allowed", "role belongs to ai_role work; provider_op work names an operation.");
@@ -168,12 +176,91 @@ internal static partial class WorkItemValidation
         }
     }
 
-    private static void ValidateOperation(string? operation, ValidationErrors errors)
+    /// <summary>
+    /// What a published contract makes of a provider operation: the name must be one this build carries a
+    /// contract for, and the caller's arguments must satisfy what that contract declares. Reading it while the
+    /// item is being written is the whole point — otherwise a mistyped argument is discovered by the attempt
+    /// that failed on it, hours later and with a plugin already called.
+    /// </summary>
+    public static void ValidateProviderOperation(string operation, JsonNode? input, ValidationErrors errors)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        ArgumentNullException.ThrowIfNull(errors);
+
+        if (OperationCatalog.Find(operation) is not { } contract)
+        {
+            errors.Add(
+                "operation",
+                "unknown",
+                "operation must name an operation this runtime publishes a contract for: "
+                    + string.Join(", ", OperationCatalog.All.Select(published => published.Id)) + ".");
+            return;
+        }
+
+        ValidateInput(contract, input, errors);
+    }
+
+    /// <summary>
+    /// The arguments alone, for a patch that rewrites them. The operation itself is not patchable, so it is not
+    /// measured again — and an item created by a build that published a contract this one does not is left alone
+    /// here rather than stranded behind a field no patch can reach; the claim fails such an item closed anyway.
+    /// </summary>
+    public static void ValidateProviderInput(string operation, JsonNode? input, ValidationErrors errors)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        ArgumentNullException.ThrowIfNull(errors);
+
+        if (OperationCatalog.Find(operation) is { } contract)
+        {
+            ValidateInput(contract, input, errors);
+        }
+    }
+
+    private static void ValidateInput(OperationContract contract, JsonNode? input, ValidationErrors errors)
+    {
+        var declared = ArgumentSchema(contract);
+        if (input is null)
+        {
+            // An item that carries no arguments is composed with an empty `args` object at claim, so an operation
+            // that declares none required is already complete; one that declares any never will be.
+            var required = Required(declared);
+            if (required.Count > 0)
+            {
+                errors.Add(
+                    InputField,
+                    "required",
+                    $"{InputField} must carry the arguments this operation declares as required: {string.Join(", ", required)}.");
+            }
+
+            return;
+        }
+
+        foreach (var problem in SchemaValidator.Validate(input, declared))
+        {
+            errors.Add(InputField + problem.Pointer, "invalid", problem.Message);
+        }
+    }
+
+    /// <summary>
+    /// The schema of the caller's own arguments — the <c>args</c> property of the operation's input schema.
+    /// Everything else in that schema is what the runtime composes around them at claim: the contact, the
+    /// campaign and the idempotency key are the runtime's to write, never the caller's.
+    /// </summary>
+    private static JsonObject ArgumentSchema(OperationContract contract) =>
+        (contract.InputSchema["properties"] as JsonObject)?["args"] as JsonObject ?? [];
+
+    private static List<string> Required(JsonObject schema) =>
+        schema["required"] is JsonArray names
+            ? [.. names.Select(name => name?.GetValueKind() == JsonValueKind.String ? name.GetValue<string>() : null).OfType<string>()]
+            : [];
+
+    /// <summary>The operation as it will be stored when the name itself is well-formed, and null when it is not.</summary>
+    private static string? ValidateOperation(string? operation, ValidationErrors errors)
     {
         if (string.IsNullOrWhiteSpace(operation))
         {
             errors.Add("operation", "required", "operation is required for provider_op work.");
-            return;
+            return null;
         }
 
         var name = operation.Trim();
@@ -182,8 +269,11 @@ internal static partial class WorkItemValidation
             errors.Add(
                 "operation",
                 "invalid",
-                string.Create(CultureInfo.InvariantCulture, $"operation must be dotted lowercase words, such as contacts.enroll, and at most {WorkItemService.MaxOperationLength} characters."));
+                string.Create(CultureInfo.InvariantCulture, $"operation must be dotted lowercase words, such as campaign.get, and at most {WorkItemService.MaxOperationLength} characters."));
+            return null;
         }
+
+        return name;
     }
 
     [GeneratedRegex("^[a-z][a-z0-9-]{0,63}$")]
