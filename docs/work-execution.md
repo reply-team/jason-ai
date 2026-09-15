@@ -6,8 +6,9 @@ what to start, what an executor is handed when it is launched, and how it report
 This document is the contract for anyone writing an agent host against Jason. The launch envelope and
 the executor operations are public surface; the rest explains the rules that surround them.
 
-Provider operations are not routed in this version — a `provider_op` item fails visibly rather than
-being quietly skipped. See "Not here yet" at the end.
+Provider operations are not routed in this version — a `provider_op` item is held to its published
+operation contract when it is written, and then fails visibly at the claim rather than being quietly
+skipped. See "Not here yet" at the end.
 
 ## What a work item is
 
@@ -22,8 +23,10 @@ There are two kinds:
   `context` object that is the brief, and may declare a `result_format` describing what the answer
   should look like. The runtime never reads the meaning of either; it hands them to the role's entry
   command and records what comes back.
-- **`provider_op`** — work a provider performs. It names an `operation` (`contacts.enroll`, …).
-  Nothing routes these yet.
+- **`provider_op`** — work a provider performs. It names an `operation` — one of the canonical
+  operations this build publishes a contract for (`campaign.get`, `list_membership.add`,
+  `campaign.enroll`) — and carries that operation's arguments under `input`, the one reserved key of
+  the context. Nothing routes these yet.
 
 Everything else on an item is scheduling, not meaning: `priority`, `not_before`, `due_at`, and the
 three per-item overrides `timeout_seconds`, `heartbeat_seconds` and `max_attempts`.
@@ -31,6 +34,26 @@ three per-item overrides `timeout_seconds`, `heartbeat_seconds` and `max_attempt
 An **attempt** is one try at a work item. It records the context exactly as it stood when the work was
 claimed, how it was launched, when it started, when it was last heard from, and how it ended. The
 attempt's public id (`att_…`) is the fencing token an executor must present to report anything.
+
+### What a provider operation is held to when it is written
+
+The canonical operations are published as one machine-readable document each, under
+[docs/contracts/](contracts/README.md), and the runtime enforces the very documents published there.
+A `provider_op` item is measured against its operation's contract when it is created, and again
+whenever a patch rewrites its arguments — so a wrong argument is a refused request rather than an
+attempt that failed on it much later, with a provider already called. `workitem.create` and
+`workitem.update` answer `validation_failed` with one detail per problem:
+
+| Field | Code | When |
+|---|---|---|
+| `operation` | `unknown` | the name is well formed, but this build publishes no contract for it. The message names the operations it does publish |
+| `context.input` | `required` | the operation declares required arguments and the item carries none. An absent key and a JSON `null` read alike — neither is an argument |
+| `context.input<pointer>` | `invalid` | the arguments do not satisfy the operation's own schema, one detail per failure with the JSON pointer of the offending place (`context.input/channel`), all of them reported at once |
+
+`workitem.update` re-reads the arguments only when the patch names the reserved key — `set` writing
+`input`, or `unset` naming it — and measures them against the item's **own** operation, which is not
+patchable. An `ai_role` item is untouched by all of this: its context is a brief, and nothing in the
+runtime reads the meaning of a brief.
 
 ## Lifecycle
 
@@ -291,9 +314,11 @@ decide soon enough.
 
 - **Provider operations.** `provider_op` items fail with `no_route`. The mechanism that will run them
   already exists and is documented in [docs/plugins.md](plugins.md): validated plugin packages, an
-  atomically reloaded registry, and a plugin host that runs one invocation in its own process.
-  Routing an item to a plugin, the binding it is given and the pre-flight check at claim arrive with
-  the next increment.
+  atomically reloaded registry, and a plugin host that runs one invocation in its own process. What
+  each operation means, and what its arguments must look like, is published under
+  [docs/contracts/](contracts/README.md) and enforced when an item is written. Routing an item to a
+  plugin, composing the input that reaches one, the binding it is given and the pre-flight check at
+  claim arrive with the next increment.
 - **Approvals.** Nothing pauses for a human decision yet.
 - **Execution profiles.** `execution_profile` is recorded verbatim as an opaque string; nothing
   resolves it.

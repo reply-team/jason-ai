@@ -59,6 +59,15 @@ covered here.
   free handler slots, one per campaign per scan. The launch envelope goes to the child on stdin;
   nothing goes on argv, and the capability token never reaches a child's environment, a
   work-directory file or an attempt row (redacted). `docs/work-execution.md` is the contract.
+- Canonical operations: a contract is data, not code. One JSON document per operation lives under
+  `docs/contracts/operations/` and is embedded into `Jason.Contracts` as a resource, so the file a
+  plugin author reads is the file the runtime enforces — never write a second copy of a rule that
+  document already states. Schemas are the restricted JSON Schema dialect `SchemaValidator`
+  publishes; a keyword outside that vocabulary is refused rather than ignored. `context.input` is the
+  reserved work-item context key carrying an operation's arguments: it is validated at
+  `workitem.create`, and again at `workitem.update` whenever a patch names the key. The fixtures
+  under `docs/contracts/fixtures/` are executed by tests, so a document and the code cannot drift
+  apart. Nothing routes a work item to a plugin yet. `docs/contracts/README.md` is the contract.
 - Plugins: a package is `~/.jason/plugins/<id>/` with `plugin.yaml`, `main.js` and optional modules;
   the directory name is the id. The manifest is validated against one fixed vocabulary of problem
   codes — package problems reject the whole reload and keep the previous snapshot, the four

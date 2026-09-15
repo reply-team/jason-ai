@@ -20,5 +20,9 @@ manifest rule and its problem code, the Host SDK with every limit, capabilities 
 invocation protocol, and how to test a package locally. The design behind it is in
 [docs/architecture.md](../docs/architecture.md).
 
+**What to implement** is §7 of that guide, "Implementing a canonical operation": the operations
+themselves are published under [docs/contracts/](../docs/contracts/README.md), one document each,
+and every one of them ends with the `conformance` list a conforming plugin has to demonstrate.
+
 `runtime/tests/fixtures/plugins/fake-provider/` is a complete, valid package that exercises every SDK
 function. It is a **test fixture**, not a marketplace plugin — copy its shape, not its manifest.

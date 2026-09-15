@@ -10,6 +10,15 @@ reading — there is no second copy to drift. The `.md` page beside it explains 
 generated block inside that page is rendered from the JSON by a test. **Prose explains; the generated block
 governs, and the JSON governs the block.**
 
+**What runs today.** The documents are published and embedded, and the runtime holds a `provider_op`
+work item to the one it names: an operation no contract is published for is refused at
+`workitem.create`, and the arguments the item carries under `context.input` are measured against that
+operation's argument schema — there, and again whenever a patch rewrites them. Nothing routes a work
+item to a plugin yet, so the composed input, the check on a plugin's answer and the repeat rule below
+are the contract a plugin is written **against** rather than something the runtime performs; routing
+arrives with the next increment. [`docs/plugins.md`](../plugins.md) §7 is the same material from the
+plugin author's side, with a worked example.
+
 ```
 docs/contracts/
   README.md                        this page
@@ -117,7 +126,8 @@ lists.
   bumps the operation's version *and* the family version. A plugin then declares `[1, 2]` to serve both.
 
 A routed plugin whose family versions do not contain the operation's version is refused with
-`contract_incompatible`. Compatibility windows and deprecation policy are not settled yet and are deliberately not
+`contract_incompatible` — a check that arrives with routing, like everything else that calls a plugin.
+Compatibility windows and deprecation policy are not settled yet and are deliberately not
 implied here.
 
 ## Running the fixtures

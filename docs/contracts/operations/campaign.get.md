@@ -8,7 +8,8 @@ Where the two seem to differ, the document is right and this page is a bug.
 "Show me this campaign": the settings, the state and the count of people in each state, as the provider holds them.
 It is the only read among the three operations this version publishes, and it is the operation that **links** a
 Jason campaign to the provider's own — the first successful call returns the provider's identifier, the runtime
-pins it, and every later operation on that campaign works by the pin rather than by a name anybody typed twice.
+will pin it, and every later operation on that campaign works by the pin rather than by a name anybody typed
+twice.
 
 Because it reads, it changes nothing, it costs nothing and it needs no idempotency key. It is the one operation in
 this version whose answer may simply be asked for again when an attempt ends without one.
