@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 
 namespace Jason.Contracts.Plugins;
@@ -27,6 +28,11 @@ public sealed record PluginContractsDto(IReadOnlyList<int> Protocol, IReadOnlyLi
 
 public sealed record PluginLimitsDto(int TimeoutMs, int MemoryMb);
 
+/// <summary>
+/// One plugin as the registry answers for it. <c>BindingSchema</c> is the schema a route to this plugin must
+/// satisfy, exactly as the manifest declared it, so an operator can see what a route has to carry before writing
+/// one; it is null when the plugin asks a route for nothing.
+/// </summary>
 public sealed record PluginDto(
     string Id,
     string Version,
@@ -41,6 +47,7 @@ public sealed record PluginDto(
     PluginEntry Entry,
     PluginCapabilitiesDto Capabilities,
     PluginLimitsDto Limits,
+    JsonObject? BindingSchema,
     PluginStatus Status,
     IReadOnlyList<PluginProblemDto> Problems);
 

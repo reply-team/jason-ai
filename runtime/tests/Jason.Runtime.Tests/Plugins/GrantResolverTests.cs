@@ -128,5 +128,6 @@ public class GrantResolverTests
         ["echo.run"],
         new PluginEntry("main.js", "invoke"),
         capabilities,
-        new ManifestLimits(null, null));
+        new ManifestLimits(null, null),
+        Binding: null);
 }

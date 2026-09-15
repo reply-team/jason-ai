@@ -92,6 +92,12 @@ capabilities:                    # every section optional; absent means "not req
 limits:                          # optional; asks, never raises
   timeout_ms: 20000
   memory_mb: 64
+binding:                         # optional; a schema, in the published dialect, that a route must satisfy
+  type: object
+  additionalProperties: false
+  required: [workspace]
+  properties:
+    workspace: { type: string }
 ```
 
 | Field | Rule | Problem code |
@@ -118,6 +124,16 @@ limits:                          # optional; asks, never raises
 | a variable named `JASON_…` | never; the prefix is reserved for the runtime | `variable_reserved` |
 | `limits.timeout_ms` | 1000 .. `Plugins:Limits:MaxTimeoutMs` (3 600 000 by default) | `field_invalid` |
 | `limits.memory_mb` | 16 .. `Plugins:Limits:MaxMemoryMb` (512 by default) | `field_invalid` |
+| `binding` | optional; a schema of `type: object` in the dialect of `docs/contracts/`, at most 64 KiB. A problem inside it is located as `binding#<json pointer>` | `field_invalid` |
+| a field a `binding` declares, at any depth | never named like a credential — any of `token`, `secret`, `password`, `passwd`, `api_key`, `apikey`, `credential`, `private_key`, `authorization`, `bearer`, `cookie`, matched case-insensitively anywhere in the name | `binding_secret_like` |
+
+`binding` says what an installation has to tell this plugin before it can act — which account, which
+workspace, which mailbox. It never carries the credential: the plugin reaches that through the
+environment variables the user granted it, and a binding is written and read by the people who
+operate the installation, so a field named like a secret is refused rather than filled in. What the
+runtime does with the schema — checking a route against it — arrives with routing; a manifest that
+declares one is read and shown by `plugin.list` today. The key is optional and additive, so
+`manifest_version` stays `1`.
 
 An invocation's effective timeout and memory are `min(what the manifest asks for, the installation's
 ceiling)`, and a caller's own budget may lower the timeout further, never raise it. A manifest with

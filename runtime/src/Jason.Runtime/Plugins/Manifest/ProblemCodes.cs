@@ -26,6 +26,13 @@ public static class ProblemCodes
     public const string EntryModuleOutsidePackage = "entry_module_outside_package";
     public const string EntryFunctionInvalid = "entry_function_invalid";
 
+    /// <summary>
+    /// The binding schema declares a field named like a credential. A binding names which identity the plugin
+    /// should act as; the credential itself never travels in it, so a field that invites one is refused here
+    /// rather than after somebody has already pasted a key into a route.
+    /// </summary>
+    public const string BindingSecretLike = "binding_secret_like";
+
     /// <summary>Environmental: nothing on the search path answers to a declared executable's name.</summary>
     public const string ExecutableMissing = "executable_missing";
 

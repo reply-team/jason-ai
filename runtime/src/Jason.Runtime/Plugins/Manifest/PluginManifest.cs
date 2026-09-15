@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Plugins;
 
 namespace Jason.Runtime.Plugins.Manifest;
@@ -22,7 +23,11 @@ public sealed record ManifestContracts(IReadOnlyList<int> Protocol, IReadOnlyLis
 /// <summary>What the plugin asks its invocations to run under; null means "whatever the installation decides".</summary>
 public sealed record ManifestLimits(int? TimeoutMs, int? MemoryMb);
 
-/// <summary>A <c>plugin.yaml</c> that passed every rule, as the rest of the runtime reads it.</summary>
+/// <summary>
+/// A <c>plugin.yaml</c> that passed every rule, as the rest of the runtime reads it. <c>Binding</c> is the schema
+/// a route to this plugin must satisfy — what the plugin needs to know about the installation before it can act,
+/// such as which account to work in — and null when the plugin asks a route for nothing.
+/// </summary>
 public sealed record PluginManifest(
     string Id,
     string Version,
@@ -34,7 +39,8 @@ public sealed record PluginManifest(
     IReadOnlyList<string> Operations,
     PluginEntry Entry,
     CapabilityRequests Capabilities,
-    ManifestLimits Limits);
+    ManifestLimits Limits,
+    JsonObject? Binding);
 
 /// <summary>The ceilings of this installation, which a manifest may approach but never raise.</summary>
 public sealed record ManifestBounds(int MaxTimeoutMs, int MaxMemoryMb);

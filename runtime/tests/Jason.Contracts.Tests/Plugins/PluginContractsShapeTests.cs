@@ -140,6 +140,7 @@ public class PluginContractsShapeTests
                         new ListCapabilityDto(["api.example.test"], []),
                         null),
                     new PluginLimitsDto(60_000, 64),
+                    new JsonObject { ["type"] = "object" },
                     PluginStatus.Unavailable,
                     [new PluginProblemDto("executable_missing", "plugin.yaml#capabilities.exec.executables[0]", "reply was not found")])
             ],

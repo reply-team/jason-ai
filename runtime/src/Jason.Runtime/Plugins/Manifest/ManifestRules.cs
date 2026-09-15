@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 
 namespace Jason.Runtime.Plugins.Manifest;
@@ -23,8 +24,11 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
     private static readonly string[] TopLevelFields =
     [
         "manifest_version", "id", "version", "kind", "name", "description", "homepage",
-        "contracts", "operations", "entry", "capabilities", "limits",
+        "contracts", "operations", "entry", "capabilities", "limits", "binding",
     ];
+
+    /// <summary>Where a schema problem is, spelled as the document and a pointer into it.</summary>
+    private const string BindingField = "binding";
 
     private readonly List<ManifestProblem> _problems = [];
 
@@ -53,8 +57,118 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
             ReadOperations(kind),
             ReadEntry(),
             ReadCapabilities(),
-            ReadLimits());
+            ReadLimits(),
+            ReadBinding());
     }
+
+    /// <summary>
+    /// The schema a route to this plugin must satisfy. It is optional, and adds nothing an older runtime would
+    /// have to understand, so the manifest version stays where it is. The schema is held to the published dialect
+    /// before anything will ever apply it: a keyword this runtime would silently ignore is a rule that does not
+    /// run, and a pattern that cannot run in linear time is a stranger's chance to stall a reload.
+    /// </summary>
+    private JsonObject? ReadBinding()
+    {
+        if (!Has(root, BindingField))
+        {
+            return null;
+        }
+
+        if (root[BindingField] is not JsonObject binding)
+        {
+            Add(ProblemCodes.FieldInvalid, BindingField, "binding is a schema saying what a route to this plugin must carry.");
+            return null;
+        }
+
+        var dialect = SchemaValidator.CheckDialect(binding);
+        foreach (var problem in dialect)
+        {
+            Add(ProblemCodes.FieldInvalid, Locate(problem.Pointer), problem.Message);
+        }
+
+        // A route carries a mapping of named fields, so a schema of any other type could never describe one. The
+        // check waits for the dialect, which would otherwise report the same malformed `type` twice.
+        if (dialect.Count == 0 && binding["type"]?.GetValue<string>() != "object")
+        {
+            Add(ProblemCodes.FieldInvalid, BindingField, "binding is a schema of `type: object`, because a route carries a mapping of named fields.");
+        }
+
+        RefuseSecretLikeNames(binding, string.Empty, 0);
+        return binding;
+    }
+
+    /// <summary>
+    /// Refuses a declared field whose name reads like a credential, wherever in the schema it is declared: under
+    /// <c>properties</c> at any depth, or named by <c>required</c> with no schema of its own. Both say the same
+    /// thing to whoever writes the route — put a value of this name here — and that is the thing being refused.
+    /// </summary>
+    private void RefuseSecretLikeNames(JsonNode? node, string pointer, int depth)
+    {
+        if (depth > SchemaValidator.MaxDepth)
+        {
+            return;
+        }
+
+        switch (node)
+        {
+            case JsonObject map:
+                foreach (var (key, value) in map)
+                {
+                    var at = Pointer(pointer, key);
+                    if (key == "properties" && value is JsonObject declared)
+                    {
+                        foreach (var (name, _) in declared)
+                        {
+                            RefuseSecretLikeName(name, Pointer(at, name));
+                        }
+                    }
+                    else if (key == "required" && value is JsonArray names)
+                    {
+                        for (var index = 0; index < names.Count; index++)
+                        {
+                            if (TryText(names[index], out var name))
+                            {
+                                RefuseSecretLikeName(name, Pointer(at, index.ToString(CultureInfo.InvariantCulture)));
+                            }
+                        }
+                    }
+
+                    RefuseSecretLikeNames(value, at, depth + 1);
+                }
+
+                break;
+
+            case JsonArray branches:
+                for (var index = 0; index < branches.Count; index++)
+                {
+                    RefuseSecretLikeNames(branches[index], Pointer(pointer, index.ToString(CultureInfo.InvariantCulture)), depth + 1);
+                }
+
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    private void RefuseSecretLikeName(string name, string pointer)
+    {
+        if (!SecretLikeNames.Matches(name))
+        {
+            return;
+        }
+
+        Add(
+            ProblemCodes.BindingSecretLike,
+            Locate(pointer),
+            $"binding declares '{name}'. A binding selects an identity the plugin's own credential store already holds; it never carries the credential itself, so no field of a binding may be named like one.");
+    }
+
+    /// <summary>The manifest field and a pointer into the schema under it, the way a YAML error names line and column.</summary>
+    private static string Locate(string pointer) => pointer.Length == 0 ? BindingField : BindingField + "#" + pointer;
+
+    private static string Pointer(string parent, string segment) =>
+        parent + "/" + segment.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
 
     private void ReadManifestVersion()
     {

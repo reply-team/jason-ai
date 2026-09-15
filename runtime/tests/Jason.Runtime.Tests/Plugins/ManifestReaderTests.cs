@@ -128,6 +128,14 @@ public class ManifestReaderTests
     [InlineData("limits:\n  memory_mb: 2048\n", "field_invalid", "limits.memory_mb")]
     [InlineData("limits:\n  timeout_ms: 5000\n  memory_mb: 128\n", null, null)]
 
+    // The binding schema: optional, additive, and held to the published dialect.
+    [InlineData("binding: workspace\n", "field_invalid", "binding")]
+    [InlineData("binding:\n  type: string\n", "field_invalid", "binding")]
+    [InlineData("binding:\n  type: object\n  unevaluatedProperties: false\n", "field_invalid", "binding#/unevaluatedProperties")]
+    [InlineData("binding:\n  type: object\n  properties:\n    workspace:\n      type: string\n      pattern: \"(?<=a)b\"\n", "field_invalid", "binding#/properties/workspace/pattern")]
+    [InlineData("binding:\n  type: object\n  properties:\n    api_token:\n      type: string\n", "binding_secret_like", "binding#/properties/api_token")]
+    [InlineData("binding:\n  type: object\n  properties:\n    workspace:\n      type: string\n", null, null)]
+
     // Typos are the common failure, so an unknown key is an error wherever it sits.
     [InlineData("capabilites:\n  env:\n    variables: [TOKEN]\n", "unknown_field", "capabilites")]
     [InlineData("entry:\n  modules: main.js\n", "unknown_field", "entry.modules")]
@@ -147,6 +155,88 @@ public class ManifestReaderTests
         Assert.Null(result.Manifest);
         var problem = Assert.Single(result.Problems, p => p.Code == code && p.Path == path);
         Assert.NotEmpty(problem.Message);
+    }
+
+    [Fact]
+    public void A_binding_schema_says_what_a_route_to_this_plugin_must_carry()
+    {
+        var result = Read(Merge("""
+            binding:
+              type: object
+              additionalProperties: false
+              required: [workspace]
+              properties:
+                workspace:
+                  type: string
+                  minLength: 1
+
+            """));
+
+        Assert.True(result.IsValid, string.Join("; ", result.Problems.Select(p => $"{p.Path}: {p.Code}")));
+        var binding = result.Manifest!.Binding;
+        Assert.NotNull(binding);
+        Assert.Equal("object", binding["type"]!.GetValue<string>());
+        Assert.Equal("string", binding["properties"]!["workspace"]!["type"]!.GetValue<string>());
+
+        // The key is optional and adds nothing an older runtime has to understand, so the version does not move.
+        Assert.Equal(1, PluginProtocol.ManifestVersion);
+    }
+
+    [Fact]
+    public void A_manifest_without_a_binding_asks_a_route_for_nothing()
+    {
+        var result = Read(TestPlugins.Manifest("fake"));
+
+        Assert.True(result.IsValid);
+        Assert.Null(result.Manifest!.Binding);
+    }
+
+    [Theory]
+    [InlineData("access_token")]
+    [InlineData("client_secret")]
+    [InlineData("Password")]
+    [InlineData("passwd")]
+    [InlineData("api_key")]
+    [InlineData("apikey")]
+    [InlineData("credentials")]
+    [InlineData("private_key")]
+    [InlineData("authorization")]
+    [InlineData("bearer_jwt")]
+    [InlineData("cookie")]
+    public void A_binding_may_not_declare_a_property_whose_name_reads_like_a_credential(string property)
+    {
+        var result = Read(Merge($"binding:\n  type: object\n  properties:\n    {property}:\n      type: string\n"));
+
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal("binding_secret_like", problem.Code);
+        Assert.Equal($"binding#/properties/{property}", problem.Path);
+        Assert.Contains(property, problem.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_credential_rule_reaches_every_depth_and_a_name_that_is_only_required()
+    {
+        // A nested definition and a bare `required` entry are both ways of saying a route must carry a field,
+        // so neither is a place the rule can be walked around.
+        var result = Read(Merge("""
+            binding:
+              type: object
+              properties:
+                account:
+                  $ref: "#/$defs/account"
+              required: [api_key]
+              $defs:
+                account:
+                  type: object
+                  properties:
+                    secret_name:
+                      type: string
+
+            """));
+
+        Assert.Equal(
+            ["binding#/$defs/account/properties/secret_name", "binding#/required/0"],
+            result.Problems.Where(p => p.Code == "binding_secret_like").Select(p => p.Path).Order(StringComparer.Ordinal));
     }
 
     [Fact]
