@@ -582,7 +582,7 @@ public static class SchemaValidator
         {
             // A bound that is a number all the same, only not one the comparison can hold, is neither the wrong
             // kind of value nor something to pass over: the rule it states cannot run, and that is what is said.
-            problems.Add(IsNumber(argument) ? OutOfRange(pointer) : Malformed(pointer, keyword, Expects(keyword)));
+            problems.Add(IsNumber(argument) ? NotComparable(pointer) : Malformed(pointer, keyword, Expects(keyword)));
             return;
         }
 
@@ -599,7 +599,7 @@ public static class SchemaValidator
             // came to accept 1e40.
             if (IsNumber(value))
             {
-                problems.Add(OutOfRange(pointer));
+                problems.Add(NotComparable(pointer));
             }
 
             return;
@@ -900,7 +900,7 @@ public static class SchemaValidator
                 case "minimum" or "maximum" or "exclusiveMinimum" or "exclusiveMaximum":
                     if (!TryNumber(argument, out _))
                     {
-                        problems.Add(IsNumber(argument) ? OutOfRange(at) : Malformed(at, keyword, Expects(keyword)));
+                        problems.Add(IsNumber(argument) ? NotComparable(at) : Malformed(at, keyword, Expects(keyword)));
                     }
 
                     break;
@@ -908,7 +908,7 @@ public static class SchemaValidator
                 case "multipleOf":
                     if (!TryNumber(argument, out var divisor))
                     {
-                        problems.Add(IsNumber(argument) ? OutOfRange(at) : Malformed(at, keyword, Expects(keyword)));
+                        problems.Add(IsNumber(argument) ? NotComparable(at) : Malformed(at, keyword, Expects(keyword)));
                     }
                     else if (divisor <= 0)
                     {
@@ -1106,13 +1106,14 @@ public static class SchemaValidator
         new(pointer, "duplicate_property", "An object here writes the same property twice, so which of the two it means is not decidable.");
 
     /// <summary>
-    /// A number the dialect cannot take part in a comparison with. Every numeric rule here runs in decimal —
-    /// chosen so that a money-like value means what it says — and a number outside that range leaves the rule
-    /// unable to run at all. Saying so is the point: a rule that quietly did not run reads exactly like one that
-    /// ran and was satisfied.
+    /// A number no comparison here could run against. Every numeric rule runs in decimal — chosen so that a
+    /// money-like value means what it says — and a number a decimal cannot hold exactly leaves the rule unable to
+    /// run at all. Saying so is the point: a rule that quietly did not run reads exactly like one that ran and was
+    /// satisfied. The code says "not comparable" rather than "out of range" deliberately: the range a caller will
+    /// think of is the one the schema set, and that is what <c>minimum</c> and <c>maximum</c> already report.
     /// </summary>
-    private static SchemaProblem OutOfRange(string pointer) =>
-        new(pointer, "number_out_of_range", "A number here is compared as a decimal, and this one lies outside the range a decimal holds.");
+    private static SchemaProblem NotComparable(string pointer) =>
+        new(pointer, "number_not_comparable", "A number here has to be compared as a decimal, and this one cannot be held as one exactly, so no comparison ran against it.");
 
     private static string Expects(string keyword) => keyword == "multipleOf" ? "a number greater than zero" : "a number";
 

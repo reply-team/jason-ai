@@ -198,13 +198,13 @@ public class SchemaValidatorTests
     [Fact]
     public void A_number_too_small_for_a_decimal_is_not_refused_for_failing_to_exceed_zero()
     {
-        Assert.Equal("number_out_of_range", Refuses("""{"exclusiveMinimum":0}""", "1e-40").Reason);
+        Assert.Equal("number_not_comparable", Refuses("""{"exclusiveMinimum":0}""", "1e-40").Reason);
 
         // Every rule that could not run says so, rather than one of them answering for all of them.
         var problems = SchemaValidator.Validate(JsonNode.Parse("-1e-40"), Schema("""{"type":"number","minimum":0,"maximum":1}"""));
 
         Assert.Equal(2, problems.Count);
-        Assert.All(problems, problem => Assert.Equal("number_out_of_range", problem.Reason));
+        Assert.All(problems, problem => Assert.Equal("number_not_comparable", problem.Reason));
     }
 
     [Fact]
@@ -216,7 +216,7 @@ public class SchemaValidatorTests
 
         // Read as zero it is not greater than zero, so the old answer was "multipleOf must be a number greater
         // than zero" about a number that is exactly that.
-        Assert.Equal("number_out_of_range", declared.Reason);
+        Assert.Equal("number_not_comparable", declared.Reason);
         Assert.Equal("/multipleOf", declared.Pointer);
     }
 
@@ -238,8 +238,8 @@ public class SchemaValidatorTests
         const string schema = """{"type":"number","maximum":100}""";
         Accepts(schema, "100");
 
-        Assert.Equal("number_out_of_range", Refuses(schema, "1e40").Reason);
-        Assert.Equal("number_out_of_range", Refuses(schema, "-1e40").Reason);
+        Assert.Equal("number_not_comparable", Refuses(schema, "1e40").Reason);
+        Assert.Equal("number_not_comparable", Refuses(schema, "-1e40").Reason);
     }
 
     [Fact]
@@ -249,9 +249,9 @@ public class SchemaValidatorTests
 
         var declared = Assert.Single(SchemaValidator.CheckDialect(Schema(schema)));
 
-        Assert.Equal("number_out_of_range", declared.Reason);
+        Assert.Equal("number_not_comparable", declared.Reason);
         Assert.Equal("/maximum", declared.Pointer);
-        Assert.Equal("number_out_of_range", Refuses(schema, "1").Reason);
+        Assert.Equal("number_not_comparable", Refuses(schema, "1").Reason);
     }
 
     [Fact]

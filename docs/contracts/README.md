@@ -101,15 +101,20 @@ never enforced).
 fixed codes: `type`, `required`, `enum`, `const`, `min_length`, `max_length`, `pattern`, `minimum`, `maximum`,
 `exclusive_minimum`, `exclusive_maximum`, `multiple_of`, `min_items`, `max_items`, `unique_items`,
 `additional_properties`, `any_of`, `all_of`, `not`, `format`, `schema_keyword_unknown`, `schema_ref_unresolved`,
-`duplicate_property`, `number_out_of_range`, `schema_too_deep`, `schema_cyclic`, `schema_pattern_invalid`,
+`duplicate_property`, `number_not_comparable`, `schema_too_deep`, `schema_cyclic`, `schema_pattern_invalid`,
 `schema_too_large`, `schema_number_not_finite`.
 
-Three details worth knowing before you write a schema:
+Four details worth knowing before you write a schema:
 
 - **Combinators report once.** `anyOf`, `allOf` and `not` report a single problem at their own pointer rather than
   every branch's problems; the message names what the first failing branch objected to. Listing every road not
   taken buries the one thing a caller has to change.
 - **An explicit `null` satisfies `required`.** Saying null is saying something; only an absent property is missing.
+- **Numbers are compared as decimals**, so that a money-like value means what it says. A number no decimal can hold
+  exactly — `1e40`, `1e-40` — is refused as `number_not_comparable`, whether it is the bound or the value, because
+  the rule could not run at all. That is not the same as `minimum` or `maximum`, which say a rule ran and the value
+  was outside the range the schema set. Whether a number is a whole one, for `type: integer`, is not a comparison
+  and is decided for any number, however large.
 - **The same code validates untrusted schemas**, because a plugin's `binding` schema comes from its manifest.
   Patterns compile without backtracking and run under a match timeout, which rules out lookaround and
   backreferences; `$ref` resolves only inside its own document and never in a loop; nesting stops at 32 levels; a

@@ -80,7 +80,7 @@ public class GeneratedBlockTests
             ["schema_number_not_finite"] = () =>
                 SchemaValidator.CheckDialect(new JsonObject { ["maximum"] = JsonValue.Create(double.PositiveInfinity) }),
             ["duplicate_property"] = () => Check("""{"type":"object","properties":{"a":{},"a":{}}}"""),
-            ["number_out_of_range"] = () => Refuse("""{"type":"number","maximum":100}""", "1e40"),
+            ["number_not_comparable"] = () => Refuse("""{"type":"number","maximum":100}""", "1e40"),
         };
 
     private static readonly Regex Aside = new(@"\([^)]*\)", RegexOptions.None, TimeSpan.FromSeconds(5));
