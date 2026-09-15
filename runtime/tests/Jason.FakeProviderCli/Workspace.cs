@@ -31,6 +31,7 @@ internal static class Workspace
     private const string LedgerFile = "ledger.json";
     private const string SuppressionFile = "suppression.json";
     private const string InstructionsFile = "instructions.json";
+    private const string CallsFile = "calls.json";
 
     /// <summary>Where this provider's identifiers start; the number is meaningless, its stability is not.</summary>
     private const int FirstContactNumber = 1001;
@@ -51,6 +52,17 @@ internal static class Workspace
         }
 
         var verb = string.Join(' ', subcommand);
+        if (!Known(verb))
+        {
+            await Console.Error.WriteLineAsync($"fake-cli: '{verb}' is not a workspace subcommand");
+            return Usage;
+        }
+
+        // Every call is recorded before it runs. What a plugin did is then a fact a test can read rather than
+        // something inferred from the state that happened to be left behind: an obligation to read before
+        // writing is invisible against a provider that would have answered the same either way.
+        RecordCall(root, verb, Text(request, "key"));
+
         switch (verb)
         {
             case "contact ensure":
@@ -65,14 +77,14 @@ internal static class Workspace
             case "campaign enroll":
                 return await EffectAsync(root, request, Enroll(root, request));
 
-            case "ledger get":
-                return await AnswerAsync(GetLedgerEntry(root, request));
-
             default:
-                await Console.Error.WriteLineAsync($"fake-cli: '{verb}' is not a workspace subcommand");
-                return Usage;
+                return await AnswerAsync(GetLedgerEntry(root, request));
         }
     }
+
+    /// <summary>The five subcommands this account answers; anything else is the caller's usage error.</summary>
+    private static bool Known(string verb) =>
+        verb is "contact ensure" or "list add" or "campaign get" or "campaign enroll" or "ledger get";
 
     // -------------------------------------------------------------------------------------------------------
     // The subcommands
@@ -338,6 +350,15 @@ internal static class Workspace
         {
             return null;
         }
+    }
+
+    /// <summary>The call log: one entry per subcommand, in the order the account was asked.</summary>
+    private static void RecordCall(string root, string verb, string key)
+    {
+        var file = Path.Combine(root, CallsFile);
+        var calls = File.Exists(file) ? JsonNode.Parse(File.ReadAllText(file))!.AsArray() : [];
+        calls.Add(new JsonObject { ["subcommand"] = verb, ["key"] = key });
+        File.WriteAllText(file, calls.ToJsonString(), new UTF8Encoding(false));
     }
 
     private static void Record(string root, string key, JsonObject entry)

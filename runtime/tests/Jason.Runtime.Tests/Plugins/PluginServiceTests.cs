@@ -63,7 +63,7 @@ public class PluginServiceTests
         Assert.Equal(["dotnet"], plugin.Capabilities.Exec.Granted);
         Assert.Equal(["localhost:5555", "127.0.0.1:5555"], plugin.Capabilities.Http!.Requested);
         Assert.Empty(plugin.Capabilities.Http.Granted);
-        Assert.Equal(["FAKE_TOKEN", "FAKE_OTHER"], plugin.Capabilities.Env!.Requested);
+        Assert.Equal(["FAKE_TOKEN", "FAKE_OTHER", "FAKE_CLI_DLL"], plugin.Capabilities.Env!.Requested);
         Assert.Equal(["FAKE_TOKEN"], plugin.Capabilities.Env.Granted);
 
         var listed = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, Ct);

@@ -45,7 +45,7 @@ public class ManifestReaderTests
         Assert.Equal("Fake provider", result.Manifest!.Name);
         Assert.Equal(["dotnet"], result.Manifest.Capabilities.Exec!.Executables.Select(e => e.Name));
         Assert.Equal(["localhost:5555", "127.0.0.1:5555"], result.Manifest.Capabilities.Http!.Hosts);
-        Assert.Equal(["FAKE_TOKEN", "FAKE_OTHER"], result.Manifest.Capabilities.Env!.Variables);
+        Assert.Equal(["FAKE_TOKEN", "FAKE_OTHER", "FAKE_CLI_DLL"], result.Manifest.Capabilities.Env!.Variables);
         Assert.Equal(20_000, result.Manifest.Limits.TimeoutMs);
         Assert.Equal(64, result.Manifest.Limits.MemoryMb);
     }

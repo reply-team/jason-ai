@@ -22,6 +22,7 @@ public sealed class TestWorkspace : IDisposable
     public const string LedgerFile = "ledger.json";
     public const string SuppressionFile = "suppression.json";
     public const string InstructionsFile = "instructions.json";
+    public const string CallsFile = "calls.json";
 
     public TestWorkspace()
     {
@@ -98,6 +99,13 @@ public sealed class TestWorkspace : IDisposable
 
     public IReadOnlyList<string> EnrollmentsIn(string campaignId) =>
         [.. (Campaigns[campaignId]?["enrollments"]?.AsArray() ?? []).Select(contact => contact!.GetValue<string>())];
+
+    /// <summary>
+    /// Every subcommand this account was asked for, in order. It is what makes an obligation to read before
+    /// writing testable: the state left behind cannot tell a plugin that checked from one that guessed right.
+    /// </summary>
+    public IReadOnlyList<string> Calls =>
+        [.. ReadArray(CallsFile).Select(call => call!["subcommand"]!.GetValue<string>())];
 
     /// <summary>How the caller asked for this person each time: <c>by_id</c> once a pin exists, never by address.</summary>
     public IReadOnlyList<string> AsksFor(string contactId) =>
