@@ -197,6 +197,11 @@ rejects the whole reload: the previous snapshot stays active, `plugin reload` an
 `plugin list` keeps showing the old snapshot with `"activated": false` on the root and the same
 problems under `last_reload`.
 
+At the first load there is no previous snapshot to keep, so the same rule empties the registry: one
+bad package leaves every other package unloaded until it is fixed, and the startup report names it
+with its problems rather than passing over it in silence. A set that loads is a set that was read
+whole — the alternative is a runtime that quietly runs with one plugin missing.
+
 **Environmental problems** — `executable_missing`, `executable_not_runnable`,
 `executable_incompatible`, `executable_version_check_failed` — are about the machine rather than the
 package. They make that one plugin `status: unavailable` with its problems listed, and change nothing
