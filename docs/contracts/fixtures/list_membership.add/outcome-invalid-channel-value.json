@@ -1,0 +1,21 @@
+{
+  "operation": "list_membership.add",
+  "version": 1,
+  "case": "the provider will not accept the address at all, which is the caller's input to fix rather than a retry",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "validation",
+      "code": "invalid_channel_value",
+      "message": "The provider rejected the address as unusable for the email channel.",
+      "details": { "channel": "email" },
+      "external_ids": null
+    },
+    "diagnostics": { "duration_ms": 130, "exec_calls": 1, "http_calls": 0, "log_lines": 1 }
+  },
+  "expect": { "status": "failed", "class": "validation", "retriable": false }
+}

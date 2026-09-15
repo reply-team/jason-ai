@@ -1,0 +1,21 @@
+{
+  "operation": "campaign.get",
+  "version": 1,
+  "case": "the answer never arrived; a read changes nothing, so this one may simply be asked again",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "ambiguous",
+      "code": "provider_answer_lost",
+      "message": "The request was sent and the connection closed before an answer came back.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": { "duration_ms": 30000, "exec_calls": 0, "http_calls": 1, "log_lines": 2 }
+  },
+  "expect": { "status": "failed", "class": "ambiguous", "retriable": true }
+}

@@ -1,0 +1,21 @@
+{
+  "operation": "list_membership.add",
+  "version": 1,
+  "case": "the write may already have taken effect; the next attempt is allowed only because the contract obliges a recovery read first",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "ambiguous",
+      "code": "provider_answer_lost",
+      "message": "The add was sent and the connection closed before an answer came back.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": { "duration_ms": 60000, "exec_calls": 1, "http_calls": 0, "log_lines": 3 }
+  },
+  "expect": { "status": "failed", "class": "ambiguous", "retriable": true }
+}

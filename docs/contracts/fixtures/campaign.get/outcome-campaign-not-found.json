@@ -1,0 +1,21 @@
+{
+  "operation": "campaign.get",
+  "version": 1,
+  "case": "the provider holds no campaign under that identifier, and never will",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "permanent",
+      "code": "campaign_not_found",
+      "message": "No campaign c_7714 exists in this account.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": { "duration_ms": 180, "exec_calls": 1, "http_calls": 0, "log_lines": 2 }
+  },
+  "expect": { "status": "failed", "class": "permanent", "retriable": false }
+}

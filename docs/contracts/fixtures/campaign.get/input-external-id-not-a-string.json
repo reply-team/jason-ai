@@ -1,0 +1,15 @@
+{
+  "operation": "campaign.get",
+  "version": 1,
+  "case": "the provider's identifier arrives as a number, which is not what a provider hands out",
+  "input": {
+    "args": { "campaign": { "external_id": 7714 } },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "draft",
+      "external_ids": {}
+    }
+  },
+  "expect": { "invalid": ["/args/campaign/external_id"] }
+}
