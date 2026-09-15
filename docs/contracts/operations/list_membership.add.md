@@ -26,7 +26,7 @@ exists**:
    Do not look the person up by address again — a pin exists precisely so that the answer stops depending on how
    the address is written.
 2. Otherwise create the contact from the value of the channel named by `args.channel`, and return the identifier
-   the provider gives you in `external_ids.contact`. The runtime pins it, and the next call takes path 1.
+   the provider gives you in `external_ids.contact`. The runtime will pin it, and the next call takes path 1.
 
 ## The input you receive
 

@@ -64,13 +64,14 @@ reports no counts" and "the provider reports zero" are different facts and a cal
 stays strict.
 
 Return the provider's campaign identifier in `external_ids.campaign`. That is what makes the link, and the runtime
-keeps it.
+will keep it.
 
 ## When it fails
 
-Use the codes the document declares. The class is what the runtime reads: `transient` may be repeated,
+Use the codes the document declares. The class is what the runtime will read: `transient` may be repeated,
 `permanent` and `validation` are final, and `ambiguous` says the provider may already have acted — which, for a
-read, costs nothing, so this operation allows the repeat.
+read, costs nothing, so this operation allows the repeat. That reading arrives with routing: no plugin's class
+reaches the runtime in this version, so until then the rule is what your own tests hold you to.
 
 ## The properties
 
