@@ -56,8 +56,9 @@ invocation, and recomputed by the child before it runs a line of JavaScript.
 
 ## 3. The manifest
 
-`plugin.yaml` is read as one YAML 1.2 document by the core schema: `yes` is the string "yes", `0644`
-is the string "0644". Anchors and aliases, a duplicate key, a second document in the file and nesting
+`plugin.yaml` is read as one YAML 1.2 document by the core schema: `yes` is the string "yes", and a
+leading zero means nothing — `0644` is the integer 644, while `0o644` is octal and `0x1a4` is
+hexadecimal. Anchors and aliases, a duplicate key, a second document in the file and nesting
 deeper than 32 levels are all refused as `yaml_invalid`. **Unknown keys are errors anywhere in the
 file** (`unknown_field`): a typo is the common failure, and forward compatibility arrives with a new
 `manifest_version`. Every rule is checked and every problem reported, so a file with three mistakes
@@ -300,10 +301,15 @@ name containing `/`, `\` or `:` — fails with `executable_not_allowed`.
 | `args` | at most 256 strings, at most 1 MiB together |
 | `stdin` | string of at most 1 MiB, written and then closed |
 | `timeout_ms` | 1 .. the invocation's `timeout_ms`, then clamped to what is left of the budget; default: what is left |
-| `env` | at most 32 entries, names `^[A-Za-z_][A-Za-z0-9_]*$`, never `JASON_*`, values at most 4096 bytes, for this child only |
+| `env` | at most 32 entries, names `^[A-Za-z_][A-Za-z0-9_]*$`, never `JASON_*` and never a loader or interpreter hook, values at most 4096 bytes, for this child only |
 
 The child's working directory is the invocation directory, and it inherits the plugin host's own
-environment — the base set below plus the granted variables — with `env` added on top. `stdout` and
+environment — the base set below plus the granted variables — with `env` added on top. A name that
+decides what a program loads is refused with a `TypeError` at the call: `LD_*`, `DYLD_*`, `COMPlus_*`,
+`CORECLR_*`, `DOTNET_STARTUP_HOOKS`, `DOTNET_ROOT`, `NODE_OPTIONS`, `NODE_PATH`, `PYTHONPATH`,
+`PYTHONSTARTUP`, `RUBYOPT`, `PERL5OPT`, `JAVA_TOOL_OPTIONS`, `CLASSPATH`, `PATH`, `PATHEXT`,
+`COMSPEC` and `SHELL` among them. Ordinary variables of the same runtimes — `NODE_ENV`,
+`DOTNET_NOLOGO`, `PYTHONUNBUFFERED` — are yours to set. `stdout` and
 `stderr` are captured up to `Plugins:Exec:OutputBytes` (4 MiB) each, the first bytes kept and the
 crossing flagged in `truncated`. On a timeout the whole process tree is killed and the call
 **returns** with `timed_out: true` rather than throwing — the plugin decides what that means, usually
@@ -593,6 +599,11 @@ through an argument array and never a shell; its HTTP is two methods to an exact
 redirects and no injected credentials; its environment is built from nothing and holds no `JASON_*`
 name; and memory, statements, recursion and wall-clock time are all bounded, with the whole process
 tree killed when the budget runs out.
+
+`env` on `host.exec` is a **trust decision** rather than a detail of the call: whatever it sets reaches
+a program you granted, so the loader and interpreter hooks — the variables that make an operating
+system, a runtime or an interpreter load somebody's code before the program's own first line — are
+refused. Without that, granting one program would quietly grant everything the plugin brought with it.
 
 What is **not** prevented: this is not a container, a virtual machine or a kernel-level isolation
 boundary — it is not a sandbox, and the documentation will not call it one. The plugin host runs

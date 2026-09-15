@@ -82,7 +82,9 @@ public sealed partial class ExecService(HostServices services)
         var environment = ArgumentReader.OptionalStringMap(engine, options, "env", Function, MaxEnv, MaxEnvValueBytes);
         foreach (var (name, _) in environment)
         {
-            if (!VariableName().IsMatch(name) || name.StartsWith(BaseEnvironment.ReservedPrefix, StringComparison.OrdinalIgnoreCase))
+            // Naming a variable is naming what runs: a loader or interpreter hook would let the plugin choose the
+            // code executed inside a program the user granted, which is not the permission the user gave.
+            if (!VariableName().IsMatch(name) || !BaseEnvironment.MayAPluginSet(name))
             {
                 throw ArgumentReader.TypeError(engine, $"{Function}: '{name}' is not a variable a plugin may set.");
             }

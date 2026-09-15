@@ -28,6 +28,46 @@ public class BaseEnvironmentTests
         Assert.False(built.ContainsKey("EXAMPLE_TOKEN"));
     }
 
+    [Theory]
+    [InlineData("LD_PRELOAD")]
+    [InlineData("ld_preload")]
+    [InlineData("LD_ANYTHING_AT_ALL")]
+    [InlineData("DYLD_INSERT_LIBRARIES")]
+    [InlineData("COMPlus_ETWEnabled")]
+    [InlineData("CORECLR_PROFILER")]
+    [InlineData("DOTNET_STARTUP_HOOKS")]
+    [InlineData("DOTNET_ROOT")]
+    [InlineData("NODE_OPTIONS")]
+    [InlineData("PYTHONPATH")]
+    [InlineData("PERL5OPT")]
+    [InlineData("JAVA_TOOL_OPTIONS")]
+    [InlineData("CLASSPATH")]
+    [InlineData("PATH")]
+    [InlineData("SHELL")]
+    [InlineData("JASON_DATA_DIR")]
+    public void A_name_that_decides_what_a_program_loads_is_not_a_plugin_s_to_set(string name) =>
+        Assert.False(BaseEnvironment.MayAPluginSet(name));
+
+    [Theory]
+    [InlineData("LANG")]
+    [InlineData("NODE_ENV")]
+    [InlineData("DOTNET_NOLOGO")]
+    [InlineData("PYTHONUNBUFFERED")]
+    [InlineData("EXAMPLE_TOKEN")]
+    [InlineData("HTTPS_PROXY")]
+    public void An_ordinary_variable_is_a_plugin_s_to_set(string name) =>
+        Assert.True(BaseEnvironment.MayAPluginSet(name));
+
+    [Fact]
+    public void The_hook_families_are_refused_whole_rather_than_name_by_name()
+    {
+        // A family is listed as a prefix exactly when every name under it exists to load somebody's code; the
+        // runtimes with ordinary variables of their own are named one by one instead.
+        Assert.Equal<IEnumerable<string>>(["LD_", "DYLD_", "COMPLUS_", "CORECLR_"], BaseEnvironment.InjectionPrefixes);
+        Assert.Contains("DOTNET_STARTUP_HOOKS", BaseEnvironment.InjectionNames);
+        Assert.DoesNotContain("DOTNET_", BaseEnvironment.InjectionPrefixes);
+    }
+
     [Fact]
     public void A_granted_variable_is_copied_by_name()
     {

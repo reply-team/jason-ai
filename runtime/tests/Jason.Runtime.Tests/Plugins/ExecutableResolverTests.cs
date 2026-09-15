@@ -156,6 +156,20 @@ public class ExecutableResolverTests
     }
 
     [Fact]
+    public async Task A_program_that_fails_its_version_command_says_what_it_printed()
+    {
+        var resolver = new ExecutableResolver(new TestSearchPath { Path = TestPlugins.FakeCliDirectory });
+        var request = new ExecutableRequest(FakeProviderCli.ExecutableName, null, ["exit", "7"]);
+
+        var result = await resolver.CheckVersionAsync(resolver.Resolve(request, 0), request, 0, HostEnvironment, TimeSpan.FromSeconds(30), Ct);
+
+        // The exit code alone explains nothing; what the program said on its way out is the part a person can act on.
+        Assert.Equal(ProblemCodes.ExecutableVersionCheckFailed, result.Problem!.Code);
+        Assert.Contains("exit code 7", result.Problem.Message, StringComparison.Ordinal);
+        Assert.Contains("exiting", result.Problem.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_check_that_runs_out_of_time_answers_rather_than_throws()
     {
         var resolver = new ExecutableResolver(new TestSearchPath { Path = TestPlugins.FakeCliDirectory });

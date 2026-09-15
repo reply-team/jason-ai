@@ -115,6 +115,64 @@ public sealed class ExecServiceTests : IDisposable
         Assert.Equal("TypeError", harness.Caught($"host.exec({{ executable: \"{Cli}\", args: [\"echo-args\"], env: {{ JASON_X: \"1\" }} }})"));
     }
 
+    /// <summary>
+    /// A granted program is a decision about that program, not about whatever the plugin would like to load into
+    /// it. Each of these names makes an operating system, a runtime or an interpreter run code of the setter's
+    /// choosing before the program's own first line, so none of them is a plugin's to set.
+    /// </summary>
+    [Theory]
+    [InlineData("LD_PRELOAD")]
+    [InlineData("LD_LIBRARY_PATH")]
+    [InlineData("LD_AUDIT")]
+    [InlineData("DYLD_INSERT_LIBRARIES")]
+    [InlineData("DYLD_LIBRARY_PATH")]
+    [InlineData("DOTNET_STARTUP_HOOKS")]
+    [InlineData("DOTNET_ROOT")]
+    [InlineData("CORECLR_PROFILER_PATH")]
+    [InlineData("COMPlus_ETWEnabled")]
+    [InlineData("NODE_OPTIONS")]
+    [InlineData("NODE_PATH")]
+    [InlineData("PYTHONPATH")]
+    [InlineData("PYTHONSTARTUP")]
+    [InlineData("RUBYOPT")]
+    [InlineData("PERL5OPT")]
+    [InlineData("JAVA_TOOL_OPTIONS")]
+    [InlineData("_JAVA_OPTIONS")]
+    [InlineData("CLASSPATH")]
+    [InlineData("PATH")]
+    [InlineData("PATHEXT")]
+    [InlineData("COMSPEC")]
+    [InlineData("SHELL")]
+    [InlineData("ld_preload")]
+    public void A_loader_or_interpreter_hook_is_not_a_plugin_s_to_set(string variable)
+    {
+        using var harness = Harness();
+
+        Assert.Equal("TypeError", harness.Caught($"host.exec({{ executable: \"{Cli}\", args: [\"echo-args\"], env: {{ {variable}: \"anything\" }} }})"));
+    }
+
+    [Fact]
+    public void A_refused_variable_never_reaches_the_program()
+    {
+        using var harness = Harness();
+
+        harness.Caught($"host.exec({{ executable: \"{Cli}\", args: [\"print-env\", \"NODE_OPTIONS\"], env: {{ NODE_OPTIONS: \"--require=./evil.js\" }} }})");
+
+        // Nothing ran, so nothing can have been loaded: the refusal is before the process, not inside it.
+        var result = Exec(harness, $"{{ executable: \"{Cli}\", args: [\"print-env\", \"NODE_OPTIONS\"] }}");
+        Assert.Equal("<unset>\n", Lines(result));
+    }
+
+    [Fact]
+    public void An_ordinary_variable_of_a_runtime_that_has_hooks_is_still_a_plugin_s_to_set()
+    {
+        using var harness = Harness();
+
+        var result = Exec(harness, $"{{ executable: \"{Cli}\", args: [\"print-env\", \"NODE_ENV\"], env: {{ NODE_ENV: \"production\" }} }}");
+
+        Assert.Equal("production\n", Lines(result));
+    }
+
     [Theory]
     [InlineData("sh")]
     [InlineData("cmd")]

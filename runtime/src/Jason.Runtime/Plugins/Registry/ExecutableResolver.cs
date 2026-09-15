@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Plugins.Manifest;
 
 namespace Jason.Runtime.Plugins.Registry;
@@ -83,7 +84,8 @@ public sealed partial class ExecutableResolver(ISearchPath searchPath)
         int index,
         IReadOnlyDictionary<string, string> environment,
         TimeSpan timeout,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Redactor? redactor = null)
     {
         ArgumentNullException.ThrowIfNull(resolved);
         ArgumentNullException.ThrowIfNull(request);
@@ -154,10 +156,11 @@ public sealed partial class ExecutableResolver(ISearchPath searchPath)
 
         if (process.ExitCode != 0)
         {
+            // The exit code alone explains nothing; what the program said on its way out is what a person acts on.
             return Failed(
                 resolved,
                 path,
-                string.Create(CultureInfo.InvariantCulture, $"'{resolved.Name}' answered its version command with exit code {process.ExitCode}."));
+                string.Create(CultureInfo.InvariantCulture, $"'{resolved.Name}' answered its version command with exit code {process.ExitCode}{Said(error, output, redactor)}."));
         }
 
         var version = FirstVersion(output) ?? FirstVersion(error);
@@ -186,6 +189,25 @@ public sealed partial class ExecutableResolver(ISearchPath searchPath)
 
     private static ResolvedExecutable Failed(ResolvedExecutable resolved, string path, string message) =>
         resolved with { Problem = new ManifestProblem(ProblemCodes.ExecutableVersionCheckFailed, path, message) };
+
+    /// <summary>How much of a failing program's output travels in the problem: enough to name the cause.</summary>
+    public const int SaidChars = 200;
+
+    /// <summary>
+    /// The tail of what the program printed — stderr first, stdout when stderr is silent — on one line and
+    /// through the redactor, so a value the plugin was granted cannot end up in a listing.
+    /// </summary>
+    private static string Said(string error, string output, Redactor? redactor)
+    {
+        var said = string.Join(' ', (string.IsNullOrWhiteSpace(error) ? output : error).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        if (said.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        said = (redactor ?? Redactor.None).Redact(said);
+        return ": " + (said.Length <= SaidChars ? said : "…" + said[^SaidChars..]);
+    }
 
     private static string ProblemPath(int index) =>
         string.Create(CultureInfo.InvariantCulture, $"capabilities.exec.executables[{index}].name");
