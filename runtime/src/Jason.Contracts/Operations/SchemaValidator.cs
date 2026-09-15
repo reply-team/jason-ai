@@ -1214,9 +1214,21 @@ public static class SchemaValidator
 
     private static bool IsOfType(string type, JsonNode? value) => type switch
     {
-        "integer" => TryNumber(value, out var number) && number == decimal.Truncate(number),
+        "integer" => IsWhole(value),
         _ => KindOf(value) == type,
     };
+
+    /// <summary>
+    /// Whether a number has no fractional part. Asking this is not a comparison, so unlike every rule that weighs
+    /// one number against another it is not confined to the range those comparisons run in: `1e40` is a whole
+    /// number, and telling a caller it is "number, not integer" because a decimal cannot hold it is simply untrue
+    /// of their value. So the exact reading answers where there is one, and the wider one answers where there is not.
+    /// </summary>
+    private static bool IsWhole(JsonNode? value) =>
+        TryNumber(value, out var exact)
+            ? exact == decimal.Truncate(exact)
+            : value is JsonValue candidate && candidate.GetValueKind() == JsonValueKind.Number
+                && candidate.TryGetValue(out double real) && double.IsInteger(real);
 
     private static bool TryString(JsonNode? node, out string value)
     {

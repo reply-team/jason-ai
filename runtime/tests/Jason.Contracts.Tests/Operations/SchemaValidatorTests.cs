@@ -172,6 +172,21 @@ public class SchemaValidatorTests
     }
 
     [Fact]
+    public void An_integer_too_large_for_a_decimal_is_still_an_integer()
+    {
+        // Whether a number has a fractional part is not a comparison, so it is not confined to the range the
+        // comparisons run in. `1e40` is a whole number, and answering "this is number" where the schema asked for
+        // an integer told a caller something untrue about their own value.
+        const string schema = """{"type":"integer"}""";
+        Accepts(schema, "7");
+        Accepts(schema, "1e40");
+        Accepts(schema, "-1e40");
+
+        Assert.Equal("type", Refuses(schema, "7.5").Reason);
+        Assert.Equal("type", Refuses(schema, "\"7\"").Reason);
+    }
+
+    [Fact]
     public void A_value_outside_the_range_this_dialect_compares_in_is_refused_rather_than_waved_through()
     {
         // The comparison runs in decimal, and neither of these fits in one. The rule cannot run, so what it would
