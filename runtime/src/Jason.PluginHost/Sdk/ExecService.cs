@@ -176,12 +176,13 @@ public sealed partial class ExecService(HostServices services)
                 }
             }
 
-            // After a kill the wait for the pipes is bounded by the same grace. A program may leave something
-            // running that inherited its standard handles, and the read end only reports the end of the stream
-            // once every writer has let go of it: waiting for that would hold this call open indefinitely for a
-            // program that has already been ended. What was captured by then is what the plugin is told.
-            Settle(pumps, timedOut);
-            Settle(written, timedOut);
+            // The wait for the pipes is bounded by the kill grace whether the program was ended or exited of
+            // its own accord. A program may leave something running that inherited its standard handles, and
+            // the read end only reports the end of the stream once every writer has let go of it: waiting for
+            // that would hold this call open for as long as the helper lived, and a program exiting cleanly
+            // says nothing about what it left behind. What was captured by then is what the plugin is told.
+            Settle(pumps);
+            Settle(written);
 
             var exitCode = ExitCodeOf(process);
             var result = new JsonObject
@@ -233,24 +234,22 @@ public sealed partial class ExecService(HostServices services)
     }
 
     /// <summary>
-    /// Waits for one of the pipe tasks, giving up after the kill grace when the program has already been ended.
-    /// An abandoned task is left to finish on its own — its pipe ends when the last writer does — and its
-    /// failure is observed there rather than thrown here, where there is no longer anyone to tell.
+    /// Waits for one of the pipe tasks, giving up after the kill grace. The program has ended by the time this
+    /// is called, so anything still holding its pipes open is something it left behind rather than the program
+    /// itself. An abandoned task is left to finish on its own — its pipe ends when the last writer does — and
+    /// its failure is observed there rather than thrown here, where there is no longer anyone to tell.
     /// </summary>
-    private static void Settle(Task work, bool bounded)
+    private static void Settle(Task work)
     {
-        if (bounded)
+        Task.WhenAny(work, Task.Delay(KillGrace)).GetAwaiter().GetResult();
+        if (!work.IsCompleted)
         {
-            Task.WhenAny(work, Task.Delay(KillGrace)).GetAwaiter().GetResult();
-            if (!work.IsCompleted)
-            {
-                work.ContinueWith(
-                    static abandoned => _ = abandoned.Exception,
-                    CancellationToken.None,
-                    TaskContinuationOptions.OnlyOnFaulted,
-                    TaskScheduler.Default);
-                return;
-            }
+            work.ContinueWith(
+                static abandoned => _ = abandoned.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
+            return;
         }
 
         work.GetAwaiter().GetResult();

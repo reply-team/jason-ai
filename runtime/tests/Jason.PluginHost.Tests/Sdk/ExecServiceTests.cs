@@ -116,6 +116,27 @@ public sealed class ExecServiceTests : IDisposable
         Assert.True(result["timed_out"]!.GetValue<bool>());
     }
 
+    /// <summary>
+    /// The same helper, left behind by a program that exited cleanly and of its own accord. The pipes it holds
+    /// are no more finished than after a kill, and the call has the same nothing to wait for: a plugin is owed
+    /// an answer whichever way the program it ran ended.
+    /// </summary>
+    [Fact]
+    public async Task Something_a_program_left_behind_does_not_hold_a_clean_exit_open()
+    {
+        using var harness = Harness();
+        var token = TestContext.Current.CancellationToken;
+
+        // The program starts the lingering one and exits at once, successfully and within milliseconds.
+        var call = Task.Run(
+            () => Exec(harness, $"{{ executable: \"{Cli}\", args: [\"spawn-orphan-inner\", \"30000\"] }}"),
+            token);
+        var result = await call.WaitAsync(TimeSpan.FromSeconds(20), token);
+
+        Assert.Equal(0, result["exit_code"]!.GetValue<int>());
+        Assert.False(result["timed_out"]!.GetValue<bool>());
+    }
+
     [Fact]
     public void A_variable_the_plugin_adds_reaches_that_child_and_nothing_else()
     {

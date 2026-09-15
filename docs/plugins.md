@@ -352,9 +352,10 @@ decides what a program loads is refused with a `TypeError` at the call: `LD_*`, 
 `stderr` are captured up to `Plugins:Exec:OutputBytes` (4 MiB) each, the first bytes kept and the
 crossing flagged in `truncated`. On a timeout the whole process tree is killed and the call
 **returns** with `timed_out: true` rather than throwing — the plugin decides what that means, usually
-`ambiguous`. Reading the output after that kill is bounded by the same five-second grace: a program
-may leave a helper running that inherited its pipes, and the call comes back with whatever was
-captured rather than waiting for a handle the program it ended no longer holds. A granted program that will not start at all is an answer too: `exit_code: -1` with the
+`ambiguous`. Reading the output is bounded by that same five-second grace however the program ended:
+a program may leave a helper running that inherited its pipes, an exit of its own accord says nothing
+about what it left behind, and the call comes back with whatever was captured rather than waiting for
+a handle the program it ran no longer holds. A granted program that will not start at all is an answer too: `exit_code: -1` with the
 reason in `stderr`, and an `exec_launch_failed` line on stderr. At most `Plugins:Exec:MaxCalls` (64)
 calls per invocation; the next fails `exec_limit`. Every call is logged as one `exec` line:
 executable, arguments, exit code, duration, timed out, truncated.
