@@ -101,7 +101,8 @@ never enforced).
 fixed codes: `type`, `required`, `enum`, `const`, `min_length`, `max_length`, `pattern`, `minimum`, `maximum`,
 `exclusive_minimum`, `exclusive_maximum`, `multiple_of`, `min_items`, `max_items`, `unique_items`,
 `additional_properties`, `any_of`, `all_of`, `not`, `format`, `schema_keyword_unknown`, `schema_ref_unresolved`,
-`schema_too_deep`, `schema_cyclic`, `schema_pattern_invalid`, `schema_too_large`, `schema_number_not_finite`.
+`duplicate_property`, `schema_too_deep`, `schema_cyclic`, `schema_pattern_invalid`, `schema_too_large`,
+`schema_number_not_finite`.
 
 Three details worth knowing before you write a schema:
 

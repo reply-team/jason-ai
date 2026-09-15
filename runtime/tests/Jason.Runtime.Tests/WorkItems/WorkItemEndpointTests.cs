@@ -1,6 +1,8 @@
 using System.Net;
+using System.Text.Json;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
+using Jason.Contracts.Json;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -41,6 +43,32 @@ public class WorkItemEndpointTests
 
         Assert.Equal("validation_failed", error.Code);
         Assert.Equal("campaign_id", error.Details![0].Field);
+    }
+
+    [Fact]
+    public async Task A_property_written_twice_anywhere_in_the_body_is_refused_as_an_invalid_request()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var campaign = await ActiveCampaignAsync(api);
+
+        // The duplicate sits inside the work item's context, which the serializer hands on as a node without
+        // reading it, so the first read of that node was deep inside the validator — a deterministic fault in the
+        // caller's own body coming back as a retryable failure of the runtime.
+        const string request = """
+            {"campaign_id":"CAMPAIGN","kind":"provider_op","operation":"campaign.get",
+             "context":{"input":{"campaign":{"external_id":"a","external_id":"b"}}}}
+            """;
+
+        var (status, body) = await api.PostRawAsync(
+            Operations.WorkItemCreate,
+            request.Replace("CAMPAIGN", campaign.Id, StringComparison.Ordinal),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+        var error = JsonSerializer.Deserialize<ErrorResponse>(body, JasonJson.Options)!.Error;
+        Assert.Equal("invalid_request", error.Code);
+        Assert.False(error.Retryable);
+        Assert.Contains("external_id", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

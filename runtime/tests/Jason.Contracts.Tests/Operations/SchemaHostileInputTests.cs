@@ -162,6 +162,47 @@ public class SchemaHostileInputTests
     }
 
     /// <summary>
+    /// A document whose property is written twice. `JsonNode.Parse` takes one without a word and throws at the
+    /// first read of that object instead, so the node looks ordinary until something reads it.
+    /// </summary>
+    private static JsonNode Duplicated(string json) =>
+        JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { AllowDuplicateProperties = true })!;
+
+    [Fact]
+    public void An_object_whose_property_is_written_twice_is_reported_at_its_own_pointer()
+    {
+        var value = Duplicated("""{"campaign":{"external_id":"a","external_id":"b"}}""");
+        var schema = Schema("""
+            {"type":"object","properties":{"campaign":{"type":"object","properties":{"external_id":{"type":"string"}}}}}
+            """);
+
+        var problem = Assert.Single(SchemaValidator.Validate(value, schema));
+
+        Assert.Equal("/campaign", problem.Pointer);
+        Assert.Equal("duplicate_property", problem.Reason);
+    }
+
+    [Fact]
+    public void The_whole_document_written_that_way_is_reported_at_the_empty_pointer()
+    {
+        var schema = Schema("""{"type":"object","required":["a"],"properties":{"a":{"type":"integer"}}}""");
+
+        var problem = Assert.Single(SchemaValidator.Validate(Duplicated("""{"a":1,"a":2}"""), schema));
+
+        Assert.Equal("", problem.Pointer);
+        Assert.Equal("duplicate_property", problem.Reason);
+    }
+
+    [Fact]
+    public void A_schema_written_that_way_is_refused_by_both_entry_points_rather_than_throwing()
+    {
+        var schema = (JsonObject)Duplicated("""{"type":"object","properties":{"x":{"type":"string"},"x":{"type":"integer"}}}""");
+
+        Assert.Contains(SchemaValidator.CheckDialect(schema), problem => problem.Reason == "duplicate_property");
+        Assert.Contains(SchemaValidator.Validate(JsonNode.Parse("""{"x":1}"""), schema), problem => problem.Reason == "duplicate_property");
+    }
+
+    /// <summary>
     /// A schema carrying a number JSON has no spelling for. It is built rather than parsed because building is the
     /// only way one can exist — text holding <c>1e400</c> parses to a number no reader can write back — and a
     /// manifest's binding schema is built exactly like this, from YAML, which is how such a number gets in.

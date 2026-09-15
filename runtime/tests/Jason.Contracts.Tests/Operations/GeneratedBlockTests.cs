@@ -79,6 +79,7 @@ public class GeneratedBlockTests
             ["schema_too_large"] = () => SchemaValidator.CheckDialect(Large()),
             ["schema_number_not_finite"] = () =>
                 SchemaValidator.CheckDialect(new JsonObject { ["maximum"] = JsonValue.Create(double.PositiveInfinity) }),
+            ["duplicate_property"] = () => Check("""{"type":"object","properties":{"a":{},"a":{}}}"""),
         };
 
     private static readonly Regex Aside = new(@"\([^)]*\)", RegexOptions.None, TimeSpan.FromSeconds(5));

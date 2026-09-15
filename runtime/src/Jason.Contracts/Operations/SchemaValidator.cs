@@ -135,6 +135,11 @@ public static class SchemaValidator
 
         switch (node)
         {
+            // An object nothing can read holds no numbers this walk could weigh either; the dialect check below
+            // reaches the same object and is where it is named.
+            case JsonObject map when Unreadable(map):
+                break;
+
             case JsonObject map:
                 foreach (var (name, child) in map)
                 {
@@ -187,6 +192,14 @@ public static class SchemaValidator
                 pointer,
                 "schema_too_deep",
                 string.Create(CultureInfo.InvariantCulture, $"This dialect validates {MaxDepth} levels of nesting, and the document goes deeper.")));
+            return;
+        }
+
+        // Every object value reaches this line, because descent into a property, an item or a branch comes back
+        // through here, so asking once is asking of all of them.
+        if ((value is JsonObject instance && Unreadable(instance)) || Unreadable(schema))
+        {
+            problems.Add(Duplicated(pointer));
             return;
         }
 
@@ -375,6 +388,12 @@ public static class SchemaValidator
             return;
         }
 
+        if (Unreadable(declared))
+        {
+            problems.Add(Duplicated(pointer));
+            return;
+        }
+
         if (value is not JsonObject instance)
         {
             return;
@@ -447,6 +466,12 @@ public static class SchemaValidator
         }
 
         var declared = schema["properties"] as JsonObject;
+        if (declared is not null && Unreadable(declared))
+        {
+            problems.Add(Duplicated(pointer));
+            return;
+        }
+
         foreach (var (name, _) in instance)
         {
             if (declared is null || !declared.ContainsKey(name))
@@ -768,6 +793,12 @@ public static class SchemaValidator
             return;
         }
 
+        if (Unreadable(schema))
+        {
+            problems.Add(Duplicated(pointer));
+            return;
+        }
+
         foreach (var (keyword, argument) in schema)
         {
             var at = Child(pointer, keyword);
@@ -893,6 +924,12 @@ public static class SchemaValidator
         if (argument is not JsonObject map)
         {
             problems.Add(MalformedAt(pointer, expected));
+            return;
+        }
+
+        if (Unreadable(map))
+        {
+            problems.Add(Duplicated(pointer));
             return;
         }
 
@@ -1035,6 +1072,28 @@ public static class SchemaValidator
     private static SchemaProblem MalformedAt(string pointer, string expected) =>
         new(pointer, "type", $"What stands here must be {expected}, so the rule it states would not run.");
 
+    private static SchemaProblem Duplicated(string pointer) =>
+        new(pointer, "duplicate_property", "An object here writes the same property twice, so which of the two it means is not decidable.");
+
+    /// <summary>
+    /// Whether an object cannot be read at all. A parser may accept a property written twice and build the
+    /// dictionary only at the first read, which then throws — so every object neither entry point built itself is
+    /// asked this before it is read. "I cannot read this" is one of the things that can be wrong with a document,
+    /// and reporting what is wrong rather than throwing is the whole promise of this code.
+    /// </summary>
+    private static bool Unreadable(JsonObject map)
+    {
+        try
+        {
+            _ = map.Count;
+            return false;
+        }
+        catch (ArgumentException)
+        {
+            return true;
+        }
+    }
+
     private static string Shown(string pointer) => pointer.Length == 0 ? "/" : pointer;
 
     private static string Child(string pointer, string segment) =>
@@ -1051,9 +1110,12 @@ public static class SchemaValidator
             .Replace("~1", "/", StringComparison.Ordinal)
             .Replace("~0", "~", StringComparison.Ordinal);
 
+        // A set of definitions nothing can read resolves nothing: the caller reports the reference as unresolved,
+        // which is what it is, and the object itself is named where the walk over the document reaches it.
         return name.Length != 0
             && !name.Contains('/', StringComparison.Ordinal)
             && root["$defs"] is JsonObject definitions
+            && !Unreadable(definitions)
             && definitions.TryGetPropertyValue(name, out var definition)
                 ? definition as JsonObject
                 : null;
@@ -1216,6 +1278,12 @@ public static class SchemaValidator
         {
             case null:
                 builder.Append("null");
+                break;
+
+            // An object nothing can read has no canonical form, and this one is only ever compared or shown; the
+            // entry points name such an object where they meet it.
+            case JsonObject unreadable when Unreadable(unreadable):
+                builder.Append("\"…\"");
                 break;
 
             case JsonObject map:
