@@ -82,6 +82,16 @@ public static class SchemaValidator
         ArgumentNullException.ThrowIfNull(schema);
 
         var problems = new List<SchemaProblem>();
+
+        // First, because everything after it reads the schema by writing it out. A schema built in memory can hold
+        // an infinity or a not-a-number, JSON has no spelling for either, and a writer handed one throws — which
+        // is how a single package once took every plugin on a machine down without a problem code naming it.
+        CheckFinite(schema, string.Empty, 0, problems);
+        if (problems.Count != 0)
+        {
+            return problems;
+        }
+
         if (TooLarge(schema))
         {
             problems.Add(new SchemaProblem(
@@ -101,12 +111,62 @@ public static class SchemaValidator
         {
             return Encoding.UTF8.GetByteCount(schema.ToJsonString()) > MaxSchemaBytes;
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is JsonException or ArgumentException)
         {
-            // A schema too deep to write is refused by the depth rule below, which says something more useful.
+            // A schema too deep to write is refused by the depth rule below, which says something more useful, and
+            // one holding a number no writer will write is refused above. Neither may leave here as an exception:
+            // measuring a document is not the place a caller learns what is wrong with it.
             return false;
         }
     }
+
+    /// <summary>
+    /// Every number in the schema, held against the one thing JSON insists on: that it can be written down. Only a
+    /// document built in memory can fail this — text spelling <c>1e400</c> parses to an infinity — which is exactly
+    /// the shape a manifest's binding schema arrives in, read from YAML rather than from JSON.
+    /// </summary>
+    private static void CheckFinite(JsonNode? node, string pointer, int depth, List<SchemaProblem> problems)
+    {
+        if (depth > MaxDepth)
+        {
+            // Deeper than this is refused by the depth rule, and the writer is guarded wherever it runs.
+            return;
+        }
+
+        switch (node)
+        {
+            case JsonObject map:
+                foreach (var (name, child) in map)
+                {
+                    CheckFinite(child, Child(pointer, name), depth + 1, problems);
+                }
+
+                break;
+
+            case JsonArray array:
+                for (var index = 0; index < array.Count; index++)
+                {
+                    CheckFinite(array[index], Child(pointer, index.ToString(CultureInfo.InvariantCulture)), depth + 1, problems);
+                }
+
+                break;
+
+            case JsonValue value when NotFinite(value):
+                problems.Add(new SchemaProblem(
+                    pointer,
+                    "schema_number_not_finite",
+                    "A number here is an infinity or a not-a-number, which JSON cannot write, so no validator could read this schema back."));
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    private static bool NotFinite(JsonValue value) =>
+        value.GetValueKind() == JsonValueKind.Number
+        && ((value.TryGetValue(out double real) && !double.IsFinite(real))
+            || (value.TryGetValue(out float single) && !float.IsFinite(single)));
 
     // ---------------------------------------------------------------------------------------------------------
     // Applying a schema to a value
@@ -1193,8 +1253,28 @@ public static class SchemaValidator
                 break;
 
             default:
-                builder.Append(node.ToJsonString());
+                builder.Append(Scalar(node));
                 break;
+        }
+    }
+
+    /// <summary>
+    /// One scalar as JSON, or as its own name when JSON has none for it. An infinity and a not-a-number can only
+    /// reach here from a node built in memory, and this form is what <c>enum</c>, <c>const</c> and
+    /// <c>uniqueItems</c> compare by: each keeps a spelling of its own, so two of them are the same value and one
+    /// of each is not, which is all the comparison asks.
+    /// </summary>
+    private static string Scalar(JsonNode node)
+    {
+        try
+        {
+            return node.ToJsonString();
+        }
+        catch (Exception exception) when (exception is JsonException or ArgumentException)
+        {
+            return node is JsonValue value && value.TryGetValue(out double real)
+                ? "\"" + real.ToString("R", CultureInfo.InvariantCulture) + "\""
+                : "\"…\"";
         }
     }
 

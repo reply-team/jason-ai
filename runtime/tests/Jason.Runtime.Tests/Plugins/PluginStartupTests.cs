@@ -44,6 +44,30 @@ public class PluginStartupTests
     }
 
     [Fact]
+    public async Task A_package_the_manifest_reader_cannot_read_is_named_rather_than_disabling_every_plugin_in_silence()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: paths =>
+        {
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+            TestPlugins.Write(
+                paths,
+                "overflowing",
+                TestPlugins.Manifest("overflowing", extra: PluginServiceTests.OverflowingBinding),
+                "export function invoke() { return { result: {} }; }");
+        });
+
+        // The load itself used to end in an exception, which left the log saying only that the runtime carries on
+        // without plugins. Whoever has to fix it needs the package's name and the rule it broke.
+        var registry = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, Ct);
+
+        Assert.False(registry.LastReload!.Activated);
+        var candidate = Assert.Single(registry.LastReload.Candidates);
+        Assert.Equal("overflowing", candidate.Directory);
+        Assert.Equal(CandidateStatus.Invalid, candidate.Status);
+        Assert.Equal("yaml_invalid", Assert.Single(candidate.Problems).Code);
+    }
+
+    [Fact]
     public async Task A_package_that_cannot_be_loaded_leaves_the_runtime_up_with_an_empty_registry()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: paths =>

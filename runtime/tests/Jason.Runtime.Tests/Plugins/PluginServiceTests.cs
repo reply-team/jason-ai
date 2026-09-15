@@ -74,6 +74,34 @@ public class PluginServiceTests
         Assert.Equal(reloaded.Plugins[0].Digest, Assert.Single(listed.Plugins).Digest);
     }
 
+    /// <summary>
+    /// A binding schema whose bound overflows a double. It is written out as a manifest fragment because that is
+    /// how it reaches the runtime: a stranger's YAML, read into a schema the validator then has to weigh.
+    /// </summary>
+    internal const string OverflowingBinding =
+        "binding:\n  type: object\n  properties:\n    workspace:\n      type: number\n      maximum: 1e400\n";
+
+    [Fact]
+    public async Task A_binding_bound_too_large_to_write_back_is_a_named_problem_rather_than_a_failure_of_the_runtime()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        TestPlugins.Write(
+            api.Paths,
+            "overflowing",
+            TestPlugins.Manifest("overflowing", extra: OverflowingBinding),
+            "export function invoke() { return { result: {} }; }");
+
+        var error = await api.PostErrorAsync(Operations.PluginReload, null, HttpStatusCode.Conflict, Ct);
+
+        // A deterministic fault in a stranger's package is theirs to fix, so it must never come back as ours to
+        // retry: the answer names the file, the line and the rule instead.
+        Assert.Equal("plugin_reload_rejected", error.Code);
+        Assert.False(error.Retryable);
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal("yaml_invalid", detail.Code);
+        Assert.StartsWith("overflowing/plugin.yaml#", detail.Field, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_broken_package_is_refused_and_the_previous_snapshot_keeps_working()
     {
