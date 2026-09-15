@@ -166,6 +166,31 @@ public class ProtocolFailureTests
         AssertGone(result.Launch!.Pid!.Value);
     }
 
+    /// <summary>
+    /// A child may leave a helper running that inherited its standard handles, and the read end of a pipe only
+    /// ends once every writer has let go of it. Waiting for that would hold the invocation open long after the
+    /// tree it started was killed, and in time hold a handler slot with it. Whatever was captured by the end of
+    /// the kill grace is the answer.
+    /// </summary>
+    [Fact]
+    public async Task Something_the_killed_child_left_behind_does_not_hold_the_invocation_open()
+    {
+        await using var api = await StartAsync(
+            Child("spawn-orphan", "30000"),
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"KillGraceMs":500}}}""");
+
+        // The budget is generous so that the lingering process certainly exists by the time the tree is killed:
+        // the child starts a middle process which starts it and exits at once, and a kill never reaches it.
+        var call = InvokeAsync(api, TimeSpan.FromSeconds(5));
+        var answered = await Task.WhenAny(call, Task.Delay(TimeSpan.FromSeconds(20), Ct)) == call;
+
+        Assert.True(answered, "the invocation was still waiting for pipes the process it killed no longer holds");
+        var result = await call;
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginTimeout, failure.Code);
+        AssertGone(result.Launch!.Pid!.Value);
+    }
+
     [Fact]
     public async Task A_host_that_cannot_be_started_at_all_is_a_launch_failure()
     {

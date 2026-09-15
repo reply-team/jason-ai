@@ -292,8 +292,10 @@ public sealed partial class PluginInvoker(
                 timedOut = !killed;
             }
 
-            await Task.WhenAll(pumps).ConfigureAwait(false);
-            await envelope.ConfigureAwait(false);
+            // After a kill the wait for the pipes is bounded by the same grace, and the streams are let go of
+            // whether or not it came back. What was captured by then is what the invocation is classified from.
+            await SettleAsync([.. pumps, envelope], killed || timedOut, settings.Invoker.KillGraceMs).ConfigureAwait(false);
+            Release(process);
 
             var exitCode = process.ExitCode;
             var outcome = Classify(invocation, settings, stdout, stderr, tooLarge, killed, timedOut, exitCode, timeoutMs);
@@ -308,6 +310,66 @@ public sealed partial class PluginInvoker(
                 null);
 
             return new PluginInvocationResult(outcome, provenance, launch);
+        }
+    }
+
+    /// <summary>
+    /// Waits for the tasks that hold the child's pipes, and after a kill for no longer than the kill grace. A
+    /// child may leave something running that inherited its standard handles, and the read end of a pipe only
+    /// ends once every writer has let go of it: waiting for that would hold an invocation open indefinitely for
+    /// a process tree that has already been ended. An abandoned task is left to finish on its own — its pipe
+    /// ends when the last writer does — and its failure is observed there rather than thrown here, where there
+    /// is no longer anyone to tell.
+    /// </summary>
+    private static async Task SettleAsync(IReadOnlyList<Task> pipes, bool bounded, int killGraceMs)
+    {
+        var all = Task.WhenAll(pipes);
+        if (!bounded || await Task.WhenAny(all, Task.Delay(killGraceMs)).ConfigureAwait(false) == all)
+        {
+            await all.ConfigureAwait(false);
+            return;
+        }
+
+        foreach (var pipe in pipes)
+        {
+            Observe(pipe);
+        }
+
+        Observe(all);
+    }
+
+    private static void Observe(Task abandoned) =>
+        _ = abandoned.ContinueWith(
+            static finished => _ = finished.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
+
+    /// <summary>
+    /// Lets go of the child's pipes. A stream the invoker asked for is not closed when the process is disposed,
+    /// because the caller could still be holding it, so an abandoned pump would otherwise keep both the handle
+    /// and the file it writes into alive for as long as anything the child left behind keeps the other end open.
+    /// </summary>
+    private static void Release(Process process)
+    {
+        Close(process.StandardInput);
+        Close(process.StandardOutput);
+        Close(process.StandardError);
+
+        static void Close(IDisposable pipe)
+        {
+            try
+            {
+                pipe.Dispose();
+            }
+            catch (IOException)
+            {
+                // A pipe whose other end is already gone. There is nothing left to flush it to.
+            }
+            catch (ObjectDisposedException)
+            {
+                // Closed once already, by the envelope's own writer.
+            }
         }
     }
 

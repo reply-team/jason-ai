@@ -649,7 +649,10 @@ JavaScript, the **child** ends the invocation and writes a normal `failed` outco
 class `permanent` if no `host.exec` or `host.http` call had been started and `ambiguous` if one had —
 the host knows, and the plugin never has to reason about it. When the child itself hangs past the
 budget and the grace period, the **runtime** kills the tree and reports the protocol failure
-`plugin_timeout`, which is always ambiguous.
+`plugin_timeout`, which is always ambiguous. Reading what that child wrote is bounded by the same
+grace, exactly as `host.exec` bounds its own: a child may leave a helper running that inherited its
+pipes, and an invocation is classified from what was captured by then rather than waiting for a
+handle the tree it ended no longer holds.
 
 The other codes the host itself writes into a failed outcome — as opposed to your own vocabulary —
 are `plugin_exception`, `bad_return`, `result_too_large`, `entry_function_missing`,
