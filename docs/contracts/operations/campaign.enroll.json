@@ -1,0 +1,261 @@
+{
+  "id": "campaign.enroll",
+  "version": 1,
+  "l1": { "name": "campaign.enroll", "contract_version": "2.0.0", "family": 8, "core": true },
+  "intent": "\"Put these fifty people into the Q3 campaign\" — with an explicit collision policy, an explicit start position and an explicit first-touch timing: the authored delay, the next open window, or immediately.",
+
+  "reach": {
+    "value": "act",
+    "conditional": true,
+    "detail": "bookkeeping while the campaign is not live, `act` the moment it is; resolved by the preview, never assumed."
+  },
+  "reversibility": {
+    "value": "irreversible",
+    "conditional": true,
+    "detail": "compensatable until the first touch goes, irreversible after."
+  },
+  "approval": {
+    "value": "confirm_once",
+    "conditional": true,
+    "detail": "confirm_once before go-live; confirm_once with a mandatory preview once live. One call over a set is one decision, and the preview is the approval artefact — it names the population, it does not count it."
+  },
+  "approval_artefact": "preview",
+  "approval_departs": false,
+  "before_repeating": "the per-item outcome of the prior run under this key, and the campaign's live state — re-running blind into a live campaign sends twice.",
+  "idempotency_key": "required",
+  "per_item_results": "required",
+  "accepts_collection": true,
+  "cost": {
+    "value": "metered",
+    "conditional": true,
+    "detail": "none while the campaign is not live; metered once it is."
+  },
+  "cost_basis": "per enrolled person, once the campaign is live",
+  "meter": "message",
+  "invariants": ["A7", "D1", "D4", "E2", "F2", "G1", "G2", "G7", "G8"],
+
+  "preflight": { "contact": "required", "channel": "from_args" },
+  "contact_projection": {
+    "fields": ["id", "first_name", "last_name", "company", "title", "time_zone"],
+    "channels": "consumed"
+  },
+  "precondition": "Ensure the provider's own contact exists before enrolling it: work by `contacts[0].external_ids.contact` when that pin is present, otherwise create the contact from the value of the channel named by `args.channel`, and return the provider's identifier under `external_ids.contact`.",
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:campaign.enroll:1:input",
+    "title": "campaign.enroll input",
+    "description": "The collision policy, the start position and the first-touch timing are all stated on every call; none of the three may be left to a default.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "contacts", "campaign", "idempotency_key"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["channel", "collision", "start", "first_touch"],
+        "properties": {
+          "campaign": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["external_id"],
+            "properties": {
+              "external_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The provider's own identifier, given to link a campaign for the first time. Later calls work by the pin."
+              }
+            }
+          },
+          "channel": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "description": "Which of the contact's channels this enrollment consumes. Exactly that one channel is projected into `contacts[0].channels`."
+          },
+          "collision": {
+            "type": "string",
+            "enum": ["skip", "refuse"],
+            "description": "What to do about a participation this person already has: leave it alone, or refuse rather than decide."
+          },
+          "start": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["position"],
+            "properties": {
+              "position": { "type": "string", "enum": ["first_step", "step"] },
+              "step": { "type": "integer", "minimum": 1 }
+            },
+            "anyOf": [
+              { "type": "object", "required": ["position"], "properties": { "position": { "const": "first_step" } } },
+              { "type": "object", "required": ["position", "step"], "properties": { "position": { "const": "step" } } }
+            ]
+          },
+          "first_touch": {
+            "type": "string",
+            "enum": ["authored_delay", "next_open_window", "immediately"],
+            "description": "When the first message may go: after the step's authored delay, at the next open sending window, or at once."
+          }
+        }
+      },
+      "contacts": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "This version addresses one person per work item, in the collection shape the level-1 contract uses.",
+        "items": { "$ref": "#/$defs/contact" }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" },
+      "idempotency_key": {
+        "type": "string",
+        "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+        "description": "The work item's own identifier: stable across every attempt, which is what makes the prior run answerable under this key."
+      }
+    },
+    "anyOf": [
+      {
+        "type": "object",
+        "required": ["args"],
+        "properties": { "args": { "type": "object", "required": ["campaign"] } }
+      },
+      {
+        "type": "object",
+        "required": ["campaign"],
+        "properties": {
+          "campaign": {
+            "type": "object",
+            "required": ["external_ids"],
+            "properties": { "external_ids": { "type": "object", "required": ["campaign"] } }
+          }
+        }
+      }
+    ],
+    "$defs": {
+      "contact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "first_name", "last_name", "company", "title", "time_zone", "channels", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "first_name": { "type": ["string", "null"], "maxLength": 200 },
+          "last_name": { "type": ["string", "null"], "maxLength": 200 },
+          "company": { "type": ["string", "null"], "maxLength": 200 },
+          "title": { "type": ["string", "null"], "maxLength": 200 },
+          "time_zone": { "type": ["string", "null"], "maxLength": 200 },
+          "channels": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "description": "Only the channel the operation consumes, never the person's whole reachability.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["channel", "value", "primary"],
+              "properties": {
+                "channel": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+                "value": { "type": "string", "minLength": 1, "maxLength": 500 },
+                "primary": { "type": "boolean" }
+              }
+            }
+          },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      },
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:campaign.enroll:1:output",
+    "title": "campaign.enroll result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items", "campaign_live"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "One outcome per person, with the reason. A partial success reported as a single verdict is a defect.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contact_id", "status"],
+          "properties": {
+            "contact_id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+            "status": { "type": "string", "enum": ["enrolled", "already_enrolled"] },
+            "external_ids": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+            }
+          }
+        }
+      },
+      "campaign_live": {
+        "type": "boolean",
+        "description": "Whether the campaign was live at the moment of the enrollment, because that is what decides whether this was a send."
+      }
+    }
+  },
+
+  "external_ids": {
+    "contact": {
+      "entity": "contact",
+      "description": "The provider's identifier for the contact this call ensured, pinned so no later call has to match the person by address again."
+    },
+    "campaign": {
+      "entity": "campaign",
+      "description": "The provider's identifier for the campaign this call enrolled into, pinned when the call was the one that linked it."
+    }
+  },
+
+  "recovery_read": {
+    "reads": "The per-item outcome of the prior run under this idempotency key, and the campaign's live state.",
+    "justification": "An enrollment into a live campaign is a send, so a blind repeat sends the same person twice and is billed twice. Consumption pricing is the general case: a repeat after a crash is a real charge, not a wasted round trip."
+  },
+  "repeat_after_ambiguous": "after_recovery_read",
+
+  "failure_codes": [
+    { "code": "campaign_not_found", "class": "permanent", "when": "The provider holds no campaign under the identifier this call carried." },
+    { "code": "campaign_not_enrollable", "class": "permanent", "when": "The campaign is archived, finished or otherwise will not take an enrollment." },
+    { "code": "collision_refused", "class": "permanent", "when": "`collision: refuse` was asked for and this person already has a participation the provider counts as a collision." },
+    { "code": "suppressed", "class": "permanent", "when": "The provider's own suppression register holds this address, so it must not be enrolled." },
+    { "code": "invalid_channel_value", "class": "validation", "when": "The provider will not accept the channel value for the channel named, so no later attempt can accept it either." },
+    { "code": "limit_reached", "class": "permanent", "when": "The account will not hold another enrollment, or the campaign's own capacity is spent." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it enroll for this account." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the enrollment for now and it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was written." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the enrollment may already have happened and may already have sent. The next attempt performs the declared recovery read before it writes." }
+  ],
+
+  "timeout_ms": 300000,
+
+  "conformance": [
+    "A contact pinned under `contacts[0].external_ids.contact` is worked by that identifier, and never matched again by the channel value.",
+    "An enrollment into a campaign that is not live reports `campaign_live: false`, so a caller can tell bookkeeping from a send.",
+    "A second call under the same idempotency key answers `already_enrolled` and performs no second enrollment.",
+    "An attempt after a lost answer reads the prior run under the key first, so one crash leaves one enrollment rather than two.",
+    "`collision: refuse` against an existing participation fails `collision_refused` rather than deciding on the caller's behalf.",
+    "The start position and the first-touch timing are taken from the arguments as given, and nothing is defaulted when they are absent — the call is refused instead."
+  ]
+}

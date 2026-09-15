@@ -1,0 +1,21 @@
+{
+  "operation": "campaign.get",
+  "version": 1,
+  "case": "the provider said not now, which is the one class that is simply repeated",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "transient",
+      "code": "rate_limited",
+      "message": "The provider answered 429 and asked for thirty seconds.",
+      "details": { "retry_after": 30 },
+      "external_ids": null
+    },
+    "diagnostics": { "duration_ms": 96, "exec_calls": 0, "http_calls": 1, "log_lines": 1 }
+  },
+  "expect": { "status": "failed", "class": "transient", "retriable": true }
+}

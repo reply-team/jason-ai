@@ -1,0 +1,24 @@
+{
+  "operation": "campaign.enroll",
+  "version": 1,
+  "case": "bookkeeping rather than a send, and the result says so",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "contact_id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+          "status": "enrolled",
+          "external_ids": { "contact": "p_88421" }
+        }
+      ],
+      "campaign_live": false
+    },
+    "external_ids": { "contact": "p_88421", "campaign": "c_7714" },
+    "error": null,
+    "diagnostics": { "duration_ms": 880, "exec_calls": 3, "http_calls": 0, "log_lines": 5 }
+  },
+  "expect": { "status": "succeeded", "retriable": false }
+}

@@ -1,0 +1,21 @@
+{
+  "operation": "list_membership.add",
+  "version": 1,
+  "case": "the provider's own suppression register holds the address, and that answer does not change on a retry",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "permanent",
+      "code": "suppressed",
+      "message": "The provider suppresses marta@example.com, so it was not added.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": { "duration_ms": 175, "exec_calls": 1, "http_calls": 0, "log_lines": 2 }
+  },
+  "expect": { "status": "failed", "class": "permanent", "retriable": false }
+}

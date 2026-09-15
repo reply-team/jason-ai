@@ -3,6 +3,10 @@ using Jason.Contracts.Api;
 
 namespace Jason.Contracts.Tests;
 
+// The canonical operation contracts live in Jason.Contracts.Operations, whose name shadows the operation-name
+// class from inside this namespace, so that one name is bound here explicitly.
+using Operations = Jason.Contracts.Api.Operations;
+
 public class ApiVersionTests
 {
     [Fact]
