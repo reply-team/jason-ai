@@ -142,9 +142,18 @@ dotnet test --project runtime/tests/Jason.Contracts.Tests -- --filter-class "Jas
 An **input fixture** is `{operation, version, case, input, expect}`, where `expect` is either the string `"valid"`
 or `{"invalid": ["<json pointer>", …]}` naming exactly the pointers the validator reports. An **outcome fixture**
 is `{operation, version, case, outcome, expect}`, where `outcome` is a plugin outcome exactly as a child writes it
-and `expect` is `{status, class?, retriable}`. `status` is `succeeded`, `failed`, or `result_invalid` — a
+and `expect` is `{status, class?, retriable, invalid?}`. `status` is `succeeded`, `failed`, or `result_invalid` — a
 well-formed outcome whose result does not satisfy the output schema, or which pins an identifier of a kind the
 operation never declared.
+
+A `result_invalid` fixture carries `invalid` as well, and it names exactly what is wrong with that answer: each
+entry is a JSON pointer, or `{"pointer": "…", "reason": "…"}` where the fixture means one particular refusal, the
+reason being one of the codes above. The reported set must equal the stated set, so an answer broken somewhere
+other than where the fixture says fails instead of passing for a reason nobody wrote down.
+
+A `failed` fixture is held against the operation's own `failure_codes`: the code its error carries is one the
+document declares, under the class the document declares it with. A fixture may not teach a plugin author a code no
+operation accepts, nor the same code under a class that would have the runtime repeat what the document calls final.
 
 Retriability in an outcome fixture is stated per the operation's own rule, so that a plugin author reading the
 fixture sees what the runtime will do with that answer: `transient` is repeated; `permanent` and `validation` are
