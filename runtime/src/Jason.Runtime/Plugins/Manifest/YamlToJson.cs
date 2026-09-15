@@ -159,6 +159,17 @@ public static partial class YamlToJson
 
         if (Float().IsMatch(value) && double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var real))
         {
+            // Parsing a float that overflows answers with an infinity rather than failing, and JSON has no
+            // spelling for one: carried onwards it would make every reader of this manifest throw where it should
+            // report. The number is refused here, where the line it is written on is still known.
+            if (!double.IsFinite(real))
+            {
+                throw new YamlInvalidException(
+                    (int)scalar.Start.Line,
+                    (int)scalar.Start.Column,
+                    $"'{value}' is larger than a number this manifest can carry.");
+            }
+
             return JsonValue.Create(real);
         }
 

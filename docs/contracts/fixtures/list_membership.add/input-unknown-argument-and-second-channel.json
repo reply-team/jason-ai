@@ -27,5 +27,10 @@
     },
     "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
   },
-  "expect": { "invalid": ["/args/deduplicate", "/contacts/0/channels"] }
+  "expect": {
+    "invalid": [
+      { "pointer": "/args/deduplicate", "reason": "additional_properties" },
+      { "pointer": "/contacts/0/channels", "reason": "max_items" }
+    ]
+  }
 }

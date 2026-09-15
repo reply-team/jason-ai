@@ -43,6 +43,34 @@ public class PluginStartupTests
         Assert.True(info.Plugins.LastReloadActivated);
     }
 
+    [Theory]
+    [InlineData(TestPlugins.BindingBoundTooLarge, "yaml_invalid")]
+    [InlineData(TestPlugins.BindingTypeAsAList, "field_invalid")]
+    public async Task A_package_the_manifest_reader_cannot_take_at_face_value_is_named_rather_than_silently_emptying_the_registry(
+        string fragment,
+        string expected)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: paths =>
+        {
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+            TestPlugins.Write(
+                paths,
+                "unreadable",
+                TestPlugins.Manifest("unreadable", extra: fragment),
+                "export function invoke() { return { result: {} }; }");
+        });
+
+        // The load itself used to end in an exception, which left the log saying only that the runtime carries on
+        // without plugins. Whoever has to fix it needs the package's name and the rule it broke.
+        var registry = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, Ct);
+
+        Assert.False(registry.LastReload!.Activated);
+        var candidate = Assert.Single(registry.LastReload.Candidates);
+        Assert.Equal("unreadable", candidate.Directory);
+        Assert.Equal(CandidateStatus.Invalid, candidate.Status);
+        Assert.Equal(expected, Assert.Single(candidate.Problems).Code);
+    }
+
     [Fact]
     public async Task A_package_that_cannot_be_loaded_leaves_the_runtime_up_with_an_empty_registry()
     {

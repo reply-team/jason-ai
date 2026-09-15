@@ -52,7 +52,6 @@ public class FixtureTests
         var contract = Operation(fixture, relative);
 
         var problems = SchemaValidator.Validate(fixture["input"], contract.InputSchema);
-        var pointers = problems.Select(problem => problem.Pointer).Order(StringComparer.Ordinal).ToList();
 
         if (fixture["expect"] is JsonValue)
         {
@@ -61,8 +60,7 @@ public class FixtureTests
             return;
         }
 
-        var expected = ((JsonArray)fixture["expect"]!["invalid"]!).Select(pointer => (string)pointer!).Order(StringComparer.Ordinal).ToList();
-        Assert.Equal(expected, pointers);
+        TheStatedProblemsAndNoOthers(relative, (JsonObject)fixture["expect"]!, problems);
     }
 
     [Theory]
@@ -128,17 +126,19 @@ public class FixtureTests
     }
 
     /// <summary>
-    /// What a <c>result_invalid</c> fixture says is wrong with the answer, held against what the runtime reports.
-    /// A fixture that claimed only "something is wrong" would go on passing while the result was broken somewhere
-    /// nobody meant, so the pointers are compared as a sorted set exactly as an input fixture's are, and where a
-    /// fixture names the reason as well — one of the reason codes the package publishes, which travels outwards as
-    /// the code of an API error rather than staying inside the runtime — that is held against the report too.
+    /// What a fixture says is wrong, held against what the runtime reports. One routine serves both kinds, because
+    /// both are answering the same question about the same validator. A fixture that claimed only "something is
+    /// wrong" would go on passing while the document was broken somewhere nobody meant, so the pointers are
+    /// compared as a sorted set; and where a fixture names the reason as well — one of the reason codes the
+    /// package publishes, which travels outwards as the code of an API error rather than staying inside the
+    /// runtime — that is held against the report too, so that a constraint quietly changing kind at that pointer
+    /// fails here rather than passing for a reason nobody wrote down.
     /// </summary>
     private static void TheStatedProblemsAndNoOthers(string relative, JsonObject expected, IReadOnlyList<SchemaProblem> problems)
     {
         var stated = expected["invalid"] as JsonArray;
 
-        Assert.True(stated is not null, $"{relative} says the result is invalid without saying what is invalid about it.");
+        Assert.True(stated is not null, $"{relative} says the document is invalid without saying what is invalid about it.");
         Assert.NotEmpty(stated);
         Assert.Equal(
             stated.Select(Pointer).Order(StringComparer.Ordinal).ToList(),

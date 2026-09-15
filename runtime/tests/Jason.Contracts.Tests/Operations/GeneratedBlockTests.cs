@@ -77,6 +77,10 @@ public class GeneratedBlockTests
             ["schema_pattern_invalid"] = () => Check("""{"type":"string","pattern":"^(?=a)a$"}"""),
             ["schema_too_deep"] = () => SchemaValidator.CheckDialect(Deep()),
             ["schema_too_large"] = () => SchemaValidator.CheckDialect(Large()),
+            ["schema_number_not_finite"] = () =>
+                SchemaValidator.CheckDialect(new JsonObject { ["maximum"] = JsonValue.Create(double.PositiveInfinity) }),
+            ["duplicate_property"] = () => Check("""{"type":"object","properties":{"a":{},"a":{}}}"""),
+            ["number_out_of_range"] = () => Refuse("""{"type":"number","maximum":100}""", "1e40"),
         };
 
     private static readonly Regex Aside = new(@"\([^)]*\)", RegexOptions.None, TimeSpan.FromSeconds(5));

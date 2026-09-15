@@ -82,6 +82,16 @@ public static class SchemaValidator
         ArgumentNullException.ThrowIfNull(schema);
 
         var problems = new List<SchemaProblem>();
+
+        // First, because everything after it reads the schema by writing it out. A schema built in memory can hold
+        // an infinity or a not-a-number, JSON has no spelling for either, and a writer handed one throws — which
+        // is how a single package once took every plugin on a machine down without a problem code naming it.
+        CheckFinite(schema, string.Empty, 0, problems);
+        if (problems.Count != 0)
+        {
+            return problems;
+        }
+
         if (TooLarge(schema))
         {
             problems.Add(new SchemaProblem(
@@ -101,11 +111,76 @@ public static class SchemaValidator
         {
             return Encoding.UTF8.GetByteCount(schema.ToJsonString()) > MaxSchemaBytes;
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is JsonException or ArgumentException)
         {
-            // A schema too deep to write is refused by the depth rule below, which says something more useful.
+            // A schema too deep to write is refused by the depth rule below, which says something more useful, and
+            // one holding a number no writer will write is refused above. Neither may leave here as an exception:
+            // measuring a document is not the place a caller learns what is wrong with it.
             return false;
         }
+    }
+
+    /// <summary>
+    /// Every number in the schema, held against the one thing JSON insists on: that it can be written down. Only a
+    /// document built in memory can fail this — text spelling <c>1e400</c> parses to an infinity — which is exactly
+    /// the shape a manifest's binding schema arrives in, read from YAML rather than from JSON.
+    /// </summary>
+    private static void CheckFinite(JsonNode? node, string pointer, int depth, List<SchemaProblem> problems)
+    {
+        if (depth > MaxDepth)
+        {
+            // Deeper than this is refused by the depth rule, and the writer is guarded wherever it runs.
+            return;
+        }
+
+        switch (node)
+        {
+            // An object nothing can read holds no numbers this walk could weigh either; the dialect check below
+            // reaches the same object and is where it is named.
+            case JsonObject map when Unreadable(map):
+                break;
+
+            case JsonObject map:
+                foreach (var (name, child) in map)
+                {
+                    CheckFinite(child, Child(pointer, name), depth + 1, problems);
+                }
+
+                break;
+
+            case JsonArray array:
+                for (var index = 0; index < array.Count; index++)
+                {
+                    CheckFinite(array[index], Child(pointer, index.ToString(CultureInfo.InvariantCulture)), depth + 1, problems);
+                }
+
+                break;
+
+            case JsonValue value when NotFinite(value):
+                problems.Add(new SchemaProblem(
+                    pointer,
+                    "schema_number_not_finite",
+                    "A number here is an infinity or a not-a-number, which JSON cannot write, so no validator could read this schema back."));
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    private static bool NotFinite(JsonValue value)
+    {
+        if (value.GetValueKind() != JsonValueKind.Number)
+        {
+            return false;
+        }
+
+        // A node parsed from text converts to any numeric type, and narrowing a large double to a float overflows
+        // to an infinity that is not in the document at all. So the widest reading available decides, and the
+        // narrower one is asked only where the wider one is not on offer.
+        return value.TryGetValue(out double real)
+            ? !double.IsFinite(real)
+            : value.TryGetValue(out float single) && !float.IsFinite(single);
     }
 
     // ---------------------------------------------------------------------------------------------------------
@@ -127,6 +202,14 @@ public static class SchemaValidator
                 pointer,
                 "schema_too_deep",
                 string.Create(CultureInfo.InvariantCulture, $"This dialect validates {MaxDepth} levels of nesting, and the document goes deeper.")));
+            return;
+        }
+
+        // Every object value reaches this line, because descent into a property, an item or a branch comes back
+        // through here, so asking once is asking of all of them.
+        if ((value is JsonObject instance && Unreadable(instance)) || Unreadable(schema))
+        {
+            problems.Add(Duplicated(pointer));
             return;
         }
 
@@ -315,6 +398,12 @@ public static class SchemaValidator
             return;
         }
 
+        if (Unreadable(declared))
+        {
+            problems.Add(Duplicated(pointer));
+            return;
+        }
+
         if (value is not JsonObject instance)
         {
             return;
@@ -387,6 +476,12 @@ public static class SchemaValidator
         }
 
         var declared = schema["properties"] as JsonObject;
+        if (declared is not null && Unreadable(declared))
+        {
+            problems.Add(Duplicated(pointer));
+            return;
+        }
+
         foreach (var (name, _) in instance)
         {
             if (declared is null || !declared.ContainsKey(name))
@@ -483,14 +578,30 @@ public static class SchemaValidator
 
     private static void ApplyNumeric(string keyword, JsonNode? argument, JsonNode? value, string pointer, List<SchemaProblem> problems)
     {
-        if (!TryNumber(argument, out var bound) || (keyword == "multipleOf" && bound <= 0))
+        if (!TryNumber(argument, out var bound))
         {
-            problems.Add(Malformed(pointer, keyword, keyword == "multipleOf" ? "a number greater than zero" : "a number"));
+            // A bound that is a number all the same, only not one the comparison can hold, is neither the wrong
+            // kind of value nor something to pass over: the rule it states cannot run, and that is what is said.
+            problems.Add(IsNumber(argument) ? OutOfRange(pointer) : Malformed(pointer, keyword, Expects(keyword)));
+            return;
+        }
+
+        if (keyword == "multipleOf" && bound <= 0)
+        {
+            problems.Add(Malformed(pointer, keyword, Expects(keyword)));
             return;
         }
 
         if (!TryNumber(value, out var number))
         {
+            // A value of any other kind is simply not what this keyword measures. One that is a number and still
+            // cannot be compared is the rule failing to run, and returning quietly there is how `maximum: 100`
+            // came to accept 1e40.
+            if (IsNumber(value))
+            {
+                problems.Add(OutOfRange(pointer));
+            }
+
             return;
         }
 
@@ -708,6 +819,12 @@ public static class SchemaValidator
             return;
         }
 
+        if (Unreadable(schema))
+        {
+            problems.Add(Duplicated(pointer));
+            return;
+        }
+
         foreach (var (keyword, argument) in schema)
         {
             var at = Child(pointer, keyword);
@@ -783,15 +900,19 @@ public static class SchemaValidator
                 case "minimum" or "maximum" or "exclusiveMinimum" or "exclusiveMaximum":
                     if (!TryNumber(argument, out _))
                     {
-                        problems.Add(Malformed(at, keyword, "a number"));
+                        problems.Add(IsNumber(argument) ? OutOfRange(at) : Malformed(at, keyword, Expects(keyword)));
                     }
 
                     break;
 
                 case "multipleOf":
-                    if (!TryNumber(argument, out var divisor) || divisor <= 0)
+                    if (!TryNumber(argument, out var divisor))
                     {
-                        problems.Add(Malformed(at, keyword, "a number greater than zero"));
+                        problems.Add(IsNumber(argument) ? OutOfRange(at) : Malformed(at, keyword, Expects(keyword)));
+                    }
+                    else if (divisor <= 0)
+                    {
+                        problems.Add(Malformed(at, keyword, Expects(keyword)));
                     }
 
                     break;
@@ -833,6 +954,12 @@ public static class SchemaValidator
         if (argument is not JsonObject map)
         {
             problems.Add(MalformedAt(pointer, expected));
+            return;
+        }
+
+        if (Unreadable(map))
+        {
+            problems.Add(Duplicated(pointer));
             return;
         }
 
@@ -975,6 +1102,41 @@ public static class SchemaValidator
     private static SchemaProblem MalformedAt(string pointer, string expected) =>
         new(pointer, "type", $"What stands here must be {expected}, so the rule it states would not run.");
 
+    private static SchemaProblem Duplicated(string pointer) =>
+        new(pointer, "duplicate_property", "An object here writes the same property twice, so which of the two it means is not decidable.");
+
+    /// <summary>
+    /// A number the dialect cannot take part in a comparison with. Every numeric rule here runs in decimal —
+    /// chosen so that a money-like value means what it says — and a number outside that range leaves the rule
+    /// unable to run at all. Saying so is the point: a rule that quietly did not run reads exactly like one that
+    /// ran and was satisfied.
+    /// </summary>
+    private static SchemaProblem OutOfRange(string pointer) =>
+        new(pointer, "number_out_of_range", "A number here is compared as a decimal, and this one lies outside the range a decimal holds.");
+
+    private static string Expects(string keyword) => keyword == "multipleOf" ? "a number greater than zero" : "a number";
+
+    private static bool IsNumber(JsonNode? node) => node is JsonValue && node.GetValueKind() == JsonValueKind.Number;
+
+    /// <summary>
+    /// Whether an object cannot be read at all. A parser may accept a property written twice and build the
+    /// dictionary only at the first read, which then throws — so every object neither entry point built itself is
+    /// asked this before it is read. "I cannot read this" is one of the things that can be wrong with a document,
+    /// and reporting what is wrong rather than throwing is the whole promise of this code.
+    /// </summary>
+    private static bool Unreadable(JsonObject map)
+    {
+        try
+        {
+            _ = map.Count;
+            return false;
+        }
+        catch (ArgumentException)
+        {
+            return true;
+        }
+    }
+
     private static string Shown(string pointer) => pointer.Length == 0 ? "/" : pointer;
 
     private static string Child(string pointer, string segment) =>
@@ -991,9 +1153,12 @@ public static class SchemaValidator
             .Replace("~1", "/", StringComparison.Ordinal)
             .Replace("~0", "~", StringComparison.Ordinal);
 
+        // A set of definitions nothing can read resolves nothing: the caller reports the reference as unresolved,
+        // which is what it is, and the object itself is named where the walk over the document reaches it.
         return name.Length != 0
             && !name.Contains('/', StringComparison.Ordinal)
             && root["$defs"] is JsonObject definitions
+            && !Unreadable(definitions)
             && definitions.TryGetPropertyValue(name, out var definition)
                 ? definition as JsonObject
                 : null;
@@ -1049,9 +1214,21 @@ public static class SchemaValidator
 
     private static bool IsOfType(string type, JsonNode? value) => type switch
     {
-        "integer" => TryNumber(value, out var number) && number == decimal.Truncate(number),
+        "integer" => IsWhole(value),
         _ => KindOf(value) == type,
     };
+
+    /// <summary>
+    /// Whether a number has no fractional part. Asking this is not a comparison, so unlike every rule that weighs
+    /// one number against another it is not confined to the range those comparisons run in: `1e40` is a whole
+    /// number, and telling a caller it is "number, not integer" because a decimal cannot hold it is simply untrue
+    /// of their value. So the exact reading answers where there is one, and the wider one answers where there is not.
+    /// </summary>
+    private static bool IsWhole(JsonNode? value) =>
+        TryNumber(value, out var exact)
+            ? exact == decimal.Truncate(exact)
+            : value is JsonValue candidate && candidate.GetValueKind() == JsonValueKind.Number
+                && candidate.TryGetValue(out double real) && double.IsInteger(real);
 
     private static bool TryString(JsonNode? node, out string value)
     {
@@ -1158,6 +1335,12 @@ public static class SchemaValidator
                 builder.Append("null");
                 break;
 
+            // An object nothing can read has no canonical form, and this one is only ever compared or shown; the
+            // entry points name such an object where they meet it.
+            case JsonObject unreadable when Unreadable(unreadable):
+                builder.Append("\"…\"");
+                break;
+
             case JsonObject map:
                 builder.Append('{');
                 var first = true;
@@ -1193,8 +1376,28 @@ public static class SchemaValidator
                 break;
 
             default:
-                builder.Append(node.ToJsonString());
+                builder.Append(Scalar(node));
                 break;
+        }
+    }
+
+    /// <summary>
+    /// One scalar as JSON, or as its own name when JSON has none for it. An infinity and a not-a-number can only
+    /// reach here from a node built in memory, and this form is what <c>enum</c>, <c>const</c> and
+    /// <c>uniqueItems</c> compare by: each keeps a spelling of its own, so two of them are the same value and one
+    /// of each is not, which is all the comparison asks.
+    /// </summary>
+    private static string Scalar(JsonNode node)
+    {
+        try
+        {
+            return node.ToJsonString();
+        }
+        catch (Exception exception) when (exception is JsonException or ArgumentException)
+        {
+            return node is JsonValue value && value.TryGetValue(out double real)
+                ? "\"" + real.ToString("R", CultureInfo.InvariantCulture) + "\""
+                : "\"…\"";
         }
     }
 

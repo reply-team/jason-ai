@@ -161,6 +161,109 @@ public class SchemaHostileInputTests
         Assert.NotNull(SchemaValidator.Validate(JsonNode.Parse(value), parsed));
     }
 
+    /// <summary>
+    /// A document whose property is written twice. `JsonNode.Parse` takes one without a word and throws at the
+    /// first read of that object instead, so the node looks ordinary until something reads it.
+    /// </summary>
+    private static JsonNode Duplicated(string json) =>
+        JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { AllowDuplicateProperties = true })!;
+
+    [Fact]
+    public void An_object_whose_property_is_written_twice_is_reported_at_its_own_pointer()
+    {
+        var value = Duplicated("""{"campaign":{"external_id":"a","external_id":"b"}}""");
+        var schema = Schema("""
+            {"type":"object","properties":{"campaign":{"type":"object","properties":{"external_id":{"type":"string"}}}}}
+            """);
+
+        var problem = Assert.Single(SchemaValidator.Validate(value, schema));
+
+        Assert.Equal("/campaign", problem.Pointer);
+        Assert.Equal("duplicate_property", problem.Reason);
+    }
+
+    [Fact]
+    public void The_whole_document_written_that_way_is_reported_at_the_empty_pointer()
+    {
+        var schema = Schema("""{"type":"object","required":["a"],"properties":{"a":{"type":"integer"}}}""");
+
+        var problem = Assert.Single(SchemaValidator.Validate(Duplicated("""{"a":1,"a":2}"""), schema));
+
+        Assert.Equal("", problem.Pointer);
+        Assert.Equal("duplicate_property", problem.Reason);
+    }
+
+    [Fact]
+    public void A_schema_written_that_way_is_refused_by_both_entry_points_rather_than_throwing()
+    {
+        var schema = (JsonObject)Duplicated("""{"type":"object","properties":{"x":{"type":"string"},"x":{"type":"integer"}}}""");
+
+        Assert.Contains(SchemaValidator.CheckDialect(schema), problem => problem.Reason == "duplicate_property");
+        Assert.Contains(SchemaValidator.Validate(JsonNode.Parse("""{"x":1}"""), schema), problem => problem.Reason == "duplicate_property");
+    }
+
+    /// <summary>
+    /// A schema carrying a number JSON has no spelling for. It is built rather than parsed because building is the
+    /// only way one can exist — text holding <c>1e400</c> parses to a number no reader can write back — and a
+    /// manifest's binding schema is built exactly like this, from YAML, which is how such a number gets in.
+    /// </summary>
+    private static JsonObject NotFinite(string keyword) => keyword switch
+    {
+        "enum" => new JsonObject { ["enum"] = new JsonArray(JsonValue.Create(double.PositiveInfinity)) },
+        _ => new JsonObject { [keyword] = JsonValue.Create(double.PositiveInfinity) },
+    };
+
+    [Theory]
+    [InlineData("minimum", "/minimum")]
+    [InlineData("maximum", "/maximum")]
+    [InlineData("const", "/const")]
+    [InlineData("enum", "/enum/0")]
+    public void A_number_json_cannot_write_is_named_by_the_dialect_check(string keyword, string pointer)
+    {
+        var problem = Assert.Single(SchemaValidator.CheckDialect(NotFinite(keyword)));
+
+        Assert.Equal("schema_number_not_finite", problem.Reason);
+        Assert.Equal(pointer, problem.Pointer);
+    }
+
+    [Theory]
+    [InlineData("minimum")]
+    [InlineData("maximum")]
+    [InlineData("const")]
+    [InlineData("enum")]
+    public void Applying_such_a_schema_reports_rather_than_throwing(string keyword) =>
+        Assert.NotNull(SchemaValidator.Validate(JsonNode.Parse("1"), NotFinite(keyword)));
+
+    [Fact]
+    public void A_value_holding_such_a_number_is_compared_rather_than_thrown_over()
+    {
+        var schema = new JsonObject { ["type"] = "array", ["uniqueItems"] = true };
+        var repeated = new JsonArray(JsonValue.Create(double.PositiveInfinity), JsonValue.Create(double.PositiveInfinity));
+        var distinct = new JsonArray(JsonValue.Create(double.PositiveInfinity), JsonValue.Create(double.NaN));
+
+        Assert.Equal("unique_items", Assert.Single(SchemaValidator.Validate(repeated, schema)).Reason);
+        Assert.Empty(SchemaValidator.Validate(distinct, schema));
+    }
+
+    [Fact]
+    public void A_schema_too_large_to_measure_because_of_such_a_number_is_still_refused_by_reason()
+    {
+        // The size check writes the document out to weigh it, and a number JSON cannot write stopped it with an
+        // exception that left the whole load with nothing to say. The refusal now names the number instead.
+        var properties = new JsonObject();
+        for (var i = 0; properties.ToJsonString().Length < 100 * 1024; i++)
+        {
+            properties["property_with_a_long_enough_name_to_grow_the_document_" + i] = new JsonObject { ["type"] = "string" };
+        }
+
+        properties["overflowing"] = new JsonObject { ["type"] = "number", ["maximum"] = JsonValue.Create(double.PositiveInfinity) };
+
+        var problem = Assert.Single(SchemaValidator.CheckDialect(new JsonObject { ["type"] = "object", ["properties"] = properties }));
+
+        Assert.Equal("schema_number_not_finite", problem.Reason);
+        Assert.Equal("/properties/overflowing/maximum", problem.Pointer);
+    }
+
     private static string Nested(string open, string close, int depth, string leaf)
     {
         var builder = new StringBuilder();

@@ -11,5 +11,5 @@
       "external_ids": {}
     }
   },
-  "expect": { "invalid": ["/args/campaign/external_id"] }
+  "expect": { "invalid": [{ "pointer": "/args/campaign/external_id", "reason": "type" }] }
 }

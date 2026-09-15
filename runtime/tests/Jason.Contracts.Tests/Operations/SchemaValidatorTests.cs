@@ -172,6 +172,54 @@ public class SchemaValidatorTests
     }
 
     [Fact]
+    public void An_integer_too_large_for_a_decimal_is_still_an_integer()
+    {
+        // Whether a number has a fractional part is not a comparison, so it is not confined to the range the
+        // comparisons run in. `1e40` is a whole number, and answering "this is number" where the schema asked for
+        // an integer told a caller something untrue about their own value.
+        const string schema = """{"type":"integer"}""";
+        Accepts(schema, "7");
+        Accepts(schema, "1e40");
+        Accepts(schema, "-1e40");
+
+        Assert.Equal("type", Refuses(schema, "7.5").Reason);
+        Assert.Equal("type", Refuses(schema, "\"7\"").Reason);
+    }
+
+    [Fact]
+    public void A_value_outside_the_range_this_dialect_compares_in_is_refused_rather_than_waved_through()
+    {
+        // The comparison runs in decimal, and neither of these fits in one. The rule cannot run, so what it would
+        // have measured is refused: returning quietly here had `{"maximum":100}` accepting 1e40.
+        const string schema = """{"type":"number","maximum":100}""";
+        Accepts(schema, "100");
+
+        Assert.Equal("number_out_of_range", Refuses(schema, "1e40").Reason);
+        Assert.Equal("number_out_of_range", Refuses(schema, "-1e40").Reason);
+    }
+
+    [Fact]
+    public void A_bound_outside_that_range_is_refused_by_both_entry_points()
+    {
+        const string schema = """{"type":"number","maximum":1e40}""";
+
+        var declared = Assert.Single(SchemaValidator.CheckDialect(Schema(schema)));
+
+        Assert.Equal("number_out_of_range", declared.Reason);
+        Assert.Equal("/maximum", declared.Pointer);
+        Assert.Equal("number_out_of_range", Refuses(schema, "1").Reason);
+    }
+
+    [Fact]
+    public void A_keyword_that_takes_no_number_at_all_still_says_so()
+    {
+        // The two refusals are different things and must stay so: `"three"` is the wrong kind of value, while a
+        // number too large to compare is the right kind and still leaves the rule unable to run.
+        Assert.Equal("type", Refuses("""{"maximum":"three"}""", "1").Reason);
+        Assert.Equal("type", Assert.Single(SchemaValidator.CheckDialect(Schema("""{"maximum":"three"}"""))).Reason);
+    }
+
+    [Fact]
     public void Items_reports_the_index_of_the_element_that_failed()
     {
         const string schema = """

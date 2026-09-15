@@ -29,5 +29,5 @@
     },
     "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
   },
-  "expect": { "invalid": ["/args/start"] }
+  "expect": { "invalid": [{ "pointer": "/args/start", "reason": "any_of" }] }
 }

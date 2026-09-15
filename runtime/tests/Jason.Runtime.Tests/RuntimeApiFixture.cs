@@ -72,6 +72,14 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
         return (response.StatusCode, await response.Content.ReadAsStringAsync(cancellationToken));
     }
 
+    /// <summary>The body exactly as written, for a request no serializer would produce.</summary>
+    public async Task<(HttpStatusCode Status, string Body)> PostRawAsync(string operation, string body, CancellationToken cancellationToken)
+    {
+        using var content = new StringContent(body, Encoding.UTF8, "application/json");
+        using var response = await _http!.PostAsync(Operations.Route(operation), content, cancellationToken);
+        return (response.StatusCode, await response.Content.ReadAsStringAsync(cancellationToken));
+    }
+
     public async Task<T> PostOkAsync<T>(string operation, object? body, CancellationToken cancellationToken)
     {
         var (status, text) = await PostAsync(operation, body, cancellationToken);
