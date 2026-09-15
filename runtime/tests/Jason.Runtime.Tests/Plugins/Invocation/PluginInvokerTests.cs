@@ -6,6 +6,7 @@ using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Plugins.Invocation;
+using Jason.Runtime.Plugins.Registry;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Plugins.Invocation;
@@ -185,6 +186,55 @@ public class PluginInvokerTests
         var unsure = Assert.IsType<InvocationOutcome.Failed>(ambiguous.Outcome);
         Assert.Equal(FailureClass.Ambiguous, unsure.Error.Class);
         Assert.False(OutcomeClassification.IsRetriable(unsure.Error.Class));
+    }
+
+    [Fact]
+    public async Task A_plugin_the_caller_pinned_runs_even_after_the_registry_has_moved_on()
+    {
+        await using var api = await StartAsync();
+        using var scope = api.Runtime.Services.CreateScope();
+        var registry = scope.ServiceProvider.GetRequiredService<PluginRegistry>();
+        var decided = registry.Snapshot;
+        var pinned = new PinnedPlugin(decided.Find(TestPlugins.FakeProviderId)!, decided.Id);
+
+        // A reload lands between the decision and the attempt, and this one leaves nothing installed at all.
+        registry.Replace(
+            PluginSnapshot.Empty(DateTime.UtcNow, SnapshotSource.Reload),
+            new ReloadReport(DateTime.UtcNow, SnapshotSource.Reload, Activated: true, []));
+
+        var result = await InvokeAsync(api, Request("echo.run", new JsonObject { ["hello"] = "world" }) with { Pinned = pinned }, Ct);
+
+        var succeeded = Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
+        Assert.Equal("world", succeeded.Result!["echo"]!["hello"]!.GetValue<string>());
+
+        // The provenance names the decision that was acted on, not whatever the registry holds now.
+        Assert.Equal(decided.Id, result.Provenance.SnapshotId);
+        Assert.Equal(pinned.Plugin.Digest, result.Provenance.Digest);
+        Assert.Equal(pinned.Plugin.Manifest.Version, result.Provenance.Version);
+
+        // Without the pin the same call is refused, which is what makes the pin the thing under test.
+        var unpinned = await InvokeAsync(api, Request("echo.run", new JsonObject()), Ct);
+        Assert.Equal(ProtocolCodes.PluginNotLoaded, Assert.IsType<InvocationOutcome.ProtocolFailure>(unpinned.Outcome).Code);
+    }
+
+    [Fact]
+    public async Task A_pinned_plugin_is_held_to_every_rule_an_unpinned_one_is()
+    {
+        await using var api = await StartAsync(paths => TestPlugins.Write(
+            paths,
+            "narrow",
+            TestPlugins.Manifest("narrow", operations: "[other.thing]"),
+            "export function invoke() { return { result: {} }; }"));
+        using var scope = api.Runtime.Services.CreateScope();
+        var registry = scope.ServiceProvider.GetRequiredService<PluginRegistry>();
+        var snapshot = registry.Snapshot;
+        var pinned = new PinnedPlugin(snapshot.Find("narrow")!, snapshot.Id);
+
+        var result = await InvokeAsync(api, Request("echo.run", new JsonObject(), plugin: "narrow") with { Pinned = pinned }, Ct);
+
+        // Pinning says which package runs, never that it may do something its manifest does not offer.
+        Assert.Equal(ProtocolCodes.PluginOperationUnsupported, Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome).Code);
+        Assert.Null(result.Launch);
     }
 
     [Fact]

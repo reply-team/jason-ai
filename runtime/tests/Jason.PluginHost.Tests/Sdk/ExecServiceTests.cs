@@ -96,6 +96,26 @@ public sealed class ExecServiceTests : IDisposable
         Assert.True(result["duration_ms"]!.GetValue<long>() < 10_000, "the kill did not wait for the program");
     }
 
+    /// <summary>
+    /// The program leaves a helper running that the kill cannot reach, and that helper still holds the output
+    /// pipes open. Whatever was captured by the end of the kill grace is the answer: the call must not wait for
+    /// a program it has already ended to stop being referred to by something else. The call is made off the test
+    /// thread only so that failing this rule fails the test rather than stopping the run.
+    /// </summary>
+    [Fact]
+    public async Task Something_the_killed_program_left_behind_does_not_hold_the_call_open()
+    {
+        using var harness = Harness();
+        var token = TestContext.Current.CancellationToken;
+
+        var call = Task.Run(
+            () => Exec(harness, $"{{ executable: \"{Cli}\", args: [\"spawn-orphan\", \"30000\"], timeout_ms: 500 }}"),
+            token);
+        var result = await call.WaitAsync(TimeSpan.FromSeconds(20), token);
+
+        Assert.True(result["timed_out"]!.GetValue<bool>());
+    }
+
     [Fact]
     public void A_variable_the_plugin_adds_reaches_that_child_and_nothing_else()
     {

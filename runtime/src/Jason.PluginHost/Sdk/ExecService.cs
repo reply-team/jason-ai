@@ -176,8 +176,12 @@ public sealed partial class ExecService(HostServices services)
                 }
             }
 
-            pumps.GetAwaiter().GetResult();
-            written.GetAwaiter().GetResult();
+            // After a kill the wait for the pipes is bounded by the same grace. A program may leave something
+            // running that inherited its standard handles, and the read end only reports the end of the stream
+            // once every writer has let go of it: waiting for that would hold this call open indefinitely for a
+            // program that has already been ended. What was captured by then is what the plugin is told.
+            Settle(pumps, timedOut);
+            Settle(written, timedOut);
 
             var exitCode = ExitCodeOf(process);
             var result = new JsonObject
@@ -226,6 +230,30 @@ public sealed partial class ExecService(HostServices services)
         {
             // Same story, seen from the other side of an already-closed pipe.
         }
+    }
+
+    /// <summary>
+    /// Waits for one of the pipe tasks, giving up after the kill grace when the program has already been ended.
+    /// An abandoned task is left to finish on its own — its pipe ends when the last writer does — and its
+    /// failure is observed there rather than thrown here, where there is no longer anyone to tell.
+    /// </summary>
+    private static void Settle(Task work, bool bounded)
+    {
+        if (bounded)
+        {
+            Task.WhenAny(work, Task.Delay(KillGrace)).GetAwaiter().GetResult();
+            if (!work.IsCompleted)
+            {
+                work.ContinueWith(
+                    static abandoned => _ = abandoned.Exception,
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted,
+                    TaskScheduler.Default);
+                return;
+            }
+        }
+
+        work.GetAwaiter().GetResult();
     }
 
     private static void TryKill(Process process)

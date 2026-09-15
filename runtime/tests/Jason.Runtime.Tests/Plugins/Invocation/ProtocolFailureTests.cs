@@ -73,6 +73,26 @@ public class ProtocolFailureTests
     }
 
     [Fact]
+    public async Task A_child_that_floods_stderr_without_ever_ending_a_line_is_capped_and_still_answered()
+    {
+        await using var api = await StartAsync(Child("spew", "8388608", "stderr"));
+
+        var result = await InvokeAsync(api);
+
+        // Megabytes with no line ending in them are still only a line: the invocation ends with an answer, and
+        // nothing of the flood is kept — not in the file the user is left with, not in the trace the failure
+        // carries, and not in the memory it would take to assemble it.
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginNoOutcome, failure.Code);
+        Assert.Contains(StderrSink.DroppedLineNotice, failure.StderrTail!, StringComparison.Ordinal);
+        Assert.DoesNotContain('x', failure.StderrTail!);
+
+        var kept = await File.ReadAllTextAsync(Path.Combine(result.Launch!.WorkDir, "stderr.log"), Ct);
+        Assert.Contains(StderrSink.TruncationNotice, kept, StringComparison.Ordinal);
+        Assert.DoesNotContain('x', kept);
+    }
+
+    [Fact]
     public async Task A_child_that_refuses_the_invocation_is_reported_as_a_refusal()
     {
         await using var api = await StartAsync(Child("exit", "3"));
@@ -127,6 +147,26 @@ public class ProtocolFailureTests
     }
 
     [Fact]
+    public async Task A_child_that_never_reads_its_envelope_is_ended_rather_than_holding_the_write_open()
+    {
+        await using var api = await StartAsync(
+            Child("sleep", "30000"),
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"KillGraceMs":500}}}""");
+
+        // An envelope this size is far larger than any pipe buffer, so the write finishes only if the child
+        // reads it — and this one never reads a byte. Nothing may wait on that write that the budget cannot end.
+        var input = new JsonObject { ["big"] = new string('x', PluginProtocol.MaxInputBytes - 1024) };
+        var watch = Stopwatch.StartNew();
+
+        var result = await InvokeAsync(api, TimeSpan.FromMilliseconds(500), input).WaitAsync(TimeSpan.FromSeconds(60), Ct);
+
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(30), $"the envelope write outlived the budget: {watch.Elapsed}");
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginTimeout, failure.Code);
+        AssertGone(result.Launch!.Pid!.Value);
+    }
+
+    [Fact]
     public async Task A_host_that_cannot_be_started_at_all_is_a_launch_failure()
     {
         await using var api = await StartAsync(new CommandLocator("jason-plugin-host-that-does-not-exist"));
@@ -157,12 +197,15 @@ public class ProtocolFailureTests
             },
             configureServices: services => services.AddSingleton(locator));
 
-    private static async Task<PluginInvocationResult> InvokeAsync(RuntimeApiFixture api, TimeSpan? timeout = null)
+    private static async Task<PluginInvocationResult> InvokeAsync(
+        RuntimeApiFixture api,
+        TimeSpan? timeout = null,
+        JsonObject? input = null)
     {
         using var scope = api.Runtime.Services.CreateScope();
         var invoker = scope.ServiceProvider.GetRequiredService<PluginInvoker>();
         return await invoker.InvokeAsync(
-            new PluginInvocationRequest(TestPlugins.FakeProviderId, "echo.run", new JsonObject(), null, "att_01K0PROTOCOL", Timeout: timeout),
+            new PluginInvocationRequest(TestPlugins.FakeProviderId, "echo.run", input ?? [], null, "att_01K0PROTOCOL", Timeout: timeout),
             Ct);
     }
 
