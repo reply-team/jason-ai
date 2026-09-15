@@ -255,7 +255,7 @@ public class ClaimerTests
         Assert.Equal(1, attempt.Number);
         Assert.Equal(AttemptStatus.Failed, attempt.Status);
         Assert.False(attempt.Error!.Retriable);
-        Assert.Contains("contacts.enroll", attempt.Error.Message, StringComparison.Ordinal);
+        Assert.Contains("campaign.get", attempt.Error.Message, StringComparison.Ordinal);
         Assert.Null(attempt.Launch);
     }
 

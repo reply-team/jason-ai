@@ -43,7 +43,7 @@ public static class WorkItemFactory
         return item;
     }
 
-    public static WorkItem NewProviderOp(Campaign campaign, string operation = "contacts.enroll", DateTime? now = null)
+    public static WorkItem NewProviderOp(Campaign campaign, string operation = "campaign.get", DateTime? now = null)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         var moment = now ?? Default;
