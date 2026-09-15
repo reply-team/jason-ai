@@ -168,10 +168,20 @@ public static class SchemaValidator
         }
     }
 
-    private static bool NotFinite(JsonValue value) =>
-        value.GetValueKind() == JsonValueKind.Number
-        && ((value.TryGetValue(out double real) && !double.IsFinite(real))
-            || (value.TryGetValue(out float single) && !float.IsFinite(single)));
+    private static bool NotFinite(JsonValue value)
+    {
+        if (value.GetValueKind() != JsonValueKind.Number)
+        {
+            return false;
+        }
+
+        // A node parsed from text converts to any numeric type, and narrowing a large double to a float overflows
+        // to an infinity that is not in the document at all. So the widest reading available decides, and the
+        // narrower one is asked only where the wider one is not on offer.
+        return value.TryGetValue(out double real)
+            ? !double.IsFinite(real)
+            : value.TryGetValue(out float single) && !float.IsFinite(single);
+    }
 
     // ---------------------------------------------------------------------------------------------------------
     // Applying a schema to a value
@@ -568,14 +578,30 @@ public static class SchemaValidator
 
     private static void ApplyNumeric(string keyword, JsonNode? argument, JsonNode? value, string pointer, List<SchemaProblem> problems)
     {
-        if (!TryNumber(argument, out var bound) || (keyword == "multipleOf" && bound <= 0))
+        if (!TryNumber(argument, out var bound))
         {
-            problems.Add(Malformed(pointer, keyword, keyword == "multipleOf" ? "a number greater than zero" : "a number"));
+            // A bound that is a number all the same, only not one the comparison can hold, is neither the wrong
+            // kind of value nor something to pass over: the rule it states cannot run, and that is what is said.
+            problems.Add(IsNumber(argument) ? OutOfRange(pointer) : Malformed(pointer, keyword, Expects(keyword)));
+            return;
+        }
+
+        if (keyword == "multipleOf" && bound <= 0)
+        {
+            problems.Add(Malformed(pointer, keyword, Expects(keyword)));
             return;
         }
 
         if (!TryNumber(value, out var number))
         {
+            // A value of any other kind is simply not what this keyword measures. One that is a number and still
+            // cannot be compared is the rule failing to run, and returning quietly there is how `maximum: 100`
+            // came to accept 1e40.
+            if (IsNumber(value))
+            {
+                problems.Add(OutOfRange(pointer));
+            }
+
             return;
         }
 
@@ -874,15 +900,19 @@ public static class SchemaValidator
                 case "minimum" or "maximum" or "exclusiveMinimum" or "exclusiveMaximum":
                     if (!TryNumber(argument, out _))
                     {
-                        problems.Add(Malformed(at, keyword, "a number"));
+                        problems.Add(IsNumber(argument) ? OutOfRange(at) : Malformed(at, keyword, Expects(keyword)));
                     }
 
                     break;
 
                 case "multipleOf":
-                    if (!TryNumber(argument, out var divisor) || divisor <= 0)
+                    if (!TryNumber(argument, out var divisor))
                     {
-                        problems.Add(Malformed(at, keyword, "a number greater than zero"));
+                        problems.Add(IsNumber(argument) ? OutOfRange(at) : Malformed(at, keyword, Expects(keyword)));
+                    }
+                    else if (divisor <= 0)
+                    {
+                        problems.Add(Malformed(at, keyword, Expects(keyword)));
                     }
 
                     break;
@@ -1074,6 +1104,19 @@ public static class SchemaValidator
 
     private static SchemaProblem Duplicated(string pointer) =>
         new(pointer, "duplicate_property", "An object here writes the same property twice, so which of the two it means is not decidable.");
+
+    /// <summary>
+    /// A number the dialect cannot take part in a comparison with. Every numeric rule here runs in decimal —
+    /// chosen so that a money-like value means what it says — and a number outside that range leaves the rule
+    /// unable to run at all. Saying so is the point: a rule that quietly did not run reads exactly like one that
+    /// ran and was satisfied.
+    /// </summary>
+    private static SchemaProblem OutOfRange(string pointer) =>
+        new(pointer, "number_out_of_range", "A number here is compared as a decimal, and this one lies outside the range a decimal holds.");
+
+    private static string Expects(string keyword) => keyword == "multipleOf" ? "a number greater than zero" : "a number";
+
+    private static bool IsNumber(JsonNode? node) => node is JsonValue && node.GetValueKind() == JsonValueKind.Number;
 
     /// <summary>
     /// Whether an object cannot be read at all. A parser may accept a property written twice and build the
