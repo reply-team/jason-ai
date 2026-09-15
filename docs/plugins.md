@@ -596,6 +596,8 @@ catalog is the ordinary case rather than an error.
 ## 8. Failure classes
 
 Every failure carries one of four classes, and the class — not the code — is what the runtime reads.
+Nothing routes a work item to a plugin yet (§13), so the last column is the rule a plugin's answer
+will meet rather than behaviour you can watch today.
 
 | Class | Meaning | What the runtime does |
 |---|---|---|
