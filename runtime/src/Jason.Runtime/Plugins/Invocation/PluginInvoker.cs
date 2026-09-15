@@ -543,12 +543,12 @@ public sealed partial class PluginInvoker(
                 continue;
             }
 
-            if (parsed is not JsonObject diagnostic || diagnostic["message"]?.GetValue<string>() is not { } message)
+            if (parsed is not JsonObject diagnostic || Text(diagnostic, "message") is not { } message)
             {
                 continue;
             }
 
-            var code = diagnostic["data"]?["code"]?.GetValue<string>();
+            var code = diagnostic["data"] is JsonObject data ? Text(data, "code") : null;
             return code is null
                 ? $"The plugin host refused the invocation: {message}."
                 : $"The plugin host refused the invocation: {message} ({code}).";
@@ -556,6 +556,14 @@ public sealed partial class PluginInvoker(
 
         return "The plugin host refused the invocation before running any of the plugin's code.";
     }
+
+    /// <summary>
+    /// One string field of an object nothing in this runtime wrote. A field of another type, or of another
+    /// shape entirely, reads as absent rather than throwing: the child's stderr is text the child chose, and a
+    /// refusal still has to come back as a refusal.
+    /// </summary>
+    private static string? Text(JsonObject parent, string name) =>
+        parent[name] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 
     private static string Verdict(InvocationOutcome outcome) => outcome switch
     {

@@ -42,6 +42,12 @@ switch (args[0])
         await Console.Error.WriteLineAsync("exiting");
         return code;
 
+    case "stderr-exit" when args.Length > 2 && int.TryParse(args[1], CultureInfo.InvariantCulture, out var stderrExitCode):
+        // A last word on stderr, chosen by the caller: whoever reads that line can be handed one it did not
+        // expect, which is what a program that broke in an unforeseen way leaves behind.
+        await Console.Error.WriteLineAsync(args[2]);
+        return stderrExitCode;
+
     case "spew" when args.Length > 1 && int.TryParse(args[1], CultureInfo.InvariantCulture, out var bytes):
         {
             var text = new string('x', bytes);

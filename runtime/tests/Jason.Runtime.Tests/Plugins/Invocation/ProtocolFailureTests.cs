@@ -105,6 +105,27 @@ public class ProtocolFailureTests
         Assert.Equal(FailureClass.Permanent, OutcomeClassification.ClassOf(failure.Code));
     }
 
+    /// <summary>
+    /// The reason a refusal carries is read from the last line of the child's stderr, and that line is the
+    /// child's own text: a host that broke in an unforeseen way, or something that is not the host at all,
+    /// can write anything there. None of it may throw out of an invocation that still has an answer to give.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"message":5}""")]
+    [InlineData("""{"message":"refused","data":5}""")]
+    [InlineData("""{"message":"refused","data":{"code":7}}""")]
+    public async Task A_diagnostic_shaped_unlike_a_diagnostic_is_read_as_one_no_further_than_it_goes(string line)
+    {
+        await using var api = await StartAsync(Child("stderr-exit", "3", line));
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginInvocationRejected, failure.Code);
+        Assert.Equal(3, failure.ExitCode);
+        Assert.Contains("refused the invocation", failure.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_child_that_broke_on_its_own_left_no_outcome()
     {
