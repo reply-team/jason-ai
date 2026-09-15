@@ -73,6 +73,26 @@ public class ProtocolFailureTests
     }
 
     [Fact]
+    public async Task A_child_that_floods_stderr_without_ever_ending_a_line_is_capped_and_still_answered()
+    {
+        await using var api = await StartAsync(Child("spew", "8388608", "stderr"));
+
+        var result = await InvokeAsync(api);
+
+        // Megabytes with no line ending in them are still only a line: the invocation ends with an answer, and
+        // nothing of the flood is kept — not in the file the user is left with, not in the trace the failure
+        // carries, and not in the memory it would take to assemble it.
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginNoOutcome, failure.Code);
+        Assert.Contains(StderrSink.DroppedLineNotice, failure.StderrTail!, StringComparison.Ordinal);
+        Assert.DoesNotContain('x', failure.StderrTail!);
+
+        var kept = await File.ReadAllTextAsync(Path.Combine(result.Launch!.WorkDir, "stderr.log"), Ct);
+        Assert.Contains(StderrSink.TruncationNotice, kept, StringComparison.Ordinal);
+        Assert.DoesNotContain('x', kept);
+    }
+
+    [Fact]
     public async Task A_child_that_refuses_the_invocation_is_reported_as_a_refusal()
     {
         await using var api = await StartAsync(Child("exit", "3"));

@@ -566,9 +566,15 @@ exist yet, so a well-formed outcome whose result is nonsense for the operation s
 
 `source` is `host` or `plugin`; `data` and `truncated` appear only when they apply. The host's own
 messages are `invocation_rejected`, `digest_unverified`, `env_probe`, `exec`, `exec_launch_failed`,
-`http`, `http_failed` and `log_truncated`. The runtime copies the whole stream, redacted, to
+`http`, `http_failed` and `log_truncated`. The runtime copies the stream, redacted, to
 `stderr.log` in the invocation directory and keeps the last 4096 characters as the trace that travels
-with a protocol failure.
+with a protocol failure. It is read in fixed chunks and copied line by line, up to
+`Plugins:Invoker:StderrBytes` (4 MiB); past that the file ends with a single `[stderr truncated]`
+notice. A line is kept or dropped whole, never cut — half a JSON line is not a line, and half a
+redacted value is not redacted — so a line longer than 128 Ki characters, which is far more than any
+line this host writes, is replaced by an `[stderr line dropped: …]` notice instead. Write your
+diagnostics as lines and the runtime keeps every one of them; write megabytes without a line ending
+and it keeps none of them.
 
 ### Exit codes
 
