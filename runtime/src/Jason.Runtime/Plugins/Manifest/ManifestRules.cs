@@ -87,8 +87,10 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
         }
 
         // A route carries a mapping of named fields, so a schema of any other type could never describe one. The
-        // check waits for the dialect, which would otherwise report the same malformed `type` twice.
-        if (dialect.Count == 0 && binding["type"]?.GetValue<string>() != "object")
+        // check waits for the dialect, which would otherwise report the same malformed `type` twice — and it reads
+        // the name the way every other rule here reads a value, because the dialect allows the list form of `type`
+        // and a typed read of a list is a throw rather than an answer.
+        if (dialect.Count == 0 && (!TryText(binding["type"], out var type) || type != "object"))
         {
             Add(ProblemCodes.FieldInvalid, BindingField, "binding is a schema of `type: object`, because a route carries a mapping of named fields.");
         }

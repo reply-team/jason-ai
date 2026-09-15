@@ -70,6 +70,19 @@ public static class TestPlugins
         return root;
     }
 
+    /// <summary>
+    /// Manifest fragments a reader once threw over rather than reported. Both are a stranger's package doing
+    /// something the rules have an answer for, and both reached a typed read that was not prepared for the shape
+    /// in front of it: a bound too large for any JSON writer, and a `type` written as the list the dialect allows.
+    /// They are kept together because what must be true of them is one thing — no manifest, however malformed,
+    /// makes the reader throw — and the tests that hold the reload and the startup load to it share them.
+    /// </summary>
+    public const string BindingBoundTooLarge =
+        "binding:\n  type: object\n  properties:\n    workspace:\n      type: number\n      maximum: 1e400\n";
+
+    public const string BindingTypeAsAList =
+        "binding:\n  type: [object, \"null\"]\n  properties:\n    workspace:\n      type: string\n";
+
     /// <summary>The smallest manifest that is valid, with room for the lines a test wants to add.</summary>
     public static string Manifest(string id, string operations = "[echo.run]", string extra = "")
     {

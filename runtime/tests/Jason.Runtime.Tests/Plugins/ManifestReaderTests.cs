@@ -134,6 +134,11 @@ public class ManifestReaderTests
     [InlineData("binding:\n  type: object\n  unevaluatedProperties: false\n", "field_invalid", "binding#/unevaluatedProperties")]
     [InlineData("binding:\n  type: object\n  properties:\n    workspace:\n      type: string\n      pattern: \"(?<=a)b\"\n", "field_invalid", "binding#/properties/workspace/pattern")]
     [InlineData("binding:\n  type: object\n  properties:\n    api_token:\n      type: string\n", "binding_secret_like", "binding#/properties/api_token")]
+    // A binding is a schema of `type: object` exactly. The list form is good JSON Schema and good dialect, so the
+    // dialect check passes it through to this rule — which read the name with an accessor that throws on a list.
+    [InlineData("binding:\n  type: [object, \"null\"]\n  properties:\n    workspace:\n      type: string\n", "field_invalid", "binding")]
+    [InlineData("binding:\n  type: [object]\n", "field_invalid", "binding")]
+    [InlineData("binding:\n  properties:\n    workspace:\n      type: string\n", "field_invalid", "binding")]
     [InlineData("binding:\n  type: object\n  properties:\n    workspace:\n      type: string\n", null, null)]
 
     // Typos are the common failure, so an unknown key is an error wherever it sits.
@@ -343,6 +348,89 @@ public class ManifestReaderTests
 
         Assert.Equal("field_invalid", Assert.Single(result.Problems).Code);
         Assert.Equal("limits.timeout_ms", Assert.Single(result.Problems).Path);
+    }
+
+    /// <summary>Every place a rule reads a value, including the ones only reachable inside a list item.</summary>
+    private static readonly string[] ReadableFields =
+    [
+        "manifest_version", "id", "version", "kind", "name", "description", "homepage",
+        "contracts", "contracts.protocol", "contracts.operations", "operations",
+        "entry", "entry.module", "entry.function",
+        "capabilities", "capabilities.exec", "capabilities.exec.executables",
+        "capabilities.http", "capabilities.http.hosts",
+        "capabilities.env", "capabilities.env.variables",
+        "limits", "limits.timeout_ms", "limits.memory_mb",
+        "binding", "binding.type", "binding.properties", "binding.required",
+    ];
+
+    /// <summary>
+    /// Shapes a rule might be handed instead of what it expects. Each one is written to look plausible rather than
+    /// obviously wrong, because an implausible value is stopped by an earlier rule and never reaches the read that
+    /// matters: `type: [object, "null"]` is good JSON Schema and good dialect, which is exactly why it got past
+    /// everything and reached a typed read that could not take a list.
+    /// </summary>
+    private static readonly string[] WrongShapes = ["[object, \"null\"]", "{ type: object }", "7", "\"object\"", "true", "~"];
+
+    /// <summary>The same question for the places a generated fragment cannot reach: inside a list.</summary>
+    private static readonly string[] WrongShapesInLists =
+    [
+        "operations: [[a, b]]\n",
+        "contracts:\n  protocol: [[1]]\n  operations: [1]\n",
+        "capabilities:\n  exec:\n    executables:\n      - name: [reply, other]\n",
+        "capabilities:\n  exec:\n    executables:\n      - name: reply\n        min_version: [1, 2]\n",
+        "capabilities:\n  exec:\n    executables:\n      - name: reply\n        version_command: { a: 1 }\n",
+        "capabilities:\n  http:\n    hosts: [[api.reply.test]]\n",
+        "capabilities:\n  env:\n    variables: [{ a: 1 }]\n",
+        "binding:\n  type: object\n  required: [[workspace]]\n",
+        "binding:\n  type: object\n  properties:\n    workspace: [a, b]\n",
+    ];
+
+    /// <summary>
+    /// The rule the whole reader is held to: no manifest, however malformed, makes it throw. Every bad value comes
+    /// back as a code at a path. A reader that throws takes the whole load with it — the reload answers 500 and a
+    /// package present when the runtime starts empties the registry with nothing naming the package at fault — so
+    /// this holds every place a rule reads a value, not only the ones a case above happens to name.
+    /// </summary>
+    [Fact]
+    public void No_manifest_however_malformed_makes_the_reader_throw()
+    {
+        var root = NewPackage(TestPlugins.Manifest("fake"), "fake");
+
+        foreach (var manifest in Malformed())
+        {
+            var thrown = Record.Exception(() => ManifestReader.Read(manifest, "fake", root, Bounds));
+
+            Assert.True(thrown is null, $"this manifest made the reader throw {thrown?.GetType().Name}: {thrown?.Message}\n\n{manifest}");
+        }
+    }
+
+    private static IEnumerable<string> Malformed()
+    {
+        foreach (var field in ReadableFields)
+        {
+            foreach (var shape in WrongShapes)
+            {
+                yield return Merge(Nested(field, shape));
+            }
+        }
+
+        foreach (var fragment in WrongShapesInLists)
+        {
+            yield return Merge(fragment);
+        }
+    }
+
+    /// <summary>A dotted field path and a value, written back out as the nested YAML mapping it stands for.</summary>
+    private static string Nested(string field, string shape)
+    {
+        var segments = field.Split('.');
+        var fragment = new System.Text.StringBuilder();
+        for (var level = 0; level < segments.Length - 1; level++)
+        {
+            fragment.Append(' ', level * 2).Append(segments[level]).Append(":\n");
+        }
+
+        return fragment.Append(' ', (segments.Length - 1) * 2).Append(segments[^1]).Append(": ").Append(shape).Append('\n').ToString();
     }
 
     /// <summary>Replaces the base manifest's lines that the fragment redefines, then appends the rest.</summary>

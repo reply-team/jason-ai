@@ -43,16 +43,20 @@ public class PluginStartupTests
         Assert.True(info.Plugins.LastReloadActivated);
     }
 
-    [Fact]
-    public async Task A_package_the_manifest_reader_cannot_read_is_named_rather_than_disabling_every_plugin_in_silence()
+    [Theory]
+    [InlineData(TestPlugins.BindingBoundTooLarge, "yaml_invalid")]
+    [InlineData(TestPlugins.BindingTypeAsAList, "field_invalid")]
+    public async Task A_package_the_manifest_reader_cannot_take_at_face_value_is_named_rather_than_silently_emptying_the_registry(
+        string fragment,
+        string expected)
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: paths =>
         {
             File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
             TestPlugins.Write(
                 paths,
-                "overflowing",
-                TestPlugins.Manifest("overflowing", extra: PluginServiceTests.OverflowingBinding),
+                "unreadable",
+                TestPlugins.Manifest("unreadable", extra: fragment),
                 "export function invoke() { return { result: {} }; }");
         });
 
@@ -62,9 +66,9 @@ public class PluginStartupTests
 
         Assert.False(registry.LastReload!.Activated);
         var candidate = Assert.Single(registry.LastReload.Candidates);
-        Assert.Equal("overflowing", candidate.Directory);
+        Assert.Equal("unreadable", candidate.Directory);
         Assert.Equal(CandidateStatus.Invalid, candidate.Status);
-        Assert.Equal("yaml_invalid", Assert.Single(candidate.Problems).Code);
+        Assert.Equal(expected, Assert.Single(candidate.Problems).Code);
     }
 
     [Fact]
