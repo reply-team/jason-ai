@@ -562,7 +562,7 @@ public class WorkItemServiceTests
         new(campaignId, WorkItemKind.AiRole, "researcher", null, null, null, null, null, null, null, null, null, null, null, null, null);
 
     private static WorkItemCreateRequest ProviderOp(string? campaignId) =>
-        new(campaignId, WorkItemKind.ProviderOp, null, "contacts.enroll", null, null, null, null, null, null, null, null, null, null, null, null);
+        new(campaignId, WorkItemKind.ProviderOp, null, "campaign.get", null, null, null, null, null, null, null, null, null, null, null, null);
 
     private static Campaign Seed(JasonDbContext db, Campaign campaign)
     {
