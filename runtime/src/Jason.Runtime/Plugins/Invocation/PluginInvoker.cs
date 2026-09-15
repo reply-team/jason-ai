@@ -295,10 +295,11 @@ public sealed partial class PluginInvoker(
                 await ChildProcess.EndedWithinAsync(process, settings.Invoker.KillGraceMs).ConfigureAwait(false);
             }
 
-            // After a kill — the caller's, the deadline's, or this invoker's own when the child floods — the
-            // wait for the pipes is bounded by the same grace, and the streams are let go of whether or not it
-            // came back. What was captured by then is what the invocation is classified from.
-            await SettleAsync([.. pumps, envelope], killed || timedOut || tooLarge, settings.Invoker.KillGraceMs).ConfigureAwait(false);
+            // The wait for the pipes is bounded by the kill grace whichever way the child ended: after a kill —
+            // the caller's, the deadline's, or this invoker's own when the child floods — and equally after a
+            // child that exited by itself, which says nothing about what it left running on the same handles.
+            // What was captured by then is what the invocation is classified from.
+            await SettleAsync([.. pumps, envelope], settings.Invoker.KillGraceMs).ConfigureAwait(false);
             Release(process);
 
             var exitCode = ExitCodeOf(process);
@@ -318,17 +319,18 @@ public sealed partial class PluginInvoker(
     }
 
     /// <summary>
-    /// Waits for the tasks that hold the child's pipes, and after a kill for no longer than the kill grace. A
-    /// child may leave something running that inherited its standard handles, and the read end of a pipe only
-    /// ends once every writer has let go of it: waiting for that would hold an invocation open indefinitely for
-    /// a process tree that has already been ended. An abandoned task is left to finish on its own — its pipe
-    /// ends when the last writer does — and its failure is observed there rather than thrown here, where there
-    /// is no longer anyone to tell.
+    /// Waits for the tasks that hold the child's pipes, for no longer than the kill grace. By the time this
+    /// runs the child has ended, and a child may leave something running that inherited its standard handles:
+    /// the read end of a pipe only ends once every writer has let go of it, so waiting for that would hold an
+    /// invocation open for as long as the helper lived — with its answer already in hand. Whether the child was
+    /// killed or exited by itself decides nothing here, because neither says what it left behind. An abandoned
+    /// task is left to finish on its own — its pipe ends when the last writer does — and its failure is
+    /// observed there rather than thrown here, where there is no longer anyone to tell.
     /// </summary>
-    private static async Task SettleAsync(IReadOnlyList<Task> pipes, bool bounded, int killGraceMs)
+    private static async Task SettleAsync(IReadOnlyList<Task> pipes, int killGraceMs)
     {
         var all = Task.WhenAll(pipes);
-        if (!bounded || await Task.WhenAny(all, Task.Delay(killGraceMs)).ConfigureAwait(false) == all)
+        if (await Task.WhenAny(all, Task.Delay(killGraceMs)).ConfigureAwait(false) == all)
         {
             await all.ConfigureAwait(false);
             return;

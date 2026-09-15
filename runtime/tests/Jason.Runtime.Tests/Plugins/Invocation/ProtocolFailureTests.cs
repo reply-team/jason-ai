@@ -231,6 +231,31 @@ public class ProtocolFailureTests
         AssertGone(result.Launch!.Pid!.Value);
     }
 
+    /// <summary>
+    /// The same helper, after a child that ended of its own accord. Nothing was killed, and the answer is
+    /// already in hand — so the read ends that are still open are held by something the child left, and waiting
+    /// for them would hold the invocation, and in time a handler slot, for a process nobody is coming back for.
+    /// A vendor CLI that detaches an update check does exactly this after writing a perfectly good outcome.
+    /// </summary>
+    [Fact]
+    public async Task Something_a_child_that_exited_left_behind_does_not_hold_the_invocation_open()
+    {
+        await using var api = await StartAsync(
+            Child("outcome-orphan", "30000"),
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"KillGraceMs":500}}}""");
+
+        // The budget is far longer than the child needs: it writes its outcome and exits in milliseconds, so
+        // nothing here is waiting on a deadline. Only the pipes are left, and only the grace bounds them.
+        var watch = Stopwatch.StartNew();
+        var call = InvokeAsync(api, TimeSpan.FromSeconds(30));
+        var answered = await Task.WhenAny(call, Task.Delay(TimeSpan.FromSeconds(20), Ct)) == call;
+
+        Assert.True(answered, "the invocation waited for pipes that only something the child left behind still holds");
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), $"the settle outlived the kill grace: {watch.Elapsed}");
+        var succeeded = Assert.IsType<InvocationOutcome.Succeeded>((await call).Outcome);
+        Assert.True(succeeded.Result!["ok"]!.GetValue<bool>());
+    }
+
     [Fact]
     public async Task A_host_that_cannot_be_started_at_all_is_a_launch_failure()
     {

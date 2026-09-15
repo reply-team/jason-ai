@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text.Json;
 
 // A stand-in for a vendor CLI. The first argument names the behaviour; everything a plugin's host.exec has to
 // survive — output floods, slow programs, non-zero exits, an environment it cannot see — is one of these, so no
@@ -89,6 +90,30 @@ switch (args[0])
         // Writes nothing and reads nothing: the point is only that the inherited handles stay open.
         await Task.Delay(holdMs);
         return 0;
+
+    case "outcome-orphan" when args.Length > 1:
+        {
+            // A child that keeps the protocol to the letter and still leaves something behind. The envelope is
+            // read so that the answer belongs to this invocation, a helper is started through a middle process
+            // that exits at once — so no kill of this tree could reach it — and it holds the inherited handles
+            // long after this program is gone. An update notifier left running by a vendor CLI does exactly
+            // this, and the answer is already written when it happens.
+            var envelope = await Console.In.ReadToEndAsync();
+            using var request = JsonDocument.Parse(envelope);
+            var invocationId = request.RootElement.GetProperty("invocation_id").GetString();
+
+            using (var middle = StartSelf("spawn-orphan-inner", args[1]))
+            {
+                middle?.WaitForExit();
+            }
+
+            await Console.Out.WriteAsync(
+                """
+                {"protocol_version":1,"invocation_id":"INVOCATION","status":"succeeded","result":{"ok":true},"external_ids":null,"error":null,"diagnostics":{"duration_ms":1,"exec_calls":0,"http_calls":0,"log_lines":0}}
+                """.Replace("INVOCATION", invocationId, StringComparison.Ordinal));
+            await Console.Out.FlushAsync();
+            return 0;
+        }
 
     case "stdin-length":
         {
