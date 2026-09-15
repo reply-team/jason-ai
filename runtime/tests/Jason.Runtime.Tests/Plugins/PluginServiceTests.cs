@@ -66,6 +66,9 @@ public class PluginServiceTests
         Assert.Equal(["FAKE_TOKEN", "FAKE_OTHER", "FAKE_CLI_DLL"], plugin.Capabilities.Env!.Requested);
         Assert.Equal(["FAKE_TOKEN"], plugin.Capabilities.Env.Granted);
 
+        // What a route to this plugin has to carry, so an operator can see it before writing one.
+        Assert.Equal(["workspace"], plugin.BindingSchema!["required"]!.AsArray().Select(name => name!.GetValue<string>()));
+
         var listed = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, Ct);
         Assert.Equal(reloaded.Snapshot.Id, listed.Snapshot.Id);
         Assert.Equal(reloaded.Plugins[0].Digest, Assert.Single(listed.Plugins).Digest);

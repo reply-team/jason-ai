@@ -156,6 +156,9 @@ public class PluginContractsShapeTests
         Assert.Contains("\"loaded_at\":\"1970-01-01T00:00:00.000Z\"", json, StringComparison.Ordinal);
         Assert.Contains("\"min_version\":\"0.4.0\"", json, StringComparison.Ordinal);
         Assert.Contains("\"last_reload\":{", json, StringComparison.Ordinal);
+
+        // The schema travels verbatim: its keywords are JSON Schema's own spelling, not Jason's snake_case.
+        Assert.Contains("\"binding_schema\":{\"type\":\"object\"}", json, StringComparison.Ordinal);
     }
 
     [Fact]
