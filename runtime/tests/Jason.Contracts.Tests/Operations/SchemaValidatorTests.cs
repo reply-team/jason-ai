@@ -186,6 +186,50 @@ public class SchemaValidatorTests
         Assert.Equal("type", Refuses(schema, "\"7\"").Reason);
     }
 
+    // Reading `1e-40` as a decimal answers zero, and a zero answers questions the number never would: it is a
+    // whole number, and it is not greater than zero. Both are false about the value in front of the validator, and
+    // a confident wrong answer is worse than a missing one — nothing anywhere said a comparison had not run.
+    [Fact]
+    public void A_number_too_small_for_a_decimal_is_not_a_whole_number()
+    {
+        Assert.Equal("type", Refuses("""{"type":"integer"}""", "1e-40").Reason);
+    }
+
+    [Fact]
+    public void A_number_too_small_for_a_decimal_is_not_refused_for_failing_to_exceed_zero()
+    {
+        Assert.Equal("number_not_comparable", Refuses("""{"exclusiveMinimum":0}""", "1e-40").Reason);
+
+        // Every rule that could not run says so, rather than one of them answering for all of them.
+        var problems = SchemaValidator.Validate(JsonNode.Parse("-1e-40"), Schema("""{"type":"number","minimum":0,"maximum":1}"""));
+
+        Assert.Equal(2, problems.Count);
+        Assert.All(problems, problem => Assert.Equal("number_not_comparable", problem.Reason));
+    }
+
+    [Fact]
+    public void A_bound_too_small_for_a_decimal_is_refused_rather_than_read_as_zero()
+    {
+        const string schema = """{"type":"number","multipleOf":1e-40}""";
+
+        var declared = Assert.Single(SchemaValidator.CheckDialect(Schema(schema)));
+
+        // Read as zero it is not greater than zero, so the old answer was "multipleOf must be a number greater
+        // than zero" about a number that is exactly that.
+        Assert.Equal("number_not_comparable", declared.Reason);
+        Assert.Equal("/multipleOf", declared.Pointer);
+    }
+
+    [Fact]
+    public void A_number_that_narrows_exactly_still_takes_part_in_every_comparison()
+    {
+        // The guard must cost the ordinary numbers a contract is written in nothing at all.
+        Accepts("""{"type":"number","minimum":0,"maximum":1}""", "0.1");
+        Accepts("""{"type":"number","multipleOf":0.05}""", "0.15");
+        Accepts("""{"type":"number","maximum":1e20}""", "1e20");
+        Accepts("""{"type":"integer","minimum":-9007199254740993}""", "9007199254740993");
+    }
+
     [Fact]
     public void A_value_outside_the_range_this_dialect_compares_in_is_refused_rather_than_waved_through()
     {
@@ -194,8 +238,8 @@ public class SchemaValidatorTests
         const string schema = """{"type":"number","maximum":100}""";
         Accepts(schema, "100");
 
-        Assert.Equal("number_out_of_range", Refuses(schema, "1e40").Reason);
-        Assert.Equal("number_out_of_range", Refuses(schema, "-1e40").Reason);
+        Assert.Equal("number_not_comparable", Refuses(schema, "1e40").Reason);
+        Assert.Equal("number_not_comparable", Refuses(schema, "-1e40").Reason);
     }
 
     [Fact]
@@ -205,9 +249,9 @@ public class SchemaValidatorTests
 
         var declared = Assert.Single(SchemaValidator.CheckDialect(Schema(schema)));
 
-        Assert.Equal("number_out_of_range", declared.Reason);
+        Assert.Equal("number_not_comparable", declared.Reason);
         Assert.Equal("/maximum", declared.Pointer);
-        Assert.Equal("number_out_of_range", Refuses(schema, "1").Reason);
+        Assert.Equal("number_not_comparable", Refuses(schema, "1").Reason);
     }
 
     [Fact]

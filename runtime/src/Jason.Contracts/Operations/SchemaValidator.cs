@@ -582,7 +582,7 @@ public static class SchemaValidator
         {
             // A bound that is a number all the same, only not one the comparison can hold, is neither the wrong
             // kind of value nor something to pass over: the rule it states cannot run, and that is what is said.
-            problems.Add(IsNumber(argument) ? OutOfRange(pointer) : Malformed(pointer, keyword, Expects(keyword)));
+            problems.Add(IsNumber(argument) ? NotComparable(pointer) : Malformed(pointer, keyword, Expects(keyword)));
             return;
         }
 
@@ -599,7 +599,7 @@ public static class SchemaValidator
             // came to accept 1e40.
             if (IsNumber(value))
             {
-                problems.Add(OutOfRange(pointer));
+                problems.Add(NotComparable(pointer));
             }
 
             return;
@@ -900,7 +900,7 @@ public static class SchemaValidator
                 case "minimum" or "maximum" or "exclusiveMinimum" or "exclusiveMaximum":
                     if (!TryNumber(argument, out _))
                     {
-                        problems.Add(IsNumber(argument) ? OutOfRange(at) : Malformed(at, keyword, Expects(keyword)));
+                        problems.Add(IsNumber(argument) ? NotComparable(at) : Malformed(at, keyword, Expects(keyword)));
                     }
 
                     break;
@@ -908,7 +908,7 @@ public static class SchemaValidator
                 case "multipleOf":
                     if (!TryNumber(argument, out var divisor))
                     {
-                        problems.Add(IsNumber(argument) ? OutOfRange(at) : Malformed(at, keyword, Expects(keyword)));
+                        problems.Add(IsNumber(argument) ? NotComparable(at) : Malformed(at, keyword, Expects(keyword)));
                     }
                     else if (divisor <= 0)
                     {
@@ -1106,13 +1106,14 @@ public static class SchemaValidator
         new(pointer, "duplicate_property", "An object here writes the same property twice, so which of the two it means is not decidable.");
 
     /// <summary>
-    /// A number the dialect cannot take part in a comparison with. Every numeric rule here runs in decimal —
-    /// chosen so that a money-like value means what it says — and a number outside that range leaves the rule
-    /// unable to run at all. Saying so is the point: a rule that quietly did not run reads exactly like one that
-    /// ran and was satisfied.
+    /// A number no comparison here could run against. Every numeric rule runs in decimal — chosen so that a
+    /// money-like value means what it says — and a number a decimal cannot hold exactly leaves the rule unable to
+    /// run at all. Saying so is the point: a rule that quietly did not run reads exactly like one that ran and was
+    /// satisfied. The code says "not comparable" rather than "out of range" deliberately: the range a caller will
+    /// think of is the one the schema set, and that is what <c>minimum</c> and <c>maximum</c> already report.
     /// </summary>
-    private static SchemaProblem OutOfRange(string pointer) =>
-        new(pointer, "number_out_of_range", "A number here is compared as a decimal, and this one lies outside the range a decimal holds.");
+    private static SchemaProblem NotComparable(string pointer) =>
+        new(pointer, "number_not_comparable", "A number here has to be compared as a decimal, and this one cannot be held as one exactly, so no comparison ran against it.");
 
     private static string Expects(string keyword) => keyword == "multipleOf" ? "a number greater than zero" : "a number";
 
@@ -1274,10 +1275,12 @@ public static class SchemaValidator
             return false;
         }
 
+        // The widest reading the node offers, kept only to say whether a narrower one is the same number.
+        var widest = candidate.TryGetValue(out double real) ? real : (double?)null;
+
         if (candidate.TryGetValue(out decimal exact))
         {
-            value = exact;
-            return true;
+            return Narrowed(exact, widest, out value);
         }
 
         // A node parsed from text holds an element that converts to any numeric type; one built in memory — a
@@ -1285,18 +1288,39 @@ public static class SchemaValidator
         // alone. Both are the same number, and a rule that ran for one has to run for the other.
         if (candidate.TryGetValue(out long whole))
         {
-            value = whole;
-            return true;
+            return Narrowed(whole, widest, out value);
         }
 
-        if (candidate.TryGetValue(out double real) && double.IsFinite(real) && real is >= MinDecimal and <= MaxDecimal)
+        if (widest is { } number && double.IsFinite(number) && number is >= MinDecimal and <= MaxDecimal)
         {
-            value = (decimal)real;
-            return true;
+            return Narrowed((decimal)number, number, out value);
         }
 
         // A number outside decimal's range is still a number; it simply cannot take part in a numeric comparison.
         return false;
+    }
+
+    /// <summary>
+    /// The decimal reading, taken only where it is still the same number the document holds. Narrowing rounds in
+    /// silence: <c>1e-40</c> becomes zero, and a zero answers questions the number never would — it is a whole
+    /// number, and it is not greater than zero. Both answers are false about the value in front of the validator,
+    /// and a confident wrong answer is worse than a missing one, so a number that does not survive the narrowing
+    /// is reported as one no comparison could run against rather than quietly stood in for.
+    /// </summary>
+    /// <param name="widest">
+    /// The same number read as a double, where the node offers one. Comparing in that space rejects only a
+    /// narrowing that lost the number, never a decimal carrying more digits than a double can hold.
+    /// </param>
+    private static bool Narrowed(decimal exact, double? widest, out decimal value)
+    {
+        if (widest is { } number && (double)exact != number)
+        {
+            value = 0m;
+            return false;
+        }
+
+        value = exact;
+        return true;
     }
 
     private static bool SameValue(JsonNode? left, JsonNode? right)
