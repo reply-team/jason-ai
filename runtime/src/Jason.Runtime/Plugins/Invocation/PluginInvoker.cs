@@ -257,7 +257,12 @@ public sealed partial class PluginInvoker(
                 stderr.PumpAsync(process.StandardError),
             };
 
-            await WriteEnvelopeAsync(process, invocation).ConfigureAwait(false);
+            // The envelope is written alongside the wait, never before it. An envelope larger than a pipe buffer
+            // only finishes being written once the child reads it, and a child that reads nothing would
+            // otherwise hold this thread here with the deadline below not yet running — nothing able to kill it.
+            // The token ends a write that has not started; the kill ends one already in flight, by breaking the
+            // pipe the write is blocked on.
+            var envelope = WriteEnvelopeAsync(process, invocation, lifetime.Token);
 
             var timedOut = false;
             var killed = false;
@@ -274,6 +279,7 @@ public sealed partial class PluginInvoker(
             }
 
             await Task.WhenAll(pumps).ConfigureAwait(false);
+            await envelope.ConfigureAwait(false);
 
             var exitCode = process.ExitCode;
             var outcome = Classify(invocation, settings, stdout, stderr, tooLarge, killed, timedOut, exitCode, timeoutMs);
@@ -414,11 +420,12 @@ public sealed partial class PluginInvoker(
             new LogLimits(settings.Invoker.LogLineBytes, settings.Invoker.StderrBytes));
 
     /// <summary>One JSON object, then end of file: the child reads until the stream ends rather than guessing.</summary>
-    private static async Task WriteEnvelopeAsync(Process process, PluginInvocation invocation)
+    private static async Task WriteEnvelopeAsync(Process process, PluginInvocation invocation, CancellationToken lifetime)
     {
         try
         {
-            await process.StandardInput.WriteAsync(JsonSerializer.Serialize(invocation, JasonJson.Options)).ConfigureAwait(false);
+            var json = JsonSerializer.Serialize(invocation, JasonJson.Options);
+            await process.StandardInput.WriteAsync(json.AsMemory(), lifetime).ConfigureAwait(false);
             process.StandardInput.Close();
         }
         catch (IOException)
@@ -428,6 +435,10 @@ public sealed partial class PluginInvoker(
         catch (ObjectDisposedException)
         {
             // The same story, seen from the other side of an already-closed pipe.
+        }
+        catch (OperationCanceledException)
+        {
+            // The invocation's lifetime ended first. The child is being killed; there is nothing left to tell it.
         }
     }
 
