@@ -14,8 +14,13 @@ durable outbound-sales operation.
 > **Plugin packages** are validated against the manifest schema, listed with their content digest
 > and their requested-versus-granted capabilities, and swapped in atomically by an explicit reload;
 > the plugin host runs one invocation of a package's JavaScript in its own process under the Host
-> SDK. Provider operations are still not routed to it, so nothing here sends outreach. The runtime
-> is being built in the open, one self-contained increment at a time; no dates, no roadmap promises.
+> SDK. **Canonical operation contracts** are published under [`docs/contracts/`](docs/contracts) —
+> one machine-readable document per operation, embedded into the runtime that enforces it — and a
+> work item naming a provider operation is measured against its contract when it is created: an
+> operation this build publishes no contract for, or arguments that do not satisfy one, are refused
+> there and then. Routing a work item to a plugin arrives with the next increment; no provider
+> operation runs yet, so nothing here sends outreach. The runtime is being built in the open, one
+> self-contained increment at a time; no dates, no roadmap promises.
 
 ## What this is
 
@@ -105,6 +110,10 @@ cp -r ./my-plugin ~/.jason/plugins/
 jason plugin reload --reason "installed my plugin"
 jason plugin list --human
 ```
+
+The canonical operations a plugin implements — one document per operation, the schema dialect they are
+written in, the published argument and answer fixtures, and where Jason's strict subset departs from
+the vendor-neutral contract it is seeded from — are in **[docs/contracts/](docs/contracts/README.md)**.
 
 ## Ecosystem
 
