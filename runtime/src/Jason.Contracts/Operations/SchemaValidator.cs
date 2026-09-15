@@ -1274,10 +1274,12 @@ public static class SchemaValidator
             return false;
         }
 
+        // The widest reading the node offers, kept only to say whether a narrower one is the same number.
+        var widest = candidate.TryGetValue(out double real) ? real : (double?)null;
+
         if (candidate.TryGetValue(out decimal exact))
         {
-            value = exact;
-            return true;
+            return Narrowed(exact, widest, out value);
         }
 
         // A node parsed from text holds an element that converts to any numeric type; one built in memory — a
@@ -1285,18 +1287,39 @@ public static class SchemaValidator
         // alone. Both are the same number, and a rule that ran for one has to run for the other.
         if (candidate.TryGetValue(out long whole))
         {
-            value = whole;
-            return true;
+            return Narrowed(whole, widest, out value);
         }
 
-        if (candidate.TryGetValue(out double real) && double.IsFinite(real) && real is >= MinDecimal and <= MaxDecimal)
+        if (widest is { } number && double.IsFinite(number) && number is >= MinDecimal and <= MaxDecimal)
         {
-            value = (decimal)real;
-            return true;
+            return Narrowed((decimal)number, number, out value);
         }
 
         // A number outside decimal's range is still a number; it simply cannot take part in a numeric comparison.
         return false;
+    }
+
+    /// <summary>
+    /// The decimal reading, taken only where it is still the same number the document holds. Narrowing rounds in
+    /// silence: <c>1e-40</c> becomes zero, and a zero answers questions the number never would — it is a whole
+    /// number, and it is not greater than zero. Both answers are false about the value in front of the validator,
+    /// and a confident wrong answer is worse than a missing one, so a number that does not survive the narrowing
+    /// is reported as one no comparison could run against rather than quietly stood in for.
+    /// </summary>
+    /// <param name="widest">
+    /// The same number read as a double, where the node offers one. Comparing in that space rejects only a
+    /// narrowing that lost the number, never a decimal carrying more digits than a double can hold.
+    /// </param>
+    private static bool Narrowed(decimal exact, double? widest, out decimal value)
+    {
+        if (widest is { } number && (double)exact != number)
+        {
+            value = 0m;
+            return false;
+        }
+
+        value = exact;
+        return true;
     }
 
     private static bool SameValue(JsonNode? left, JsonNode? right)
