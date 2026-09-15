@@ -42,6 +42,12 @@ switch (args[0])
         await Console.Error.WriteLineAsync("exiting");
         return code;
 
+    case "stderr-exit" when args.Length > 2 && int.TryParse(args[1], CultureInfo.InvariantCulture, out var stderrExitCode):
+        // A last word on stderr, chosen by the caller: whoever reads that line can be handed one it did not
+        // expect, which is what a program that broke in an unforeseen way leaves behind.
+        await Console.Error.WriteLineAsync(args[2]);
+        return stderrExitCode;
+
     case "spew" when args.Length > 1 && int.TryParse(args[1], CultureInfo.InvariantCulture, out var bytes):
         {
             var text = new string('x', bytes);
@@ -51,17 +57,32 @@ switch (args[0])
             return 0;
         }
 
+    case "spew-orphan" when args.Length > 2 && int.TryParse(args[1], CultureInfo.InvariantCulture, out var floodBytes):
+        {
+            // Both at once: the middle process is waited for rather than left to run, so that by the time the
+            // flood starts the helper it left behind is certainly running and certainly out of reach of a tree
+            // kill. Whoever reads this stream can end the flood; what holds the pipe open outlives that.
+            using (var middle = StartSelf("spawn-orphan-inner", args[2]))
+            {
+                middle?.WaitForExit();
+            }
+
+            await Console.Out.WriteAsync(new string('x', floodBytes));
+            await Console.Out.FlushAsync();
+            return 0;
+        }
+
     case "spawn-orphan" when args.Length > 1:
         // Leaves a program behind that this process is no longer an ancestor of: the middle one starts the
         // lingering one and exits at once, so killing this process tree never reaches it. It still holds the
         // standard handles it inherited, which is how a helper a program left behind keeps a caller's pipes
         // open long after that program is gone.
-        StartSelf("spawn-orphan-inner", args[1]);
+        StartSelf("spawn-orphan-inner", args[1])?.Dispose();
         await Task.Delay(Timeout.Infinite);
         return 0;
 
     case "spawn-orphan-inner" when args.Length > 1:
-        StartSelf("hold", args[1]);
+        StartSelf("hold", args[1])?.Dispose();
         return 0;
 
     case "hold" when args.Length > 1 && int.TryParse(args[1], CultureInfo.InvariantCulture, out var holdMs):
@@ -96,7 +117,7 @@ switch (args[0])
 
 // This program again, with the standard handles it was given rather than pipes of its own: no redirection, so
 // the new process inherits them, and no console of its own, so nothing replaces them.
-static void StartSelf(params string[] arguments)
+static Process? StartSelf(params string[] arguments)
 {
     var host = Environment.ProcessPath!;
     var info = new ProcessStartInfo(host) { UseShellExecute = false, CreateNoWindow = true };
@@ -112,7 +133,7 @@ static void StartSelf(params string[] arguments)
         info.ArgumentList.Add(argument);
     }
 
-    Process.Start(info)?.Dispose();
+    return Process.Start(info);
 }
 
 // A version check is the one thing this program does without being asked by a test: the reload runs it. Any

@@ -245,9 +245,17 @@ export function invoke(operation, input, context) {
       const contact = input.contacts[0];
       const answer = host.exec({ executable: "reply", args: ["list", "add", "--json"], stdin: JSON.stringify(input.args) });
       if (answer.exit_code !== 0) {
-        // Called, and no answer came back: whether it acted is not knowable from here, which is what
-        // `ambiguous` means. The contract's recovery read is how the next attempt finds out (§7).
-        throw host.fail({ class: "ambiguous", code: "provider_answer_lost", message: answer.stderr.slice(0, 500) });
+        // Not every non-zero exit is the same not-knowing. A program that never started (`-1`) or that
+        // refused the call before doing anything (2 here — your provider's own convention) cannot have
+        // acted, so that is `permanent`. A timeout, or an exit once the call was under way, may have
+        // acted: that is what `ambiguous` means, and the contract's recovery read is how the next attempt
+        // finds out (§7).
+        const acted = answer.timed_out || (answer.exit_code !== -1 && answer.exit_code !== 2);
+        throw host.fail({
+          class: acted ? "ambiguous" : "permanent",
+          code: acted ? "provider_answer_lost" : "provider_call_failed",
+          message: answer.stderr.slice(0, 500),
+        });
       }
 
       const added = JSON.parse(answer.stdout);
@@ -271,7 +279,12 @@ verbatim. Anything else — a bare value, `undefined`, an array, an object witho
 
 **Failing.** `throw host.fail({ class, code, message, details?, external_ids? })` is the only way to
 report a business failure with its class. Anything else thrown fails `permanent` with
-`plugin_exception`, keeping the message and the JavaScript stack in `details.stack`.
+`plugin_exception`, keeping the message and the JavaScript stack in `details.stack`. The class is a
+judgement only you can make, and `ambiguous` is the expensive one — it ends the work item and waits
+for a person (§8), so spend it only where the effect really may have landed. In the snippet above
+`provider_answer_lost` is a code the three published contracts declare; `provider_call_failed` is
+that plugin's own word for a call that never became work, and a contract expecting it would list it
+among its `failure_codes` (§7).
 
 **Promises.** `async function invoke` works: the host drains the job queue and unwraps the promise
 within the budget. The five `host.*` functions are synchronous — they block until the program or the
@@ -339,9 +352,10 @@ decides what a program loads is refused with a `TypeError` at the call: `LD_*`, 
 `stderr` are captured up to `Plugins:Exec:OutputBytes` (4 MiB) each, the first bytes kept and the
 crossing flagged in `truncated`. On a timeout the whole process tree is killed and the call
 **returns** with `timed_out: true` rather than throwing — the plugin decides what that means, usually
-`ambiguous`. Reading the output after that kill is bounded by the same five-second grace: a program
-may leave a helper running that inherited its pipes, and the call comes back with whatever was
-captured rather than waiting for a handle the program it ended no longer holds. A granted program that will not start at all is an answer too: `exit_code: -1` with the
+`ambiguous`. Reading the output is bounded by that same five-second grace however the program ended:
+a program may leave a helper running that inherited its pipes, an exit of its own accord says nothing
+about what it left behind, and the call comes back with whatever was captured rather than waiting for
+a handle the program it ran no longer holds. A granted program that will not start at all is an answer too: `exit_code: -1` with the
 reason in `stderr`, and an `exec_launch_failed` line on stderr. At most `Plugins:Exec:MaxCalls` (64)
 calls per invocation; the next fails `exec_limit`. Every call is logged as one `exec` line:
 executable, arguments, exit code, duration, timed out, truncated.
@@ -649,7 +663,10 @@ JavaScript, the **child** ends the invocation and writes a normal `failed` outco
 class `permanent` if no `host.exec` or `host.http` call had been started and `ambiguous` if one had —
 the host knows, and the plugin never has to reason about it. When the child itself hangs past the
 budget and the grace period, the **runtime** kills the tree and reports the protocol failure
-`plugin_timeout`, which is always ambiguous.
+`plugin_timeout`, which is always ambiguous. Reading what that child wrote is bounded by the same
+grace, exactly as `host.exec` bounds its own: a child may leave a helper running that inherited its
+pipes, and an invocation is classified from what was captured by then rather than waiting for a
+handle the tree it ended no longer holds.
 
 The other codes the host itself writes into a failed outcome — as opposed to your own vocabulary —
 are `plugin_exception`, `bad_return`, `result_too_large`, `entry_function_missing`,

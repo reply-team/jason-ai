@@ -72,6 +72,25 @@ public class ProtocolFailureTests
         AssertGone(result.Launch!.Pid!.Value);
     }
 
+    /// <summary>
+    /// The flood is ended by a kill like any other, so reading what is left of it is bounded like any other:
+    /// this child leaves a helper holding its pipes behind before it floods, and the answer still arrives.
+    /// </summary>
+    [Fact]
+    public async Task A_flood_that_left_a_helper_holding_the_pipes_is_answered_all_the_same()
+    {
+        await using var api = await StartAsync(
+            Child("spew-orphan", "5000000", "30000"),
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"OutcomeBytes":65536,"KillGraceMs":500}}}""");
+
+        var call = InvokeAsync(api);
+        var answered = await Task.WhenAny(call, Task.Delay(TimeSpan.FromSeconds(20), Ct)) == call;
+
+        Assert.True(answered, "the invocation was still reading a stream the process it killed no longer writes to");
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>((await call).Outcome);
+        Assert.Equal(ProtocolCodes.PluginOutputTooLarge, failure.Code);
+    }
+
     [Fact]
     public async Task A_child_that_floods_stderr_without_ever_ending_a_line_is_capped_and_still_answered()
     {
@@ -103,6 +122,27 @@ public class ProtocolFailureTests
         Assert.Equal(ProtocolCodes.PluginInvocationRejected, failure.Code);
         Assert.Equal(3, failure.ExitCode);
         Assert.Equal(FailureClass.Permanent, OutcomeClassification.ClassOf(failure.Code));
+    }
+
+    /// <summary>
+    /// The reason a refusal carries is read from the last line of the child's stderr, and that line is the
+    /// child's own text: a host that broke in an unforeseen way, or something that is not the host at all,
+    /// can write anything there. None of it may throw out of an invocation that still has an answer to give.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"message":5}""")]
+    [InlineData("""{"message":"refused","data":5}""")]
+    [InlineData("""{"message":"refused","data":{"code":7}}""")]
+    public async Task A_diagnostic_shaped_unlike_a_diagnostic_is_read_as_one_no_further_than_it_goes(string line)
+    {
+        await using var api = await StartAsync(Child("stderr-exit", "3", line));
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginInvocationRejected, failure.Code);
+        Assert.Equal(3, failure.ExitCode);
+        Assert.Contains("refused the invocation", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -161,6 +201,31 @@ public class ProtocolFailureTests
         var result = await InvokeAsync(api, TimeSpan.FromMilliseconds(500), input).WaitAsync(TimeSpan.FromSeconds(60), Ct);
 
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(30), $"the envelope write outlived the budget: {watch.Elapsed}");
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginTimeout, failure.Code);
+        AssertGone(result.Launch!.Pid!.Value);
+    }
+
+    /// <summary>
+    /// A child may leave a helper running that inherited its standard handles, and the read end of a pipe only
+    /// ends once every writer has let go of it. Waiting for that would hold the invocation open long after the
+    /// tree it started was killed, and in time hold a handler slot with it. Whatever was captured by the end of
+    /// the kill grace is the answer.
+    /// </summary>
+    [Fact]
+    public async Task Something_the_killed_child_left_behind_does_not_hold_the_invocation_open()
+    {
+        await using var api = await StartAsync(
+            Child("spawn-orphan", "30000"),
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"KillGraceMs":500}}}""");
+
+        // The budget is generous so that the lingering process certainly exists by the time the tree is killed:
+        // the child starts a middle process which starts it and exits at once, and a kill never reaches it.
+        var call = InvokeAsync(api, TimeSpan.FromSeconds(5));
+        var answered = await Task.WhenAny(call, Task.Delay(TimeSpan.FromSeconds(20), Ct)) == call;
+
+        Assert.True(answered, "the invocation was still waiting for pipes the process it killed no longer holds");
+        var result = await call;
         var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
         Assert.Equal(ProtocolCodes.PluginTimeout, failure.Code);
         AssertGone(result.Launch!.Pid!.Value);
