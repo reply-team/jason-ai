@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 
 namespace Jason.Cli.Human;
@@ -40,6 +41,7 @@ public static class WorkItemRenderers
             Line("Updated:", RenderText.Moment(item.UpdatedAt)),
             Line("Finished:", RenderText.Moment(item.FinishedAt)),
             Line("Context keys:", RenderText.Keys(item.Context)),
+            Line("Input:", Input(item.Context)),
             Line("Result:", item.Result is null ? "none" : "present"),
         };
 
@@ -86,6 +88,17 @@ public static class WorkItemRenderers
         var line = $"attempt {response.AttemptId} alive; lease until {RenderText.Moment(response.LockUntil)}";
         return response.HeartbeatDueBy is null ? line : line + $"; next heartbeat due by {RenderText.Moment(response.HeartbeatDueBy.Value)}";
     }
+
+    /// <summary>
+    /// The arguments of a provider operation, named rather than printed like the context around them. They earn
+    /// their own line because they are the half of the context a plugin will actually be given.
+    /// </summary>
+    private static string? Input(JsonObject? context) => context?["input"] switch
+    {
+        null => null,
+        JsonObject arguments => RenderText.Keys(arguments),
+        _ => "present",
+    };
 
     private static string AttemptTable(IReadOnlyList<AttemptDto> attempts)
     {

@@ -14,6 +14,12 @@ namespace Jason.Cli.Commands;
 /// </summary>
 public static class WorkItemCommands
 {
+    /// <summary>
+    /// The context key the API reserves for a provider operation's arguments. Named here the way every other
+    /// field name is: the CLI composes the body the API documents and reads nothing into it.
+    /// </summary>
+    private const string InputKey = "input";
+
     /// <summary>The fields <c>--clear</c> may set back to nothing; every one of them is nullable on the API.</summary>
     private static readonly string[] Clearable =
         ["not_before", "due_at", "timeout_seconds", "heartbeat_seconds", "max_attempts", "result_format"];
@@ -51,6 +57,10 @@ public static class WorkItemCommands
         var heartbeat = new Option<int?>("--heartbeat") { Description = "How often the executor must prove it is alive, in seconds; 0 turns the check off." };
         var maxAttempts = new Option<int?>("--max-attempts") { Description = "How many attempts a retriable failure is worth." };
         var context = new Option<string?>("--context") { Description = "The work item's context, as a JSON object — the brief the executor is given." };
+        var input = new Option<string?>("--input")
+        {
+            Description = "The arguments of a provider operation, as a JSON object. Written into the context under input, the one key an operation's arguments travel in.",
+        };
         var resultFormat = new Option<string?>("--result-format") { Description = "What the result should look like, as any JSON value." };
         var file = VerbOptions.File(
             "The object holds campaign_id, kind, role or operation, contact_id, execution_profile, priority, not_before, due_at, "
@@ -70,6 +80,7 @@ public static class WorkItemCommands
         command.Options.Add(heartbeat);
         command.Options.Add(maxAttempts);
         command.Options.Add(context);
+        command.Options.Add(input);
         command.Options.Add(resultFormat);
         command.Options.Add(file);
         command.Options.Add(reason);
@@ -90,7 +101,7 @@ public static class WorkItemCommands
                 .Set("timeout_seconds", parseResult.GetValue(timeout))
                 .Set("heartbeat_seconds", parseResult.GetValue(heartbeat))
                 .Set("max_attempts", parseResult.GetValue(maxAttempts))
-                .Set("context", VerbOptions.Object(parseResult.GetValue(context), "--context"))
+                .Set("context", Context(body, parseResult.GetValue(context), parseResult.GetValue(input)))
                 .Set("result_format", VerbOptions.Json(parseResult.GetValue(resultFormat), "--result-format"))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
@@ -354,6 +365,37 @@ public static class WorkItemCommands
         });
 
         return command;
+    }
+
+    /// <summary>
+    /// The context the item starts with, and a provider operation's arguments written into the one key that
+    /// carries them. The CLI reads nothing about what an argument means — that is the contract's business — but
+    /// it refuses to write <c>input</c> twice: choosing silently between two of them would decide for the caller
+    /// what the operation does.
+    /// </summary>
+    private static JsonObject? Context(JsonObject body, string? context, string? input)
+    {
+        var given = VerbOptions.Object(context, "--context");
+        var arguments = VerbOptions.Object(input, "--input");
+        if (arguments is null)
+        {
+            return given;
+        }
+
+        var carrier = given ?? body["context"] switch
+        {
+            null => [],
+            JsonObject existing => existing,
+            _ => throw new UsageException("--input writes into the context, and the body carries a context that is not a JSON object."),
+        };
+
+        if (carrier.ContainsKey(InputKey))
+        {
+            throw new UsageException($"--input and the context both carry '{InputKey}'; give the operation's arguments once.");
+        }
+
+        carrier[InputKey] = arguments;
+        return carrier;
     }
 
     /// <summary>Both flags at once asks two contradictory questions, and the CLI can tell without the runtime.</summary>

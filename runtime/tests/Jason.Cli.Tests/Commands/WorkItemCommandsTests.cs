@@ -62,10 +62,105 @@ public class WorkItemCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("workitem", "create", "cmp_A", "--kind", "provider_op", "--operation", "contact.enroll");
+        var exit = await cli.RunAsync("workitem", "create", "cmp_A", "--kind", "provider_op", "--operation", "campaign.get");
 
         Assert.Equal(ExitCodes.Success, exit);
-        cli.AssertPosted(Operations.WorkItemCreate, "{\"campaign_id\":\"cmp_A\",\"kind\":\"provider_op\",\"operation\":\"contact.enroll\"}");
+        cli.AssertPosted(Operations.WorkItemCreate, "{\"campaign_id\":\"cmp_A\",\"kind\":\"provider_op\",\"operation\":\"campaign.get\"}");
+    }
+
+    [Fact]
+    public async Task Create_puts_the_operation_arguments_under_the_context_key_that_carries_them()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(
+            "workitem",
+            "create",
+            "cmp_A",
+            "--kind",
+            "provider_op",
+            "--operation",
+            "list_membership.add",
+            "--input",
+            "{\"list\":{\"external_id\":\"lst_7\"},\"channel\":\"email\"}");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.WorkItemCreate,
+            "{\"campaign_id\":\"cmp_A\",\"kind\":\"provider_op\",\"operation\":\"list_membership.add\","
+                + "\"context\":{\"input\":{\"list\":{\"external_id\":\"lst_7\"},\"channel\":\"email\"}}}");
+    }
+
+    [Fact]
+    public async Task Create_lays_the_input_into_a_context_given_beside_it()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(
+            "workitem",
+            "create",
+            "cmp_A",
+            "--kind",
+            "provider_op",
+            "--operation",
+            "campaign.get",
+            "--context",
+            "{\"brief\":\"the weekly read\"}",
+            "--input",
+            "{\"campaign\":{\"external_id\":\"seq_3\"}}");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.WorkItemCreate,
+            "{\"campaign_id\":\"cmp_A\",\"kind\":\"provider_op\",\"operation\":\"campaign.get\","
+                + "\"context\":{\"brief\":\"the weekly read\",\"input\":{\"campaign\":{\"external_id\":\"seq_3\"}}}}");
+    }
+
+    [Fact]
+    public async Task Create_lays_the_input_into_a_context_that_came_from_a_file()
+    {
+        using var file = new TempFile("{\"kind\":\"provider_op\",\"operation\":\"campaign.get\",\"context\":{\"brief\":\"from the file\"}}");
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("workitem", "create", "cmp_A", "--file", file.Path, "--input", "{}");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.WorkItemCreate,
+            "{\"kind\":\"provider_op\",\"operation\":\"campaign.get\",\"context\":{\"brief\":\"from the file\",\"input\":{}},\"campaign_id\":\"cmp_A\"}");
+    }
+
+    [Fact]
+    public async Task An_input_the_context_already_carries_is_a_usage_error()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync(
+            "workitem",
+            "create",
+            "cmp_A",
+            "--kind",
+            "provider_op",
+            "--operation",
+            "campaign.get",
+            "--context",
+            "{\"input\":{}}",
+            "--input",
+            "{}");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains("--input", cli.Error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_input_that_is_not_an_object_is_a_usage_error()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("workitem", "create", "cmp_A", "--kind", "provider_op", "--operation", "campaign.get", "--input", "[1]");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains("--input", cli.Error.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -425,9 +520,35 @@ public class WorkItemCommandsTests
             Updated:      2026-09-14 10:00:00 UTC
             Finished:     -
             Context keys: icp, tone
+            Input:        -
             Result:       none
             """.ReplaceLineEndings() + Environment.NewLine,
             cli.Text);
+    }
+
+    [Fact]
+    public async Task Human_mode_names_the_arguments_a_provider_operation_was_given()
+    {
+        var item = Item(null) with
+        {
+            Kind = WorkItemKind.ProviderOp,
+            Role = null,
+            Operation = "list_membership.add",
+            Context = new JsonObject
+            {
+                ["brief"] = "the weekly import",
+                ["input"] = new JsonObject { ["list"] = new JsonObject { ["external_id"] = "lst_7" }, ["channel"] = "email" },
+            },
+        };
+        using var cli = new CliRun(Serialize(item));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Kind:         provider_op (operation list_membership.add)", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Context keys: brief, input", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Input:        list, channel", cli.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 
     [Fact]
