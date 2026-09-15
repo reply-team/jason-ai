@@ -96,7 +96,7 @@ public class FixtureTests
 
             case "result_invalid":
                 Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
-                Assert.NotEmpty(resultProblems);
+                TheStatedProblemsAndNoOthers(relative, expected, resultProblems);
                 Assert.Equal(FailureClass.Ambiguous, Class(expected));
                 Assert.False((bool)expected["retriable"]!, "A shape error is deterministic, so repeating it can only spend budget.");
                 break;
@@ -106,6 +106,47 @@ public class FixtureTests
                 break;
         }
     }
+
+    /// <summary>
+    /// What a <c>result_invalid</c> fixture says is wrong with the answer, held against what the runtime reports.
+    /// A fixture that claimed only "something is wrong" would go on passing while the result was broken somewhere
+    /// nobody meant, so the pointers are compared as a sorted set exactly as an input fixture's are, and where a
+    /// fixture names the reason as well — one of the reason codes the package publishes, which travels outwards as
+    /// the code of an API error rather than staying inside the runtime — that is held against the report too.
+    /// </summary>
+    private static void TheStatedProblemsAndNoOthers(string relative, JsonObject expected, IReadOnlyList<SchemaProblem> problems)
+    {
+        var stated = expected["invalid"] as JsonArray;
+
+        Assert.True(stated is not null, $"{relative} says the result is invalid without saying what is invalid about it.");
+        Assert.NotEmpty(stated);
+        Assert.Equal(
+            stated.Select(Pointer).Order(StringComparer.Ordinal).ToList(),
+            problems.Select(problem => problem.Pointer).Order(StringComparer.Ordinal).ToList());
+
+        foreach (var entry in stated.OfType<JsonObject>())
+        {
+            var reason = (string?)entry["reason"];
+            if (reason is null)
+            {
+                continue;
+            }
+
+            var pointer = (string)entry["pointer"]!;
+            var reported = problems.Where(problem => problem.Pointer == pointer).Select(problem => problem.Reason).ToList();
+
+            Assert.True(
+                reported.Contains(reason, StringComparer.Ordinal),
+                $"{relative} says `{pointer}` fails with `{reason}`; the validator reports {Listed(reported)} there.");
+        }
+    }
+
+    /// <summary>An entry of <c>invalid</c> is a pointer, or a pointer with the reason the fixture means by it.</summary>
+    private static string Pointer(JsonNode? entry) =>
+        entry is JsonObject stated ? (string)stated["pointer"]! : (string)entry!;
+
+    private static string Listed(IReadOnlyList<string> reasons) =>
+        reasons.Count == 0 ? "nothing" : string.Join(", ", reasons.Select(reason => "`" + reason + "`"));
 
     private static OperationContract Operation(JsonObject fixture, string relative)
     {

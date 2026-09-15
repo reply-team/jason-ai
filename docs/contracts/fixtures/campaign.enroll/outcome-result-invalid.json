@@ -19,5 +19,10 @@
     "error": null,
     "diagnostics": { "duration_ms": 900, "exec_calls": 3, "http_calls": 0, "log_lines": 5 }
   },
-  "expect": { "status": "result_invalid", "class": "ambiguous", "retriable": false }
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": false,
+    "invalid": [{ "pointer": "/campaign_live", "reason": "required" }]
+  }
 }
