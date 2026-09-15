@@ -164,7 +164,8 @@ answer.
 ## Where these come from
 
 The first group of fields is copied from a vendor-neutral contract of SDR business operations, published as an open
-skill pack and versioned independently of Jason; each document records which version it was copied from under
+skill pack in [`reply-team/reply-skills`](https://github.com/reply-team/reply-skills) and versioned independently
+of Jason; each document records which version it was copied from under
 `l1.contract_version`, together with the family and the operation's name there. Jason implements a small, strict
 subset of it, and [`divergence-from-l1.md`](divergence-from-l1.md) records every place the two differ, why, and
 whether the difference is something the upstream contract should take back. Feedback travels through that
