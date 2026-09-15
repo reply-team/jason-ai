@@ -14,6 +14,16 @@ public class ExecutableResolverTests
 
     private static readonly IReadOnlyDictionary<string, string> NoEnvironment = new Dictionary<string, string>(StringComparer.Ordinal);
 
+    /// <summary>
+    /// The environment a version check is handed when the program actually has to start. A program that is
+    /// itself a .NET application cannot find its own host without the machine's .NET root, and only the base
+    /// environment carries it: on a machine whose runtime lives outside the platform's default location — a
+    /// macOS build agent, say — an empty environment stops the program before it can answer. This is also the
+    /// environment a real vendor CLI is started with, so what these tests prove is what a reload will do.
+    /// </summary>
+    private static IReadOnlyDictionary<string, string> HostEnvironment =>
+        BaseEnvironment.Build(PluginLoader.CurrentEnvironment(), []);
+
     [Fact]
     public void A_declared_program_resolves_to_the_file_the_search_path_holds()
     {
@@ -97,7 +107,7 @@ public class ExecutableResolverTests
         var resolver = new ExecutableResolver(new TestSearchPath { Path = TestPlugins.FakeCliDirectory });
         var request = new ExecutableRequest(FakeProviderCli.ExecutableName, null, ["--version"]);
 
-        var result = await resolver.CheckVersionAsync(resolver.Resolve(request, 0), request, 0, NoEnvironment, TimeSpan.FromSeconds(30), Ct);
+        var result = await resolver.CheckVersionAsync(resolver.Resolve(request, 0), request, 0, HostEnvironment, TimeSpan.FromSeconds(30), Ct);
 
         Assert.Null(result.Problem);
         Assert.Equal("1.2.3", result.Version);
@@ -109,7 +119,7 @@ public class ExecutableResolverTests
         var resolver = new ExecutableResolver(new TestSearchPath { Path = TestPlugins.FakeCliDirectory });
         var request = new ExecutableRequest(FakeProviderCli.ExecutableName, "2.0.0", ["--version"]);
 
-        var result = await resolver.CheckVersionAsync(resolver.Resolve(request, 1), request, 1, NoEnvironment, TimeSpan.FromSeconds(30), Ct);
+        var result = await resolver.CheckVersionAsync(resolver.Resolve(request, 1), request, 1, HostEnvironment, TimeSpan.FromSeconds(30), Ct);
 
         Assert.Equal(ProblemCodes.ExecutableIncompatible, result.Problem!.Code);
         Assert.Equal("capabilities.exec.executables[1].name", result.Problem.Path);
@@ -123,7 +133,7 @@ public class ExecutableResolverTests
         var resolver = new ExecutableResolver(new TestSearchPath { Path = TestPlugins.FakeCliDirectory });
         var request = new ExecutableRequest(FakeProviderCli.ExecutableName, "1.0.0", ["--version"]);
 
-        var result = await resolver.CheckVersionAsync(resolver.Resolve(request, 0), request, 0, NoEnvironment, TimeSpan.FromSeconds(30), Ct);
+        var result = await resolver.CheckVersionAsync(resolver.Resolve(request, 0), request, 0, HostEnvironment, TimeSpan.FromSeconds(30), Ct);
 
         Assert.Null(result.Problem);
         Assert.Equal("1.2.3", result.Version);
@@ -151,7 +161,7 @@ public class ExecutableResolverTests
         var resolver = new ExecutableResolver(new TestSearchPath { Path = TestPlugins.FakeCliDirectory });
         var request = new ExecutableRequest(FakeProviderCli.ExecutableName, null, ["--version"]);
 
-        var result = await resolver.CheckVersionAsync(resolver.Resolve(request, 0), request, 0, NoEnvironment, TimeSpan.FromMilliseconds(1), Ct);
+        var result = await resolver.CheckVersionAsync(resolver.Resolve(request, 0), request, 0, HostEnvironment, TimeSpan.FromMilliseconds(1), Ct);
 
         // A fast machine may still finish inside a millisecond; what matters is that a reload is never held up
         // by a program that does not answer.
