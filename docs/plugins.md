@@ -7,8 +7,8 @@ is ever called on your behalf, so this document is the whole contract.
 Provider operations are **not routed yet**: nothing in the runtime invokes a plugin on its own, and a
 `provider_op` work item still fails with `no_route` (see [docs/work-execution.md](work-execution.md)).
 What exists today is everything around that — packages, validation, the registry, the invocation
-mechanism — and it is worth writing against, because the package you write now is the package that
-will be routed to.
+mechanism, and the canonical operation contracts a plugin implements (§7) — and it is worth writing
+against, because the package you write now is the package that will be routed to.
 
 ## 1. What a plugin is
 
@@ -22,8 +22,10 @@ and exits**: globals do not survive, there is no plugin-local state and no warm 
 Jint, embedded in that host, so there is no Node, no npm install step and no native module — a
 package is the JavaScript you ship in it. Official and community plugins use exactly this mechanism;
 there is no private extension path. What is **not** here yet: routing a `provider_op` to a plugin;
-per-operation schemas (an outcome is checked for shape and size only); `plugin install|update|remove`
-(installing is copying a directory); signing and trust; invoking `kind: notification` plugins.
+enforcing an operation's own schema on the answer (an invocation still checks an outcome for shape and
+size alone, though the three published operations do declare what a result must look like — §7);
+`plugin install|update|remove` (installing is copying a directory); signing and trust; invoking
+`kind: notification` plugins.
 
 ## 2. The package
 
@@ -133,7 +135,8 @@ environment variables the user granted it, and a binding is written and read by 
 operate the installation, so a field named like a secret is refused rather than filled in. What the
 runtime does with the schema — checking a route against it — arrives with routing; a manifest that
 declares one is read and shown by `plugin.list` today. The key is optional and additive, so
-`manifest_version` stays `1`.
+`manifest_version` stays `1`. §7 is the same key from the plugin's side: what a binding is for, and
+what reaches the code as `context.binding`.
 
 An invocation's effective timeout and memory are `min(what the manifest asks for, the installation's
 ceiling)`, and a caller's own budget may lower the timeout further, never raise it. A manifest with
@@ -238,14 +241,20 @@ export function invoke(operation, input, context) {
     case "echo.run":
       return { result: { echo: input, helped: helper(input.value) } };
 
-    case "contact.create": {
-      const answer = host.exec({ executable: "reply", args: ["contact", "create", "--json"], stdin: JSON.stringify(input) });
+    case "list_membership.add": {
+      const contact = input.contacts[0];
+      const answer = host.exec({ executable: "reply", args: ["list", "add", "--json"], stdin: JSON.stringify(input.args) });
       if (answer.exit_code !== 0) {
-        throw host.fail({ class: "transient", code: "cli_failed", message: answer.stderr.slice(0, 500) });
+        // Called, and no answer came back: whether it acted is not knowable from here, which is what
+        // `ambiguous` means. The contract's recovery read is how the next attempt finds out (§7).
+        throw host.fail({ class: "ambiguous", code: "provider_answer_lost", message: answer.stderr.slice(0, 500) });
       }
 
-      const created = JSON.parse(answer.stdout);
-      return { result: { id: created.id }, external_ids: { contact: created.id } };
+      const added = JSON.parse(answer.stdout);
+      return {
+        result: { items: [{ contact_id: contact.id, status: added.status, external_ids: { contact: added.id } }] },
+        external_ids: { contact: added.id },
+      };
     }
 
     default:
@@ -283,7 +292,8 @@ no CLR**; `eval` and `new Function` do not compile. Everything a plugin can reac
   "plugin": { "id": "fake-provider", "version": "1.0.0" }, "runtime_version": "0.1.0" }
 ```
 
-`binding` is the caller's opaque, non-secret note to the plugin (at most 64 KiB); `attempt_id`,
+`binding` is the caller's non-secret note to the plugin, in the shape the manifest's `binding` schema
+declares (§3 and §7), at most 64 KiB; `attempt_id`,
 `attempt_number`, `work_item_id` and `campaign_id` are filled once provider operations are routed —
 `attempt_number` is what tells a plugin it is being repeated. No secret is ever in `context`.
 
@@ -429,7 +439,161 @@ Never anything else, and **never a `JASON_*` variable** — not even `JASON_DATA
 dumps its own environment learns nothing about the runtime that started it, and cannot locate the
 database.
 
-## 7. Failure classes
+## 7. Implementing a canonical operation
+
+A **canonical operation** is one unit of SDR work named in the practitioner's language, with no vendor
+in the name: `campaign.get`, `list_membership.add`, `campaign.enroll`. Each one is published as a
+single machine-readable document under [`docs/contracts/operations/`](contracts/operations), and that
+same file is embedded into the runtime as a resource — the contract you read is the contract the
+runtime applies, so there is no second copy to drift from it. The `.md` page beside each document
+explains it for a person, and [`docs/contracts/README.md`](contracts/README.md) covers the schema
+dialect, what every field means and how versions move.
+
+What runs today is the **write side**: a `provider_op` work item naming an operation this build
+publishes no contract for is refused when it is created, and the arguments it carries are measured
+against that operation's schema there and then. What does not run is routing (§13) — no work item
+reaches a plugin yet, so the composed input, the answer check and the repeat rule below are the
+contract a plugin is written against rather than something the runtime performs for you. Implementing
+an operation now is still worth doing: the document that refuses a caller's arguments today is the
+document you implement.
+
+Listing an operation nobody publishes a contract for is not a manifest error — the rule there is only
+that the name is well formed. It is simply an operation no work item can ever name.
+
+### Reading a document
+
+The first group of fields is the vendor-neutral contract: what the operation reaches, whether it can
+be undone, what approval it needs, what it costs, and what must be observed before it is run again.
+Those decide whether an operation may run at all, and they are not a plugin's to reinterpret.
+
+The second group is about executing it, and it is the half you implement:
+
+| Field | What it asks of you |
+|---|---|
+| `preflight`, `contact_projection` | what you are handed: whether a contact comes with the call, and exactly which of its fields and channels |
+| `precondition` | what must be true at the provider before you may act — for the writes, that the provider's own contact exists |
+| `input_schema` | the whole input you receive, already valid by the time it reaches you |
+| `output_schema` | what a succeeded `result` must look like |
+| `external_ids` | the kinds of provider identifier you may return, and what each one identifies |
+| `recovery_read`, `repeat_after_ambiguous` | what to read, and when, before repeating something that may already have happened |
+| `failure_codes` | the code to report for each situation the operation knows about, and the class it carries |
+| `timeout_ms` | the budget of one invocation of this operation |
+| `conformance` | the behaviours a conforming plugin demonstrates — the list to test yourself against |
+
+### The input you are handed
+
+The runtime composes it from the work item; a plugin never sees a work item's context.
+
+```json
+{
+  "args": { "list": { "external_id": "L-1129" }, "channel": "email" },
+  "contacts": [ { "id": "cnt_…", "first_name": "Marta", "company": "Puerto Analytics",
+                  "channels": [ { "channel": "email", "value": "marta@example.com", "primary": true } ],
+                  "external_ids": { "contact": "p_88421" } } ],
+  "campaign": { "id": "cmp_…", "name": "Q3 LatAm founders", "status": "active",
+                "external_ids": { "campaign": "c_7714" } },
+  "idempotency_key": "wi_…"
+}
+```
+
+- **`args`** is what the caller wrote under the work item's `context.input`, and nothing else from
+  that context. It is always present — `{}` when the operation takes no arguments.
+- **`contacts`** appears only when the operation's pre-flight says a contact is `required`, carries
+  exactly one person in this version, and is cut to the **declared projection**: the fields the
+  document names, and only the one channel the operation consumes. The rest of a person's
+  reachability is not yours to see, and widening that is a change to the document.
+- **`campaign`** is Jason's own record of the campaign the work item belongs to.
+- **`idempotency_key`** is the *work item's* own identifier, present when the operation requires one.
+  It is stable across every attempt, which is what makes "what did the prior run under this key do"
+  a question a provider's ledger can answer.
+- Every `external_ids` object is filtered to **your own** pins — identifiers your plugin returned
+  before. Another plugin's identifier for the same person is never visible to you.
+
+### The provider-contact precondition
+
+A provider's list or campaign holds the *provider's* contacts, not Jason's, so every write operation
+states the same precondition. When `contacts[0].external_ids.contact` is present it is the provider's
+identifier for this person and you work by it. When it is absent, create the contact from the value of
+the channel named by `args.channel` and return the identifier the provider gave you. Once a pin exists
+nobody matches that person by address again, which is what stops two spellings of one address becoming
+two people.
+
+### Repeating after a lost answer
+
+`context.attempt_number` is what tells you that you are being repeated. The runtime does not reason
+about what the last attempt achieved, and neither should you.
+
+When a document says `repeat_after_ambiguous: "after_recovery_read"`, the `recovery_read` it declares
+is **a call you have to make** on every attempt after the first — not a state check you can reason
+your way out of. Read the ledger under the idempotency key, and the membership or participation the
+operation writes, *before* writing anything, and answer from that reading when the effect already
+happened. A plugin that skips the reading looks perfectly correct against a provider that happens to
+be idempotent, and bills twice against one that is not; performing it is what makes one crash cost one
+effect. `campaign.get` says `safe` instead, because a read may simply be asked again.
+
+### What to return
+
+```json
+{
+  "result": { "items": [ { "contact_id": "cnt_…", "status": "added", "external_ids": { "contact": "p_88421" } } ] },
+  "external_ids": { "contact": "p_88421" }
+}
+```
+
+The provider's identifiers come back in **two places, and both are wanted**. The `external_ids` beside
+`result` is the invocation's own answer: the pins the runtime will record, and what a later call
+receives back where that entity sits in its input — `contacts[0].external_ids` for a person,
+`campaign.external_ids` for a campaign. The `external_ids` inside each item
+of the result is the record of *who got what* — which person this identifier belongs to — and it stays
+right when a call addresses more than one person. They are not copies of each other; return both.
+
+**Translating the provider's words is your job.** A document's vocabulary is neutral and a provider's
+is not: `campaign.get` answers with `draft | live | paused | archived | other`, and only your plugin
+knows which of those a given provider state is. Where nothing fits, answer with the contract's
+catch-all — `other` — rather than the closest-looking word, and let the provider's own word travel
+untranslated in the free-form `vendor` object beside the neutral result. Nothing is lost that way, and
+nobody downstream reasons over a word you guessed.
+
+### The `binding`
+
+`binding:` in the manifest (§3) is a schema — in the same dialect as the contracts — for what an
+installation must tell your plugin before it can act: which account, which workspace, which mailbox.
+The value satisfying it reaches you as `context.binding`.
+
+**A binding selects an identity; it never carries a credential.** A declared property named anything
+like one is refused at load with `binding_secret_like`, because a binding is written and read by the
+people who operate an installation, and a field named `api_token` is an invitation to put a secret in
+a file that was never meant to hold one. A credential reaches you the way every secret does: through a
+variable your manifest declares under `capabilities.env`, granted by the user and read with `host.env`
+(§6), never through the envelope. The worked example below is exactly this shape — its binding names
+the account to act in, and the program it acts with comes from a granted variable.
+
+### Checking yourself against the fixtures
+
+Every operation ships argument and answer vectors under `docs/contracts/fixtures/<operation>/`, and
+each of them is executed by a test in this repository, which is what keeps the documents and the
+runtime from drifting apart. An **input fixture**'s `input` is a whole plugin input, so it is also the
+body of a hand-written envelope: take one, put it under `"input"` in the envelope of §10 with
+`"digest": null`, and drive the invocation yourself (§12):
+
+```sh
+cat invocation.json | jason plugin-host --protocol 1 --plugin my-plugin --operation list_membership.add --correlation dev
+```
+
+The **outcome fixtures** beside them are the other half: what a conforming answer looks like, with the
+status, class and retriability each one implies. Compare what came back on stdout with those, and read
+the operation's `conformance` list for the behaviours your own tests should cover.
+
+### The worked example
+
+`runtime/tests/fixtures/plugins/fake-provider/` implements all three published operations against a
+stand-in vendor program: the provider-contact precondition, the recovery read under the idempotency
+key, the neutral-to-vendor mapping, and a binding that names the account it acts in. It is a test
+fixture rather than a marketplace plugin, and it is the shortest path to a working one.
+`other-provider/` beside it implements two of the three, because a provider that covers part of the
+catalog is the ordinary case rather than an error.
+
+## 8. Failure classes
 
 Every failure carries one of four classes, and the class — not the code — is what the runtime reads.
 
@@ -441,8 +605,20 @@ Every failure carries one of four classes, and the class — not the code — is
 | `ambiguous` | **it may already have happened** at the provider | final in this version |
 
 `ambiguous` is deliberately not retried: a blind repeat could send the same message twice, and that
-is the user's reputation rather than a retry budget. Such an item waits for a human or a manager role
-until a recovery read exists that can check what really happened.
+is the user's reputation rather than a retry budget. Such an item waits for a human or a manager role.
+
+What may be done about an ambiguous end is a property of the operation, and every published contract
+states it as `repeat_after_ambiguous`: `safe` for a read, which may simply be asked again;
+`after_recovery_read` for a write that declares the reading which settles the question; `never` where
+nothing can settle it. The runtime's half of that rule — repeating an attempt because its contract
+says the repeat is answerable — arrives with routing, so today every ambiguous failure is final
+whatever the document says. The plugin's half is already yours to write: when you are handed an
+attempt number above 1, perform the declared recovery read before you write anything (§7).
+
+A contract also names the **codes** an operation may report and the class each carries, so that two
+plugins for two providers answer the same situation with the same word. Nothing checks a code against
+that list — the class is what the runtime reads — but a code outside it is a code no planner was
+written for.
 
 **Protocol failures** mean the runtime never got an answer at all. They are classified by how much
 may already have run.
@@ -480,7 +656,7 @@ are `plugin_exception`, `bad_return`, `result_too_large`, `entry_function_missin
 `http_scheme_not_allowed`, `http_method_not_allowed`, `http_header_not_allowed`, `http_limit` and
 `module_not_allowed`. All of them are `permanent`.
 
-## 8. Capabilities and grants
+## 9. Capabilities and grants
 
 **Declaring a capability is not being given it.** A manifest says what a plugin wants; the user says
 what it gets, in `~/.jason/config/settings.json`:
@@ -509,9 +685,9 @@ And the version check of a declared executable runs only for an executable the u
 reload must never start a program nobody consented to; an ungranted one is resolved for presence only
 and lists `"version": null`.
 
-## 9. The protocol
+## 10. The protocol
 
-The runtime starts the shipped executable in plugin-host mode, and you can do the same by hand (§11):
+The runtime starts the shipped executable in plugin-host mode, and you can do the same by hand (§12):
 
 ```text
 jason plugin-host --protocol 1 --plugin <id> --operation <op> --correlation <id>
@@ -571,8 +747,10 @@ channel. The runtime re-validates the outcome after the child exits: exactly one
 invocation's id, `protocol_version` 1, a known status, an error exactly when the status is `failed`,
 a result of at most 1 MiB, `details` of at most 64 KiB, a lower snake_case code of at most 64
 characters, a message of at most 2000 characters, `external_ids` of at most 64 string values of at
-most 256 characters. Anything else is `plugin_malformed_outcome`. Canonical result schemas do not
-exist yet, so a well-formed outcome whose result is nonsense for the operation still passes.
+most 256 characters. Anything else is `plugin_malformed_outcome`. The operation's own `output_schema`
+is **not** applied here, so a well-formed outcome whose result is nonsense for the operation still
+passes this check today; every published operation declares what a succeeded result must look like,
+and the runtime will measure an answer against the operation it asked for once it invokes one (§7).
 
 ### stderr: JSON Lines
 
@@ -611,7 +789,7 @@ Exit 3 carries one of eight rejection codes on stderr: `envelope_unreadable`, `e
 `plugin_invocation_rejected`, quoting the host's own last message; exit 4 becomes
 `plugin_no_outcome`.
 
-## 10. Isolation, honestly
+## 11. Isolation, honestly
 
 Isolation here is **process isolation plus interpreter isolation**, and that is the whole claim.
 
@@ -640,7 +818,7 @@ Signing, publisher identity, trust levels, install-time capability review and op
 resource control are deliberately not in this version. Read a package before you install it, and
 grant it the narrowest set of executables, hosts and variables that lets it do its job.
 
-## 11. Testing a plugin locally
+## 12. Testing a plugin locally
 
 **Through the runtime.** Copy the package, reload, read the diagnostics. A rejected reload prints
 every problem with its location and code, and changes nothing.
@@ -658,7 +836,7 @@ drive one invocation yourself without going near the runtime's state:
 cat invocation.json | jason plugin-host --protocol 1 --plugin my-plugin --operation echo.run --correlation dev
 ```
 
-Write `invocation.json` to the shape in §9, with `"root"` pointing at your package directory. A
+Write `invocation.json` to the shape in §10, with `"root"` pointing at your package directory. A
 hand-written envelope may set `"digest": null` — the host then skips the verification, runs the
 package as it is on disk, and says so with a `digest_unverified` line on stderr. The runtime always
 sends a digest, so this is strictly a development path. Export the granted variables in your shell
@@ -668,19 +846,28 @@ completed.
 
 **The shape to copy.** `runtime/tests/fixtures/plugins/fake-provider/` in this repository is a
 complete, valid package — manifest, `main.js`, and a local module under `modules/` — that exercises
-every SDK function and every kind of failure. It is a test fixture rather than a marketplace plugin,
-and it is the fastest way to see a working one.
+every SDK function, every kind of failure, and all three published operations against a stand-in
+vendor program. It is a test fixture rather than a marketplace plugin, and it is the fastest way to
+see a working one.
 
-## 12. Known limitations of this version
+**Against the published vectors.** The argument and answer fixtures under `docs/contracts/fixtures/`
+are the operations' own examples; §7 says how to drive one through the host by hand.
+
+## 13. Known limitations of this version
 
 - **Nothing routes to a plugin yet.** `provider_op` work items fail with `no_route`; routing,
-  bindings and invocation pinning arrive with the next increment.
+  bindings and invocation pinning arrive with the next increment. The operation contracts a route
+  will carry are published and enforced when a work item is written (§7), which is the half of it
+  that runs today.
 - **Windows: only `.exe` and `.com` can be declared.** A bare name that resolves only to a `.cmd`,
   `.bat` or `.ps1` is `executable_not_runnable`, because starting one means `cmd.exe` interprets the
   arguments — the shell the argument-array rule exists to exclude. A Node-based CLI installed through
   npm resolves to a `.cmd` shim and so needs a native executable today; resolving a shim into its
   interpreter and entry script is a possible future step inside the executable resolver.
-- **The outcome is checked for shape and size only**, until per-operation schemas exist.
+- **An outcome is still checked for shape and size alone.** Every published operation declares what a
+  succeeded result must look like, and the runtime carries the check that measures one against it —
+  but nothing asks a plugin for an operation on a work item's behalf yet, so nothing runs that check.
+  It applies to a plugin's answer when routing arrives.
 - **Proxies come from the base environment.** `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and their
   lowercase forms are passed through and honoured; there is no proxy configuration of Jason's own and
   no custom TLS.
@@ -696,6 +883,7 @@ and it is the fastest way to see a working one.
 - **No install verbs, no signing, no trust model.** Installing is copying a directory.
 
 The design behind all of this — the plugin model, the trust boundary, and what is deliberately left
-open — is in [docs/architecture.md](architecture.md), §14 and §16.5. How work items reach an
-executor, and where provider operations will plug in, is in
-[docs/work-execution.md](work-execution.md).
+open — is in [docs/architecture.md](architecture.md), §14 and §16.5. The operations themselves, with
+their schemas, fixtures and the dialect they are written in, are in
+[docs/contracts/](contracts/README.md). How work items reach an executor, and where provider
+operations will plug in, is in [docs/work-execution.md](work-execution.md).
