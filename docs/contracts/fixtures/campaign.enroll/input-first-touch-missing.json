@@ -28,5 +28,5 @@
     },
     "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
   },
-  "expect": { "invalid": ["/args/first_touch"] }
+  "expect": { "invalid": [{ "pointer": "/args/first_touch", "reason": "required" }] }
 }

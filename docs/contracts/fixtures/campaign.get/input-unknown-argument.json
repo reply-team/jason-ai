@@ -11,5 +11,5 @@
       "external_ids": { "campaign": "c_7714" }
     }
   },
-  "expect": { "invalid": ["/args/include_steps"] }
+  "expect": { "invalid": [{ "pointer": "/args/include_steps", "reason": "additional_properties" }] }
 }

@@ -3,5 +3,10 @@
   "version": 1,
   "case": "neither a pin nor an argument names a campaign, so nothing says which one to read",
   "input": { "args": {} },
-  "expect": { "invalid": ["", "/campaign"] }
+  "expect": {
+    "invalid": [
+      { "pointer": "", "reason": "any_of" },
+      { "pointer": "/campaign", "reason": "required" }
+    ]
+  }
 }

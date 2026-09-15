@@ -29,5 +29,5 @@
     },
     "idempotency_key": "batch-2026-09-15"
   },
-  "expect": { "invalid": ["/idempotency_key"] }
+  "expect": { "invalid": [{ "pointer": "/idempotency_key", "reason": "pattern" }] }
 }

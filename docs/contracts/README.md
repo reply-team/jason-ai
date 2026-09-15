@@ -25,7 +25,7 @@ docs/contracts/
   divergence-from-l1.md            where Jason's stricter subset departs from the contract it is seeded from
   operations/<name>.json           the contract — one file, one version, embedded into the runtime
   operations/<name>.md             the same contract explained, with a generated properties block
-  fixtures/<name>/input-*.json     argument vectors, valid and invalid, with the pointers each failure carries
+  fixtures/<name>/input-*.json     argument vectors, valid and invalid, with the pointer and reason of each failure
   fixtures/<name>/outcome-*.json   answer vectors, with the status, class and retriability each implies
 ```
 
@@ -141,16 +141,17 @@ dotnet test --project runtime/tests/Jason.Contracts.Tests -- --filter-class "Jas
 ```
 
 An **input fixture** is `{operation, version, case, input, expect}`, where `expect` is either the string `"valid"`
-or `{"invalid": ["<json pointer>", …]}` naming exactly the pointers the validator reports. An **outcome fixture**
-is `{operation, version, case, outcome, expect}`, where `outcome` is a plugin outcome exactly as a child writes it
-and `expect` is `{status, class?, retriable, invalid?}`. `status` is `succeeded`, `failed`, or `result_invalid` — a
-well-formed outcome whose result does not satisfy the output schema, or which pins an identifier of a kind the
-operation never declared.
+or `{"invalid": [ … ]}`. An **outcome fixture** is `{operation, version, case, outcome, expect}`, where `outcome`
+is a plugin outcome exactly as a child writes it and `expect` is `{status, class?, retriable, invalid?}`. `status`
+is `succeeded`, `failed`, or `result_invalid` — a well-formed outcome whose result does not satisfy the output
+schema, or which pins an identifier of a kind the operation never declared.
 
-A `result_invalid` fixture carries `invalid` as well, and it names exactly what is wrong with that answer: each
-entry is a JSON pointer, or `{"pointer": "…", "reason": "…"}` where the fixture means one particular refusal, the
-reason being one of the codes above. The reported set must equal the stated set, so an answer broken somewhere
-other than where the fixture says fails instead of passing for a reason nobody wrote down.
+An `invalid` list names exactly what is wrong with the document, and it is written the same way in both kinds of
+fixture: each entry is a JSON pointer, or `{"pointer": "…", "reason": "…"}` where the fixture means one particular
+refusal, the reason being one of the codes above. The reported set must equal the stated set, so a document broken
+somewhere other than where the fixture says fails instead of passing for a reason nobody wrote down; and where a
+fixture states the reason, a constraint that changes kind at that pointer fails too, rather than going on passing
+while it no longer demonstrates what the case is named for.
 
 A `failed` fixture is held against the operation's own `failure_codes`: the code its error carries is one the
 document declares, under the class the document declares it with. A fixture may not teach a plugin author a code no
