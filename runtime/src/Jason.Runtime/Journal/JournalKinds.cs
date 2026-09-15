@@ -44,6 +44,15 @@ public static partial class JournalKinds
     /// <summary>A new plugin snapshot became the active one: which packages, at which digests, from when.</summary>
     public const string PluginsReloaded = "plugins_reloaded";
 
+    /// <summary>Where a campaign sends its provider work changed: the route that was set, moved or removed.</summary>
+    public const string RoutesUpdated = "routes_updated";
+
+    /// <summary>A plugin's own identifier for one of our entities was learned and written down for good.</summary>
+    public const string ExternalIdPinned = "external_id_pinned";
+
+    /// <summary>A plugin answered with a different identifier than the one already pinned; both are kept.</summary>
+    public const string ExternalIdDiverged = "external_id_diverged";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -72,6 +81,9 @@ public static partial class JournalKinds
         WorkItemReopened,
         RoleAdded,
         PluginsReloaded,
+        RoutesUpdated,
+        ExternalIdPinned,
+        ExternalIdDiverged,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);
