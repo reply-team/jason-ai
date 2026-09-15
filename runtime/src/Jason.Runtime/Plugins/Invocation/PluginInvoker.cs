@@ -292,9 +292,10 @@ public sealed partial class PluginInvoker(
                 timedOut = !killed;
             }
 
-            // After a kill the wait for the pipes is bounded by the same grace, and the streams are let go of
-            // whether or not it came back. What was captured by then is what the invocation is classified from.
-            await SettleAsync([.. pumps, envelope], killed || timedOut, settings.Invoker.KillGraceMs).ConfigureAwait(false);
+            // After a kill — the caller's, the deadline's, or this invoker's own when the child floods — the
+            // wait for the pipes is bounded by the same grace, and the streams are let go of whether or not it
+            // came back. What was captured by then is what the invocation is classified from.
+            await SettleAsync([.. pumps, envelope], killed || timedOut || tooLarge, settings.Invoker.KillGraceMs).ConfigureAwait(false);
             Release(process);
 
             var exitCode = process.ExitCode;

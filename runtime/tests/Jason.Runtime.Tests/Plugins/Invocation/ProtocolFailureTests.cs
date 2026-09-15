@@ -72,6 +72,25 @@ public class ProtocolFailureTests
         AssertGone(result.Launch!.Pid!.Value);
     }
 
+    /// <summary>
+    /// The flood is ended by a kill like any other, so reading what is left of it is bounded like any other:
+    /// this child leaves a helper holding its pipes behind before it floods, and the answer still arrives.
+    /// </summary>
+    [Fact]
+    public async Task A_flood_that_left_a_helper_holding_the_pipes_is_answered_all_the_same()
+    {
+        await using var api = await StartAsync(
+            Child("spew-orphan", "5000000", "30000"),
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"OutcomeBytes":65536,"KillGraceMs":500}}}""");
+
+        var call = InvokeAsync(api);
+        var answered = await Task.WhenAny(call, Task.Delay(TimeSpan.FromSeconds(20), Ct)) == call;
+
+        Assert.True(answered, "the invocation was still reading a stream the process it killed no longer writes to");
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>((await call).Outcome);
+        Assert.Equal(ProtocolCodes.PluginOutputTooLarge, failure.Code);
+    }
+
     [Fact]
     public async Task A_child_that_floods_stderr_without_ever_ending_a_line_is_capped_and_still_answered()
     {
