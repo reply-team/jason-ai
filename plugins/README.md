@@ -13,5 +13,12 @@ This directory is the plugin marketplace of the repository. Each plugin lives in
 └── modules/      # optional local JavaScript modules bundled with the plugin
 ```
 
-The official Reply plugin and a reference notification plugin will land here. The plugin model is
-described in [docs/architecture.md](../docs/architecture.md).
+The index is empty: the official Reply plugin and a reference notification plugin will land here.
+
+**Writing one?** [docs/plugins.md](../docs/plugins.md) is the author's guide — package layout, every
+manifest rule and its problem code, the Host SDK with every limit, capabilities and grants, the
+invocation protocol, and how to test a package locally. The design behind it is in
+[docs/architecture.md](../docs/architecture.md).
+
+`runtime/tests/fixtures/plugins/fake-provider/` is a complete, valid package that exercises every SDK
+function. It is a **test fixture**, not a marketplace plugin — copy its shape, not its manifest.

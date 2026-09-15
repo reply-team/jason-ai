@@ -11,8 +11,11 @@ durable outbound-sales operation.
 > contact directory with campaign membership, a suppression list, and **work items: units of work
 > inside a campaign that a deterministic dispatcher claims under a lease and hands to a role's
 > entry command, which reports back through the API** — all through the CLI and the Runtime API.
-> Provider operations are not routed yet, so nothing here sends outreach. The runtime is being
-> built in the open, one self-contained increment at a time; no dates, no roadmap promises.
+> **Plugin packages** are validated against the manifest schema, listed with their content digest
+> and their requested-versus-granted capabilities, and swapped in atomically by an explicit reload;
+> the plugin host runs one invocation of a package's JavaScript in its own process under the Host
+> SDK. Provider operations are still not routed to it, so nothing here sends outreach. The runtime
+> is being built in the open, one self-contained increment at a time; no dates, no roadmap promises.
 
 ## What this is
 
@@ -34,7 +37,7 @@ survives the chat session. Jason is that missing layer — three parts working a
    [Reply.io](https://reply.io) is the configured default execution provider (through
    [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli)) — supported and
    commercial, but never hard-coded: the same public plugin mechanism works for other
-   providers.
+   providers, and writing one against it is documented in [docs/plugins.md](docs/plugins.md).
 
 Your AI stays yours: Jason ships no AI client, no model account, and no model credentials.
 Interactive agent sessions drive Jason through skills + CLI; background AI work runs through
@@ -92,6 +95,16 @@ environment variable).
 How work items are claimed, launched and reported on — the lifecycle, the launch envelope an
 executor is handed, the operations it reports through, and the settings that pace all of it — is
 documented in **[docs/work-execution.md](docs/work-execution.md)**.
+
+What a plugin package is, every rule its manifest is held to, what the Host SDK offers and under
+which limits, how capabilities are granted, and the invocation protocol between the runtime and the
+plugin host, are documented in **[docs/plugins.md](docs/plugins.md)**:
+
+```sh
+cp -r ./my-plugin ~/.jason/plugins/
+jason plugin reload --reason "installed my plugin"
+jason plugin list --human
+```
 
 ## Ecosystem
 
