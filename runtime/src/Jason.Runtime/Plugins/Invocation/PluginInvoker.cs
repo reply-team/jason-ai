@@ -59,8 +59,8 @@ public sealed partial class PluginInvoker(
             new EventId(1, nameof(Started)),
             "Plugin {PluginId} {Version} {Digest} invocation {InvocationId} for {Operation} started as pid {Pid}");
 
-    private static readonly Action<ILogger, string, string, int, string, long, Exception?> Ended =
-        LoggerMessage.Define<string, string, int, string, long>(
+    private static readonly Action<ILogger, string, string, int?, string, long, Exception?> Ended =
+        LoggerMessage.Define<string, string, int?, string, long>(
             LogLevel.Information,
             new EventId(2, nameof(Ended)),
             "Plugin invocation {InvocationId} (correlation {CorrelationId}) ended: exit {ExitCode}, {Verdict} in {DurationMs} ms");
@@ -287,9 +287,12 @@ public sealed partial class PluginInvoker(
             catch (OperationCanceledException)
             {
                 TryKill(process);
-                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
                 killed = kill.IsCancellationRequested;
                 timedOut = !killed;
+
+                // The kill is a request, not a guarantee. Waiting for a child it did not end would be a wait
+                // with nothing left to end it, so it is given the same grace as everything else that follows.
+                await ChildProcess.EndedWithinAsync(process, settings.Invoker.KillGraceMs).ConfigureAwait(false);
             }
 
             // After a kill — the caller's, the deadline's, or this invoker's own when the child floods — the
@@ -298,7 +301,7 @@ public sealed partial class PluginInvoker(
             await SettleAsync([.. pumps, envelope], killed || timedOut || tooLarge, settings.Invoker.KillGraceMs).ConfigureAwait(false);
             Release(process);
 
-            var exitCode = process.ExitCode;
+            var exitCode = ExitCodeOf(process);
             var outcome = Classify(invocation, settings, stdout, stderr, tooLarge, killed, timedOut, exitCode, timeoutMs);
             var launch = new InvocationLaunch(command, process.Id, exitCode, startedAt, watch.ElapsedMilliseconds, workDir);
             Ended(
@@ -382,7 +385,7 @@ public sealed partial class PluginInvoker(
         bool tooLarge,
         bool killed,
         bool timedOut,
-        int exitCode,
+        int? exitCode,
         int timeoutMs)
     {
         InvocationOutcome Protocol(string code, string message) =>
@@ -409,16 +412,23 @@ public sealed partial class PluginInvoker(
                     $"The plugin host did not exit within {timeoutMs + settings.Invoker.KillGraceMs} ms and was ended."));
         }
 
-        if (exitCode is RejectedExitCode or UsageExitCode)
+        if (exitCode is not { } code)
+        {
+            // Only reachable where a kill did not take, and the two answers above have already covered every
+            // way of ending a child. Nothing this one could still write would be this invocation's answer.
+            return Protocol(ProtocolCodes.PluginNoOutcome, "The plugin host was ended and had not exited.");
+        }
+
+        if (code is RejectedExitCode or UsageExitCode)
         {
             return Protocol(ProtocolCodes.PluginInvocationRejected, RejectionMessage(stderr.Tail));
         }
 
-        if (exitCode != 0)
+        if (code != 0)
         {
             return Protocol(
                 ProtocolCodes.PluginNoOutcome,
-                string.Create(CultureInfo.InvariantCulture, $"The plugin host exited with {exitCode} without writing an outcome."));
+                string.Create(CultureInfo.InvariantCulture, $"The plugin host exited with {code} without writing an outcome."));
         }
 
         var text = stdout.Text;
@@ -577,6 +587,19 @@ public sealed partial class PluginInvoker(
 
     private static string Codes(IReadOnlyList<ManifestProblem> problems) =>
         string.Join(", ", problems.Select(problem => problem.Code).Distinct(StringComparer.Ordinal));
+
+    /// <summary>The child's exit code, or nothing when it is still running: a kill it survived has none yet.</summary>
+    private static int? ExitCodeOf(Process process)
+    {
+        try
+        {
+            return process.ExitCode;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
 
     private static void TryKill(Process process)
     {
