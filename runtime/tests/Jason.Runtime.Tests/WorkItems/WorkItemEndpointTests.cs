@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
@@ -69,6 +71,38 @@ public class WorkItemEndpointTests
         Assert.Equal("invalid_request", error.Code);
         Assert.False(error.Retryable);
         Assert.Contains("external_id", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_body_wrong_in_twenty_thousand_places_answers_with_a_bounded_list_and_a_count()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var campaign = await ActiveCampaignAsync(api);
+        var input = new JsonObject();
+        for (var index = 0; index < 20_000; index++)
+        {
+            input["unknown_" + index.ToString(CultureInfo.InvariantCulture)] = index;
+        }
+
+        var (status, body) = await api.PostAsync(
+            Operations.WorkItemCreate,
+            new
+            {
+                CampaignId = campaign.Id,
+                Kind = "provider_op",
+                Operation = "campaign.get",
+                Context = new JsonObject { ["input"] = input },
+            },
+            Ct);
+
+        // Twenty thousand pointers say nothing the first fifty do not, and cost megabytes to say it.
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+        var error = JsonSerializer.Deserialize<ErrorResponse>(body, JasonJson.Options)!.Error;
+        Assert.Equal("validation_failed", error.Code);
+        Assert.Equal(50, error.Details!.Count);
+        Assert.Contains("19950", error.Message, StringComparison.Ordinal);
+        Assert.True(error.Message.Length < 500, $"the message is {error.Message.Length} characters long.");
+        Assert.True(body.Length < 32 * 1024, $"the answer is {body.Length} bytes long.");
     }
 
     [Fact]
