@@ -51,6 +51,12 @@ const CAMPAIGN_STATUS = {
   Archived: "archived",
 };
 
+// The vendor program's own exit codes, and the two of them that say the call never became work: the host
+// answers -1 when it could not start the program at all, and the program answers 2 when it will not make
+// sense of the call or of the account it was pointed at. Neither can have had an effect at the provider.
+const NOT_STARTED = -1;
+const REFUSED_THE_CALL = 2;
+
 // One call to the vendor CLI: the request goes in on stdin and exactly one answer comes back on stdout.
 function cli(context, subcommand, request) {
   const program = host.env("FAKE_CLI_DLL");
@@ -70,13 +76,24 @@ function cli(context, subcommand, request) {
   });
 
   if (answer.exit_code !== 0) {
-    // The program was called and did not answer. Whether it acted is not knowable from here, which is what
-    // `ambiguous` means; the contract's recovery read is how the next attempt finds out.
+    // Not every non-zero exit is the same not-knowing. A program that never started, or that refused the call
+    // before touching the account, cannot have acted: that is a `permanent` failure and says so. A timeout, or
+    // an exit once the call was under way, may have acted — which is what `ambiguous` is for, and the
+    // contract's recovery read is how the next attempt finds out.
+    const acted = answer.timed_out === true
+      || (answer.exit_code !== NOT_STARTED && answer.exit_code !== REFUSED_THE_CALL);
+
     throw host.fail({
-      class: "ambiguous",
-      code: "provider_answer_lost",
-      message: "The provider was called and no answer came back.",
-      details: { subcommand: subcommand.join(" "), exit_code: answer.exit_code },
+      class: acted ? "ambiguous" : "permanent",
+      code: acted ? "provider_answer_lost" : "provider_call_failed",
+      message: acted
+        ? "The provider was called and no answer came back."
+        : "The provider was never called: the program would not start, or refused the call it was given.",
+      details: {
+        subcommand: subcommand.join(" "),
+        exit_code: answer.exit_code,
+        timed_out: answer.timed_out === true,
+      },
     });
   }
 

@@ -287,6 +287,27 @@ public class CanonicalOperationTests : IDisposable
         Assert.Equal(["contact ensure", "campaign enroll", "ledger get"], workspace.Calls);
     }
 
+    /// <summary>
+    /// A call the provider's program refused before doing anything is not what `ambiguous` is for. The program
+    /// distinguishes a call it could not make sense of from an exit after the effect had already landed, and a
+    /// plugin that answers both the same way leaves a work item waiting on a recovery read for something that
+    /// never happened.
+    /// </summary>
+    [Fact]
+    public async Task A_call_the_provider_program_refused_before_acting_is_permanent_rather_than_ambiguous()
+    {
+        using var workspace = new TestWorkspace();
+        await using var api = await StartAsync();
+
+        // The binding names a directory holding no account at all, which the program answers as a usage error.
+        var binding = new JsonObject { ["workspace"] = Path.Combine(workspace.Root, "no-such-account") };
+        var result = await InvokeAsync(api, "campaign.get", CampaignGetInput(ProviderCampaign), TestPlugins.FakeProviderId, binding, Ct);
+
+        var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
+        Assert.Equal(FailureClass.Permanent, failed.Error.Class);
+        Assert.Equal("provider_call_failed", failed.Error.Code);
+    }
+
     [Fact]
     public async Task The_second_package_answers_the_two_operations_it_declares_and_refuses_the_third()
     {

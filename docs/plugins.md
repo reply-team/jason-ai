@@ -245,9 +245,17 @@ export function invoke(operation, input, context) {
       const contact = input.contacts[0];
       const answer = host.exec({ executable: "reply", args: ["list", "add", "--json"], stdin: JSON.stringify(input.args) });
       if (answer.exit_code !== 0) {
-        // Called, and no answer came back: whether it acted is not knowable from here, which is what
-        // `ambiguous` means. The contract's recovery read is how the next attempt finds out (§7).
-        throw host.fail({ class: "ambiguous", code: "provider_answer_lost", message: answer.stderr.slice(0, 500) });
+        // Not every non-zero exit is the same not-knowing. A program that never started (`-1`) or that
+        // refused the call before doing anything (2 here — your provider's own convention) cannot have
+        // acted, so that is `permanent`. A timeout, or an exit once the call was under way, may have
+        // acted: that is what `ambiguous` means, and the contract's recovery read is how the next attempt
+        // finds out (§7).
+        const acted = answer.timed_out || (answer.exit_code !== -1 && answer.exit_code !== 2);
+        throw host.fail({
+          class: acted ? "ambiguous" : "permanent",
+          code: acted ? "provider_answer_lost" : "provider_call_failed",
+          message: answer.stderr.slice(0, 500),
+        });
       }
 
       const added = JSON.parse(answer.stdout);
@@ -271,7 +279,12 @@ verbatim. Anything else — a bare value, `undefined`, an array, an object witho
 
 **Failing.** `throw host.fail({ class, code, message, details?, external_ids? })` is the only way to
 report a business failure with its class. Anything else thrown fails `permanent` with
-`plugin_exception`, keeping the message and the JavaScript stack in `details.stack`.
+`plugin_exception`, keeping the message and the JavaScript stack in `details.stack`. The class is a
+judgement only you can make, and `ambiguous` is the expensive one — it ends the work item and waits
+for a person (§8), so spend it only where the effect really may have landed. In the snippet above
+`provider_answer_lost` is a code the three published contracts declare; `provider_call_failed` is
+that plugin's own word for a call that never became work, and a contract expecting it would list it
+among its `failure_codes` (§7).
 
 **Promises.** `async function invoke` works: the host drains the job queue and unwraps the promise
 within the budget. The five `host.*` functions are synchronous — they block until the program or the
