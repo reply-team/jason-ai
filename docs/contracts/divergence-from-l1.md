@@ -33,18 +33,25 @@ issue per row, not a private note.
 
 ## Known gaps of these documents
 
-Not every gap is a difference between the two contracts; this one is a place where neither of them
-says anything, recorded here so that nobody reads the silence as a decision.
+Not every gap is a difference between the two contracts. These are places where the contract above says
+nothing, recorded here so that nobody reads the silence as a decision — and where Jason has had to name
+something itself, the name is stated rather than left to each plugin.
 
-**No failure code names a pin that no longer resolves.** An identifier a plugin pinned — a contact, a
-campaign — can be deleted, merged, or moved to another account at the provider, and from that moment
-every operation that works by it is asking for something that is gone. Neither the vendor-neutral
-contract nor these three documents declare a code for it, so a plugin has to answer with one of its
-own: the worked example in this repository reports `contact_not_found` and classes it permanent.
+**A pin that no longer resolves has a word here, and nowhere else.** An identifier a plugin pinned — a
+contact, a campaign — can be deleted, merged, or moved to another account at the provider, and from
+that moment every operation that works by it is asking for something that is gone. The two operations
+that act on a person declare `contact_not_found` for it, as permanent, so that two plugins meeting the
+same situation answer with the same word rather than inventing one each. The vendor-neutral contract
+these documents are seeded from still says nothing about it, and that is where the gap remains: the
+situation belongs to anyone who works by a provider's identifier, not to Jason.
 
-Permanent is the honest class while nothing can repair the situation, and that is why the gap matters.
-The repair is to drop the pin and match the person again — reconciliation, which is deliberately not
-in this increment. Until it exists, an identifier that stops resolving turns every later operation on
-that person into a failure with no way forward, and two plugins meeting the same situation will answer
-it with two different words. Preventing exactly that is what a shared vocabulary is for, which is why
-this one belongs upstream rather than in each plugin.
+What no code can supply is the way forward. Permanent is the honest class only because nothing can
+repair the situation: the repair is to drop the pin and match the person again — reconciliation, which
+is deliberately not in this increment. Until it exists, an identifier that stops resolving turns every
+later operation on that person into a failure a plugin can name and a human has to resolve.
+
+**A call that never became work has a word too.** `provider_call_failed`, permanent, on all three
+operations: the vendor tool refused the call or never started, so nothing the operation asks for was
+attempted and repeating it runs the same broken call. It is deliberately apart from
+`provider_unavailable`, which is transient and means the provider was reachable enough to say "not
+now".

@@ -237,11 +237,13 @@
 
   "failure_codes": [
     { "code": "campaign_not_found", "class": "permanent", "when": "The provider holds no campaign under the identifier this call carried." },
+    { "code": "contact_not_found", "class": "permanent", "when": "The identifier pinned for this person no longer resolves at the provider, so the operation cannot act on the person it was told to act on. Working by the pinned identifier is the rule, so this is reported rather than re-matched by address." },
     { "code": "campaign_not_enrollable", "class": "permanent", "when": "The campaign is archived, finished or otherwise will not take an enrollment." },
     { "code": "collision_refused", "class": "permanent", "when": "`collision: refuse` was asked for and this person already has a participation the provider counts as a collision." },
     { "code": "suppressed", "class": "permanent", "when": "The provider's own suppression register holds this address, so it must not be enrolled." },
     { "code": "invalid_channel_value", "class": "validation", "when": "The provider will not accept the channel value for the channel named, so no later attempt can accept it either." },
     { "code": "limit_reached", "class": "permanent", "when": "The account will not hold another enrollment, or the campaign's own capacity is spent." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
     { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it enroll for this account." },
     { "code": "rate_limited", "class": "transient", "when": "The provider refused the enrollment for now and it may be attempted again." },
     { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was written." },

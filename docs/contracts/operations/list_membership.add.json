@@ -164,10 +164,12 @@
   "repeat_after_ambiguous": "after_recovery_read",
 
   "failure_codes": [
+    { "code": "contact_not_found", "class": "permanent", "when": "The identifier pinned for this person no longer resolves at the provider, so the operation cannot act on the person it was told to act on. Working by the pinned identifier is the rule, so this is reported rather than re-matched by address." },
     { "code": "list_not_found", "class": "permanent", "when": "The provider holds no list under `args.list.external_id`." },
     { "code": "suppressed", "class": "permanent", "when": "The provider's own suppression register holds this address, so it must not be added to an outreach list." },
     { "code": "invalid_channel_value", "class": "validation", "when": "The provider will not accept the channel value for the channel named, so no later attempt can accept it either." },
     { "code": "limit_reached", "class": "permanent", "when": "The account will not hold another contact, or another member of this list." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
     { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it write lists for this account." },
     { "code": "rate_limited", "class": "transient", "when": "The provider refused the write for now and it may be attempted again." },
     { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was written." },
