@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
 using Jason.Contracts.Json;
+using Jason.Contracts.Plugins;
 
 namespace Jason.Contracts.Tests;
 
@@ -139,6 +140,23 @@ public class ContractsShapeTests
         Assert.Contains(
             "\"trace\":\"exit 3\"",
             JsonSerializer.Serialize(new AttemptErrorDto("executor_exited", "m", true, "exit 3"), JasonJson.Options),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Only a failure somebody classified carries a class, so an agent attempt serialises exactly as it always
+    /// has: the field says "a plugin told us what kind of failure this was", and silence is not a fifth class.
+    /// </summary>
+    [Fact]
+    public void An_attempt_error_names_a_failure_class_only_when_one_was_established()
+    {
+        Assert.DoesNotContain(
+            "\"class\"",
+            JsonSerializer.Serialize(new AttemptErrorDto("lease_expired", "m", true), JasonJson.Options),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"class\":\"ambiguous\"",
+            JsonSerializer.Serialize(new AttemptErrorDto("provider_unavailable", "m", false, Class: FailureClass.Ambiguous), JasonJson.Options),
             StringComparison.Ordinal);
     }
 

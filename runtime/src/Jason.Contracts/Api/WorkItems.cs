@@ -1,19 +1,23 @@
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Jason.Contracts.Json;
+using Jason.Contracts.Plugins;
 
 namespace Jason.Contracts.Api;
 
 /// <summary>
 /// Why an attempt failed. <c>Retriable</c> is the runtime's judgement, not the executor's: one rule set decides
 /// whether the work is worth another attempt. <c>Trace</c> is diagnostic and never travels onto the work item.
+/// <c>Class</c> is present only where something with the standing to classify the failure did so — a plugin
+/// answering for a provider — so an attempt nobody classified serialises exactly as it always has.
 /// </summary>
 public sealed record AttemptErrorDto(
     string Code,
     string Message,
     bool Retriable,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Trace = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ErrorDetail>? Details = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ErrorDetail>? Details = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] FailureClass? Class = null);
 
 /// <summary>How an attempt was actually run: provenance without secrets.</summary>
 public sealed record AttemptLaunchDto(IReadOnlyList<string> EntryCommand, string WorkDir, int? Pid, int? ExitCode);
