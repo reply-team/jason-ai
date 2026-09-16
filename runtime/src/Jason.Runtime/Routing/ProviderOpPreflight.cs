@@ -199,6 +199,7 @@ public static class ProviderOpPreflight
         if (plugins.Find(route.PluginId) is not { } plugin)
         {
             return Refused(
+                null,
                 AttemptErrors.PluginNotLoaded,
                 $"The route for '{contract.Id}' names plugin '{route.PluginId}', which the active plugin set does not hold.");
         }
@@ -206,6 +207,7 @@ public static class ProviderOpPreflight
         if (plugin.Status == PluginStatus.Unavailable)
         {
             return Refused(
+                null,
                 AttemptErrors.PluginUnavailable,
                 $"Plugin '{plugin.Manifest.Id}' is installed but unavailable on this machine; reload after repairing what it needs.");
         }
@@ -215,6 +217,7 @@ public static class ProviderOpPreflight
         if (plugin.Manifest.Kind != PluginKind.Provider)
         {
             return Refused(
+                null,
                 AttemptErrors.PluginOperationUnsupported,
                 $"Plugin '{plugin.Manifest.Id}' is not a kind of plugin that performs canonical operations.");
         }
@@ -222,6 +225,7 @@ public static class ProviderOpPreflight
         if (!plugin.Supports(contract.Id))
         {
             return Refused(
+                null,
                 AttemptErrors.PluginOperationUnsupported,
                 $"Plugin '{plugin.Manifest.Id}' does not perform '{contract.Id}', and work is never handed to a plugin the route did not name.");
         }
@@ -229,6 +233,7 @@ public static class ProviderOpPreflight
         if (!plugin.Manifest.Contracts.Operations.Contains(contract.Version))
         {
             return Refused(
+                null,
                 AttemptErrors.ContractIncompatible,
                 string.Create(
                     CultureInfo.InvariantCulture,
@@ -242,6 +247,7 @@ public static class ProviderOpPreflight
         if (plugin.Manifest.Binding is { } schema && SchemaValidator.Validate(route.Binding, schema) is { Count: > 0 } wrong)
         {
             return Refused(
+                null,
                 AttemptErrors.BindingInvalid,
                 $"The binding of the route to plugin '{plugin.Manifest.Id}' does not satisfy the schema that plugin declares.",
                 Details(wrong));
