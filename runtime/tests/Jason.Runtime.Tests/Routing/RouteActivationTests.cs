@@ -223,6 +223,24 @@ public class RouteActivationTests
     }
 
     /// <summary>
+    /// The spelling everybody actually writes. A binding key named <c>x-api-key</c> is the same name as
+    /// <c>api_key</c>, and it was getting through because the published fragment list writes that name with an
+    /// underscore — the list is how the question is asked, not what the rule says.
+    /// </summary>
+    [Fact]
+    public void A_credential_name_spelled_with_dashes_is_the_same_name()
+    {
+        var snapshot = SnapshotOf(BuiltPlugin("anything", ["campaign.get"], operationContracts: [1]));
+        var binding = new JsonObject { ["workspace"] = "west", ["x-api-key"] = "not a value anybody should paste here" };
+
+        var problem = RouteActivator.Check(snapshot, "campaign.get", "anything", binding);
+
+        Assert.Equal(RouteProblemCodes.BindingSecretLike, problem!.Code);
+        Assert.Contains("x-api-key", problem.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("not a value anybody should paste here", problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The other write path, held to the same cap. A binding is bounded where it is written rather than only
     /// where it is used, so the settings file cannot smuggle one past the invocation's check either — and the
     /// route set that was already active stays exactly as it was.

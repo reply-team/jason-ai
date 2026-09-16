@@ -209,6 +209,10 @@ selects an identity the plugin's own credential store already holds; it is journ
 never carries the credential itself.
 ```
 
+The name is read with its separators ignored, so the spelling makes no difference: `x-api-key`, `API.KEY`
+and `api key` are refused exactly as `api_key` is. The published list of fragments (`docs/plugins.md` §3)
+is how the question is asked; "reads like a credential" is what it says.
+
 A credential reaches a plugin the way every secret does: through a variable its manifest declares under
 `capabilities.env`, granted by the user and read with `host.env`.
 
