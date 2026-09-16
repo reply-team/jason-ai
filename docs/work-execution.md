@@ -291,13 +291,18 @@ whether this runtime has a dispatch loop at all.
 | `Dispatcher:AiRole:TimeoutSeconds` | `3600` | 30..86400 | the budget of one `ai_role` attempt |
 | `Dispatcher:AiRole:HeartbeatSeconds` | `120` | 0, or 10..3600 | how often an `ai_role` executor must prove it is alive |
 | `Dispatcher:AiRole:MaxAttempts` | `3` | 1..10 | how many failures an `ai_role` item is worth |
-| `Dispatcher:ProviderOp:TimeoutSeconds` | `300` | 30..86400 | the budget of one `provider_op` attempt |
+| `Dispatcher:ProviderOp:TimeoutSeconds` | `600` | 30..86400 | the budget of one `provider_op` attempt; never below the slowest published operation's `timeout_ms` plus `Plugins:Invoker:KillGraceMs` |
 | `Dispatcher:ProviderOp:HeartbeatSeconds` | `0` | 0, or 10..3600 | 0: a provider call is short, the lease suffices |
 | `Dispatcher:ProviderOp:MaxAttempts` | `3` | 1..10 | how many failures a `provider_op` item is worth |
 | `Roles:DefaultEntryCommand` | `[]` | — | the command used for any role without one of its own |
 
 An item may override the three per-kind numbers for itself: `timeout_seconds` (30..86400),
-`heartbeat_seconds` (0, or 10..3600) and `max_attempts` (1..10).
+`heartbeat_seconds` (0, or 10..3600) and `max_attempts` (1..10). A `provider_op` item has one rule
+more: its `timeout_seconds` may not be shorter than the operation's own `timeout_ms` plus
+`Plugins:Invoker:KillGraceMs`, rounded up to whole seconds. A child is given the operation's budget
+and never what is left of the lease, so a shorter lease could only end with the lease gone and the
+provider's answer unknown. `workitem.create` and `workitem.update` refuse such an item rather than
+raising the number quietly: a lease silently changed is one the planner still believes.
 
 `jason runtime status --human` shows what the loop is doing:
 

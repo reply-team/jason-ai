@@ -370,7 +370,7 @@ public class WorkItemContractTests
     private static WorkItemService NewService(JasonDbContext db)
     {
         var clock = new FixedClock(Noon);
-        return new WorkItemService(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
+        return new WorkItemService(db, new JournalWriter(clock), clock, TestCanceller.New(clock), TestOptions.Plugins());
     }
 
     private static WorkItemCreateRequest ProviderOp(string? campaignId, string operation) =>

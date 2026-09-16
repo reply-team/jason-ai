@@ -15,7 +15,7 @@ public class EffectiveLimitsTests
         var provider = EffectiveLimits.For(WorkItemFactory.NewProviderOp(campaign), options);
 
         Assert.Equal(new EffectiveLimits(3600, 120, 3), role);
-        Assert.Equal(new EffectiveLimits(300, 0, 3), provider);
+        Assert.Equal(new EffectiveLimits(600, 0, 3), provider);
     }
 
     [Fact]

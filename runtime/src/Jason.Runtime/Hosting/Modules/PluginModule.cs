@@ -28,11 +28,16 @@ public static class PluginModule
         services.AddSingleton<ISearchPath, EnvironmentSearchPath>();
         services.AddSingleton<IPluginHostLocator, ProcessPathLocator>();
 
+        // Stateless and reentrant, and everything it reads is itself one per process, so one invoker serves the
+        // whole runtime. It has to outlive a scope in any case: the command that invokes a plugin is held by the
+        // dispatcher for as long as an attempt runs, which is longer than the scope that resolved it.
+        services.AddSingleton<PluginInvoker>();
+
         services.AddScoped<ExecutableResolver>();
         services.AddScoped<ExternalIdStore>();
         services.AddScoped<PluginLoader>();
         services.AddScoped<PluginService>();
-        services.AddScoped<PluginInvoker>();
+
         return services.AddHostedService<PluginStartupLoader>();
     }
 
