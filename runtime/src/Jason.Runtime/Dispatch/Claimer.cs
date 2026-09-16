@@ -204,7 +204,13 @@ public sealed class Claimer(
                 trace: null,
                 verdict.Details,
                 Actors.Dispatcher,
-                failureClass: verdict.Class);
+                failureClass: verdict.Class,
+
+                // Said here rather than inferred from a table somewhere else: nothing about the work changed
+                // between two scans, so an item released back into the queue would be refused for the same
+                // reason for as long as the queue existed. A pre-flight refusal is final because the pre-flight
+                // says it is.
+                retriable: false);
             return null;
         }
 
