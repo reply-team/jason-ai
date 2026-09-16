@@ -186,9 +186,15 @@ public class ProviderOperationE2ETests
             Assert.False((bool)refusedEnrollment["error"]!["retriable"]!);
             Assert.Equal(PluginId, (string?)refusedEnrollment["provenance"]!["plugin_id"]);
 
-            // Nothing reached the provider on its behalf: the account holds no enrollment at all.
+            // Nothing reached the provider on its behalf. The account holds no enrollment — and, the claim that
+            // actually matters, it was never asked for one: an empty array is what a refused write leaves behind
+            // too. The stand-in account logs every call it answers, and the log is where "nothing was asked" is
+            // readable. It is not empty, because everything above did reach this account.
             Assert.Empty(JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(workspace, "campaigns.json"), Ct))!
                 .AsObject()[providerCampaign]!["enrollments"]!.AsArray());
+            var asked = await CallsAsync(workspace);
+            Assert.NotEmpty(asked);
+            Assert.DoesNotContain("campaign enroll", asked);
 
             // 7. The route is taken out of the settings file — and nothing changes yet. A work item created now
             //    still runs against the plugin, because the dispatcher reads the frozen snapshot and never the file.
@@ -321,6 +327,18 @@ public class ProviderOperationE2ETests
         }
 
         return settings.ToJsonString(JasonJson.Options);
+    }
+
+    /// <summary>
+    /// Every subcommand the stand-in account answered, in the order it was asked. It is the account's own record
+    /// of what was requested of it, which is the only way to tell work that was refused from work never sent.
+    /// </summary>
+    private static async Task<IReadOnlyList<string>> CallsAsync(string workspace)
+    {
+        var file = Path.Combine(workspace, "calls.json");
+        return File.Exists(file)
+            ? [.. JsonNode.Parse(await File.ReadAllTextAsync(file, Ct))!.AsArray().Select(call => call!["subcommand"]!.GetValue<string>())]
+            : [];
     }
 
     private static JsonObject ToTheList(string list) => new()

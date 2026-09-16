@@ -21,12 +21,18 @@ public class ProcessPathLocatorTests
         Assert.Equal(["/opt/jason/jason"], locator.Command);
     }
 
+    /// <summary>
+    /// And the muxer it names is the one this process is running under, not whatever a PATH lookup would find.
+    /// The plugin host is started in a child whose environment is cleared down to almost nothing, so a muxer
+    /// that is not on the PATH — installed beside an application, reached through a shim — would be a child
+    /// that never starts: exactly the failure naming the assembly again exists to prevent.
+    /// </summary>
     [Fact]
     public void A_runtime_started_through_the_muxer_names_the_assembly_the_muxer_has_to_run()
     {
         var locator = new ProcessPathLocator("/usr/share/dotnet/dotnet", "/build/jason.dll");
 
-        Assert.Equal(["dotnet", "/build/jason.dll"], locator.Command);
+        Assert.Equal(["/usr/share/dotnet/dotnet", "/build/jason.dll"], locator.Command);
     }
 
     /// <summary>The same host, under the name the platform gives it.</summary>
@@ -35,7 +41,7 @@ public class ProcessPathLocatorTests
     {
         var locator = new ProcessPathLocator("/Program Files/dotnet/DOTNET.exe", "/build/jason.dll");
 
-        Assert.Equal(["dotnet", "/build/jason.dll"], locator.Command);
+        Assert.Equal(["/Program Files/dotnet/DOTNET.exe", "/build/jason.dll"], locator.Command);
     }
 
     /// <summary>
