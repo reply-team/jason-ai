@@ -180,12 +180,10 @@ public class PluginInvokerTests
         var failed = Assert.IsType<InvocationOutcome.Failed>(transient.Outcome);
         Assert.Equal(FailureClass.Transient, failed.Error.Class);
         Assert.Equal("rate_limited", failed.Error.Code);
-        Assert.True(OutcomeClassification.IsRetriable(failed.Error.Class));
         Assert.Equal(0, transient.Launch!.ExitCode);
 
         var unsure = Assert.IsType<InvocationOutcome.Failed>(ambiguous.Outcome);
         Assert.Equal(FailureClass.Ambiguous, unsure.Error.Class);
-        Assert.False(OutcomeClassification.IsRetriable(unsure.Error.Class));
     }
 
     [Fact]

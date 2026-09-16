@@ -90,7 +90,7 @@ public class FixtureTests
                 Assert.NotNull(outcome.Error);
                 Assert.Equal(Class(expected), outcome.Error.Class);
                 TheFailureTheOperationDeclares(relative, contract, outcome.Error);
-                Assert.Equal(Retriable(outcome.Error.Class, contract), (bool)expected["retriable"]!);
+                Assert.Equal(OutcomeContract.Retriable(outcome.Error.Class, contract), (bool)expected["retriable"]!);
                 break;
 
             case "result_invalid":
@@ -188,16 +188,4 @@ public class FixtureTests
     /// <summary>A class as the documents spell it, so a failure message reads in the vocabulary of the contract.</summary>
     private static string Name(FailureClass failure) =>
         JsonSerializer.Serialize(failure, JasonJson.Options).Trim('"');
-
-    /// <summary>
-    /// The retry rule as this version states it, kept here rather than in the runtime because 5a has nothing that
-    /// hands a work item to a plugin yet. A shape error is final whatever the operation allows: the next attempt
-    /// would run the same code over the same answer, so it can only spend budget while a manager waits.
-    /// </summary>
-    private static bool Retriable(FailureClass failure, OperationContract contract) => failure switch
-    {
-        FailureClass.Transient => true,
-        FailureClass.Ambiguous => contract.RepeatAfterAmbiguous is RepeatAfterAmbiguous.Safe or RepeatAfterAmbiguous.AfterRecoveryRead,
-        _ => false,
-    };
 }
