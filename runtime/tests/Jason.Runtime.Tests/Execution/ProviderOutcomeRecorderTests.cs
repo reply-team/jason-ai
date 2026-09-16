@@ -96,6 +96,33 @@ public class ProviderOutcomeRecorderTests
         Assert.Equal(refused.ToJsonString(), provenance.RejectedResult!.ToJsonString());
     }
 
+    /// <summary>
+    /// The pin is Jason's record; the answer is the plugin's. When they disagree the disagreement is written
+    /// down beside the pin — and the work still happened, so the attempt is still a success. Failing it would
+    /// throw away work really done at the provider, and deciding which value is right is reconciliation, which
+    /// this version deliberately does not have.
+    /// </summary>
+    [Fact]
+    public async Task A_disagreement_about_an_identifier_does_not_cost_the_attempt_its_success()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var first = await SeedAsync(db);
+        await first.RecordAsync(db, Add, Succeeded(Added(first.Contact.PublicId), new JsonObject { ["contact"] = "p_1001" }));
+
+        var second = await SeedAsync(db, after: first);
+        await second.RecordAsync(db, Add, Succeeded(Added(second.Contact.PublicId), new JsonObject { ["contact"] = "p_2002" }));
+
+        Assert.Equal(AttemptStatus.Succeeded, second.Attempt.Status);
+        Assert.Equal(WorkItemStatus.Succeeded, second.Item.Status);
+        Assert.Null(second.Attempt.Error);
+
+        var pin = await db.ExternalIds.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal("p_1001", pin.Value);
+        Assert.Equal("p_2002", pin.DivergedValue);
+        Assert.Equal(second.Attempt.PublicId, pin.DivergedByAttemptId);
+    }
+
     [Fact]
     public async Task An_identifier_of_a_kind_the_operation_never_declared_refuses_the_whole_answer()
     {
@@ -329,23 +356,31 @@ public class ProviderOutcomeRecorderTests
     /// One claimed provider item, mid-run: the campaign, the person, and the attempt that is out at the plugin.
     /// The claim wrote the provenance, so the completion this task adds has a record to merge into.
     /// </summary>
-    private static async Task<Scene> SeedAsync(JasonDbContext db, int? invokerOutcomeBytes = null)
+    /// <summary>
+    /// A scene is one provider item mid-flight. Passing a previous scene reuses its campaign, contact and item
+    /// and adds the next attempt to them, which is what a second answer about the same person needs.
+    /// </summary>
+    private static async Task<Scene> SeedAsync(JasonDbContext db, int? invokerOutcomeBytes = null, Scene? after = null)
     {
         var clock = new FixedClock(new DateTimeOffset(Noon));
-        var campaign = WorkItemFactory.NewCampaign(now: Noon);
-        var contact = new Contact { PublicId = PublicId.New("cnt"), CreatedAt = Noon, UpdatedAt = Noon };
-        var item = WorkItemFactory.NewProviderOp(campaign, "list_membership.add", Noon);
+        var campaign = after?.Campaign ?? WorkItemFactory.NewCampaign(now: Noon);
+        var contact = after?.Contact ?? new Contact { PublicId = PublicId.New("cnt"), CreatedAt = Noon, UpdatedAt = Noon };
+        var item = after?.Item ?? WorkItemFactory.NewProviderOp(campaign, "list_membership.add", Noon);
         item.Contact = contact;
         item.Status = WorkItemStatus.Processing;
-        var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Running, Noon);
+        var attempt = WorkItemFactory.NewAttempt(item, (after?.Attempt.Number ?? 0) + 1, AttemptStatus.Running, Noon);
         attempt.Provenance = new AttemptProvenanceDto(
             TestPlugins.FakeProviderId, "1.0.0", "sha256:0", PluginProtocol.CurrentVersion, PluginProtocol.OperationContractVersion,
             "list_membership.add", 1, Provenance.SnapshotId, RouteSnapshotId, RouteScope.GlobalDefault, "sha256:1",
             CorrelationId: attempt.PublicId);
 
-        db.Campaigns.Add(campaign);
-        db.Contacts.Add(contact);
-        db.WorkItems.Add(item);
+        if (after is null)
+        {
+            db.Campaigns.Add(campaign);
+            db.Contacts.Add(contact);
+            db.WorkItems.Add(item);
+        }
+
         db.Attempts.Add(attempt);
         await db.SaveChangesAsync(Ct);
 
