@@ -38,6 +38,7 @@ public static class ContactRenderers
         lines.Add(Line("Custom keys:", RenderText.Keys(contact.Custom)));
         lines.Add(string.Empty);
         lines.Add(Channels(contact.Channels));
+        lines.AddRange(RenderText.ExternalIds(contact.ExternalIds));
         return RenderText.Lines(lines);
     }
 

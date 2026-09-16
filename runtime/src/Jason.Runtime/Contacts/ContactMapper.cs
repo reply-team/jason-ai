@@ -1,5 +1,6 @@
 using Jason.Contracts.Api;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins;
 
 namespace Jason.Runtime.Contacts;
 
@@ -26,6 +27,7 @@ public static class ContactMapper
                 .ThenBy(channel => channel.Value, StringComparer.Ordinal)
                 .Select(channel => new ChannelDto(channel.Channel, channel.Value, channel.Label, channel.IsPrimary, channel.Data))],
             contact.Custom,
+            ExternalIdStore.ToDtos(contact.ExternalIds),
             ToOffset(contact.CreatedAt),
             ToOffset(contact.UpdatedAt),
             contact.ArchivedAt is { } archived ? ToOffset(archived) : null);

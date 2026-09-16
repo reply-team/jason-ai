@@ -7,6 +7,10 @@ namespace Jason.Contracts.Api;
 /// <summary>One way to reach a contact. The vocabulary of channels is open; <c>value</c> is always the normalized form.</summary>
 public sealed record ChannelDto(string Channel, string Value, string? Label, bool Primary, JsonObject? Data);
 
+/// <summary>
+/// One contact as the API answers with it. <c>external_ids</c> is always a list, possibly empty: an absent field
+/// and an empty list would read alike to a client, and one of the two would be a lie about what is known.
+/// </summary>
 public sealed record ContactDto(
     string Id,
     string? FirstName,
@@ -16,6 +20,7 @@ public sealed record ContactDto(
     string? TimeZone,
     IReadOnlyList<ChannelDto> Channels,
     JsonObject Custom,
+    IReadOnlyList<ExternalIdDto> ExternalIds,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     DateTimeOffset? ArchivedAt);

@@ -230,8 +230,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
                 "(contact_id IS NOT NULL AND campaign_id IS NULL) OR (contact_id IS NULL AND campaign_id IS NOT NULL)"));
 
             // A pin is meaningless without the thing it names, so it goes when that goes.
-            pin.HasOne(p => p.Contact).WithMany().HasForeignKey(p => p.ContactId).OnDelete(DeleteBehavior.Cascade);
-            pin.HasOne(p => p.Campaign).WithMany().HasForeignKey(p => p.CampaignId).OnDelete(DeleteBehavior.Cascade);
+            pin.HasOne(p => p.Contact).WithMany(c => c!.ExternalIds).HasForeignKey(p => p.ContactId).OnDelete(DeleteBehavior.Cascade);
+            pin.HasOne(p => p.Campaign).WithMany(c => c!.ExternalIds).HasForeignKey(p => p.CampaignId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<CampaignRoute>(route =>
