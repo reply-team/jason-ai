@@ -58,7 +58,7 @@ public class ProviderOperationE2ETests
         // its shape. Distinctive, so the privacy assertion at the end is about these values and not about luck.
         var mark = "zq" + Guid.NewGuid().ToString("N");
         var root = Path.Combine(Path.GetTempPath(), "jason-provider", Guid.NewGuid().ToString("N"));
-        var workspace = Path.Combine(Path.GetTempPath(), "jason-provider-account", "acct-" + mark);
+        var workspace = Path.Combine(Path.GetTempPath(), "jason-provider-account-" + mark);
         var address = mark + "@example.test";
         var list = "lst-" + mark;
         var providerCampaign = "cmp-" + mark;
@@ -243,7 +243,7 @@ public class ProviderOperationE2ETests
             }
 
             Delete(root);
-            Delete(Path.GetDirectoryName(workspace)!);
+            Delete(workspace);
         }
     }
 
