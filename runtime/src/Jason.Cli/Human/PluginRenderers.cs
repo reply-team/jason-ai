@@ -57,6 +57,12 @@ public static class PluginRenderers
                     lines.Add($"{Location(candidate.Directory, problem.Path)}: {problem.Code} — {problem.Message}");
                 }
             }
+
+            // A route already names itself the way the operator wrote it, so there is no location to build.
+            foreach (var route in rejected.Routes ?? [])
+            {
+                lines.Add($"{route.Route}: {route.Code} — {route.Message}");
+            }
         }
 
         return RenderText.Lines(lines);

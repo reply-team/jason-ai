@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Runtime.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Tests.Routing;
 
@@ -33,6 +34,55 @@ public static class TestRoutes
         settings[RoutesOptions.Section] = JsonNode.Parse(json)!.AsObject();
         File.WriteAllText(paths.UserSettingsFile, settings.ToJsonString(JasonJson.Options), new UTF8Encoding(false));
     }
+
+    /// <summary>
+    /// The same merge into a <b>running</b> runtime's settings file, and then a wait until the options monitor
+    /// has seen it. A hand edit reaches a running runtime through a file watcher, so a test that wrote the file
+    /// and reloaded immediately would be racing it; this waits for the runtime's own view of the section to
+    /// change, which is the only thing that makes the next reload deterministic. A section the validator refuses
+    /// counts as a change too — that is exactly what a test about a mistyped route is waiting for.
+    /// </summary>
+    public static async Task WriteGlobalAsync(RuntimeApiFixture api, string json, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(api);
+        var monitor = api.Resolve<IOptionsMonitor<RoutesOptions>>();
+        var before = Seen(monitor);
+        WriteGlobal(api.Paths, json);
+
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (Seen(monitor) == before && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(25, cancellationToken);
+        }
+
+        Assert.NotEqual(before, Seen(monitor));
+    }
+
+    /// <summary>What the running runtime currently makes of the section, including "nothing it could work with".</summary>
+    private static string Seen(IOptionsMonitor<RoutesOptions> monitor)
+    {
+        RoutesOptions current;
+        try
+        {
+            current = monitor.CurrentValue;
+        }
+        catch (OptionsValidationException failure)
+        {
+            return "refused: " + string.Join("; ", failure.Failures);
+        }
+
+        var described = new JsonObject
+        {
+            ["Default"] = Describe(current.Default),
+            ["Operations"] = new JsonObject(current.Operations.Select(entry =>
+                KeyValuePair.Create(entry.Key, Describe(entry.Value)))),
+        };
+
+        return described.ToJsonString(JasonJson.Options);
+    }
+
+    private static JsonNode? Describe(RouteEntry? entry) =>
+        entry is null ? null : new JsonObject { ["Plugin"] = entry.Plugin, ["Binding"] = entry.Binding?.DeepClone() };
 
     /// <summary>The <c>Routes</c> section of a runtime that sends everything to one plugin.</summary>
     public static string GlobalDefault(string pluginId, JsonObject? binding = null)

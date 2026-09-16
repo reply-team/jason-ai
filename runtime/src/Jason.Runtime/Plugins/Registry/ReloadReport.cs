@@ -1,3 +1,4 @@
+using Jason.Contracts.Api;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Plugins.Manifest;
 
@@ -9,8 +10,18 @@ public sealed record CandidateReport(string Directory, string? Id, CandidateStat
 /// <summary>
 /// The diagnostics of the last load. A rejected load leaves the previous snapshot alone and this report behind,
 /// which is the only way anyone finds out why nothing changed.
+/// <para>
+/// <see cref="Routes"/> carries what the candidate route set was refused for, each detail's <c>Field</c> naming
+/// the route. It is a field of its own rather than a candidate called "routes", because a candidate is a package
+/// and a route is not one.
+/// </para>
 /// </summary>
-public sealed record ReloadReport(DateTime At, SnapshotSource Source, bool Activated, IReadOnlyList<CandidateReport> Candidates);
+public sealed record ReloadReport(
+    DateTime At,
+    SnapshotSource Source,
+    bool Activated,
+    IReadOnlyList<CandidateReport> Candidates,
+    IReadOnlyList<ErrorDetail> Routes);
 
 /// <summary>A load: the snapshot it would activate, or none when some candidate's package is not valid.</summary>
 public sealed record LoadResult(PluginSnapshot? Snapshot, ReloadReport Report);
