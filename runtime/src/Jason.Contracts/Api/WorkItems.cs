@@ -42,7 +42,8 @@ public sealed record AttemptLaunchDto(IReadOnlyList<string> EntryCommand, string
 /// </param>
 /// <param name="RejectedResult">
 /// The answer a shape error refused, so a plugin author can see what was actually sent. Present only where an
-/// otherwise well-formed answer failed the operation's own schema.
+/// otherwise well-formed answer failed the operation's own schema, and only where the read asked for snapshots:
+/// it is bounded by what the invoker will read back, which is not a size every read of a work item should carry.
 /// </param>
 public sealed record AttemptProvenanceDto(
     string? PluginId,

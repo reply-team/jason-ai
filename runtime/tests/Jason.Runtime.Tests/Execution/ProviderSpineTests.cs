@@ -160,7 +160,14 @@ public class ProviderSpineTests
         Assert.Equal("type", detail.Code);
 
         // The answer survived the protocol and is on the attempt, which a unit test of the recorder cannot show.
-        var rejected = attempt.Provenance!.RejectedResult!;
+        // It is evidence rather than status, and as large as the invoker will read back, so it travels under the
+        // same flag as the context snapshot instead of on every read of the item.
+        Assert.Null(attempt.Provenance!.RejectedResult);
+        var withEvidence = await api.PostOkAsync<WorkItemDto>(
+            Operations.WorkItemGet,
+            new { work_item_id = item, include_snapshots = true },
+            Ct);
+        var rejected = Assert.Single(withEvidence.Attempts!).Provenance!.RejectedResult!;
         Assert.Equal(42, (int)rejected["campaign"]!["name"]!);
         Assert.Equal(ProviderCampaign, (string?)rejected["campaign"]!["external_id"]);
     }
