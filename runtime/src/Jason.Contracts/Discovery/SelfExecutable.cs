@@ -9,7 +9,10 @@ namespace Jason.Contracts.Discovery;
 /// A published executable runs itself. A build started as <c>dotnet jason.dll</c> has the muxer for its process
 /// path and the assembly is not recoverable from it, so the entry assembly has to be named again — both because
 /// the child would otherwise be <c>dotnet &lt;mode&gt;</c>, which is not a program, and because naming
-/// <c>jason</c> alone would start whatever is on the PATH rather than this build.
+/// <c>jason</c> alone would start whatever is on the PATH rather than this build. The muxer is named by the path
+/// the operating system gives for this very process wherever there is one: a bare <c>dotnet</c> is looked up on
+/// the PATH, and a runtime started by a muxer that is not on it — an installation beside the app, a shim, a PATH
+/// the plugin host's cleared environment does not carry — would start no child at all.
 /// </remarks>
 public static class SelfExecutable
 {
@@ -32,6 +35,9 @@ public static class SelfExecutable
         }
 
         ArgumentException.ThrowIfNullOrWhiteSpace(entryAssembly);
-        return [DotnetHost, entryAssembly];
+
+        // The muxer that is running this process, by the path it is running at. The bare name is only for a host
+        // that publishes no process path at all, where there is nothing better to say.
+        return processPath is null ? [DotnetHost, entryAssembly] : [processPath, entryAssembly];
     }
 }
