@@ -5,7 +5,6 @@ using Jason.Runtime.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Dispatch;
 
@@ -17,7 +16,7 @@ namespace Jason.Runtime.Dispatch;
 public sealed class DispatcherService(
     ScanRunner runner,
     IServiceScopeFactory scopes,
-    IOptionsMonitor<DispatcherOptions> options,
+    DispatcherSettings settings,
     TimeProvider clock,
     DispatcherStatus status,
     HandlerPool pool,
@@ -49,7 +48,7 @@ public sealed class DispatcherService(
         status.RuntimeStartedAt = clock.GetUtcNow().UtcDateTime;
         status.MaxParallel = pool.MaxParallel;
 
-        if (!options.CurrentValue.Enabled)
+        if (!settings.Current.Enabled)
         {
             status.State = DispatcherState.Disabled;
             Disabled(logger, null);
@@ -88,8 +87,9 @@ public sealed class DispatcherService(
 
             try
             {
-                // Read every iteration, so an edit of the settings file changes the tick without a restart.
-                await Task.Delay(TimeSpan.FromSeconds(options.CurrentValue.TickSeconds), clock, stoppingToken).ConfigureAwait(false);
+                // Read every iteration, so an edit of the settings file changes the tick without a restart, and
+                // read through the settings, so an edit the validator refuses costs the edit and not the loop.
+                await Task.Delay(TimeSpan.FromSeconds(settings.Current.TickSeconds), clock, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -108,7 +108,7 @@ public sealed class DispatcherService(
         status.State = DispatcherState.Draining;
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
 
-        var drained = await pool.DrainAsync(TimeSpan.FromSeconds(options.CurrentValue.DrainSeconds)).ConfigureAwait(false);
+        var drained = await pool.DrainAsync(TimeSpan.FromSeconds(settings.Current.DrainSeconds)).ConfigureAwait(false);
         status.State = DispatcherState.Stopped;
         if (!drained)
         {
