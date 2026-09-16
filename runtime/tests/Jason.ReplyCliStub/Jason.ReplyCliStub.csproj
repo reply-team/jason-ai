@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The CI stand-in for the vendor CLI the official Reply plugin drives. Its assembly is named `reply` on
+       purpose: an executable resolver looks for a program of that name on the search path, so the plugin's own
+       manifest and the operator's own grant are exercised unchanged, and no test has to install a vendor tool or
+       reach a real account. It is test scaffolding, never published, and its name does not end in .Tests so the
+       test-runner properties do not apply to it; the test project references it only so its assembly — and its
+       apphost, which is what a resolver finds on a search path — is copied next to the tests. It references
+       nothing at all: a stand-in that needed our own types would prove nothing about starting a foreign program. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>reply</AssemblyName>
+    <RootNamespace>Jason.ReplyCliStub</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+</Project>
