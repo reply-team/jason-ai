@@ -203,6 +203,82 @@ public class SchemaHostileInputTests
     }
 
     /// <summary>
+    /// The same number, written in code as each of the CLR types a builder might hand it. A node parsed from text
+    /// holds a <c>JsonElement</c> that converts to anything; a node built in memory holds the value it was given
+    /// and converts to that type alone, so <c>JsonValue.Create(1)</c> is an <c>int</c> and nothing else. All of
+    /// them are the number 2, and a rule that runs for one has to run for every one — otherwise building a schema
+    /// rather than parsing one, which is what the hostile-input tests here are required to do, makes a working
+    /// validator look broken and teaches the next person to go back to parsing strings.
+    /// </summary>
+    [Fact]
+    public void A_bound_written_in_code_is_read_whatever_clr_number_holds_it()
+    {
+        foreach (var bound in Twos())
+        {
+            var schema = new JsonObject { ["type"] = "string", ["minLength"] = bound.Value };
+
+            Assert.Empty(SchemaValidator.CheckDialect(schema));
+            Assert.Empty(SchemaValidator.Validate(JsonNode.Parse("\"ab\""), schema));
+
+            var problem = Assert.Single(SchemaValidator.Validate(JsonNode.Parse("\"a\""), schema));
+            Assert.True(
+                problem.Reason == "min_length",
+                $"a bound written as a CLR {bound.Type} reported `{problem.Reason}`: {problem.Message}");
+        }
+    }
+
+    /// <summary>The same, for a bound compared rather than counted, so both readings of a number are covered.</summary>
+    [Fact]
+    public void A_numeric_comparison_runs_against_a_bound_written_in_code()
+    {
+        foreach (var bound in Twos())
+        {
+            var schema = new JsonObject { ["type"] = "number", ["maximum"] = bound.Value };
+
+            Assert.Empty(SchemaValidator.Validate(JsonNode.Parse("1"), schema));
+
+            var problem = Assert.Single(SchemaValidator.Validate(JsonNode.Parse("3"), schema));
+            Assert.True(
+                problem.Reason == "maximum",
+                $"a bound written as a CLR {bound.Type} reported `{problem.Reason}`: {problem.Message}");
+        }
+    }
+
+    /// <summary>
+    /// And what must still be refused, so neither test above can pass by a reader that accepts everything: a
+    /// number no decimal holds leaves the comparison unable to run, and a bound that is not a number at all is a
+    /// keyword the schema wrote badly.
+    /// </summary>
+    [Fact]
+    public void A_bound_that_still_cannot_be_compared_is_still_refused()
+    {
+        var beyondDecimal = new JsonObject { ["type"] = "number", ["maximum"] = JsonValue.Create(1e40) };
+        Assert.Equal("number_not_comparable", Assert.Single(SchemaValidator.Validate(JsonNode.Parse("1"), beyondDecimal)).Reason);
+
+        var notANumber = new JsonObject { ["type"] = "number", ["maximum"] = JsonValue.Create("three") };
+        Assert.Equal("schema_keyword_malformed", Assert.Single(SchemaValidator.Validate(JsonNode.Parse("1"), notANumber)).Reason);
+
+        var notAWholeCount = new JsonObject { ["type"] = "string", ["minLength"] = JsonValue.Create(1.5) };
+        Assert.Equal("schema_keyword_malformed", Assert.Single(SchemaValidator.Validate(JsonNode.Parse("\"a\""), notAWholeCount)).Reason);
+    }
+
+    /// <summary>The number two, once per CLR type a schema built in code could be carrying it as.</summary>
+    private static IEnumerable<(string Type, JsonValue Value)> Twos()
+    {
+        yield return ("int", JsonValue.Create(2));
+        yield return ("long", JsonValue.Create(2L));
+        yield return ("short", JsonValue.Create((short)2));
+        yield return ("sbyte", JsonValue.Create((sbyte)2));
+        yield return ("byte", JsonValue.Create((byte)2));
+        yield return ("uint", JsonValue.Create(2U));
+        yield return ("ulong", JsonValue.Create(2UL));
+        yield return ("ushort", JsonValue.Create((ushort)2));
+        yield return ("decimal", JsonValue.Create(2m));
+        yield return ("double", JsonValue.Create(2d));
+        yield return ("float", JsonValue.Create(2f));
+    }
+
+    /// <summary>
     /// A schema carrying a number JSON has no spelling for. It is built rather than parsed because building is the
     /// only way one can exist — text holding <c>1e400</c> parses to a number no reader can write back — and a
     /// manifest's binding schema is built exactly like this, from YAML, which is how such a number gets in.

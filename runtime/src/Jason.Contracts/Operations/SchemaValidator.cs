@@ -1290,17 +1290,9 @@ public static class SchemaValidator
         // The widest reading the node offers, kept only to say whether a narrower one is the same number.
         var widest = candidate.TryGetValue(out double real) ? real : (double?)null;
 
-        if (candidate.TryGetValue(out decimal exact))
+        if (TryExact(candidate, out var exact))
         {
             return Narrowed(exact, widest, out value);
-        }
-
-        // A node parsed from text holds an element that converts to any numeric type; one built in memory — a
-        // manifest's binding schema, read from YAML — holds the CLR value it was given and converts to that type
-        // alone. Both are the same number, and a rule that ran for one has to run for the other.
-        if (candidate.TryGetValue(out long whole))
-        {
-            return Narrowed(whole, widest, out value);
         }
 
         if (widest is { } number && double.IsFinite(number) && number is >= MinDecimal and <= MaxDecimal)
@@ -1309,6 +1301,84 @@ public static class SchemaValidator
         }
 
         // A number outside decimal's range is still a number; it simply cannot take part in a numeric comparison.
+        return false;
+    }
+
+    /// <summary>
+    /// The number a node holds, read as a decimal, whatever CLR type it was built from.
+    /// </summary>
+    /// <remarks>
+    /// A node parsed from text holds an element that converts to any numeric type. A node built in memory holds
+    /// the CLR value it was given and converts to that type alone: <c>JsonValue.Create(1)</c> is an <c>int</c>,
+    /// a manifest's binding schema read from YAML is a <c>long</c>, and a schema written in a test is whatever
+    /// the literal was. All of them are the same number, and a rule that ran for one has to run for the others —
+    /// a reader that knew only two of these types made building a schema, rather than parsing one, look like a
+    /// mistake. The whole family is therefore asked, widest first; a <c>float</c> is range-checked because the
+    /// cast to decimal would throw above it, and everything that survives is exact.
+    /// </remarks>
+    private static bool TryExact(JsonValue candidate, out decimal exact)
+    {
+        if (candidate.TryGetValue(out decimal asDecimal))
+        {
+            exact = asDecimal;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out long asLong))
+        {
+            exact = asLong;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out ulong asULong))
+        {
+            exact = asULong;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out int asInt))
+        {
+            exact = asInt;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out uint asUInt))
+        {
+            exact = asUInt;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out short asShort))
+        {
+            exact = asShort;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out ushort asUShort))
+        {
+            exact = asUShort;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out sbyte asSByte))
+        {
+            exact = asSByte;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out byte asByte))
+        {
+            exact = asByte;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out float asFloat) && float.IsFinite(asFloat) && (double)asFloat is > MinDecimal and < MaxDecimal)
+        {
+            exact = (decimal)asFloat;
+            return true;
+        }
+
+        exact = 0m;
         return false;
     }
 
