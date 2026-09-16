@@ -1,18 +1,44 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Jason.Contracts.Api;
+using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
+using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Execution;
 
+/// <summary>What only the invocation itself can know, and what the claim therefore left blank.</summary>
+/// <param name="InvocationId">The id the invoker gave the child, which is how its diagnostics are found again.</param>
+/// <param name="Diagnostics">What the run cost: how long it took and how much of each capability it used.</param>
+/// <param name="ExternalIdsReturned">The identifiers the plugin answered with, as it returned them.</param>
+/// <param name="RejectedResult">An answer the operation's schema refused, kept so its author can see it.</param>
+public sealed record InvocationRecord(
+    string? InvocationId = null,
+    OutcomeDiagnostics? Diagnostics = null,
+    IReadOnlyDictionary<string, string>? ExternalIdsReturned = null,
+    JsonNode? RejectedResult = null);
+
 /// <summary>
-/// The provenance of one attempt: written at claim from the decision that was just made. Nothing else ever
-/// writes it, and nothing rewrites what the claim recorded — an attempt is a record of what happened, so a route
-/// changed, a plugin reloaded or a package edited afterwards leaves it exactly as it stands.
+/// The provenance of one attempt: written at claim from the decision that was just made, and completed once the
+/// invocation has ended. Nothing else ever writes it, and nothing rewrites what the claim recorded — an attempt
+/// is a record of what happened, so a route changed, a plugin reloaded or a package edited afterwards leaves it
+/// exactly as it stands.
 /// </summary>
 public static class AttemptProvenance
 {
+    /// <summary>
+    /// The four fields a completion adds, and nothing else: serialised without its nulls so that what is merged
+    /// into the stored record names only what the invocation learned. The names come from the DTO itself, so the
+    /// patch and the record it is merged into cannot come to spell a field differently.
+    /// </summary>
+    private static readonly JsonSerializerOptions OnlyWhatIsKnown =
+        new(JasonJson.Options) { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+
     /// <summary>Everything a claim-time record can say before the invocation exists.</summary>
     private static readonly AttemptProvenanceDto Unknown =
         new(null, null, null, null, null, null, null, null, null, null, null);
@@ -61,5 +87,46 @@ public static class AttemptProvenance
             BindingIdentity = route?.BindingIdentity,
             CorrelationId = correlationId,
         };
+    }
+
+    /// <summary>
+    /// Adds what the invocation learned to the record the claim already wrote, through one guarded UPDATE: the
+    /// attempt's public id is the fencing token, the merge touches only the fields the completion names, and
+    /// nothing is read back first — a lease enforcer may be writing the same row, and reading a row to write it
+    /// again is how one writer silently undoes another.
+    /// </summary>
+    /// <returns>
+    /// False where there was nothing to complete: the attempt is gone, or it never had a claim-time record,
+    /// which is not a failure of the work but the reason its provenance stays as it is.
+    /// </returns>
+    public static async Task<bool> CompleteAsync(
+        JasonDbContext db,
+        string attemptId,
+        InvocationRecord invocation,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
+        ArgumentNullException.ThrowIfNull(invocation);
+
+        var patch = JsonSerializer.Serialize(
+            Unknown with
+            {
+                InvocationId = invocation.InvocationId,
+                Diagnostics = invocation.Diagnostics,
+                ExternalIdsReturned = invocation.ExternalIdsReturned,
+                RejectedResult = invocation.RejectedResult,
+            },
+            OnlyWhatIsKnown);
+
+        var touched = await db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+             UPDATE attempts
+                SET provenance_json = json_patch(provenance_json, {patch})
+              WHERE public_id = {attemptId} AND provenance_json IS NOT NULL
+             """,
+            cancellationToken).ConfigureAwait(false);
+
+        return touched == 1;
     }
 }

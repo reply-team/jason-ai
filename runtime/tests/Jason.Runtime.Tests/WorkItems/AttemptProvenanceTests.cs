@@ -4,10 +4,12 @@ using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Persistence;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Dispatch;
 using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.Tests.Routing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.WorkItems;
@@ -34,6 +36,12 @@ public class AttemptProvenanceTests
 
     /// <summary>A package whose declared program is nowhere on this machine: installed, listed, and held back.</summary>
     private const string HeldBack = "held-back-provider";
+
+    /// <summary>What an invocation adds to the record the claim wrote, and what the claim could not know.</summary>
+    private static readonly InvocationRecord Answered = new(
+        "pin_01K5B7Q2WE5X3M9T0YH4C6RDNA",
+        new OutcomeDiagnostics(41, 0, 1, 3),
+        new Dictionary<string, string>(StringComparer.Ordinal) { ["campaign"] = "c-7714" });
 
     [Fact]
     public async Task A_provider_attempt_says_exactly_what_ran()
@@ -62,6 +70,8 @@ public class AttemptProvenanceTests
         Assert.Equal(RouteScope.GlobalDefault, provenance.RouteScope);
         Assert.Equal(BindingIdentity.Of(Workspace), provenance.BindingIdentity);
         Assert.Equal(attempt.Id, provenance.CorrelationId);
+        Assert.Equal(Answered.InvocationId, provenance.InvocationId);
+        Assert.NotNull(provenance.Diagnostics);
     }
 
     /// <summary>An attempt of the other kind carries none, and its JSON says so by leaving the field out.</summary>
@@ -82,6 +92,82 @@ public class AttemptProvenanceTests
 
         var (_, body) = await api.PostAsync(Operations.WorkItemGet, new { work_item_id = item.Id }, Ct);
         Assert.DoesNotContain("provenance", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The completion adds what only the invocation could know, and it adds it without reading the record back:
+    /// the attempt's id is the fencing token, and a writer that reads a row to write it again is how one writer
+    /// silently undoes another. Here the other writer is a heartbeat landing in between.
+    /// </summary>
+    [Fact]
+    public async Task A_completion_adds_what_the_invocation_learned_and_undoes_nothing()
+    {
+        var gate = new TaskCompletionSource<CommandOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var command = new FakeCommand(WorkItemKind.ProviderOp, _ => gate.Task);
+        await using var api = await StartAsync(command, ToTheReferenceProvider);
+        var campaign = await CampaignAsync(api);
+        var item = await ProviderItemAsync(api, campaign, "campaign.get", Named("c-7714"));
+        Assert.True(await DispatchHarness.FirstScanDoneAsync(api.Resolve<DispatcherStatus>(), Ct));
+        Assert.Equal(1, (await api.Resolve<ScanRunner>().ScanOnceAsync(Ct)).Claimed);
+        Assert.True(await DispatchHarness.EventuallyAsync(() => command.Contexts.Count == 1, Ct));
+        var running = command.Contexts.Single();
+
+        // A context that read the attempt before anybody else touched it: exactly what a read-then-write would
+        // save back over the heartbeat that lands next.
+        await using var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var stale = await db.Attempts.FirstAsync(a => a.PublicId == running.AttemptId, Ct);
+        Assert.Null(stale.LastHeartbeatAt);
+        await api.PostOkAsync<HeartbeatResponse>(
+            Operations.WorkItemHeartbeat,
+            new { work_item_id = running.WorkItemId, attempt_id = running.AttemptId },
+            Ct);
+
+        Assert.True(await AttemptProvenance.CompleteAsync(db, running.AttemptId, Answered, Ct));
+
+        gate.SetResult(new CommandOutcome.Completed(null));
+        Assert.True(await api.Resolve<HandlerPool>().DrainAsync(TimeSpan.FromSeconds(10)));
+
+        var attempt = await AttemptAsync(api, item);
+        Assert.NotNull(attempt.LastHeartbeatAt);
+        var provenance = attempt.Provenance;
+        Assert.NotNull(provenance);
+        Assert.Equal(Answered.InvocationId, provenance.InvocationId);
+        Assert.Equal(Answered.Diagnostics, provenance.Diagnostics);
+        var returned = Assert.Single(provenance.ExternalIdsReturned!);
+        Assert.Equal("campaign", returned.Key);
+        Assert.Equal("c-7714", returned.Value);
+
+        // And everything the claim recorded is still what it recorded.
+        Assert.Equal(TestPlugins.FakeProviderId, provenance.PluginId);
+        Assert.Equal(RouteScope.GlobalDefault, provenance.RouteScope);
+        Assert.Equal(BindingIdentity.Of(Workspace), provenance.BindingIdentity);
+        Assert.Equal(attempt.Id, provenance.CorrelationId);
+    }
+
+    /// <summary>
+    /// Nothing to complete is not a failure of the work: an attempt the claim never wrote a record for keeps
+    /// none, and an attempt that is not there is answered with "no" rather than with an exception.
+    /// </summary>
+    [Fact]
+    public async Task A_completion_writes_nothing_where_the_claim_recorded_nothing()
+    {
+        await using var api = await StartAsync(FakeCommand.Returning(new CommandOutcome.Completed(null)), ToTheReferenceProvider);
+        var campaign = await CampaignAsync(api);
+        var item = await api.PostOkAsync<WorkItemDto>(
+            Operations.WorkItemCreate,
+            new { campaign_id = campaign, kind = "ai_role", role = "researcher" },
+            Ct);
+        await RunOneAsync(api);
+        var agent = await AttemptAsync(api, item.Id);
+
+        await using var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+
+        Assert.False(await AttemptProvenance.CompleteAsync(db, agent.Id, Answered, Ct));
+        Assert.False(await AttemptProvenance.CompleteAsync(db, "att_00000000000000000000000000", Answered, Ct));
+
+        Assert.Null((await AttemptAsync(api, item.Id)).Provenance);
     }
 
     /// <summary>
@@ -232,7 +318,13 @@ public class AttemptProvenanceTests
 
         private async Task<CommandOutcome> RunAsync(CommandContext context)
         {
-            await _api!.PostOkAsync<WorkItemDto>(
+            await using (var scope = _api!.Resolve<IServiceScopeFactory>().CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+                Assert.True(await AttemptProvenance.CompleteAsync(db, context.AttemptId, Answered, Ct));
+            }
+
+            await _api.PostOkAsync<WorkItemDto>(
                 Operations.WorkItemComplete,
                 new
                 {
