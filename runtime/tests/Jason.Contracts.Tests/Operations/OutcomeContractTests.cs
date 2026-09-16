@@ -92,6 +92,24 @@ public class OutcomeContractTests
             Assert.Single(OutcomeContract.CheckExternalIds(Add, new JsonObject { ["contact"] = new string('p', 257) })).Reason);
     }
 
+    /// <summary>
+    /// An identifier is a provider's word rendered into a person's terminal beside the rest of a table. A newline
+    /// in it forges a row, an escape sequence rewrites what is already on the screen, and a NUL ends the string
+    /// somewhere no reader expects — so a value carrying one is refused rather than kept and printed later. The
+    /// offending values are built here, character by character, rather than parsed out of text.
+    /// </summary>
+    [Theory]
+    [InlineData("p_884\n21")]
+    [InlineData("p_884\u001b[2J21")]
+    [InlineData("p_884\u000021")]
+    [InlineData("p_884\u009b31m21")]
+    public void An_identifier_carrying_a_control_character_is_refused_before_anything_prints_it(string identifier)
+    {
+        var problems = OutcomeContract.CheckExternalIds(Add, new JsonObject { ["contact"] = identifier });
+
+        Assert.Equal("pattern", Assert.Single(problems).Reason);
+    }
+
     [Fact]
     public void Returning_no_identifiers_at_all_is_an_ordinary_answer()
     {

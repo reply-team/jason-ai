@@ -248,6 +248,40 @@ public class ExternalIdStoreTests
         Assert.Empty(await db.Journal.AsNoTracking().ToListAsync(Ct));
     }
 
+    /// <summary>
+    /// Built, not parsed. What a provider calls somebody is printed into an operator's terminal by
+    /// <c>contact get --human</c>, so a value carrying a newline or an escape sequence would forge a row of that
+    /// table or clear the screen around it. It never becomes a pin, which is the only place it could be read
+    /// from later.
+    /// </summary>
+    [Fact]
+    public async Task An_identifier_carrying_a_control_character_is_never_written_down()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db);
+
+        var outcome = scene.Store.Apply(
+            db,
+            CampaignEnroll,
+            TestPlugins.FakeProviderId,
+            scene.Item,
+            scene.Campaign,
+            scene.Contact,
+            scene.First,
+            new JsonObject
+            {
+                ["contact"] = "p_884" + '\u001b' + "[2Jgone",
+                ["campaign"] = "c_77" + '\n' + "14  forged  row",
+            });
+        await db.SaveChangesAsync(Ct);
+
+        Assert.False(outcome.Pinned);
+        Assert.False(outcome.Diverged);
+        Assert.Empty(await db.ExternalIds.AsNoTracking().ToListAsync(Ct));
+        Assert.Empty(await db.Journal.AsNoTracking().ToListAsync(Ct));
+    }
+
     [Fact]
     public async Task Nothing_returned_is_an_ordinary_answer()
     {

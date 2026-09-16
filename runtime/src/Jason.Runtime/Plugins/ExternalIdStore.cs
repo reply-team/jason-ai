@@ -218,8 +218,11 @@ public sealed class ExternalIdStore(JournalWriter journal, TimeProvider clock)
         (entity == PinnedEntity.Contact ? "contact/" : "campaign/") + pluginId + "/" + kind;
 
     /// <summary>
-    /// An identifier is a non-empty string of at most the length the protocol accepts. Anything else — a number,
-    /// an object, an empty string — identifies nothing, so it is not written down.
+    /// An identifier is a non-empty string of at most the length the protocol accepts, carrying no control
+    /// character. Anything else — a number, an object, an empty string, a value with an escape sequence in it
+    /// that would rewrite the terminal it is printed into — identifies nothing, so it is not written down. The
+    /// contract's own check refuses the same values; this is the last gate before the record, and it asks the
+    /// same question rather than a second version of it.
     /// </summary>
     private static bool Identifier(JsonNode? node, out string value)
     {
@@ -230,6 +233,11 @@ public sealed class ExternalIdStore(JournalWriter journal, TimeProvider clock)
         }
 
         if (identifier is null || identifier.Length == 0 || identifier.Length > OutcomeContract.MaxExternalIdLength)
+        {
+            return false;
+        }
+
+        if (OutcomeContract.ControlCharacterIn(identifier) is not null)
         {
             return false;
         }

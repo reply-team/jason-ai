@@ -107,8 +107,43 @@ public static class OutcomeContract
                     "max_length",
                     string.Create(CultureInfo.InvariantCulture, $"An identifier is at most {MaxExternalIdLength} characters.")));
             }
+            else if (ControlCharacterIn(identifier) is { } control)
+            {
+                problems.Add(new SchemaProblem(
+                    pointer,
+                    "pattern",
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The identifier under `{kind}` carries U+{(int)control:X4}; an identifier is printed to a person as it stands, so it carries no control character.")));
+            }
         }
 
         return problems;
+    }
+
+    /// <summary>
+    /// The first control character <paramref name="identifier"/> carries, or null where it carries none.
+    /// </summary>
+    /// <remarks>
+    /// A provider's identifier is length-checked and then rendered verbatim into a person's terminal, beside the
+    /// rest of a table. A newline in it forges a row, an escape sequence rewrites whatever is already on the
+    /// screen, and a NUL ends the value somewhere no reader expects. Nothing downstream is in a position to
+    /// decide this — a renderer that escaped the value would still be showing a person something the provider
+    /// composed — so it is refused where it would be written down, and one place answers the question for both
+    /// the contract's check and the store's.
+    /// </remarks>
+    public static char? ControlCharacterIn(string identifier)
+    {
+        ArgumentNullException.ThrowIfNull(identifier);
+
+        foreach (var character in identifier)
+        {
+            if (char.IsControl(character))
+            {
+                return character;
+            }
+        }
+
+        return null;
     }
 }
