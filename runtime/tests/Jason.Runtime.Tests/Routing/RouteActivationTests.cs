@@ -222,6 +222,76 @@ public class RouteActivationTests
         Assert.DoesNotContain("not a value anybody should paste here", detail.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The spelling everybody actually writes. A binding key named <c>x-api-key</c> is the same name as
+    /// <c>api_key</c>, and it was getting through because the published fragment list writes that name with an
+    /// underscore — the list is how the question is asked, not what the rule says.
+    /// </summary>
+    [Fact]
+    public void A_credential_name_spelled_with_dashes_is_the_same_name()
+    {
+        var snapshot = SnapshotOf(BuiltPlugin("anything", ["campaign.get"], operationContracts: [1]));
+        var binding = new JsonObject { ["workspace"] = "west", ["x-api-key"] = "not a value anybody should paste here" };
+
+        var problem = RouteActivator.Check(snapshot, "campaign.get", "anything", binding);
+
+        Assert.Equal(RouteProblemCodes.BindingSecretLike, problem!.Code);
+        Assert.Contains("x-api-key", problem.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("not a value anybody should paste here", problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The other write path, held to the same cap. A binding is bounded where it is written rather than only
+    /// where it is used, so the settings file cannot smuggle one past the invocation's check either — and the
+    /// route set that was already active stays exactly as it was.
+    /// </summary>
+    [Fact]
+    public async Task A_global_binding_larger_than_the_protocol_carries_refuses_the_reload()
+    {
+        await using var api = await StartAsync(
+            TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, Workspace()),
+            paths => TestPlugins.InstallFakeProvider(paths));
+        var before = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, new { }, Ct);
+
+        // Built, not written out as a literal: the only thing wrong with it is how much of it there is.
+        var binding = new JsonObject { ["workspace"] = new string('w', PluginProtocol.MaxBindingBytes) };
+        await TestRoutes.WriteGlobalAsync(api, TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, binding), Ct);
+
+        var detail = await RefusedAsync(api);
+
+        Assert.Equal("Routes:Default", detail.Field);
+        Assert.Equal(RouteProblemCodes.BindingTooLarge, detail.Code);
+        Assert.DoesNotContain(new string('w', 64), detail.Message, StringComparison.Ordinal);
+
+        var after = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, new { }, Ct);
+        Assert.Equal(before.RoutingSnapshotId, after.RoutingSnapshotId);
+        Assert.Equal("west", (string?)api.Resolve<RouteRegistry>().Snapshot.Global.Default!.Binding!["workspace"]);
+
+        // Nothing permanent records the value either: a rejected reload journals nothing at all.
+        var entries = await api.PostOkAsync<Page<JournalEntryDto>>(
+            Operations.JournalList,
+            new { Kind = JournalKinds.PluginsReloaded },
+            Ct);
+        Assert.Single(entries.Items);
+    }
+
+    /// <summary>
+    /// The boundary itself, asked of the check rather than through a runtime: a binding whose canonical JSON is
+    /// exactly the cap is a binding the protocol can carry, and one byte more is not.
+    /// </summary>
+    [Fact]
+    public void A_binding_of_exactly_the_cap_is_carried_and_one_byte_more_is_not()
+    {
+        var snapshot = SnapshotOf(BuiltPlugin("anything", ["campaign.get"], operationContracts: [1]));
+
+        // {"workspace":""} is sixteen bytes around the value, and every byte of the value is one ASCII character.
+        var exact = new JsonObject { ["workspace"] = new string('w', PluginProtocol.MaxBindingBytes - 16) };
+        var over = new JsonObject { ["workspace"] = new string('w', PluginProtocol.MaxBindingBytes - 15) };
+
+        Assert.Null(RouteActivator.Check(snapshot, "campaign.get", "anything", exact));
+        Assert.Equal(RouteProblemCodes.BindingTooLarge, RouteActivator.Check(snapshot, "campaign.get", "anything", over)!.Code);
+    }
+
     [Fact]
     public async Task A_route_to_a_plugin_that_performs_no_operation_refuses_the_reload()
     {

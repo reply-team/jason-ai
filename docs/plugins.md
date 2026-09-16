@@ -126,7 +126,7 @@ binding:                         # optional; a schema, in the published dialect,
 | `limits.timeout_ms` | 1000 .. `Plugins:Limits:MaxTimeoutMs` (3 600 000 by default) | `field_invalid` |
 | `limits.memory_mb` | 16 .. `Plugins:Limits:MaxMemoryMb` (512 by default) | `field_invalid` |
 | `binding` | optional; a schema of `type: object` in the dialect of `docs/contracts/`, at most 64 KiB. A problem inside it is located as `binding#<json pointer>` | `field_invalid` |
-| a field a `binding` declares, at any depth | never named like a credential — any of `token`, `secret`, `password`, `passwd`, `api_key`, `apikey`, `credential`, `private_key`, `authorization`, `bearer`, `cookie`, matched case-insensitively anywhere in the name | `binding_secret_like` |
+| a field a `binding` declares, at any depth | never named like a credential — any of `token`, `secret`, `password`, `passwd`, `api_key`, `apikey`, `credential`, `private_key`, `authorization`, `bearer`, `cookie`, matched case-insensitively anywhere in the name and with every separator ignored, so `x-api-key`, `API.KEY` and `api key` are all that same name | `binding_secret_like` |
 
 `binding` says what an installation has to tell this plugin before it can act — which account, which
 workspace, which mailbox. It never carries the credential: the plugin reaches that through the
@@ -613,7 +613,8 @@ The value satisfying it reaches you as `context.binding`.
 **A binding selects an identity; it never carries a credential.** A declared property named anything
 like one is refused at load with `binding_secret_like`, because a binding is written and read by the
 people who operate an installation, and a field named `api_token` is an invitation to put a secret in
-a file that was never meant to hold one. A credential reaches you the way every secret does: through a
+a file that was never meant to hold one. Punctuation is no way around it: the name is read with its
+separators dropped, so `x-api-key` is refused exactly as `api_key` is. A credential reaches you the way every secret does: through a
 variable your manifest declares under `capabilities.env`, granted by the user and read with `host.env`
 (§6), never through the envelope. The worked example below is exactly this shape — its binding names
 the account to act in, and the program it acts with comes from a granted variable.

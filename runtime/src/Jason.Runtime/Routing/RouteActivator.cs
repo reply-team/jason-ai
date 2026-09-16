@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
@@ -96,9 +97,23 @@ public sealed class RouteActivator(
     /// what belongs here is the order they are asked in and the words an operator is answered with.
     /// </para>
     /// </summary>
-    public static RouteProblem? Check(PluginSnapshot plugins, string? operation, string? pluginId, JsonObject? binding)
+    public static RouteProblem? Check(PluginSnapshot plugins, string? operation, string? pluginId, JsonObject? binding) =>
+        Check(plugins, operation, pluginId, binding, out _);
+
+    /// <summary>
+    /// The same check, also answering what the binding is called — the identity the route will be frozen with.
+    /// It falls out of the size check, which has to write the canonical form anyway, so a route is serialised
+    /// once rather than once to bound it and again to name it.
+    /// </summary>
+    private static RouteProblem? Check(
+        PluginSnapshot plugins,
+        string? operation,
+        string? pluginId,
+        JsonObject? binding,
+        out string? bindingIdentity)
     {
         ArgumentNullException.ThrowIfNull(plugins);
+        bindingIdentity = null;
 
         if (RouteChecks.Loaded(plugins, pluginId) is not { } plugin)
         {
@@ -127,6 +142,23 @@ public sealed class RouteActivator(
             return new RouteProblem(
                 RouteProblemCodes.BindingSecretLike,
                 $"a binding must not carry '{named}'. A binding selects an identity the plugin's own credential store already holds; it is journaled and listed, so it never carries the credential itself.");
+        }
+
+        if (BindingIdentity.Measure(binding) is { } measured)
+        {
+            // Bounded where it is written, not only where it is used. The invocation refuses an oversized
+            // binding too, but by then the route has been journaled into an append-only table, listed and
+            // answered as usable, and every item through it dies with nothing naming the route that carried it.
+            if (measured.Bytes > PluginProtocol.MaxBindingBytes)
+            {
+                return new RouteProblem(
+                    RouteProblemCodes.BindingTooLarge,
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"a binding is at most {PluginProtocol.MaxBindingBytes} bytes of canonical JSON, and this one is {measured.Bytes}. It is refused where it is written, because a route is journaled, listed and resolved long before anything tries to carry it to a plugin."));
+            }
+
+            bindingIdentity = measured.Identity;
         }
 
         return RouteChecks.BindingProblems(plugin, binding) is { Count: > 0 } failures
@@ -266,16 +298,17 @@ public sealed class RouteActivator(
         JsonObject? binding,
         List<ErrorDetail> problems)
     {
-        if (Check(plugins, operation, pluginId, binding) is { } problem)
+        if (Check(plugins, operation, pluginId, binding, out var identity) is { } problem)
         {
             problems.Add(new ErrorDetail(field, problem.Code, problem.Message));
             return null;
         }
 
         // A copy, because the snapshot outlives the settings instance and the database row it was read from, and
-        // a JsonNode belongs to exactly one parent.
+        // a JsonNode belongs to exactly one parent. The identity is the one the check already measured: a clone
+        // has the same canonical form, so writing it out a second time would only be a chance to disagree.
         var owned = binding?.DeepClone().AsObject();
-        return new Route(pluginId!, owned, BindingIdentity.Of(owned));
+        return new Route(pluginId!, owned, identity);
     }
 
     private static RouteProblem? OperationProblem(LoadedPlugin plugin, string operation)

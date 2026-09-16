@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
@@ -285,6 +286,47 @@ public class RouteApiTests
     }
 
     /// <summary>
+    /// A binding is bounded where it is written, not only where it is used. The cap belongs here because the
+    /// write is the irreversible half: a binding the invocation would refuse has by then been journaled into an
+    /// append-only table, listed by <c>route list</c> and answered as usable by <c>route resolve</c>, and every
+    /// item through that route would then die at the invocation with nothing naming the route that carried it.
+    /// </summary>
+    [Fact]
+    public async Task A_binding_larger_than_the_protocol_carries_is_refused_before_it_is_written()
+    {
+        await using var api = await StartAsync(TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, RouteActivationTests.Workspace()));
+        var campaign = await CampaignAsync(api);
+
+        // Built rather than parsed: this is the one shape no fixture file should carry, and it is schema-valid
+        // for fake-provider, so size is the only thing wrong with it.
+        var binding = new JsonObject { ["workspace"] = new string('w', PluginProtocol.MaxBindingBytes) };
+
+        var error = await api.PostErrorAsync(
+            Operations.RouteSet,
+            new { campaign_id = campaign, operation = "campaign.get", plugin = TestPlugins.FakeProviderId, binding },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        Assert.Equal("validation_failed", error.Code);
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(RouteActivator.CampaignField(campaign, "campaign.get"), detail.Field);
+        Assert.Equal(RouteProblemCodes.BindingTooLarge, detail.Code);
+
+        // The message says both numbers and never the value: an answer that quoted 64 KiB back would be the
+        // same mistake in a different table.
+        Assert.Contains(PluginProtocol.MaxBindingBytes.ToString(CultureInfo.InvariantCulture), detail.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(new string('w', 64), detail.Message, StringComparison.Ordinal);
+
+        // The journal is append-only, so a row written here could never be taken back. Nothing was written.
+        var entries = await api.PostOkAsync<Page<JournalEntryDto>>(
+            Operations.JournalList,
+            new { CampaignId = campaign, Kind = JournalKinds.RoutesUpdated },
+            Ct);
+        Assert.Empty(entries.Items);
+        Assert.Empty(api.Resolve<RouteRegistry>().Snapshot.Campaigns);
+    }
+
+    /// <summary>
     /// An archived campaign answers what it already answers everywhere else. A new code for "archived, but about
     /// routes" would be one more thing to learn for no new fact.
     /// </summary>
@@ -302,6 +344,95 @@ public class RouteApiTests
             Ct);
 
         Assert.Equal("campaign_archived", error.Code);
+    }
+
+    /// <summary>
+    /// A set replaces the route, whole. Leaving the binding out is not "keep the one that is there": it writes a
+    /// route with no binding, and the account the old one selected is gone. That is the right shape for a verb
+    /// that writes a route rather than patching one, and the old value is in the journal beside the new — but it
+    /// is a thing somebody will do by accident, so it is written down here and in §4 of the routing document.
+    /// </summary>
+    [Fact]
+    public async Task Setting_a_route_without_a_binding_clears_the_binding_that_was_there()
+    {
+        await using var api = await StartAsync(TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, RouteActivationTests.Workspace()));
+        var campaign = await CampaignAsync(api);
+        await TestRoutes.SetCampaignAsync(api, campaign, "campaign.get", TestPlugins.OtherProviderId, new JsonObject { ["account"] = "east" }, Ct);
+
+        var after = await api.PostOkAsync<RoutesDto>(
+            Operations.RouteSet,
+            new { campaign_id = campaign, operation = "campaign.get", plugin = TestPlugins.OtherProviderId, reason = "moving it off that account" },
+            Ct);
+
+        var written = Assert.Single(after.Campaigns).Operations["campaign.get"];
+        Assert.Equal(TestPlugins.OtherProviderId, written.PluginId);
+        Assert.Null(written.Binding);
+        Assert.Null(written.BindingIdentity);
+        Assert.Null(api.Resolve<RouteRegistry>().Snapshot.Campaigns[campaign].Operations["campaign.get"].Binding);
+
+        // What the route used to select is not lost, it is journaled: that is the whole compensation for the
+        // clearing being silent.
+        var entries = await api.PostOkAsync<Page<JournalEntryDto>>(
+            Operations.JournalList,
+            new { CampaignId = campaign, Kind = JournalKinds.RoutesUpdated },
+            Ct);
+        var latest = entries.Items.Single(entry => entry.Reason is not null);
+        Assert.Equal("east", (string?)latest.Old!["binding"]!["account"]);
+        Assert.Null(latest.New!["binding"]);
+    }
+
+    /// <summary>
+    /// Unset is refused on an archived campaign for the same reason set is, and answers the same way. Archived
+    /// work never dispatches again, so it is never re-routed — in either direction, including the direction that
+    /// only takes something away.
+    /// </summary>
+    [Fact]
+    public async Task Unsetting_a_route_on_an_archived_campaign_is_refused_the_way_archiving_is_refused_everywhere()
+    {
+        await using var api = await StartAsync(TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, RouteActivationTests.Workspace()));
+        var campaign = await CampaignAsync(api);
+        await TestRoutes.SetCampaignAsync(api, campaign, operation: null, TestPlugins.OtherProviderId, binding: null, Ct);
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignArchive, new { CampaignId = campaign }, Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.RouteUnset,
+            new { campaign_id = campaign, reason = "tidying up" },
+            HttpStatusCode.Conflict,
+            Ct);
+
+        Assert.Equal("campaign_archived", error.Code);
+
+        // The row is still there, and still journaled as it was: refusing is not a quiet removal.
+        Assert.Equal(TestPlugins.OtherProviderId, api.Resolve<RouteRegistry>().Snapshot.Campaigns[campaign].Default!.PluginId);
+    }
+
+    /// <summary>
+    /// What the read verbs make of an archived campaign, which is not nothing: the campaign can still be named,
+    /// so both answer — and both answer about a campaign whose own routes have left the snapshot. Archiving is
+    /// not itself an activation, so they leave it at the next one, and until then an operator reading either verb
+    /// still sees the route the campaign had.
+    /// </summary>
+    [Fact]
+    public async Task An_archived_campaigns_routes_leave_the_answer_at_the_next_activation()
+    {
+        await using var api = await StartAsync(TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, RouteActivationTests.Workspace()));
+        var campaign = await CampaignAsync(api);
+        await TestRoutes.SetCampaignAsync(api, campaign, operation: null, TestPlugins.OtherProviderId, binding: null, Ct);
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignArchive, new { CampaignId = campaign }, Ct);
+
+        // Archiving swapped nothing, so the frozen snapshot still answers what it was frozen with.
+        Assert.Equal(RouteScope.CampaignDefault, (await ResolveAsync(api, campaign)).Scope);
+
+        await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { }, Ct);
+
+        var resolution = await ResolveAsync(api, campaign);
+        Assert.Equal(RouteScope.GlobalDefault, resolution.Scope);
+        Assert.Equal(TestPlugins.FakeProviderId, resolution.PluginId);
+        Assert.True(resolution.Usable);
+
+        var listed = await api.PostOkAsync<RoutesDto>(Operations.RouteList, new { campaign_id = campaign }, Ct);
+        Assert.Empty(listed.Campaigns);
+        Assert.Equal(TestPlugins.FakeProviderId, listed.Global.Default!.PluginId);
     }
 
     /// <summary>Taking a route away gives back whatever it was hiding, which here is the global default.</summary>

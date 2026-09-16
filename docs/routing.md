@@ -118,13 +118,25 @@ written under "Routes" in settings.json and activated with 'jason plugin reload'
 The reason is worth stating rather than accepting: a reload freezes plugins and routes together, so a
 global route becomes active by the same explicit act as the packages it names.
 
-Three smaller rules, each of which somebody will meet:
+Four smaller rules, each of which somebody will meet:
 
 - **A route is checked before its row is written.** A `route set` that could never activate is refused
   as a 400 naming the route, rather than written and then refusing its own activation.
-- **An archived campaign is refused** with the same `campaign_archived` it answers everywhere else.
+- **A set replaces the route, whole.** `--binding` left out is *not* "keep the one that is there": the
+  route it writes has no binding, and whatever account the old one selected is gone. The change is
+  journaled with the old binding beside the new, and the answer shows the route that was written — so
+  nothing is lost, but nothing warns you either.
+- **An archived campaign is refused**, for `route set` and `route unset` alike, with the same
+  `campaign_archived` it answers everywhere else: archived work never dispatches again, so it is never
+  re-routed in either direction — including the direction that only takes something away.
 - **`route unset` of a route that is not there succeeds and changes nothing** — it is the state the
   caller asked for, and nothing is activated because nothing changed.
+
+**The read verbs still answer for an archived campaign**, because it can still be named — and what they
+answer about is a campaign whose own routes have left the snapshot: `route resolve` falls back to the
+global route, and `route list` shows no rows for it. Archiving is not itself an activation, so those
+rows leave at the next one — a reload, or any `route set` — and until then both verbs still show the
+route the campaign had.
 
 ### `route resolve` has two different answers
 
@@ -185,11 +197,19 @@ The escape hatch is real and is in the same place: set that binding **per campai
 
 A plugin's manifest may declare `binding:` — a schema, in the dialect of `docs/contracts/`, for what
 an installation must tell it before it can act. A route to a plugin that declares one must satisfy it;
-a route to a plugin that declares none may carry any JSON object, up to 64 KiB (a larger one is
-refused at the invocation with `plugin_binding_too_large`, which is permanent). The value reaches the
+a route to a plugin that declares none may carry any JSON object, up to 64 KiB. The value reaches the
 plugin as `context.binding`. **Nothing in the runtime interprets what it means** — that is the plugin's
 business — though the runtime does hold it to the plugin's schema, refuse a credential-shaped name in
 it, hash it into each attempt's provenance, journal it and show it in `route list`.
+
+**The 64 KiB is measured where the binding is written**, at activation, over the same canonical JSON the
+binding's `sha256:` identity is taken from — so both write paths are covered, `route set` and the `Routes`
+section, and a larger one is `route_binding_too_large`. It has to be that way round: a route is journaled
+into an append-only table, listed by `route list` and answered `usable: true` by `route resolve` before
+anything tries to carry it anywhere, so a binding first refused at the invocation would already be
+permanent, and every item through that route would die with nothing naming the route that did it. The
+invocation keeps its own cap — `plugin_binding_too_large`, permanent — as the protocol's guard on the
+envelope it writes; nothing a route can carry should ever reach it.
 
 **A binding selects an identity the plugin's own credential store already holds; it never carries the
 credential.** A binding is journaled when it is written and shown in full by `route list`, so a field
@@ -200,6 +220,10 @@ campaign:cmp_…/routes/default: route_binding_secret_like — a binding must no
 selects an identity the plugin's own credential store already holds; it is journaled and listed, so it
 never carries the credential itself.
 ```
+
+The name is read with its separators ignored, so the spelling makes no difference: `x-api-key`, `API.KEY`
+and `api key` are refused exactly as `api_key` is. The published list of fragments (`docs/plugins.md` §3)
+is how the question is asked; "reads like a credential" is what it says.
 
 A credential reaches a plugin the way every secret does: through a variable its manifest declares under
 `capabilities.env`, granted by the user and read with `host.env`.
@@ -269,7 +293,7 @@ the one a planner can fix by editing the item; everything else is structural. An
 disagrees with a pin is refused rather than resolved either way: the rule is to work by the pin, so the
 message names the pinned value.
 
-### At activation — seven route problems, plus one for the section
+### At activation — eight route problems, plus one for the section
 
 | Code | When |
 |---|---|
@@ -279,9 +303,10 @@ message names the pinned value.
 | `route_operation_unsupported` | the plugin does not list the operation the route sends it |
 | `route_contract_incompatible` | the plugin speaks no version of that operation's contract |
 | `route_binding_secret_like` | the binding carries a field named like a credential, at any depth |
+| `route_binding_too_large` | the binding's canonical JSON is larger than the 64 KiB the protocol carries |
 | `route_binding_invalid` | the binding does not satisfy the schema the plugin declares |
 
-The eighth is not a problem with a route but with the **section**: `routes_settings_invalid` is the
+The ninth is not a problem with a route but with the **section**: `routes_settings_invalid` is the
 `Routes` section itself failing the validator that reads it, which happens when the file is edited into
 something no route could be built from. The options system reports that as prose rather than as
 structure, so the runtime carries the validator's own sentence through verbatim and names the setting it
@@ -307,6 +332,11 @@ can only differ in wording.
 claim: a package whose program is missing from this machine is an environment's problem, and refusing
 every route to it would answer that with a rejected reload. `route_binding_secret_like` is asked only at
 activation: that is where a binding is written, and nothing at claim time could still refuse one.
+
+**A third is asked twice, at neither of those two places.** How large a binding is is refused at
+activation, as `route_binding_too_large`, and again by the invocation, as `plugin_binding_too_large` —
+one number, stated in each side's own vocabulary. The claim in between does not ask it at all, because by
+then it can only be answered one way: a binding over the cap never became a route.
 
 ## 8. What "ambiguous" costs, in operator terms
 
