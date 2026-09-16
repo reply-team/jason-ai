@@ -91,19 +91,23 @@ public sealed class RouteActivator(
     /// Only the first failing check is answered. The checks after the first one read what it established — there
     /// is no operation to support without a plugin to support it — and an operator fixing a route fixes it once.
     /// </para>
+    /// <para>
+    /// The questions are <see cref="RouteChecks"/>, which the claim asks again of the route an item resolved to;
+    /// what belongs here is the order they are asked in and the words an operator is answered with.
+    /// </para>
     /// </summary>
     public static RouteProblem? Check(PluginSnapshot plugins, string? operation, string? pluginId, JsonObject? binding)
     {
         ArgumentNullException.ThrowIfNull(plugins);
 
-        if (string.IsNullOrWhiteSpace(pluginId) || plugins.Find(pluginId) is not { } plugin)
+        if (RouteChecks.Loaded(plugins, pluginId) is not { } plugin)
         {
             return new RouteProblem(
                 RouteProblemCodes.PluginUnknown,
                 $"no plugin with id '{pluginId}' is in the candidate set, so nothing would perform this work.");
         }
 
-        if (plugin.Manifest.Kind != PluginKind.Provider)
+        if (RouteChecks.KindNotInvocable(plugin))
         {
             return new RouteProblem(
                 RouteProblemCodes.PluginKindNotInvocable,
@@ -125,17 +129,11 @@ public sealed class RouteActivator(
                 $"a binding must not carry '{named}'. A binding selects an identity the plugin's own credential store already holds; it is journaled and listed, so it never carries the credential itself.");
         }
 
-        if (plugin.Manifest.Binding is not { } schema)
-        {
-            return null;
-        }
-
-        var failures = SchemaValidator.Validate(binding, schema);
-        return failures.Count == 0
-            ? null
-            : new RouteProblem(
+        return RouteChecks.BindingProblems(plugin, binding) is { Count: > 0 } failures
+            ? new RouteProblem(
                 RouteProblemCodes.BindingInvalid,
-                $"the binding does not satisfy what '{plugin.Manifest.Id}' declares a route to it must carry: {Where(failures[0].Pointer)}{failures[0].Message}");
+                $"the binding does not satisfy what '{plugin.Manifest.Id}' declares a route to it must carry: {Where(failures[0].Pointer)}{failures[0].Message}")
+            : null;
     }
 
     /// <summary>How a campaign's route is named in a problem, so the operator can find the row they wrote.</summary>
@@ -289,7 +287,7 @@ public sealed class RouteActivator(
                 $"'{operation}' is not an operation this build publishes.");
         }
 
-        if (!plugin.Supports(operation))
+        if (RouteChecks.OperationUnsupported(plugin, operation))
         {
             return new RouteProblem(
                 RouteProblemCodes.OperationUnsupported,
@@ -317,11 +315,11 @@ public sealed class RouteActivator(
     }
 
     private static RouteProblem? Incompatible(LoadedPlugin plugin, OperationContract contract) =>
-        plugin.Manifest.Contracts.Operations.Contains(contract.Version)
-            ? null
-            : new RouteProblem(
+        RouteChecks.ContractIncompatible(plugin, contract)
+            ? new RouteProblem(
                 RouteProblemCodes.ContractIncompatible,
-                $"'{plugin.Manifest.Id}' speaks operation contract {string.Join(", ", plugin.Manifest.Contracts.Operations)}, and '{contract.Id}' is published at version {contract.Version}.");
+                $"'{plugin.Manifest.Id}' speaks operation contract {string.Join(", ", plugin.Manifest.Contracts.Operations)}, and '{contract.Id}' is published at version {contract.Version}.")
+            : null;
 
     /// <summary>
     /// The first field anywhere in the binding whose name reads as a credential. The walk carries its own stack
