@@ -458,8 +458,8 @@ The plugin-host process — and therefore every program `host.exec` starts — i
   `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `APPDATA`, `LOCALAPPDATA`, `ProgramData`, `ProgramFiles`,
   `ProgramFiles(x86)`, `ProgramW6432`, `NUMBER_OF_PROCESSORS`, `PROCESSOR_ARCHITECTURE`, `OS`,
   `USERNAME`;
-- on everything else: `HOME`, `TMPDIR`, `LANG`, `LC_ALL`, `LC_CTYPE`, `USER`, `LOGNAME`, `SHELL`,
-  `TERM`;
+- on everything else: `HOME`, `XDG_CONFIG_HOME`, `TMPDIR`, `LANG`, `LC_ALL`, `LC_CTYPE`, `USER`,
+  `LOGNAME`, `SHELL`, `TERM`;
 - plus the granted `env` variables, by name.
 
 Never anything else, and **never a `JASON_*` variable** — not even `JASON_DATA_DIR`. A plugin that
