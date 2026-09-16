@@ -203,6 +203,43 @@ public class ReplyCampaignGetTests
         AssertTheSequenceWasRead(account);
     }
 
+    [Fact]
+    public async Task A_name_longer_than_the_contract_allows_is_answered_rather_than_refused()
+    {
+        // The contract allows five hundred characters and Reply publishes no limit at all, so the two can
+        // disagree about a real sequence. Passing a longer name straight through would make the whole answer
+        // result_invalid — final, never repeated — and cost an operator the read of that campaign for good,
+        // over a display string. The neutral half carries what it can hold; the provider's own name survives
+        // beside it, whole, which is what `vendor` is for.
+        var long_name = new string('a', 640);
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, long_name, "active");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        // Succeeded holds the answer to the output schema, so a name that did not fit would fail here.
+        var answer = Succeeded(await InvokeAsync(api, Input(supplied: "7"), Ct));
+
+        Assert.Equal(500, answer["campaign"]!["name"]!.GetValue<string>().Length);
+        Assert.Equal(long_name, answer["vendor"]!["name"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task A_name_that_fits_is_not_repeated_beside_itself()
+    {
+        // The provider's name travels under `vendor` only where the two halves really differ. Repeating it
+        // unchanged would say they disagree when they agree.
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 outbound", "active");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = Succeeded(await InvokeAsync(api, Input(supplied: "7"), Ct));
+
+        Assert.Equal("Q3 outbound", answer["campaign"]!["name"]!.GetValue<string>());
+        Assert.Null(answer["vendor"]!["name"]);
+    }
+
     // -------------------------------------------------------------------------------------------------------
     // The failure rows this operation declares, and only those
     // -------------------------------------------------------------------------------------------------------

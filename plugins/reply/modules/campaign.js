@@ -23,6 +23,9 @@ const STATUS = {
 const SEQUENCE_NUMBER = /^[1-9][0-9]{0,9}$/;
 const LARGEST_SEQUENCE_NUMBER = 2147483647;
 
+// What the output schema allows a campaign's name. Reply publishes no limit of its own, so the two can disagree.
+const MAX_NAME = 500;
+
 export function campaignGet(input, context) {
   const sequence = identifier(input);
   const path = "/v3/sequences/" + sequence;
@@ -57,12 +60,19 @@ export function campaignGet(input, context) {
   // an archived sequence is `archived` here whatever its status says.
   const archived = sequenceRead.isArchived === true;
   const state = typeof sequenceRead.status === "string" ? sequenceRead.status : "";
+  const named = typeof sequenceRead.name === "string" ? sequenceRead.name : "";
+
+  // The contract allows a campaign's name five hundred characters and Reply agrees to no limit at all. Passing a
+  // longer one straight through would make the whole answer `result_invalid` — final, never repeated — and cost
+  // an operator the read of that campaign for good, over a display string. So the neutral half carries what it
+  // can hold and the provider's own name survives beside it, whole.
+  const name = named.length > MAX_NAME ? named.slice(0, MAX_NAME) : named;
 
   return {
     result: {
       campaign: {
         external_id: sequence,
-        name: typeof sequenceRead.name === "string" ? sequenceRead.name : "",
+        name: name,
         // A state this vocabulary has no word for is `other`, never the closest-looking word: `other` is an
         // honest answer a caller can act on, and a guess is one they cannot tell from a fact.
         status: archived ? "archived" : (STATUS[state] || "other"),
@@ -77,6 +87,9 @@ export function campaignGet(input, context) {
       // where they survive. Of the three operations this package implements only this one publishes a `vendor`
       // bag: the other two output schemas are closed.
       vendor: {
+        // Only when it did not fit: a name repeated unchanged in both halves would say the two disagree when
+        // they do not.
+        name: name === named ? undefined : named,
         status: sequenceRead.status === undefined ? null : sequenceRead.status,
         is_archived: sequenceRead.isArchived === undefined ? null : sequenceRead.isArchived,
         health: sequenceRead.health === undefined ? null : sequenceRead.health,
