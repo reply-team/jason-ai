@@ -6,7 +6,17 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>One call the stand-in was asked to make, as it recorded it before answering.</summary>
 /// <param name="Args">The whole argument vector, which is what makes "this flag never appears" assertable.</param>
-public sealed record ReplyCall(string Method, string Path, string? Body, IReadOnlyList<string> Args);
+/// <param name="Environment">
+/// Every vendor-named variable the stand-in was started with. No <c>REPLY_*</c> name enters the runtime, so what
+/// an operator exported in their own shell must not reach a child; the only one that may be here is the one the
+/// package sets on the call itself, and this is where that is read rather than assumed.
+/// </param>
+public sealed record ReplyCall(
+    string Method,
+    string Path,
+    string? Body,
+    IReadOnlyList<string> Args,
+    IReadOnlyDictionary<string, string> Environment);
 
 /// <summary>
 /// One Reply account, as a directory of JSON files: the state the stand-in vendor CLI reads and writes, and the
@@ -238,6 +248,22 @@ public sealed class ReplyAccount : IDisposable
     public ReplyAccount LosesTheAnswerAfterWriting(string method, string path) =>
         Script(new JsonObject { ["kind"] = "lost", ["method"] = method, ["path"] = path });
 
+    /// <summary>
+    /// The next call to this method and path writes exactly this on stdout and ends with exactly this code,
+    /// whatever it would otherwise have answered. It is the one ending <see cref="Answers"/> cannot express —
+    /// that one always prints the CLI's own <c>{code, data}</c> around whatever it is given — and a caller has
+    /// to survive stdout that is not an envelope at all: a stack trace, half a line, or nothing.
+    /// </summary>
+    public ReplyAccount Prints(string method, string path, int exitCode, string stdout) =>
+        Script(new JsonObject
+        {
+            ["kind"] = "prints",
+            ["method"] = method,
+            ["path"] = path,
+            ["exit_code"] = exitCode,
+            ["stdout"] = stdout,
+        });
+
     /// <summary>The next call to this method and path takes this long before it answers.</summary>
     public ReplyAccount Hangs(string method, string path, int milliseconds) =>
         Script(new JsonObject
@@ -290,7 +316,11 @@ public sealed class ReplyAccount : IDisposable
                     call["method"]!.GetValue<string>(),
                     call["path"]!.GetValue<string>(),
                     call["body"] is JsonValue body ? body.GetValue<string>() : null,
-                    [.. call["args"]!.AsArray().Select(argument => argument!.GetValue<string>())]));
+                    [.. call["args"]!.AsArray().Select(argument => argument!.GetValue<string>())],
+                    (call["env"] as JsonObject ?? []).ToDictionary(
+                        variable => variable.Key,
+                        variable => variable.Value?.GetValue<string>() ?? string.Empty,
+                        StringComparer.Ordinal)));
             }
 
             return calls;
