@@ -26,7 +26,9 @@ public static class PluginModule
         // Registered here so a test can replace them afterwards: the host composes modules before it lets a
         // test configure services, and the last registration wins.
         services.AddSingleton<ISearchPath, EnvironmentSearchPath>();
-        services.AddSingleton<IPluginHostLocator, ProcessPathLocator>();
+        // Constructed rather than activated: the locator's other constructor takes the two process facts it
+        // decides from, which is a seam for tests and never something the container should try to satisfy.
+        services.AddSingleton<IPluginHostLocator>(_ => new ProcessPathLocator());
 
         // Stateless and reentrant, and everything it reads is itself one per process, so one invoker serves the
         // whole runtime. It has to outlive a scope in any case: the command that invokes a plugin is held by the

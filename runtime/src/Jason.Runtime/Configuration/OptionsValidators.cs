@@ -108,6 +108,13 @@ public sealed class DispatcherOptionsValidator : IValidateOptions<DispatcherOpti
 /// that lowers <c>MaxTimeoutMs</c> below <c>TimeoutMs</c> is caught before a plugin runs under an impossible
 /// budget; every grant entry must be something a manifest could have requested.
 /// </summary>
+/// <remarks>
+/// One of those ceilings is measured against the published contracts rather than against another setting. The
+/// default timeout is what a package that declares no limit of its own runs under, and a ceiling can only lower
+/// an operation's budget: set below the slowest operation this build publishes, it kills a child partway through
+/// work the runtime itself asked for and answers ambiguous, with nothing on the attempt to say why. The floor
+/// therefore comes from the catalog, so publishing a slower operation moves it rather than leaving it stale.
+/// </remarks>
 public sealed partial class PluginsOptionsValidator : IValidateOptions<PluginsOptions>
 {
     public ValidateOptionsResult Validate(string? name, PluginsOptions options)
@@ -116,6 +123,13 @@ public sealed partial class PluginsOptionsValidator : IValidateOptions<PluginsOp
         var failures = new List<string>();
 
         OptionRules.Range(failures, "Plugins:Limits:TimeoutMs", options.Limits.TimeoutMs, 1_000, 3_600_000);
+        if (OperationCatalog.Slowest is { } slowest && options.Limits.TimeoutMs < slowest.TimeoutMs)
+        {
+            failures.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Plugins:Limits:TimeoutMs must be at least {slowest.TimeoutMs} to hold '{slowest.Id}', the slowest operation this build publishes, for a package that declares no limit of its own; got {options.Limits.TimeoutMs}."));
+        }
+
         OptionRules.Range(failures, "Plugins:Limits:MaxTimeoutMs", options.Limits.MaxTimeoutMs, options.Limits.TimeoutMs, 86_400_000);
         OptionRules.Range(failures, "Plugins:Limits:MemoryMb", options.Limits.MemoryMb, 16, 1024);
         OptionRules.Range(failures, "Plugins:Limits:MaxMemoryMb", options.Limits.MaxMemoryMb, options.Limits.MemoryMb, 4096);

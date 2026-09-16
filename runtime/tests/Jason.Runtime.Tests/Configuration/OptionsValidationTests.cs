@@ -21,7 +21,7 @@ public class OptionsValidationTests
         var options = new PluginsOptions();
 
         Assert.Empty(options.Grants);
-        Assert.Equal(60_000, options.Limits.TimeoutMs);
+        Assert.Equal(300_000, options.Limits.TimeoutMs);
         Assert.Equal(3_600_000, options.Limits.MaxTimeoutMs);
         Assert.Equal(64, options.Limits.MemoryMb);
         Assert.Equal(512, options.Limits.MaxMemoryMb);
@@ -64,11 +64,11 @@ public class OptionsValidationTests
     {
         var result = new PluginsOptionsValidator().Validate(null, new PluginsOptions
         {
-            Limits = new PluginLimitsOptions { TimeoutMs = 60_000, MaxTimeoutMs = 30_000, MemoryMb = 64, MaxMemoryMb = 32 },
+            Limits = new PluginLimitsOptions { TimeoutMs = 300_000, MaxTimeoutMs = 30_000, MemoryMb = 64, MaxMemoryMb = 32 },
         });
 
         Assert.True(result.Failed);
-        Assert.Contains("Plugins:Limits:MaxTimeoutMs must be between 60000 and 86400000; got 30000.", result.Failures!);
+        Assert.Contains("Plugins:Limits:MaxTimeoutMs must be between 300000 and 86400000; got 30000.", result.Failures!);
         Assert.Contains("Plugins:Limits:MaxMemoryMb must be between 64 and 4096; got 32.", result.Failures!);
     }
 
