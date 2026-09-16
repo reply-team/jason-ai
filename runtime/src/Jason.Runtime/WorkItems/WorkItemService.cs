@@ -6,11 +6,13 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.WorkItems;
 
@@ -19,7 +21,17 @@ namespace Jason.Runtime.WorkItems;
 /// item may run, and what happens when it does, belongs to the dispatcher and to
 /// <see cref="WorkItemTransitions"/>.
 /// </summary>
-public sealed class WorkItemService(JasonDbContext db, JournalWriter journal, TimeProvider clock, WorkItemCanceller canceller)
+/// <param name="plugins">
+/// Read for one number: the grace a child is given to stop, which together with an operation's own budget is the
+/// shortest lease a provider item may be run under. It is read at each request rather than captured, so an
+/// edited settings file governs the next item written.
+/// </param>
+public sealed class WorkItemService(
+    JasonDbContext db,
+    JournalWriter journal,
+    TimeProvider clock,
+    WorkItemCanceller canceller,
+    IOptionsMonitor<PluginsOptions> plugins)
 {
     /// <summary>
     /// The one context key a provider operation's arguments live under. Everything else in a work item's context
@@ -41,7 +53,11 @@ public sealed class WorkItemService(JasonDbContext db, JournalWriter journal, Ti
         var actor = Actors.Resolve(request.Actor);
 
         var errors = new ValidationErrors();
-        WorkItemValidation.ValidateCreate(request, await RoleExistsAsync(request, cancellationToken).ConfigureAwait(false), errors);
+        WorkItemValidation.ValidateCreate(
+            request,
+            await RoleExistsAsync(request, cancellationToken).ConfigureAwait(false),
+            plugins.CurrentValue.Invoker.KillGraceMs,
+            errors);
         errors.ThrowIfAny();
         await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
 
@@ -199,6 +215,14 @@ public sealed class WorkItemService(JasonDbContext db, JournalWriter journal, Ti
 
         WorkItemValidation.ValidateOverrides(timeoutSeconds, heartbeatSeconds, maxAttempts, errors);
         WorkItemValidation.ValidateWindow(notBefore, dueAt, errors);
+
+        // The same mistake arriving later. Only a patch that names the lease is measured: an item written before
+        // this rule existed is left repairable rather than having every unrelated patch refused along with it.
+        if (request.TimeoutSeconds.IsSet && item.Kind == WorkItemKind.ProviderOp && item.Operation is { } operation)
+        {
+            WorkItemValidation.ValidateProviderTimeout(operation, timeoutSeconds, plugins.CurrentValue.Invoker.KillGraceMs, errors);
+        }
+
         if (request.ResultFormat.IsSet)
         {
             if (item.Kind == WorkItemKind.ProviderOp)
