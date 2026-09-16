@@ -126,4 +126,37 @@ public class BaseEnvironmentTests
             BaseEnvironment.ForCurrentOs);
         Assert.DoesNotContain(BaseEnvironment.ForCurrentOs, name => name.StartsWith(BaseEnvironment.ReservedPrefix, StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public void A_childs_own_configuration_directory_is_machine_configuration_on_every_platform()
+    {
+        // A vendor CLI keeps its credential under the user's configuration directory, and on Unix that location
+        // is this variable when it is set. Windows already carries its exact counterpart, APPDATA; a child that
+        // saw one and not the other would look in the right place on one platform and the wrong one on two.
+        var source = new Dictionary<string, string>
+        {
+            ["HOME"] = "/home/someone",
+            ["XDG_CONFIG_HOME"] = "/home/someone/.config-elsewhere",
+        };
+
+        var built = BaseEnvironment.Build(source, []);
+
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Contains("APPDATA", BaseEnvironment.Windows);
+            return;
+        }
+
+        Assert.Equal("/home/someone/.config-elsewhere", built["XDG_CONFIG_HOME"]);
+    }
+
+    [Fact]
+    public void No_variable_the_runtime_copies_is_named_after_a_vendor()
+    {
+        // The base environment is machine configuration, not an integration point. A vendor's own variables
+        // reach a plugin the way every other secret does — declared, granted, and read by name.
+        var copied = BaseEnvironment.Common.Concat(BaseEnvironment.Windows).Concat(BaseEnvironment.Unix);
+
+        Assert.DoesNotContain(copied, name => name.Contains("REPLY", StringComparison.OrdinalIgnoreCase));
+    }
 }

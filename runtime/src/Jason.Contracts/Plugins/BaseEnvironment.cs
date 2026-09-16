@@ -53,6 +53,9 @@ public static class BaseEnvironment
     public static IReadOnlyList<string> Unix { get; } =
     [
         "HOME",
+        // Where a child's own configuration lives when the user moved it: the counterpart of APPDATA above, and
+        // the difference between a vendor CLI finding its credential store and looking in an empty directory.
+        "XDG_CONFIG_HOME",
         "TMPDIR",
         "LANG",
         "LC_ALL",
