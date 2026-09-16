@@ -3,6 +3,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Plugins;
+using Jason.Runtime.Plugins.Manifest;
+using Jason.Runtime.Plugins.Registry;
 
 namespace Jason.Runtime.Tests.Plugins;
 
@@ -46,6 +49,40 @@ public static class TestPlugins
         Copy(OtherProviderSource, root);
         return root;
     }
+
+    /// <summary>
+    /// A plugin as a load would have left it, for a test that needs one in a snapshot rather than on disk — a
+    /// package that could not be loaded at all (a contract version this build does not speak) is only reachable
+    /// this way, and a test about what the runtime does with such a plugin should not have to fake a machine.
+    /// </summary>
+    public static LoadedPlugin Loaded(
+        string id,
+        IReadOnlyList<string>? operations = null,
+        PluginKind kind = PluginKind.Provider,
+        IReadOnlyList<int>? contractVersions = null,
+        JsonObject? binding = null,
+        PluginStatus status = PluginStatus.Valid) =>
+        new(
+            new PluginManifest(
+                id,
+                "1.0.0",
+                kind,
+                Name: null,
+                Description: null,
+                Homepage: null,
+                new ManifestContracts([PluginProtocol.CurrentVersion], contractVersions ?? [PluginProtocol.OperationContractVersion]),
+                kind == PluginKind.Notification ? [] : operations ?? [],
+                new PluginEntry("main.js", "invoke"),
+                new CapabilityRequests(null, null, null),
+                new ManifestLimits(null, null),
+                binding),
+            Root: Path.Combine(Path.GetTempPath(), id),
+            Digest: "sha256:0",
+            Executables: [],
+            Grants: ResolvedGrants.None,
+            Limits: new EffectivePluginLimits(20_000, 64),
+            Status: status,
+            Problems: []);
 
     /// <summary>
     /// Writes a package: the manifest verbatim, <c>main.js</c>, and any local modules by relative path. Verbatim

@@ -1,6 +1,7 @@
 using Jason.Contracts.Api;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Api;
+using Jason.Runtime.Plugins;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Registry;
 using Microsoft.AspNetCore.Routing;
@@ -28,6 +29,7 @@ public static class PluginModule
         services.AddSingleton<IPluginHostLocator, ProcessPathLocator>();
 
         services.AddScoped<ExecutableResolver>();
+        services.AddScoped<ExternalIdStore>();
         services.AddScoped<PluginLoader>();
         services.AddScoped<PluginService>();
         services.AddScoped<PluginInvoker>();
