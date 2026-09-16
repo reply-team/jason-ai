@@ -17,7 +17,7 @@ public class PluginStartupTests
     public async Task A_package_installed_before_the_runtime_started_is_already_active()
     {
         using var programs = new TestPrograms();
-        programs.AddProgram("dotnet");
+        programs.AddProgram(FakeProviderCli.ExecutableName);
         await using var api = await PluginServiceTests.StartAsync(new TestSearchPath { Path = programs.Root }, paths =>
         {
             TestPlugins.InstallFakeProvider(paths);

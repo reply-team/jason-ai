@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Jason.Cli;
 using Jason.Runtime.Tests.Plugins;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Integration;
 
@@ -29,7 +30,7 @@ public class PluginCliAgainstRuntimeTests
         Assert.Empty(plugin["problems"]!.AsArray());
         var digest = (string)plugin["digest"]!;
         Assert.StartsWith("sha256:", digest, StringComparison.Ordinal);
-        Assert.Equal("dotnet", (string?)Assert.Single(plugin["capabilities"]!["exec"]!["granted"]!.AsArray()));
+        Assert.Equal(FakeProviderCli.ExecutableName, (string?)Assert.Single(plugin["capabilities"]!["exec"]!["granted"]!.AsArray()));
         var startupSnapshot = (string)listed["snapshot"]!["id"]!;
         Assert.StartsWith("snp_", startupSnapshot, StringComparison.Ordinal);
 
@@ -115,10 +116,12 @@ public class PluginCliAgainstRuntimeTests
                 File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
                 TestPlugins.InstallFakeProvider(paths);
 
-                // The fixture package declares dotnet, which any machine running these tests has; the search
-                // path is the real one, so what is listed as valid is valid on this machine and not on a stub.
+                // The fixture package declares the stand-in vendor CLI by its own name; the search path is the
+                // real one with that program's directory in front, so what is listed as valid is valid on this
+                // machine and not on a stub.
                 TestPlugins.Grant(paths, TestPlugins.FakeProviderId, exec: ["*"], env: ["FAKE_TOKEN"]);
-            });
+            },
+            configureServices: services => services.AddSingleton(TestPlugins.SearchPath));
 
     private static async Task<JsonObject> OkAsync(RuntimeApiFixture fixture, params string[] args)
     {

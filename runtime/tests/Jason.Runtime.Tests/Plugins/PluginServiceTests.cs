@@ -37,7 +37,7 @@ public class PluginServiceTests
     public async Task An_installed_package_is_listed_with_its_digest_and_what_it_may_use()
     {
         using var programs = new TestPrograms();
-        programs.AddProgram("dotnet");
+        programs.AddProgram(FakeProviderCli.ExecutableName);
         var search = new TestSearchPath { Path = programs.Root };
         await using var api = await StartAsync(search, paths =>
         {
@@ -59,11 +59,11 @@ public class PluginServiceTests
         Assert.Empty(plugin.Problems);
 
         // Requested against granted, for every capability: the whole point of the view.
-        Assert.Equal("dotnet", Assert.Single(plugin.Capabilities.Exec!.Requested).Name);
-        Assert.Equal(["dotnet"], plugin.Capabilities.Exec.Granted);
+        Assert.Equal(FakeProviderCli.ExecutableName, Assert.Single(plugin.Capabilities.Exec!.Requested).Name);
+        Assert.Equal([FakeProviderCli.ExecutableName], plugin.Capabilities.Exec.Granted);
         Assert.Equal(["localhost:5555", "127.0.0.1:5555"], plugin.Capabilities.Http!.Requested);
         Assert.Empty(plugin.Capabilities.Http.Granted);
-        Assert.Equal(["FAKE_TOKEN", "FAKE_OTHER", "FAKE_CLI_DLL"], plugin.Capabilities.Env!.Requested);
+        Assert.Equal(["FAKE_TOKEN", "FAKE_OTHER"], plugin.Capabilities.Env!.Requested);
         Assert.Equal(["FAKE_TOKEN"], plugin.Capabilities.Env.Granted);
 
         // What a route to this plugin has to carry, so an operator can see it before writing one.
@@ -103,7 +103,7 @@ public class PluginServiceTests
     public async Task A_broken_package_is_refused_and_the_previous_snapshot_keeps_working()
     {
         using var programs = new TestPrograms();
-        programs.AddProgram("dotnet");
+        programs.AddProgram(FakeProviderCli.ExecutableName);
         var search = new TestSearchPath { Path = programs.Root };
         await using var api = await StartAsync(search, paths =>
         {
@@ -144,7 +144,7 @@ public class PluginServiceTests
     public async Task A_plugin_the_machine_cannot_run_is_listed_without_holding_the_others_back()
     {
         using var programs = new TestPrograms();
-        programs.AddProgram("dotnet");
+        programs.AddProgram(FakeProviderCli.ExecutableName);
         var search = new TestSearchPath { Path = programs.Root };
         await using var api = await StartAsync(search, paths =>
         {
@@ -169,7 +169,7 @@ public class PluginServiceTests
 
         // Repairing the machine is a reload away: the search path is read again, not remembered.
         using var repaired = new TestPrograms();
-        repaired.AddProgram("dotnet");
+        repaired.AddProgram(FakeProviderCli.ExecutableName);
         repaired.AddProgram("not-installed-anywhere");
         search.Path = repaired.Root;
 
@@ -274,7 +274,7 @@ public class PluginServiceTests
     public async Task A_grant_the_manifest_never_asked_for_is_shown_as_a_problem_of_the_settings()
     {
         using var programs = new TestPrograms();
-        programs.AddProgram("dotnet");
+        programs.AddProgram(FakeProviderCli.ExecutableName);
         await using var api = await StartAsync(new TestSearchPath { Path = programs.Root }, paths =>
         {
             TestPlugins.InstallFakeProvider(paths);

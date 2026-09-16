@@ -84,8 +84,10 @@ entry:                           # optional; defaults to main.js / invoke
 capabilities:                    # every section optional; absent means "not requested"
   exec:
     executables:                 # 1..16; the ONLY programs host.exec may ever start
-      - name: dotnet             # bare file name, no path separators, no extension
-        min_version: 10.0.0      # optional; needs a version_command
+      - name: provider-cli       # the vendor program itself, by its own name: a bare file name, no
+                                 # path separators, no extension. Never a language runtime — granting
+                                 # one of those reaches every program it can be handed.
+        min_version: 2.4.0       # optional; needs a version_command
         version_command: ["--version"]
   http:
     hosts: ["api.example.com", "localhost:5555"]   # 1..32; exact match, no wildcards
@@ -179,7 +181,7 @@ it in full:
       "digest": "sha256:3f2a9c1b4d5e…", "contracts": { "protocol": [1], "operations": [1] },
       "operations": ["echo.run", "exec.run"], "entry": { "module": "main.js", "function": "invoke" },
       "capabilities": {
-        "exec": { "requested": [ { "name": "dotnet", "path": "/usr/bin/dotnet", "version": "10.0.100", "min_version": null } ], "granted": ["dotnet"] },
+        "exec": { "requested": [ { "name": "provider-cli", "path": "/usr/local/bin/provider-cli", "version": "2.4.1", "min_version": null } ], "granted": ["provider-cli"] },
         "http": { "requested": ["localhost:5555", "api.example.com"], "granted": [] },
         "env":  { "requested": ["FAKE_TOKEN", "OTHER_TOKEN"], "granted": ["FAKE_TOKEN"] } },
       "limits": { "timeout_ms": 20000, "memory_mb": 64 }, "status": "valid", "problems": [] } ],
@@ -739,7 +741,7 @@ disagreement. Everything else, the input, the binding and the resolved grants in
   "input": { "…": "the operation's arguments, at most 1 MiB" },
   "context": { "binding": null, "attempt_id": null, "attempt_number": null,
                "work_item_id": null, "campaign_id": null, "runtime_version": "0.1.0" },
-  "grants": { "exec": { "executables": [ { "name": "dotnet", "path": "/usr/bin/dotnet" } ] },
+  "grants": { "exec": { "executables": [ { "name": "provider-cli", "path": "/usr/local/bin/provider-cli" } ] },
               "http": { "hosts": ["api.example.com"] },
               "env": { "variables": ["FAKE_TOKEN"] } },
   "limits": { "timeout_ms": 20000, "memory_bytes": 67108864, "max_statements": 10000000, "max_recursion": 64,
@@ -782,7 +784,7 @@ and the runtime will measure an answer against the operation it asked for once i
 ### stderr: JSON Lines
 
 ```json
-{"ts":"2026-09-14T12:00:00.123Z","level":"info","source":"host","plugin":"fake-provider","invocation_id":"pin_01J4…","message":"exec","data":{"executable":"dotnet","args":["--version"],"exit_code":0,"timed_out":false,"duration_ms":42,"truncated":false}}
+{"ts":"2026-09-14T12:00:00.123Z","level":"info","source":"host","plugin":"fake-provider","invocation_id":"pin_01J4…","message":"exec","data":{"executable":"provider-cli","args":["--version"],"exit_code":0,"timed_out":false,"duration_ms":42,"truncated":false}}
 ```
 
 `source` is `host` or `plugin`; `data` and `truncated` appear only when they apply. The host's own

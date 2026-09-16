@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Runtime.Plugins.Registry;
 
 namespace Jason.Runtime.Tests.Plugins;
 
@@ -25,6 +26,19 @@ public static class TestPlugins
 
     /// <summary>Where the stand-in vendor CLI's apphost lives, for a search path that has to find something real.</summary>
     public static string FakeCliDirectory => FakeProviderCli.Directory;
+
+    /// <summary>
+    /// The machine as a test that loads the checked-in package needs to see it: the stand-in vendor CLI's own
+    /// directory, then the real search path. The package declares that program by its own name — the way a
+    /// plugin declares a vendor CLI — and it is installed beside the tests rather than onto the machine, so the
+    /// runtime has to be told where to look. Everything else on the machine is still findable, because the real
+    /// path follows.
+    /// </summary>
+    public static ISearchPath SearchPath { get; } = new TestSearchPath
+    {
+        Path = FakeProviderCli.Directory + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"),
+        PathExt = OperatingSystem.IsWindows() ? Environment.GetEnvironmentVariable("PATHEXT") : null,
+    };
 
     /// <summary>Copies the checked-in package into the data directory and answers with its root.</summary>
     public static string InstallFakeProvider(JasonPaths paths)

@@ -57,21 +57,24 @@ const CAMPAIGN_STATUS = {
 const NOT_STARTED = -1;
 const REFUSED_THE_CALL = 2;
 
+// The vendor program this plugin drives, by the name the manifest declared and the user granted. The runtime
+// decided what that name means at reload; nothing here looks a program up for itself.
+const PROVIDER_CLI = "Jason.FakeProviderCli";
+
 // One call to the vendor CLI: the request goes in on stdin and exactly one answer comes back on stdout.
 function cli(context, subcommand, request) {
-  const program = host.env("FAKE_CLI_DLL");
   const workspace = context.binding && context.binding.workspace;
-  if (!program || !workspace) {
+  if (!workspace) {
     throw host.fail({
       class: "permanent",
       code: "unauthorized",
-      message: "This plugin needs a binding naming the account it should act in, and the vendor program to act with.",
+      message: "This plugin needs a binding naming the account it should act in.",
     });
   }
 
   const answer = host.exec({
-    executable: "dotnet",
-    args: [program, "--workspace", workspace, ...subcommand],
+    executable: PROVIDER_CLI,
+    args: ["--workspace", workspace, ...subcommand],
     stdin: JSON.stringify(request),
   });
 

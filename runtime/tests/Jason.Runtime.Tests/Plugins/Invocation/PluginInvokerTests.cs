@@ -277,7 +277,7 @@ public class PluginInvokerTests
         await using var api = await StartAsync(paths => TestPlugins.Write(
             paths,
             "ungranted",
-            TestPlugins.Manifest("ungranted", operations: "[exec.run]", extra: "capabilities:\n  exec:\n    executables:\n      - name: dotnet\n"),
+            TestPlugins.Manifest("ungranted", operations: "[exec.run]", extra: $"capabilities:\n  exec:\n    executables:\n      - name: {FakeProviderCli.ExecutableName}\n"),
             "export function invoke(operation, input) { return { result: host.exec({ executable: input.executable, args: input.args }) }; }"));
 
         var result = await InvokeAsync(api, Request("exec.run", Exec(TokenVariable), plugin: "ungranted"), Ct);
@@ -452,12 +452,16 @@ public class PluginInvokerTests
                 File.WriteAllText(paths.UserSettingsFile, settings ?? RuntimeApiFixture.DispatcherOff);
                 TestPlugins.InstallFakeProvider(paths);
 
-                // The fixture declares dotnet, which the machine running these tests has by definition; the
-                // search path is the real one, because host.exec has to start a real program.
+                // The fixture declares the stand-in vendor CLI by its own name, and host.exec has to start a
+                // real program, so the search path is the real one with that program's directory in front.
                 TestPlugins.Grant(paths, TestPlugins.FakeProviderId, exec: ["*"], env: [TokenVariable]);
                 extra?.Invoke(paths);
             },
-            configureServices: services => services.AddSingleton<IPluginHostLocator>(new JasonDllLocator()));
+            configureServices: services =>
+            {
+                services.AddSingleton<IPluginHostLocator>(new JasonDllLocator());
+                services.AddSingleton(TestPlugins.SearchPath);
+            });
 
     internal static async Task<PluginInvocationResult> InvokeAsync(
         RuntimeApiFixture api,
@@ -478,8 +482,8 @@ public class PluginInvokerTests
 
     private static JsonObject Exec(string variable) => new()
     {
-        ["executable"] = "dotnet",
-        ["args"] = new JsonArray(FakeProviderCli.Dll, "print-env", variable),
+        ["executable"] = FakeProviderCli.ExecutableName,
+        ["args"] = new JsonArray("print-env", variable),
     };
 
     private static string Stdout(PluginInvocationResult result) =>

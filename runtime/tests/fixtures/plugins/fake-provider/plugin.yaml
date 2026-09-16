@@ -13,12 +13,14 @@ entry:
   function: invoke
 capabilities:
   exec:
+    # The vendor program this plugin drives, named as itself. Naming a language runtime instead — and passing the
+    # real program to it as an argument — would be a grant that reaches every program that runtime can start.
     executables:
-      - name: dotnet
+      - name: Jason.FakeProviderCli
   http:
     hosts: ["localhost:5555", "127.0.0.1:5555"]
   env:
-    variables: [FAKE_TOKEN, FAKE_OTHER, FAKE_CLI_DLL]
+    variables: [FAKE_TOKEN, FAKE_OTHER]
 limits:
   timeout_ms: 20000
   memory_mb: 64
