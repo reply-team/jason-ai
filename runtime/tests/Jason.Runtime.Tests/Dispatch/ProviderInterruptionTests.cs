@@ -96,14 +96,17 @@ public class ProviderInterruptionTests
         Assert.Equal(0, await harness.Enforcer.EnforceAsync(db, Ct));
     }
 
+    /// <summary>
+    /// The claim is not the launch. An attempt a restart finds still scheduled is one the handler never
+    /// committed <c>processing</c> for, and the handler commits that before it launches anything — so no child
+    /// was started, no provider was asked, and there is nothing ambiguous to record. It goes back uncounted,
+    /// exactly as agent work does. Calling it ambiguous would permanently fail an item whose operation may
+    /// never be repeated, over work that provably never happened.
+    /// </summary>
     [Theory]
-    [InlineData(Safe, WorkItemStatus.Created, AttemptStatus.Failed, true)]
-    [InlineData(NeverRepeated, WorkItemStatus.Failed, AttemptStatus.Failed, false)]
-    public async Task A_provider_attempt_a_restart_found_still_out_is_ambiguous_and_then_the_operation_decides(
-        string operation,
-        WorkItemStatus expected,
-        AttemptStatus attemptStatus,
-        bool retriable)
+    [InlineData(Safe)]
+    [InlineData(NeverRepeated)]
+    public async Task A_provider_attempt_a_restart_found_before_it_started_goes_straight_back(string operation)
     {
         using var database = new TestDatabase();
         await using var db = database.Open();
@@ -114,11 +117,35 @@ public class ProviderInterruptionTests
 
         await db.Entry(item).ReloadAsync(Ct);
         await db.Entry(attempt).ReloadAsync(Ct);
-        Assert.Equal(attemptStatus, attempt.Status);
+        Assert.Equal(AttemptStatus.Interrupted, attempt.Status);
+        Assert.Null(attempt.Error);
+        Assert.Equal(WorkItemStatus.Created, item.Status);
+        Assert.Equal(0, item.AttemptCount);
+        Assert.Null(item.RetryAfter);
+    }
+
+    /// <summary>
+    /// The other side of that guard, and why it is written as one: an attempt that did start is past the moment
+    /// the handler commits, so nobody can say the provider was not asked. The handler writes the item and the
+    /// attempt together, which is why no run leaves a row like this and the test has to write it itself.
+    /// </summary>
+    [Fact]
+    public async Task A_provider_attempt_found_past_its_start_is_ambiguous_however_a_restart_finds_it()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var harness = new Harness();
+        var (item, attempt) = await SeedAsync(db, WorkItemKind.ProviderOp, NeverRepeated, WorkItemStatus.Scheduled, AttemptStatus.Running);
+
+        Assert.Equal(1, await harness.Recovery.RunAsync(db, Ct));
+
+        await db.Entry(item).ReloadAsync(Ct);
+        await db.Entry(attempt).ReloadAsync(Ct);
+        Assert.Equal(AttemptStatus.Failed, attempt.Status);
         Assert.Equal(AttemptErrors.Interrupted, attempt.Error!.Code);
         Assert.Equal(FailureClass.Ambiguous, attempt.Error.Class);
-        Assert.Equal(retriable, attempt.Error.Retriable);
-        Assert.Equal(expected, item.Status);
+        Assert.False(attempt.Error.Retriable);
+        Assert.Equal(WorkItemStatus.Failed, item.Status);
     }
 
     /// <summary>
@@ -132,14 +159,15 @@ public class ProviderInterruptionTests
         await using var db = database.Open();
         var harness = new Harness();
         var (item, _) = await SeedAsync(db, WorkItemKind.ProviderOp, NeverRepeated, WorkItemStatus.Scheduled, AttemptStatus.Scheduled);
+        harness.Clock.Now = Start.AddSeconds(61);
 
-        await harness.Recovery.RunAsync(db, Ct);
+        Assert.Equal(1, await harness.Enforcer.EnforceAsync(db, Ct));
 
         await db.Entry(item).ReloadAsync(Ct);
         Assert.Equal(WorkItemStatus.Failed, item.Status);
 
-        // Counted, unlike an agent attempt a restart hands back: this one ended, and how it ended is the reason
-        // the item is here rather than in the queue.
+        // Counted, unlike an attempt a restart hands back: this one was out when its lease ran out, and how it
+        // ended is the reason the item is here rather than in the queue.
         Assert.Equal(1, item.AttemptCount);
         Assert.Equal(FailureClass.Ambiguous, item.LastError!.Class);
         Assert.False(item.LastError.Retriable);
