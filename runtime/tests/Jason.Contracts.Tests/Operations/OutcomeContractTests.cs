@@ -62,6 +62,19 @@ public class OutcomeContractTests
         Assert.Contains("list_membership.add", problem.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A failed answer keeps its identifiers on the error, so a pointer that named <c>/external_ids</c> would
+    /// send its author to a key that is null in the document they actually wrote — evidence pointing at the
+    /// wrong place is worse than no evidence, because it is believed.
+    /// </summary>
+    [Fact]
+    public void An_identifier_refused_on_a_failure_is_pointed_at_where_the_plugin_wrote_it()
+    {
+        var problems = OutcomeContract.CheckExternalIds(Add, new JsonObject { ["enrollment"] = "e_1" }, OutcomeContract.OnTheError);
+
+        Assert.Equal("/error/external_ids/enrollment", Assert.Single(problems).Pointer);
+    }
+
     [Fact]
     public void An_identifier_that_is_not_a_string_is_refused_because_it_travels_exactly_as_written()
     {

@@ -22,6 +22,6 @@
     "class": "ambiguous",
     "retriable": true,
     "pinned": { "contact": "p_88421" },
-    "invalid": [{ "pointer": "/external_ids/enrollment", "reason": "additional_properties" }]
+    "invalid": [{ "pointer": "/error/external_ids/enrollment", "reason": "additional_properties" }]
   }
 }

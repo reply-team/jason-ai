@@ -241,7 +241,7 @@ public class ProviderOutcomeRecorderTests
         Assert.Equal("contact", pin.Kind);
 
         var detail = Assert.Single(scene.Attempt.Error.Details!);
-        Assert.Equal("/external_ids/membership", detail.Field);
+        Assert.Equal("/error/external_ids/membership", detail.Field);
         Assert.Equal("additional_properties", detail.Code);
     }
 

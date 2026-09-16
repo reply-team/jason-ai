@@ -20,6 +20,13 @@ public static class OutcomeContract
     public const int MaxExternalIdLength = 256;
 
     /// <summary>
+    /// Where a failed answer keeps its identifiers: on the error, which is where <c>host.fail</c> puts them and
+    /// the only place the runtime reads them. A pointer into a failed outcome is prefixed with this, so what an
+    /// author is sent to is the key they actually wrote rather than one that is null in their document.
+    /// </summary>
+    public const string OnTheError = "/error";
+
+    /// <summary>
     /// Whether a failed attempt of <paramref name="contract"/> is worth another one. Three of the four classes
     /// mean the same thing whatever was being attempted — a transient failure may pass, and a permanent or a
     /// validation failure would fail the same way again — so only an ambiguous one reads the operation at all.
@@ -51,9 +58,18 @@ public static class OutcomeContract
     }
 
     /// <summary>Every returned external-id key must be a kind the contract declares, carrying a string value.</summary>
-    public static IReadOnlyList<SchemaProblem> CheckExternalIds(OperationContract contract, JsonObject? externalIds)
+    /// <param name="pointerPrefix">
+    /// Where in the outcome these identifiers were read from: empty beside a result, <see cref="OnTheError"/> on
+    /// a failure. A pointer is an address into the document its author wrote, so it has to carry the half of the
+    /// path the caller knows and the check does not.
+    /// </param>
+    public static IReadOnlyList<SchemaProblem> CheckExternalIds(
+        OperationContract contract,
+        JsonObject? externalIds,
+        string pointerPrefix = "")
     {
         ArgumentNullException.ThrowIfNull(contract);
+        ArgumentNullException.ThrowIfNull(pointerPrefix);
 
         var problems = new List<SchemaProblem>();
         if (externalIds is null)
@@ -64,7 +80,7 @@ public static class OutcomeContract
 
         foreach (var (kind, value) in externalIds)
         {
-            var pointer = "/external_ids/" + kind.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
+            var pointer = pointerPrefix + "/external_ids/" + kind.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
             if (!contract.ExternalIds.ContainsKey(kind))
             {
                 problems.Add(new SchemaProblem(
