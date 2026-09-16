@@ -6,7 +6,6 @@ using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Dispatch;
 
@@ -18,7 +17,7 @@ namespace Jason.Runtime.Dispatch;
 public sealed class LeaseEnforcer(
     AttemptOutcomes outcomes,
     TimeProvider clock,
-    IOptionsMonitor<DispatcherOptions> options,
+    DispatcherSettings settings,
     RunningAttemptRegistry registry,
     DispatcherStatus status,
     UnansweredEnd unanswered)
@@ -27,7 +26,7 @@ public sealed class LeaseEnforcer(
     {
         ArgumentNullException.ThrowIfNull(db);
         var now = clock.GetUtcNow().UtcDateTime;
-        var current = options.CurrentValue;
+        var current = settings.Current;
 
         // The ids first, the rows one at a time: losing a race on one item must not detach the others.
         var live = await db.WorkItems.AsNoTracking()

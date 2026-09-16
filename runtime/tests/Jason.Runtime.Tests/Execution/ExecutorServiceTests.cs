@@ -258,8 +258,8 @@ public class ExecutorServiceTests
     private static ExecutorService NewService(JasonDbContext db, FixedClock? clock = null)
     {
         var time = clock ?? new FixedClock(Noon);
-        var options = TestOptions.Dispatcher(o => o.RetryDelaySeconds = 0);
-        return new ExecutorService(db, time, new AttemptOutcomes(new JournalWriter(time), time, options), options);
+        var settings = TestOptions.Settings(o => o.RetryDelaySeconds = 0);
+        return new ExecutorService(db, time, new AttemptOutcomes(new JournalWriter(time), time, settings), settings);
     }
 
     private static async Task<(string ItemId, string AttemptId)> SeedAsync(TestDatabase database, Action<WorkItem>? configure = null)

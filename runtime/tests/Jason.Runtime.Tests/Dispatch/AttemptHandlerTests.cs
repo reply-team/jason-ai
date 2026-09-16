@@ -309,7 +309,7 @@ public class AttemptHandlerTests
         await using var db = harness.Open();
         var attempt = await db.Attempts.Include(a => a.WorkItem).SingleAsync(a => a.PublicId == attemptId, Ct);
         var item = attempt.WorkItem!;
-        var outcomes = new AttemptOutcomes(new JournalWriter(harness.Clock), harness.Clock, harness.Options);
+        var outcomes = new AttemptOutcomes(new JournalWriter(harness.Clock), harness.Clock, TestOptions.Settings(harness.Options));
         outcomes.Succeed(db, item, attempt, null, Actors.ForAttempt(attempt));
         await db.SaveChangesAsync(Ct);
     }
@@ -320,7 +320,7 @@ public class AttemptHandlerTests
         await using var db = harness.Open();
         var attempt = await db.Attempts.Include(a => a.WorkItem).SingleAsync(a => a.PublicId == attemptId, Ct);
         var item = attempt.WorkItem!;
-        new AttemptOutcomes(new JournalWriter(harness.Clock), harness.Clock, harness.Options).CancelAttempt(attempt);
+        new AttemptOutcomes(new JournalWriter(harness.Clock), harness.Clock, TestOptions.Settings(harness.Options)).CancelAttempt(attempt);
         WorkItemTransitions.Apply(item, WorkItemStatus.Cancelled, harness.Clock.Now.UtcDateTime);
         await db.SaveChangesAsync(Ct);
     }

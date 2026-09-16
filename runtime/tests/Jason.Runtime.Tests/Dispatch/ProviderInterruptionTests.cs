@@ -281,15 +281,18 @@ public class ProviderInterruptionTests
                 o.ExitGraceSeconds = 30;
                 configure?.Invoke(o);
             });
-            Outcomes = new AttemptOutcomes(new JournalWriter(Clock), Clock, Options);
+            Settings = TestOptions.Settings(Options);
+            Outcomes = new AttemptOutcomes(new JournalWriter(Clock), Clock, Settings);
             var unanswered = new UnansweredEnd(ContractFor);
-            Enforcer = new LeaseEnforcer(Outcomes, Clock, Options, new RunningAttemptRegistry(), new DispatcherStatus(), unanswered);
+            Enforcer = new LeaseEnforcer(Outcomes, Clock, Settings, new RunningAttemptRegistry(), new DispatcherStatus(), unanswered);
             Recovery = new StartupRecovery(Outcomes, unanswered);
         }
 
         public FixedClock Clock { get; }
 
         public TestOptionsMonitor<DispatcherOptions> Options { get; }
+
+        public DispatcherSettings Settings { get; }
 
         public AttemptOutcomes Outcomes { get; }
 
