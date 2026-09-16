@@ -6,6 +6,8 @@ using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins.Invocation;
+using Jason.Runtime.Routing;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -104,7 +106,7 @@ public static class AttemptHandler
 
         AttemptStarted(logger, work.AttemptPublicId, work.WorkItemPublicId, null);
         var limits = EffectiveLimits.For(item, services.GetRequiredService<IOptionsMonitor<DispatcherOptions>>().CurrentValue);
-        return (Context(item, attempt, limits), Pick(services, item.Kind));
+        return (Context(item, attempt, limits, work.Plan), Pick(services, item.Kind));
     }
 
     /// <summary>
@@ -150,6 +152,16 @@ public static class AttemptHandler
         await using var scope = scopes.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<JasonDbContext>();
+
+        // What only the invocation could know, added to the record the claim already wrote. It happens before
+        // anything else here, so it lands whether or not this handler still owns the verdict; a record that was
+        // never written is an answer about the record, not a failure of the work.
+        if (outcome is CommandOutcome.Provider provider)
+        {
+            _ = await AttemptProvenance.CompleteAsync(db, work.AttemptPublicId, Learned(provider.Result), CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+
         var attempt = await db.Attempts.Include(a => a.WorkItem)
             .FirstOrDefaultAsync(a => a.Id == work.AttemptId)
             .ConfigureAwait(false);
@@ -230,12 +242,29 @@ public static class AttemptHandler
         }
     }
 
+    /// <summary>
+    /// The half of an invocation's record the claim could not write: the id the child's diagnostics are found
+    /// again by, and what the run cost. What the plugin actually answered is read elsewhere — the handler
+    /// records how an attempt was run and never what it means.
+    /// </summary>
+    private static InvocationRecord Learned(PluginInvocationResult result) => new(
+        result.Provenance.InvocationId,
+        result.Outcome switch
+        {
+            InvocationOutcome.Succeeded succeeded => succeeded.Diagnostics,
+            InvocationOutcome.Failed failed => failed.Diagnostics,
+
+            // A protocol failure means the runtime never got an answer, so there is nothing measured to record.
+            _ => null,
+        });
+
     private static AttemptLaunchDto? Launch(CommandOutcome outcome) => outcome switch
     {
         CommandOutcome.Completed completed => completed.Launch,
         CommandOutcome.Exited exited => exited.Launch,
         CommandOutcome.LaunchFailed failed => failed.Launch,
         CommandOutcome.Killed killed => killed.Launch,
+        CommandOutcome.Provider provider => provider.Launch,
         _ => null,
     };
 
@@ -243,7 +272,7 @@ public static class AttemptHandler
     private static ICommand? Pick(IServiceProvider services, WorkItemKind kind) =>
         services.GetServices<ICommand>().LastOrDefault(command => command.Kind == kind);
 
-    private static CommandContext Context(WorkItem item, Attempt attempt, EffectiveLimits limits) => new(
+    private static CommandContext Context(WorkItem item, Attempt attempt, EffectiveLimits limits, ProviderOpPlan? plan) => new(
         item.PublicId,
         attempt.PublicId,
         attempt.Number,
@@ -258,5 +287,7 @@ public static class AttemptHandler
         WorkItemMapper.Utc(attempt.LockUntil),
         attempt.Launch?.EntryCommand ?? [],
         attempt.Launch?.WorkDir ?? string.Empty,
-        CancellationToken.None);
+        CancellationToken.None,
+        item.Operation,
+        plan);
 }

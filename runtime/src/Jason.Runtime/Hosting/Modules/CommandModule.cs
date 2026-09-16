@@ -13,6 +13,7 @@ public static class CommandModule
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddSingleton<ICommand, AiRoleCommand>();
+        services.AddSingleton<ICommand, ProviderOpCommand>();
         return services;
     }
 }
