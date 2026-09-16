@@ -273,7 +273,10 @@ public class CanonicalOperationTests
         Assert.Equal("already_enrolled", answer["items"]!.AsArray()[0]!["status"]!.GetValue<string>());
         Assert.False(answer["campaign_live"]!.GetValue<bool>());
         Assert.Single(workspace.EnrollmentsIn(ProviderCampaign));
-        Assert.Equal(["contact ensure", "campaign enroll", "ledger get"], workspace.Calls);
+
+        // Both reads the contract names, in the order it names them: what the prior run under this key decided,
+        // and then whether the campaign is live — which is what says whether that decision was a send.
+        Assert.Equal(["contact ensure", "campaign enroll", "ledger get", "campaign get"], workspace.Calls);
     }
 
     /// <summary>
