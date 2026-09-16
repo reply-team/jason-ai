@@ -520,27 +520,52 @@ public class ManifestReaderTests
     {
         var root = NewPackage(TestPlugins.Manifest("fake"), "fake");
 
-        foreach (var manifest in Malformed())
+        foreach (var (field, shape, manifest) in Malformed())
         {
-            var thrown = Record.Exception(() => ManifestReader.Read(manifest, "fake", root, Bounds));
+            ManifestReadResult? result = null;
+            var thrown = Record.Exception(() => result = ManifestReader.Read(manifest, "fake", root, Bounds));
 
             Assert.True(thrown is null, $"this manifest made the reader throw {thrown?.GetType().Name}: {thrown?.Message}\n\n{manifest}");
+
+            // Not throwing is half the claim. A case that stopped reaching the read it was written for would go
+            // on passing silently, so each one has to be refused as well — except where the shape it was handed
+            // happens to be a legitimate value for that field, which is a fact about the field and not a gap.
+            Assert.True(
+                result!.Problems.Count > 0 || Acceptable.Contains((field, shape)),
+                $"`{field}: {shape}` was accepted, so that case no longer reaches the rule it was written for:\n\n{manifest}");
         }
     }
 
-    private static IEnumerable<string> Malformed()
+    /// <summary>
+    /// The generated pairs that are, for their field, perfectly good values rather than malformed ones: three
+    /// free-text fields may be the word "object", a list of two hosts named `object` and `null` is a list of two
+    /// perfectly ordinary host names, and an empty YAML value means the optional field is absent. Spelled out
+    /// pair by pair so that a case which starts passing for any other reason is still caught.
+    /// </summary>
+    private static readonly HashSet<(string Field, string Shape)> Acceptable =
+    [
+        .. new[] { "name", "description", "entry.function" }.Select(field => (field, "\"object\"")),
+        .. ReadableFields.Select(field => (field, "~")),
+        ("capabilities.http.hosts", "[object, \"null\"]"),
+
+        // A binding of `type: object` — written either way round — is exactly what a binding is.
+        ("binding", "{ type: object }"),
+        ("binding.type", "\"object\""),
+    ];
+
+    private static IEnumerable<(string Field, string Shape, string Manifest)> Malformed()
     {
         foreach (var field in ReadableFields)
         {
             foreach (var shape in WrongShapes)
             {
-                yield return Merge(Nested(field, shape));
+                yield return (field, shape, Merge(Nested(field, shape)));
             }
         }
 
         foreach (var fragment in WrongShapesInLists)
         {
-            yield return Merge(fragment);
+            yield return (fragment, "as written", Merge(fragment));
         }
     }
 

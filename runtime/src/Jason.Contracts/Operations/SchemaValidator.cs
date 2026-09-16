@@ -1393,6 +1393,13 @@ public static class SchemaValidator
     /// The same number read as a double, where the node offers one. Comparing in that space rejects only a
     /// narrowing that lost the number, never a decimal carrying more digits than a double can hold.
     /// </param>
+    /// <remarks>
+    /// Observed rather than fixed, so that it is not mistaken for a new defect later: the two readings come from
+    /// the same node but are separate conversions, and a node could in principle offer a double that is not the
+    /// number its decimal reading is — such a node would be reported as not comparable rather than compared
+    /// wrongly, which is the safe way round. Only a node built in memory could hold two disagreeing readings of
+    /// one value, and none of the types read above can produce a pair like that.
+    /// </remarks>
     private static bool Narrowed(decimal exact, double? widest, out decimal value)
     {
         if (widest is { } number && (double)exact != number)
@@ -1493,6 +1500,13 @@ public static class SchemaValidator
     /// <c>uniqueItems</c> compare by: each keeps a spelling of its own, so two of them are the same value and one
     /// of each is not, which is all the comparison asks.
     /// </summary>
+    /// <remarks>
+    /// Observed rather than fixed, so that it is not mistaken for a new defect later: the fallback spelling of an
+    /// infinity is the quoted text <c>"Infinity"</c>, which is also the canonical form of the ordinary string
+    /// <c>Infinity</c>, so a <c>const</c> of one would accept the other. Nothing can reach it — a schema holding
+    /// such a number is refused by the dialect check before it is ever applied, and no document parsed from text
+    /// can hold one — and inventing a distinct spelling here would change what every comparison compares by.
+    /// </remarks>
     private static string Scalar(JsonNode node)
     {
         try
