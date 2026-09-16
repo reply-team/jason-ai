@@ -34,9 +34,11 @@ public sealed partial class ExecutableResolver(ISearchPath searchPath)
     private static readonly string[] WindowsRefusedExtensions = [".cmd", ".bat", ".ps1"];
 
     /// <summary>
-    /// Walks the search path in order. On Windows only <c>.exe</c> and <c>.com</c> are accepted: starting a
-    /// <c>.cmd</c> or a <c>.bat</c> means <c>cmd.exe</c> interprets the arguments, which is the shell the
-    /// argument-array invariant exists to exclude.
+    /// Walks the search path in order. On Windows a name resolves to an <c>.exe</c> or a <c>.com</c>, or — only
+    /// when the whole path yielded neither — to the cmd shim npm writes, which is read rather than started:
+    /// starting a <c>.cmd</c> or a <c>.bat</c> means <c>cmd.exe</c> interprets the arguments, which is the shell
+    /// the argument-array invariant exists to exclude, so what runs is the interpreter and entry script the shim
+    /// named. Every other <c>.cmd</c>, and every <c>.bat</c> and <c>.ps1</c>, is refused as it always was.
     /// </summary>
     public ResolvedExecutable Resolve(ExecutableRequest request, int index)
     {
