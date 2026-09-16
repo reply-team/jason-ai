@@ -164,6 +164,7 @@ public static class RuntimeHost
         app.MapExecutorOperations();
         app.MapRoleOperations();
         app.MapPluginOperations();
+        app.MapRouteOperations();
 
         // An explicit catch-all pattern: the default fallback pattern is "{*path:nonfile}", and every operation
         // name contains a dot, so a mistyped operation would look like a file request and escape the fallback.
