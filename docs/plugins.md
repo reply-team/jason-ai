@@ -350,7 +350,8 @@ name containing `/`, `\` or `:` — fails with `executable_not_allowed`.
 
 The child's working directory is the invocation directory, and it inherits the plugin host's own
 environment — the base set below plus the granted variables — with `env` added on top. A name that
-decides what a program loads is refused with a `TypeError` at the call: `LD_*`, `DYLD_*`, `COMPlus_*`,
+decides what a program loads is refused with a `TypeError` at the call, whose message names the rule
+as `exec_env_not_allowed`: `LD_*`, `DYLD_*`, `COMPlus_*`,
 `CORECLR_*`, `DOTNET_STARTUP_HOOKS`, `DOTNET_ROOT`, `NODE_OPTIONS`, `NODE_PATH`, `PYTHONPATH`,
 `PYTHONSTARTUP`, `RUBYOPT`, `PERL5OPT`, `JAVA_TOOL_OPTIONS`, `CLASSPATH`, `PATH`, `PATHEXT`,
 `COMSPEC` and `SHELL` among them. Ordinary variables of the same runtimes — `NODE_ENV`,

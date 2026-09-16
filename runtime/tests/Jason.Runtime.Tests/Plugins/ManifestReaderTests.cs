@@ -268,6 +268,23 @@ public class ManifestReaderTests
         Assert.Contains(name, problem.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A name ending in a line break. `$` matches before a trailing one, so the name rule accepted it and the
+    /// denylist — which compares whole names — did not recognise it: the anchor is `\z`. The escape is written
+    /// out so that the string the rule is handed really ends in a line break.
+    /// </summary>
+    [Theory]
+    [InlineData("TOKEN")]
+    [InlineData("NODE_OPTIONS")]
+    public void A_variable_name_with_a_line_break_after_it_is_not_a_name(string stem)
+    {
+        var result = Read(Merge($"capabilities:\n  env:\n    variables: [\"{stem}\\n\"]\n"));
+
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal("variable_name_invalid", problem.Code);
+        Assert.Equal("capabilities.env.variables[0]", problem.Path);
+    }
+
     [Fact]
     public void A_variable_of_a_runtime_that_has_hooks_is_still_a_plugin_s_to_be_granted()
     {
@@ -275,6 +292,52 @@ public class ManifestReaderTests
 
         Assert.True(result.IsValid, string.Join("; ", result.Problems.Select(p => $"{p.Path}: {p.Code}")));
         Assert.Equal(["NODE_ENV", "DOTNET_NOLOGO"], result.Manifest!.Capabilities.Env!.Variables);
+    }
+
+    /// <summary>
+    /// The credential rule walks the schema's own nodes, so its budget has to be the budget of the document it
+    /// walks. It was measured against the dialect's nesting limit instead, which counts schema levels — about
+    /// two nodes each — so the scan would have stopped around halfway down a schema the dialect accepts. Nothing
+    /// could reach that today only because the manifest reader stops a deeper document first: one cap covering a
+    /// different cap's mistake. The schema is built here rather than written out, and it is as deep as a manifest
+    /// can carry, so a later change to the nesting limit widens the scan with it rather than opening a gap.
+    /// </summary>
+    [Fact]
+    public void The_credential_rule_reaches_the_bottom_of_the_deepest_binding_a_manifest_can_carry()
+    {
+        var (fragment, pointer) = DeepBinding("client_secret");
+
+        var result = Read(Merge(fragment));
+
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal("binding_secret_like", problem.Code);
+        Assert.Equal(pointer, problem.Path);
+    }
+
+    /// <summary>
+    /// A binding nested as deep as the reader will take it, with a credential-shaped property at the bottom. The
+    /// document node is level 1, `binding` is 2 and its `properties` is 3; every schema level after that costs
+    /// two nodes — `properties`, then the name under it — and the `type` scalar at the bottom costs one more. So
+    /// the levels are counted from the reader's own limit rather than guessed at.
+    /// </summary>
+    private static (string Fragment, string Pointer) DeepBinding(string leaf)
+    {
+        var levels = (YamlToJson.MaxDepth - 3) / 2;
+        var yaml = new System.Text.StringBuilder("binding:\n  type: object\n");
+        var pointer = new System.Text.StringBuilder("binding#");
+        var indent = 2;
+
+        for (var level = 0; level < levels; level++)
+        {
+            var name = level == levels - 1 ? leaf : "step" + level.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            yaml.Append(' ', indent).Append("properties:\n");
+            yaml.Append(' ', indent + 2).Append(name).Append(":\n");
+            yaml.Append(' ', indent + 4).Append("type: object\n");
+            pointer.Append("/properties/").Append(name);
+            indent += 4;
+        }
+
+        return (yaml.ToString(), pointer.ToString());
     }
 
     [Fact]
