@@ -87,7 +87,8 @@ The runtime composes it; the plugin never sees a work item's context. It is alwa
 ## The schema dialect
 
 Schemas are JSON Schema 2020-12 — every schema carries
-`"$schema": "https://json-schema.org/draft/2020-12/schema"`, so any conforming validator reads them unchanged —
+`"$schema": "https://json-schema.org/draft/2020-12/schema"`, so any conforming validator reads them unchanged,
+with the one deviation noted below —
 restricted to a published vocabulary. A keyword outside it is refused rather than ignored, because a keyword the
 runtime would silently skip is a rule that does not run.
 
@@ -100,16 +101,29 @@ never enforced).
 **Reason codes.** Every failure carries a JSON pointer — the empty string is the whole document — and one of these
 fixed codes: `type`, `required`, `enum`, `const`, `min_length`, `max_length`, `pattern`, `minimum`, `maximum`,
 `exclusive_minimum`, `exclusive_maximum`, `multiple_of`, `min_items`, `max_items`, `unique_items`,
-`additional_properties`, `any_of`, `all_of`, `not`, `format`, `schema_keyword_unknown`, `schema_ref_unresolved`,
-`duplicate_property`, `number_not_comparable`, `schema_too_deep`, `schema_cyclic`, `schema_pattern_invalid`,
-`schema_too_large`, `schema_number_not_finite`.
+`additional_properties`, `any_of`, `all_of`, `not`, `format`, `schema_keyword_unknown`,
+`schema_keyword_malformed`, `schema_ref_unresolved`, `duplicate_property`, `number_not_comparable`,
+`schema_too_deep`, `schema_cyclic`, `schema_pattern_invalid`, `schema_too_large`, `schema_number_not_finite`.
 
-Four details worth knowing before you write a schema:
+The `schema_…` codes say the schema is wrong, not the value: they are what a rule that could not run reports, and
+the reader who has to fix one is looking at the contract rather than at the arguments. Everything else is about
+the value at the pointer.
+
+Five details worth knowing before you write a schema:
 
 - **Combinators report once.** `anyOf`, `allOf` and `not` report a single problem at their own pointer rather than
   every branch's problems; the message names what the first failing branch objected to. Listing every road not
   taken buries the one thing a caller has to change.
 - **An explicit `null` satisfies `required`.** Saying null is saying something; only an absent property is missing.
+  That is a rule about a property *inside* a document being validated, and it is not the rule about the work item's
+  reserved `context.input` key, where an absent key and a JSON null read alike — neither is a set of arguments.
+  `docs/work-execution.md` states that one.
+- **`additionalProperties: false` sees only its own object.** It is evaluated against the properties named in the
+  same schema object, and does not see properties contributed by an adjacent `$ref` or by an `allOf` branch. A
+  2020-12 validator evaluates it against everything annotated at that location, so a schema that combines
+  `additionalProperties: false` with `$ref` or `allOf` is read differently here and elsewhere — which is the one
+  place the portability above does not hold. Write the properties in the same object as the keyword, and the two
+  readings agree.
 - **Numbers are compared as decimals**, so that a money-like value means what it says. A number no decimal can hold
   exactly — `1e40`, `1e-40` — is refused as `number_not_comparable`, whether it is the bound or the value, because
   the rule could not run at all. That is not the same as `minimum` or `maximum`, which say a rule ran and the value

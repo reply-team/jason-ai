@@ -63,6 +63,13 @@ public static class SchemaValidator
     /// Every failure is reported, not the first, because a caller fixing its arguments should see all of them at
     /// once. A defect in the schema itself is reported at the value's own pointer with the schema-level reason
     /// code, since that is the place a reader is looking when the rule fails to run.
+    /// <para>
+    /// The precondition, stated because it is easy to miss: this applies no size cap of its own — only
+    /// <see cref="CheckDialect"/> weighs a schema. Every caller today passes a schema that has been through the
+    /// dialect check first (an embedded operation document at build time, a plugin's binding schema at reload),
+    /// which is what bounds the work here. A caller that skipped it would be handing this method an unbounded
+    /// document.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<SchemaProblem> Validate(JsonNode? value, JsonObject schema)
     {
@@ -1095,12 +1102,17 @@ public static class SchemaValidator
     // Values, pointers and patterns
     // ---------------------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// A keyword the schema itself wrote badly. The pointer is the caller's value, because that is where a reader
+    /// is looking when a rule fails to run — but the code says whose document is wrong. Reported as <c>type</c>
+    /// it read as "the value here is the wrong kind", which sent whoever has to fix it to the wrong document.
+    /// </summary>
     private static SchemaProblem Malformed(string pointer, string keyword, string expected) =>
-        new(pointer, "type", $"`{keyword}` must be {expected}, so the rule it states did not run.");
+        new(pointer, "schema_keyword_malformed", $"`{keyword}` must be {expected}, so the rule it states did not run.");
 
     /// <summary>The same refusal where the pointer already names the place: the dialect check addresses the schema.</summary>
     private static SchemaProblem MalformedAt(string pointer, string expected) =>
-        new(pointer, "type", $"What stands here must be {expected}, so the rule it states would not run.");
+        new(pointer, "schema_keyword_malformed", $"What stands here must be {expected}, so the rule it states would not run.");
 
     private static SchemaProblem Duplicated(string pointer) =>
         new(pointer, "duplicate_property", "An object here writes the same property twice, so which of the two it means is not decidable.");

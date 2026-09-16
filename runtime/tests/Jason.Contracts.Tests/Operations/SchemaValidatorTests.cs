@@ -259,8 +259,40 @@ public class SchemaValidatorTests
     {
         // The two refusals are different things and must stay so: `"three"` is the wrong kind of value, while a
         // number too large to compare is the right kind and still leaves the rule unable to run.
-        Assert.Equal("type", Refuses("""{"maximum":"three"}""", "1").Reason);
-        Assert.Equal("type", Assert.Single(SchemaValidator.CheckDialect(Schema("""{"maximum":"three"}"""))).Reason);
+        Assert.Equal("schema_keyword_malformed", Refuses("""{"maximum":"three"}""", "1").Reason);
+        Assert.Equal("schema_keyword_malformed", Assert.Single(SchemaValidator.CheckDialect(Schema("""{"maximum":"three"}"""))).Reason);
+    }
+
+    /// <summary>
+    /// Whose document is wrong. A keyword the schema wrote badly was reported as `type` at the caller's own
+    /// pointer — the code that means "the value here is the wrong kind" — so the caller read "your value is
+    /// wrong" about a value that was fine, and went looking in the wrong document for it.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"type":"object","properties":{"a":{"type":"string"}},"required":"a"}""", "required")]
+    [InlineData("""{"type":"object","properties":"a"}""", "properties")]
+    [InlineData("""{"type":"object","additionalProperties":{"type":"string"}}""", "additionalProperties")]
+    [InlineData("""{"type":"nonsense"}""", "type")]
+    [InlineData("""{"enum":[]}""", "enum")]
+    [InlineData("""{"minLength":"three"}""", "minLength")]
+    [InlineData("""{"anyOf":[]}""", "anyOf")]
+    public void A_malformed_keyword_says_the_schema_is_wrong_rather_than_the_value(string schema, string keyword)
+    {
+        var applied = Refuses(schema, """{"a":"x"}""");
+
+        Assert.Equal("schema_keyword_malformed", applied.Reason);
+        Assert.Contains(keyword, applied.Message, StringComparison.Ordinal);
+
+        Assert.Contains(
+            SchemaValidator.CheckDialect(Schema(schema)),
+            problem => problem.Reason == "schema_keyword_malformed");
+    }
+
+    /// <summary>The value's own failure keeps `type`, which is the code a caller acts on.</summary>
+    [Fact]
+    public void A_value_of_the_wrong_kind_is_still_the_value_s_own_failure()
+    {
+        Assert.Equal("type", Refuses("""{"type":"integer"}""", "\"seven\"").Reason);
     }
 
     [Fact]
