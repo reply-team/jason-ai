@@ -87,8 +87,21 @@ public static class WorkItemMapper
             Utc(attempt.LockUntil),
 
             // Ten attempts of a 256 KiB context is more than any default read should carry.
-            includeSnapshot ? attempt.ContextSnapshot : null);
+            includeSnapshot ? attempt.ContextSnapshot : null,
+
+            // Provenance is small, it is the point of asking, and an agent attempt has none: always sent — all
+            // of it except the answer a shape error refused, which is bounded only by what the invoker will read
+            // back and would otherwise put megabytes on every get, heartbeat and complete.
+            includeSnapshot ? attempt.Provenance : WithoutEvidence(attempt.Provenance));
     }
+
+    /// <summary>
+    /// The record without the one part of it that is a document rather than a fact. It is kept, not shrunk: a
+    /// plugin author asks for it by the same flag as the context an attempt was launched with, which is the other
+    /// piece of evidence too large to send to somebody who only wanted to know what ran.
+    /// </summary>
+    private static AttemptProvenanceDto? WithoutEvidence(AttemptProvenanceDto? provenance) =>
+        provenance is { RejectedResult: not null } ? provenance with { RejectedResult = null } : provenance;
 
     /// <summary>Everything in the database is UTC; SQLite hands the kind back unset.</summary>
     public static DateTimeOffset Utc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));

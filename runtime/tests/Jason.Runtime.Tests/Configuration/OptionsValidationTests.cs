@@ -12,6 +12,7 @@ public class OptionsValidationTests
         Assert.True(new DispatcherOptionsValidator().Validate(null, new DispatcherOptions()).Succeeded);
         Assert.True(new RolesOptionsValidator().Validate(null, new RolesOptions()).Succeeded);
         Assert.True(new PluginsOptionsValidator().Validate(null, new PluginsOptions()).Succeeded);
+        Assert.True(new RoutesOptionsValidator().Validate(null, new RoutesOptions()).Succeeded);
     }
 
     [Fact]
@@ -20,7 +21,7 @@ public class OptionsValidationTests
         var options = new PluginsOptions();
 
         Assert.Empty(options.Grants);
-        Assert.Equal(60_000, options.Limits.TimeoutMs);
+        Assert.Equal(300_000, options.Limits.TimeoutMs);
         Assert.Equal(3_600_000, options.Limits.MaxTimeoutMs);
         Assert.Equal(64, options.Limits.MemoryMb);
         Assert.Equal(512, options.Limits.MaxMemoryMb);
@@ -63,11 +64,11 @@ public class OptionsValidationTests
     {
         var result = new PluginsOptionsValidator().Validate(null, new PluginsOptions
         {
-            Limits = new PluginLimitsOptions { TimeoutMs = 60_000, MaxTimeoutMs = 30_000, MemoryMb = 64, MaxMemoryMb = 32 },
+            Limits = new PluginLimitsOptions { TimeoutMs = 300_000, MaxTimeoutMs = 30_000, MemoryMb = 64, MaxMemoryMb = 32 },
         });
 
         Assert.True(result.Failed);
-        Assert.Contains("Plugins:Limits:MaxTimeoutMs must be between 60000 and 86400000; got 30000.", result.Failures!);
+        Assert.Contains("Plugins:Limits:MaxTimeoutMs must be between 300000 and 86400000; got 30000.", result.Failures!);
         Assert.Contains("Plugins:Limits:MaxMemoryMb must be between 64 and 4096; got 32.", result.Failures!);
     }
 
@@ -87,6 +88,26 @@ public class OptionsValidationTests
         Assert.Contains(result.Failures!, failure => failure.StartsWith("Plugins:Grants:fake:Http[1] must ", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A grant entry that names an executable and then a newline names no executable at all: nothing a manifest
+    /// requests can match it, so it would sit in the file looking like a permission and granting nothing. The
+    /// settings file is a person's to edit, and what they need back is the line, not silence.
+    /// </summary>
+    [Fact]
+    public void A_grant_entry_that_ends_in_a_newline_is_refused_rather_than_granting_nothing()
+    {
+        var result = new PluginsOptionsValidator().Validate(null, new PluginsOptions
+        {
+            Grants = new Dictionary<string, PluginGrant>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["fake-provider"] = new PluginGrant { Exec = ["provider-cli\n"] },
+            },
+        });
+
+        Assert.True(result.Failed);
+        Assert.Contains(result.Failures!, failure => failure.StartsWith("Plugins:Grants:fake-provider:Exec[0] must ", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Everything_a_manifest_can_request_is_a_valid_grant_entry()
     {
@@ -94,7 +115,7 @@ public class OptionsValidationTests
         {
             Grants = new Dictionary<string, PluginGrant>(StringComparer.OrdinalIgnoreCase)
             {
-                ["fake-provider"] = new PluginGrant { Exec = ["reply", "Jason.FakeProviderCli"], Http = ["api.example.test", "localhost:5555"], Env = ["EXAMPLE_TOKEN", "*"] },
+                ["fake-provider"] = new PluginGrant { Exec = ["provider-cli", "Jason.FakeProviderCli"], Http = ["api.example.test", "localhost:5555"], Env = ["EXAMPLE_TOKEN", "*"] },
             },
         });
 
@@ -115,7 +136,7 @@ public class OptionsValidationTests
         Assert.Equal(3600, options.AiRole.TimeoutSeconds);
         Assert.Equal(120, options.AiRole.HeartbeatSeconds);
         Assert.Equal(3, options.AiRole.MaxAttempts);
-        Assert.Equal(300, options.ProviderOp.TimeoutSeconds);
+        Assert.Equal(600, options.ProviderOp.TimeoutSeconds);
         Assert.Equal(0, options.ProviderOp.HeartbeatSeconds);
         Assert.Equal(3, options.ProviderOp.MaxAttempts);
     }

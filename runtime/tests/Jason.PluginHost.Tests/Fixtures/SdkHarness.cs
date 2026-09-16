@@ -63,6 +63,10 @@ public sealed class SdkHarness : IDisposable
     public string Caught(string expression) =>
         Engine.Evaluate($"(() => {{ try {{ {expression}; return 'no-throw'; }} catch (e) {{ return e.name; }} }})()").AsString();
 
+    /// <summary>The same, answering with what the plugin author would read rather than the kind of the throw.</summary>
+    public string Message(string expression) =>
+        Engine.Evaluate($"(() => {{ try {{ {expression}; return 'no-throw'; }} catch (e) {{ return String(e.message); }} }})()").AsString();
+
     public void Dispose()
     {
         Http.Dispose();

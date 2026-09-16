@@ -3,12 +3,10 @@
 **Version 1.** The machine-readable contract is [`list_membership.add.json`](list_membership.add.json); this page
 explains it. Where the two seem to differ, the document is right and this page is a bug.
 
-> **This version never runs it.** No `provider_op` work item reaches a plugin at all yet: every one of them fails
-> at the claim with `no_route`, so nothing here has ever created a contact or touched a list. What runs is the
-> check on the work item itself — an operation no contract is published for is refused when the item is written,
-> and the arguments it carries are measured against this operation's argument schema. The contract is published
-> complete so that routing is the only thing left to add — and so that a plugin author can implement and test the
-> operation now.
+> **This version runs it**, and it writes: a work item naming this operation is measured against the argument
+> schema below when it is written, routed to a plugin at the claim, and performed against a real provider account
+> — a contact may be created and a list may be changed. It reaches a plugin only where a route sends it: without
+> one the item fails at the claim with `no_route` ([docs/routing.md](../../routing.md)).
 
 ## What it is for
 
@@ -70,8 +68,12 @@ the identifier the call gave you, so the caller can match the answer to the pers
 If an attempt ends without an answer, the add may already have happened. The runtime will hand the item back with
 the next attempt number and **the same idempotency key**; it does not reason about what happened. You do:
 
-- Read the ledger under the idempotency key and the membership of the pinned contact in the list.
-- If the effect already happened, answer from that reading — `already_member` — and write nothing.
+- Read the membership of the pinned contact in the list, and the ledger entry under the idempotency key.
+- If either says the effect already happened, answer from that reading — `already_member` — and write nothing.
+
+Return the contact identifier you learned on the failure as well — `host.fail({ external_ids: { contact: … } })`.
+It is recorded by the same rule as on a success, and after a lost answer it is the only trace of the contact the
+attempt ensured: without it the next attempt has no pin to read the membership of.
 
 That obligation is why this operation is repeatable at all. A duplicate add is harmless at most providers, but the
 contact creation it implies may be metered, and a second contact is a merge nobody asked for.

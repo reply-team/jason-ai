@@ -85,7 +85,7 @@ public sealed class PluginLoader(
 
         var activated = candidates.All(candidate => candidate.Status != CandidateStatus.Invalid);
         var now = clock.GetUtcNow().UtcDateTime;
-        var report = new ReloadReport(now, source, activated, candidates);
+        var report = new ReloadReport(now, source, activated, candidates, []);
         Loaded(logger, source.ToString(), activated, plugins.Count, candidates.Count, null);
 
         return new LoadResult(

@@ -1,4 +1,7 @@
+using Jason.Contracts.Operations;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
+using Jason.Runtime.Execution;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Hosting.Modules;
@@ -18,6 +21,13 @@ public static class DispatcherModule
             .AddScoped<EntryCommandResolver>()
             .AddScoped<Claimer>()
             .AddScoped<StartupRecovery>();
+
+        // The rule is a pure function over the published catalog: one per process, like the catalog itself.
+        services.AddSingleton(new UnansweredEnd(OperationCatalog.Find));
+
+        // What the loop and system.info both read the settings through, so the last value that validated is one
+        // value and the complaint about an edit that did not is said once.
+        services.AddSingleton<DispatcherSettings>();
 
         // The pool is sized once and the counters are one per process, so both outlive any request scope.
         services.AddSingleton<HandlerPool>();

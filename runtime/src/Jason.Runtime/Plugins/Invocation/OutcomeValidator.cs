@@ -228,6 +228,6 @@ public static partial class OutcomeValidator
         return true;
     }
 
-    [GeneratedRegex(@"^[a-z][a-z0-9_]{0,63}$")]
+    [GeneratedRegex(@"^[a-z][a-z0-9_]{0,63}\z")]
     private static partial Regex CodePattern();
 }

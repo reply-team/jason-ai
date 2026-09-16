@@ -1,5 +1,8 @@
 using System.Globalization;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Jason.Contracts.Operations;
+using Jason.Runtime.Plugins.Manifest;
 using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Configuration;
@@ -105,6 +108,13 @@ public sealed class DispatcherOptionsValidator : IValidateOptions<DispatcherOpti
 /// that lowers <c>MaxTimeoutMs</c> below <c>TimeoutMs</c> is caught before a plugin runs under an impossible
 /// budget; every grant entry must be something a manifest could have requested.
 /// </summary>
+/// <remarks>
+/// One of those ceilings is measured against the published contracts rather than against another setting. The
+/// default timeout is what a package that declares no limit of its own runs under, and a ceiling can only lower
+/// an operation's budget: set below the slowest operation this build publishes, it kills a child partway through
+/// work the runtime itself asked for and answers ambiguous, with nothing on the attempt to say why. The floor
+/// therefore comes from the catalog, so publishing a slower operation moves it rather than leaving it stale.
+/// </remarks>
 public sealed partial class PluginsOptionsValidator : IValidateOptions<PluginsOptions>
 {
     public ValidateOptionsResult Validate(string? name, PluginsOptions options)
@@ -113,6 +123,13 @@ public sealed partial class PluginsOptionsValidator : IValidateOptions<PluginsOp
         var failures = new List<string>();
 
         OptionRules.Range(failures, "Plugins:Limits:TimeoutMs", options.Limits.TimeoutMs, 1_000, 3_600_000);
+        if (OperationCatalog.Slowest is { } slowest && options.Limits.TimeoutMs < slowest.TimeoutMs)
+        {
+            failures.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Plugins:Limits:TimeoutMs must be at least {slowest.TimeoutMs} to hold '{slowest.Id}', the slowest operation this build publishes, for a package that declares no limit of its own; got {options.Limits.TimeoutMs}."));
+        }
+
         OptionRules.Range(failures, "Plugins:Limits:MaxTimeoutMs", options.Limits.MaxTimeoutMs, options.Limits.TimeoutMs, 86_400_000);
         OptionRules.Range(failures, "Plugins:Limits:MemoryMb", options.Limits.MemoryMb, 16, 1024);
         OptionRules.Range(failures, "Plugins:Limits:MaxMemoryMb", options.Limits.MaxMemoryMb, options.Limits.MemoryMb, 4096);
@@ -165,8 +182,61 @@ public sealed partial class PluginsOptionsValidator : IValidateOptions<PluginsOp
         }
     }
 
-    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._:()-]{0,127}$")]
+    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._:()-]{0,127}\z")]
     private static partial Regex GrantEntry();
+}
+
+/// <summary>
+/// The global routes, checked for shape alone. Whether the plugin exists, lists the operation, or accepts the
+/// binding is a reload question — settings are read before any package is loaded — so what is refused here is
+/// only what could never be right: a plugin nothing could be called, an operation this build does not publish,
+/// and a binding that is not an object.
+/// </summary>
+public sealed class RoutesOptionsValidator : IValidateOptions<RoutesOptions>
+{
+    public ValidateOptionsResult Validate(string? name, RoutesOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var failures = new List<string>();
+
+        if (options.Default is not null)
+        {
+            ValidateEntry(failures, $"{RoutesOptions.Section}:Default", options.Default);
+        }
+
+        foreach (var (operation, entry) in options.Operations)
+        {
+            var setting = $"{RoutesOptions.Section}:Operations:{operation}";
+            if (!OperationCatalog.Knows(operation))
+            {
+                failures.Add($"{setting} must name a published operation; got '{operation}'.");
+            }
+
+            if (entry is null)
+            {
+                failures.Add($"{setting} must be an object with Plugin and an optional Binding.");
+                continue;
+            }
+
+            ValidateEntry(failures, setting, entry);
+        }
+
+        return OptionRules.Result(failures);
+    }
+
+    private static void ValidateEntry(List<string> failures, string setting, RouteEntry entry)
+    {
+        if (!ManifestRules.IsPluginId(entry.Plugin))
+        {
+            failures.Add($"{setting}:Plugin must be a plugin id; got '{entry.Plugin}'.");
+        }
+
+        if (entry.Binding is not null and not JsonObject)
+        {
+            var text = entry.Binding is JsonValue value ? value.ToString() : entry.Binding.ToJsonString();
+            failures.Add($"{setting}:Binding must be an object; got '{text}'.");
+        }
+    }
 }
 
 public sealed class RolesOptionsValidator : IValidateOptions<RolesOptions>

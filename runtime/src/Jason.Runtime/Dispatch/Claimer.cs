@@ -2,11 +2,15 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Ids;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins;
+using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Routing;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -25,6 +29,10 @@ public sealed class Claimer(
     TimeProvider clock,
     AttemptOutcomes outcomes,
     EntryCommandResolver resolver,
+    PluginRegistry plugins,
+    RouteRegistry routes,
+    ExternalIdStore identifiers,
+    ISuppressionCheck suppression,
     IOptionsMonitor<DispatcherOptions> options,
     JasonPaths paths,
     ILogger<Claimer> logger)
@@ -50,6 +58,11 @@ public sealed class Claimer(
         var current = options.CurrentValue;
         var claimed = new List<ClaimedWork>();
 
+        // Both snapshots are read once, so every item this scan hands out was decided against one pair of them
+        // and an activation that happens mid-scan belongs to the next one.
+        var packages = plugins.Snapshot;
+        var routing = routes.Snapshot;
+
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         foreach (var id in await CandidatesAsync(db, now, freeSlots, ct).ConfigureAwait(false))
         {
@@ -72,7 +85,7 @@ public sealed class Claimer(
                 updated: JsonValue.Create(attempt.Number),
                 workItem: item,
                 attempt: attempt);
-            FailClosed(db, item, attempt);
+            var plan = await FailClosedAsync(db, item, attempt, packages, routing, ct).ConfigureAwait(false);
 
             try
             {
@@ -87,7 +100,7 @@ public sealed class Claimer(
 
             if (item.Status == WorkItemStatus.Scheduled)
             {
-                claimed.Add(new ClaimedWork(item.Id, attempt.Id, item.PublicId, attempt.PublicId));
+                claimed.Add(new ClaimedWork(item.Id, attempt.Id, item.PublicId, attempt.PublicId, plan));
             }
         }
 
@@ -156,21 +169,52 @@ public sealed class Claimer(
     /// Work the runtime cannot perform fails where it is noticed, with the attempt and its snapshot kept so the
     /// manager can see what would have run. A silent skip would leave the item looking claimable forever.
     /// </summary>
-    private void FailClosed(JasonDbContext db, WorkItem item, Attempt attempt)
+    /// <remarks>
+    /// For a provider operation this is the whole pre-flight: everything that can refuse the work is decided
+    /// here, before a child process exists, and what comes back is either the plan the run needs or the one
+    /// reason the item cannot run. Nothing is retried and nothing falls back to another plugin.
+    /// </remarks>
+    private async Task<ProviderOpPlan?> FailClosedAsync(
+        JasonDbContext db,
+        WorkItem item,
+        Attempt attempt,
+        PluginSnapshot packages,
+        RouteSnapshot routing,
+        CancellationToken ct)
     {
         if (item.Kind == WorkItemKind.ProviderOp)
         {
+            var facts = await FactsAsync(db, item, routing, ct).ConfigureAwait(false);
+            var verdict = ProviderOpPreflight.Check(facts, packages, routing);
+
+            // What was decided, recorded before anything acts on it and whichever way the decision went: an item
+            // that never ran still says what would have run it, which is the half of a refusal a manager can act on.
+            attempt.Provenance = AttemptProvenance.AtClaim(item.Operation, verdict, packages, routing, attempt.PublicId);
+            if (verdict.Passed)
+            {
+                return verdict.Plan;
+            }
+
             outcomes.Fail(
                 db,
                 item,
                 attempt,
-                AttemptErrors.NoRoute,
-                $"No provider route exists yet for operation '{item.Operation}'.",
+                verdict.Code!,
+                verdict.Message!,
                 trace: null,
-                details: null,
-                Actors.Dispatcher);
+                verdict.Details,
+                Actors.Dispatcher,
+                failureClass: verdict.Class,
+
+                // Said here rather than inferred from a table somewhere else: nothing about the work changed
+                // between two scans, so an item released back into the queue would be refused for the same
+                // reason for as long as the queue existed. A pre-flight refusal is final because the pre-flight
+                // says it is.
+                retriable: false);
+            return null;
         }
-        else if (attempt.Launch is null)
+
+        if (attempt.Launch is null)
         {
             outcomes.Fail(
                 db,
@@ -182,5 +226,81 @@ public sealed class Claimer(
                 details: null,
                 Actors.Dispatcher);
         }
+
+        return null;
     }
+
+    /// <summary>
+    /// What the pre-flight decides on, read inside the claim transaction and nowhere else. The route is resolved
+    /// first — a pure lookup over the snapshot the decision itself will use again — because whose identifiers to
+    /// read is the routed plugin's question, and an item nothing routes needs no reads at all.
+    /// </summary>
+    private async Task<PreflightFacts> FactsAsync(JasonDbContext db, WorkItem item, RouteSnapshot routing, CancellationToken ct)
+    {
+        var campaign = item.Campaign!;
+        var contract = item.Operation is { } operation ? OperationCatalog.Find(operation) : null;
+        var resolution = contract is null ? null : RouteResolver.Resolve(routing, campaign.PublicId, contract.Id);
+        if (contract is null || resolution is null)
+        {
+            return new PreflightFacts(item, campaign, item.Contact, PreflightFacts.NoPins, PreflightFacts.NoPins, Suppressed: false);
+        }
+
+        var pluginId = resolution.Route.PluginId;
+        var campaignPins = await PinsAsync(db, campaign, pluginId, ct).ConfigureAwait(false);
+        if (item.Contact is not { } contact)
+        {
+            return new PreflightFacts(item, campaign, null, PreflightFacts.NoPins, campaignPins, Suppressed: false);
+        }
+
+        if (contract.Preflight.Channel == ChannelRequirement.FromArgs)
+        {
+            // How the person is reachable, read once: the composed input carries the one channel the operation
+            // consumes, and the register is asked about that same value.
+            await db.Entry(contact).Collection(person => person.Channels).LoadAsync(ct).ConfigureAwait(false);
+        }
+
+        return new PreflightFacts(
+            item,
+            campaign,
+            contact,
+            await PinsAsync(db, contact, pluginId, ct).ConfigureAwait(false),
+            campaignPins,
+            await SuppressedAsync(db, contract, item, contact, ct).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// One indexed read, and the projection is then taken from the loaded navigation: the store does no I/O of
+    /// its own, so an entity whose pins were never brought in would look like an entity nobody has pinned. Only
+    /// the routed plugin's rows are read — the index is on exactly that pair, and what another provider calls
+    /// somebody is never this one's business.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, string>> PinsAsync(JasonDbContext db, Campaign campaign, string pluginId, CancellationToken ct)
+    {
+        await db.Entry(campaign).Collection(entity => entity.ExternalIds).Query()
+            .Where(pin => pin.PluginId == pluginId)
+            .LoadAsync(ct)
+            .ConfigureAwait(false);
+
+        return identifiers.PinsFor(campaign, pluginId);
+    }
+
+    /// <summary>The same for the person the item is about.</summary>
+    private async Task<IReadOnlyDictionary<string, string>> PinsAsync(JasonDbContext db, Contact contact, string pluginId, CancellationToken ct)
+    {
+        await db.Entry(contact).Collection(person => person.ExternalIds).Query()
+            .Where(pin => pin.PluginId == pluginId)
+            .LoadAsync(ct)
+            .ConfigureAwait(false);
+
+        return identifiers.PinsFor(contact, pluginId);
+    }
+
+    /// <summary>
+    /// The one question the register is asked, and only where the operation names a channel to ask about: both
+    /// a stored channel value and a suppression are already normalized, so they are compared as they stand.
+    /// </summary>
+    private async Task<bool> SuppressedAsync(JasonDbContext db, OperationContract contract, WorkItem item, Contact contact, CancellationToken ct) =>
+        CanonicalInput.ConsumedChannel(contract, item) is { } channel
+        && CanonicalInput.Reachable(contact, channel) is { } reachable
+        && await suppression.IsSuppressedAsync(db, channel, reachable.Value, ct).ConfigureAwait(false);
 }

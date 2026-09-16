@@ -57,7 +57,7 @@ public class ExecutableResolverTests
     {
         var resolver = new ExecutableResolver(new TestSearchPath { Path = null });
 
-        Assert.Equal(ProblemCodes.ExecutableMissing, resolver.Resolve(new ExecutableRequest("reply", null, null), 0).Problem!.Code);
+        Assert.Equal(ProblemCodes.ExecutableMissing, resolver.Resolve(new ExecutableRequest("provider-cli", null, null), 0).Problem!.Code);
     }
 
     [Fact]
@@ -65,11 +65,11 @@ public class ExecutableResolverTests
     {
         using var first = new TestPrograms();
         using var second = new TestPrograms();
-        var wanted = first.AddProgram("reply");
-        second.AddProgram("reply");
+        var wanted = first.AddProgram("provider-cli");
+        second.AddProgram("provider-cli");
         var resolver = new ExecutableResolver(new TestSearchPath { Path = first.Root + Path.PathSeparator + second.Root });
 
-        Assert.Equal(wanted, resolver.Resolve(new ExecutableRequest("reply", null, null), 0).Path);
+        Assert.Equal(wanted, resolver.Resolve(new ExecutableRequest("provider-cli", null, null), 0).Path);
     }
 
     [Fact]
@@ -167,6 +167,33 @@ public class ExecutableResolverTests
         Assert.Equal(ProblemCodes.ExecutableVersionCheckFailed, result.Problem!.Code);
         Assert.Contains("exit code 7", result.Problem.Message, StringComparison.Ordinal);
         Assert.Contains("exiting", result.Problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The tail of a failing program's output travels into a problem a person reads in <c>plugin list</c>, and a
+    /// version check runs with the plugin's granted variables in its environment — so a program that echoes one
+    /// back would otherwise leave it in a listing. The redaction exists for that; nothing exercised it.
+    /// </summary>
+    [Fact]
+    public async Task What_a_failing_program_printed_is_redacted_before_it_becomes_a_problem()
+    {
+        const string granted = "a-granted-credential-value";
+        var resolver = new ExecutableResolver(new TestSearchPath { Path = TestPlugins.FakeCliDirectory });
+        var request = new ExecutableRequest(FakeProviderCli.ExecutableName, null, ["stderr-exit", "9", granted]);
+
+        var result = await resolver.CheckVersionAsync(
+            resolver.Resolve(request, 0),
+            request,
+            0,
+            HostEnvironment,
+            TimeSpan.FromSeconds(30),
+            Ct,
+            new Redactor([granted]));
+
+        Assert.Equal(ProblemCodes.ExecutableVersionCheckFailed, result.Problem!.Code);
+        Assert.Contains("exit code 9", result.Problem.Message, StringComparison.Ordinal);
+        Assert.Contains(Redactor.Mask, result.Problem.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(granted, result.Problem.Message, StringComparison.Ordinal);
     }
 
     [Fact]

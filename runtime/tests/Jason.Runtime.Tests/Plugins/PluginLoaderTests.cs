@@ -38,7 +38,7 @@ public class PluginLoaderTests
     {
         using var dir = new TempDataDir();
         using var programs = new TestPrograms();
-        programs.AddProgram("dotnet");
+        programs.AddProgram(FakeProviderCli.ExecutableName);
         var root = TestPlugins.InstallFakeProvider(dir.Paths);
 
         var load = await NewLoader(dir.Paths, programs).LoadAsync(SnapshotSource.Reload, Ct);
@@ -55,7 +55,7 @@ public class PluginLoaderTests
 
         // Declared and found, but never started: the user granted nothing, so no version was asked for.
         var executable = Assert.Single(plugin.Executables);
-        Assert.Equal("dotnet", executable.Name);
+        Assert.Equal(FakeProviderCli.ExecutableName, executable.Name);
         Assert.NotNull(executable.Path);
         Assert.Null(executable.Version);
         Assert.Empty(plugin.Grants.Exec);
@@ -83,7 +83,7 @@ public class PluginLoaderTests
     {
         using var dir = new TempDataDir();
         using var programs = new TestPrograms();
-        programs.AddProgram("dotnet");
+        programs.AddProgram(FakeProviderCli.ExecutableName);
         TestPlugins.InstallFakeProvider(dir.Paths);
         TestPlugins.Write(dir.Paths, "broken", TestPlugins.Manifest("broken").Replace("kind: provider", "kind: bogus", StringComparison.Ordinal), "export function invoke() {}");
 
@@ -103,7 +103,7 @@ public class PluginLoaderTests
     {
         using var dir = new TempDataDir();
         using var programs = new TestPrograms();
-        programs.AddProgram("dotnet");
+        programs.AddProgram(FakeProviderCli.ExecutableName);
         TestPlugins.InstallFakeProvider(dir.Paths);
         TestPlugins.Write(
             dir.Paths,
@@ -169,7 +169,7 @@ public class PluginLoaderTests
     {
         using var dir = new TempDataDir();
         using var programs = new TestPrograms();
-        programs.AddProgram("dotnet");
+        programs.AddProgram(FakeProviderCli.ExecutableName);
         TestPlugins.InstallFakeProvider(dir.Paths);
 
         var load = await NewLoader(dir.Paths, programs, options =>

@@ -9,13 +9,8 @@ namespace Jason.Cli.Human;
 /// </summary>
 public static class PluginRenderers
 {
-    private const string DigestPrefix = "sha256:";
-
     /// <summary>What a capability the plugin never asked for looks like: nothing to grant, nothing to count.</summary>
     private const string Absent = "-";
-
-    /// <summary>How much of the digest a person needs to tell two packages apart at a glance.</summary>
-    private const int DigestShown = 12;
 
     /// <summary>How many operations fit a table cell before the rest becomes an ellipsis.</summary>
     private const int OperationsShown = 2;
@@ -42,7 +37,7 @@ public static class PluginRenderers
                 RenderText.Snake(plugin.Status),
                 Operations(plugin.Operations),
                 Grants(plugin.Capabilities),
-                Digest(plugin.Digest));
+                RenderText.Digest(plugin.Digest));
         }
 
         var lines = new List<string> { table.Render() };
@@ -56,6 +51,12 @@ public static class PluginRenderers
                 {
                     lines.Add($"{Location(candidate.Directory, problem.Path)}: {problem.Code} — {problem.Message}");
                 }
+            }
+
+            // A route already names itself the way the operator wrote it, so there is no location to build.
+            foreach (var route in rejected.Routes ?? [])
+            {
+                lines.Add($"{route.Route}: {route.Code} — {route.Message}");
             }
         }
 
@@ -118,18 +119,6 @@ public static class PluginRenderers
 
     private static string Counts(int granted, int requested) =>
         string.Create(CultureInfo.InvariantCulture, $"{granted}/{requested}");
-
-    /// <summary>The head of the content digest, which is what people compare; the whole value is in the JSON.</summary>
-    private static string? Digest(string? digest)
-    {
-        if (string.IsNullOrEmpty(digest))
-        {
-            return null;
-        }
-
-        var hex = digest.StartsWith(DigestPrefix, StringComparison.Ordinal) ? digest[DigestPrefix.Length..] : digest;
-        return hex.Length <= DigestShown ? hex : hex[..DigestShown];
-    }
 
     /// <summary>
     /// Where a problem is, the way the runtime's own error details spell it: the file is named exactly once. A

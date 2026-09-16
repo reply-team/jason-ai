@@ -24,7 +24,10 @@ public class RuntimeStatusCommandTests
     private static string InfoJson(string instanceId, DispatcherInfo dispatcher) =>
         InfoJson(instanceId, dispatcher, new PluginsInfo(2, "snp_01J4", new DateTimeOffset(2026, 9, 14, 12, 0, 0, TimeSpan.Zero), true));
 
-    private static string InfoJson(string instanceId, DispatcherInfo dispatcher, PluginsInfo plugins) => JsonSerializer.Serialize(
+    private static string InfoJson(string instanceId, DispatcherInfo dispatcher, PluginsInfo plugins) =>
+        InfoJson(instanceId, dispatcher, plugins, new RoutesInfo("rts_01J4", new DateTimeOffset(2026, 9, 14, 12, 0, 0, TimeSpan.Zero), "fake-provider", 1, 3));
+
+    private static string InfoJson(string instanceId, DispatcherInfo dispatcher, PluginsInfo plugins, RoutesInfo routes) => JsonSerializer.Serialize(
         new SystemInfoResponse(
             "0.1.0-dev",
             "v1",
@@ -34,7 +37,8 @@ public class RuntimeStatusCommandTests
             "/home/u/.jason",
             new DatabaseInfo(["20260913225419_InitialCreate"]),
             dispatcher,
-            plugins),
+            plugins,
+            routes),
         JasonJson.Options);
 
     [Fact]
@@ -199,6 +203,42 @@ public class RuntimeStatusCommandTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Where work is being sent, beside which packages are active: the two are one question, and a status that
+    /// answered only half of it would send an operator to a second call to find the other half.
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_says_where_work_is_being_sent()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE"))));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains(
+            "Routes:     snapshot rts_01J4 · default fake-provider · 1 override · 3 campaign routes",
+            output.ToString(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_says_when_nothing_is_routed_anywhere()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var dispatcher = new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0);
+        var plugins = new PluginsInfo(2, "snp_01J4", DateTimeOffset.UnixEpoch, true);
+        var routes = new RoutesInfo("rts_EMPTY", DateTimeOffset.UnixEpoch, null, 0, 0);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE", dispatcher, plugins, routes))));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Routes:     nothing is routed anywhere · snapshot rts_EMPTY", output.ToString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Human_mode_says_that_the_last_load_was_refused()
     {
@@ -225,6 +265,7 @@ public class RuntimeStatusCommandTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains("Plugins:    unknown", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Routes:     unknown", output.ToString(), StringComparison.Ordinal);
     }
 
     private static (CliEnvironment Env, StringWriter Out, StringWriter Error) Environment(TempPaths dir, HttpMessageHandler handler)

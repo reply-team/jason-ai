@@ -19,9 +19,15 @@ public sealed class PluginGrant
 /// The engine budget of an invocation. A manifest may raise the timeout and the memory of its own invocations up
 /// to the ceilings here, never past them; the caller's budget only ever lowers the timeout further.
 /// </summary>
+/// <remarks>
+/// <see cref="TimeoutMs"/> is what a package that declares no limit of its own runs under, and a ceiling can only
+/// lower an operation's budget. It is therefore the budget of the slowest operation this build publishes: shipped
+/// any lower, the defaults could not run the operations the runtime itself publishes. <c>PluginsOptionsValidator</c>
+/// holds the number to that floor, so publishing a slower operation fails a test rather than a plugin.
+/// </remarks>
 public sealed class PluginLimitsOptions
 {
-    public int TimeoutMs { get; set; } = 60_000;
+    public int TimeoutMs { get; set; } = 300_000;
 
     public int MaxTimeoutMs { get; set; } = 3_600_000;
 

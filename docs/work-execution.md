@@ -6,9 +6,10 @@ what to start, what an executor is handed when it is launched, and how it report
 This document is the contract for anyone writing an agent host against Jason. The launch envelope and
 the executor operations are public surface; the rest explains the rules that surround them.
 
-Provider operations are not routed in this version — a `provider_op` item is held to its published
-operation contract when it is written, and then fails visibly at the claim rather than being quietly
-skipped. See "Not here yet" at the end.
+Provider operations run: an item that names a canonical operation is held to that operation's contract
+when it is written, routed to a plugin at the claim, performed in a separate process and answered.
+Where an item is routed, and every reason a claim can refuse one, is
+[docs/routing.md](routing.md).
 
 ## What a work item is
 
@@ -26,7 +27,9 @@ There are two kinds:
 - **`provider_op`** — work a provider performs. It names an `operation` — one of the canonical
   operations this build publishes a contract for (`campaign.get`, `list_membership.add`,
   `campaign.enroll`) — and carries that operation's arguments under `input`, the one reserved key of
-  the context. Nothing routes these yet.
+  the context. Which plugin performs it, and in which provider account, is a route
+  ([docs/routing.md](routing.md)); the runtime composes what the plugin is given and never hands over
+  the rest of the context.
 
 Everything else on an item is scheduling, not meaning: `priority`, `not_before`, `due_at`, and the
 three per-item overrides `timeout_seconds`, `heartbeat_seconds` and `max_attempts`.
@@ -48,7 +51,14 @@ attempt that failed on it much later, with a provider already called. `workitem.
 |---|---|---|
 | `operation` | `unknown` | the name is well formed, but this build publishes no contract for it. The message names the operations it does publish |
 | `context.input` | `required` | the operation declares required arguments and the item carries none. An absent key and a JSON `null` read alike — neither is an argument |
-| `context.input<pointer>` | `invalid` | the arguments do not satisfy the operation's own schema, one detail per failure with the JSON pointer of the offending place (`context.input/channel`), all of them reported at once |
+| `context.input<pointer>` | `invalid` | the arguments do not satisfy the `args` sub-schema of the operation's input, one detail per failure with the JSON pointer of the offending place (`context.input/channel`), all of them reported at once |
+
+What is measured here is the caller's own arguments — the `args` property of the operation's input
+schema — and not the whole composed input. The rest of that input is the runtime's to write, at
+claim: the contact, the campaign and the idempotency key. So a rule the operation states across the
+whole of it, such as a root `anyOf`, is not a creation-time check: at the claim the composed document
+is measured against the operation's whole input schema, and that is where such a rule is enforced —
+as `input_invalid` on the attempt rather than as a refused request.
 
 `workitem.update` re-reads the arguments only when the patch names the reserved key — `set` writing
 `input`, or `unset` naming it — and measures them against the item's **own** operation, which is not
@@ -111,8 +121,9 @@ the same item; the second waits, finds it taken and moves on. Within one scan th
 - never more than the free handler slots, so a queued item cannot sit watching its own lease expire.
 
 Work the runtime cannot perform is failed inside the same transaction rather than skipped: a
-`provider_op` fails with `no_route`, and an `ai_role` whose role has no entry command fails with
-`role_not_launchable`. A silent skip would leave the item looking claimable forever.
+`provider_op` fails with whichever of the twelve pre-flight reasons applies — `no_route` when nothing
+routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
+A silent skip would leave the item looking claimable forever.
 
 ## Leases and heartbeats
 
@@ -149,9 +160,21 @@ A retriable failure below `max_attempts` returns the item to `created` with
 eligible hands it out again. At the limit, or on a non-retriable failure, the item becomes `failed`
 with the last error visible on the item.
 
+That table is the rule for **agent** work, where the failure happened inside this machine. A
+`provider_op` attempt is answered differently, because its work happened at somebody else's system:
+the failure carries one of four **classes** — `transient`, `permanent`, `validation`, `ambiguous` —
+and the class plus the operation's own `repeat_after_ambiguous` rule decide, not the code table. Every
+way such an attempt can end with nobody answering for it — the invoker's timeout, `lease_expired`,
+`heartbeat_missed`, a command that could not be started (`executor_launch_failed`) and one that was
+stopped (`executor_exited`) — is `ambiguous`, because a missing answer says nothing about whether the
+provider acted. An attempt a restart finds still `scheduled` is not one of them: it never started, so nobody
+was asked anything. A shape error in an answer that did arrive
+(`result_invalid`) is `ambiguous` and never repeated: the next attempt would run the same code over
+the same answer. A cancellation stays a cancellation in both kinds.
+
 `attempt_count` counts **failed** attempts — the ones that count toward the limit. Work that succeeds
-first time shows `attempt_count: 0` with one entry in `attempts`. Attempts that were `interrupted` by
-a restart or `cancelled` by a caller never count.
+first time shows `attempt_count: 0` with one entry in `attempts`. An attempt that was `interrupted` by
+a restart, and any attempt `cancelled` by a caller, never count.
 
 There is no separate inbox entity: what needs a human or a manager role is
 `jason workitem list --status failed --status expired`.
@@ -248,7 +271,47 @@ have passed since its attempt finished: the attempt is over, so nothing it does 
 | `executor_exited` | attempt | the child ended without reporting |
 | `executor_launch_failed` | attempt | the entry command could not be started at all |
 | `role_not_launchable` | attempt | the role has no entry command and no default is configured |
-| `no_route` | attempt | no provider route exists for the operation |
+| the twelve pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
+
+## Provider operations
+
+A `provider_op` item is a kind of work item, not a second execution engine: it is claimed under the
+same lease, runs in the same handler pool, and ends through the same routine. Four things about it
+differ from agent work.
+
+**Its arguments live under one reserved context key.** `context.input` carries the operation's
+arguments and nothing else in the context is an argument. The runtime **composes** what the plugin
+receives from the item — the arguments, the contact cut to the projection the operation declares, the
+campaign, the identifiers that plugin itself pinned, and the work item's own id as the idempotency key
+— and validates the whole composed document against the operation's input schema at the claim. A
+plugin never sees a work item's context.
+
+**Everything that can refuse it is decided at the claim, before a child process exists.** Twelve
+checks, in this order, and the first that fails is the one the attempt records:
+
+```text
+operation_unknown → no_route → plugin_not_loaded → plugin_unavailable → plugin_operation_unsupported →
+contract_incompatible → binding_invalid → approval_required → contact_required → no_channel_value →
+suppressed → input_invalid
+```
+
+All twelve are final. Eleven are `permanent`; `input_invalid` is `validation`, because it is the one a
+planner can fix by editing the item. The attempt is kept with its context snapshot either way — a
+silent skip would leave the item looking claimable forever — and nothing ever falls back to another
+plugin. [docs/routing.md](routing.md) says what each one means and what to change.
+
+**A failure's class decides the retry, not the code table.** A provider attempt ends with one of four
+classes: `transient` comes back, `permanent` and `validation` are final, and `ambiguous` — the
+provider may already have acted — is repeated only where the operation's own contract says a repeat is
+`safe` or is answerable `after_recovery_read`. An answer that arrived and does not satisfy the
+operation's output schema is `result_invalid`: ambiguous, and never repeated.
+
+**What ran is pinned to the attempt.** Every provider attempt carries a `provenance` record, written at
+the claim from the decision that was just made and completed when the invocation ends: the plugin, its
+version and content digest, the operation and contract version, the plugin and route snapshot ids, the
+route scope, the binding's identity (a hash, never the value), the invocation id, what the run cost,
+the identifiers the plugin returned, and — after a `result_invalid` — the answer that was refused.
+Nothing rewrites it afterwards. `jason workitem get <id> --human` prints it as a block per attempt.
 
 ## Roles
 
@@ -285,13 +348,21 @@ whether this runtime has a dispatch loop at all.
 | `Dispatcher:AiRole:TimeoutSeconds` | `3600` | 30..86400 | the budget of one `ai_role` attempt |
 | `Dispatcher:AiRole:HeartbeatSeconds` | `120` | 0, or 10..3600 | how often an `ai_role` executor must prove it is alive |
 | `Dispatcher:AiRole:MaxAttempts` | `3` | 1..10 | how many failures an `ai_role` item is worth |
-| `Dispatcher:ProviderOp:TimeoutSeconds` | `300` | 30..86400 | the budget of one `provider_op` attempt |
+| `Dispatcher:ProviderOp:TimeoutSeconds` | `600` | 30..86400 | the budget of one `provider_op` attempt; never below the slowest published operation's `timeout_ms` plus `Plugins:Invoker:KillGraceMs` |
 | `Dispatcher:ProviderOp:HeartbeatSeconds` | `0` | 0, or 10..3600 | 0: a provider call is short, the lease suffices |
 | `Dispatcher:ProviderOp:MaxAttempts` | `3` | 1..10 | how many failures a `provider_op` item is worth |
 | `Roles:DefaultEntryCommand` | `[]` | — | the command used for any role without one of its own |
 
 An item may override the three per-kind numbers for itself: `timeout_seconds` (30..86400),
-`heartbeat_seconds` (0, or 10..3600) and `max_attempts` (1..10).
+`heartbeat_seconds` (0, or 10..3600) and `max_attempts` (1..10). A `provider_op` item has one rule
+more: its `timeout_seconds` may not be shorter than the operation's own `timeout_ms` plus
+`Plugins:Invoker:KillGraceMs`, rounded up to whole seconds. A child is given the operation's budget
+and never what is left of the lease, so a shorter lease could only end with the lease gone and the
+provider's answer unknown — **capped by the plugin's own ceiling where that is smaller**, which is
+`limits.timeout_ms` from its manifest or `Plugins:Limits:TimeoutMs` when it declares none, so a plugin
+that implements a slow operation must declare a ceiling at least as large as that operation's contract
+(`docs/routing.md` §9 has the whole rule). `workitem.create` and `workitem.update` refuse such an item
+rather than raising the number quietly: a lease silently changed is one the planner still believes.
 
 `jason runtime status --human` shows what the loop is doing:
 
@@ -305,21 +376,18 @@ A shutdown stops claiming immediately, then waits up to `Dispatcher:DrainSeconds
 their children finish. Children still running are **not** killed: their leases are still good, and a
 survivor completes against the next runtime by re-reading the descriptor.
 
-On start the runtime releases what was only `scheduled` when it died — the attempt is marked
-`interrupted`, which does not count against the limit, and the item goes back to `created`. Items that
-were `processing` are left alone: their executor may still be alive, and the lease and heartbeat rules
-decide soon enough.
+On start the runtime releases what was only `scheduled` when it died, whatever kind of work it is. The
+handler commits the item `processing` and the attempt started before it launches anything, so an attempt
+still `scheduled` ran nothing and asked nobody — not even a provider: it is marked `interrupted`, which
+does not count against the limit, and the item goes back to `created`. Items that were `processing` are
+left alone: their executor may still be alive, and the lease and heartbeat rules decide soon enough —
+and for a `provider_op` those rules are the ambiguous ones, so an operation that may never be repeated
+waits for a person rather than being handed out again.
 
 ## Not here yet
 
-- **Provider operations.** `provider_op` items fail with `no_route`. The mechanism that will run them
-  already exists and is documented in [docs/plugins.md](plugins.md): validated plugin packages, an
-  atomically reloaded registry, and a plugin host that runs one invocation in its own process. What
-  each operation means, and what its arguments must look like, is published under
-  [docs/contracts/](contracts/README.md) and enforced when an item is written. Routing an item to a
-  plugin, composing the input that reaches one, the binding it is given and the pre-flight check at
-  claim arrive with the next increment.
-- **Approvals.** Nothing pauses for a human decision yet.
+- **Approvals.** Nothing pauses for a human decision yet, and an operation that requires one —
+  `campaign.enroll` — therefore fails closed at the claim with `approval_required` every time.
 - **Execution profiles.** `execution_profile` is recorded verbatim as an opaque string; nothing
   resolves it.
 - **Session resume.** A host that is interrupted is retried from the start, not nudged to continue.

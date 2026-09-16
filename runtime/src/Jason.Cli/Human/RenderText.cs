@@ -12,6 +12,11 @@ namespace Jason.Cli.Human;
 /// </summary>
 internal static class RenderText
 {
+    private const string DigestPrefix = "sha256:";
+
+    /// <summary>How much of a digest a person needs to tell two packages apart at a glance.</summary>
+    private const int DigestShown = 12;
+
     /// <summary>A response body of the expected shape, or null when it is something else — the runner then prints the raw JSON.</summary>
     public static T? Read<T>(string json)
         where T : class
@@ -67,6 +72,43 @@ internal static class RenderText
     {
         var keys = properties is null ? [] : properties.Select(property => property.Key).ToList();
         return keys.Count == 0 ? "none" : string.Join(", ", keys);
+    }
+
+    /// <summary>
+    /// What providers call this entity, as a block only when there is one — most entities carry no pins, and a
+    /// table of nothing would be noise. A pin that a later answer disagreed with shows both values and the attempt
+    /// that disagreed, because that disagreement is exactly what a person is being asked to look at.
+    /// </summary>
+    public static IReadOnlyList<string> ExternalIds(IReadOnlyList<ExternalIdDto>? externalIds)
+    {
+        if (externalIds is null || externalIds.Count == 0)
+        {
+            return [];
+        }
+
+        var table = new HumanTable("PLUGIN", "KIND", "VALUE", "DISPUTED", "DISPUTED BY");
+        foreach (var pin in externalIds)
+        {
+            table.Row(pin.PluginId, pin.Kind, pin.Value, pin.DivergedValue, pin.DivergedByAttemptId);
+        }
+
+        return [string.Empty, "EXTERNAL IDS", table.Render()];
+    }
+
+    /// <summary>
+    /// The head of a content digest, which is what people compare at a glance; the whole value is in the JSON
+    /// output. One spelling of the shortening, because two renderers showing the same digest differently would
+    /// make a reader wonder which package they are looking at.
+    /// </summary>
+    public static string? Digest(string? digest)
+    {
+        if (string.IsNullOrEmpty(digest))
+        {
+            return null;
+        }
+
+        var hex = digest.StartsWith(DigestPrefix, StringComparison.Ordinal) ? digest[DigestPrefix.Length..] : digest;
+        return hex.Length <= DigestShown ? hex : hex[..DigestShown];
     }
 
     /// <summary>Appends the cursor that continues a listing, when the page has one.</summary>

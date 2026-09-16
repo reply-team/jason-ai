@@ -63,6 +63,13 @@ public static class SchemaValidator
     /// Every failure is reported, not the first, because a caller fixing its arguments should see all of them at
     /// once. A defect in the schema itself is reported at the value's own pointer with the schema-level reason
     /// code, since that is the place a reader is looking when the rule fails to run.
+    /// <para>
+    /// The precondition, stated because it is easy to miss: this applies no size cap of its own — only
+    /// <see cref="CheckDialect"/> weighs a schema. Every caller today passes a schema that has been through the
+    /// dialect check first (an embedded operation document at build time, a plugin's binding schema at reload),
+    /// which is what bounds the work here. A caller that skipped it would be handing this method an unbounded
+    /// document.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<SchemaProblem> Validate(JsonNode? value, JsonObject schema)
     {
@@ -1095,12 +1102,17 @@ public static class SchemaValidator
     // Values, pointers and patterns
     // ---------------------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// A keyword the schema itself wrote badly. The pointer is the caller's value, because that is where a reader
+    /// is looking when a rule fails to run — but the code says whose document is wrong. Reported as <c>type</c>
+    /// it read as "the value here is the wrong kind", which sent whoever has to fix it to the wrong document.
+    /// </summary>
     private static SchemaProblem Malformed(string pointer, string keyword, string expected) =>
-        new(pointer, "type", $"`{keyword}` must be {expected}, so the rule it states did not run.");
+        new(pointer, "schema_keyword_malformed", $"`{keyword}` must be {expected}, so the rule it states did not run.");
 
     /// <summary>The same refusal where the pointer already names the place: the dialect check addresses the schema.</summary>
     private static SchemaProblem MalformedAt(string pointer, string expected) =>
-        new(pointer, "type", $"What stands here must be {expected}, so the rule it states would not run.");
+        new(pointer, "schema_keyword_malformed", $"What stands here must be {expected}, so the rule it states would not run.");
 
     private static SchemaProblem Duplicated(string pointer) =>
         new(pointer, "duplicate_property", "An object here writes the same property twice, so which of the two it means is not decidable.");
@@ -1278,17 +1290,9 @@ public static class SchemaValidator
         // The widest reading the node offers, kept only to say whether a narrower one is the same number.
         var widest = candidate.TryGetValue(out double real) ? real : (double?)null;
 
-        if (candidate.TryGetValue(out decimal exact))
+        if (TryExact(candidate, out var exact))
         {
             return Narrowed(exact, widest, out value);
-        }
-
-        // A node parsed from text holds an element that converts to any numeric type; one built in memory — a
-        // manifest's binding schema, read from YAML — holds the CLR value it was given and converts to that type
-        // alone. Both are the same number, and a rule that ran for one has to run for the other.
-        if (candidate.TryGetValue(out long whole))
-        {
-            return Narrowed(whole, widest, out value);
         }
 
         if (widest is { } number && double.IsFinite(number) && number is >= MinDecimal and <= MaxDecimal)
@@ -1297,6 +1301,84 @@ public static class SchemaValidator
         }
 
         // A number outside decimal's range is still a number; it simply cannot take part in a numeric comparison.
+        return false;
+    }
+
+    /// <summary>
+    /// The number a node holds, read as a decimal, whatever CLR type it was built from.
+    /// </summary>
+    /// <remarks>
+    /// A node parsed from text holds an element that converts to any numeric type. A node built in memory holds
+    /// the CLR value it was given and converts to that type alone: <c>JsonValue.Create(1)</c> is an <c>int</c>,
+    /// a manifest's binding schema read from YAML is a <c>long</c>, and a schema written in a test is whatever
+    /// the literal was. All of them are the same number, and a rule that ran for one has to run for the others —
+    /// a reader that knew only two of these types made building a schema, rather than parsing one, look like a
+    /// mistake. The whole family is therefore asked, widest first; a <c>float</c> is range-checked because the
+    /// cast to decimal would throw above it, and everything that survives is exact.
+    /// </remarks>
+    private static bool TryExact(JsonValue candidate, out decimal exact)
+    {
+        if (candidate.TryGetValue(out decimal asDecimal))
+        {
+            exact = asDecimal;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out long asLong))
+        {
+            exact = asLong;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out ulong asULong))
+        {
+            exact = asULong;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out int asInt))
+        {
+            exact = asInt;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out uint asUInt))
+        {
+            exact = asUInt;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out short asShort))
+        {
+            exact = asShort;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out ushort asUShort))
+        {
+            exact = asUShort;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out sbyte asSByte))
+        {
+            exact = asSByte;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out byte asByte))
+        {
+            exact = asByte;
+            return true;
+        }
+
+        if (candidate.TryGetValue(out float asFloat) && float.IsFinite(asFloat) && (double)asFloat is > MinDecimal and < MaxDecimal)
+        {
+            exact = (decimal)asFloat;
+            return true;
+        }
+
+        exact = 0m;
         return false;
     }
 
@@ -1311,6 +1393,13 @@ public static class SchemaValidator
     /// The same number read as a double, where the node offers one. Comparing in that space rejects only a
     /// narrowing that lost the number, never a decimal carrying more digits than a double can hold.
     /// </param>
+    /// <remarks>
+    /// Observed rather than fixed, so that it is not mistaken for a new defect later: the two readings come from
+    /// the same node but are separate conversions, and a node could in principle offer a double that is not the
+    /// number its decimal reading is — such a node would be reported as not comparable rather than compared
+    /// wrongly, which is the safe way round. Only a node built in memory could hold two disagreeing readings of
+    /// one value, and none of the types read above can produce a pair like that.
+    /// </remarks>
     private static bool Narrowed(decimal exact, double? widest, out decimal value)
     {
         if (widest is { } number && (double)exact != number)
@@ -1411,6 +1500,13 @@ public static class SchemaValidator
     /// <c>uniqueItems</c> compare by: each keeps a spelling of its own, so two of them are the same value and one
     /// of each is not, which is all the comparison asks.
     /// </summary>
+    /// <remarks>
+    /// Observed rather than fixed, so that it is not mistaken for a new defect later: the fallback spelling of an
+    /// infinity is the quoted text <c>"Infinity"</c>, which is also the canonical form of the ordinary string
+    /// <c>Infinity</c>, so a <c>const</c> of one would accept the other. Nothing can reach it — a schema holding
+    /// such a number is refused by the dialect check before it is ever applied, and no document parsed from text
+    /// can hold one — and inventing a distinct spelling here would change what every comparison compares by.
+    /// </remarks>
     private static string Scalar(JsonNode node)
     {
         try

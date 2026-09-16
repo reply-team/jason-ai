@@ -62,14 +62,28 @@ public static class JasonConfiguration
         services.AddSingleton<IValidateOptions<RuntimeOptions>, RuntimeOptionsValidator>();
         services.AddSingleton<IValidateOptions<LoggingOptions>, LoggingOptionsValidator>();
         services.AddSingleton<IValidateOptions<DispatcherOptions>, DispatcherOptionsValidator>();
+
+        // A second validator of the same section, not a rule folded into the first: the lease a provider attempt
+        // is claimed under has to outlast the slowest operation this build publishes, and that is a relationship
+        // between two sections rather than a range one of them owns.
+        services.AddSingleton<IValidateOptions<DispatcherOptions>, ProviderOpBudgetValidator>();
         services.AddSingleton<IValidateOptions<RolesOptions>, RolesOptionsValidator>();
         services.AddSingleton<IValidateOptions<PluginsOptions>, PluginsOptionsValidator>();
+        services.AddSingleton<IValidateOptions<RoutesOptions>, RoutesOptionsValidator>();
 
         services.AddOptions<RuntimeOptions>().Bind(configuration.GetSection(RuntimeOptions.Section)).ValidateOnStart();
         services.AddOptions<LoggingOptions>().Bind(configuration.GetSection(LoggingOptions.Section)).ValidateOnStart();
         services.AddOptions<DispatcherOptions>().Bind(configuration.GetSection(DispatcherOptions.Section)).ValidateOnStart();
         services.AddOptions<RolesOptions>().Bind(configuration.GetSection(RolesOptions.Section)).ValidateOnStart();
         services.AddOptions<PluginsOptions>().Bind(configuration.GetSection(PluginsOptions.Section)).ValidateOnStart();
+
+        // Routes are read rather than bound: a route carries a JSON binding, and the standard binder cannot make
+        // a JsonObject at all. The change-token source is the same one Bind would have registered, so a hand
+        // edit still reaches a running runtime, and the validator is still what decides whether it may.
+        var routes = configuration.GetSection(RoutesOptions.Section);
+        services.AddSingleton<IOptionsChangeTokenSource<RoutesOptions>>(new ConfigurationChangeTokenSource<RoutesOptions>(routes));
+        services.AddSingleton<IConfigureOptions<RoutesOptions>>(new ConfigureOptions<RoutesOptions>(options => RoutesOptions.Fill(routes, options)));
+        services.AddOptions<RoutesOptions>().ValidateOnStart();
 
         return services;
     }

@@ -55,11 +55,35 @@ public sealed record SnapshotDto(string Id, DateTimeOffset LoadedAt, SnapshotSou
 
 public sealed record CandidateDto(string Directory, string? Id, CandidateStatus Status, IReadOnlyList<PluginProblemDto> Problems);
 
-/// <summary>What the last load made of every candidate, whether or not it ended in a swap.</summary>
-public sealed record ReloadReportDto(DateTimeOffset At, SnapshotSource Source, bool Activated, IReadOnlyList<CandidateDto> Candidates);
+/// <summary>
+/// One route the last load refused, named the way an operator edits it: <c>Routes:Default</c>,
+/// <c>Routes:Operations:&lt;operation&gt;</c> or <c>campaign:&lt;cmp_id&gt;/routes/&lt;operation|default&gt;</c>.
+/// </summary>
+public sealed record RouteProblemDto(string Route, string Code, string Message);
 
-/// <summary>The whole registry: a small thing, answered in one piece and never paged.</summary>
-public sealed record PluginRegistryDto(SnapshotDto Snapshot, IReadOnlyList<PluginDto> Plugins, ReloadReportDto? LastReload, bool Activated);
+/// <summary>
+/// What the last load made of every candidate, whether or not it ended in a swap. <c>Routes</c> is its own list
+/// rather than a candidate named "routes": a candidate is a package, and a reader of this report should not have
+/// to know that one entry in a list of packages is a different kind of thing.
+/// </summary>
+public sealed record ReloadReportDto(
+    DateTimeOffset At,
+    SnapshotSource Source,
+    bool Activated,
+    IReadOnlyList<CandidateDto> Candidates,
+    IReadOnlyList<RouteProblemDto> Routes);
+
+/// <summary>
+/// The whole registry: a small thing, answered in one piece and never paged. <c>RoutingSnapshotId</c> is the
+/// route snapshot that was frozen against this plugin snapshot — the two travel together, because which plugin
+/// performs an operation is only answerable from both.
+/// </summary>
+public sealed record PluginRegistryDto(
+    SnapshotDto Snapshot,
+    string RoutingSnapshotId,
+    IReadOnlyList<PluginDto> Plugins,
+    ReloadReportDto? LastReload,
+    bool Activated);
 
 public sealed record PluginListRequest();
 

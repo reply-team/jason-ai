@@ -2,6 +2,7 @@ using Jason.Contracts.Plugins;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -44,6 +45,17 @@ public sealed class PluginStartupLoader(
                 return;
             }
 
+            // The same all-or-nothing rule a reload follows, and for the same reason: a bad route leaves both
+            // registries empty rather than a plugin set active with routes nobody checked.
+            var activator = scope.ServiceProvider.GetRequiredService<RouteActivator>();
+            var candidate = await activator.BuildAsync(load.Snapshot, GlobalRouteSource.FromSettings, cancellationToken).ConfigureAwait(false);
+            if (candidate.Snapshot is null)
+            {
+                registry.Record(load.Report with { Activated = false, Routes = candidate.Problems });
+                StartupRejected(logger, candidate.Problems.Count, null);
+                return;
+            }
+
             // The runtime is the actor: nobody asked for this load, the process starting is what caused it. The
             // record is written before the swap, like a reload's: a snapshot nobody could write down is not active.
             var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
@@ -52,9 +64,11 @@ public sealed class PluginStartupLoader(
                 db,
                 Actors.Runtime,
                 load.Snapshot,
+                candidate.Snapshot,
                 reason: null);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             registry.Replace(load.Snapshot, load.Report);
+            activator.Activate(candidate.Snapshot);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

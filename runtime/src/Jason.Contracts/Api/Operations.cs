@@ -45,6 +45,11 @@ public static class Operations
     public const string PluginList = "plugin.list";
     public const string PluginReload = "plugin.reload";
 
+    public const string RouteResolve = "route.resolve";
+    public const string RouteList = "route.list";
+    public const string RouteSet = "route.set";
+    public const string RouteUnset = "route.unset";
+
     public const string SuppressionAdd = "suppression.add";
     public const string SuppressionRemove = "suppression.remove";
     public const string SuppressionList = "suppression.list";

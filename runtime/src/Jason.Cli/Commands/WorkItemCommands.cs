@@ -120,7 +120,7 @@ public static class WorkItemCommands
         var id = WorkItemId();
         var snapshots = new Option<bool>("--snapshots")
         {
-            Description = "Include the context each attempt was launched with. Left out by default: ten attempts of a large context is a lot to read.",
+            Description = "Include the evidence each attempt kept: the context it was launched with, and any answer its operation refused. Left out by default: either can be megabytes.",
         };
         var human = VerbOptions.Human();
         command.Arguments.Add(id);

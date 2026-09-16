@@ -67,7 +67,18 @@ covered here.
   reserved work-item context key carrying an operation's arguments: it is validated at
   `workitem.create`, and again at `workitem.update` whenever a patch names the key. The fixtures
   under `docs/contracts/fixtures/` are executed by tests, so a document and the code cannot drift
-  apart. Nothing routes a work item to a plugin yet. `docs/contracts/README.md` is the contract.
+  apart. `docs/contracts/README.md` is the contract.
+- Routing: which plugin performs an operation for a campaign is a route, resolved by a pure function
+  over an immutable snapshot — campaign operation override, campaign default, global operation
+  override, global default, with exact masking and no fallback to another plugin. Routes are frozen
+  by the same reload that freezes plugins: the `Routes` section of `settings.json` is read only
+  there and at startup, `route.set`/`route.unset` copy the global half from the active snapshot, and
+  a bad route rejects the whole reload. The claim is fail-closed: twelve checks in one published
+  order, one code per reason, decided before a child exists, with the attempt kept. A binding names
+  an account and never a credential. A provider identifier is pinned once and never overwritten — a
+  different value is recorded beside it as a divergence and the attempt still succeeds. Provenance
+  is written at the claim and completed at the end; nothing rewrites it. `docs/routing.md` is the
+  contract.
 - Plugins: a package is `~/.jason/plugins/<id>/` with `plugin.yaml`, `main.js` and optional modules;
   the directory name is the id. The manifest is validated against one fixed vocabulary of problem
   codes — package problems reject the whole reload and keep the previous snapshot, the four

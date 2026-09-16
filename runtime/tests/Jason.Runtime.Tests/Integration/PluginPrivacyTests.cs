@@ -132,7 +132,11 @@ public class PluginPrivacyTests
                     """);
                 TestPlugins.Grant(paths, "talkative", env: [_variable]);
             },
-            configureServices: services => services.AddSingleton<IPluginHostLocator>(new JasonDllLocator()));
+            configureServices: services =>
+            {
+                services.AddSingleton<IPluginHostLocator>(new JasonDllLocator());
+                services.AddSingleton(TestPlugins.SearchPath);
+            });
 
     private static string ReadAll(string directory)
     {

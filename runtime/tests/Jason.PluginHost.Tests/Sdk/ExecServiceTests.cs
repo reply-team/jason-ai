@@ -204,6 +204,51 @@ public sealed class ExecServiceTests : IDisposable
         Assert.Equal("<unset>\n", Lines(result));
     }
 
+    /// <summary>
+    /// A name ending in a line break. The anchor `$` matches before a trailing one, so such a name satisfied the
+    /// name rule, and the denylist — which compares whole names — did not recognise it either: two rules missing
+    /// the same string for the same reason. The name is built here rather than parsed from anything.
+    /// </summary>
+    [Theory]
+    [InlineData("FAKE_EXEC_VALUE")]
+    [InlineData("NODE_OPTIONS")]
+    [InlineData("DOTNET_STARTUP_HOOKS")]
+    public void A_name_with_a_line_break_after_it_is_not_a_variable_name(string stem)
+    {
+        using var harness = Harness();
+
+        Assert.Equal(
+            "TypeError",
+            harness.Caught($"host.exec({{ executable: \"{Cli}\", args: [\"echo-args\"], env: {{ \"{stem}\\n\": \"anything\" }} }})"));
+    }
+
+    /// <summary>
+    /// The refusal has a name of its own, and a <c>TypeError</c> has nowhere to put it but the message — so the
+    /// message carries it, and an author who reads one can search the guide for the rule that produced it.
+    /// </summary>
+    [Fact]
+    public void A_refused_variable_names_the_code_an_author_can_look_up()
+    {
+        using var harness = Harness();
+
+        var message = harness.Message($"host.exec({{ executable: \"{Cli}\", args: [\"echo-args\"], env: {{ NODE_OPTIONS: \"x\" }} }})");
+
+        Assert.Contains(ExecService.EnvNotAllowedCode, message, StringComparison.Ordinal);
+        Assert.Contains("NODE_OPTIONS", message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The denylist compares names the way an operating system does, so a different case is the same name.</summary>
+    [Theory]
+    [InlineData("Ld_Preload")]
+    [InlineData("Node_Options")]
+    [InlineData("dotnet_startup_hooks")]
+    public void A_denylisted_variable_in_another_case_is_the_same_variable(string variable)
+    {
+        using var harness = Harness();
+
+        Assert.Equal("TypeError", harness.Caught($"host.exec({{ executable: \"{Cli}\", args: [\"echo-args\"], env: {{ {variable}: \"anything\" }} }})"));
+    }
+
     [Fact]
     public void An_ordinary_variable_of_a_runtime_that_has_hooks_is_still_a_plugin_s_to_set()
     {

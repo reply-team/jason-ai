@@ -1,4 +1,5 @@
 using Jason.Contracts.Api;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
@@ -168,7 +169,13 @@ public class LeaseEnforcerTests
             });
             Registry = new RunningAttemptRegistry();
             Status = new DispatcherStatus();
-            Enforcer = new LeaseEnforcer(new AttemptOutcomes(new JournalWriter(Clock), Clock, Options), Clock, Options, Registry, Status);
+            Enforcer = new LeaseEnforcer(
+                new AttemptOutcomes(new JournalWriter(Clock), Clock, Options),
+                Clock,
+                Options,
+                Registry,
+                Status,
+                new UnansweredEnd(OperationCatalog.Find));
         }
 
         public FixedClock Clock { get; }

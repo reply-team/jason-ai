@@ -43,7 +43,20 @@ public class PluginFlowEndToEndTests
 
     private const string PluginId = "fake-provider";
 
+    /// <summary>The name the fixture package declares for the stand-in vendor CLI, and where that program is.</summary>
+    private const string CliName = "Jason.FakeProviderCli";
+
+    private static string CliDirectory => AppContext.BaseDirectory;
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>The machine as this test needs it: the stand-in CLI's directory, then the real search path.</summary>
+    private sealed class CliOnPath : ISearchPath
+    {
+        public string? Path => CliDirectory + System.IO.Path.PathSeparator + Environment.GetEnvironmentVariable("PATH");
+
+        public string? PathExt => OperatingSystem.IsWindows() ? Environment.GetEnvironmentVariable("PATHEXT") : null;
+    }
 
     [Fact]
     public async Task A_package_is_installed_listed_refused_repaired_and_invoked_through_the_shipped_executable()
@@ -72,7 +85,7 @@ public class PluginFlowEndToEndTests
             Assert.Empty(plugin["problems"]!.AsArray());
             var digest = (string)plugin["digest"]!;
             Assert.StartsWith("sha256:", digest, StringComparison.Ordinal);
-            Assert.Equal("dotnet", (string?)Assert.Single(plugin["capabilities"]!["exec"]!["granted"]!.AsArray()));
+            Assert.Equal(CliName, (string?)Assert.Single(plugin["capabilities"]!["exec"]!["granted"]!.AsArray()));
             var startupSnapshot = (string)listed["snapshot"]!["id"]!;
 
             // A manifest edited into nonsense. A reload refuses the whole set rather than activate part of it.
@@ -167,7 +180,7 @@ public class PluginFlowEndToEndTests
         var options = new FixedOptions<PluginsOptions>(settings);
         var loader = new PluginLoader(
             paths,
-            new ExecutableResolver(new EnvironmentSearchPath()),
+            new ExecutableResolver(new CliOnPath()),
             options,
             TimeProvider.System,
             NullLogger<PluginLoader>.Instance);
@@ -234,6 +247,10 @@ public class PluginFlowEndToEndTests
         }
 
         start.Environment[JasonPaths.DataDirectoryVariable] = root;
+
+        // The package declares the stand-in vendor CLI by its own name, and that program is installed beside
+        // these tests rather than onto the machine, so the runtime this starts has to be told where to look.
+        start.Environment["PATH"] = CliDirectory + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH");
 
         using var process = Process.Start(start) ?? throw new InvalidOperationException("The jason executable could not be started.");
         process.StandardInput.Close();

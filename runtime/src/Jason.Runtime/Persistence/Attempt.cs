@@ -35,6 +35,12 @@ public sealed class Attempt
 
     public AttemptLaunchDto? Launch { get; set; }
 
+    /// <summary>
+    /// What was resolved to run the attempt — the plugin, the package, the route — written as far as resolution
+    /// got, so an attempt that failed before a plugin was chosen still says so. Null for every agent attempt.
+    /// </summary>
+    public AttemptProvenanceDto? Provenance { get; set; }
+
     public DateTime ClaimedAt { get; set; }
 
     public DateTime? StartedAt { get; set; }

@@ -6,6 +6,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 
 namespace Jason.Runtime.WorkItems;
@@ -26,7 +27,11 @@ internal static partial class WorkItemValidation
     /// <summary>A vendor-neutral operation is dotted lowercase, as in <c>campaign.get</c>.</summary>
     public static Regex OperationName { get; } = OperationNamePattern();
 
-    public static void ValidateCreate(WorkItemCreateRequest request, bool roleExists, ValidationErrors errors)
+    /// <param name="killGraceMs">
+    /// How long the invoker gives a child to stop once its budget is spent, which is part of the shortest lease
+    /// a provider operation can be run under.
+    /// </param>
+    public static void ValidateCreate(WorkItemCreateRequest request, bool roleExists, int killGraceMs, ValidationErrors errors)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(errors);
@@ -53,6 +58,7 @@ internal static partial class WorkItemValidation
             if (ValidateOperation(request.Operation, errors) is { } operation)
             {
                 ValidateProviderOperation(operation, request.Context?[WorkItemService.InputKey], errors);
+                ValidateProviderTimeout(operation, request.TimeoutSeconds, killGraceMs, errors);
             }
 
             if (request.Role is not null)
@@ -214,6 +220,42 @@ internal static partial class WorkItemValidation
         {
             ValidateInput(contract, input, errors);
         }
+    }
+
+    /// <summary>
+    /// A lease the runtime already knows cannot cover the run it is for. The child of a provider attempt is
+    /// given the operation's own budget — never what is left of the lease — so an item that asks for less time
+    /// than the operation declares could only ever end with the lease gone and the provider's answer unknown.
+    /// It is refused rather than quietly raised: a number silently changed is one the planner still believes.
+    /// </summary>
+    /// <remarks>
+    /// An item that names no lease of its own takes the kind's default, and
+    /// <c>ProviderOpBudgetValidator</c> already holds that default to the same floor, so absence always passes.
+    /// An operation this build publishes no contract for has no floor to measure against; such an item is
+    /// refused where it is named, and an older row carrying one fails closed at the claim.
+    /// </remarks>
+    public static void ValidateProviderTimeout(string operation, int? timeoutSeconds, int killGraceMs, ValidationErrors errors)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        ArgumentNullException.ThrowIfNull(errors);
+
+        if (timeoutSeconds is not { } lease || OperationCatalog.Find(operation) is not { } contract)
+        {
+            return;
+        }
+
+        var floor = ProviderOpBudgetValidator.FloorSeconds(contract.TimeoutMs, killGraceMs);
+        if (lease >= floor)
+        {
+            return;
+        }
+
+        errors.Add(
+            "timeout_seconds",
+            "too_short",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"timeout_seconds must be at least {floor} for '{contract.Id}', which declares {contract.TimeoutMs} ms, plus the {killGraceMs} ms a child is given to stop."));
     }
 
     private static void ValidateInput(OperationContract contract, JsonNode? input, ValidationErrors errors)

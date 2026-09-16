@@ -1,6 +1,7 @@
 using Jason.Contracts.Api;
 using Jason.Runtime.Api;
 using Jason.Runtime.Contacts;
+using Jason.Runtime.Routing;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -16,6 +17,9 @@ public static class ContactModule
         services.AddScoped<ContactService>();
         services.AddScoped<MembershipService>();
         services.AddScoped<SuppressionService>();
+
+        // The claim asks the register one question, through the service that owns what suppression means.
+        services.AddScoped<ISuppressionCheck>(services => services.GetRequiredService<SuppressionService>());
         return services;
     }
 

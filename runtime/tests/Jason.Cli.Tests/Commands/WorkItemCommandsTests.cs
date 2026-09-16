@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Cli;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Contracts.Plugins;
 
 namespace Jason.Cli.Tests.Commands;
 
@@ -147,6 +148,19 @@ public class WorkItemCommandsTests
             "{\"input\":{}}",
             "--input",
             "{}");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains("--input", cli.Error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_input_beside_a_file_body_whose_context_is_not_an_object_is_a_usage_error()
+    {
+        using var file = new TempFile("{\"kind\":\"provider_op\",\"operation\":\"campaign.get\",\"context\":[1,2]}");
+        using var cli = new CliRun();
+
+        // The arguments have nowhere to be written, and the CLI says so rather than throwing over the body.
+        var exit = await cli.RunAsync("workitem", "create", "cmp_A", "--file", file.Path, "--input", "{}");
 
         Assert.Equal(ExitCodes.Usage, exit);
         Assert.Contains("--input", cli.Error.ToString(), StringComparison.Ordinal);
@@ -578,6 +592,53 @@ public class WorkItemCommandsTests
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>What ran, in the words a person reads: the package, the operation, the route and what it cost.</summary>
+    [Fact]
+    public async Task Human_mode_shows_what_ran_one_provider_attempt()
+    {
+        var provenance = new AttemptProvenanceDto(
+            "fake-provider",
+            "1.2.0",
+            "sha256:9f2b7c4d1e6a8b3c5d7e9f0a1b2c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e4",
+            1,
+            1,
+            "campaign.get",
+            1,
+            "snp_01K5B7Q2WE5X3M9T0YH4C6RDNA",
+            "rts_01K5B7Q2WE5X3M9T0YH4C6RDNB",
+            RouteScope.CampaignOperation,
+            "sha256:aa11bb22cc33dd44ee55ff6677889900aabbccddeeff00112233445566778899",
+            "pin_01K5B7Q2WE5X3M9T0YH4C6RDNC",
+            "att_A",
+            new OutcomeDiagnostics(412, 0, 2, 7));
+        using var cli = new CliRun(Serialize(Item([Attempt(provenance)])));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("ATTEMPT 1 (att_A) RAN", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Plugin:       fake-provider 1.2.0 · 9f2b7c4d1e6a", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Operation:    campaign.get v1", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Route:        campaign_operation · binding aa11bb22cc33", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Snapshots:    plugins snp_01K5B7Q2WE5X3M9T0YH4C6RDNA · routes rts_01K5B7Q2WE5X3M9T0YH4C6RDNB", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Invocation:   pin_01K5B7Q2WE5X3M9T0YH4C6RDNC · 412 ms · exec 0 · http 2 · log 7", cli.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>An attempt with no record of what ran prints what it always printed, and no empty block.</summary>
+    [Fact]
+    public async Task Human_mode_adds_nothing_for_an_attempt_that_ran_no_plugin()
+    {
+        using var cli = new CliRun(Serialize(Item([Attempt(null)])));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("1  att_A  succeeded", cli.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("RAN", cli.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Plugin:", cli.Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Human_mode_renders_a_work_item_listing_with_its_cursor()
     {
@@ -672,4 +733,20 @@ public class WorkItemCommandsTests
         null);
 
     private static string Serialize<T>(T value) => JsonSerializer.Serialize(value, JasonJson.Options);
+
+    private static AttemptDto Attempt(AttemptProvenanceDto? provenance) => new(
+        "att_A",
+        1,
+        AttemptStatus.Succeeded,
+        provenance is null ? WorkItemKind.AiRole : WorkItemKind.ProviderOp,
+        null,
+        null,
+        null,
+        Moment.AddMinutes(1),
+        Moment.AddMinutes(1),
+        Moment.AddMinutes(2),
+        null,
+        Moment.AddHours(1),
+        null,
+        provenance);
 }

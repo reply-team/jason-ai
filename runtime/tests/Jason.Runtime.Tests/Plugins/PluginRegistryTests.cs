@@ -28,7 +28,7 @@ public class PluginRegistryTests
     {
         var registry = new PluginRegistry(new FixedClock(Noon));
         var snapshot = PluginSnapshot.Empty(Noon.UtcDateTime.AddMinutes(1), SnapshotSource.Reload);
-        var report = new ReloadReport(Noon.UtcDateTime.AddMinutes(1), SnapshotSource.Reload, true, []);
+        var report = new ReloadReport(Noon.UtcDateTime.AddMinutes(1), SnapshotSource.Reload, true, [], []);
 
         registry.Replace(snapshot, report);
 
@@ -41,8 +41,8 @@ public class PluginRegistryTests
     {
         var registry = new PluginRegistry(new FixedClock(Noon));
         var active = PluginSnapshot.Empty(Noon.UtcDateTime, SnapshotSource.Reload);
-        registry.Replace(active, new ReloadReport(Noon.UtcDateTime, SnapshotSource.Reload, true, []));
-        var rejected = new ReloadReport(Noon.UtcDateTime.AddMinutes(5), SnapshotSource.Reload, false, []);
+        registry.Replace(active, new ReloadReport(Noon.UtcDateTime, SnapshotSource.Reload, true, [], []));
+        var rejected = new ReloadReport(Noon.UtcDateTime.AddMinutes(5), SnapshotSource.Reload, false, [], []);
 
         registry.Record(rejected);
 

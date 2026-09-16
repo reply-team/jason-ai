@@ -90,6 +90,7 @@ public class PluginCommandsTests
             last reload rejected at 2026-09-14 12:00:00 UTC:
             broken/plugin.yaml#3:1: yaml_invalid — mapping values are not allowed here
             broken/plugin.yaml#id: id_mismatch — the manifest says 'other', the directory says 'broken'
+            Routes:Default: route_plugin_unknown — no plugin 'gone' is in the candidate set
             """.ReplaceLineEndings() + Environment.NewLine,
             cli.Text);
     }
@@ -160,6 +161,7 @@ public class PluginCommandsTests
     /// <summary>A registry the way a machine with one working plugin and one it cannot run answers.</summary>
     private static PluginRegistryDto TwoPlugins() => new(
         new SnapshotDto("snp_01J4", Moment, SnapshotSource.Reload, 2),
+        "rts_01J4",
         [
             new PluginDto(
                 "fake-provider",
@@ -199,12 +201,13 @@ public class PluginCommandsTests
                 PluginStatus.Unavailable,
                 [new PluginProblemDto("executable_missing", "capabilities.exec.executables[0]", "No 'notify' was found.")]),
         ],
-        new ReloadReportDto(Moment, SnapshotSource.Reload, true, []),
+        new ReloadReportDto(Moment, SnapshotSource.Reload, true, [], []),
         Activated: true);
 
     /// <summary>The snapshot that survived a refused reload, with the diagnostics that explain the refusal.</summary>
     private static PluginRegistryDto KeptAfterARejectedReload() => new(
         new SnapshotDto("snp_01J4", Moment, SnapshotSource.Startup, 1),
+        "rts_01J4",
         [
             new PluginDto(
                 "fake-provider",
@@ -240,6 +243,10 @@ public class PluginCommandsTests
                         new PluginProblemDto("yaml_invalid", "plugin.yaml#3:1", "mapping values are not allowed here"),
                         new PluginProblemDto("id_mismatch", "id", "the manifest says 'other', the directory says 'broken'"),
                     ]),
-            ]),
+            ],
+
+            // A route is not a package, so it is not one of the candidates above; it is still a reason the
+            // reload changed nothing, and the person reading this is the person who wrote the route.
+            [new RouteProblemDto("Routes:Default", "route_plugin_unknown", "no plugin 'gone' is in the candidate set")]),
         Activated: false);
 }

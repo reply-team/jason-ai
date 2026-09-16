@@ -77,6 +77,19 @@ public sealed class HostObjectTests : IDisposable
         Assert.Equal("TypeError", harness.Caught("host.fail(" + specification + ")"));
     }
 
+    /// <summary>
+    /// A code that is lower snake_case until the newline the plugin built onto its end. The code leaves here for
+    /// the outcome document and ends up on an attempt a person reads, so the rule has to hold to the end of the
+    /// string: a plugin is a third party, and this is the door its words come through.
+    /// </summary>
+    [Fact]
+    public void A_code_that_ends_in_a_newline_is_not_lower_snake_case()
+    {
+        using var harness = Harness();
+
+        Assert.Equal("TypeError", harness.Caught("host.fail({ class: \"transient\", code: \"rate_limited\\n\", message: \"m\" })"));
+    }
+
     [Fact]
     public void External_identifiers_on_a_failure_are_bounded()
     {

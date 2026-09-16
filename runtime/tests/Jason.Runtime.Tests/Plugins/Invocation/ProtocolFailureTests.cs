@@ -242,17 +242,29 @@ public class ProtocolFailureTests
     {
         await using var api = await StartAsync(
             Child("outcome-orphan", "30000"),
-            """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"KillGraceMs":500}}}""");
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"KillGraceMs":2000}}}""");
 
         // The budget is far longer than the child needs: it writes its outcome and exits in milliseconds, so
-        // nothing here is waiting on a deadline. Only the pipes are left, and only the grace bounds them.
+        // nothing here is waiting on a deadline. Only the pipes are left, and only the grace bounds them — and
+        // because the helper holds them for the whole of it, this case always spends its grace in full. Two
+        // seconds is room for a loaded agent to get the outcome read before the settle gives up on the pipes;
+        // it is a fraction of the shipped grace, and well inside the ten seconds the settle is held to below.
         var watch = Stopwatch.StartNew();
         var call = InvokeAsync(api, TimeSpan.FromSeconds(30));
         var answered = await Task.WhenAny(call, Task.Delay(TimeSpan.FromSeconds(20), Ct)) == call;
 
         Assert.True(answered, "the invocation waited for pipes that only something the child left behind still holds");
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), $"the settle outlived the kill grace: {watch.Elapsed}");
-        var succeeded = Assert.IsType<InvocationOutcome.Succeeded>((await call).Outcome);
+
+        // A failure here says which one it was. The type mismatch alone leaves whoever reads a run that went
+        // wrong knowing only that the outcome was not a success, which is the one thing they already knew.
+        var outcome = (await call).Outcome;
+        if (outcome is InvocationOutcome.ProtocolFailure broken)
+        {
+            Assert.Fail($"the outcome the child wrote was not read back: {broken.Code} — {broken.Message}");
+        }
+
+        var succeeded = Assert.IsType<InvocationOutcome.Succeeded>(outcome);
         Assert.True(succeeded.Result!["ok"]!.GetValue<bool>());
     }
 
@@ -267,9 +279,8 @@ public class ProtocolFailureTests
         Assert.Equal(ProtocolCodes.PluginLaunchFailed, failure.Code);
         Assert.Null(result.Launch);
 
-        // The one protocol failure worth trying again: nothing ran, and the next attempt may find the program.
+        // The one protocol failure that is not even ambiguous: nothing ran, and the next attempt may find the program.
         Assert.Equal(FailureClass.Transient, OutcomeClassification.ClassOf(failure.Code));
-        Assert.True(OutcomeClassification.IsRetriable(OutcomeClassification.ClassOf(failure.Code)));
     }
 
     /// <summary>The stand-in vendor CLI, which ignores the protocol arguments the invoker appends to its own.</summary>
@@ -285,7 +296,11 @@ public class ProtocolFailureTests
                 TestPlugins.InstallFakeProvider(paths);
                 TestPlugins.Grant(paths, TestPlugins.FakeProviderId, exec: ["*"]);
             },
-            configureServices: services => services.AddSingleton(locator));
+            configureServices: services =>
+            {
+                services.AddSingleton(locator);
+                services.AddSingleton(TestPlugins.SearchPath);
+            });
 
     private static async Task<PluginInvocationResult> InvokeAsync(
         RuntimeApiFixture api,

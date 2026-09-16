@@ -33,7 +33,12 @@ public class SchemaTests
         Assert.Contains("ix_campaign_contacts_campaign_id_contact_id", indexes);
         Assert.Contains("ix_suppressions_channel_value", indexes);
 
-        Assert.Equal(["journal_no_delete", "journal_no_update", "work_items_result_frozen"], Names(connection, "SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name"));
+        Assert.Equal(
+            [
+                "attempts_provenance_valid_insert", "attempts_provenance_valid_update", "journal_no_delete", "journal_no_update",
+                "work_items_result_frozen",
+            ],
+            Names(connection, "SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name"));
     }
 
     [Fact]
@@ -60,7 +65,8 @@ public class SchemaTests
         Assert.Equal(
             [
                 "claimed_at", "command", "context_snapshot_json", "error_json", "execution_profile", "finished_at", "id",
-                "last_heartbeat_at", "launch_json", "lock_until", "number", "public_id", "started_at", "status", "work_item_id",
+                "last_heartbeat_at", "launch_json", "lock_until", "number", "provenance_json", "public_id", "started_at", "status",
+                "work_item_id",
             ],
             Sorted(connection, "SELECT name FROM pragma_table_info('attempts')"));
 

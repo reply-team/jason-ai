@@ -13,17 +13,15 @@ namespace Jason.Runtime.Tests.Plugins.Invocation;
 /// implementable" something other than an opinion.
 /// </summary>
 /// <remarks>
-/// Nothing routes a work item to a plugin yet, so the canonical input is composed here exactly as the operation
-/// document defines it, and checked against that document before it is sent. Every answer is checked back
-/// against the document too, so a result that would be refused once outcome validation is wired up fails here
-/// first, next to the code that produced it.
+/// The input is composed here rather than by a claim, so that one operation can be exercised without a work
+/// item, a route and a dispatcher behind it: it is built exactly as the operation document defines it and
+/// checked against that document before it is sent, and every answer is checked back against the document as
+/// the recorder checks it. What the spine does with those answers is <c>ProviderSpineTests</c>; this is the
+/// contract-by-contract half, next to the code that produced each answer.
 /// </remarks>
 [Collection(ProcessEnvironmentCollection.Name)]
-public class CanonicalOperationTests : IDisposable
+public class CanonicalOperationTests
 {
-    /// <summary>Where the plugin finds the stand-in vendor CLI. Its value is a path, and never a secret.</summary>
-    private const string CliVariable = "FAKE_CLI_DLL";
-
     private const string CampaignId = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
     private const string ContactId = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
     private const string WorkItemId = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
@@ -32,14 +30,6 @@ public class CanonicalOperationTests : IDisposable
     private const string ProviderList = "lst_7";
     private const string Marta = "marta@example.test";
     private const string Blocked = "blocked@example.test";
-
-    public CanonicalOperationTests() => Environment.SetEnvironmentVariable(CliVariable, FakeProviderCli.Dll);
-
-    public void Dispose()
-    {
-        Environment.SetEnvironmentVariable(CliVariable, null);
-        GC.SuppressFinalize(this);
-    }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -284,7 +274,10 @@ public class CanonicalOperationTests : IDisposable
         Assert.Equal("already_enrolled", answer["items"]!.AsArray()[0]!["status"]!.GetValue<string>());
         Assert.False(answer["campaign_live"]!.GetValue<bool>());
         Assert.Single(workspace.EnrollmentsIn(ProviderCampaign));
-        Assert.Equal(["contact ensure", "campaign enroll", "ledger get"], workspace.Calls);
+
+        // Both reads the contract names, in the order it names them: what the prior run under this key decided,
+        // and then whether the campaign is live — which is what says whether that decision was a send.
+        Assert.Equal(["contact ensure", "campaign enroll", "ledger get", "campaign get"], workspace.Calls);
     }
 
     /// <summary>
@@ -447,7 +440,7 @@ public class CanonicalOperationTests : IDisposable
     private static Task<RuntimeApiFixture> StartAsync(Action<JasonPaths>? extra = null) =>
         PluginInvokerTests.StartAsync(paths =>
         {
-            TestPlugins.Grant(paths, TestPlugins.FakeProviderId, exec: ["*"], env: ["FAKE_TOKEN", CliVariable]);
+            TestPlugins.Grant(paths, TestPlugins.FakeProviderId, exec: ["*"], env: ["FAKE_TOKEN"]);
             extra?.Invoke(paths);
         });
 }

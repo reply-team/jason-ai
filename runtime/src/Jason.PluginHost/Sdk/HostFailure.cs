@@ -192,6 +192,6 @@ public static partial class HostFailure
 
     private static int Bytes(JsonNode node) => Encoding.UTF8.GetByteCount(node.ToJsonString());
 
-    [GeneratedRegex("^[a-z][a-z0-9_]{0,63}$")]
+    [GeneratedRegex(@"^[a-z][a-z0-9_]{0,63}\z")]
     private static partial Regex CodePattern();
 }

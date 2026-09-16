@@ -1,11 +1,18 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Ids;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins;
+using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Routing;
+using Jason.Runtime.Tests.Plugins;
+using Jason.Runtime.WorkItems;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -260,6 +267,96 @@ public class ClaimerTests
     }
 
     [Fact]
+    public async Task A_routed_provider_operation_is_claimed_with_the_plan_that_will_run_it()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.get"]),
+            route: new Route("stand-in-provider", new JsonObject { ["workspace"] = "west" }, "sha256:west"));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = WorkItemFactory.NewProviderOp(campaign, now: Noon);
+        item.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject { ["campaign"] = new JsonObject { ["external_id"] = "c-7714" } },
+        };
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Equal(WorkItemStatus.Scheduled, item.Status);
+        var plan = work.Plan;
+        Assert.NotNull(plan);
+        Assert.Equal("campaign.get", plan.Contract.Id);
+        Assert.Equal("stand-in-provider", plan.Plugin.Manifest.Id);
+        Assert.Equal(RouteScope.GlobalDefault, plan.Scope);
+        Assert.Equal("sha256:west", plan.BindingIdentity);
+        Assert.Equal("c-7714", (string?)plan.Input["args"]!["campaign"]!["external_id"]);
+        Assert.Equal(campaign.PublicId, (string?)plan.Input["campaign"]!["id"]);
+    }
+
+    /// <summary>
+    /// The pins are read inside the claim and they decide the claim: this item names the campaign by nothing but
+    /// the identifier Jason already holds, so an unread pin would fail it for an input that is in fact complete.
+    /// What another plugin calls the same campaign never travels.
+    /// </summary>
+    [Fact]
+    public async Task The_plan_carries_the_routed_plugin_s_identifiers_and_no_other_plugin_s()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.get"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        campaign.ExternalIds.Add(Pin("stand-in-provider", "c-7714"));
+        campaign.ExternalIds.Add(Pin("other-provider", "OTHER-1"));
+        db.Campaigns.Add(campaign);
+        db.WorkItems.Add(WorkItemFactory.NewProviderOp(campaign, now: Noon));
+        await db.SaveChangesAsync(Ct);
+
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        var identifiers = work.Plan!.Input["campaign"]!["external_ids"]!.AsObject();
+        Assert.Equal("c-7714", (string?)identifiers["campaign"]);
+        Assert.Single(identifiers);
+    }
+
+    /// <summary>The composed input is validated as a whole, and an item it refuses never reaches a child.</summary>
+    [Fact]
+    public async Task A_provider_operation_whose_composed_input_is_refused_fails_before_anything_starts()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.get"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+
+        // Nothing names the provider's campaign: no argument, and no pin either.
+        var item = WorkItemFactory.NewProviderOp(campaign, now: Noon);
+        item.Context = new JsonObject { ["note"] = "what the planner wrote" };
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var attempt = await fresh.Attempts.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(AttemptErrors.InputInvalid, attempt.Error!.Code);
+        Assert.Equal(FailureClass.Validation, attempt.Error.Class);
+        Assert.False(attempt.Error.Retriable);
+        Assert.Equal("/", Assert.Single(attempt.Error.Details!).Field);
+        Assert.Null(attempt.Launch);
+
+        // The attempt is kept, and it is kept with what the item said at the moment it was refused.
+        Assert.Equal("what the planner wrote", (string?)attempt.ContextSnapshot["note"]);
+    }
+
+    [Fact]
     public async Task A_role_nothing_can_launch_fails_closed_and_says_where_to_configure_it()
     {
         using var harness = new Harness();
@@ -350,6 +447,15 @@ public class ClaimerTests
         await transaction.RollbackAsync(Ct);
     }
 
+    private static ExternalId Pin(string pluginId, string value) => new()
+    {
+        PluginId = pluginId,
+        Kind = "campaign",
+        Value = value,
+        RecordedAt = Noon,
+        RecordedByAttemptId = PublicId.New("att"),
+    };
+
     private static async Task GiveRoleAsync(JasonDbContext db, string name, params string[] entryCommand)
     {
         var role = await db.Roles.SingleAsync(r => r.Name == name, Ct);
@@ -360,16 +466,43 @@ public class ClaimerTests
     {
         private readonly TempDataDir _dir = new();
 
-        public Harness(Action<DispatcherOptions>? dispatcher = null, RolesOptions? roles = null)
+        public Harness(
+            Action<DispatcherOptions>? dispatcher = null,
+            RolesOptions? roles = null,
+            LoadedPlugin? plugin = null,
+            Route? route = null)
         {
             var clock = new FixedClock(Noon);
             var options = TestOptions.Dispatcher(dispatcher);
             var journal = new JournalWriter(clock);
+            var plugins = new PluginRegistry(clock);
+            if (plugin is not null)
+            {
+                plugins.Replace(
+                    new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Noon, SnapshotSource.Startup, [plugin]),
+                    new ReloadReport(Noon, SnapshotSource.Startup, Activated: true, [], []));
+            }
+
+            var routing = new RouteRegistry(clock, plugins);
+            if (route is not null)
+            {
+                routing.Replace(new RouteSnapshot(
+                    PublicId.New(RouteSnapshot.IdPrefix),
+                    Noon,
+                    plugins.Snapshot.Id,
+                    new RouteSet(route, RouteSet.Empty.Operations),
+                    RouteSnapshot.Empty(Noon, plugins.Snapshot.Id).Campaigns));
+            }
+
             Claimer = new Claimer(
                 journal,
                 clock,
                 new AttemptOutcomes(journal, clock, options),
                 new EntryCommandResolver(new TestOptionsMonitor<RolesOptions>(roles ?? new RolesOptions())),
+                plugins,
+                routing,
+                new ExternalIdStore(journal, clock),
+                new NothingIsSuppressed(),
                 options,
                 _dir.Paths,
                 NullLogger<Claimer>.Instance);
@@ -380,5 +513,12 @@ public class ClaimerTests
         public Claimer Claimer { get; }
 
         public void Dispose() => _dir.Dispose();
+
+        /// <summary>The register these tests are not about; the suppression check itself is tested where it lives.</summary>
+        private sealed class NothingIsSuppressed : ISuppressionCheck
+        {
+            public Task<bool> IsSuppressedAsync(JasonDbContext db, string channel, string value, CancellationToken cancellationToken) =>
+                Task.FromResult(false);
+        }
     }
 }

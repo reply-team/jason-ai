@@ -83,4 +83,39 @@ public class ContactEndpointTests
             TestContext.Current.CancellationToken);
         Assert.NotNull(archived.ArchivedAt);
     }
+
+    /// <summary>
+    /// A pin is what a plugin answered with, recorded by the attempt that ran it. Nothing a caller sends writes
+    /// one: the field is simply not part of the request, so it is read past like any other property the runtime
+    /// does not know — the update succeeds, and the contact still has no identifiers afterwards.
+    /// </summary>
+    [Fact]
+    public async Task No_request_field_writes_a_pin()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(TestContext.Current.CancellationToken);
+        var created = await fixture.PostOkAsync<ContactDto>(
+            Operations.ContactCreate,
+            new { first_name = "Ada" },
+            TestContext.Current.CancellationToken);
+        Assert.Empty(created.ExternalIds);
+
+        var updated = await fixture.PostOkAsync<ContactDto>(
+            Operations.ContactUpdate,
+            new
+            {
+                contact_id = created.Id,
+                company = "Analytical Engines",
+                external_ids = new[]
+                {
+                    new { plugin_id = "fake-provider", kind = "contact", value = "forged", recorded_by_attempt_id = "att_forged" },
+                },
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("Analytical Engines", updated.Company);
+        Assert.Empty(updated.ExternalIds);
+
+        var fetched = await fixture.PostOkAsync<ContactDto>(Operations.ContactGet, new { contact_id = created.Id }, TestContext.Current.CancellationToken);
+        Assert.Empty(fetched.ExternalIds);
+    }
 }

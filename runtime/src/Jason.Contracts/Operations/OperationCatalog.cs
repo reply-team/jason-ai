@@ -25,6 +25,14 @@ public static class OperationCatalog
     public static IReadOnlyList<OperationContract> All { get; } =
         [.. ByIdentifier.Values.OrderBy(contract => contract.Id, StringComparer.Ordinal)];
 
+    /// <summary>
+    /// The published operation with the largest budget — the one every budget an installation configures has to
+    /// be able to hold, and the reason a setting can be refused for a number nobody wrote into it. Null only if
+    /// a build published nothing at all. Ties go to the first id, because <see cref="All"/> is already settled.
+    /// </summary>
+    public static OperationContract? Slowest { get; } =
+        All.OrderByDescending(contract => contract.TimeoutMs).FirstOrDefault();
+
     /// <summary>The contract for one operation, or null when nothing of that name is published.</summary>
     public static OperationContract? Find(string operation)
     {

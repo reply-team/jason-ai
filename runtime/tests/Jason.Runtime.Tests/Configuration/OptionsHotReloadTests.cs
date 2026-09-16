@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
 using Jason.Runtime.Hosting;
@@ -52,6 +53,34 @@ public class OptionsHotReloadTests
         }
 
         Assert.Equal(["A", "B"], monitor.CurrentValue.Grants["fake"].Env);
+    }
+
+    /// <summary>
+    /// Routes are read rather than bound, so the change token is registered by hand; this is what says the hand
+    /// did it. A route still only takes effect when a reload freezes it — what must reach a running runtime is
+    /// the edited file, so that the reload has something new to freeze.
+    /// </summary>
+    [Fact]
+    public async Task An_edited_route_is_seen_by_the_runtime_that_will_freeze_it_at_the_next_reload()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Routes":{"Default":{"Plugin":"fake-provider","Binding":{"workspace":"west"}}}}"""));
+
+        var monitor = fixture.Runtime.Services.GetRequiredService<IOptionsMonitor<RoutesOptions>>();
+        Assert.Equal("fake-provider", monitor.CurrentValue.Default!.Plugin);
+        Assert.Equal("west", (string?)Assert.IsType<JsonObject>(monitor.CurrentValue.Default.Binding)["workspace"]);
+
+        File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Routes":{"Default":{"Plugin":"other-provider"}}}""");
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (monitor.CurrentValue.Default!.Plugin != "other-provider" && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(25, Ct);
+        }
+
+        Assert.Equal("other-provider", monitor.CurrentValue.Default!.Plugin);
+        Assert.Null(monitor.CurrentValue.Default.Binding);
     }
 
     [Fact]

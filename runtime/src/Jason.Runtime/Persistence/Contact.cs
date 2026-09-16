@@ -34,6 +34,9 @@ public sealed class Contact
     public DateTime? ArchivedAt { get; set; }
 
     public List<ContactChannel> Channels { get; } = [];
+
+    /// <summary>What plugins call this person. Loaded wherever the contact is answered with, so an empty list means none.</summary>
+    public List<ExternalId> ExternalIds { get; } = [];
 }
 
 /// <summary>One way to reach a contact. A child table rather than a JSON array: matching and suppression look up (channel, value).</summary>

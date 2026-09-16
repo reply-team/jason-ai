@@ -6,6 +6,7 @@ using Jason.Contracts.Plugins;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Routing;
 using Microsoft.Extensions.Logging;
 
 namespace Jason.Runtime.Plugins.Registry;
@@ -20,6 +21,8 @@ public sealed class PluginService(
     JournalWriter journal,
     PluginRegistry registry,
     PluginLoader loader,
+    RouteRegistry routes,
+    RouteActivator activator,
     ReloadGate gate,
     ILogger<PluginService> logger)
 {
@@ -36,7 +39,7 @@ public sealed class PluginService(
         "Plugin reload rejected with {Problems} problems; the previous snapshot stays active");
 
     public PluginRegistryDto List() =>
-        PluginMapper.ToDto(registry.Snapshot, registry.LastReload, registry.LastReload?.Activated ?? true);
+        PluginMapper.ToDto(registry.Snapshot, routes.Snapshot.Id, registry.LastReload, registry.LastReload?.Activated ?? true);
 
     public async Task<PluginRegistryDto> ReloadAsync(PluginReloadRequest request, CancellationToken cancellationToken)
     {
@@ -60,20 +63,26 @@ public sealed class PluginService(
             {
                 // The previous snapshot stays: a partly working registry would hide the problem, and the fix is
                 // always the same — repair the package and reload again.
-                registry.Record(load.Report);
-                var details = PluginMapper.ToDetails(load.Report);
-                Rejected(logger, details.Count, null);
-                throw DomainErrors.PluginReloadRejected(details);
+                throw Reject(load.Report);
+            }
+
+            // Every route is checked against the candidate plugin set before either registry is touched, so a
+            // route naming a plugin this load does not have keeps both snapshots exactly where they were.
+            var candidate = await activator.BuildAsync(load.Snapshot, GlobalRouteSource.FromSettings, cancellationToken).ConfigureAwait(false);
+            if (candidate.Snapshot is null)
+            {
+                throw Reject(load.Report with { Activated = false, Routes = candidate.Problems });
             }
 
             // The record first, the swap second: the swap is in memory and cannot fail, the save can. A reload that
             // could not be written down leaves the previous snapshot active and is simply repeated, instead of a new
             // snapshot running with no trace of when it began.
-            JournalActivation(journal, db, actor, load.Snapshot, reason);
+            JournalActivation(journal, db, actor, load.Snapshot, candidate.Snapshot, reason);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             registry.Replace(load.Snapshot, load.Report);
+            activator.Activate(candidate.Snapshot);
             Activated(logger, load.Snapshot.Id, load.Snapshot.Plugins.Count, reason, null);
-            return PluginMapper.ToDto(load.Snapshot, load.Report, activated: true);
+            return PluginMapper.ToDto(load.Snapshot, candidate.Snapshot.Id, load.Report, activated: true);
         }
         finally
         {
@@ -82,13 +91,32 @@ public sealed class PluginService(
     }
 
     /// <summary>
+    /// A load that will change nothing: the report is kept so that <c>plugin.list</c> can say why, and the
+    /// problems are answered to the caller. Both halves of the registry stay exactly as they were.
+    /// </summary>
+    private DomainException Reject(ReloadReport report)
+    {
+        registry.Record(report);
+        var details = PluginMapper.ToDetails(report);
+        Rejected(logger, details.Count, null);
+        return DomainErrors.PluginReloadRejected(details);
+    }
+
+    /// <summary>
     /// One global entry per activated snapshot, shared with the load at startup. It is the audit trail that
     /// invocation pinning leans on: which package, at which digest, was active when.
     /// </summary>
-    public static void JournalActivation(JournalWriter journal, JasonDbContext db, ActorRef actor, PluginSnapshot snapshot, string? reason)
+    public static void JournalActivation(
+        JournalWriter journal,
+        JasonDbContext db,
+        ActorRef actor,
+        PluginSnapshot snapshot,
+        RouteSnapshot routes,
+        string? reason)
     {
         ArgumentNullException.ThrowIfNull(journal);
         ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(routes);
 
         var plugins = new JsonArray();
         foreach (var plugin in snapshot.Plugins)
@@ -113,6 +141,16 @@ public sealed class PluginService(
                 ["snapshot_id"] = snapshot.Id,
                 ["source"] = SnakeCase.Convert(snapshot.Source.ToString()),
                 ["plugins"] = plugins,
+
+                // The routes the same act froze. Which package was active when is only half of "what was
+                // running": the other half is where each operation was being sent.
+                ["routes"] = new JsonObject
+                {
+                    ["snapshot_id"] = routes.Id,
+                    ["global_default"] = routes.Global.Default?.PluginId,
+                    ["override_count"] = routes.Global.Operations.Count,
+                    ["campaign_route_count"] = routes.Campaigns.Values.Sum(set => set.Operations.Count + (set.Default is null ? 0 : 1)),
+                },
             },
             reason: reason);
     }

@@ -11,9 +11,9 @@ public static class ErrorResults
     /// <summary>
     /// How many field problems one answer lists. A body wrong in twenty thousand places is wrong for one reason,
     /// and answering with twenty thousand pointers spends megabytes to say it: the first fifty show the shape of
-    /// the mistake, and the message says how many more there were. The bound is here, where the answer is written,
-    /// rather than in the validator — a caller fixing its arguments still wants every problem it can act on, and
-    /// what has to be bounded is the size of one HTTP response.
+    /// the mistake. The bound is here, where the answer is written, rather than in the validator — a caller fixing
+    /// its arguments still wants every problem it can act on, and what has to be bounded is the size of one HTTP
+    /// response.
     /// </summary>
     public const int MaxDetails = 50;
 
@@ -26,9 +26,11 @@ public static class ErrorResults
         if (details is not null && details.Count > MaxDetails)
         {
             listed = [.. details.Take(MaxDetails)];
-            message = string.Create(
-                CultureInfo.InvariantCulture,
-                $"{message} The first {MaxDetails} problems are listed; {details.Count - MaxDetails} more are not.");
+
+            // How many there were is already in the message the exception composed. Saying it again from a
+            // different starting point — the details array rather than the sentence — put two counts of the same
+            // thing side by side, disagreeing, and left a reader working out which was which.
+            message = string.Create(CultureInfo.InvariantCulture, $"{message} Of those, only the first {MaxDetails} are listed here.");
         }
 
         return context.Response.WriteAsJsonAsync(new ErrorResponse(new ErrorBody(code, message, retryable, listed)), JasonJson.Options);

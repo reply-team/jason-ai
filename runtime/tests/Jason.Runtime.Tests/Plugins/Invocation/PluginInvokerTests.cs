@@ -180,12 +180,10 @@ public class PluginInvokerTests
         var failed = Assert.IsType<InvocationOutcome.Failed>(transient.Outcome);
         Assert.Equal(FailureClass.Transient, failed.Error.Class);
         Assert.Equal("rate_limited", failed.Error.Code);
-        Assert.True(OutcomeClassification.IsRetriable(failed.Error.Class));
         Assert.Equal(0, transient.Launch!.ExitCode);
 
         var unsure = Assert.IsType<InvocationOutcome.Failed>(ambiguous.Outcome);
         Assert.Equal(FailureClass.Ambiguous, unsure.Error.Class);
-        Assert.False(OutcomeClassification.IsRetriable(unsure.Error.Class));
     }
 
     [Fact]
@@ -200,7 +198,7 @@ public class PluginInvokerTests
         // A reload lands between the decision and the attempt, and this one leaves nothing installed at all.
         registry.Replace(
             PluginSnapshot.Empty(DateTime.UtcNow, SnapshotSource.Reload),
-            new ReloadReport(DateTime.UtcNow, SnapshotSource.Reload, Activated: true, []));
+            new ReloadReport(DateTime.UtcNow, SnapshotSource.Reload, Activated: true, [], []));
 
         var result = await InvokeAsync(api, Request("echo.run", new JsonObject { ["hello"] = "world" }) with { Pinned = pinned }, Ct);
 
@@ -277,7 +275,7 @@ public class PluginInvokerTests
         await using var api = await StartAsync(paths => TestPlugins.Write(
             paths,
             "ungranted",
-            TestPlugins.Manifest("ungranted", operations: "[exec.run]", extra: "capabilities:\n  exec:\n    executables:\n      - name: dotnet\n"),
+            TestPlugins.Manifest("ungranted", operations: "[exec.run]", extra: $"capabilities:\n  exec:\n    executables:\n      - name: {FakeProviderCli.ExecutableName}\n"),
             "export function invoke(operation, input) { return { result: host.exec({ executable: input.executable, args: input.args }) }; }"));
 
         var result = await InvokeAsync(api, Request("exec.run", Exec(TokenVariable), plugin: "ungranted"), Ct);
@@ -338,6 +336,33 @@ public class PluginInvokerTests
         var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
         Assert.Equal(ProtocolCodes.PluginInvocationRejected, failure.Code);
         Assert.Contains("digest_mismatch", failure.StderrTail!, StringComparison.Ordinal);
+        Assert.Equal(3, result.Launch!.ExitCode);
+        Assert.Equal(FailureClass.Permanent, OutcomeClassification.ClassOf(failure.Code));
+    }
+
+    /// <summary>
+    /// A pin says which package runs, and between the decision and the child there is a filesystem. The child
+    /// recomputes what it was told to run before running any of it, so a package that has gone missing since is
+    /// refused there rather than half-run — and the runtime reports it as a rejection, not as an answer.
+    /// </summary>
+    [Fact]
+    public async Task A_pinned_package_that_is_gone_by_the_time_the_child_starts_is_refused_by_the_child()
+    {
+        await using var api = await StartAsync();
+        PinnedPlugin pinned;
+        using (var scope = api.Runtime.Services.CreateScope())
+        {
+            var snapshot = scope.ServiceProvider.GetRequiredService<PluginRegistry>().Snapshot;
+            pinned = new PinnedPlugin(snapshot.Find(TestPlugins.FakeProviderId)!, snapshot.Id);
+        }
+
+        Directory.Delete(api.Paths.PluginPackageDirectory(TestPlugins.FakeProviderId), recursive: true);
+
+        var result = await InvokeAsync(api, Request("echo.run", new JsonObject()) with { Pinned = pinned }, Ct);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginInvocationRejected, failure.Code);
+        Assert.Contains("package_root_missing", failure.StderrTail!, StringComparison.Ordinal);
         Assert.Equal(3, result.Launch!.ExitCode);
         Assert.Equal(FailureClass.Permanent, OutcomeClassification.ClassOf(failure.Code));
     }
@@ -425,12 +450,16 @@ public class PluginInvokerTests
                 File.WriteAllText(paths.UserSettingsFile, settings ?? RuntimeApiFixture.DispatcherOff);
                 TestPlugins.InstallFakeProvider(paths);
 
-                // The fixture declares dotnet, which the machine running these tests has by definition; the
-                // search path is the real one, because host.exec has to start a real program.
+                // The fixture declares the stand-in vendor CLI by its own name, and host.exec has to start a
+                // real program, so the search path is the real one with that program's directory in front.
                 TestPlugins.Grant(paths, TestPlugins.FakeProviderId, exec: ["*"], env: [TokenVariable]);
                 extra?.Invoke(paths);
             },
-            configureServices: services => services.AddSingleton<IPluginHostLocator>(new JasonDllLocator()));
+            configureServices: services =>
+            {
+                services.AddSingleton<IPluginHostLocator>(new JasonDllLocator());
+                services.AddSingleton(TestPlugins.SearchPath);
+            });
 
     internal static async Task<PluginInvocationResult> InvokeAsync(
         RuntimeApiFixture api,
@@ -451,8 +480,8 @@ public class PluginInvokerTests
 
     private static JsonObject Exec(string variable) => new()
     {
-        ["executable"] = "dotnet",
-        ["args"] = new JsonArray(FakeProviderCli.Dll, "print-env", variable),
+        ["executable"] = FakeProviderCli.ExecutableName,
+        ["args"] = new JsonArray("print-env", variable),
     };
 
     private static string Stdout(PluginInvocationResult result) =>

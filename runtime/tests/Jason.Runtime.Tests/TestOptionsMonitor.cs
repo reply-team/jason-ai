@@ -22,4 +22,12 @@ public static class TestOptions
         configure?.Invoke(options);
         return new TestOptionsMonitor<DispatcherOptions>(options);
     }
+
+    /// <summary>Plugin options with the shipped defaults, adjusted by the test.</summary>
+    public static TestOptionsMonitor<PluginsOptions> Plugins(Action<PluginsOptions>? configure = null)
+    {
+        var options = new PluginsOptions();
+        configure?.Invoke(options);
+        return new TestOptionsMonitor<PluginsOptions>(options);
+    }
 }

@@ -22,7 +22,7 @@ public class PluginContractsShapeTests
         new JsonObject { ["value"] = "hello" },
         new InvocationContext(new JsonObject { ["account"] = "a1" }, "att_01J", 2, "wi_01J", "cmp_01J", "0.1.0"),
         new InvocationGrants(
-            new ExecGrants([new ExecutableGrant("reply", "/usr/local/bin/reply")]),
+            new ExecGrants([new ExecutableGrant("provider-cli", "/usr/local/bin/provider-cli")]),
             new HttpGrants(["api.example.test"]),
             new EnvGrants(["EXAMPLE_TOKEN"])),
         new InvocationLimits(60_000, 67_108_864, 10_000_000, 64, new ExecLimits(4_194_304, 64), new HttpLimits(4_194_304, 1_048_576, 64, 30_000), new LogLimits(16_384, 4_194_304)));
@@ -47,7 +47,7 @@ public class PluginContractsShapeTests
         Assert.Contains("\"kind\":\"provider\"", json, StringComparison.Ordinal);
         Assert.Contains("\"attempt_number\":2", json, StringComparison.Ordinal);
         Assert.Contains("\"runtime_version\":\"0.1.0\"", json, StringComparison.Ordinal);
-        Assert.Contains("\"executables\":[{\"name\":\"reply\",\"path\":\"/usr/local/bin/reply\"}]", json, StringComparison.Ordinal);
+        Assert.Contains("\"executables\":[{\"name\":\"provider-cli\",\"path\":\"/usr/local/bin/provider-cli\"}]", json, StringComparison.Ordinal);
         Assert.Contains("\"output_bytes\":4194304", json, StringComparison.Ordinal);
         Assert.Contains("\"memory_bytes\":67108864", json, StringComparison.Ordinal);
     }
@@ -65,7 +65,7 @@ public class PluginContractsShapeTests
         Assert.Equal("hello", back.Input["value"]!.GetValue<string>());
         Assert.Equal("a1", back.Context.Binding!["account"]!.GetValue<string>());
         Assert.Equal(2, back.Context.AttemptNumber);
-        Assert.Equal("/usr/local/bin/reply", back.Grants.Exec!.Executables[0].Path);
+        Assert.Equal("/usr/local/bin/provider-cli", back.Grants.Exec!.Executables[0].Path);
         Assert.Equal(30_000, back.Limits.Http.TimeoutMs);
     }
 
@@ -132,20 +132,21 @@ public class PluginContractsShapeTests
     {
         var dto = new PluginRegistryDto(
             new SnapshotDto("snp_01J", DateTimeOffset.UnixEpoch, SnapshotSource.Startup, 1),
+            "rts_01J",
             [
                 new PluginDto("fake-provider", "1.0.0", PluginKind.Provider, "Fake provider", null, null, "/packages/fake-provider", "sha256:ab",
                     new PluginContractsDto([1], [1]), ["echo.run"], new PluginEntry("main.js", "invoke"),
                     new PluginCapabilitiesDto(
-                        new ExecCapabilityDto([new ExecutableDto("reply", null, null, "0.4.0")], []),
+                        new ExecCapabilityDto([new ExecutableDto("provider-cli", null, null, "0.4.0")], []),
                         new ListCapabilityDto(["api.example.test"], []),
                         null),
                     new PluginLimitsDto(60_000, 64),
                     new JsonObject { ["type"] = "object" },
                     PluginStatus.Unavailable,
-                    [new PluginProblemDto("executable_missing", "plugin.yaml#capabilities.exec.executables[0]", "reply was not found")])
+                    [new PluginProblemDto("executable_missing", "plugin.yaml#capabilities.exec.executables[0]", "provider-cli was not found")])
             ],
             new ReloadReportDto(DateTimeOffset.UnixEpoch, SnapshotSource.Startup, true,
-                [new CandidateDto("fake-provider", "fake-provider", CandidateStatus.Unavailable, [])]),
+                [new CandidateDto("fake-provider", "fake-provider", CandidateStatus.Unavailable, [])], []),
             Activated: true);
 
         var json = JsonSerializer.Serialize(dto, JasonJson.Options);
@@ -171,18 +172,21 @@ public class PluginContractsShapeTests
     }
 
     [Fact]
-    public void System_info_carries_a_plugins_section()
+    public void System_info_carries_a_plugins_section_and_the_routes_frozen_beside_it()
     {
         var info = new SystemInfoResponse(
             "0.1.0", ApiVersion.Current, "rt_01J", 1234, DateTimeOffset.UnixEpoch, "/data",
             new DatabaseInfo([]),
             new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0),
-            new PluginsInfo(1, "snp_01J", DateTimeOffset.UnixEpoch, true));
+            new PluginsInfo(1, "snp_01J", DateTimeOffset.UnixEpoch, true),
+            new RoutesInfo("rts_01J", DateTimeOffset.UnixEpoch, "a-provider", 2, 3));
 
         var json = JsonSerializer.Serialize(info, JasonJson.Options);
 
         Assert.Contains("\"plugins\":{\"active_count\":1,\"snapshot_id\":\"snp_01J\"", json, StringComparison.Ordinal);
         Assert.Contains("\"last_reload_activated\":true", json, StringComparison.Ordinal);
+        Assert.Contains("\"routes\":{\"snapshot_id\":\"rts_01J\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"global_default_plugin\":\"a-provider\",\"global_override_count\":2,\"campaign_route_count\":3", json, StringComparison.Ordinal);
     }
 
     [Fact]

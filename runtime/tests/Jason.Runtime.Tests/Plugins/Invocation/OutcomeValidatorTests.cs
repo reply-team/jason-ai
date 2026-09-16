@@ -128,6 +128,21 @@ public class OutcomeValidatorTests
         Assert.Contains("Rate-Limited", problem, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A code that is snake_case right up to a newline at its end. The code is classified, stored on the attempt
+    /// and read back by a person, and it comes from a program the user installed: the pattern has to end at the
+    /// end of the text rather than one character earlier, or the code a manager reads is not the code that was
+    /// checked.
+    /// </summary>
+    [Fact]
+    public void A_code_carrying_a_newline_at_its_end_is_refused()
+    {
+        var document = Document(status: "failed", error: Error(code: "rate_limited\n"));
+
+        Assert.False(OutcomeValidator.TryValidate(document, Expected, out _, out var problem));
+        Assert.Contains("error.code", problem, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void A_message_longer_than_the_protocol_allows_is_refused()
     {

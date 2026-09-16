@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
 using Jason.Contracts.Json;
+using Jason.Contracts.Plugins;
 
 namespace Jason.Contracts.Tests;
 
@@ -26,9 +27,9 @@ public class ContractsShapeTests
     [Fact]
     public void Campaign_dto_serializes_with_inline_context_and_snake_case_status()
     {
-        var dto = new CampaignDto("cmp_A", "LatAm", CampaignStatus.Draft, new JsonObject { ["icp"] = "founders" }, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, null);
+        var dto = new CampaignDto("cmp_A", "LatAm", CampaignStatus.Draft, new JsonObject { ["icp"] = "founders" }, [], DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, null);
         var json = JsonSerializer.Serialize(dto, JasonJson.Options);
-        Assert.Equal("{\"id\":\"cmp_A\",\"name\":\"LatAm\",\"status\":\"draft\",\"context\":{\"icp\":\"founders\"},\"created_at\":\"1970-01-01T00:00:00.000Z\",\"updated_at\":\"1970-01-01T00:00:00.000Z\",\"archived_at\":null}", json);
+        Assert.Equal("{\"id\":\"cmp_A\",\"name\":\"LatAm\",\"status\":\"draft\",\"context\":{\"icp\":\"founders\"},\"external_ids\":[],\"created_at\":\"1970-01-01T00:00:00.000Z\",\"updated_at\":\"1970-01-01T00:00:00.000Z\",\"archived_at\":null}", json);
     }
 
     [Fact]
@@ -96,6 +97,26 @@ public class ContractsShapeTests
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<WorkItemStatus>("3", JasonJson.Options));
     }
 
+    /// <summary>
+    /// The four levels a route can be decided at, in order of specificity. They live in the contracts because
+    /// both a resolution and an attempt's provenance say which one answered.
+    /// </summary>
+    [Fact]
+    public void The_route_scopes_are_snake_case_strings_in_both_directions()
+    {
+        Assert.Equal("\"campaign_operation\"", JsonSerializer.Serialize(RouteScope.CampaignOperation, JasonJson.Options));
+        Assert.Equal("\"campaign_default\"", JsonSerializer.Serialize(RouteScope.CampaignDefault, JasonJson.Options));
+        Assert.Equal("\"global_operation\"", JsonSerializer.Serialize(RouteScope.GlobalOperation, JasonJson.Options));
+        Assert.Equal("\"global_default\"", JsonSerializer.Serialize(RouteScope.GlobalDefault, JasonJson.Options));
+        Assert.Equal(RouteScope.GlobalDefault, JsonSerializer.Deserialize<RouteScope>("\"global_default\"", JasonJson.Options));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<RouteScope>("0", JasonJson.Options));
+
+        // Most specific first, so that a comparison is the precedence rather than a second copy of it.
+        Assert.Equal(
+            [RouteScope.CampaignOperation, RouteScope.CampaignDefault, RouteScope.GlobalOperation, RouteScope.GlobalDefault],
+            Enum.GetValues<RouteScope>());
+    }
+
     [Fact]
     public void A_work_item_patch_tells_an_absent_field_from_an_explicit_null()
     {
@@ -139,6 +160,23 @@ public class ContractsShapeTests
         Assert.Contains(
             "\"trace\":\"exit 3\"",
             JsonSerializer.Serialize(new AttemptErrorDto("executor_exited", "m", true, "exit 3"), JasonJson.Options),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Only a failure somebody classified carries a class, so an agent attempt serialises exactly as it always
+    /// has: the field says "a plugin told us what kind of failure this was", and silence is not a fifth class.
+    /// </summary>
+    [Fact]
+    public void An_attempt_error_names_a_failure_class_only_when_one_was_established()
+    {
+        Assert.DoesNotContain(
+            "\"class\"",
+            JsonSerializer.Serialize(new AttemptErrorDto("lease_expired", "m", true), JasonJson.Options),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"class\":\"ambiguous\"",
+            JsonSerializer.Serialize(new AttemptErrorDto("provider_unavailable", "m", false, Class: FailureClass.Ambiguous), JasonJson.Options),
             StringComparison.Ordinal);
     }
 

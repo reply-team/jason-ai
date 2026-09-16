@@ -228,7 +228,7 @@ public class CampaignCommandsTests
     public async Task Human_mode_renders_one_campaign()
     {
         var campaign = JsonSerializer.Serialize(
-            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, Moment, Moment, null),
+            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, [], Moment, Moment, null),
             JasonJson.Options);
         using var cli = new CliRun(campaign);
 
@@ -271,6 +271,7 @@ public class CampaignCommandsTests
             "Mathematician",
             "Europe/Kyiv",
             [new ChannelDto("email", "ada@example.com", null, true, null)],
+            [],
             [],
             Moment,
             Moment,

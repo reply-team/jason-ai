@@ -70,6 +70,10 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("number");
 
+                    b.Property<string>("Provenance")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("provenance_json");
+
                     b.Property<string>("PublicId")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -218,6 +222,54 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.ToTable("campaign_contacts");
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.CampaignRoute", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Binding")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("binding_json");
+
+                    b.Property<int>("CampaignId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("campaign_id");
+
+                    b.Property<string>("Operation")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("operation");
+
+                    b.Property<string>("PluginId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("plugin_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_campaign_routes");
+
+                    b.HasIndex("CampaignId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_campaign_routes_one_default_per_campaign")
+                        .HasFilter("operation IS NULL");
+
+                    b.HasIndex("CampaignId", "Operation")
+                        .IsUnique()
+                        .HasDatabaseName("ix_campaign_routes_campaign_id_operation");
+
+                    b.ToTable("campaign_routes", t =>
+                        {
+                            t.HasCheckConstraint("ck_campaign_routes_binding_json", "binding_json IS NULL OR json_valid(binding_json)");
+                        });
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.Contact", b =>
                 {
                     b.Property<int>("Id")
@@ -342,6 +394,80 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.ToTable("contact_channels", t =>
                         {
                             t.HasCheckConstraint("ck_contact_channels_data_json", "data_json IS NULL OR json_valid(data_json)");
+                        });
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.ExternalId", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<int?>("CampaignId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("campaign_id");
+
+                    b.Property<int?>("ContactId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("contact_id");
+
+                    b.Property<DateTime?>("DivergedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("diverged_at");
+
+                    b.Property<string>("DivergedByAttemptId")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("diverged_by_attempt_id");
+
+                    b.Property<string>("DivergedValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("diverged_value");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("PluginId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("plugin_id");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("recorded_at");
+
+                    b.Property<string>("RecordedByAttemptId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("recorded_by_attempt_id");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id")
+                        .HasName("pk_external_ids");
+
+                    b.HasIndex("CampaignId", "PluginId", "Kind")
+                        .IsUnique()
+                        .HasDatabaseName("ix_external_ids_campaign_id_plugin_id_kind");
+
+                    b.HasIndex("ContactId", "PluginId", "Kind")
+                        .IsUnique()
+                        .HasDatabaseName("ix_external_ids_contact_id_plugin_id_kind");
+
+                    b.ToTable("external_ids", t =>
+                        {
+                            t.HasCheckConstraint("ck_external_ids_one_entity", "(contact_id IS NOT NULL AND campaign_id IS NULL) OR (contact_id IS NULL AND campaign_id IS NOT NULL)");
                         });
                 });
 
@@ -739,6 +865,18 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Navigation("Contact");
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.CampaignRoute", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.Campaign", "Campaign")
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_campaign_routes_campaigns_campaign_id");
+
+                    b.Navigation("Campaign");
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.ContactChannel", b =>
                 {
                     b.HasOne("Jason.Runtime.Persistence.Contact", "Contact")
@@ -747,6 +885,25 @@ namespace Jason.Runtime.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_contact_channels_contacts_contact_id");
+
+                    b.Navigation("Contact");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.ExternalId", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.Campaign", "Campaign")
+                        .WithMany("ExternalIds")
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_external_ids_campaigns_campaign_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.Contact", "Contact")
+                        .WithMany("ExternalIds")
+                        .HasForeignKey("ContactId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_external_ids_contacts_contact_id");
+
+                    b.Navigation("Campaign");
 
                     b.Navigation("Contact");
                 });
@@ -784,12 +941,16 @@ namespace Jason.Runtime.Persistence.Migrations
 
             modelBuilder.Entity("Jason.Runtime.Persistence.Campaign", b =>
                 {
+                    b.Navigation("ExternalIds");
+
                     b.Navigation("Members");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.Contact", b =>
                 {
                     b.Navigation("Channels");
+
+                    b.Navigation("ExternalIds");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.WorkItem", b =>

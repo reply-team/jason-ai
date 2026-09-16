@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Domain;
@@ -137,5 +138,22 @@ public class JournalWriterTests
         Assert.False(JournalKinds.IsWellFormed("_leading"));
         Assert.False(JournalKinds.IsWellFormed(string.Empty));
         Assert.False(JournalKinds.IsWellFormed(new string('a', 65)));
+    }
+
+    /// <summary>
+    /// The rule behind the list above: a kind the runtime names is a kind no caller may write. A constant added
+    /// without its <c>Reserved</c> entry would let a caller forge the runtime's own record through journal.append.
+    /// </summary>
+    [Fact]
+    public void Every_kind_the_runtime_names_is_reserved()
+    {
+        var named = typeof(JournalKinds)
+            .GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)
+            .Where(field => field is { IsLiteral: true, IsInitOnly: false } && field.FieldType == typeof(string))
+            .Select(field => (string)field.GetRawConstantValue()!)
+            .ToList();
+
+        Assert.NotEmpty(named);
+        Assert.Equal(named.OrderBy(kind => kind, StringComparer.Ordinal), JournalKinds.Reserved.OrderBy(kind => kind, StringComparer.Ordinal));
     }
 }
