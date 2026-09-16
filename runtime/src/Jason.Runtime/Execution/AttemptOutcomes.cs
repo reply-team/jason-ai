@@ -7,7 +7,6 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
-using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Execution;
 
@@ -16,7 +15,7 @@ namespace Jason.Runtime.Execution;
 /// canceller all come through here, so "what happens after an attempt" is decided once and journaled the same
 /// way every time. Nothing here saves: the caller commits the outcome together with whatever else it changed.
 /// </summary>
-public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, IOptionsMonitor<DispatcherOptions> options)
+public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, DispatcherSettings settings)
 {
     /// <summary>The attempt and its item both succeed; a result, when given, replaces whatever the item carried.</summary>
     public void Succeed(JasonDbContext db, WorkItem item, Attempt attempt, JsonNode? result, ActorRef actor, string? reason = null)
@@ -81,13 +80,16 @@ public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, I
         attempt.Error = error;
         item.AttemptCount++;
 
-        var limits = EffectiveLimits.For(item, options.CurrentValue);
+        // One read for the whole decision: two reads of a live monitor can disagree with each other, and an
+        // attempt that was worth repeating by one of them and delayed by the other is a bug waiting for a slow edit.
+        var current = settings.Current;
+        var limits = EffectiveLimits.For(item, current);
         if (worthRepeating && item.AttemptCount < limits.MaxAttempts)
         {
             WorkItemTransitions.Apply(item, WorkItemStatus.Created, now);
 
             // A linear back-off owned by the dispatcher; not_before belongs to whoever planned the work.
-            var delay = options.CurrentValue.RetryDelaySeconds;
+            var delay = current.RetryDelaySeconds;
             item.RetryAfter = delay == 0 ? null : now.AddSeconds((long)delay * item.AttemptCount);
             journal.Append(
                 db,

@@ -14,6 +14,6 @@ public static class TestCanceller
         new(
             new JournalWriter(clock),
             clock,
-            new AttemptOutcomes(new JournalWriter(clock), clock, TestOptions.Dispatcher()),
+            new AttemptOutcomes(new JournalWriter(clock), clock, TestOptions.Settings()),
             registry ?? new RunningAttemptRegistry());
 }

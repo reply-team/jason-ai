@@ -14,7 +14,6 @@ using Jason.Runtime.Routing;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Dispatch;
 
@@ -33,7 +32,7 @@ public sealed class Claimer(
     RouteRegistry routes,
     ExternalIdStore identifiers,
     ISuppressionCheck suppression,
-    IOptionsMonitor<DispatcherOptions> options,
+    DispatcherSettings settings,
     JasonPaths paths,
     ILogger<Claimer> logger)
 {
@@ -55,7 +54,7 @@ public sealed class Claimer(
         }
 
         var now = clock.GetUtcNow().UtcDateTime;
-        var current = options.CurrentValue;
+        var current = settings.Current;
         var claimed = new List<ClaimedWork>();
 
         // Both snapshots are read once, so every item this scan hands out was decided against one pair of them

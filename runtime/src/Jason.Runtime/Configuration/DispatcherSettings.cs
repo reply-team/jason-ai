@@ -64,6 +64,25 @@ public sealed class DispatcherSettings(IOptionsMonitor<DispatcherOptions> monito
     /// <summary>How many reads the validator has refused since the runtime started; zero is the normal answer.</summary>
     public long Refusals => Interlocked.Read(ref _refusals);
 
+    /// <summary>
+    /// The settings for a path that has to answer. A request is not a tick: an executor reporting what it did
+    /// cannot act on an exception, so where the loop may fall back and carry on, an endpoint needs to know that
+    /// there is nothing to fall back to and say so in its own vocabulary.
+    /// </summary>
+    public bool TryCurrent(out DispatcherOptions options)
+    {
+        try
+        {
+            options = Current;
+            return true;
+        }
+        catch (OptionsValidationException)
+        {
+            options = null!;
+            return false;
+        }
+    }
+
     private DispatcherOptions? Fallback(string failure)
     {
         Interlocked.Increment(ref _refusals);

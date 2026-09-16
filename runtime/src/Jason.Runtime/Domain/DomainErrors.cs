@@ -49,6 +49,18 @@ public static class DomainErrors
         new(StatusCodes.Status409Conflict, "concurrent_update", "Another change reached the same row first; read it again and retry.", retryable: true);
 
     /// <summary>
+    /// The settings file is invalid and this runtime has never read one that was not, so there is nothing to
+    /// work from. It is the file that is broken rather than the request: retryable, because repairing the file
+    /// is all it takes.
+    /// </summary>
+    public static DomainException SettingsUnreadable() =>
+        new(
+            StatusCodes.Status503ServiceUnavailable,
+            "settings_unreadable",
+            "The runtime's settings are invalid and none have validated since it started; repair the settings file and try again.",
+            retryable: true);
+
+    /// <summary>
     /// A reload that found something wrong with a package. The whole candidate set stays out and the previous
     /// snapshot stays active: a registry that is only partly right hides the problem instead of showing it.
     /// </summary>

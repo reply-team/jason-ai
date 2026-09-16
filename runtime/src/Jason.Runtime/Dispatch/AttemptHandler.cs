@@ -12,7 +12,6 @@ using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Dispatch;
 
@@ -105,7 +104,7 @@ public static class AttemptHandler
         }
 
         AttemptStarted(logger, work.AttemptPublicId, work.WorkItemPublicId, null);
-        var limits = EffectiveLimits.For(item, services.GetRequiredService<IOptionsMonitor<DispatcherOptions>>().CurrentValue);
+        var limits = EffectiveLimits.For(item, services.GetRequiredService<DispatcherSettings>().Current);
         return (Context(item, attempt, limits, work.Plan), Pick(services, item.Kind));
     }
 
