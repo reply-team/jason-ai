@@ -9,7 +9,7 @@ using Jason.Contracts.Json;
 namespace Jason.App.Tests.EndToEnd;
 
 /// <summary>
-/// A provider operation from end to end, through the shipped executable and nothing else: a package installed by
+/// A provider operation from end to end, through the shipped program and nothing else: a package installed by
 /// copying it, a route written into the settings file, a runtime started in the background, and a work item that
 /// a dispatcher claims, routes, runs in a plugin host against a real provider account, and answers — with what
 /// was decided pinned onto the attempt and what the provider calls our contact pinned onto the contact.
@@ -42,11 +42,11 @@ public class ProviderOperationE2ETests
     private static string CliDirectory => AppContext.BaseDirectory;
 
     /// <summary>
-    /// The executable itself, not the assembly run through <c>dotnet</c>. It matters here and in no other
-    /// end-to-end test: the plugin host is this same program started again, found by its own process path, so a
-    /// runtime launched as <c>dotnet jason.dll</c> would name <c>dotnet</c> alone and start no host at all.
+    /// The shipped program as the repository's own documented command starts it — <c>dotnet jason.dll</c>, the
+    /// same way every other end-to-end test here starts it. Nothing about the plugin host depends on that
+    /// choice: a runtime run through the muxer names its entry assembly again when it starts a child.
     /// </summary>
-    private static string Executable => Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+    private static string Assembly => Path.Combine(AppContext.BaseDirectory, "jason.dll");
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -99,7 +99,7 @@ public class ProviderOperationE2ETests
         var pids = new HashSet<int>();
         try
         {
-            Assert.True(File.Exists(Executable), $"The shipped executable is not beside these tests: '{Executable}'.");
+            Assert.True(File.Exists(Assembly), $"The shipped program is not beside these tests: '{Assembly}'.");
             AssertSuccess(await JasonAsync(root, "runtime", "start"));
             var descriptor = ReadDescriptor(paths) ?? throw new InvalidOperationException("runtime start returned success without leaving a descriptor behind.");
             pids.Add(descriptor.Pid);
@@ -414,10 +414,10 @@ public class ProviderOperationE2ETests
 
     private static JsonObject Json(CliResult result) => JsonNode.Parse(result.Output)!.AsObject();
 
-    /// <summary>One CLI step: the shipped executable, the isolated data directory, and everything it said.</summary>
+    /// <summary>One CLI step: the shipped program, the isolated data directory, and everything it said.</summary>
     private static async Task<CliResult> JasonAsync(string root, params string[] args)
     {
-        var start = new ProcessStartInfo(Executable)
+        var start = new ProcessStartInfo("dotnet")
         {
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -427,6 +427,7 @@ public class ProviderOperationE2ETests
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
+        start.ArgumentList.Add(Assembly);
         foreach (var argument in args)
         {
             start.ArgumentList.Add(argument);

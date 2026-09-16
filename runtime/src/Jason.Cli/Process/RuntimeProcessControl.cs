@@ -35,8 +35,6 @@ public interface IRuntimeProcessControl
 /// <inheritdoc />
 public sealed class RuntimeProcessControl : IRuntimeProcessControl
 {
-    private const string DotnetHost = "dotnet";
-
     private const int StandardInputHandle = -10;
     private const int StandardOutputHandle = -11;
     private const int StandardErrorHandle = -12;
@@ -47,19 +45,14 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
     public static RuntimeProcessControl Instance { get; } = new();
 
     /// <summary>
-    /// What to run to get another copy of this program. A published executable runs itself; a build started as
-    /// <c>dotnet jason.dll</c> has <c>dotnet</c> for its process path, and the entry assembly has to be named
-    /// again for the child to be this same build rather than whatever <c>jason</c> is on the PATH.
+    /// What to run to get another copy of this program, in the detached runtime mode. Which program that is —
+    /// the published executable, or the muxer with this build's entry assembly named again — is
+    /// <see cref="SelfExecutable"/>'s question, and the plugin host is started from the same answer.
     /// </summary>
     public static (string FileName, IReadOnlyList<string> Arguments) ResolveSelf()
     {
-        var executable = Environment.ProcessPath;
-        if (executable is null || string.Equals(Path.GetFileNameWithoutExtension(executable), DotnetHost, StringComparison.OrdinalIgnoreCase))
-        {
-            return (DotnetHost, [Environment.GetCommandLineArgs()[0], "runtime", "run", "--detached"]);
-        }
-
-        return (executable, ["runtime", "run", "--detached"]);
+        var self = SelfExecutable.Command;
+        return (self[0], [.. self.Skip(1), "runtime", "run", "--detached"]);
     }
 
     public IProcessHandle Launch(JasonPaths paths)
