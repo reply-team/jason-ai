@@ -249,15 +249,44 @@ public static class AttemptHandler
                     Actors.Dispatcher);
                 break;
             case CommandOutcome.LaunchFailed failed:
-                outcomes.Fail(db, item, attempt, AttemptErrors.ExecutorLaunchFailed, failed.Message, trace: null, details: null, Actors.Dispatcher);
+                Unanswered(services, outcomes, db, item, attempt, AttemptErrors.ExecutorLaunchFailed, failed.Message);
                 break;
             case CommandOutcome.Killed:
-                outcomes.Fail(db, item, attempt, AttemptErrors.ExecutorExited, "The executor was stopped.", trace: null, details: null, Actors.Dispatcher);
+                Unanswered(services, outcomes, db, item, attempt, AttemptErrors.ExecutorExited, "The executor was stopped.");
                 break;
             default:
                 // Completed: the executor reported through the API and the attempt is already finished there.
                 break;
         }
+    }
+
+    /// <summary>
+    /// A1. The two ends where the command reported no answer at all: it could not be started, or it was
+    /// stopped part-way. For provider work either one is ambiguous — a missing answer says nothing about
+    /// whether the provider acted — and the operation's own contract decides what follows. For agent work the
+    /// verdict is null and the runtime's own code table answers, exactly as it always has.
+    /// </summary>
+    private static void Unanswered(
+        IServiceProvider services,
+        AttemptOutcomes outcomes,
+        JasonDbContext db,
+        WorkItem item,
+        Attempt attempt,
+        string code,
+        string message)
+    {
+        var end = services.GetRequiredService<UnansweredEnd>().Verdict(item);
+        outcomes.Fail(
+            db,
+            item,
+            attempt,
+            code,
+            message,
+            trace: null,
+            details: null,
+            Actors.Dispatcher,
+            failureClass: end?.Class,
+            retriable: end?.Retriable);
     }
 
     /// <summary>

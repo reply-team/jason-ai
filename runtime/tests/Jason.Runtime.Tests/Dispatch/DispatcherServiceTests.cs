@@ -1,11 +1,13 @@
 using System.Diagnostics;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Jason.Runtime.Tests.Dispatch;
 
@@ -121,6 +123,49 @@ public class DispatcherServiceTests
         }
     }
 
+    /// <summary>
+    /// A settings file edited while the runtime runs is the operator's path — to a tick, to a budget, to a
+    /// route — and an operator mistypes. A value the validator refuses is a fact about the file and not about
+    /// the process: the runtime keeps the last settings that did validate, says once what it refused, is still
+    /// there to answer, and takes the file the moment it is put right.
+    /// </summary>
+    [Fact]
+    public async Task A_live_edit_the_validator_refuses_costs_the_edit_and_not_the_runtime()
+    {
+        var fixture = await RuntimeApiFixture.StartAsync(Ct, prepare: Settings("""{"Dispatcher":{"TickSeconds":1,"DrainSeconds":1}}"""));
+        await using (fixture)
+        {
+            var status = fixture.Resolve<DispatcherStatus>();
+            var settings = fixture.Resolve<DispatcherSettings>();
+            var lifetime = fixture.Resolve<IHostApplicationLifetime>();
+            Assert.True(await DispatchHarness.FirstScanDoneAsync(status, Ct));
+
+            File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"TickSeconds":0,"DrainSeconds":1}}""");
+
+            // Nothing else has read the settings since the edit, so the refusals counted here are the loop's.
+            Assert.True(await DispatchHarness.EventuallyAsync(() => settings.Refusals > 0, Ct));
+            Assert.False(lifetime.ApplicationStopping.IsCancellationRequested);
+
+            // And the runtime answers for itself with what it is working from, which is the tick it had.
+            var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+            Assert.Equal(DispatcherState.Running, info.Dispatcher.State);
+            Assert.Equal(1, info.Dispatcher.TickSeconds);
+
+            // The loop was there all along to see the file put right: it scans again without a restart.
+            var scans = status.Scans;
+            File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"TickSeconds":2,"DrainSeconds":1}}""");
+            Assert.True(await DispatchHarness.EventuallyAsync(() => status.Scans > scans, Ct));
+            Assert.Equal(2, settings.Current.TickSeconds);
+
+            await fixture.Runtime.StopAsync();
+
+            // The validator's own sentence, said once for the edit and not once for every tick that read it.
+            var logs = ReadLogs(fixture.Paths);
+            Assert.Contains("Dispatcher:TickSeconds must be between 1 and 3600; got 0.", logs, StringComparison.Ordinal);
+            Assert.Equal(1, Occurrences(logs, "Edited settings were refused"));
+        }
+    }
+
     private static Action<JasonPaths> Settings(string json) => paths => File.WriteAllText(paths.UserSettingsFile, json);
 
     private static string SeedClaimable(JasonPaths paths)
@@ -138,6 +183,17 @@ public class DispatcherServiceTests
     {
         await using var db = new JasonDbContext(JasonDbContext.CreateOptions(paths.DatabaseFile));
         return await db.WorkItems.AsNoTracking().Where(w => w.PublicId == publicId).Select(w => w.Status).SingleAsync(ct);
+    }
+
+    private static int Occurrences(string text, string needle)
+    {
+        var count = 0;
+        for (var at = text.IndexOf(needle, StringComparison.Ordinal); at >= 0; at = text.IndexOf(needle, at + needle.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
     }
 
     private static string ReadLogs(JasonPaths paths) =>

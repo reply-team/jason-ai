@@ -11,7 +11,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Hosting.Modules;
 
@@ -36,7 +35,7 @@ public static class SystemModule
              MigrationReport report,
              JasonPaths dataPaths,
              DispatcherStatus dispatcher,
-             IOptionsMonitor<DispatcherOptions> dispatcherOptions,
+             DispatcherSettings dispatcherSettings,
              RunningAttemptRegistry running,
              PluginRegistry plugins,
              RouteRegistry routes) =>
@@ -48,7 +47,9 @@ public static class SystemModule
                     runtimeInfo.StartedAt,
                     dataPaths.Root,
                     new DatabaseInfo(report.AppliedMigrations),
-                    dispatcher.Snapshot(dispatcherOptions.CurrentValue, running.Count),
+                    // Through the settings, not the file: an operator whose edit was refused asks this operation
+                    // what the runtime is working from, and is answered with what it is actually working from.
+                    dispatcher.Snapshot(dispatcherSettings.Current, running.Count),
                     new PluginsInfo(
                         plugins.Snapshot.Plugins.Count,
                         plugins.Snapshot.Id,

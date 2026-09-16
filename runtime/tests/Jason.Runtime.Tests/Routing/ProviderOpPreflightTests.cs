@@ -88,7 +88,9 @@ public class ProviderOpPreflightTests
 
     /// <summary>
     /// None of the twelve is worth another attempt: nothing about the work changed between two scans, so an item
-    /// released back into the queue would fail the same way for as long as the queue existed.
+    /// released back into the queue would fail the same way for as long as the queue existed. The claim says so
+    /// itself — it fails a refused item with <c>retriable: false</c> — and this is the table agreeing, so that a
+    /// code later added to both places cannot come to mean two different things.
     /// </summary>
     [Fact]
     public void No_reason_the_pre_flight_gives_is_ever_worth_another_attempt() =>
