@@ -466,6 +466,10 @@ public class ReplyEnrollTests
         var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
         Assert.Equal("provider_call_failed", failed.Error.Code);
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
+
+        // The code alone is the one every refusal of the package's own shares, so it says nothing about which
+        // rule was broken. An operator gets the reason or gets nothing they can act on.
+        Assert.Contains("no single step is step 2", failed.Error.Details!["reason"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Equal([LiveState], Paths(account));
         Assert.Empty(account.EnrolledIn(Sequence));
     }
@@ -487,6 +491,10 @@ public class ReplyEnrollTests
         var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
         Assert.Equal("provider_call_failed", failed.Error.Code);
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
+
+        // And it says where the chain actually ended, so an operator can see the position they asked for was
+        // past it rather than being told only that something went wrong.
+        Assert.Contains("chain ends at", failed.Error.Details!["reason"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Equal([LiveState], Paths(account));
         Assert.Empty(account.EnrolledIn(Sequence));
     }

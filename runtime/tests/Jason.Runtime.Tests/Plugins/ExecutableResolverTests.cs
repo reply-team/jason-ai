@@ -253,6 +253,28 @@ public class ExecutableResolverTests
 
     private const string WindowsOnly = "npm writes a .cmd shim only on Windows, and only there is one ever read.";
 
+    [Fact]
+    public void A_shim_is_read_again_rather_than_remembered_from_the_last_time()
+    {
+        // A file that decides which program runs must not be trusted from the last reload: a package updated,
+        // replaced or tampered with between two reloads has to be met as it is now. Nothing here caches, and
+        // this is what says so — the same resolver, asked twice, answers the file in front of it both times.
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        programs.AddInterpreter("node.exe");
+        InstallVendorCli(programs);
+
+        var first = Resolve(programs, "vendor");
+        Assert.Null(first.Problem);
+
+        // The same shim, rewritten to something npm did not write.
+        programs.Add("vendor.cmd", "@ECHO off" + Environment.NewLine + "cmd /c whatever %*" + Environment.NewLine);
+        var second = Resolve(programs, "vendor");
+
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, second.Problem!.Code);
+        Assert.Null(second.Path);
+    }
+
     private static ResolvedExecutable Resolve(TestPrograms programs, string name) =>
         new ExecutableResolver(new TestSearchPath { Path = programs.Root }).Resolve(new ExecutableRequest(name, null, null), 0);
 
