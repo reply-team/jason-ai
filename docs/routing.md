@@ -346,11 +346,15 @@ Three budgets, and they are not the same number:
   child. A configuration where it does not is refused when the runtime starts, naming the operation that
   forces the floor.
 - **The plugin's ceiling** is `limits.timeout_ms` from its manifest when it declares one, and
-  `Plugins:Limits:TimeoutMs` — **60 s** — when it does not; either is itself capped by
-  `Plugins:Limits:MaxTimeoutMs`. The ceiling can only lower the child's budget, never raise it, so a
-  package that says nothing about limits caps a 300 s operation at 60 s, and one that declares 20 s
-  caps it at 20 s. A plugin implementing a slow operation has to declare a limit at least as large as
-  that operation's contract (see [docs/plugins.md](plugins.md) §7).
+  `Plugins:Limits:TimeoutMs` — **300 s**, the budget of the slowest operation this build publishes —
+  when it does not; either is itself capped by `Plugins:Limits:MaxTimeoutMs`. The ceiling can only
+  lower the child's budget, never raise it, so a package that says nothing about limits leaves every
+  published operation the budget its contract asks for, and one that declares 20 s caps a 300 s
+  operation at 20 s. Lowering the setting below the slowest published operation is refused when the
+  runtime starts, for the same reason and in the same words as a lease that cannot hold one. The
+  manifest is not held to anything of the kind: a plugin implementing a slow operation has to declare
+  a limit at least as large as that operation's contract, and nothing checks that for it (see
+  [docs/plugins.md](plugins.md) §7).
 
 An item may ask for a shorter lease of its own — `--timeout` — but **not shorter than the operation
 needs**, and the refusal names the floor rather than quietly raising the number:

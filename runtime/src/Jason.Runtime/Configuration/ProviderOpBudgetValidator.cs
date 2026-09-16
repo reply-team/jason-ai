@@ -27,8 +27,7 @@ public sealed class ProviderOpBudgetValidator(IOptionsMonitor<PluginsOptions> pl
             return ValidateOptionsResult.Success;
         }
 
-        var slowest = OperationCatalog.All.OrderByDescending(contract => contract.TimeoutMs).FirstOrDefault();
-        if (slowest is null)
+        if (OperationCatalog.Slowest is not { } slowest)
         {
             return ValidateOptionsResult.Success;
         }
