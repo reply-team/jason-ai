@@ -212,6 +212,28 @@ public class ReplyEnrollTests
     }
 
     [Fact]
+    public async Task A_repeat_answers_from_the_recovery_read_whatever_the_collision_policy_asked()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
+            .WithContact(1001, Address, FirstName)
+            .WithEnrollment(Sequence, 1001);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured, collision: "refuse"), Ct, attempt: 2));
+
+        // The same account and the same policy as the test above it, on a repeated attempt instead of a first
+        // one — and the answer is the other one. The document's instruction is to answer from the recovery read
+        // when the effect already happened, and it has to win here: Reply has no per-run ledger, so after a lost
+        // answer the participation this read finds may well be the one this work item's own earlier attempt
+        // made, and reporting that as a collision would call the runtime's own write somebody else's.
+        Assert.Equal("already_enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
+        Assert.DoesNotContain(Bulk, Paths(account));
+        Assert.Equal([1001], account.EnrolledIn(Sequence));
+    }
+
+    [Fact]
     public void A_call_missing_the_start_or_the_first_touch_is_refused_before_the_plugin_sees_it()
     {
         var contract = OperationCatalog.Find(Operation);
