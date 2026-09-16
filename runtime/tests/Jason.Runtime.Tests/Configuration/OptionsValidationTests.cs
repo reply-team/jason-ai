@@ -95,7 +95,7 @@ public class OptionsValidationTests
         {
             Grants = new Dictionary<string, PluginGrant>(StringComparer.OrdinalIgnoreCase)
             {
-                ["fake-provider"] = new PluginGrant { Exec = ["reply", "Jason.FakeProviderCli"], Http = ["api.example.test", "localhost:5555"], Env = ["EXAMPLE_TOKEN", "*"] },
+                ["fake-provider"] = new PluginGrant { Exec = ["provider-cli", "Jason.FakeProviderCli"], Http = ["api.example.test", "localhost:5555"], Env = ["EXAMPLE_TOKEN", "*"] },
             },
         });
 
