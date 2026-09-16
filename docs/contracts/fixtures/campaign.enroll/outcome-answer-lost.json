@@ -7,15 +7,20 @@
     "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
     "status": "failed",
     "result": null,
-    "external_ids": { "contact": "p_88421" },
+    "external_ids": null,
     "error": {
       "class": "ambiguous",
       "code": "provider_answer_lost",
       "message": "The enrollment was sent and the connection closed before an answer came back.",
       "details": null,
-      "external_ids": null
+      "external_ids": { "contact": "p_88421" }
     },
     "diagnostics": { "duration_ms": 120000, "exec_calls": 2, "http_calls": 0, "log_lines": 4 }
   },
-  "expect": { "status": "failed", "class": "ambiguous", "retriable": true }
+  "expect": {
+    "status": "failed",
+    "class": "ambiguous",
+    "retriable": true,
+    "pinned": { "contact": "p_88421" }
+  }
 }

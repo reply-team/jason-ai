@@ -3,11 +3,11 @@
 **Version 1.** The machine-readable contract is [`campaign.get.json`](campaign.get.json); this page explains it.
 Where the two seem to differ, the document is right and this page is a bug.
 
-> **This version never runs it.** No `provider_op` work item reaches a plugin at all yet: every one of them fails
-> at the claim with `no_route`. What runs is the check on the work item itself — an operation no contract is
-> published for is refused when the item is written, and the arguments it carries are measured against this
-> operation's argument schema. The contract is published complete so that routing is the only thing left to add —
-> and so that a plugin author can implement and test the operation now.
+> **This version runs it.** A work item naming this operation is measured against the argument schema below when
+> it is written, routed to a plugin at the claim, performed in a plugin-host process, and answered — and the
+> answer is measured against the result schema before it becomes the item's result. It reaches a plugin only
+> where a route sends it: without one the item fails at the claim with `no_route`
+> ([docs/routing.md](../../routing.md)).
 
 ## What it is for
 
@@ -68,10 +68,14 @@ will keep it.
 
 ## When it fails
 
-Use the codes the document declares. The class is what the runtime will read: `transient` may be repeated,
+Use the codes the document declares. The class is what the runtime reads: `transient` may be repeated,
 `permanent` and `validation` are final, and `ambiguous` says the provider may already have acted — which, for a
-read, costs nothing, so this operation allows the repeat. That reading arrives with routing: no plugin's class
-reaches the runtime in this version, so until then the rule is what your own tests hold you to.
+read, costs nothing, so this operation allows the repeat. The class you report is therefore the class the work
+item is retried or ended by; a failure filed under the wrong one is a decision made on your word.
+
+Return the campaign identifier you learned on a failure too — `host.fail({ external_ids: { campaign: … } })`. It is
+recorded by the same rule as on a success, so a read that resolved the campaign and then lost its answer still
+leaves the link behind.
 
 ## The properties
 

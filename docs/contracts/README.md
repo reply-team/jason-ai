@@ -11,13 +11,14 @@ generated block inside that page is rendered from the JSON by a test. **Prose ex
 governs, and the JSON governs the block.**
 
 **What runs today.** The documents are published and embedded, and the runtime holds a `provider_op`
-work item to the one it names: an operation no contract is published for is refused at
+work item to the one it names from end to end: an operation no contract is published for is refused at
 `workitem.create`, and the arguments the item carries under `context.input` are measured against that
-operation's argument schema — there, and again whenever a patch rewrites them. Nothing routes a work
-item to a plugin yet, so the composed input, the check on a plugin's answer and the repeat rule below
-are the contract a plugin is written **against** rather than something the runtime performs; routing
-arrives with the next increment. [`docs/plugins.md`](../plugins.md) §7 is the same material from the
-plugin author's side, with a worked example.
+operation's argument schema — there, and again whenever a patch rewrites them. At the claim the item is
+routed to a plugin, the whole input below is composed and validated, the plugin is given the budget the
+document states, and its answer is measured against the output schema before it becomes the item's
+result; the repeat rule below is what the runtime reads when such an attempt ends ambiguously.
+[`docs/plugins.md`](../plugins.md) §7 is the same material from the plugin author's side, with a worked
+example; [`docs/routing.md`](../routing.md) is how an operation reaches a plugin at all.
 
 ```
 docs/contracts/
@@ -87,7 +88,8 @@ The runtime composes it; the plugin never sees a work item's context. It is alwa
 ## The schema dialect
 
 Schemas are JSON Schema 2020-12 — every schema carries
-`"$schema": "https://json-schema.org/draft/2020-12/schema"`, so any conforming validator reads them unchanged —
+`"$schema": "https://json-schema.org/draft/2020-12/schema"`, so any conforming validator reads them unchanged,
+with the one deviation noted below —
 restricted to a published vocabulary. A keyword outside it is refused rather than ignored, because a keyword the
 runtime would silently skip is a rule that does not run.
 
@@ -100,16 +102,29 @@ never enforced).
 **Reason codes.** Every failure carries a JSON pointer — the empty string is the whole document — and one of these
 fixed codes: `type`, `required`, `enum`, `const`, `min_length`, `max_length`, `pattern`, `minimum`, `maximum`,
 `exclusive_minimum`, `exclusive_maximum`, `multiple_of`, `min_items`, `max_items`, `unique_items`,
-`additional_properties`, `any_of`, `all_of`, `not`, `format`, `schema_keyword_unknown`, `schema_ref_unresolved`,
-`duplicate_property`, `number_not_comparable`, `schema_too_deep`, `schema_cyclic`, `schema_pattern_invalid`,
-`schema_too_large`, `schema_number_not_finite`.
+`additional_properties`, `any_of`, `all_of`, `not`, `format`, `schema_keyword_unknown`,
+`schema_keyword_malformed`, `schema_ref_unresolved`, `duplicate_property`, `number_not_comparable`,
+`schema_too_deep`, `schema_cyclic`, `schema_pattern_invalid`, `schema_too_large`, `schema_number_not_finite`.
 
-Four details worth knowing before you write a schema:
+The `schema_…` codes say the schema is wrong, not the value: they are what a rule that could not run reports, and
+the reader who has to fix one is looking at the contract rather than at the arguments. Everything else is about
+the value at the pointer.
+
+Five details worth knowing before you write a schema:
 
 - **Combinators report once.** `anyOf`, `allOf` and `not` report a single problem at their own pointer rather than
   every branch's problems; the message names what the first failing branch objected to. Listing every road not
   taken buries the one thing a caller has to change.
 - **An explicit `null` satisfies `required`.** Saying null is saying something; only an absent property is missing.
+  That is a rule about a property *inside* a document being validated, and it is not the rule about the work item's
+  reserved `context.input` key, where an absent key and a JSON null read alike — neither is a set of arguments.
+  `docs/work-execution.md` states that one.
+- **`additionalProperties: false` sees only its own object.** It is evaluated against the properties named in the
+  same schema object, and does not see properties contributed by an adjacent `$ref` or by an `allOf` branch. A
+  2020-12 validator evaluates it against everything annotated at that location, so a schema that combines
+  `additionalProperties: false` with `$ref` or `allOf` is read differently here and elsewhere — which is the one
+  place the portability above does not hold. Write the properties in the same object as the keyword, and the two
+  readings agree.
 - **Numbers are compared as decimals**, so that a money-like value means what it says. A number no decimal can hold
   exactly — `1e40`, `1e-40` — is refused as `number_not_comparable`, whether it is the bound or the value, because
   the rule could not run at all. That is not the same as `minimum` or `maximum`, which say a rule ran and the value
@@ -131,10 +146,11 @@ lists.
 - **Breaking** — a newly required field, a removed field, a changed enum, a changed property such as `reach` —
   bumps the operation's version *and* the family version. A plugin then declares `[1, 2]` to serve both.
 
-A routed plugin whose family versions do not contain the operation's version is refused with
-`contract_incompatible` — a check that arrives with routing, like everything else that calls a plugin.
+A route to a plugin whose family versions do not contain the operation's version is refused when the
+route is activated, as `route_contract_incompatible`, and again at the claim as
+`contract_incompatible`: the plan a run is handed has to be true of the package in front of it.
 Compatibility windows and deprecation policy are not settled yet and are deliberately not
-implied here.
+implied here (DEF-OPS-002; `docs/routing.md` §12 lists it beside this version's other limitations).
 
 ## Running the fixtures
 
@@ -147,9 +163,10 @@ dotnet test --project runtime/tests/Jason.Contracts.Tests -- --filter-class "Jas
 
 An **input fixture** is `{operation, version, case, input, expect}`, where `expect` is either the string `"valid"`
 or `{"invalid": [ … ]}`. An **outcome fixture** is `{operation, version, case, outcome, expect}`, where `outcome`
-is a plugin outcome exactly as a child writes it and `expect` is `{status, class?, retriable, invalid?}`. `status`
-is `succeeded`, `failed`, or `result_invalid` — a well-formed outcome whose result does not satisfy the output
-schema, or which pins an identifier of a kind the operation never declared.
+is a plugin outcome exactly as a child writes it and `expect` is `{status, class?, retriable, invalid?, pinned?}`.
+`status` is `succeeded`, `failed`, or `result_invalid` — a well-formed outcome whose result does not satisfy the
+output schema, or which pins an identifier of a kind the operation never declared. `pinned` is what the runtime
+writes into its record of provider identifiers from that answer, as `{kind: value}`.
 
 An `invalid` list names exactly what is wrong with the document, and it is written the same way in both kinds of
 fixture: each entry is a JSON pointer, or `{"pointer": "…", "reason": "…"}` where the fixture means one particular
@@ -161,6 +178,15 @@ while it no longer demonstrates what the case is named for.
 A `failed` fixture is held against the operation's own `failure_codes`: the code its error carries is one the
 document declares, under the class the document declares it with. A fixture may not teach a plugin author a code no
 operation accepts, nor the same code under a class that would have the runtime repeat what the document calls final.
+
+**A failure may still pin.** A failed outcome carries its identifiers on the error — `error.external_ids`, which is
+where `host.fail` puts them and the only place the runtime reads them — and a declared kind there is written down by
+the same rule as on a success. The answer-lost case is exactly where a pin matters most: the effect happened, the
+answer never came back, and the identifier is the only trace of what was done. An **undeclared** kind on a failure is
+refused rather than recorded, but it does **not** become `result_invalid` the way it would on a success: replacing
+the failure the plugin reported with a shape error would hide the reason the operation failed. The attempt keeps the
+plugin's own failure and names the refused identifier beside it. The two fixtures named `outcome-answer-lost` and
+`outcome-answer-lost-with-an-undeclared-identifier` are that asymmetry, executed.
 
 Retriability in an outcome fixture is stated per the operation's own rule, so that a plugin author reading the
 fixture sees what the runtime will do with that answer: `transient` is repeated; `permanent` and `validation` are

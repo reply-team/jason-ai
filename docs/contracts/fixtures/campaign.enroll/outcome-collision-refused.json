@@ -7,15 +7,20 @@
     "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
     "status": "failed",
     "result": null,
-    "external_ids": { "contact": "p_88421" },
+    "external_ids": null,
     "error": {
       "class": "permanent",
       "code": "collision_refused",
       "message": "The person is already participating in another campaign and the caller asked to refuse rather than decide.",
       "details": null,
-      "external_ids": null
+      "external_ids": { "contact": "p_88421" }
     },
     "diagnostics": { "duration_ms": 340, "exec_calls": 2, "http_calls": 0, "log_lines": 3 }
   },
-  "expect": { "status": "failed", "class": "permanent", "retriable": false }
+  "expect": {
+    "status": "failed",
+    "class": "permanent",
+    "retriable": false,
+    "pinned": { "contact": "p_88421" }
+  }
 }
