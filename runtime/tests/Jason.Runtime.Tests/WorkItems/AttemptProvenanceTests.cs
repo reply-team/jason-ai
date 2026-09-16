@@ -1,6 +1,8 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
@@ -92,6 +94,54 @@ public class AttemptProvenanceTests
 
         var (_, body) = await api.PostAsync(Operations.WorkItemGet, new { work_item_id = item.Id }, Ct);
         Assert.DoesNotContain("provenance", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The invariant the whole wave is for: an attempt is a record of what happened, and nothing that happens
+    /// afterwards may edit it. The world moves under a finished attempt in exactly three ways — the routes are
+    /// changed, the plugins are reloaded, and the package on disk is edited — and all three are here.
+    /// </summary>
+    [Fact]
+    public async Task What_ran_stays_what_ran_after_the_routes_the_plugins_and_the_package_change()
+    {
+        var executor = new Executor();
+        await using var api = await StartAsync(executor.Command, ToTheReferenceProvider);
+        executor.Answers(api);
+        var campaign = await CampaignAsync(api);
+        var item = await ProviderItemAsync(api, campaign, "campaign.get", Named("c-7714"));
+        await RunOneAsync(api);
+        var before = (await AttemptAsync(api, item)).Provenance;
+        Assert.NotNull(before);
+
+        // A reload on its own: both snapshots are new, and the finished attempt still names the old ones.
+        var reloaded = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { }, Ct);
+        Assert.True(reloaded.Activated);
+        Assert.NotEqual(before.PluginSnapshotId, reloaded.Snapshot.Id);
+        Assert.NotEqual(before.RoutingSnapshotId, reloaded.RoutingSnapshotId);
+        await AssertUnchangedAsync(api, item, before);
+
+        // The route now names the other package, and the one that ran has been edited on disk since.
+        File.AppendAllText(Path.Combine(api.Paths.PluginPackageDirectory(TestPlugins.FakeProviderId), "main.js"), "\n// edited after the attempt\n");
+        await TestRoutes.WriteGlobalAsync(api, TestRoutes.GlobalDefault(TestPlugins.OtherProviderId), Ct);
+        var moved = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { }, Ct);
+
+        Assert.True(moved.Activated);
+        Assert.Equal(TestPlugins.OtherProviderId, api.Resolve<RouteRegistry>().Snapshot.Global.Default!.PluginId);
+        var edited = Assert.Single(moved.Plugins, plugin => plugin.Id == TestPlugins.FakeProviderId);
+        Assert.NotEqual(before.PluginDigest, edited.Digest);
+
+        await AssertUnchangedAsync(api, item, before);
+    }
+
+    /// <summary>
+    /// Every field as it stands now against every field as it stood, compared as the row itself stores them so
+    /// that a change to any one of them fails this rather than only the ones a test thought to name.
+    /// </summary>
+    private static async Task AssertUnchangedAsync(RuntimeApiFixture api, string item, AttemptProvenanceDto before)
+    {
+        var now = (await AttemptAsync(api, item)).Provenance;
+        Assert.NotNull(now);
+        Assert.Equal(JsonSerializer.Serialize(before, JasonJson.Options), JsonSerializer.Serialize(now, JasonJson.Options));
     }
 
     /// <summary>
