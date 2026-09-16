@@ -155,6 +155,41 @@ public sealed class ReplyAccount : IDisposable
         });
     }
 
+    /// <summary>
+    /// The steps of a planted sequence, shaped by hand: a condition in the middle of the chain, a branch, or a
+    /// chain shorter than somebody asked for. Reply gives a step no ordering field whatever — the
+    /// <c>parentId</c> graph is the only order there is — so a shape that is not a single chain is exactly the
+    /// one that has no Nth step, and these tests need to plant one.
+    /// </summary>
+    public ReplyAccount WithSteps(int sequence, params (int Id, int? ParentId, string Type)[] steps)
+    {
+        ArgumentNullException.ThrowIfNull(steps);
+        var planted = Sequences.FirstOrDefault(entry => entry!["id"]!.GetValue<int>() == sequence)
+            ?? throw new InvalidOperationException($"no sequence {sequence} has been planted to give steps to.");
+
+        var shaped = new JsonArray();
+        foreach (var (id, parent, type) in steps)
+        {
+            shaped.Add(new JsonObject
+            {
+                ["id"] = id,
+                ["parentId"] = parent is null ? null : JsonValue.Create(parent.Value),
+                ["type"] = type,
+                ["delayInMinutes"] = parent is null ? 0 : 1440,
+            });
+        }
+
+        return Replace(SequencesFile, sequence, new JsonObject
+        {
+            ["id"] = sequence,
+            ["name"] = planted["name"]!.DeepClone(),
+            ["status"] = planted["status"]!.DeepClone(),
+            ["isArchived"] = planted["isArchived"]!.DeepClone(),
+            ["health"] = planted["health"]!.DeepClone(),
+            ["steps"] = shaped,
+        });
+    }
+
     public ReplyAccount WithEnrollment(int sequence, int contact, string statusInSequence = "active")
     {
         var enrollments = ReadArray(EnrollmentsFile);

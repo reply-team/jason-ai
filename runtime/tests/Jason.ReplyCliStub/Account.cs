@@ -191,21 +191,38 @@ internal static class Account
         var added = new JsonArray();
         var notProcessed = new JsonObject();
 
+        // Reply's own switch, honoured here rather than ignored: it takes the person out of every other
+        // sequence they are in. A stand-in that dropped it would leave a plugin free to ask for it with nothing
+        // to show the difference, and this is the one request whose damage is silent.
+        if (Request(body)?["removeFromExisting"] is JsonValue switched
+            && switched.TryGetValue<bool>(out var removeFromExisting)
+            && removeFromExisting)
+        {
+            foreach (var elsewhere in enrollments.OfType<JsonObject>().ToList())
+            {
+                if (elsewhere["sequenceId"]!.GetValue<int>() != number
+                    && contactIds.Contains(elsewhere["contactId"]!.GetValue<int>()))
+                {
+                    enrollments.Remove(elsewhere);
+                }
+            }
+        }
+
         foreach (var contactId in contactIds)
         {
             var key = contactId.ToString(CultureInfo.InvariantCulture);
             if (Find(contacts, contactId) is null)
             {
-                notProcessed[key] = Failure("ContactNotFound", $"This account holds no contact {key}.");
+                notProcessed[key] = Failure("contactNotFound", $"This account holds no contact {key}.");
             }
             else if (suppressed.Contains(contactId))
             {
-                notProcessed[key] = Failure("ContactOptedOut", $"Contact {key} has opted out.");
+                notProcessed[key] = Failure("contactOptedOut", $"Contact {key} has opted out.");
             }
             else if (enrollments.OfType<JsonObject>().Any(entry =>
                 entry["sequenceId"]!.GetValue<int>() == number && entry["contactId"]!.GetValue<int>() == contactId))
             {
-                notProcessed[key] = Failure("AlreadyInSequence", $"Contact {key} already takes part in sequence {sequenceId}.");
+                notProcessed[key] = Failure("contactAlreadyInSequence", $"Contact {key} already takes part in sequence {sequenceId}.");
             }
             else
             {
@@ -652,6 +669,11 @@ internal static class Account
         ["errors"] = new JsonArray(new JsonObject { ["pointer"] = pointer, ["detail"] = detail }),
     });
 
+    /// <summary>
+    /// One person the bulk enrol would not take. The slugs are the ones the published table names — it is
+    /// labelled "Common" and the type behind it is declared nowhere, so <c>contactOptedOut</c> stands for the
+    /// open half of that set: a real word this stand-in answers with and no published table maps.
+    /// </summary>
     private static JsonObject Failure(string error, string details) =>
         new() { ["error"] = error, ["errorDetails"] = details };
 
