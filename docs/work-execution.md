@@ -165,8 +165,9 @@ That table is the rule for **agent** work, where the failure happened inside thi
 the failure carries one of four **classes** — `transient`, `permanent`, `validation`, `ambiguous` —
 and the class plus the operation's own `repeat_after_ambiguous` rule decide, not the code table. Every
 way such an attempt can end with nobody answering for it — the invoker's timeout, `lease_expired`,
-`heartbeat_missed` — is `ambiguous`, because a missing answer says nothing about whether the provider
-acted. An attempt a restart finds still `scheduled` is not one of them: it never started, so nobody
+`heartbeat_missed`, a command that could not be started (`executor_launch_failed`) and one that was
+stopped (`executor_exited`) — is `ambiguous`, because a missing answer says nothing about whether the
+provider acted. An attempt a restart finds still `scheduled` is not one of them: it never started, so nobody
 was asked anything. A shape error in an answer that did arrive
 (`result_invalid`) is `ambiguous` and never repeated: the next attempt would run the same code over
 the same answer. A cancellation stays a cancellation in both kinds.

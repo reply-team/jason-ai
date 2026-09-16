@@ -1,4 +1,5 @@
 using Jason.Contracts.Api;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
@@ -112,7 +113,58 @@ public class AttemptHandlerTests
         Assert.Equal(WorkItemStatus.Failed, item.Status);
         Assert.Equal(AttemptErrors.ExecutorLaunchFailed, item.LastError!.Code);
         Assert.False(item.LastError.Retriable);
+
+        // An agent's launch happened inside this machine, so the runtime's own code table answers for it and
+        // there is no class to carry: a class is what a provider operation's contract is read against.
+        Assert.Null(item.LastError.Class);
         Assert.Equal("agent-host is not on the path", Assert.Single(item.Attempts).Error!.Message);
+    }
+
+    /// <summary>
+    /// A1. A provider command that could not be started is an end nobody answered for, and a missing answer
+    /// says nothing about whether the provider acted — so the class is ambiguous and the operation's own
+    /// contract decides what follows, exactly as for a lease that ran out. It is barely reachable, because the
+    /// invoker turns kills, timeouts, launch failures and pin mismatches into outcomes of its own; the sentence
+    /// has to be true anyway, or the one path that does reach it fails a claim the runtime cannot account for.
+    /// </summary>
+    [Fact]
+    public async Task A_provider_command_that_cannot_be_started_ends_ambiguous()
+    {
+        var command = FakeCommand.Returning(new CommandOutcome.LaunchFailed("the plugin host is not there", Launch(null)), WorkItemKind.ProviderOp);
+        using var harness = new DispatchHarness(Noon, o => o.RetryDelaySeconds = 0, commands: command);
+        var (seeded, work) = await SeedClaimedProviderAsync(harness);
+
+        await RunAsync(harness, work);
+
+        var item = await harness.ReadItemAsync(seeded, Ct);
+        var attempt = Assert.Single(item.Attempts);
+        Assert.Equal(AttemptErrors.ExecutorLaunchFailed, attempt.Error!.Code);
+        Assert.Equal(FailureClass.Ambiguous, attempt.Error.Class);
+
+        // campaign.get says a repeat after an ambiguous end is safe, so the item goes back into the queue.
+        Assert.True(attempt.Error.Retriable);
+        Assert.Equal(WorkItemStatus.Created, item.Status);
+    }
+
+    /// <summary>
+    /// The same for a provider command that was stopped. The runtime gave up on the child; whether the child
+    /// had already reached the provider is exactly what nobody can say.
+    /// </summary>
+    [Fact]
+    public async Task A_provider_command_that_was_stopped_ends_ambiguous()
+    {
+        var command = FakeCommand.Returning(new CommandOutcome.Killed(Launch(2718)), WorkItemKind.ProviderOp);
+        using var harness = new DispatchHarness(Noon, o => o.RetryDelaySeconds = 0, commands: command);
+        var (seeded, work) = await SeedClaimedProviderAsync(harness);
+
+        await RunAsync(harness, work);
+
+        var item = await harness.ReadItemAsync(seeded, Ct);
+        var attempt = Assert.Single(item.Attempts);
+        Assert.Equal(AttemptErrors.ExecutorExited, attempt.Error!.Code);
+        Assert.Equal(FailureClass.Ambiguous, attempt.Error.Class);
+        Assert.True(attempt.Error.Retriable);
+        Assert.Equal(WorkItemStatus.Created, item.Status);
     }
 
     [Fact]
@@ -229,6 +281,25 @@ public class AttemptHandlerTests
 
     private static Task RunAsync(DispatchHarness harness, ClaimedWork work) =>
         AttemptHandler.RunAsync(harness.Scopes, work, harness.Registry, NullLogger.Instance);
+
+    /// <summary>
+    /// A provider attempt as a claim leaves it, written without the claim: what is proven here is how the
+    /// handler answers for an outcome, and which plugin would have run it is the pre-flight's subject. No plan
+    /// is carried, because neither outcome here is one a plugin answered.
+    /// </summary>
+    private static async Task<(string WorkItemId, ClaimedWork Work)> SeedClaimedProviderAsync(DispatchHarness harness)
+    {
+        await using var db = harness.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        var item = WorkItemFactory.NewProviderOp(campaign, now: Noon);
+        item.Status = WorkItemStatus.Scheduled;
+        var attempt = WorkItemFactory.NewAttempt(item, 1, AttemptStatus.Scheduled, Noon);
+        db.Campaigns.Add(campaign);
+        db.WorkItems.Add(item);
+        db.Attempts.Add(attempt);
+        await db.SaveChangesAsync(Ct);
+        return (item.PublicId, new ClaimedWork(item.Id, attempt.Id, item.PublicId, attempt.PublicId));
+    }
 
     private static AttemptLaunchDto Launch(int? pid) => new(["agent-host"], "work", pid, null);
 

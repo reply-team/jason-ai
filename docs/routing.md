@@ -325,8 +325,8 @@ makes one crash cost one effect rather than one bill. An operation that said `ne
 person rather than risk a second send; none of the published three does.
 
 Every end where nobody answered is ambiguous: the invoker's timeout, a lease that ran out, a missed
-heartbeat. A missing answer says nothing about whether a provider acted, and the honest class is the one
-that says so. An attempt a restart finds still `scheduled` is not such an end — the handler commits the
+heartbeat, a command that could not be started, a command that was stopped. A missing answer says nothing
+about whether a provider acted, and the honest class is the one that says so. An attempt a restart finds still `scheduled` is not such an end — the handler commits the
 attempt started before it launches anything, so that one never ran and goes back uncounted.
 
 **`result_invalid` is never repeated.** An answer that arrived and does not satisfy the operation's output
