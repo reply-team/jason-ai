@@ -109,6 +109,18 @@ public sealed partial class PluginInvoker(
             request.CorrelationId,
             snapshotId);
 
+        // A pin says which package runs while the request's own id is what the provenance records and what every
+        // line of the log about this invocation says. Where the two disagree, one of them is a lie about what
+        // ran, and there is no reading of the request that makes it true: it is refused before a process exists.
+        if (request.Pinned is { } chosen && !string.Equals(request.PluginId, chosen.Plugin.Manifest.Id, StringComparison.Ordinal))
+        {
+            return Refuse(
+                provenance,
+                request,
+                ProtocolCodes.PluginInvocationRejected,
+                $"This invocation names the plugin '{request.PluginId}' while the package pinned to it is '{chosen.Plugin.Manifest.Id}'.");
+        }
+
         if (plugin is null)
         {
             return Refuse(provenance, request, ProtocolCodes.PluginNotLoaded, $"No plugin '{request.PluginId}' is in the active snapshot.");
