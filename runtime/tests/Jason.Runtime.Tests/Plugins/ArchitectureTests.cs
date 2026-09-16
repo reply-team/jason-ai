@@ -102,7 +102,7 @@ public class ArchitectureTests
                 const char Quote = '"';
                 const string Plain = "reply.io";
                 const string Escaped = "a \" reply-cli";
-                const string Verbatim = @"C:\replyapp\""quoted""";
+                const string Verbatim = @"a path \ reply.io ""quoted""";
                 const string Raw = """
                     reply_cli
                     """;
@@ -113,7 +113,7 @@ public class ArchitectureTests
         var literals = Literals(source).ToArray();
 
         Assert.Equal(
-            ["reply.io", "a \\\" reply-cli", "C:\\replyapp\\\"\"quoted\"\"", "reply_cli", "n={n} reply"],
+            ["reply.io", "a \\\" reply-cli", "a path \\ reply.io \"\"quoted\"\"", "reply_cli", "n={n} reply"],
             literals.Select(literal => literal.Text));
         Assert.Equal([7, 8, 9, 10, 13], literals.Select(literal => literal.Line));
 
