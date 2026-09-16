@@ -113,7 +113,8 @@ public class ProviderOpCommandTests
 
         await RunOneAsync(api);
 
-        var attempt = await AttemptAsync(api, item);
+        var read = await api.PostOkAsync<WorkItemDto>(Operations.WorkItemGet, new { work_item_id = item }, Ct);
+        var attempt = Assert.Single(read.Attempts!);
         var launch = attempt.Launch;
         Assert.NotNull(launch);
         Assert.True(launch.Pid > 0);
@@ -133,8 +134,19 @@ public class ProviderOpCommandTests
         // The vendor program was really called, which is what makes the answer evidence rather than a fixture.
         Assert.Contains(workspace.Calls, call => call.Contains("campaign get", StringComparison.Ordinal));
 
-        // Nothing turns an answer into an outcome yet: one recorder does that, and it is the next increment.
-        Assert.Equal(AttemptStatus.Running, attempt.Status);
+        // And the answer became the item's outcome: one recorder reads it against the operation's own contract,
+        // records the result, and writes down what this provider calls the campaign the read resolved.
+        Assert.Equal(AttemptStatus.Succeeded, attempt.Status);
+        Assert.Equal(WorkItemStatus.Succeeded, read.Status);
+        Assert.Equal(ProviderCampaign, (string?)read.Result!["campaign"]!["external_id"]);
+        Assert.Equal("live", (string?)read.Result["campaign"]!["status"]);
+
+        var pinned = await api.PostOkAsync<CampaignDto>(Operations.CampaignGet, new { campaign_id = campaign }, Ct);
+        var pin = Assert.Single(pinned.ExternalIds);
+        Assert.Equal(TestPlugins.FakeProviderId, pin.PluginId);
+        Assert.Equal("campaign", pin.Kind);
+        Assert.Equal(ProviderCampaign, pin.Value);
+        Assert.Equal(attempt.Id, pin.RecordedByAttemptId);
     }
 
     private static Task<RuntimeApiFixture> StartAsync(TestWorkspace workspace) =>
@@ -163,12 +175,6 @@ public class ProviderOpCommandTests
         Assert.True(await DispatchHarness.FirstScanDoneAsync(api.Resolve<DispatcherStatus>(), Ct));
         Assert.Equal(1, (await api.Resolve<ScanRunner>().ScanOnceAsync(Ct)).Claimed);
         Assert.True(await api.Resolve<HandlerPool>().DrainAsync(TimeSpan.FromSeconds(30)));
-    }
-
-    private static async Task<AttemptDto> AttemptAsync(RuntimeApiFixture api, string item)
-    {
-        var read = await api.PostOkAsync<WorkItemDto>(Operations.WorkItemGet, new { work_item_id = item }, Ct);
-        return Assert.Single(read.Attempts!);
     }
 
     private static async Task<string> CampaignAsync(RuntimeApiFixture api)
