@@ -48,7 +48,13 @@ attempt that failed on it much later, with a provider already called. `workitem.
 |---|---|---|
 | `operation` | `unknown` | the name is well formed, but this build publishes no contract for it. The message names the operations it does publish |
 | `context.input` | `required` | the operation declares required arguments and the item carries none. An absent key and a JSON `null` read alike — neither is an argument |
-| `context.input<pointer>` | `invalid` | the arguments do not satisfy the operation's own schema, one detail per failure with the JSON pointer of the offending place (`context.input/channel`), all of them reported at once |
+| `context.input<pointer>` | `invalid` | the arguments do not satisfy the `args` sub-schema of the operation's input, one detail per failure with the JSON pointer of the offending place (`context.input/channel`), all of them reported at once |
+
+What is measured here is the caller's own arguments — the `args` property of the operation's input
+schema — and not the whole composed input. The rest of that input is the runtime's to write, at
+claim: the contact, the campaign and the idempotency key. So a rule the operation states across the
+whole of it, such as a root `anyOf`, is not a creation-time check; there is nothing yet for it to be
+checked against.
 
 `workitem.update` re-reads the arguments only when the patch names the reserved key — `set` writing
 `input`, or `unset` naming it — and measures them against the item's **own** operation, which is not

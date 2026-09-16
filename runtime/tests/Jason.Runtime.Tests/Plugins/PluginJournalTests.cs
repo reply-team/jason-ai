@@ -17,7 +17,7 @@ public class PluginJournalTests
     public async Task An_activated_reload_is_written_down_once()
     {
         using var programs = new TestPrograms();
-        programs.AddProgram("dotnet");
+        programs.AddProgram(FakeProviderCli.ExecutableName);
         await using var api = await PluginServiceTests.StartAsync(new TestSearchPath { Path = programs.Root }, paths =>
         {
             TestPlugins.InstallFakeProvider(paths);

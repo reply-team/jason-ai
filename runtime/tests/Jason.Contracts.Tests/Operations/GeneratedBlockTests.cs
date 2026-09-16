@@ -72,6 +72,7 @@ public class GeneratedBlockTests
             ["not"] = () => Refuse("""{"not":{"type":"string"}}""", "\"a\""),
             ["format"] = () => Refuse("""{"type":"string","format":"date-time"}""", "\"the fifth\""),
             [Unknown] = () => Check("""{"type":"object","patternProperties":{}}"""),
+            ["schema_keyword_malformed"] = () => Check("""{"type":"object","required":"a"}"""),
             ["schema_ref_unresolved"] = () => Check("""{"$ref":"#/$defs/absent"}"""),
             ["schema_cyclic"] = () => Check("""{"$ref":"#/$defs/a","$defs":{"a":{"$ref":"#/$defs/a"}}}"""),
             ["schema_pattern_invalid"] = () => Check("""{"type":"string","pattern":"^(?=a)a$"}"""),

@@ -84,8 +84,10 @@ entry:                           # optional; defaults to main.js / invoke
 capabilities:                    # every section optional; absent means "not requested"
   exec:
     executables:                 # 1..16; the ONLY programs host.exec may ever start
-      - name: dotnet             # bare file name, no path separators, no extension
-        min_version: 10.0.0      # optional; needs a version_command
+      - name: provider-cli       # the vendor program itself, by its own name: a bare file name, no
+                                 # path separators, no extension. Never a language runtime — granting
+                                 # one of those reaches every program it can be handed.
+        min_version: 2.4.0       # optional; needs a version_command
         version_command: ["--version"]
   http:
     hosts: ["api.example.com", "localhost:5555"]   # 1..32; exact match, no wildcards
@@ -124,6 +126,7 @@ binding:                         # optional; a schema, in the published dialect,
 | `capabilities.http.hosts` | required inside `http`; 1..32 lowercase `host` or `host:port` (port 1–65535), exact, unique, no scheme, no path, no wildcards | `field_required`, `field_invalid`, `host_invalid` |
 | `capabilities.env.variables` | required inside `env`; 1..32 names `^[A-Z][A-Z0-9_]{0,63}$`, unique | `field_required`, `field_invalid`, `variable_name_invalid` |
 | a variable named `JASON_…` | never; the prefix is reserved for the runtime | `variable_reserved` |
+| a variable that decides what a program loads | never; the same names `host.exec` refuses — `LD_*`, `DYLD_*`, `COMPlus_*`, `CORECLR_*`, `DOTNET_STARTUP_HOOKS`, `NODE_OPTIONS`, `PYTHONPATH`, `JAVA_TOOL_OPTIONS`, `PATH` and the rest listed under `host.exec` below. A granted variable is copied into every child the plugin starts, so being handed one and setting one end in the same place | `field_invalid` |
 | `limits.timeout_ms` | 1000 .. `Plugins:Limits:MaxTimeoutMs` (3 600 000 by default) | `field_invalid` |
 | `limits.memory_mb` | 16 .. `Plugins:Limits:MaxMemoryMb` (512 by default) | `field_invalid` |
 | `binding` | optional; a schema of `type: object` in the dialect of `docs/contracts/`, at most 64 KiB. A problem inside it is located as `binding#<json pointer>` | `field_invalid` |
@@ -178,7 +181,7 @@ it in full:
       "digest": "sha256:3f2a9c1b4d5e…", "contracts": { "protocol": [1], "operations": [1] },
       "operations": ["echo.run", "exec.run"], "entry": { "module": "main.js", "function": "invoke" },
       "capabilities": {
-        "exec": { "requested": [ { "name": "dotnet", "path": "/usr/bin/dotnet", "version": "10.0.100", "min_version": null } ], "granted": ["dotnet"] },
+        "exec": { "requested": [ { "name": "provider-cli", "path": "/usr/local/bin/provider-cli", "version": "2.4.1", "min_version": null } ], "granted": ["provider-cli"] },
         "http": { "requested": ["localhost:5555", "api.example.com"], "granted": [] },
         "env":  { "requested": ["FAKE_TOKEN", "OTHER_TOKEN"], "granted": ["FAKE_TOKEN"] } },
       "limits": { "timeout_ms": 20000, "memory_mb": 64 }, "status": "valid", "problems": [] } ],
@@ -349,7 +352,8 @@ name containing `/`, `\` or `:` — fails with `executable_not_allowed`.
 
 The child's working directory is the invocation directory, and it inherits the plugin host's own
 environment — the base set below plus the granted variables — with `env` added on top. A name that
-decides what a program loads is refused with a `TypeError` at the call: `LD_*`, `DYLD_*`, `COMPlus_*`,
+decides what a program loads is refused with a `TypeError` at the call, whose message names the rule
+as `exec_env_not_allowed`: `LD_*`, `DYLD_*`, `COMPlus_*`,
 `CORECLR_*`, `DOTNET_STARTUP_HOOKS`, `DOTNET_ROOT`, `NODE_OPTIONS`, `NODE_PATH`, `PYTHONPATH`,
 `PYTHONSTARTUP`, `RUBYOPT`, `PERL5OPT`, `JAVA_TOOL_OPTIONS`, `CLASSPATH`, `PATH`, `PATHEXT`,
 `COMSPEC` and `SHELL` among them. Ordinary variables of the same runtimes — `NODE_ENV`,
@@ -737,7 +741,7 @@ disagreement. Everything else, the input, the binding and the resolved grants in
   "input": { "…": "the operation's arguments, at most 1 MiB" },
   "context": { "binding": null, "attempt_id": null, "attempt_number": null,
                "work_item_id": null, "campaign_id": null, "runtime_version": "0.1.0" },
-  "grants": { "exec": { "executables": [ { "name": "dotnet", "path": "/usr/bin/dotnet" } ] },
+  "grants": { "exec": { "executables": [ { "name": "provider-cli", "path": "/usr/local/bin/provider-cli" } ] },
               "http": { "hosts": ["api.example.com"] },
               "env": { "variables": ["FAKE_TOKEN"] } },
   "limits": { "timeout_ms": 20000, "memory_bytes": 67108864, "max_statements": 10000000, "max_recursion": 64,
@@ -780,7 +784,7 @@ and the runtime will measure an answer against the operation it asked for once i
 ### stderr: JSON Lines
 
 ```json
-{"ts":"2026-09-14T12:00:00.123Z","level":"info","source":"host","plugin":"fake-provider","invocation_id":"pin_01J4…","message":"exec","data":{"executable":"dotnet","args":["--version"],"exit_code":0,"timed_out":false,"duration_ms":42,"truncated":false}}
+{"ts":"2026-09-14T12:00:00.123Z","level":"info","source":"host","plugin":"fake-provider","invocation_id":"pin_01J4…","message":"exec","data":{"executable":"provider-cli","args":["--version"],"exit_code":0,"timed_out":false,"duration_ms":42,"truncated":false}}
 ```
 
 `source` is `host` or `plugin`; `data` and `truncated` appear only when they apply. The host's own

@@ -25,6 +25,14 @@ public sealed partial class ExecService(HostServices services)
     public const int MaxEnv = 32;
     public const int MaxEnvValueBytes = 4096;
 
+    /// <summary>
+    /// The name this refusal was given. A rule broken by the plugin's own call is a <c>TypeError</c> — thrown
+    /// where the call was written, catchable by the plugin, and never an outcome code — so the code has nowhere
+    /// to live but the message. It lives there because a plugin author who reads one needs something to search
+    /// the guide for.
+    /// </summary>
+    public const string EnvNotAllowedCode = "exec_env_not_allowed";
+
     /// <summary>How long a killed process is given to actually go away before the host stops waiting for it.</summary>
     private static readonly TimeSpan KillGrace = TimeSpan.FromSeconds(5);
 
@@ -86,7 +94,7 @@ public sealed partial class ExecService(HostServices services)
             // code executed inside a program the user granted, which is not the permission the user gave.
             if (!VariableName().IsMatch(name) || !BaseEnvironment.MayAPluginSet(name))
             {
-                throw ArgumentReader.TypeError(engine, $"{Function}: '{name}' is not a variable a plugin may set.");
+                throw ArgumentReader.TypeError(engine, $"{Function}: '{name}' is not a variable a plugin may set ({EnvNotAllowedCode}).");
             }
         }
 
@@ -183,6 +191,11 @@ public sealed partial class ExecService(HostServices services)
             // says nothing about what it left behind. What was captured by then is what the plugin is told.
             Settle(pumps);
             Settle(written);
+
+            // The same letting go, said out loud: an abandoned pump keeps running, and what the plugin is told
+            // must be what was captured by now rather than whatever the helper goes on writing afterwards.
+            stdout.Freeze();
+            stderr.Freeze();
 
             var exitCode = ExitCodeOf(process);
             var result = new JsonObject
@@ -303,6 +316,9 @@ public sealed partial class ExecService(HostServices services)
         }
     }
 
-    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$")]
+    // `\z` rather than `$`: `$` also matches immediately before a trailing line break, so "NODE_OPTIONS\n"
+    // satisfied this rule and then missed the denylist, which compares whole names. A name ends where the
+    // string ends.
+    [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*\z")]
     private static partial Regex VariableName();
 }

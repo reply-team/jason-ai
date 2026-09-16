@@ -41,16 +41,49 @@ public sealed class StderrSink(
 
     private readonly StringBuilder _line = new();
     private readonly StringBuilder _tail = new();
+
+    /// <summary>Held over the tail's append and its read, which happen on different threads. See <see cref="Freeze"/>.</summary>
+    private readonly Lock _tailGate = new();
+
+    private string? _frozen;
     private long _written;
     private bool _silenced;
     private bool _dropping;
     private bool _afterCarriageReturn;
 
     /// <summary>The last of the child's stderr, redacted — the trace a failed invocation travels with.</summary>
-    public string Tail => _tail.ToString();
+    public string Tail
+    {
+        get
+        {
+            lock (_tailGate)
+            {
+                return _frozen ?? _tail.ToString();
+            }
+        }
+    }
 
     /// <summary>Whether the child wrote more than the cap allowed to be kept.</summary>
     public bool Truncated => _silenced;
+
+    /// <summary>
+    /// Says that the caller has let go: the tail stops moving and every later read answers with what stood here
+    /// at this moment. The caller is the invoker, which waits for this pump only as long as the kill grace and
+    /// then abandons it — a child can leave something behind holding its stderr open, and that helper goes on
+    /// writing into this sink long after the invocation has its answer. Freezing is what makes the trace that
+    /// travels with a protocol failure the trace of the invocation rather than of whatever outlived it.
+    /// </summary>
+    /// <remarks>
+    /// The file is a separate matter and keeps its copy of everything: a durable record of what a child said is
+    /// worth more than a tidy end, and nothing reads it back into an answer.
+    /// </remarks>
+    public void Freeze()
+    {
+        lock (_tailGate)
+        {
+            _frozen ??= _tail.ToString();
+        }
+    }
 
     public async Task PumpAsync(StreamReader source)
     {
@@ -130,10 +163,18 @@ public sealed class StderrSink(
         _line.Clear();
         _dropping = false;
 
-        _tail.AppendLine(text);
-        if (_tail.Length > tailChars)
+        // Under the gate, because the reader of the tail is another thread entirely and a builder trimmed while
+        // it is being read does not merely hand back a torn string: the read throws.
+        lock (_tailGate)
         {
-            _tail.Remove(0, _tail.Length - tailChars);
+            if (_frozen is null)
+            {
+                _tail.AppendLine(text);
+                if (_tail.Length > tailChars)
+                {
+                    _tail.Remove(0, _tail.Length - tailChars);
+                }
+            }
         }
 
         if (_silenced)

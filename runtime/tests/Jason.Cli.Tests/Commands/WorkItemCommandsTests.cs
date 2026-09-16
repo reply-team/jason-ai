@@ -153,6 +153,19 @@ public class WorkItemCommandsTests
     }
 
     [Fact]
+    public async Task An_input_beside_a_file_body_whose_context_is_not_an_object_is_a_usage_error()
+    {
+        using var file = new TempFile("{\"kind\":\"provider_op\",\"operation\":\"campaign.get\",\"context\":[1,2]}");
+        using var cli = new CliRun();
+
+        // The arguments have nowhere to be written, and the CLI says so rather than throwing over the body.
+        var exit = await cli.RunAsync("workitem", "create", "cmp_A", "--file", file.Path, "--input", "{}");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains("--input", cli.Error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task An_input_that_is_not_an_object_is_a_usage_error()
     {
         using var cli = new CliRun();

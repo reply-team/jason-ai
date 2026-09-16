@@ -144,20 +144,23 @@ public class FixtureTests
             stated.Select(Pointer).Order(StringComparer.Ordinal).ToList(),
             problems.Select(problem => problem.Pointer).Order(StringComparer.Ordinal).ToList());
 
-        foreach (var entry in stated.OfType<JsonObject>())
+        // Where a fixture names the reason at every entry for a pointer, the set at that pointer is compared for
+        // equality rather than for membership: "one of the problems here is the one I named" goes on passing
+        // after that pointer grows a second problem nobody meant, which is exactly the drift this exists to catch.
+        foreach (var group in stated.OfType<JsonObject>().GroupBy(entry => (string)entry["pointer"]!, StringComparer.Ordinal))
         {
-            var reason = (string?)entry["reason"];
-            if (reason is null)
+            var reasons = group.Select(entry => (string?)entry["reason"]).ToList();
+            if (reasons.Exists(reason => reason is null))
             {
                 continue;
             }
 
-            var pointer = (string)entry["pointer"]!;
-            var reported = problems.Where(problem => problem.Pointer == pointer).Select(problem => problem.Reason).ToList();
+            var named = reasons.OfType<string>().Order(StringComparer.Ordinal).ToList();
+            var reported = problems.Where(problem => problem.Pointer == group.Key).Select(problem => problem.Reason).Order(StringComparer.Ordinal).ToList();
 
             Assert.True(
-                reported.Contains(reason, StringComparer.Ordinal),
-                $"{relative} says `{pointer}` fails with `{reason}`; the validator reports {Listed(reported)} there.");
+                named.SequenceEqual(reported, StringComparer.Ordinal),
+                $"{relative} says `{group.Key}` fails with {Listed(named)}; the validator reports {Listed(reported)} there.");
         }
     }
 

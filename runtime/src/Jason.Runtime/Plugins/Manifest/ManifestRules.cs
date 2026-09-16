@@ -106,7 +106,12 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
     /// </summary>
     private void RefuseSecretLikeNames(JsonNode? node, string pointer, int depth)
     {
-        if (depth > SchemaValidator.MaxDepth)
+        // The bound is the one on the document being walked, not the one on the schema it expresses. A schema
+        // level costs about two nodes — `properties`, then the name under it — so measuring node depth against
+        // the dialect's schema depth stopped the scan around halfway down a schema the dialect accepts, and the
+        // rule stopped with it. Nothing could reach that because the reader refuses a deeper document first;
+        // holding the scan to the reader's own limit means a later change to that limit widens the scan too.
+        if (depth > YamlToJson.MaxDepth)
         {
             return;
         }
@@ -728,6 +733,18 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
             {
                 Add(ProblemCodes.VariableReserved, itemPath, $"variables starting with '{BaseEnvironment.ReservedPrefix}' belong to the runtime and never reach a plugin.");
             }
+            else if (!BaseEnvironment.MayAPluginSet(variable))
+            {
+                // The same list `host.exec` holds a plugin to. Being granted a name and setting one end in the
+                // same place: a granted variable is copied out of the runtime's own environment into every child
+                // the plugin starts, so a loader or interpreter hook granted here chooses the code that runs
+                // inside a program the user allowed — which is not the permission the user gave.
+                Add(
+                    ProblemCodes.FieldInvalid,
+                    itemPath,
+                    $"'{variable}' decides what a program loads before its own first line runs, so it is neither a "
+                        + "variable a plugin may set nor one a plugin may be granted.");
+            }
             else if (variables.Contains(variable, StringComparer.Ordinal))
             {
                 Add(ProblemCodes.VariableNameInvalid, itemPath, $"variable '{variable}' is named twice.");
@@ -825,27 +842,31 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
     /// </summary>
     internal static bool IsPluginId(string? text) => text is not null && Identifier().IsMatch(text);
 
-    [GeneratedRegex("^[a-z][a-z0-9-]{1,63}$")]
+    // Every name rule below ends at `\z` rather than `$`. `$` also matches immediately before a trailing line
+    // break, so "NODE_OPTIONS\n" satisfied the name rule — and then missed a denylist that compares whole names,
+    // and a grant that looks a name up by the whole of it. A manifest is a stranger's text; a name ends where the
+    // string ends.
+    [GeneratedRegex(@"^[a-z][a-z0-9-]{1,63}\z")]
     private static partial Regex Identifier();
 
-    [GeneratedRegex(@"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?$")]
+    [GeneratedRegex(@"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?\z")]
     private static partial Regex SemanticVersion();
 
-    [GeneratedRegex(@"^\d+\.\d+\.\d+$")]
+    [GeneratedRegex(@"^\d+\.\d+\.\d+\z")]
     private static partial Regex VersionCore();
 
-    [GeneratedRegex(@"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")]
+    [GeneratedRegex(@"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+\z")]
     private static partial Regex OperationName();
 
-    [GeneratedRegex(@"^[A-Za-z_$][A-Za-z0-9_$]*$")]
+    [GeneratedRegex(@"^[A-Za-z_$][A-Za-z0-9_$]*\z")]
     private static partial Regex FunctionName();
 
-    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")]
+    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\z")]
     private static partial Regex ExecutableName();
 
-    [GeneratedRegex(@"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:([1-9]\d{0,4}))?$")]
+    [GeneratedRegex(@"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:([1-9]\d{0,4}))?\z")]
     private static partial Regex HostName();
 
-    [GeneratedRegex("^[A-Z][A-Z0-9_]{0,63}$")]
+    [GeneratedRegex(@"^[A-Z][A-Z0-9_]{0,63}\z")]
     private static partial Regex VariableName();
 }

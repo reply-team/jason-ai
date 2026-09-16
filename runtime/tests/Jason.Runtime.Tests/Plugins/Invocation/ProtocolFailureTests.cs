@@ -285,7 +285,11 @@ public class ProtocolFailureTests
                 TestPlugins.InstallFakeProvider(paths);
                 TestPlugins.Grant(paths, TestPlugins.FakeProviderId, exec: ["*"]);
             },
-            configureServices: services => services.AddSingleton(locator));
+            configureServices: services =>
+            {
+                services.AddSingleton(locator);
+                services.AddSingleton(TestPlugins.SearchPath);
+            });
 
     private static async Task<PluginInvocationResult> InvokeAsync(
         RuntimeApiFixture api,

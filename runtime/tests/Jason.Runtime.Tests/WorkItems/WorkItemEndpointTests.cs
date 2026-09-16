@@ -100,7 +100,13 @@ public class WorkItemEndpointTests
         var error = JsonSerializer.Deserialize<ErrorResponse>(body, JasonJson.Options)!.Error;
         Assert.Equal("validation_failed", error.Code);
         Assert.Equal(50, error.Details!.Count);
-        Assert.Contains("19950", error.Message, StringComparison.Ordinal);
+
+        // One count of how many there were, said once. The message used to carry two — the problems the sentence
+        // did not name, and the details the answer did not list — which disagree, being counted from different
+        // places, and left a reader working out which number was about what.
+        Assert.Contains("19995 more", error.Message, StringComparison.Ordinal);
+        Assert.Contains("first 50 are listed", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("19950", error.Message, StringComparison.Ordinal);
         Assert.True(error.Message.Length < 500, $"the message is {error.Message.Length} characters long.");
         Assert.True(body.Length < 32 * 1024, $"the answer is {body.Length} bytes long.");
     }

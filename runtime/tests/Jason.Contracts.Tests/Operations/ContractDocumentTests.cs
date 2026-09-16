@@ -133,6 +133,12 @@ public class ContractDocumentTests
         }
     }
 
+    /// <summary>
+    /// The declared projection and the schema the plugin is actually handed are one statement, so they are held
+    /// against each other rather than each against a list written here: a hardcoded list agrees with a copy of
+    /// itself while the two documents drift apart. The declared fields plus the two the projection does not name
+    /// — the channels it consumes and the pins it may see — are exactly the contact a plugin receives.
+    /// </summary>
     [Theory]
     [MemberData(nameof(Published))]
     public void The_declared_contact_projection_follows_the_pre_flight(string id)
@@ -142,12 +148,22 @@ public class ContractDocumentTests
         if (contract.Preflight.Contact == ContactRequirement.NotUsed)
         {
             Assert.Null(contract.ContactProjection);
+            Assert.Null(contract.InputSchema["$defs"]?["contact"]);
             return;
         }
 
         Assert.NotNull(contract.ContactProjection);
-        Assert.Equal(["id", "first_name", "last_name", "company", "title", "time_zone"], contract.ContactProjection.Fields);
         Assert.Equal("consumed", contract.ContactProjection.Channels);
+
+        var contact = Assert.IsType<JsonObject>(contract.InputSchema["$defs"]?["contact"]);
+        var properties = Assert.IsType<JsonObject>(contact["properties"]);
+
+        Assert.Equal(
+            contract.ContactProjection.Fields.Concat(["channels", "external_ids"]).Order(StringComparer.Ordinal).ToList(),
+            properties.Select(property => property.Key).Order(StringComparer.Ordinal).ToList());
+
+        // `consumed` is one channel, not a person's whole reachability, and the schema is what enforces it.
+        Assert.Equal(1, (int)properties["channels"]!["maxItems"]!);
     }
 
     [Theory]

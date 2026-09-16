@@ -1,3 +1,4 @@
+using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Plugins.Manifest;
 
@@ -43,9 +44,9 @@ public class ManifestReaderTests
 
         Assert.True(result.IsValid, string.Join("; ", result.Problems.Select(p => $"{p.Path}: {p.Code}")));
         Assert.Equal("Fake provider", result.Manifest!.Name);
-        Assert.Equal(["dotnet"], result.Manifest.Capabilities.Exec!.Executables.Select(e => e.Name));
+        Assert.Equal([FakeProviderCli.ExecutableName], result.Manifest.Capabilities.Exec!.Executables.Select(e => e.Name));
         Assert.Equal(["localhost:5555", "127.0.0.1:5555"], result.Manifest.Capabilities.Http!.Hosts);
-        Assert.Equal(["FAKE_TOKEN", "FAKE_OTHER", "FAKE_CLI_DLL"], result.Manifest.Capabilities.Env!.Variables);
+        Assert.Equal(["FAKE_TOKEN", "FAKE_OTHER"], result.Manifest.Capabilities.Env!.Variables);
         Assert.Equal(20_000, result.Manifest.Limits.TimeoutMs);
         Assert.Equal(64, result.Manifest.Limits.MemoryMb);
     }
@@ -244,6 +245,129 @@ public class ManifestReaderTests
             result.Problems.Where(p => p.Code == "binding_secret_like").Select(p => p.Path).Order(StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// The grant and the denylist are one rule. A plugin may not <c>set</c> a loader or interpreter hook for a
+    /// program it starts; being <c>handed</c> one reaches the same child through a different door, because a
+    /// granted name is copied out of the runtime's own environment into every child that plugin starts.
+    /// </summary>
+    [Theory]
+    [InlineData("LD_PRELOAD")]
+    [InlineData("LD_LIBRARY_PATH")]
+    [InlineData("DYLD_INSERT_LIBRARIES")]
+    [InlineData("NODE_OPTIONS")]
+    [InlineData("DOTNET_STARTUP_HOOKS")]
+    [InlineData("PYTHONPATH")]
+    [InlineData("JAVA_TOOL_OPTIONS")]
+    [InlineData("PATH")]
+    public void A_plugin_may_not_be_granted_a_variable_it_may_not_set(string name)
+    {
+        var result = Read(Merge($"capabilities:\n  env:\n    variables: [{name}]\n"));
+
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal("field_invalid", problem.Code);
+        Assert.Equal("capabilities.env.variables[0]", problem.Path);
+        Assert.Contains(name, problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A name ending in a line break. `$` matches before a trailing one, so the name rule accepted it and the
+    /// denylist — which compares whole names — did not recognise it: the anchor is `\z`. The escape is written
+    /// out so that the string the rule is handed really ends in a line break.
+    /// </summary>
+    [Theory]
+    [InlineData("TOKEN")]
+    [InlineData("NODE_OPTIONS")]
+    public void A_variable_name_with_a_line_break_after_it_is_not_a_name(string stem)
+    {
+        var result = Read(Merge($"capabilities:\n  env:\n    variables: [\"{stem}\\n\"]\n"));
+
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal("variable_name_invalid", problem.Code);
+        Assert.Equal("capabilities.env.variables[0]", problem.Path);
+    }
+
+    [Fact]
+    public void A_variable_of_a_runtime_that_has_hooks_is_still_a_plugin_s_to_be_granted()
+    {
+        var result = Read(Merge("capabilities:\n  env:\n    variables: [NODE_ENV, DOTNET_NOLOGO]\n"));
+
+        Assert.True(result.IsValid, string.Join("; ", result.Problems.Select(p => $"{p.Path}: {p.Code}")));
+        Assert.Equal(["NODE_ENV", "DOTNET_NOLOGO"], result.Manifest!.Capabilities.Env!.Variables);
+    }
+
+    /// <summary>
+    /// The credential rule walks the schema's own nodes, so its budget has to be the budget of the document it
+    /// walks. It was measured against the dialect's nesting limit instead, which counts schema levels — about
+    /// two nodes each — so the scan would have stopped around halfway down a schema the dialect accepts. Nothing
+    /// could reach that today only because the manifest reader stops a deeper document first: one cap covering a
+    /// different cap's mistake. The schema is built here rather than written out, and it is as deep as a manifest
+    /// can carry, so a later change to the nesting limit widens the scan with it rather than opening a gap.
+    /// </summary>
+    [Fact]
+    public void The_credential_rule_reaches_the_bottom_of_the_deepest_binding_a_manifest_can_carry()
+    {
+        var (fragment, pointer) = DeepBinding("client_secret");
+
+        var result = Read(Merge(fragment));
+
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal("binding_secret_like", problem.Code);
+        Assert.Equal(pointer, problem.Path);
+    }
+
+    /// <summary>
+    /// A binding nested as deep as the reader will take it, with a credential-shaped property at the bottom. The
+    /// document node is level 1, `binding` is 2 and its `properties` is 3; every schema level after that costs
+    /// two nodes — `properties`, then the name under it — and the `type` scalar at the bottom costs one more. So
+    /// the levels are counted from the reader's own limit rather than guessed at.
+    /// </summary>
+    private static (string Fragment, string Pointer) DeepBinding(string leaf)
+    {
+        var levels = (YamlToJson.MaxDepth - 3) / 2;
+        var yaml = new System.Text.StringBuilder("binding:\n  type: object\n");
+        var pointer = new System.Text.StringBuilder("binding#");
+        var indent = 2;
+
+        for (var level = 0; level < levels; level++)
+        {
+            var name = level == levels - 1 ? leaf : "step" + level.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            yaml.Append(' ', indent).Append("properties:\n");
+            yaml.Append(' ', indent + 2).Append(name).Append(":\n");
+            yaml.Append(' ', indent + 4).Append("type: object\n");
+            pointer.Append("/properties/").Append(name);
+            indent += 4;
+        }
+
+        return (yaml.ToString(), pointer.ToString());
+    }
+
+    /// <summary>
+    /// A binding schema past the size the dialect reads at all. The document is built here rather than written
+    /// out, because what is being proved is that the reader weighs a stranger's schema before applying it — and a
+    /// schema that size is not something anyone writes by hand.
+    /// </summary>
+    [Fact]
+    public void A_binding_schema_larger_than_the_dialect_reads_is_refused()
+    {
+        // The cap is on the schema the reader hands the dialect check, not on the YAML that expressed it, and the
+        // two are within a few per cent of each other — so the document is grown to twice the cap rather than
+        // counted to the byte, which would only be arithmetic about a spelling.
+        var yaml = new System.Text.StringBuilder("binding:\n  type: object\n  properties:\n");
+        for (var index = 0; yaml.Length <= 2 * SchemaValidator.MaxSchemaBytes; index++)
+        {
+            yaml.Append("    a_property_named_at_length_so_the_document_grows_")
+                .Append(index.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                .Append(":\n      type: string\n");
+        }
+
+        var result = Read(Merge(yaml.ToString()));
+
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal("field_invalid", problem.Code);
+        Assert.Equal("binding", problem.Path);
+        Assert.Contains(SchemaValidator.MaxSchemaBytes.ToString(System.Globalization.CultureInfo.InvariantCulture), problem.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void A_manifest_in_the_wrong_directory_is_not_that_plugin()
     {
@@ -396,27 +520,52 @@ public class ManifestReaderTests
     {
         var root = NewPackage(TestPlugins.Manifest("fake"), "fake");
 
-        foreach (var manifest in Malformed())
+        foreach (var (field, shape, manifest) in Malformed())
         {
-            var thrown = Record.Exception(() => ManifestReader.Read(manifest, "fake", root, Bounds));
+            ManifestReadResult? result = null;
+            var thrown = Record.Exception(() => result = ManifestReader.Read(manifest, "fake", root, Bounds));
 
             Assert.True(thrown is null, $"this manifest made the reader throw {thrown?.GetType().Name}: {thrown?.Message}\n\n{manifest}");
+
+            // Not throwing is half the claim. A case that stopped reaching the read it was written for would go
+            // on passing silently, so each one has to be refused as well — except where the shape it was handed
+            // happens to be a legitimate value for that field, which is a fact about the field and not a gap.
+            Assert.True(
+                result!.Problems.Count > 0 || Acceptable.Contains((field, shape)),
+                $"`{field}: {shape}` was accepted, so that case no longer reaches the rule it was written for:\n\n{manifest}");
         }
     }
 
-    private static IEnumerable<string> Malformed()
+    /// <summary>
+    /// The generated pairs that are, for their field, perfectly good values rather than malformed ones: three
+    /// free-text fields may be the word "object", a list of two hosts named `object` and `null` is a list of two
+    /// perfectly ordinary host names, and an empty YAML value means the optional field is absent. Spelled out
+    /// pair by pair so that a case which starts passing for any other reason is still caught.
+    /// </summary>
+    private static readonly HashSet<(string Field, string Shape)> Acceptable =
+    [
+        .. new[] { "name", "description", "entry.function" }.Select(field => (field, "\"object\"")),
+        .. ReadableFields.Select(field => (field, "~")),
+        ("capabilities.http.hosts", "[object, \"null\"]"),
+
+        // A binding of `type: object` — written either way round — is exactly what a binding is.
+        ("binding", "{ type: object }"),
+        ("binding.type", "\"object\""),
+    ];
+
+    private static IEnumerable<(string Field, string Shape, string Manifest)> Malformed()
     {
         foreach (var field in ReadableFields)
         {
             foreach (var shape in WrongShapes)
             {
-                yield return Merge(Nested(field, shape));
+                yield return (field, shape, Merge(Nested(field, shape)));
             }
         }
 
         foreach (var fragment in WrongShapesInLists)
         {
-            yield return Merge(fragment);
+            yield return (fragment, "as written", Merge(fragment));
         }
     }
 

@@ -19,11 +19,8 @@ namespace Jason.Runtime.Tests.Plugins.Invocation;
 /// first, next to the code that produced it.
 /// </remarks>
 [Collection(ProcessEnvironmentCollection.Name)]
-public class CanonicalOperationTests : IDisposable
+public class CanonicalOperationTests
 {
-    /// <summary>Where the plugin finds the stand-in vendor CLI. Its value is a path, and never a secret.</summary>
-    private const string CliVariable = "FAKE_CLI_DLL";
-
     private const string CampaignId = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
     private const string ContactId = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
     private const string WorkItemId = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
@@ -32,14 +29,6 @@ public class CanonicalOperationTests : IDisposable
     private const string ProviderList = "lst_7";
     private const string Marta = "marta@example.test";
     private const string Blocked = "blocked@example.test";
-
-    public CanonicalOperationTests() => Environment.SetEnvironmentVariable(CliVariable, FakeProviderCli.Dll);
-
-    public void Dispose()
-    {
-        Environment.SetEnvironmentVariable(CliVariable, null);
-        GC.SuppressFinalize(this);
-    }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -447,7 +436,7 @@ public class CanonicalOperationTests : IDisposable
     private static Task<RuntimeApiFixture> StartAsync(Action<JasonPaths>? extra = null) =>
         PluginInvokerTests.StartAsync(paths =>
         {
-            TestPlugins.Grant(paths, TestPlugins.FakeProviderId, exec: ["*"], env: ["FAKE_TOKEN", CliVariable]);
+            TestPlugins.Grant(paths, TestPlugins.FakeProviderId, exec: ["*"], env: ["FAKE_TOKEN"]);
             extra?.Invoke(paths);
         });
 }

@@ -300,6 +300,12 @@ public sealed partial class PluginInvoker(
             // child that exited by itself, which says nothing about what it left running on the same handles.
             // What was captured by then is what the invocation is classified from.
             await SettleAsync([.. pumps, envelope], settings.Invoker.KillGraceMs).ConfigureAwait(false);
+
+            // Letting go is said out loud, because an abandoned pump keeps running: what is classified below has
+            // to be what was captured by now, and a tail still being appended to while it is read does not merely
+            // tear — the read throws, out of this method, stranding the handler slot this attempt is holding.
+            stdout.Freeze();
+            stderr.Freeze();
             Release(process);
 
             var exitCode = ExitCodeOf(process);
