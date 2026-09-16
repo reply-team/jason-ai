@@ -68,6 +68,26 @@ public class BoundedCaptureTests
         await Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Both callers wait for a drain only as long as a kill grace and then abandon it, because a program can
+    /// leave something behind that inherited its pipes. What the caller was told is therefore what stood here
+    /// when it let go, and the stream is still read to the end — a pipe nobody drains is how a child hangs.
+    /// </summary>
+    [Fact]
+    public async Task A_capture_the_caller_has_let_go_of_keeps_what_it_had()
+    {
+        var capture = new BoundedCapture(1024);
+        await capture.DrainAsync(Stream("what the caller was told"), Ct);
+
+        capture.Freeze();
+        var afterwards = Stream(" and what the helper wrote afterwards");
+        await capture.DrainAsync(afterwards, Ct);
+
+        Assert.Equal("what the caller was told", capture.Text);
+        Assert.Equal(24, capture.TotalBytes);
+        Assert.Equal(afterwards.Length, afterwards.Position);
+    }
+
     [Fact]
     public void A_cap_that_is_not_a_size_is_refused()
     {

@@ -96,6 +96,150 @@ public class StderrSinkTests : IDisposable
         Assert.True(sink.Tail.Length <= 4096, $"the tail grew to {sink.Tail.Length} characters");
     }
 
+    /// <summary>
+    /// The invoker reads the tail on every protocol-failure branch, and by then it may have abandoned the pump
+    /// at the end of the kill grace — so the read and the append run at the same time. A <c>StringBuilder</c>
+    /// read while it is being written does not merely tear: the read can throw, out of the invocation, which in
+    /// this runtime strands the handler slot the attempt was holding rather than spoiling one diagnostic string.
+    /// </summary>
+    [Fact]
+    public async Task Reading_the_tail_while_a_pump_is_still_writing_never_throws()
+    {
+        var sink = Sink();
+        var pump = Task.Run(() => sink.PumpAsync(Reader(Flood(20_000), step: 4096)), Ct);
+
+        Exception? thrown = null;
+        while (!pump.IsCompleted)
+        {
+            try
+            {
+                _ = sink.Tail;
+            }
+            catch (Exception exception)
+            {
+                thrown = exception;
+                break;
+            }
+        }
+
+        await pump;
+        Assert.True(thrown is null, $"reading the tail threw {thrown?.GetType().Name}: {thrown?.Message}");
+    }
+
+    /// <summary>
+    /// What the invoker actually needs: the trace that travels with a protocol failure is the trace of this
+    /// invocation. The pump is abandoned at the end of the kill grace, and a child can leave something behind
+    /// holding its stderr open — so without a moment of letting go, the answer would go on changing under the
+    /// caller that already acted on it.
+    /// </summary>
+    [Fact]
+    public async Task A_tail_the_caller_has_let_go_of_does_not_move_under_it()
+    {
+        var sink = Sink(maxBytes: 4096);
+        using var held = new HeldOpenStream("a line the helper goes on writing after the invocation has its answer\n");
+        var pump = Task.Run(() => sink.PumpAsync(new StreamReader(held, Encoding.UTF8)), Ct);
+
+        // The state the invoker finds the sink in: lines assembled, and a pump that has not finished — this one
+        // cannot finish, because the stream ends only when this test says so.
+        while (sink.Tail.Length == 0)
+        {
+            await Task.Yield();
+        }
+
+        sink.Freeze();
+        var frozen = sink.Tail;
+        Assert.NotEmpty(frozen);
+
+        var served = held.Reads;
+        while (held.Reads < served + 50)
+        {
+            await Task.Yield();
+        }
+
+        Assert.Equal(frozen, sink.Tail);
+
+        held.Finish();
+        await pump;
+        Assert.Equal(frozen, sink.Tail);
+    }
+
+    /// <summary>
+    /// A stream that never ends until it is told to, so a test can hold a pump in the middle of writing. This is
+    /// the shape a helper a child left behind presents to the runtime: the pipe stays open and data keeps coming
+    /// long after the invocation has its answer.
+    /// </summary>
+    private sealed class HeldOpenStream(string line) : Stream
+    {
+        private readonly byte[] _payload = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat(line, 8)));
+        private readonly ManualResetEventSlim _finished = new(false);
+        private int _reads;
+
+        public int Reads => Volatile.Read(ref _reads);
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public void Finish() => _finished.Set();
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            ArgumentNullException.ThrowIfNull(buffer);
+            Interlocked.Increment(ref _reads);
+            if (_finished.IsSet)
+            {
+                return 0;
+            }
+
+            var take = Math.Min(count, _payload.Length);
+            Array.Copy(_payload, 0, buffer, offset, take);
+            return take;
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _finished.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+    }
+
+    private static string Flood(int lines)
+    {
+        var text = new StringBuilder();
+        for (var line = 0; line < lines; line++)
+        {
+            text.Append("a diagnostic line long enough that the tail has to be trimmed on every one of them ")
+                .Append(line)
+                .Append('\n');
+        }
+
+        return text.ToString();
+    }
+
     private StderrSink Sink(int maxBytes = 4_194_304, int maxLineChars = StderrSink.DefaultLineChars) =>
         new(_file, new Redactor([Secret]), maxBytes, tailChars: 4096, maxLineChars: maxLineChars);
 

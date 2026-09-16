@@ -192,6 +192,11 @@ public sealed partial class ExecService(HostServices services)
             Settle(pumps);
             Settle(written);
 
+            // The same letting go, said out loud: an abandoned pump keeps running, and what the plugin is told
+            // must be what was captured by now rather than whatever the helper goes on writing afterwards.
+            stdout.Freeze();
+            stderr.Freeze();
+
             var exitCode = ExitCodeOf(process);
             var result = new JsonObject
             {
