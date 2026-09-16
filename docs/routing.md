@@ -228,6 +228,18 @@ is how the question is asked; "reads like a credential" is what it says.
 A credential reaches a plugin the way every secret does: through a variable its manifest declares under
 `capabilities.env`, granted by the user and read with `host.env`.
 
+The package under [`plugins/reply/`](../plugins/reply/README.md) is the whole handshake in one place. Its
+manifest declares two optional fields, and a campaign somebody routed to it acts as the profile the
+binding names — one of the profiles that package's own vendor CLI already holds a credential for:
+
+```sh
+jason route set --campaign cmp_… --plugin reply --binding '{"profile":"outbound"}'
+```
+
+Nothing here knows which provider `reply` is or what a `profile` selects. Both are what an operator
+wrote: the id is the directory the package was copied into, and the field is one that package's manifest
+declared.
+
 ## 6. Activation, and what refuses it
 
 A reload builds the whole candidate route set — the global half from `settings.json`, the campaign half
