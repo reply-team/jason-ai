@@ -287,7 +287,11 @@ is, and is never written down. Anything else — a bare value, `undefined`, an a
 
 **Failing.** `throw host.fail({ class, code, message, details?, external_ids? })` is the only way to
 report a business failure with its class. Anything else thrown fails `permanent` with
-`plugin_exception`, keeping the message and the JavaScript stack in `details.stack`. The class is a
+`plugin_exception`, keeping the message and the JavaScript stack in `details.stack`. **Know where
+`details` ends up**: for a provider operation it is flattened into the attempt's free-text `trace`,
+and it is stripped from the work item's `last_error` entirely — so put what a person needs to act on
+in `message`, and treat `details` as something a developer reads from the attempt rather than as
+structure anything will parse. The class is a
 judgement only you can make, and `ambiguous` is the expensive one — it ends the work item and waits
 for a person (§8), so spend it only where the effect really may have landed. In the snippet above
 `provider_answer_lost` is a code the three published contracts declare; `provider_call_failed` is
@@ -650,10 +654,20 @@ every operation's plugin is held to, and the runtime enforces each of them:
 2. **Return the provider's identifiers in the right place** — on `external_ids` beside a result, on
    `error.external_ids` inside a failure — and only kinds the operation declares. An undeclared kind
    makes a *success* `result_invalid`; on a failure it is refused and named beside the failure the
-   plugin reported, which is kept.
+   plugin reported, which is kept. **A top-level `external_ids` on a failed outcome is dropped without
+   a word**: the host writes null there for a failure, so the identifier you meant to record is lost
+   exactly where it matters most — after a lost answer, where the pin is the only trace that anything
+   happened.
 3. **Answer in the operation's own vocabulary**, so that a result satisfies its output schema. An
    answer that does not is `result_invalid`, is never repeated, and is kept on the attempt.
 4. **Work by a pin when you are given one**, and never match that person by address again.
+5. **Carry the provider's own refusal back, in the runtime's vocabulary.** A provider may know something
+   the runtime cannot: a person suppressed at the provider between the moment the work was claimed and
+   the moment you act on it is the ordinary case. Your job is not to re-check anything the runtime
+   already checked — it is to recognise the provider's refusal and report it as `suppressed` with class
+   `permanent`, so the item ends in a person's inbox rather than being retried into the same wall. The
+   reference plugin does exactly this and nothing more: the re-check happens at the provider, and the
+   plugin maps the answer.
 
 And one thing the runtime does for you, which it is easy to write a plugin that does not expect: every
 `external_ids` object in your input is filtered to **your own** pins. What another plugin calls the

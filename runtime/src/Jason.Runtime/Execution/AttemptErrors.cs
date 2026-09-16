@@ -60,7 +60,11 @@ public static class AttemptErrors
     /// <summary>The plugin answered, and the answer is not the shape the operation publishes.</summary>
     public const string ResultInvalid = "result_invalid";
 
-    /// <summary>A runtime restart found the attempt still scheduled; it was never counted.</summary>
+    /// <summary>
+    /// A runtime restart found the attempt still scheduled, before anything was launched, so it was never
+    /// counted — for provider work as much as for an agent's, because `processing` is committed before a
+    /// child exists and an attempt still scheduled therefore provably ran nothing.
+    /// </summary>
     public const string Interrupted = "interrupted";
 
     /// <summary>The work item was cancelled while the attempt was live.</summary>
