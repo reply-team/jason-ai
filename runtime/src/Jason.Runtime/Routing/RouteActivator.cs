@@ -192,10 +192,10 @@ public sealed class RouteActivator(
         var operations = new Dictionary<string, Route>(StringComparer.Ordinal);
         foreach (var (operation, route) in active.Operations)
         {
-            var checked_ = Accept(plugins, GlobalOperationField(operation), operation, route.PluginId, route.Binding, problems);
-            if (checked_ is not null)
+            var rechecked = Accept(plugins, GlobalOperationField(operation), operation, route.PluginId, route.Binding, problems);
+            if (rechecked is not null)
             {
-                operations[operation] = checked_;
+                operations[operation] = rechecked;
             }
         }
 
@@ -216,11 +216,13 @@ public sealed class RouteActivator(
         var rows = await db.CampaignRoutes
             .AsNoTracking()
             .Where(route => route.Campaign!.ArchivedAt == null)
+            .OrderBy(route => route.CampaignId)
+            .ThenBy(route => route.Operation)
             .Select(route => new { Campaign = route.Campaign!.PublicId, route.Operation, route.PluginId, route.Binding })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var campaigns = new Dictionary<string, (Route? Default, Dictionary<string, Route> Operations)>(StringComparer.Ordinal);
+        var campaigns = new Dictionary<string, CampaignRoutes>(StringComparer.Ordinal);
         foreach (var row in rows)
         {
             var route = Accept(plugins, CampaignField(row.Campaign, row.Operation), row.Operation, row.PluginId, row.Binding, problems);
@@ -231,27 +233,30 @@ public sealed class RouteActivator(
 
             if (!campaigns.TryGetValue(row.Campaign, out var set))
             {
-                set = (null, new Dictionary<string, Route>(StringComparer.Ordinal));
+                campaigns[row.Campaign] = set = new CampaignRoutes();
             }
 
-            campaigns[row.Campaign] = row.Operation is null
-                ? (route, set.Operations)
-                : Added(set, row.Operation, route);
+            if (row.Operation is null)
+            {
+                set.Default = route;
+            }
+            else
+            {
+                set.Operations[row.Operation] = route;
+            }
         }
 
-        return campaigns.ToDictionary(
-            entry => entry.Key,
-            entry => new RouteSet(entry.Value.Default, entry.Value.Operations),
-            StringComparer.Ordinal);
+        return campaigns.ToDictionary(entry => entry.Key, entry => entry.Value.Frozen(), StringComparer.Ordinal);
     }
 
-    private static (Route? Default, Dictionary<string, Route> Operations) Added(
-        (Route? Default, Dictionary<string, Route> Operations) set,
-        string operation,
-        Route route)
+    /// <summary>One campaign's routes while the rows are still being read: a default, and the overrides of it.</summary>
+    private sealed class CampaignRoutes
     {
-        set.Operations[operation] = route;
-        return set;
+        public Route? Default { get; set; }
+
+        public Dictionary<string, Route> Operations { get; } = new(StringComparer.Ordinal);
+
+        public RouteSet Frozen() => new(Default, Operations);
     }
 
     /// <summary>The route as the snapshot will hold it, or nothing — with the problem recorded against its name.</summary>
