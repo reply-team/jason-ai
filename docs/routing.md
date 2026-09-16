@@ -83,7 +83,8 @@ plugin's manifest says a route to it must carry.
 **A global route is frozen into the active route snapshot by `jason plugin reload`, and by the load at
 startup — editing the file changes nothing until then.** It is the same discipline plugin grants
 already follow, and for the same reason: what is running should change when somebody says so, not when
-a file is saved. `jason runtime status --human` names the snapshot that is actually active:
+a file is saved. `jason runtime status --human` names the snapshot that is actually active — here on a
+runtime whose global default is one plugin and which also holds one campaign route:
 
 ```text
 Routes:     snapshot rts_01M2M7H79NXYND9TAPQFDEQTHY · default fake-provider · 0 overrides · 1 campaign route
