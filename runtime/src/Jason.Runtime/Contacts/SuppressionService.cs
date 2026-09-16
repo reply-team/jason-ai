@@ -4,6 +4,7 @@ using Jason.Contracts.Ids;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Contacts;
@@ -13,8 +14,21 @@ namespace Jason.Runtime.Contacts;
 /// opting out of LinkedIn. Entries are keyed by the normalized value, so a suppression matches however the
 /// address was typed the next time somebody imports it.
 /// </summary>
-public sealed class SuppressionService(JasonDbContext db, JournalWriter journal, TimeProvider clock)
+public sealed class SuppressionService(JasonDbContext db, JournalWriter journal, TimeProvider clock) : ISuppressionCheck
 {
+    /// <summary>
+    /// Whether this address is out of reach, asked of the caller's own context: the claim asks inside its
+    /// transaction, and the entries are keyed by the normalized value, which is also how a channel is stored.
+    /// </summary>
+    public Task<bool> IsSuppressedAsync(JasonDbContext context, string channel, string value, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return context.Suppressions.AnyAsync(
+            suppression => suppression.Channel == channel && suppression.Value == value,
+            cancellationToken);
+    }
+
     /// <summary>Idempotent: an existing pair answers with the entry that is already there and writes no second chronicle line.</summary>
     public async Task<SuppressionDto> AddAsync(SuppressionAddRequest request, CancellationToken cancellationToken)
     {

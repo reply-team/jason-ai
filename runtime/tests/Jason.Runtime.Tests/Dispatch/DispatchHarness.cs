@@ -2,11 +2,15 @@ using System.Collections.Concurrent;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Contacts;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Hosting.Modules;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins;
+using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,6 +71,14 @@ internal sealed class DispatchHarness : IDisposable
         });
         services.AddScoped<JournalWriter>();
         services.AddScoped<AttemptOutcomes>();
+
+        // What the claim reads before it hands out provider work. The registries are empty here — these tests
+        // are about agent work — and an empty route snapshot is exactly what "nothing is routed" looks like.
+        services.AddSingleton<PluginRegistry>();
+        services.AddSingleton<RouteRegistry>();
+        services.AddScoped<ExternalIdStore>();
+        services.AddScoped<SuppressionService>();
+        services.AddScoped<ISuppressionCheck>(provider => provider.GetRequiredService<SuppressionService>());
         services.AddDispatcherModule();
         foreach (var command in commands)
         {
