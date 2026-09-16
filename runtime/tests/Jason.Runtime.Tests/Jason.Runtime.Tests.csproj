@@ -15,5 +15,7 @@
   <ItemGroup>
     <!-- The canonical plugin package, kept in one place and linked into every test project that installs it. -->
     <None Include="../fixtures/plugins/**" LinkBase="Fixtures/plugins" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The marketplace package itself, linked next to the tests beside the fixtures, so no test has to walk up from whatever directory it happens to run in to find the package it installs. -->
+    <None Include="../../../plugins/reply/**" LinkBase="Fixtures/plugins/reply" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
