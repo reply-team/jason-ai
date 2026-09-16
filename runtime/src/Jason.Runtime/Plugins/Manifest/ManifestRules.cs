@@ -819,6 +819,12 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
         return false;
     }
 
+    /// <summary>
+    /// Whether text could name a plugin — the rule a manifest's own <c>id</c> is held to, spelled once so that a
+    /// route naming a plugin and a package declaring one are measured against the same sentence.
+    /// </summary>
+    internal static bool IsPluginId(string? text) => text is not null && Identifier().IsMatch(text);
+
     [GeneratedRegex("^[a-z][a-z0-9-]{1,63}$")]
     private static partial Regex Identifier();
 

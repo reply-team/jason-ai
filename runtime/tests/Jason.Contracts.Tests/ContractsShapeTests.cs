@@ -97,6 +97,26 @@ public class ContractsShapeTests
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<WorkItemStatus>("3", JasonJson.Options));
     }
 
+    /// <summary>
+    /// The four levels a route can be decided at, in order of specificity. They live in the contracts because
+    /// both a resolution and an attempt's provenance say which one answered.
+    /// </summary>
+    [Fact]
+    public void The_route_scopes_are_snake_case_strings_in_both_directions()
+    {
+        Assert.Equal("\"campaign_operation\"", JsonSerializer.Serialize(RouteScope.CampaignOperation, JasonJson.Options));
+        Assert.Equal("\"campaign_default\"", JsonSerializer.Serialize(RouteScope.CampaignDefault, JasonJson.Options));
+        Assert.Equal("\"global_operation\"", JsonSerializer.Serialize(RouteScope.GlobalOperation, JasonJson.Options));
+        Assert.Equal("\"global_default\"", JsonSerializer.Serialize(RouteScope.GlobalDefault, JasonJson.Options));
+        Assert.Equal(RouteScope.GlobalDefault, JsonSerializer.Deserialize<RouteScope>("\"global_default\"", JasonJson.Options));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<RouteScope>("0", JasonJson.Options));
+
+        // Most specific first, so that a comparison is the precedence rather than a second copy of it.
+        Assert.Equal(
+            [RouteScope.CampaignOperation, RouteScope.CampaignDefault, RouteScope.GlobalOperation, RouteScope.GlobalDefault],
+            Enum.GetValues<RouteScope>());
+    }
+
     [Fact]
     public void A_work_item_patch_tells_an_absent_field_from_an_explicit_null()
     {
