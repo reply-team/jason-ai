@@ -91,6 +91,7 @@ public class FixtureTests
                 Assert.Equal(Class(expected), outcome.Error.Class);
                 TheFailureTheOperationDeclares(relative, contract, outcome.Error);
                 Assert.Equal(OutcomeContract.Retriable(outcome.Error.Class, contract), (bool)expected["retriable"]!);
+                TheIdentifiersTheFailureLeaves(relative, contract, expected, outcome);
                 break;
 
             case "result_invalid":
@@ -104,6 +105,49 @@ public class FixtureTests
                 Assert.Fail($"{relative} expects the unknown status `{status}`.");
                 break;
         }
+    }
+
+    /// <summary>
+    /// What a failed answer leaves behind. A failed outcome may still carry identifiers, and the answer-lost case
+    /// is where they matter most — the effect happened, the answer did not come back, and the identifier is the
+    /// only trace — so a declared kind is written down by the same rule as on a success. An undeclared kind does
+    /// <b>not</b> turn the outcome into a shape error the way it would on a success: replacing the failure the
+    /// plugin reported with "your identifier was wrong" would hide the reason the operation failed. That
+    /// asymmetry is deliberate, and this is what executes it.
+    /// </summary>
+    /// <remarks>
+    /// Identifiers travel on the error rather than beside the result: that is where <c>host.fail</c> puts them
+    /// and the only place the runtime reads them, so a fixture showing them anywhere else would teach a plugin
+    /// author to return a pin that is silently dropped.
+    /// </remarks>
+    private static void TheIdentifiersTheFailureLeaves(string relative, OperationContract contract, JsonObject expected, PluginOutcome outcome)
+    {
+        Assert.True(
+            outcome.ExternalIds is null,
+            $"{relative} puts identifiers beside the result of a failed outcome; a failure carries them on its error.");
+
+        var refused = OutcomeContract.CheckExternalIds(contract, outcome.Error!.ExternalIds);
+        if (expected["invalid"] is JsonArray)
+        {
+            TheStatedProblemsAndNoOthers(relative, expected, refused);
+        }
+        else
+        {
+            Assert.True(refused.Count == 0, $"{relative} returns an identifier {contract.Id} does not declare without saying so.");
+        }
+
+        var pinned = new JsonObject();
+        foreach (var (kind, value) in outcome.Error.ExternalIds ?? [])
+        {
+            if (contract.ExternalIds.ContainsKey(kind) && !refused.Any(problem => problem.Pointer.EndsWith("/" + kind, StringComparison.Ordinal)))
+            {
+                pinned[kind] = value?.DeepClone();
+            }
+        }
+
+        Assert.Equal(
+            (expected["pinned"] as JsonObject ?? []).ToJsonString(),
+            pinned.ToJsonString());
     }
 
     /// <summary>

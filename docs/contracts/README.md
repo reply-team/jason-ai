@@ -161,9 +161,10 @@ dotnet test --project runtime/tests/Jason.Contracts.Tests -- --filter-class "Jas
 
 An **input fixture** is `{operation, version, case, input, expect}`, where `expect` is either the string `"valid"`
 or `{"invalid": [ … ]}`. An **outcome fixture** is `{operation, version, case, outcome, expect}`, where `outcome`
-is a plugin outcome exactly as a child writes it and `expect` is `{status, class?, retriable, invalid?}`. `status`
-is `succeeded`, `failed`, or `result_invalid` — a well-formed outcome whose result does not satisfy the output
-schema, or which pins an identifier of a kind the operation never declared.
+is a plugin outcome exactly as a child writes it and `expect` is `{status, class?, retriable, invalid?, pinned?}`.
+`status` is `succeeded`, `failed`, or `result_invalid` — a well-formed outcome whose result does not satisfy the
+output schema, or which pins an identifier of a kind the operation never declared. `pinned` is what the runtime
+writes into its record of provider identifiers from that answer, as `{kind: value}`.
 
 An `invalid` list names exactly what is wrong with the document, and it is written the same way in both kinds of
 fixture: each entry is a JSON pointer, or `{"pointer": "…", "reason": "…"}` where the fixture means one particular
@@ -175,6 +176,15 @@ while it no longer demonstrates what the case is named for.
 A `failed` fixture is held against the operation's own `failure_codes`: the code its error carries is one the
 document declares, under the class the document declares it with. A fixture may not teach a plugin author a code no
 operation accepts, nor the same code under a class that would have the runtime repeat what the document calls final.
+
+**A failure may still pin.** A failed outcome carries its identifiers on the error — `error.external_ids`, which is
+where `host.fail` puts them and the only place the runtime reads them — and a declared kind there is written down by
+the same rule as on a success. The answer-lost case is exactly where a pin matters most: the effect happened, the
+answer never came back, and the identifier is the only trace of what was done. An **undeclared** kind on a failure is
+refused rather than recorded, but it does **not** become `result_invalid` the way it would on a success: replacing
+the failure the plugin reported with a shape error would hide the reason the operation failed. The attempt keeps the
+plugin's own failure and names the refused identifier beside it. The two fixtures named `outcome-answer-lost` and
+`outcome-answer-lost-with-an-undeclared-identifier` are that asymmetry, executed.
 
 Retriability in an outcome fixture is stated per the operation's own rule, so that a plugin author reading the
 fixture sees what the runtime will do with that answer: `transient` is repeated; `permanent` and `validation` are

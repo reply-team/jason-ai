@@ -1,7 +1,7 @@
 {
   "operation": "campaign.enroll",
   "version": 1,
-  "case": "the enrollment may already have sent; the next attempt is allowed only because the contract obliges a recovery read first",
+  "case": "the same lost answer, offering one identifier the operation declares and one it does not: the pin that can be read is kept, the other is refused, and neither replaces the failure the plugin reported",
   "outcome": {
     "protocol_version": 1,
     "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
@@ -13,7 +13,7 @@
       "code": "provider_answer_lost",
       "message": "The enrollment was sent and the connection closed before an answer came back.",
       "details": null,
-      "external_ids": { "contact": "p_88421" }
+      "external_ids": { "contact": "p_88421", "enrollment": "e_5512" }
     },
     "diagnostics": { "duration_ms": 120000, "exec_calls": 2, "http_calls": 0, "log_lines": 4 }
   },
@@ -21,6 +21,7 @@
     "status": "failed",
     "class": "ambiguous",
     "retriable": true,
-    "pinned": { "contact": "p_88421" }
+    "pinned": { "contact": "p_88421" },
+    "invalid": [{ "pointer": "/external_ids/enrollment", "reason": "additional_properties" }]
   }
 }

@@ -68,10 +68,14 @@ will keep it.
 
 ## When it fails
 
-Use the codes the document declares. The class is what the runtime will read: `transient` may be repeated,
+Use the codes the document declares. The class is what the runtime reads: `transient` may be repeated,
 `permanent` and `validation` are final, and `ambiguous` says the provider may already have acted — which, for a
-read, costs nothing, so this operation allows the repeat. That reading arrives with routing: no plugin's class
-reaches the runtime in this version, so until then the rule is what your own tests hold you to.
+read, costs nothing, so this operation allows the repeat. The class you report is therefore the class the work
+item is retried or ended by; a failure filed under the wrong one is a decision made on your word.
+
+Return the campaign identifier you learned on a failure too — `host.fail({ external_ids: { campaign: … } })`. It is
+recorded by the same rule as on a success, so a read that resolved the campaign and then lost its answer still
+leaves the link behind.
 
 ## The properties
 
