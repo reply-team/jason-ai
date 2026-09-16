@@ -21,12 +21,18 @@ namespace Jason.Runtime.Routing;
 /// </param>
 /// <param name="Details">Where the input failed, by pointer, for the one check that can name more than one place.</param>
 /// <param name="Plan">Everything the run needs, and null whenever something refused it.</param>
+/// <param name="Resolution">
+/// Where the work was routed, present whenever routing succeeded — including when a later check refused the
+/// item. It is what lets a refused attempt still record the plugin it would have used: computing that answer a
+/// second time would make two places that can disagree about one decision.
+/// </param>
 public sealed record PreflightVerdict(
     string? Code,
     string? Message,
     FailureClass? Class,
     IReadOnlyList<ErrorDetail>? Details,
-    ProviderOpPlan? Plan)
+    ProviderOpPlan? Plan,
+    Resolution? Resolution)
 {
     public bool Passed => Code is null;
 }
@@ -82,18 +88,19 @@ public static class ProviderOpPreflight
         {
             // Creation refuses an operation this build does not publish; a row written by a build that did is the
             // reason this is checked rather than assumed.
-            return Refused(AttemptErrors.OperationUnknown, $"This runtime publishes no contract for operation '{operation}'.");
+            return Refused(null, AttemptErrors.OperationUnknown, $"This runtime publishes no contract for operation '{operation}'.");
         }
 
         if (RouteResolver.Resolve(routes, facts.Campaign.PublicId, operation) is not { } resolution)
         {
-            return Refused(AttemptErrors.NoRoute, $"No provider route exists yet for operation '{operation}'.");
+            return Refused(null, AttemptErrors.NoRoute, $"No provider route exists yet for operation '{operation}'.");
         }
 
         var route = resolution.Route;
         if (plugins.Find(route.PluginId) is not { } plugin)
         {
             return Refused(
+                resolution,
                 AttemptErrors.PluginNotLoaded,
                 $"The route for '{operation}' names plugin '{route.PluginId}', which the active plugin set does not hold.");
         }
@@ -101,6 +108,7 @@ public static class ProviderOpPreflight
         if (plugin.Status == PluginStatus.Unavailable)
         {
             return Refused(
+                resolution,
                 AttemptErrors.PluginUnavailable,
                 $"Plugin '{plugin.Manifest.Id}' is installed but unavailable on this machine; reload after repairing what it needs.");
         }
@@ -110,6 +118,7 @@ public static class ProviderOpPreflight
         if (plugin.Manifest.Kind != PluginKind.Provider)
         {
             return Refused(
+                resolution,
                 AttemptErrors.PluginOperationUnsupported,
                 $"Plugin '{plugin.Manifest.Id}' is not a kind of plugin that performs canonical operations.");
         }
@@ -117,6 +126,7 @@ public static class ProviderOpPreflight
         if (!plugin.Supports(operation))
         {
             return Refused(
+                resolution,
                 AttemptErrors.PluginOperationUnsupported,
                 $"Plugin '{plugin.Manifest.Id}' does not perform '{operation}', and work is never handed to a plugin the route did not name.");
         }
@@ -124,6 +134,7 @@ public static class ProviderOpPreflight
         if (!plugin.Manifest.Contracts.Operations.Contains(contract.Version))
         {
             return Refused(
+                resolution,
                 AttemptErrors.ContractIncompatible,
                 string.Create(
                     CultureInfo.InvariantCulture,
@@ -137,6 +148,7 @@ public static class ProviderOpPreflight
         if (plugin.Manifest.Binding is { } schema && SchemaValidator.Validate(route.Binding, schema) is { Count: > 0 } wrong)
         {
             return Refused(
+                resolution,
                 AttemptErrors.BindingInvalid,
                 $"The binding of the route to plugin '{plugin.Manifest.Id}' does not satisfy the schema that plugin declares.",
                 Details(wrong));
@@ -145,13 +157,14 @@ public static class ProviderOpPreflight
         if (!string.Equals(contract.Approval.Value, Automatic, StringComparison.Ordinal))
         {
             return Refused(
+                resolution,
                 AttemptErrors.ApprovalRequired,
                 $"Operation '{operation}' is approved '{contract.Approval.Value}', and a dispatcher may not stand in for the person who approves it.");
         }
 
         if (contract.Preflight.Contact == ContactRequirement.Required && facts.Contact is null)
         {
-            return Refused(AttemptErrors.ContactRequired, $"Operation '{operation}' acts on a contact, and this work item names none.");
+            return Refused(resolution, AttemptErrors.ContactRequired, $"Operation '{operation}' acts on a contact, and this work item names none.");
         }
 
         // A channel the arguments never named is not a person's problem: the composed document says so by
@@ -161,6 +174,7 @@ public static class ProviderOpPreflight
             if (CanonicalInput.Reachable(contact, channel) is null)
             {
                 return Refused(
+                    resolution,
                     AttemptErrors.NoChannelValue,
                     $"The contact has no '{channel}' channel, and '{channel}' is the one '{operation}' consumes.");
             }
@@ -168,6 +182,7 @@ public static class ProviderOpPreflight
             if (facts.Suppressed)
             {
                 return Refused(
+                    resolution,
                     AttemptErrors.Suppressed,
                     $"The contact's '{channel}' value is on the suppression list, so this campaign does not reach them there.");
             }
@@ -177,6 +192,7 @@ public static class ProviderOpPreflight
         if (Contradictions(contract, facts, input) is { Count: > 0 } contradicted)
         {
             return Refused(
+                resolution,
                 AttemptErrors.InputInvalid,
                 $"The arguments of this work item contradict an identifier Jason has already recorded for '{operation}'.",
                 contradicted,
@@ -188,6 +204,7 @@ public static class ProviderOpPreflight
         if (SchemaValidator.Validate(input, contract.InputSchema) is { Count: > 0 } problems)
         {
             return Refused(
+                resolution,
                 AttemptErrors.InputInvalid,
                 $"The input composed for '{operation}' does not satisfy the schema that operation publishes.",
                 Details(problems),
@@ -207,7 +224,8 @@ public static class ProviderOpPreflight
                 route.Binding,
                 route.BindingIdentity,
                 contract,
-                input));
+                input),
+            resolution);
     }
 
     /// <summary>
@@ -251,10 +269,15 @@ public static class ProviderOpPreflight
     /// <summary>The whole document is a place too, and it is named rather than left blank.</summary>
     private static string Pointer(string pointer) => pointer.Length == 0 ? "/" : pointer;
 
+    /// <summary>
+    /// One refusal, carrying the resolution the decision had reached when it refused: the attempt records what
+    /// was chosen even where the work never ran, which is the half of a failure a manager can act on.
+    /// </summary>
     private static PreflightVerdict Refused(
+        Resolution? resolution,
         string code,
         string message,
         IReadOnlyList<ErrorDetail>? details = null,
         FailureClass failureClass = FailureClass.Permanent) =>
-        new(code, message, failureClass, details, null);
+        new(code, message, failureClass, details, null, resolution);
 }

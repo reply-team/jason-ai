@@ -87,7 +87,10 @@ public static class WorkItemMapper
             Utc(attempt.LockUntil),
 
             // Ten attempts of a 256 KiB context is more than any default read should carry.
-            includeSnapshot ? attempt.ContextSnapshot : null);
+            includeSnapshot ? attempt.ContextSnapshot : null,
+
+            // Provenance is small, it is the point of asking, and an agent attempt has none: always sent.
+            attempt.Provenance);
     }
 
     /// <summary>Everything in the database is UTC; SQLite hands the kind back unset.</summary>

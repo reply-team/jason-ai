@@ -39,7 +39,7 @@ public sealed class Attempt
     /// What was resolved to run the attempt — the plugin, the package, the route — written as far as resolution
     /// got, so an attempt that failed before a plugin was chosen still says so. Null for every agent attempt.
     /// </summary>
-    public JsonObject? Provenance { get; set; }
+    public AttemptProvenanceDto? Provenance { get; set; }
 
     public DateTime ClaimedAt { get; set; }
 

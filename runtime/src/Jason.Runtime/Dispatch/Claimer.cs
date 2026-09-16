@@ -186,6 +186,10 @@ public sealed class Claimer(
         {
             var facts = await FactsAsync(db, item, routing, ct).ConfigureAwait(false);
             var verdict = ProviderOpPreflight.Check(facts, packages, routing);
+
+            // What was decided, recorded before anything acts on it and whichever way the decision went: an item
+            // that never ran still says what would have run it, which is the half of a refusal a manager can act on.
+            attempt.Provenance = AttemptProvenance.AtClaim(item.Operation, verdict, packages, routing, attempt.PublicId);
             if (verdict.Passed)
             {
                 return verdict.Plan;
