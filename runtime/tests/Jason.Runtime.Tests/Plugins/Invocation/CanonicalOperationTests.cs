@@ -13,10 +13,11 @@ namespace Jason.Runtime.Tests.Plugins.Invocation;
 /// implementable" something other than an opinion.
 /// </summary>
 /// <remarks>
-/// Nothing routes a work item to a plugin yet, so the canonical input is composed here exactly as the operation
-/// document defines it, and checked against that document before it is sent. Every answer is checked back
-/// against the document too, so a result that would be refused once outcome validation is wired up fails here
-/// first, next to the code that produced it.
+/// The input is composed here rather than by a claim, so that one operation can be exercised without a work
+/// item, a route and a dispatcher behind it: it is built exactly as the operation document defines it and
+/// checked against that document before it is sent, and every answer is checked back against the document as
+/// the recorder checks it. What the spine does with those answers is <c>ProviderSpineTests</c>; this is the
+/// contract-by-contract half, next to the code that produced each answer.
 /// </remarks>
 [Collection(ProcessEnvironmentCollection.Name)]
 public class CanonicalOperationTests

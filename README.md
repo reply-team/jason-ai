@@ -18,8 +18,14 @@ durable outbound-sales operation.
 > one machine-readable document per operation, embedded into the runtime that enforces it — and a
 > work item naming a provider operation is measured against its contract when it is created: an
 > operation this build publishes no contract for, or arguments that do not satisfy one, are refused
-> there and then. Routing a work item to a plugin arrives with the next increment; no provider
-> operation runs yet, so nothing here sends outreach. The runtime is being built in the open, one
+> there and then. **Provider operations now run through routed plugins**: a route says which plugin
+> performs an operation for a campaign and which account of that provider it works in, the claim
+> decides everything that could refuse the work before a child process exists, the plugin performs it
+> in its own process, and what ran is pinned to the attempt — the package, its digest, both snapshots
+> and the account by identity. **No provider is built in.** One arrives as a plugin, and a fresh
+> runtime routes nothing anywhere until somebody writes a route
+> ([docs/routing.md](docs/routing.md)); an operation that needs a person's approval still fails
+> closed, because nothing here can ask for one. The runtime is being built in the open, one
 > self-contained increment at a time; no dates, no roadmap promises.
 
 ## What this is
@@ -39,10 +45,11 @@ survives the chat session. Jason is that missing layer — three parts working a
    profession's knowledge lives under [`skills/business`](skills/business).
 3. **Provider plugins** — strict, vendor-neutral canonical operations executed by JavaScript
    plugin packages in a short-lived plugin-host process started from the same executable.
-   [Reply.io](https://reply.io) is the configured default execution provider (through
+   [Reply.io](https://reply.io) is the intended default execution provider (through
    [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli)) — supported and
-   commercial, but never hard-coded: the same public plugin mechanism works for other
-   providers, and writing one against it is documented in [docs/plugins.md](docs/plugins.md).
+   commercial, but never hard-coded: no provider ships configured, the same public plugin mechanism
+   works for any other, and writing one against it is documented in
+   [docs/plugins.md](docs/plugins.md).
 
 Your AI stays yours: Jason ships no AI client, no model account, and no model credentials.
 Interactive agent sessions drive Jason through skills + CLI; background AI work runs through
@@ -114,6 +121,16 @@ jason plugin list --human
 The canonical operations a plugin implements — one document per operation, the schema dialect they are
 written in, the published argument and answer fixtures, and where Jason's strict subset departs from
 the vendor-neutral contract it is seeded from — are in **[docs/contracts/](docs/contracts/README.md)**.
+
+Which plugin performs an operation for a campaign, which account of that provider it works in, every
+reason a claim refuses provider work, and what is recorded about a run, are in
+**[docs/routing.md](docs/routing.md)**:
+
+```sh
+jason route set --campaign <id> --plugin acme-provider --binding '{"workspace":"latam"}'
+jason route resolve --campaign <id> --operation list_membership.add --human
+jason route list --human
+```
 
 ## Ecosystem
 

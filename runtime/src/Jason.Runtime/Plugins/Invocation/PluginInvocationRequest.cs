@@ -12,9 +12,9 @@ namespace Jason.Runtime.Plugins.Invocation;
 /// <remarks>
 /// Pinning says which package runs, never that it may do more: the plugin's status, its kind and the operation
 /// it offers are checked exactly as they are for a package looked up now, and the child recomputes the package's
-/// digest before it runs a line of it, so a package edited after the decision is still refused by the child. What
-/// should happen to work already queued against a package a reload has changed or removed is deliberately left
-/// open until routing exists to answer it.
+/// digest before it runs a line of it, so a package edited after the decision is still refused by the child. A
+/// running attempt therefore keeps the package it was claimed with; what should happen to work still queued
+/// against a package a reload has changed or removed is deliberately left open.
 /// </remarks>
 public sealed record PinnedPlugin(LoadedPlugin Plugin, string SnapshotId);
 
