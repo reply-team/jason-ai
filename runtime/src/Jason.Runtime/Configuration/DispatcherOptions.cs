@@ -39,5 +39,11 @@ public sealed class DispatcherOptions
 
     public KindDefaults AiRole { get; set; } = new() { TimeoutSeconds = 3600, HeartbeatSeconds = 120, MaxAttempts = 3 };
 
-    public KindDefaults ProviderOp { get; set; } = new() { TimeoutSeconds = 300, HeartbeatSeconds = 0, MaxAttempts = 3 };
+    /// <summary>
+    /// The lease covers the slowest operation this build publishes plus the grace a child is given to stop, with
+    /// room for the next one — <see cref="ProviderOpBudgetValidator"/> refuses a runtime whose lease is shorter.
+    /// One consequence an operator should know: a stuck provider item holds a handler slot for up to this long,
+    /// and <see cref="MaxParallel"/> bounds both kinds of work.
+    /// </summary>
+    public KindDefaults ProviderOp { get; set; } = new() { TimeoutSeconds = 600, HeartbeatSeconds = 0, MaxAttempts = 3 };
 }

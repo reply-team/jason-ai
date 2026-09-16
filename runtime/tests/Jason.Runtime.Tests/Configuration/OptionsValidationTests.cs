@@ -116,7 +116,7 @@ public class OptionsValidationTests
         Assert.Equal(3600, options.AiRole.TimeoutSeconds);
         Assert.Equal(120, options.AiRole.HeartbeatSeconds);
         Assert.Equal(3, options.AiRole.MaxAttempts);
-        Assert.Equal(300, options.ProviderOp.TimeoutSeconds);
+        Assert.Equal(600, options.ProviderOp.TimeoutSeconds);
         Assert.Equal(0, options.ProviderOp.HeartbeatSeconds);
         Assert.Equal(3, options.ProviderOp.MaxAttempts);
     }
