@@ -108,6 +108,33 @@ public class ReplyMembershipTests
     }
 
     [Fact]
+    public async Task The_recovery_read_is_reached_by_the_attempt_number_and_not_by_the_key_alone()
+    {
+        // The document words this operation's repeat as "a second call under the same idempotency key", and this
+        // package never reads that key: `docs/plugins.md` §7 says `context.attempt_number` is what tells a plugin
+        // it is being repeated, and that is what the recovery read is hung on. The two move together for every
+        // call the runtime makes — one work item, one key, a rising attempt number — so no test that repeats an
+        // attempt can tell the two apart. This one separates them, and records the answer: the key alone buys
+        // nothing, and a second call that does not say it is a second attempt writes again.
+        using var account = new ReplyAccount();
+        account.WithContact(1001, Address, FirstName).WithList(List, "Q3 LatAm founders");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct));
+        var mark = account.Mark();
+
+        // The same input, the same idempotency key, and no claim to be a repeat.
+        Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct));
+
+        // No recovery read, and the add is made a second time. That is the honest shape of what this provider
+        // supports: Reply has no ledger under a key to consult, so nothing but the attempt number distinguishes
+        // a repeat, and it is the runtime that raises it.
+        Assert.DoesNotContain($"GET /v3/contacts/{Ensured}/lists", PathsSince(account, mark));
+        Assert.Contains($"POST /v3/contact-lists/{List}/add-contacts", PathsSince(account, mark));
+    }
+
+    [Fact]
     public async Task A_person_who_opted_out_after_the_add_landed_is_not_told_the_add_failed()
     {
         // The document says to answer from the recovery read when the effect already happened, so that reading
