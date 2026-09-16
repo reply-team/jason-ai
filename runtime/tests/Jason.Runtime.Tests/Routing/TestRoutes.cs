@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Runtime.Configuration;
@@ -113,7 +114,7 @@ public static class TestRoutes
         ArgumentNullException.ThrowIfNull(api);
 
         var (status, body) = await api.PostAsync(
-            "route.set",
+            Operations.RouteSet,
             new { campaign_id = campaignId, operation, plugin = pluginId, binding },
             cancellationToken);
 

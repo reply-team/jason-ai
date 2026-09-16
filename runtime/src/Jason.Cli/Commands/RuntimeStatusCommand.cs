@@ -95,7 +95,33 @@ public static class RuntimeStatusCommand
         output.WriteLine($"Migrations: {info.Database.AppliedMigrations.Count} applied");
         output.WriteLine($"Dispatcher: {Dispatcher(info.Dispatcher)}");
         output.WriteLine($"Plugins:    {Plugins(info.Plugins)}");
+        output.WriteLine($"Routes:     {Routes(info.Routes)}");
     }
+
+    /// <summary>
+    /// Where work is being sent. A runtime older than routing reports no section at all, and a runtime that
+    /// routes nothing anywhere is the state worth spelling out: no campaign will reach a provider until
+    /// somebody writes a route.
+    /// </summary>
+    private static string Routes(RoutesInfo? routes)
+    {
+        if (routes is null)
+        {
+            return "unknown";
+        }
+
+        if (routes is { GlobalDefaultPlugin: null, GlobalOverrideCount: 0, CampaignRouteCount: 0 })
+        {
+            return $"nothing is routed anywhere · snapshot {routes.SnapshotId}";
+        }
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"snapshot {routes.SnapshotId} · default {routes.GlobalDefaultPlugin ?? "none"} · {Plural(routes.GlobalOverrideCount, "override")} · {Plural(routes.CampaignRouteCount, "campaign route")}");
+    }
+
+    private static string Plural(int count, string noun) =>
+        string.Create(CultureInfo.InvariantCulture, $"{count} {noun}{(count == 1 ? string.Empty : "s")}");
 
     /// <summary>A runtime older than the dispatcher reports no section at all; say so rather than invent a state.</summary>
     private static string Dispatcher(DispatcherInfo? dispatcher)

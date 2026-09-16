@@ -1,5 +1,10 @@
 using Jason.Contracts.Api;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Routing;
+using Jason.Runtime.Tests.Plugins;
+using Jason.Runtime.Tests.Routing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Hosting;
 
@@ -30,6 +35,47 @@ public class SystemInfoTests
         Assert.Equal(0, info.Plugins.ActiveCount);
         Assert.True(info.Plugins.LastReloadActivated);
         Assert.Equal(TimeSpan.Zero, info.Plugins.LoadedAt.Offset);
+    }
+
+    /// <summary>
+    /// The cheapest way to see where work is being sent, beside which packages are active — the two questions
+    /// are one question, and a runtime that answers only half of it sends an operator looking for the other.
+    /// </summary>
+    [Fact]
+    public async Task System_info_reports_where_work_is_being_sent()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+                TestPlugins.InstallFakeProvider(paths);
+                TestRoutes.WriteGlobal(paths, TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, RouteActivationTests.Workspace()));
+            },
+            configureServices: services => services.AddSingleton(TestPlugins.SearchPath));
+        var campaign = (await fixture.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { Name = "Routed" }, Ct)).Id;
+        await TestRoutes.SetCampaignAsync(fixture, campaign, "campaign.get", TestPlugins.FakeProviderId, RouteActivationTests.Workspace("east"), Ct);
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        Assert.Equal(fixture.Resolve<RouteRegistry>().Snapshot.Id, info.Routes.SnapshotId);
+        Assert.Equal(TestPlugins.FakeProviderId, info.Routes.GlobalDefaultPlugin);
+        Assert.Equal(0, info.Routes.GlobalOverrideCount);
+        Assert.Equal(1, info.Routes.CampaignRouteCount);
+        Assert.Equal(TimeSpan.Zero, info.Routes.ActivatedAt.Offset);
+    }
+
+    [Fact]
+    public async Task System_info_reports_a_runtime_that_routes_nothing_anywhere()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        Assert.StartsWith("rts_", info.Routes.SnapshotId, StringComparison.Ordinal);
+        Assert.Null(info.Routes.GlobalDefaultPlugin);
+        Assert.Equal(0, info.Routes.GlobalOverrideCount);
+        Assert.Equal(0, info.Routes.CampaignRouteCount);
     }
 
     [Fact]

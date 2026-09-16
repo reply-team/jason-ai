@@ -91,56 +91,13 @@ public static class ProviderOpPreflight
         }
 
         var route = resolution.Route;
-        if (plugins.Find(route.PluginId) is not { } plugin)
+        if (Routable(plugins, contract, route) is { } unroutable)
         {
-            return Refused(
-                AttemptErrors.PluginNotLoaded,
-                $"The route for '{operation}' names plugin '{route.PluginId}', which the active plugin set does not hold.");
+            return unroutable;
         }
 
-        if (plugin.Status == PluginStatus.Unavailable)
-        {
-            return Refused(
-                AttemptErrors.PluginUnavailable,
-                $"Plugin '{plugin.Manifest.Id}' is installed but unavailable on this machine; reload after repairing what it needs.");
-        }
-
-        // The kind is asked first: a plugin that only notifies lists no operation at all, so asking "does it
-        // implement this one?" first would answer with what is missing rather than with what it is.
-        if (plugin.Manifest.Kind != PluginKind.Provider)
-        {
-            return Refused(
-                AttemptErrors.PluginOperationUnsupported,
-                $"Plugin '{plugin.Manifest.Id}' is not a kind of plugin that performs canonical operations.");
-        }
-
-        if (!plugin.Supports(operation))
-        {
-            return Refused(
-                AttemptErrors.PluginOperationUnsupported,
-                $"Plugin '{plugin.Manifest.Id}' does not perform '{operation}', and work is never handed to a plugin the route did not name.");
-        }
-
-        if (!plugin.Manifest.Contracts.Operations.Contains(contract.Version))
-        {
-            return Refused(
-                AttemptErrors.ContractIncompatible,
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Plugin '{plugin.Manifest.Id}' speaks no version of the '{operation}' contract that this runtime publishes, which is version {contract.Version}."));
-        }
-
-        // Activation already held this binding to the same schema. It is checked again because the plan a run is
-        // given has to be true of the package in front of it, not of the one the route was written against. A
-        // route that carries no binding at all is checked too: a plugin whose schema requires one is unusable
-        // without it, and passing the item on to a child that cannot work would be the dishonest answer.
-        if (plugin.Manifest.Binding is { } schema && SchemaValidator.Validate(route.Binding, schema) is { Count: > 0 } wrong)
-        {
-            return Refused(
-                AttemptErrors.BindingInvalid,
-                $"The binding of the route to plugin '{plugin.Manifest.Id}' does not satisfy the schema that plugin declares.",
-                Details(wrong));
-        }
+        // Nothing objected, so the plugin the checks above found is there to be found again.
+        var plugin = plugins.Find(route.PluginId)!;
 
         if (!string.Equals(contract.Approval.Value, Automatic, StringComparison.Ordinal))
         {
@@ -208,6 +165,75 @@ public static class ProviderOpPreflight
                 route.BindingIdentity,
                 contract,
                 input));
+    }
+
+    /// <summary>
+    /// The half of the decision that needs nothing but the route and the plugin set behind it: whether the
+    /// plugin a route names would be handed this operation at all. Null when it would be.
+    /// <para>
+    /// It is its own function because <c>route.resolve</c> answers exactly this, before any work item exists —
+    /// and an operator asking "why will this campaign not run?" has to be told what the claim would decide,
+    /// rather than something that resembles it because two places were kept in step by hand.
+    /// </para>
+    /// </summary>
+    public static PreflightVerdict? Routable(PluginSnapshot plugins, OperationContract contract, Route route)
+    {
+        ArgumentNullException.ThrowIfNull(plugins);
+        ArgumentNullException.ThrowIfNull(contract);
+        ArgumentNullException.ThrowIfNull(route);
+
+        if (plugins.Find(route.PluginId) is not { } plugin)
+        {
+            return Refused(
+                AttemptErrors.PluginNotLoaded,
+                $"The route for '{contract.Id}' names plugin '{route.PluginId}', which the active plugin set does not hold.");
+        }
+
+        if (plugin.Status == PluginStatus.Unavailable)
+        {
+            return Refused(
+                AttemptErrors.PluginUnavailable,
+                $"Plugin '{plugin.Manifest.Id}' is installed but unavailable on this machine; reload after repairing what it needs.");
+        }
+
+        // The kind is asked first: a plugin that only notifies lists no operation at all, so asking "does it
+        // implement this one?" first would answer with what is missing rather than with what it is.
+        if (plugin.Manifest.Kind != PluginKind.Provider)
+        {
+            return Refused(
+                AttemptErrors.PluginOperationUnsupported,
+                $"Plugin '{plugin.Manifest.Id}' is not a kind of plugin that performs canonical operations.");
+        }
+
+        if (!plugin.Supports(contract.Id))
+        {
+            return Refused(
+                AttemptErrors.PluginOperationUnsupported,
+                $"Plugin '{plugin.Manifest.Id}' does not perform '{contract.Id}', and work is never handed to a plugin the route did not name.");
+        }
+
+        if (!plugin.Manifest.Contracts.Operations.Contains(contract.Version))
+        {
+            return Refused(
+                AttemptErrors.ContractIncompatible,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Plugin '{plugin.Manifest.Id}' speaks no version of the '{contract.Id}' contract that this runtime publishes, which is version {contract.Version}."));
+        }
+
+        // Activation already held this binding to the same schema. It is checked again because the plan a run is
+        // given has to be true of the package in front of it, not of the one the route was written against. A
+        // route that carries no binding at all is checked too: a plugin whose schema requires one is unusable
+        // without it, and passing the item on to a child that cannot work would be the dishonest answer.
+        if (plugin.Manifest.Binding is { } schema && SchemaValidator.Validate(route.Binding, schema) is { Count: > 0 } wrong)
+        {
+            return Refused(
+                AttemptErrors.BindingInvalid,
+                $"The binding of the route to plugin '{plugin.Manifest.Id}' does not satisfy the schema that plugin declares.",
+                Details(wrong));
+        }
+
+        return null;
     }
 
     /// <summary>
