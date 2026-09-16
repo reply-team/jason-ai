@@ -502,15 +502,19 @@ The second group is about executing it, and it is the half you implement:
 
 One invocation is given the operation's own `timeout_ms` — never what is left of the work item's
 lease, so the same operation behaves the same however busy the runtime was when it was claimed. Your
-manifest's `limits.timeout_ms` is a **ceiling on that budget**: the two are combined by taking the
-lower, so a plugin can lower what an operation asks for and can never raise it.
+plugin's **effective limit is a ceiling on that budget**: the two are combined by taking the lower, so
+a plugin can lower what an operation asks for and can never raise it. That effective limit is
+`limits.timeout_ms` from your manifest when you declare one, and `Plugins:Limits:TimeoutMs` — **60 000
+ms** — when you do not; either is itself capped by `Plugins:Limits:MaxTimeoutMs`.
 
-That is a trap worth stating plainly. The reference package declares `timeout_ms: 20000` while
-`list_membership.add` declares `120000`, so an invocation of that operation is killed after 20 s —
-long enough for a stand-in provider, and far too short for a real one. A plugin implementing a slow
-operation must declare a limit **at least as large as that operation's contract**, or every attempt
-that takes longer than its own ceiling is killed and reported `plugin_timeout`, which is
-**ambiguous**: the provider may already have acted, and the next attempt has to find out.
+That is a trap worth stating plainly, twice over. The reference package declares `timeout_ms: 20000`
+while `list_membership.add` declares `120000`, so an invocation of that operation is killed after 20 s
+— long enough for a stand-in provider, and far too short for a real one. And a manifest that declares
+no limits at all is not thereby unlimited: it takes the 60 s default, which is less than what two of
+the three published operations ask for. A plugin implementing a slow operation must declare a limit
+**at least as large as that operation's contract**, or every attempt that takes longer than its own
+ceiling is killed and reported `plugin_timeout`, which is **ambiguous**: the provider may already have
+acted, and the next attempt has to find out.
 
 ### The input you are handed
 

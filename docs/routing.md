@@ -107,8 +107,8 @@ that activates a global edit somebody left in the file, and the operator who edi
 wrote a campaign route will see the *old* global set in the answer. That is not a stale read; it is
 the freeze rule seen from the other side. `jason plugin reload` is what picks the edit up.
 
-**There is no global `route set`.** The API writes campaign routes only, and asking for a global one
-says where a global route lives:
+**There is no global `route set`.** The API writes campaign routes only, and the CLI refuses the command
+before it sends anything — a usage error, exit 2 — saying where a global route lives instead:
 
 ```text
 --campaign is required: only a campaign's routes are written through the API. A global route is
@@ -128,15 +128,26 @@ Three smaller rules, each of which somebody will meet:
 
 ### `route resolve` has two different answers
 
-`route resolve` is the diagnostic verb: it asks the active snapshot exactly what a claim would decide.
+`route resolve` is the diagnostic verb: it asks the active snapshot — the same one the claim reads —
+where this campaign's work would go and whether the plugin there could take it.
 
 - **Nothing resolves** → `no_route`, a 404 (CLI exit 1). That is a configuration fact: no route sends
   this operation anywhere for this campaign.
 - **A route resolves and cannot run** → a 200 with `"usable": false` and the problems listed.
 
 The problems in that second answer carry **attempt-error codes, not route-problem codes**, because
-resolve predicts what the claim would decide and therefore speaks the claim's vocabulary. §7 has both
-lists.
+resolve is predicting what the claim would decide and therefore speaks the claim's vocabulary. §7 has
+both lists.
+
+**`usable: true` is about the route, not about an item.** Of the twelve reasons a claim can refuse work
+(§7), resolve answers the first two in its own words — an operation this build does not publish is a
+400, nothing resolving is the 404 above — and asks the five that need nothing but a route and a plugin
+set, numbers 3 to 7. The last five are questions about a work item, which resolve does not have:
+whether the operation needs a person's approval, whether a contact is named, whether that person is
+reachable on the channel the operation consumes, whether that value is suppressed, and whether the
+composed input satisfies the schema. So `route resolve --operation campaign.enroll` answers
+`usable: true` against a plugin that implements it, and every item of that operation still fails
+`approval_required` at the claim.
 
 The most common real `usable: false` is a **default** route, and it is worth showing. A default route
 is validated only against the operations its plugin already claims, so a global default to a provider
@@ -176,7 +187,9 @@ A plugin's manifest may declare `binding:` — a schema, in the dialect of `docs
 an installation must tell it before it can act. A route to a plugin that declares one must satisfy it;
 a route to a plugin that declares none may carry any JSON object, up to 64 KiB (a larger one is
 refused at the invocation with `plugin_binding_too_large`, which is permanent). The value reaches the
-plugin as `context.binding` and nothing else in the runtime reads it.
+plugin as `context.binding`. **Nothing in the runtime interprets what it means** — that is the plugin's
+business — though the runtime does hold it to the plugin's schema, refuse a credential-shaped name in
+it, hash it into each attempt's provenance, journal it and show it in `route list`.
 
 **A binding selects an identity the plugin's own credential store already holds; it never carries the
 credential.** A binding is journaled when it is written and shown in full by `route list`, so a field
@@ -262,7 +275,7 @@ message names the pinned value.
 |---|---|
 | `route_plugin_unknown` | the route names a plugin the candidate set does not contain |
 | `route_plugin_kind_not_invocable` | the plugin is a notification plugin, which performs no canonical operation |
-| `route_operation_unknown` | the route is for an operation this build does not publish. A *global* override keyed by such a name is caught one step earlier, by the section validator below |
+| `route_operation_unknown` | a *campaign* route names an operation this build does not publish. A global override keyed by such a name never reaches this check: the section validator refuses it first, as the eighth code below |
 | `route_operation_unsupported` | the plugin does not list the operation the route sends it |
 | `route_contract_incompatible` | the plugin speaks no version of that operation's contract |
 | `route_binding_secret_like` | the binding carries a field named like a credential, at any depth |
@@ -285,8 +298,15 @@ answer — and never a 500, which would say the runtime broke rather than the ed
   whoever pasted a credential into a settings file needs to read.
 
 The two vocabularies are deliberate. A route problem is read by an operator repairing an installation; an
-attempt error is read by a manager reading why one item failed. Only the words differ — the verdict is the
-same code path, asked twice.
+attempt error is read by a manager reading why one item failed. Five of the questions — is the plugin
+there, is it a kind that performs operations, does it list this one, does it speak the contract's
+version, does the binding satisfy its schema — are one implementation asked by both gates, so the two
+can only differ in wording.
+
+**Two questions belong to exactly one gate, deliberately.** `plugin_unavailable` is asked only at the
+claim: a package whose program is missing from this machine is an environment's problem, and refusing
+every route to it would answer that with a rejected reload. `route_binding_secret_like` is asked only at
+activation: that is where a binding is written, and nothing at claim time could still refuse one.
 
 ## 8. What "ambiguous" costs, in operator terms
 
@@ -316,16 +336,21 @@ and the answer that was refused is kept on the attempt's provenance so its autho
 
 ## 9. Budgets, and what they cost the handler pool
 
-Three numbers, and they are not the same number:
+Three budgets, and they are not the same number:
 
 - **The child's budget** is the operation's own `timeout_ms`, from its contract — 60 s for
-  `campaign.get`, 120 s for `list_membership.add`, 300 s for `campaign.enroll`. It is never what is left
-  of the lease: the same operation must not behave differently because the claim before it was slow.
+  `campaign.get`, 120 s for `list_membership.add`, 300 s for `campaign.enroll` — lowered by the
+  plugin's ceiling below where that is smaller. It is never what is left of the lease: the same
+  operation must not behave differently because the claim before it was slow.
 - **The lease** is `Dispatcher:ProviderOp:TimeoutSeconds`, **600 s** by default, and it has to outlast the
   child. A configuration where it does not is refused when the runtime starts, naming the operation that
   forces the floor.
-- **The plugin's own ceiling** is `limits.timeout_ms` in its manifest, and it can only lower the child's
-  budget, never raise it (see [docs/plugins.md](plugins.md) §7).
+- **The plugin's ceiling** is `limits.timeout_ms` from its manifest when it declares one, and
+  `Plugins:Limits:TimeoutMs` — **60 s** — when it does not; either is itself capped by
+  `Plugins:Limits:MaxTimeoutMs`. The ceiling can only lower the child's budget, never raise it, so a
+  package that says nothing about limits caps a 300 s operation at 60 s, and one that declares 20 s
+  caps it at 20 s. A plugin implementing a slow operation has to declare a limit at least as large as
+  that operation's contract (see [docs/plugins.md](plugins.md) §7).
 
 An item may ask for a shorter lease of its own — `--timeout` — but **not shorter than the operation
 needs**, and the refusal names the floor rather than quietly raising the number:
