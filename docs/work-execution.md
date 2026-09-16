@@ -6,9 +6,10 @@ what to start, what an executor is handed when it is launched, and how it report
 This document is the contract for anyone writing an agent host against Jason. The launch envelope and
 the executor operations are public surface; the rest explains the rules that surround them.
 
-Provider operations are not routed in this version — a `provider_op` item is held to its published
-operation contract when it is written, and then fails visibly at the claim rather than being quietly
-skipped. See "Not here yet" at the end.
+Provider operations run: an item that names a canonical operation is held to that operation's contract
+when it is written, routed to a plugin at the claim, performed in a separate process and answered.
+Where an item is routed, and every reason a claim can refuse one, is
+[docs/routing.md](routing.md).
 
 ## What a work item is
 
@@ -26,7 +27,9 @@ There are two kinds:
 - **`provider_op`** — work a provider performs. It names an `operation` — one of the canonical
   operations this build publishes a contract for (`campaign.get`, `list_membership.add`,
   `campaign.enroll`) — and carries that operation's arguments under `input`, the one reserved key of
-  the context. Nothing routes these yet.
+  the context. Which plugin performs it, and in which provider account, is a route
+  ([docs/routing.md](routing.md)); the runtime composes what the plugin is given and never hands over
+  the rest of the context.
 
 Everything else on an item is scheduling, not meaning: `priority`, `not_before`, `due_at`, and the
 three per-item overrides `timeout_seconds`, `heartbeat_seconds` and `max_attempts`.
@@ -53,8 +56,9 @@ attempt that failed on it much later, with a provider already called. `workitem.
 What is measured here is the caller's own arguments — the `args` property of the operation's input
 schema — and not the whole composed input. The rest of that input is the runtime's to write, at
 claim: the contact, the campaign and the idempotency key. So a rule the operation states across the
-whole of it, such as a root `anyOf`, is not a creation-time check; there is nothing yet for it to be
-checked against.
+whole of it, such as a root `anyOf`, is not a creation-time check: at the claim the composed document
+is measured against the operation's whole input schema, and that is where such a rule is enforced —
+as `input_invalid` on the attempt rather than as a refused request.
 
 `workitem.update` re-reads the arguments only when the patch names the reserved key — `set` writing
 `input`, or `unset` naming it — and measures them against the item's **own** operation, which is not
@@ -117,8 +121,9 @@ the same item; the second waits, finds it taken and moves on. Within one scan th
 - never more than the free handler slots, so a queued item cannot sit watching its own lease expire.
 
 Work the runtime cannot perform is failed inside the same transaction rather than skipped: a
-`provider_op` fails with `no_route`, and an `ai_role` whose role has no entry command fails with
-`role_not_launchable`. A silent skip would leave the item looking claimable forever.
+`provider_op` fails with whichever of the twelve pre-flight reasons applies — `no_route` when nothing
+routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
+A silent skip would leave the item looking claimable forever.
 
 ## Leases and heartbeats
 
@@ -264,7 +269,47 @@ have passed since its attempt finished: the attempt is over, so nothing it does 
 | `executor_exited` | attempt | the child ended without reporting |
 | `executor_launch_failed` | attempt | the entry command could not be started at all |
 | `role_not_launchable` | attempt | the role has no entry command and no default is configured |
-| `no_route` | attempt | no provider route exists for the operation |
+| the twelve pre-flight codes | attempt | a `provider_op` item the claim refused, `no_route` among them — see below |
+
+## Provider operations
+
+A `provider_op` item is a kind of work item, not a second execution engine: it is claimed under the
+same lease, runs in the same handler pool, and ends through the same routine. Four things about it
+differ from agent work.
+
+**Its arguments live under one reserved context key.** `context.input` carries the operation's
+arguments and nothing else in the context is an argument. The runtime **composes** what the plugin
+receives from the item — the arguments, the contact cut to the projection the operation declares, the
+campaign, the identifiers that plugin itself pinned, and the work item's own id as the idempotency key
+— and validates the whole composed document against the operation's input schema at the claim. A
+plugin never sees a work item's context.
+
+**Everything that can refuse it is decided at the claim, before a child process exists.** Twelve
+checks, in this order, and the first that fails is the one the attempt records:
+
+```text
+operation_unknown → no_route → plugin_not_loaded → plugin_unavailable → plugin_operation_unsupported →
+contract_incompatible → binding_invalid → approval_required → contact_required → no_channel_value →
+suppressed → input_invalid
+```
+
+All twelve are final. Eleven are `permanent`; `input_invalid` is `validation`, because it is the one a
+planner can fix by editing the item. The attempt is kept with its context snapshot either way — a
+silent skip would leave the item looking claimable forever — and nothing ever falls back to another
+plugin. [docs/routing.md](routing.md) says what each one means and what to change.
+
+**A failure's class decides the retry, not the code table.** A provider attempt ends with one of four
+classes: `transient` comes back, `permanent` and `validation` are final, and `ambiguous` — the
+provider may already have acted — is repeated only where the operation's own contract says a repeat is
+`safe` or is answerable `after_recovery_read`. An answer that arrived and does not satisfy the
+operation's output schema is `result_invalid`: ambiguous, and never repeated.
+
+**What ran is pinned to the attempt.** Every provider attempt carries a `provenance` record, written at
+the claim from the decision that was just made and completed when the invocation ends: the plugin, its
+version and content digest, the operation and contract version, the plugin and route snapshot ids, the
+route scope, the binding's identity (a hash, never the value), the invocation id, what the run cost,
+the identifiers the plugin returned, and — after a `result_invalid` — the answer that was refused.
+Nothing rewrites it afterwards. `jason workitem get <id> --human` prints it as a block per attempt.
 
 ## Roles
 
@@ -335,14 +380,8 @@ executor may still be alive, and the lease and heartbeat rules decide soon enoug
 
 ## Not here yet
 
-- **Provider operations.** `provider_op` items fail with `no_route`. The mechanism that will run them
-  already exists and is documented in [docs/plugins.md](plugins.md): validated plugin packages, an
-  atomically reloaded registry, and a plugin host that runs one invocation in its own process. What
-  each operation means, and what its arguments must look like, is published under
-  [docs/contracts/](contracts/README.md) and enforced when an item is written. Routing an item to a
-  plugin, composing the input that reaches one, the binding it is given and the pre-flight check at
-  claim arrive with the next increment.
-- **Approvals.** Nothing pauses for a human decision yet.
+- **Approvals.** Nothing pauses for a human decision yet, and an operation that requires one —
+  `campaign.enroll` — therefore fails closed at the claim with `approval_required` every time.
 - **Execution profiles.** `execution_profile` is recorded verbatim as an opaque string; nothing
   resolves it.
 - **Session resume.** A host that is interrupted is retried from the start, not nudged to continue.

@@ -3,11 +3,12 @@
 **Version 1.** The machine-readable contract is [`campaign.enroll.json`](campaign.enroll.json); this page explains
 it. Where the two seem to differ, the document is right and this page is a bug.
 
-> **This version never runs it** — and not only for want of the approval gate. No `provider_op` work item reaches
-> a plugin at all yet: every one of them fails at the claim with `no_route`. On top of that, `campaign.enroll`
-> requires approval, and nothing in the runtime can ask a person for one. The contract is published complete so
-> that routing and the gate are the only things left to add — and so that a plugin author can implement and test
-> the operation now.
+> **This version never runs it**, and the reason is now the approval alone. Routing, the composed input and the
+> answer check are all in place — the other two published operations run through them — but `campaign.enroll`
+> requires a person's approval, nothing in the runtime can ask for one, and a dispatcher may not stand in for the
+> person who approves. Every item naming it fails at the claim with `approval_required`, having reached no
+> provider. The contract is published complete so that the gate is the only thing left to add — and so that a
+> plugin author can implement and test the operation now.
 
 ## What it is for
 

@@ -11,13 +11,14 @@ generated block inside that page is rendered from the JSON by a test. **Prose ex
 governs, and the JSON governs the block.**
 
 **What runs today.** The documents are published and embedded, and the runtime holds a `provider_op`
-work item to the one it names: an operation no contract is published for is refused at
+work item to the one it names from end to end: an operation no contract is published for is refused at
 `workitem.create`, and the arguments the item carries under `context.input` are measured against that
-operation's argument schema — there, and again whenever a patch rewrites them. Nothing routes a work
-item to a plugin yet, so the composed input, the check on a plugin's answer and the repeat rule below
-are the contract a plugin is written **against** rather than something the runtime performs; routing
-arrives with the next increment. [`docs/plugins.md`](../plugins.md) §7 is the same material from the
-plugin author's side, with a worked example.
+operation's argument schema — there, and again whenever a patch rewrites them. At the claim the item is
+routed to a plugin, the whole input below is composed and validated, the plugin is given the budget the
+document states, and its answer is measured against the output schema before it becomes the item's
+result; the repeat rule below is what the runtime reads when such an attempt ends ambiguously.
+[`docs/plugins.md`](../plugins.md) §7 is the same material from the plugin author's side, with a worked
+example; [`docs/routing.md`](../routing.md) is how an operation reaches a plugin at all.
 
 ```
 docs/contracts/
@@ -145,8 +146,9 @@ lists.
 - **Breaking** — a newly required field, a removed field, a changed enum, a changed property such as `reach` —
   bumps the operation's version *and* the family version. A plugin then declares `[1, 2]` to serve both.
 
-A routed plugin whose family versions do not contain the operation's version is refused with
-`contract_incompatible` — a check that arrives with routing, like everything else that calls a plugin.
+A route to a plugin whose family versions do not contain the operation's version is refused when the
+route is activated, as `route_contract_incompatible`, and again at the claim as
+`contract_incompatible`: the plan a run is handed has to be true of the package in front of it.
 Compatibility windows and deprecation policy are not settled yet and are deliberately not
 implied here.
 
