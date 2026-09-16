@@ -480,7 +480,7 @@ public class ClaimerTests
             {
                 plugins.Replace(
                     new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Noon, SnapshotSource.Startup, [plugin]),
-                    new ReloadReport(Noon, SnapshotSource.Startup, Activated: true, []));
+                    new ReloadReport(Noon, SnapshotSource.Startup, Activated: true, [], []));
             }
 
             var routing = new RouteRegistry(clock, plugins);
