@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -62,6 +63,15 @@ internal static class Account
             case "hang":
                 await Task.Delay(Number(instruction!, "milliseconds"));
                 break;
+
+            case "prints":
+                // Whatever the test built, written out exactly as it is: no envelope, no status, nothing this
+                // program decides. It is the one answer `Answers` cannot express, because that one always
+                // prints the CLI's own {code, data} around whatever it is given — and a caller has to survive
+                // stdout that is not an envelope at all.
+                await Console.Out.WriteAsync(Text(instruction!, "stdout"));
+                await Console.Out.FlushAsync();
+                return Number(instruction!, "exit_code");
 
             case "lost":
                 {
@@ -542,9 +552,32 @@ internal static class Account
             ["path"] = path,
             ["body"] = body,
             ["args"] = new JsonArray([.. argv.Select(argument => (JsonNode)JsonValue.Create(argument))]),
+            ["env"] = VendorVariables(),
         };
 
         Append(Path.Combine(root, CallsFile), entry.ToJsonString() + "\n");
+    }
+
+    /// <summary>
+    /// Every vendor-named variable this process was given, by name and value. Only the ones named after this
+    /// vendor, because that is the whole of the question: an operator's own <c>REPLY_API_KEY</c> or
+    /// <c>REPLY_TEAM_ID</c> must not reach a child, and the one name that legitimately does is the one the
+    /// package itself sets on the call. Copying the rest of a machine's environment into a file would answer
+    /// nothing and would put whatever a developer exported into it.
+    /// </summary>
+    private static JsonObject VendorVariables()
+    {
+        var seen = new JsonObject();
+        foreach (DictionaryEntry variable in Environment.GetEnvironmentVariables())
+        {
+            var name = variable.Key.ToString() ?? string.Empty;
+            if (name.StartsWith("REPLY_", StringComparison.OrdinalIgnoreCase))
+            {
+                seen[name] = variable.Value?.ToString();
+            }
+        }
+
+        return seen;
     }
 
     /// <summary>
