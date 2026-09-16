@@ -168,7 +168,7 @@ public sealed partial class PluginsOptionsValidator : IValidateOptions<PluginsOp
         }
     }
 
-    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._:()-]{0,127}$")]
+    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._:()-]{0,127}\z")]
     private static partial Regex GrantEntry();
 }
 

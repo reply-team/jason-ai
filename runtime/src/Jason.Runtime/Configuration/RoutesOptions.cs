@@ -126,6 +126,6 @@ public sealed partial class RoutesOptions
         return (Number().IsMatch(value) ? JsonNode.Parse(value) : null) ?? JsonValue.Create(value)!;
     }
 
-    [GeneratedRegex(@"^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][-+]?[0-9]+)?$")]
+    [GeneratedRegex(@"^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][-+]?[0-9]+)?\z")]
     private static partial Regex Number();
 }

@@ -88,6 +88,26 @@ public class OptionsValidationTests
         Assert.Contains(result.Failures!, failure => failure.StartsWith("Plugins:Grants:fake:Http[1] must ", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A grant entry that names an executable and then a newline names no executable at all: nothing a manifest
+    /// requests can match it, so it would sit in the file looking like a permission and granting nothing. The
+    /// settings file is a person's to edit, and what they need back is the line, not silence.
+    /// </summary>
+    [Fact]
+    public void A_grant_entry_that_ends_in_a_newline_is_refused_rather_than_granting_nothing()
+    {
+        var result = new PluginsOptionsValidator().Validate(null, new PluginsOptions
+        {
+            Grants = new Dictionary<string, PluginGrant>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["fake-provider"] = new PluginGrant { Exec = ["provider-cli\n"] },
+            },
+        });
+
+        Assert.True(result.Failed);
+        Assert.Contains(result.Failures!, failure => failure.StartsWith("Plugins:Grants:fake-provider:Exec[0] must ", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Everything_a_manifest_can_request_is_a_valid_grant_entry()
     {
