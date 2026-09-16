@@ -444,13 +444,19 @@ public class RouteActivationTests
     }
 
     internal static Task<RuntimeApiFixture> StartAsync(string? routes = null, Action<JasonPaths>? prepare = null) =>
-        RuntimeApiFixture.StartAsync(Ct, prepare: paths =>
-        {
-            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
-            prepare?.Invoke(paths);
-            if (routes is not null)
+        RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
             {
-                TestRoutes.WriteGlobal(paths, routes);
-            }
-        });
+                File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+                prepare?.Invoke(paths);
+                if (routes is not null)
+                {
+                    TestRoutes.WriteGlobal(paths, routes);
+                }
+            },
+            // The reference package now names the stand-in vendor program itself rather than reaching it through
+            // the muxer, so a runtime that cannot find that program on its search path reports the plugin
+            // unavailable — which is a different answer from the one these tests are about.
+            configureServices: services => services.AddSingleton(TestPlugins.SearchPath));
 }

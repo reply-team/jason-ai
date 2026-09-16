@@ -46,13 +46,19 @@ public class PreflightMatrixTests
     public async Task A_provider_item_that_cannot_run_says_why_and_keeps_its_attempt(string reason)
     {
         var scenario = Cases[reason];
-        await using var api = await RuntimeApiFixture.StartAsync(Ct, paths =>
-        {
-            File.WriteAllText(paths.UserSettingsFile, Idle);
-            TestPlugins.InstallFakeProvider(paths);
-            TestPlugins.Grant(paths, TestPlugins.FakeProviderId, exec: ["*"]);
-            scenario.Install(paths);
-        });
+        await using var api = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                File.WriteAllText(paths.UserSettingsFile, Idle);
+                TestPlugins.InstallFakeProvider(paths);
+                TestPlugins.Grant(paths, TestPlugins.FakeProviderId, exec: ["*"]);
+                scenario.Install(paths);
+            },
+            // The reference package names the stand-in vendor program itself, so without its directory on the
+            // search path the plugin loads as unavailable — which is one of the twelve answers this matrix is
+            // about, and would silently stand in for the other eleven.
+            configureServices: services => services.AddSingleton(TestPlugins.SearchPath));
 
         // The loop scans the moment it starts; everything this test seeds comes after that, so the only scan
         // that matters is the one below.
