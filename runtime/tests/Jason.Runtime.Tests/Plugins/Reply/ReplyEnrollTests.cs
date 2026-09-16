@@ -393,8 +393,13 @@ public class ReplyEnrollTests
     [Fact]
     public async Task A_step_position_is_resolved_by_walking_the_chain_a_sequence_actually_has()
     {
+        // The steps arrive in an order that is deliberately not the chain's: the array reads 13, 11, 12 while
+        // the chain runs 11 → 12 → 13. Walking answers 13 for the third step; taking the third element of the
+        // array would answer 12. Planted in chain order the two agree, and the test would prove nothing about
+        // which one the package does.
         using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11, 12, 13)
+        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
+            .WithSteps(Sequence, (13, 12, "email"), (11, null, "email"), (12, 11, "email"))
             .WithContact(1001, Address, FirstName);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
@@ -406,6 +411,7 @@ public class ReplyEnrollTests
         // third element of whatever order the array happened to arrive in.
         var body = JsonNode.Parse(Assert.Single(account.Calls, call => call.Path == BulkPath).Body!)!.AsObject();
         Assert.Equal(13, body["startStepId"]!.GetValue<int>());
+        Assert.NotEqual(12, body["startStepId"]!.GetValue<int>());
     }
 
     [Fact]
