@@ -35,9 +35,15 @@ public sealed record AttemptLaunchDto(IReadOnlyList<string> EntryCommand, string
 /// account?", while the value itself stays in the route.
 /// </remarks>
 /// <param name="CorrelationId">The attempt's own id, which is what ties an invocation back to the work.</param>
+/// <param name="ExternalIdsReturned">
+/// The identifiers the plugin answered with, keyed as it keyed them. The kinds the contract declares are pinned
+/// and can be read from the entity; this is the only place an undeclared one survives at all, so its spelling is
+/// kept out of the dialect's naming policy — the key here matches the pointer that refused it.
+/// </param>
 /// <param name="RejectedResult">
 /// The answer a shape error refused, so a plugin author can see what was actually sent. Present only where an
-/// otherwise well-formed answer failed the operation's own schema.
+/// otherwise well-formed answer failed the operation's own schema, and only where the read asked for snapshots:
+/// it is bounded by what the invoker will read back, which is not a size every read of a work item should carry.
 /// </param>
 public sealed record AttemptProvenanceDto(
     string? PluginId,
@@ -54,7 +60,9 @@ public sealed record AttemptProvenanceDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? InvocationId = null,
     string? CorrelationId = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OutcomeDiagnostics? Diagnostics = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, string>? ExternalIdsReturned = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [property: JsonConverter(typeof(VerbatimKeysConverter))]
+    IReadOnlyDictionary<string, string>? ExternalIdsReturned = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonNode? RejectedResult = null);
 
 /// <summary>One run of one work item. The id is also the fencing token every executor operation must carry.</summary>

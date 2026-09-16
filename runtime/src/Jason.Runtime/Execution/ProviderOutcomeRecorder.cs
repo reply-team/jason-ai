@@ -142,9 +142,13 @@ public sealed class ProviderOutcomeRecorder(
     /// <summary>
     /// Which of a failed answer's identifiers were not written down, named beside the failure that was kept. The
     /// same check the success path refuses the whole answer on: one reading of "the contract does not declare it".
+    /// The pointers are addressed from the outcome's root, and a failed answer keeps its identifiers on the error
+    /// — so that is what an author is sent to, rather than a key that is null in the document they wrote.
     /// </summary>
     private static IReadOnlyList<ErrorDetail>? Refused(OperationContract contract, JsonObject? externalIds) =>
-        OutcomeContract.CheckExternalIds(contract, externalIds) is { Count: > 0 } problems ? ErrorDetail.From(problems) : null;
+        OutcomeContract.CheckExternalIds(contract, externalIds, OutcomeContract.OnTheError) is { Count: > 0 } problems
+            ? ErrorDetail.From(problems)
+            : null;
 
     /// <summary>
     /// The identifiers the plugin answered with, whichever way it ended, as it returned them. Anything that is

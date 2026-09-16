@@ -186,7 +186,11 @@ public class AttemptProvenanceTests
         gate.SetResult(new CommandOutcome.Completed(null));
         Assert.True(await api.Resolve<HandlerPool>().DrainAsync(TimeSpan.FromSeconds(10)));
 
-        var attempt = await AttemptAsync(api, item);
+        // The rejected answer is the one unbounded thing a record can carry, so it is asked for by the same flag
+        // as the context snapshot beside it rather than riding on every read of the item.
+        Assert.Null((await AttemptAsync(api, item)).Provenance!.RejectedResult);
+
+        var attempt = await AttemptAsync(api, item, snapshots: true);
         Assert.NotNull(attempt.LastHeartbeatAt);
         var provenance = attempt.Provenance;
         Assert.NotNull(provenance);
@@ -336,9 +340,12 @@ public class AttemptProvenanceTests
 
     private static Task RunOneAsync(RuntimeApiFixture api) => ScanAsync(api, claimed: 1);
 
-    private static async Task<AttemptDto> AttemptAsync(RuntimeApiFixture api, string item)
+    private static async Task<AttemptDto> AttemptAsync(RuntimeApiFixture api, string item, bool snapshots = false)
     {
-        var read = await api.PostOkAsync<WorkItemDto>(Operations.WorkItemGet, new { work_item_id = item }, Ct);
+        var read = await api.PostOkAsync<WorkItemDto>(
+            Operations.WorkItemGet,
+            new { work_item_id = item, include_snapshots = snapshots },
+            Ct);
         return Assert.Single(read.Attempts!);
     }
 

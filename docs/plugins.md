@@ -280,8 +280,10 @@ export function invoke(operation, input, context) {
 **The return contract.** `invoke` returns `{ result, external_ids? }`, or a Promise of it. `result`
 is any JSON value up to 1 MiB (`result_too_large` above that); `external_ids` is an object of at most
 64 string values of at most 256 characters, keyed by the **provider's** own names, which travel
-verbatim. Anything else — a bare value, `undefined`, an array, an object without `result` — fails
-`permanent` with `bad_return`.
+verbatim. Because an identifier is later printed to a person exactly as you returned it, a value
+carrying a control character — a newline, an escape sequence — is refused the way an undeclared kind
+is, and is never written down. Anything else — a bare value, `undefined`, an array, an object without
+`result` — fails `permanent` with `bad_return`.
 
 **Failing.** `throw host.fail({ class, code, message, details?, external_ids? })` is the only way to
 report a business failure with its class. Anything else thrown fails `permanent` with
@@ -834,8 +836,8 @@ characters, a message of at most 2000 characters, `external_ids` of at most 64 s
 most 256 characters. Anything else is `plugin_malformed_outcome`. The operation's own `output_schema`
 is **not** applied here — this check is about the envelope. The runtime applies it a moment later, when
 it turns the answer into the work item's outcome: a result that does not satisfy the schema, or an
-identifier of a kind the operation never declared, ends the item with `result_invalid` and the failing
-pointers, rather than with a malformed outcome (§7).
+identifier of a kind the operation never declared or carrying a control character, ends the item with
+`result_invalid` and the failing pointers, rather than with a malformed outcome (§7).
 
 ### stderr: JSON Lines
 

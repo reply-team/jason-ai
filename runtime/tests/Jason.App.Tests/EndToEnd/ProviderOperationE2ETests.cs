@@ -163,9 +163,10 @@ public class ProviderOperationE2ETests
             Assert.Contains("p_1001", pinned, StringComparison.Ordinal);
 
             // 5. An answer the operation's own schema refuses is not a result. The item ends, the pointers say
-            //    where, and what was actually sent is kept on the attempt so its author can see it.
+            //    where, and what was actually sent is kept on the attempt so its author can see it — under
+            //    `--snapshots`, with the other evidence too large to ride on every read.
             var refused = await ItemAsync(root, campaign, "campaign.get", Named(providerCampaign), contact: null);
-            var rejected = await PollAsync(root, refused, item => Finished((string?)item["status"]));
+            var rejected = await PollAsync(root, refused, item => Finished((string?)item["status"]), snapshots: true);
             Assert.Equal("failed", (string?)rejected["status"]);
             var refusal = Assert.Single(rejected["attempts"]!.AsArray())!;
             Assert.Equal("result_invalid", (string?)refusal["error"]!["code"]);

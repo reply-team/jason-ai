@@ -126,7 +126,7 @@ public class FixtureTests
             outcome.ExternalIds is null,
             $"{relative} puts identifiers beside the result of a failed outcome; a failure carries them on its error.");
 
-        var refused = OutcomeContract.CheckExternalIds(contract, outcome.Error!.ExternalIds);
+        var refused = OutcomeContract.CheckExternalIds(contract, outcome.Error!.ExternalIds, OutcomeContract.OnTheError);
         if (expected["invalid"] is JsonArray)
         {
             TheStatedProblemsAndNoOthers(relative, expected, refused);

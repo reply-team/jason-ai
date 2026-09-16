@@ -54,6 +54,29 @@ public class JasonJsonTests
         Assert.Equal(descriptor, JsonSerializer.Deserialize<RuntimeDescriptor>(json, JasonJson.Options));
     }
 
+    /// <summary>
+    /// The dialect's naming policy reaches dictionary keys, which is right for a map Jason names and wrong for
+    /// one a provider names. The identifiers an attempt kept are the provider's own words, so they survive the
+    /// round trip spelled as they arrived; and a value that is not a string is refused rather than read as one.
+    /// </summary>
+    [Fact]
+    public void The_identifiers_an_attempt_kept_travel_under_the_keys_the_plugin_used()
+    {
+        var provenance = new AttemptProvenanceDto(
+            null, null, null, null, null, null, null, null, null, null, null,
+            ExternalIdsReturned: new Dictionary<string, string>(StringComparer.Ordinal) { ["contactId"] = "p_1001" });
+
+        var json = JsonSerializer.Serialize(provenance, JasonJson.Options);
+
+        Assert.Contains("\"external_ids_returned\":{\"contactId\":\"p_1001\"}", json, StringComparison.Ordinal);
+        Assert.Equal(
+            "contactId",
+            Assert.Single(JsonSerializer.Deserialize<AttemptProvenanceDto>(json, JasonJson.Options)!.ExternalIdsReturned!).Key);
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<AttemptProvenanceDto>(
+            "{\"external_ids_returned\":{\"contactId\":1001}}",
+            JasonJson.Options));
+    }
+
     [Fact]
     public void Apply_configures_foreign_options_identically()
     {

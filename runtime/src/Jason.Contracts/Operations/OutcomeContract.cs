@@ -20,6 +20,13 @@ public static class OutcomeContract
     public const int MaxExternalIdLength = 256;
 
     /// <summary>
+    /// Where a failed answer keeps its identifiers: on the error, which is where <c>host.fail</c> puts them and
+    /// the only place the runtime reads them. A pointer into a failed outcome is prefixed with this, so what an
+    /// author is sent to is the key they actually wrote rather than one that is null in their document.
+    /// </summary>
+    public const string OnTheError = "/error";
+
+    /// <summary>
     /// Whether a failed attempt of <paramref name="contract"/> is worth another one. Three of the four classes
     /// mean the same thing whatever was being attempted — a transient failure may pass, and a permanent or a
     /// validation failure would fail the same way again — so only an ambiguous one reads the operation at all.
@@ -51,9 +58,18 @@ public static class OutcomeContract
     }
 
     /// <summary>Every returned external-id key must be a kind the contract declares, carrying a string value.</summary>
-    public static IReadOnlyList<SchemaProblem> CheckExternalIds(OperationContract contract, JsonObject? externalIds)
+    /// <param name="pointerPrefix">
+    /// Where in the outcome these identifiers were read from: empty beside a result, <see cref="OnTheError"/> on
+    /// a failure. A pointer is an address into the document its author wrote, so it has to carry the half of the
+    /// path the caller knows and the check does not.
+    /// </param>
+    public static IReadOnlyList<SchemaProblem> CheckExternalIds(
+        OperationContract contract,
+        JsonObject? externalIds,
+        string pointerPrefix = "")
     {
         ArgumentNullException.ThrowIfNull(contract);
+        ArgumentNullException.ThrowIfNull(pointerPrefix);
 
         var problems = new List<SchemaProblem>();
         if (externalIds is null)
@@ -64,7 +80,7 @@ public static class OutcomeContract
 
         foreach (var (kind, value) in externalIds)
         {
-            var pointer = "/external_ids/" + kind.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
+            var pointer = pointerPrefix + "/external_ids/" + kind.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
             if (!contract.ExternalIds.ContainsKey(kind))
             {
                 problems.Add(new SchemaProblem(
@@ -91,8 +107,43 @@ public static class OutcomeContract
                     "max_length",
                     string.Create(CultureInfo.InvariantCulture, $"An identifier is at most {MaxExternalIdLength} characters.")));
             }
+            else if (ControlCharacterIn(identifier) is { } control)
+            {
+                problems.Add(new SchemaProblem(
+                    pointer,
+                    "pattern",
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The identifier under `{kind}` carries U+{(int)control:X4}; an identifier is printed to a person as it stands, so it carries no control character.")));
+            }
         }
 
         return problems;
+    }
+
+    /// <summary>
+    /// The first control character <paramref name="identifier"/> carries, or null where it carries none.
+    /// </summary>
+    /// <remarks>
+    /// A provider's identifier is length-checked and then rendered verbatim into a person's terminal, beside the
+    /// rest of a table. A newline in it forges a row, an escape sequence rewrites whatever is already on the
+    /// screen, and a NUL ends the value somewhere no reader expects. Nothing downstream is in a position to
+    /// decide this — a renderer that escaped the value would still be showing a person something the provider
+    /// composed — so it is refused where it would be written down, and one place answers the question for both
+    /// the contract's check and the store's.
+    /// </remarks>
+    public static char? ControlCharacterIn(string identifier)
+    {
+        ArgumentNullException.ThrowIfNull(identifier);
+
+        foreach (var character in identifier)
+        {
+            if (char.IsControl(character))
+            {
+                return character;
+            }
+        }
+
+        return null;
     }
 }
