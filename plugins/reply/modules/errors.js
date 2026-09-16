@@ -83,7 +83,7 @@ export const ROWS = {
       "note": "A write was sent to Reply and no answer came back, so it may already have happened. The CLI's exit codes cannot tell a request that was never sent from one whose answer was lost, and repeating a write can create a person twice or send to them twice — so the work item stops here for a person rather than guessing."
     },
     "unauthorized": {
-      "when": "401, whose body Reply leaves empty, or 403 on any call.",
+      "when": "401, whose body Reply leaves empty, or 403 on any call — and the per-item word `forbidden`, which is how the bulk enrol says the same thing about one person inside a 200.",
       "code": "unauthorized",
       "class": "permanent",
       "note": "The profile this route names is not signed in, or its key does not carry the scope this call needs. Sign in with `reply auth login` for that profile, or issue a key with the scope; no retry can help."
@@ -150,19 +150,19 @@ export const ROWS = {
         "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
       },
       "contact_not_found": {
-        "when": "404 with code `contact.notFound` on `GET /v3/contacts/{id}/statuses`, read by the pin Jason holds.",
+        "when": "404 with code `contact.notFound` on `GET /v3/contacts/{id}/statuses`, read by the pin Jason holds, or the per-item word `contactNotFound` against this person inside the bulk enrol's `notProcessed`.",
         "code": "contact_not_found",
         "class": "permanent",
         "note": "The identifier pinned for this person no longer resolves at Reply — the contact was deleted, or it belongs to another account. The pin has to be cleared before this person can be worked again."
       },
       "campaign_not_enrollable": {
-        "when": "400 with code `sequence.archived`, or the live-state read answers a sequence that is archived.",
+        "when": "The live-state read answers a sequence that is archived, or a 400 on the sequence carries `sequence.archived` or `sequenceContact.noStepsInSequence`.",
         "code": "campaign_not_enrollable",
         "class": "permanent",
-        "note": "The sequence will not take an enrollment: it is archived. Un-archiving it at Reply is what makes the work item runnable, so it fails rather than waiting."
+        "note": "The sequence will not take an enrollment: it is archived, or it holds no step to send. Un-archiving it at Reply, or giving it a step, is what makes the work item runnable — so it fails rather than waiting."
       },
       "collision_refused": {
-        "when": "`args.collision` is `refuse` and the participation read answers a participation that already exists.",
+        "when": "`args.collision` is `refuse` and the bulk enrol answers the per-item word `contactAlreadyInSequence` against this person. Under `skip` the same word is the successful answer `already_enrolled` instead.",
         "code": "collision_refused",
         "class": "permanent",
         "note": "This person already takes part in the sequence and the call asked to be refused rather than to decide. Choose another collision policy if a second participation is what was meant."
@@ -184,6 +184,18 @@ export const ROWS = {
         "code": "limit_reached",
         "class": "permanent",
         "note": "The account will hold no further contact or enrollment. The sequence's own capacity, unlike the account's, publishes no code of its own — a refusal there arrives as an ordinary business 400 and is reported as a refusal this version has no word for, rather than guessed into this row."
+      },
+      "call_could_not_be_built": {
+        "when": "The arguments name a call this provider cannot be asked to make: a start position no shape of this sequence's steps can answer, or a first-touch timing this version has no word for. Decided before anything is sent.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The enrollment could not be built from the arguments it was given, so nothing was sent. A Reply step carries no ordering field at all — the steps are a graph of parents with branch labels — so a numbered start position has a sound meaning only while they form a single chain, and the details say which reading failed. Ask for the first step, or name a position the sequence really has."
+      },
+      "request_rejected_as_invalid": {
+        "when": "The bulk enrol answers the per-item word `invalidInput` against this person: Reply read the request and would not take it.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply rejected the enrollment request as invalid. A request built wrong is built the same way on every attempt, so it is reported rather than retried, and what Reply said travels in the details."
       }
     }
   }
@@ -337,6 +349,10 @@ export function fail(operation, observed, learned) {
     // What a 200 said about this one person, where it refused one inside an answer that reported success. It is
     // reported and never read: the shape of that value is documented two incompatible ways.
     provider_item: observed.provider_item,
+    // What this package itself could not do, for the endings that are its own refusal rather than an answer
+    // from Reply. An operator reading one of those has no status and no provider code to go on, so the reason
+    // is the whole of what they get.
+    reason: observed.reason,
     exit_code: observed.exit_code,
     timed_out: observed.timed_out,
   });
