@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Runtime.Configuration;
 using Microsoft.Extensions.Configuration;
@@ -62,6 +63,36 @@ public class RoutesOptionsTests
         var entry = Assert.Contains("campaign.get", options.Operations);
         Assert.Equal("other-provider", entry.Plugin);
         Assert.Null(entry.Binding);
+    }
+
+    /// <summary>
+    /// The configuration system hands every scalar over as text, so what a binding value is — a number or a
+    /// string — is decided here by pattern. A quoted value ending in a newline was read as a number: the binding
+    /// is hashed into the identity an attempt records and measured against the plugin's declared schema, and
+    /// neither the identity nor the type would be the one the person editing the file wrote. The value is built
+    /// rather than written into the JSON, so what is tested is the runtime's reading of it.
+    /// </summary>
+    [Fact]
+    public void A_binding_value_that_ends_in_a_newline_stays_the_string_it_was_written_as()
+    {
+        var settings = new JsonObject
+        {
+            ["Routes"] = new JsonObject
+            {
+                ["Default"] = new JsonObject
+                {
+                    ["Plugin"] = "fake-provider",
+                    ["Binding"] = new JsonObject { ["seats"] = "3\n", ["desks"] = "3 " },
+                },
+            },
+        };
+
+        var binding = Assert.IsType<JsonObject>(Read(settings.ToJsonString()).Default!.Binding);
+
+        // A trailing space was already a string; only a trailing newline was not, which is the anchor's doing.
+        Assert.Equal(JsonValueKind.String, binding["seats"]!.GetValueKind());
+        Assert.Equal("3\n", (string?)binding["seats"]);
+        Assert.Equal("3 ", (string?)binding["desks"]);
     }
 
     [Fact]

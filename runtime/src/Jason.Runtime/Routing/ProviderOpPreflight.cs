@@ -189,6 +189,10 @@ public static class ProviderOpPreflight
     /// and an operator asking "why will this campaign not run?" has to be told what the claim would decide,
     /// rather than something that resembles it because two places were kept in step by hand.
     /// </para>
+    /// <para>
+    /// The questions are <see cref="RouteChecks"/>, which activation asked of the same route when it froze it;
+    /// what belongs here is the order they are asked in and the words a manager is answered with.
+    /// </para>
     /// </summary>
     public static PreflightVerdict? Routable(PluginSnapshot plugins, OperationContract contract, Route route)
     {
@@ -196,7 +200,7 @@ public static class ProviderOpPreflight
         ArgumentNullException.ThrowIfNull(contract);
         ArgumentNullException.ThrowIfNull(route);
 
-        if (plugins.Find(route.PluginId) is not { } plugin)
+        if (RouteChecks.Loaded(plugins, route.PluginId) is not { } plugin)
         {
             return Refused(
                 null,
@@ -204,7 +208,9 @@ public static class ProviderOpPreflight
                 $"The route for '{contract.Id}' names plugin '{route.PluginId}', which the active plugin set does not hold.");
         }
 
-        if (plugin.Status == PluginStatus.Unavailable)
+        // Asked here and nowhere in activation: a package that cannot run on this machine is an environment's
+        // problem, and refusing every route to it would answer a missing program with a rejected reload.
+        if (RouteChecks.Unavailable(plugin))
         {
             return Refused(
                 null,
@@ -214,7 +220,7 @@ public static class ProviderOpPreflight
 
         // The kind is asked first: a plugin that only notifies lists no operation at all, so asking "does it
         // implement this one?" first would answer with what is missing rather than with what it is.
-        if (plugin.Manifest.Kind != PluginKind.Provider)
+        if (RouteChecks.KindNotInvocable(plugin))
         {
             return Refused(
                 null,
@@ -222,7 +228,7 @@ public static class ProviderOpPreflight
                 $"Plugin '{plugin.Manifest.Id}' is not a kind of plugin that performs canonical operations.");
         }
 
-        if (!plugin.Supports(contract.Id))
+        if (RouteChecks.OperationUnsupported(plugin, contract.Id))
         {
             return Refused(
                 null,
@@ -230,7 +236,7 @@ public static class ProviderOpPreflight
                 $"Plugin '{plugin.Manifest.Id}' does not perform '{contract.Id}', and work is never handed to a plugin the route did not name.");
         }
 
-        if (!plugin.Manifest.Contracts.Operations.Contains(contract.Version))
+        if (RouteChecks.ContractIncompatible(plugin, contract))
         {
             return Refused(
                 null,
@@ -244,16 +250,13 @@ public static class ProviderOpPreflight
         // given has to be true of the package in front of it, not of the one the route was written against. A
         // route that carries no binding at all is checked too: a plugin whose schema requires one is unusable
         // without it, and passing the item on to a child that cannot work would be the dishonest answer.
-        if (plugin.Manifest.Binding is { } schema && SchemaValidator.Validate(route.Binding, schema) is { Count: > 0 } wrong)
-        {
-            return Refused(
+        return RouteChecks.BindingProblems(plugin, route.Binding) is { Count: > 0 } wrong
+            ? Refused(
                 null,
                 AttemptErrors.BindingInvalid,
                 $"The binding of the route to plugin '{plugin.Manifest.Id}' does not satisfy the schema that plugin declares.",
-                Details(wrong));
-        }
-
-        return null;
+                Details(wrong))
+            : null;
     }
 
     /// <summary>
