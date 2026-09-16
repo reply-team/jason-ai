@@ -132,6 +132,15 @@ jason route resolve --campaign <id> --operation list_membership.add --human
 jason route list --human
 ```
 
+Once a route is in place, provider work is a work item like any other: the operation it asks for,
+and the arguments that operation's own contract publishes.
+
+```sh
+jason workitem create <campaign-id> --kind provider_op --operation list_membership.add \
+  --contact <contact-id> --input '{"list":{"external_id":"lst-q3"},"channel":"email"}'
+jason workitem get <work-item-id> --human
+```
+
 ## Ecosystem
 
 | Repository | Role |
