@@ -111,6 +111,13 @@ public class ProviderOutcomeRecorderTests
         Assert.Equal(AttemptErrors.ResultInvalid, scene.Attempt.Error!.Code);
         Assert.Equal("/external_ids/membership", Assert.Single(scene.Attempt.Error.Details!).Field);
         Assert.Empty(await db.ExternalIds.AsNoTracking().ToListAsync(Ct));
+
+        // The same answer as any other shape error, asserted rather than inherited from a shared code path:
+        // ambiguous, and final however generously the operation's own rule reads. `list_membership.add` says
+        // after_recovery_read, so a rule-driven answer here would have been a repeat.
+        Assert.Equal(FailureClass.Ambiguous, scene.Attempt.Error.Class);
+        Assert.False(scene.Attempt.Error.Retriable);
+        Assert.Equal(WorkItemStatus.Failed, scene.Item.Status);
     }
 
     /// <summary>
