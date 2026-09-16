@@ -175,6 +175,14 @@ public class AttemptProvenanceTests
 
         Assert.True(await AttemptProvenance.CompleteAsync(db, running.AttemptId, Answered, Ct));
 
+        // A second writer adds what it knows and nothing else: whoever reads the answer and whoever runs it are
+        // not the same code, and neither of them has to carry the other's half to write its own.
+        Assert.True(await AttemptProvenance.CompleteAsync(
+            db,
+            running.AttemptId,
+            new InvocationRecord(RejectedResult: new JsonObject { ["campaign"] = "not what the schema asked for" }),
+            Ct));
+
         gate.SetResult(new CommandOutcome.Completed(null));
         Assert.True(await api.Resolve<HandlerPool>().DrainAsync(TimeSpan.FromSeconds(10)));
 
@@ -187,6 +195,7 @@ public class AttemptProvenanceTests
         var returned = Assert.Single(provenance.ExternalIdsReturned!);
         Assert.Equal("campaign", returned.Key);
         Assert.Equal("c-7714", returned.Value);
+        Assert.Equal("not what the schema asked for", (string?)provenance.RejectedResult!["campaign"]);
 
         // And everything the claim recorded is still what it recorded.
         Assert.Equal(TestPlugins.FakeProviderId, provenance.PluginId);
