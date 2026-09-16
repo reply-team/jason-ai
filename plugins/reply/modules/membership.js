@@ -1,11 +1,12 @@
 // `list_membership.add`: put one person on one of the account's contact lists.
 //
 // Four things happen, in this order and for a reason. The provider's own contact is ensured, because a Reply
-// list holds Reply's contacts. Reply's opt-out register is read by that contact's identifier, because a person
-// who asked not to be contacted must not be put on an outreach list and only the provider knows — the same call
-// says whether a pin still resolves, so one read serves both. On any attempt after the first the declared
-// recovery read is made, because a repeat of a write that may have landed is a real cost and Reply documents
-// nothing about re-adding a contact already on a list. Then, and only then, the add.
+// list holds Reply's contacts. On any attempt after the first the declared recovery read is made — and it comes
+// before everything else, because the document says to answer from that reading when the effect already
+// happened: a person can opt out between two attempts, and reporting a refusal for an add that already
+// succeeded would be false. Only where there is still something to write is Reply's opt-out register read, by
+// that contact's identifier, because a person who asked not to be contacted must not be put on an outreach list
+// and only the provider knows. Then, and only then, the add.
 //
 // The answer's vocabulary is the output schema's, which is closed: `added` or `already_member`, one item naming
 // the contact the call was given, and no `vendor` bag for anything of Reply's to ride along in.
@@ -33,15 +34,18 @@ export function listMembershipAdd(input, context) {
   // without it the next attempt has nothing to read the membership by.
   const learned = { contact: ensured };
 
-  refuseIfSuppressed(OPERATION, context, ensured, learned);
-
-  // The recovery read the document declares, made as a call rather than reasoned about. There is no ledger
-  // under the idempotency key at Reply, so this reading cannot tell this work item's own earlier write from
-  // somebody else's addition of the same person: it answers what the account holds now, which is the most the
-  // provider can be asked. That is a limitation of this version and not something to paper over.
+  // The recovery read the document declares, made as a call rather than reasoned about, and made before
+  // anything is weighed against writing: when the account already holds this membership the document's answer
+  // is that reading. There is no ledger under the idempotency key at Reply, so it cannot tell this work item's
+  // own earlier write from somebody else's addition of the same person; it answers what the account holds now,
+  // which is the most the provider can be asked. That is a limitation of this version and not papered over.
   if (context && context.attempt_number > 1 && holds(context, list, ensured, learned)) {
     return membership(contact.id, "already_member", ensured);
   }
+
+  // Only now, with a write still to make: an opt-out that arrived after the add already landed would otherwise
+  // turn a finished piece of work into a permanent failure.
+  refuseIfSuppressed(OPERATION, context, ensured, learned);
 
   add(context, list, ensured, learned);
   return membership(contact.id, "added", ensured);

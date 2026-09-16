@@ -100,12 +100,30 @@ public class ReplyMembershipTests
         var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2));
 
         // From a mark taken after the first attempt, or the assertion would run over that attempt's own write.
-        // Two reads and no write: the membership the provider already holds is the answer, and answering it is
-        // what makes one crash cost one effect rather than two.
+        // One read and no write: the membership the provider already holds is the answer, and answering it is
+        // what makes one crash cost one effect rather than two. The opt-out register is not consulted at all,
+        // because nothing is going to be written.
         Assert.Equal("already_member", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal(
-            [$"GET /v3/contacts/{Ensured}/statuses", $"GET /v3/contacts/{Ensured}/lists"],
-            PathsSince(account, mark));
+        Assert.Equal([$"GET /v3/contacts/{Ensured}/lists"], PathsSince(account, mark));
+    }
+
+    [Fact]
+    public async Task A_person_who_opted_out_after_the_add_landed_is_not_told_the_add_failed()
+    {
+        // The document says to answer from the recovery read when the effect already happened, so that reading
+        // comes before anything else on a repeated attempt. A person can opt out between two attempts, and
+        // answering `suppressed` here would report a permanent failure for work the provider already did —
+        // sending an operator after an item that is finished.
+        using var account = new ReplyAccount();
+        account.WithContact(1001, Address, FirstName, optedOut: true)
+            .WithList(List, "Q3 LatAm founders", 1001);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2));
+
+        Assert.Equal("already_member", answer["items"]![0]!["status"]!.GetValue<string>());
+        Assert.DoesNotContain($"GET /v3/contacts/{Ensured}/statuses", PathsSince(account, 0));
     }
 
     [Fact]
@@ -131,10 +149,11 @@ public class ReplyMembershipTests
         var mark = account.Mark();
         var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2));
 
+        // One read, and it is the declared one: the membership the account already holds is the answer, so one
+        // crash left one effect rather than two. The opt-out register is not read here because nothing is going
+        // to be written — it is consulted only on the path that still has a write ahead of it.
         Assert.Equal("already_member", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal(
-            [$"GET /v3/contacts/{Ensured}/statuses", $"GET /v3/contacts/{Ensured}/lists"],
-            PathsSince(account, mark));
+        Assert.Equal([$"GET /v3/contacts/{Ensured}/lists"], PathsSince(account, mark));
     }
 
     [Fact]
