@@ -1,3 +1,4 @@
+using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Plugins.Manifest;
 
@@ -338,6 +339,33 @@ public class ManifestReaderTests
         }
 
         return (yaml.ToString(), pointer.ToString());
+    }
+
+    /// <summary>
+    /// A binding schema past the size the dialect reads at all. The document is built here rather than written
+    /// out, because what is being proved is that the reader weighs a stranger's schema before applying it — and a
+    /// schema that size is not something anyone writes by hand.
+    /// </summary>
+    [Fact]
+    public void A_binding_schema_larger_than_the_dialect_reads_is_refused()
+    {
+        // The cap is on the schema the reader hands the dialect check, not on the YAML that expressed it, and the
+        // two are within a few per cent of each other — so the document is grown to twice the cap rather than
+        // counted to the byte, which would only be arithmetic about a spelling.
+        var yaml = new System.Text.StringBuilder("binding:\n  type: object\n  properties:\n");
+        for (var index = 0; yaml.Length <= 2 * SchemaValidator.MaxSchemaBytes; index++)
+        {
+            yaml.Append("    a_property_named_at_length_so_the_document_grows_")
+                .Append(index.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                .Append(":\n      type: string\n");
+        }
+
+        var result = Read(Merge(yaml.ToString()));
+
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal("field_invalid", problem.Code);
+        Assert.Equal("binding", problem.Path);
+        Assert.Contains(SchemaValidator.MaxSchemaBytes.ToString(System.Globalization.CultureInfo.InvariantCulture), problem.Message, StringComparison.Ordinal);
     }
 
     [Fact]

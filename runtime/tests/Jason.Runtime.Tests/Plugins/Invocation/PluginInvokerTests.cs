@@ -342,6 +342,33 @@ public class PluginInvokerTests
         Assert.Equal(FailureClass.Permanent, OutcomeClassification.ClassOf(failure.Code));
     }
 
+    /// <summary>
+    /// A pin says which package runs, and between the decision and the child there is a filesystem. The child
+    /// recomputes what it was told to run before running any of it, so a package that has gone missing since is
+    /// refused there rather than half-run — and the runtime reports it as a rejection, not as an answer.
+    /// </summary>
+    [Fact]
+    public async Task A_pinned_package_that_is_gone_by_the_time_the_child_starts_is_refused_by_the_child()
+    {
+        await using var api = await StartAsync();
+        PinnedPlugin pinned;
+        using (var scope = api.Runtime.Services.CreateScope())
+        {
+            var snapshot = scope.ServiceProvider.GetRequiredService<PluginRegistry>().Snapshot;
+            pinned = new PinnedPlugin(snapshot.Find(TestPlugins.FakeProviderId)!, snapshot.Id);
+        }
+
+        Directory.Delete(api.Paths.PluginPackageDirectory(TestPlugins.FakeProviderId), recursive: true);
+
+        var result = await InvokeAsync(api, Request("echo.run", new JsonObject()) with { Pinned = pinned }, Ct);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginInvocationRejected, failure.Code);
+        Assert.Contains("package_root_missing", failure.StderrTail!, StringComparison.Ordinal);
+        Assert.Equal(3, result.Launch!.ExitCode);
+        Assert.Equal(FailureClass.Permanent, OutcomeClassification.ClassOf(failure.Code));
+    }
+
     [Fact]
     public async Task An_input_larger_than_an_envelope_may_carry_starts_nothing()
     {
