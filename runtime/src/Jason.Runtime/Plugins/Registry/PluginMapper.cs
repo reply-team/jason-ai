@@ -44,7 +44,12 @@ public static class PluginMapper
                 manifest.Capabilities.Exec is null
                     ? null
                     : new ExecCapabilityDto(
-                        [.. plugin.Executables.Select(executable => new ExecutableDto(executable.Name, executable.Path, executable.Version, executable.MinVersion))],
+                        [.. plugin.Executables.Select(executable => new ExecutableDto(
+                            executable.Name,
+                            executable.Path,
+                            executable.Version,
+                            executable.MinVersion,
+                            executable.Launch.Count == 0 ? null : executable.Launch))],
                         plugin.Grants.Exec),
                 manifest.Capabilities.Http is null ? null : new ListCapabilityDto(manifest.Capabilities.Http.Hosts, plugin.Grants.Http),
                 manifest.Capabilities.Env is null ? null : new ListCapabilityDto(manifest.Capabilities.Env.Variables, plugin.Grants.Env)),

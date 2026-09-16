@@ -47,9 +47,30 @@ public class PluginContractsShapeTests
         Assert.Contains("\"kind\":\"provider\"", json, StringComparison.Ordinal);
         Assert.Contains("\"attempt_number\":2", json, StringComparison.Ordinal);
         Assert.Contains("\"runtime_version\":\"0.1.0\"", json, StringComparison.Ordinal);
-        Assert.Contains("\"executables\":[{\"name\":\"provider-cli\",\"path\":\"/usr/local/bin/provider-cli\"}]", json, StringComparison.Ordinal);
+        // A name the runtime resolved to a program and nothing more says so, rather than leaving the child to
+        // wonder: the dialect writes its nulls.
+        Assert.Contains("\"executables\":[{\"name\":\"provider-cli\",\"path\":\"/usr/local/bin/provider-cli\",\"launch\":null}]", json, StringComparison.Ordinal);
         Assert.Contains("\"output_bytes\":4194304", json, StringComparison.Ordinal);
         Assert.Contains("\"memory_bytes\":67108864", json, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A Windows npm shim resolves to an interpreter and the entry script it was told to run, so a granted name
+    /// is a program <em>plus</em> leading arguments. The child starts what the runtime resolved and nothing of
+    /// its own, which means both halves have to survive the wire between them.
+    /// </summary>
+    [Fact]
+    public void An_executable_resolved_to_a_program_plus_arguments_travels_as_both()
+    {
+        var entry = Path.Combine("npm", "node_modules", "vendor-cli", "dist", "index.js");
+        var grant = new ExecutableGrant("vendor", Path.Combine("npm", "node.exe"), [entry]);
+
+        var json = JsonSerializer.Serialize(grant, JasonJson.Options);
+        var back = JsonSerializer.Deserialize<ExecutableGrant>(json, JasonJson.Options)!;
+
+        Assert.Contains("\"launch\":[", json, StringComparison.Ordinal);
+        Assert.Equal(grant.Path, back.Path);
+        Assert.Equal([entry], back.Launch);
     }
 
     [Fact]
