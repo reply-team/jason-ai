@@ -728,6 +728,18 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
             {
                 Add(ProblemCodes.VariableReserved, itemPath, $"variables starting with '{BaseEnvironment.ReservedPrefix}' belong to the runtime and never reach a plugin.");
             }
+            else if (!BaseEnvironment.MayAPluginSet(variable))
+            {
+                // The same list `host.exec` holds a plugin to. Being granted a name and setting one end in the
+                // same place: a granted variable is copied out of the runtime's own environment into every child
+                // the plugin starts, so a loader or interpreter hook granted here chooses the code that runs
+                // inside a program the user allowed — which is not the permission the user gave.
+                Add(
+                    ProblemCodes.FieldInvalid,
+                    itemPath,
+                    $"'{variable}' decides what a program loads before its own first line runs, so it is neither a "
+                        + "variable a plugin may set nor one a plugin may be granted.");
+            }
             else if (variables.Contains(variable, StringComparer.Ordinal))
             {
                 Add(ProblemCodes.VariableNameInvalid, itemPath, $"variable '{variable}' is named twice.");

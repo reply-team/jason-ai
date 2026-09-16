@@ -124,6 +124,7 @@ binding:                         # optional; a schema, in the published dialect,
 | `capabilities.http.hosts` | required inside `http`; 1..32 lowercase `host` or `host:port` (port 1–65535), exact, unique, no scheme, no path, no wildcards | `field_required`, `field_invalid`, `host_invalid` |
 | `capabilities.env.variables` | required inside `env`; 1..32 names `^[A-Z][A-Z0-9_]{0,63}$`, unique | `field_required`, `field_invalid`, `variable_name_invalid` |
 | a variable named `JASON_…` | never; the prefix is reserved for the runtime | `variable_reserved` |
+| a variable that decides what a program loads | never; the same names `host.exec` refuses — `LD_*`, `DYLD_*`, `COMPlus_*`, `CORECLR_*`, `DOTNET_STARTUP_HOOKS`, `NODE_OPTIONS`, `PYTHONPATH`, `JAVA_TOOL_OPTIONS`, `PATH` and the rest listed under `host.exec` below. A granted variable is copied into every child the plugin starts, so being handed one and setting one end in the same place | `field_invalid` |
 | `limits.timeout_ms` | 1000 .. `Plugins:Limits:MaxTimeoutMs` (3 600 000 by default) | `field_invalid` |
 | `limits.memory_mb` | 16 .. `Plugins:Limits:MaxMemoryMb` (512 by default) | `field_invalid` |
 | `binding` | optional; a schema of `type: object` in the dialect of `docs/contracts/`, at most 64 KiB. A problem inside it is located as `binding#<json pointer>` | `field_invalid` |

@@ -244,6 +244,39 @@ public class ManifestReaderTests
             result.Problems.Where(p => p.Code == "binding_secret_like").Select(p => p.Path).Order(StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// The grant and the denylist are one rule. A plugin may not <c>set</c> a loader or interpreter hook for a
+    /// program it starts; being <c>handed</c> one reaches the same child through a different door, because a
+    /// granted name is copied out of the runtime's own environment into every child that plugin starts.
+    /// </summary>
+    [Theory]
+    [InlineData("LD_PRELOAD")]
+    [InlineData("LD_LIBRARY_PATH")]
+    [InlineData("DYLD_INSERT_LIBRARIES")]
+    [InlineData("NODE_OPTIONS")]
+    [InlineData("DOTNET_STARTUP_HOOKS")]
+    [InlineData("PYTHONPATH")]
+    [InlineData("JAVA_TOOL_OPTIONS")]
+    [InlineData("PATH")]
+    public void A_plugin_may_not_be_granted_a_variable_it_may_not_set(string name)
+    {
+        var result = Read(Merge($"capabilities:\n  env:\n    variables: [{name}]\n"));
+
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal("field_invalid", problem.Code);
+        Assert.Equal("capabilities.env.variables[0]", problem.Path);
+        Assert.Contains(name, problem.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_variable_of_a_runtime_that_has_hooks_is_still_a_plugin_s_to_be_granted()
+    {
+        var result = Read(Merge("capabilities:\n  env:\n    variables: [NODE_ENV, DOTNET_NOLOGO]\n"));
+
+        Assert.True(result.IsValid, string.Join("; ", result.Problems.Select(p => $"{p.Path}: {p.Code}")));
+        Assert.Equal(["NODE_ENV", "DOTNET_NOLOGO"], result.Manifest!.Capabilities.Env!.Variables);
+    }
+
     [Fact]
     public void A_manifest_in_the_wrong_directory_is_not_that_plugin()
     {
