@@ -141,6 +141,10 @@ public class BaseEnvironmentTests
 
         var built = BaseEnvironment.Build(source, []);
 
+        // Named on every platform, because Build consults only the current one: without this line the test
+        // passes on Windows whatever the Unix list says, and a Windows workstation is where it is usually run.
+        Assert.Contains("XDG_CONFIG_HOME", BaseEnvironment.Unix);
+
         if (OperatingSystem.IsWindows())
         {
             Assert.Contains("APPDATA", BaseEnvironment.Windows);
