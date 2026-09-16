@@ -24,8 +24,14 @@ public sealed record InvocationContext(
     string? CampaignId,
     string RuntimeVersion);
 
-/// <summary>One executable the plugin may start, named in the manifest and resolved to a path by the runtime.</summary>
-public sealed record ExecutableGrant(string Name, string Path);
+/// <summary>
+/// One executable the plugin may start, named in the manifest and resolved to a path by the runtime.
+/// <c>Launch</c> is what the runtime resolved the name to beyond the program itself — absent for an ordinary
+/// program, and the entry script for a Windows npm shim, where the program is the interpreter that runs it.
+/// Those arguments go ahead of everything the plugin asks for; a plugin never sets them and cannot see them
+/// as anything but the fact that this name is what it was granted.
+/// </summary>
+public sealed record ExecutableGrant(string Name, string Path, IReadOnlyList<string>? Launch = null);
 
 public sealed record ExecGrants(IReadOnlyList<ExecutableGrant> Executables);
 

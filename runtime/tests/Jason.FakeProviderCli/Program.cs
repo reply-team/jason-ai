@@ -13,6 +13,17 @@ if (args.Length == 0)
     return UnknownBehaviour;
 }
 
+// Started the way a language runtime is started: the first argument is a script this program was handed to run.
+// A copy of this apphost stands in for node.exe wherever a test resolves an npm shim — the machine's own node
+// is never used, because CI installs none — so the script is dropped here and the behaviour is read from what
+// follows it, exactly as node would. What was handed over is still recorded in full: which entry script a
+// resolver chose is the thing such a test is about.
+var handed = args;
+if (args.Length > 1 && args[0].EndsWith(".js", StringComparison.OrdinalIgnoreCase))
+{
+    args = args[1..];
+}
+
 // The other half of the program: a provider account held in a directory, which is what the canonical operations
 // are implemented against. A plugin is given the directory by its binding and nothing else.
 if (args is ["--workspace", var workspaceRoot, .. var subcommand] && subcommand.Length > 0)
@@ -131,7 +142,7 @@ switch (args[0])
     case "-v":
     case "-V":
     case "version":
-        Record(args);
+        Record(handed);
         await Console.Out.WriteLineAsync("fake-cli 1.2.3");
         return 0;
 

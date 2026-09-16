@@ -504,7 +504,10 @@ public sealed partial class PluginInvoker(
         var capabilities = plugin.Manifest.Capabilities;
         var executables = plugin.Executables
             .Where(executable => executable.Path is not null && plugin.Grants.Exec.Contains(executable.Name, StringComparer.Ordinal))
-            .Select(executable => new ExecutableGrant(executable.Name, executable.Path!))
+            .Select(executable => new ExecutableGrant(
+                executable.Name,
+                executable.Path!,
+                executable.Launch.Count == 0 ? null : executable.Launch))
             .ToList();
 
         // A grant is absent, not empty, when the manifest never asked for the capability or the user granted none
