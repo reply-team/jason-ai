@@ -10,7 +10,7 @@ public class ModeRouterTests
     [InlineData(new[] { "runtime", "run", "--whatever" }, Mode.RuntimeService)]
     [InlineData(new[] { "runtime", "run", "--detached" }, Mode.RuntimeService)]
     [InlineData(new[] { "plugin-host" }, Mode.PluginHost)]
-    [InlineData(new[] { "plugin-host", "reply" }, Mode.PluginHost)]
+    [InlineData(new[] { "plugin-host", "fake-provider" }, Mode.PluginHost)]
     [InlineData(new[] { "runtime", "status" }, Mode.Cli)]
     [InlineData(new[] { "--help" }, Mode.Cli)]
     [InlineData(new string[0], Mode.Cli)]

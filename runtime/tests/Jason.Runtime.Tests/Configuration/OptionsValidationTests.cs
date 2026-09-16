@@ -12,6 +12,7 @@ public class OptionsValidationTests
         Assert.True(new DispatcherOptionsValidator().Validate(null, new DispatcherOptions()).Succeeded);
         Assert.True(new RolesOptionsValidator().Validate(null, new RolesOptions()).Succeeded);
         Assert.True(new PluginsOptionsValidator().Validate(null, new PluginsOptions()).Succeeded);
+        Assert.True(new RoutesOptionsValidator().Validate(null, new RoutesOptions()).Succeeded);
     }
 
     [Fact]
@@ -94,7 +95,7 @@ public class OptionsValidationTests
         {
             Grants = new Dictionary<string, PluginGrant>(StringComparer.OrdinalIgnoreCase)
             {
-                ["fake-provider"] = new PluginGrant { Exec = ["reply", "Jason.FakeProviderCli"], Http = ["api.example.test", "localhost:5555"], Env = ["EXAMPLE_TOKEN", "*"] },
+                ["fake-provider"] = new PluginGrant { Exec = ["provider-cli", "Jason.FakeProviderCli"], Http = ["api.example.test", "localhost:5555"], Env = ["EXAMPLE_TOKEN", "*"] },
             },
         });
 

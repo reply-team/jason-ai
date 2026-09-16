@@ -1,5 +1,8 @@
 using System.Globalization;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Jason.Contracts.Operations;
+using Jason.Runtime.Plugins.Manifest;
 using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Configuration;
@@ -167,6 +170,59 @@ public sealed partial class PluginsOptionsValidator : IValidateOptions<PluginsOp
 
     [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._:()-]{0,127}$")]
     private static partial Regex GrantEntry();
+}
+
+/// <summary>
+/// The global routes, checked for shape alone. Whether the plugin exists, lists the operation, or accepts the
+/// binding is a reload question — settings are read before any package is loaded — so what is refused here is
+/// only what could never be right: a plugin nothing could be called, an operation this build does not publish,
+/// and a binding that is not an object.
+/// </summary>
+public sealed class RoutesOptionsValidator : IValidateOptions<RoutesOptions>
+{
+    public ValidateOptionsResult Validate(string? name, RoutesOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var failures = new List<string>();
+
+        if (options.Default is not null)
+        {
+            ValidateEntry(failures, $"{RoutesOptions.Section}:Default", options.Default);
+        }
+
+        foreach (var (operation, entry) in options.Operations)
+        {
+            var setting = $"{RoutesOptions.Section}:Operations:{operation}";
+            if (!OperationCatalog.Knows(operation))
+            {
+                failures.Add($"{setting} must name a published operation; got '{operation}'.");
+            }
+
+            if (entry is null)
+            {
+                failures.Add($"{setting} must be an object with Plugin and an optional Binding.");
+                continue;
+            }
+
+            ValidateEntry(failures, setting, entry);
+        }
+
+        return OptionRules.Result(failures);
+    }
+
+    private static void ValidateEntry(List<string> failures, string setting, RouteEntry entry)
+    {
+        if (!ManifestRules.IsPluginId(entry.Plugin))
+        {
+            failures.Add($"{setting}:Plugin must be a plugin id; got '{entry.Plugin}'.");
+        }
+
+        if (entry.Binding is not null and not JsonObject)
+        {
+            var text = entry.Binding is JsonValue value ? value.ToString() : entry.Binding.ToJsonString();
+            failures.Add($"{setting}:Binding must be an object; got '{text}'.");
+        }
+    }
 }
 
 public sealed class RolesOptionsValidator : IValidateOptions<RolesOptions>

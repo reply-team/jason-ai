@@ -38,6 +38,20 @@ public enum WorkItemKind
 }
 
 /// <summary>
+/// Which of the four levels decided where an operation's work goes, most specific first. A campaign default
+/// hides every global operation override for that campaign: bringing one back takes an explicit campaign
+/// operation override, because a campaign that named its provider must not still be sending one operation
+/// somewhere else.
+/// </summary>
+public enum RouteScope
+{
+    CampaignOperation,
+    CampaignDefault,
+    GlobalOperation,
+    GlobalDefault,
+}
+
+/// <summary>
 /// created → scheduled → processing → succeeded | failed, with cancelled and expired as the two ways an item
 /// ends without running. A retriable failure returns the item to created; an expired item can be reopened.
 /// </summary>

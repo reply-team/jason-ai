@@ -12,9 +12,9 @@ namespace Jason.Runtime.Tests.Plugins;
 public class GrantResolverTests
 {
     private static readonly CapabilityRequests Requested = new(
-        new ExecRequestSpec([new ExecutableRequest("reply", null, null), new ExecutableRequest("dotnet", null, null)]),
-        new HttpRequestSpec(["api.reply.test", "localhost:5555"]),
-        new EnvRequestSpec(["REPLY_API_KEY", "REPLY_OTHER"]));
+        new ExecRequestSpec([new ExecutableRequest("provider-cli", null, null), new ExecutableRequest("dotnet", null, null)]),
+        new HttpRequestSpec(["api.example.test", "localhost:5555"]),
+        new EnvRequestSpec(["EXAMPLE_API_KEY", "EXAMPLE_OTHER"]));
 
     [Fact]
     public void A_plugin_nobody_decided_about_is_granted_nothing()
@@ -43,9 +43,9 @@ public class GrantResolverTests
     {
         var grants = GrantResolver.Resolve(Manifest(Requested), new PluginGrant { Exec = ["*"], Http = ["*"], Env = ["*"] });
 
-        Assert.Equal(["reply", "dotnet"], grants.Exec);
-        Assert.Equal(["api.reply.test", "localhost:5555"], grants.Http);
-        Assert.Equal(["REPLY_API_KEY", "REPLY_OTHER"], grants.Env);
+        Assert.Equal(["provider-cli", "dotnet"], grants.Exec);
+        Assert.Equal(["api.example.test", "localhost:5555"], grants.Http);
+        Assert.Equal(["EXAMPLE_API_KEY", "EXAMPLE_OTHER"], grants.Env);
         Assert.Empty(grants.Warnings);
     }
 
@@ -54,20 +54,20 @@ public class GrantResolverTests
     {
         var grants = GrantResolver.Resolve(
             Manifest(Requested),
-            new PluginGrant { Exec = ["dotnet"], Http = ["localhost:5555"], Env = ["REPLY_API_KEY"] });
+            new PluginGrant { Exec = ["dotnet"], Http = ["localhost:5555"], Env = ["EXAMPLE_API_KEY"] });
 
         Assert.Equal(["dotnet"], grants.Exec);
         Assert.Equal(["localhost:5555"], grants.Http);
-        Assert.Equal(["REPLY_API_KEY"], grants.Env);
+        Assert.Equal(["EXAMPLE_API_KEY"], grants.Env);
         Assert.Empty(grants.Warnings);
     }
 
     [Fact]
     public void A_grant_the_manifest_never_asked_for_grants_nothing_and_says_so()
     {
-        var grants = GrantResolver.Resolve(Manifest(Requested), new PluginGrant { Http = ["evil.test", "api.reply.test"] });
+        var grants = GrantResolver.Resolve(Manifest(Requested), new PluginGrant { Http = ["evil.test", "api.example.test"] });
 
-        Assert.Equal(["api.reply.test"], grants.Http);
+        Assert.Equal(["api.example.test"], grants.Http);
         var warning = Assert.Single(grants.Warnings);
         Assert.Equal(ProblemCodes.GrantUnrequested, warning.Code);
         Assert.Equal("grants.http[0]", warning.Path);
@@ -78,7 +78,7 @@ public class GrantResolverTests
     {
         var grants = GrantResolver.Resolve(
             Manifest(new CapabilityRequests(null, null, null)),
-            new PluginGrant { Exec = ["*"], Http = ["api.reply.test"], Env = ["*"] });
+            new PluginGrant { Exec = ["*"], Http = ["api.example.test"], Env = ["*"] });
 
         Assert.Empty(grants.Exec);
         Assert.Empty(grants.Http);
@@ -92,17 +92,17 @@ public class GrantResolverTests
     [Fact]
     public void A_host_is_matched_the_way_a_host_is_compared()
     {
-        var grants = GrantResolver.Resolve(Manifest(Requested), new PluginGrant { Http = ["API.Reply.Test"] });
+        var grants = GrantResolver.Resolve(Manifest(Requested), new PluginGrant { Http = ["API.Example.Test"] });
 
         // The grant is recorded as the manifest spells it, so everything downstream compares one form.
-        Assert.Equal(["api.reply.test"], grants.Http);
+        Assert.Equal(["api.example.test"], grants.Http);
         Assert.Empty(grants.Warnings);
     }
 
     [Fact]
     public void A_program_and_a_variable_are_matched_exactly()
     {
-        var grants = GrantResolver.Resolve(Manifest(Requested), new PluginGrant { Exec = ["Reply"], Env = ["reply_api_key"] });
+        var grants = GrantResolver.Resolve(Manifest(Requested), new PluginGrant { Exec = ["Provider-Cli"], Env = ["example_api_key"] });
 
         Assert.Empty(grants.Exec);
         Assert.Empty(grants.Env);
@@ -112,9 +112,9 @@ public class GrantResolverTests
     [Fact]
     public void The_same_grant_written_twice_grants_it_once()
     {
-        var grants = GrantResolver.Resolve(Manifest(Requested), new PluginGrant { Exec = ["reply", "reply"] });
+        var grants = GrantResolver.Resolve(Manifest(Requested), new PluginGrant { Exec = ["provider-cli", "provider-cli"] });
 
-        Assert.Equal(["reply"], grants.Exec);
+        Assert.Equal(["provider-cli"], grants.Exec);
     }
 
     private static PluginManifest Manifest(CapabilityRequests capabilities) => new(

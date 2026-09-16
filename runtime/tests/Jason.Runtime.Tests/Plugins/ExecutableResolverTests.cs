@@ -57,7 +57,7 @@ public class ExecutableResolverTests
     {
         var resolver = new ExecutableResolver(new TestSearchPath { Path = null });
 
-        Assert.Equal(ProblemCodes.ExecutableMissing, resolver.Resolve(new ExecutableRequest("reply", null, null), 0).Problem!.Code);
+        Assert.Equal(ProblemCodes.ExecutableMissing, resolver.Resolve(new ExecutableRequest("provider-cli", null, null), 0).Problem!.Code);
     }
 
     [Fact]
@@ -65,11 +65,11 @@ public class ExecutableResolverTests
     {
         using var first = new TestPrograms();
         using var second = new TestPrograms();
-        var wanted = first.AddProgram("reply");
-        second.AddProgram("reply");
+        var wanted = first.AddProgram("provider-cli");
+        second.AddProgram("provider-cli");
         var resolver = new ExecutableResolver(new TestSearchPath { Path = first.Root + Path.PathSeparator + second.Root });
 
-        Assert.Equal(wanted, resolver.Resolve(new ExecutableRequest("reply", null, null), 0).Path);
+        Assert.Equal(wanted, resolver.Resolve(new ExecutableRequest("provider-cli", null, null), 0).Path);
     }
 
     [Fact]

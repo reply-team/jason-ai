@@ -95,25 +95,25 @@ public class ManifestReaderTests
 
     // Executables (amendment 2 lives here).
     [InlineData("capabilities:\n  exec:\n    executables:\n      - name: bad/name\n", "field_invalid", "capabilities.exec.executables[0].name")]
-    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: reply\n      - name: reply\n", "field_invalid", "capabilities.exec.executables[1].name")]
+    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: provider-cli\n      - name: provider-cli\n", "field_invalid", "capabilities.exec.executables[1].name")]
     [InlineData("capabilities:\n  exec:\n    executables: []\n", "field_invalid", "capabilities.exec.executables")]
-    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: reply\n        min_version: 0.4.0\n", "field_invalid", "capabilities.exec.executables[0].min_version")]
-    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: reply\n        min_version: 0.4\n        version_command: [\"--version\"]\n", "field_invalid", "capabilities.exec.executables[0].min_version")]
-    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: reply\n        version_command: [\"--version\", \"--force\"]\n", "field_invalid", "capabilities.exec.executables[0].version_command")]
-    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: reply\n        version_command: [\"rm\", \"-rf\"]\n", "field_invalid", "capabilities.exec.executables[0].version_command")]
-    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: reply\n        version_command: [\"--help\"]\n", "field_invalid", "capabilities.exec.executables[0].version_command")]
-    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: reply\n        min_version: 0.4.0\n        version_command: [\"--version\"]\n", null, null)]
-    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: reply\n        version_command: [\"-v\"]\n", null, null)]
-    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: reply\n        version_command: [\"-V\"]\n", null, null)]
-    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: reply\n        version_command: [\"version\"]\n", null, null)]
+    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: provider-cli\n        min_version: 0.4.0\n", "field_invalid", "capabilities.exec.executables[0].min_version")]
+    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: provider-cli\n        min_version: 0.4\n        version_command: [\"--version\"]\n", "field_invalid", "capabilities.exec.executables[0].min_version")]
+    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: provider-cli\n        version_command: [\"--version\", \"--force\"]\n", "field_invalid", "capabilities.exec.executables[0].version_command")]
+    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: provider-cli\n        version_command: [\"rm\", \"-rf\"]\n", "field_invalid", "capabilities.exec.executables[0].version_command")]
+    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: provider-cli\n        version_command: [\"--help\"]\n", "field_invalid", "capabilities.exec.executables[0].version_command")]
+    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: provider-cli\n        min_version: 0.4.0\n        version_command: [\"--version\"]\n", null, null)]
+    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: provider-cli\n        version_command: [\"-v\"]\n", null, null)]
+    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: provider-cli\n        version_command: [\"-V\"]\n", null, null)]
+    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: provider-cli\n        version_command: [\"version\"]\n", null, null)]
 
     // Hosts.
-    [InlineData("capabilities:\n  http:\n    hosts: [\"*.reply.test\"]\n", "host_invalid", "capabilities.http.hosts[0]")]
-    [InlineData("capabilities:\n  http:\n    hosts: [\"API.reply.test\"]\n", "host_invalid", "capabilities.http.hosts[0]")]
+    [InlineData("capabilities:\n  http:\n    hosts: [\"*.example.test\"]\n", "host_invalid", "capabilities.http.hosts[0]")]
+    [InlineData("capabilities:\n  http:\n    hosts: [\"API.example.test\"]\n", "host_invalid", "capabilities.http.hosts[0]")]
     [InlineData("capabilities:\n  http:\n    hosts: [\"localhost:99999\"]\n", "host_invalid", "capabilities.http.hosts[0]")]
-    [InlineData("capabilities:\n  http:\n    hosts: [\"https://api.reply.test\"]\n", "host_invalid", "capabilities.http.hosts[0]")]
-    [InlineData("capabilities:\n  http:\n    hosts: [\"api.reply.test\", \"api.reply.test\"]\n", "host_invalid", "capabilities.http.hosts[1]")]
-    [InlineData("capabilities:\n  http:\n    hosts: [\"api.reply.test\", \"localhost:8080\"]\n", null, null)]
+    [InlineData("capabilities:\n  http:\n    hosts: [\"https://api.example.test\"]\n", "host_invalid", "capabilities.http.hosts[0]")]
+    [InlineData("capabilities:\n  http:\n    hosts: [\"api.example.test\", \"api.example.test\"]\n", "host_invalid", "capabilities.http.hosts[1]")]
+    [InlineData("capabilities:\n  http:\n    hosts: [\"api.example.test\", \"localhost:8080\"]\n", null, null)]
 
     // Variables.
     [InlineData("capabilities:\n  env:\n    variables: [lower]\n", "variable_name_invalid", "capabilities.env.variables[0]")]
@@ -144,7 +144,7 @@ public class ManifestReaderTests
     // Typos are the common failure, so an unknown key is an error wherever it sits.
     [InlineData("capabilites:\n  env:\n    variables: [TOKEN]\n", "unknown_field", "capabilites")]
     [InlineData("entry:\n  modules: main.js\n", "unknown_field", "entry.modules")]
-    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: reply\n        minversion: 1.0.0\n", "unknown_field", "capabilities.exec.executables[0].minversion")]
+    [InlineData("capabilities:\n  exec:\n    executables:\n      - name: provider-cli\n        minversion: 1.0.0\n", "unknown_field", "capabilities.exec.executables[0].minversion")]
     [InlineData("capabilities:\n  net:\n    hosts: [a.test]\n", "unknown_field", "capabilities.net")]
     public void A_rule_answers_with_its_own_code_at_its_own_path(string manifest, string? code, string? path)
     {
@@ -376,10 +376,10 @@ public class ManifestReaderTests
     [
         "operations: [[a, b]]\n",
         "contracts:\n  protocol: [[1]]\n  operations: [1]\n",
-        "capabilities:\n  exec:\n    executables:\n      - name: [reply, other]\n",
-        "capabilities:\n  exec:\n    executables:\n      - name: reply\n        min_version: [1, 2]\n",
-        "capabilities:\n  exec:\n    executables:\n      - name: reply\n        version_command: { a: 1 }\n",
-        "capabilities:\n  http:\n    hosts: [[api.reply.test]]\n",
+        "capabilities:\n  exec:\n    executables:\n      - name: [provider-cli, other]\n",
+        "capabilities:\n  exec:\n    executables:\n      - name: provider-cli\n        min_version: [1, 2]\n",
+        "capabilities:\n  exec:\n    executables:\n      - name: provider-cli\n        version_command: { a: 1 }\n",
+        "capabilities:\n  http:\n    hosts: [[api.example.test]]\n",
         "capabilities:\n  env:\n    variables: [{ a: 1 }]\n",
         "binding:\n  type: object\n  required: [[workspace]]\n",
         "binding:\n  type: object\n  properties:\n    workspace: [a, b]\n",
