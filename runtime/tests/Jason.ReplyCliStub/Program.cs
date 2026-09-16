@@ -11,6 +11,17 @@
 // configuration directory and the profile name, so a test chooses one by setting a variable on the process
 // that starts it.
 
+// The one thing answered before anything else: a manifest that declares a minimum version makes a reload run
+// this on whatever it resolved, long before any account is involved, and a program that refused it would be
+// refused in turn and never reach an operation at all.
+if (args.Length == 1 && string.Equals(args[0], "--version", StringComparison.Ordinal))
+{
+    // Newer than the oldest release the official package will work with, and printed the way the real one prints
+    // it: a line with the program's own name in front of the number.
+    await Console.Out.WriteLineAsync("reply 0.5.1");
+    return 0;
+}
+
 string profile = "default";
 string path;
 var method = "GET";

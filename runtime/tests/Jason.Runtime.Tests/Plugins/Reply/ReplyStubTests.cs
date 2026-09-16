@@ -168,6 +168,22 @@ public class ReplyStubTests
     }
 
     [Fact]
+    public async Task The_version_command_a_manifest_may_name_is_answered_before_anything_else()
+    {
+        using var account = new ReplyAccount();
+
+        var (exit, stdout, stderr) = await account.RunAsync(["--version"], Ct);
+
+        // A reload runs this on whatever it resolved, for a plugin that declares a minimum version — so a
+        // stand-in that could not answer it would make the package unavailable and nothing else could be proven
+        // about it. It is answered before the account is looked for, because a version is not account business.
+        Assert.Equal(0, exit);
+        Assert.Equal(string.Empty, stderr);
+        Assert.Matches(@"\d+\.\d+\.\d+", stdout);
+        Assert.Empty(account.Calls);
+    }
+
+    [Fact]
     public async Task A_command_the_package_does_not_use_is_a_usage_error()
     {
         using var account = new ReplyAccount();

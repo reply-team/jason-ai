@@ -1,4 +1,9 @@
+using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
+using Jason.Contracts.Plugins;
+using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Registry;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
@@ -14,6 +19,66 @@ public static class ReplyPlugins
 {
     /// <summary>The program name the package declares, which is also this stand-in's assembly name.</summary>
     public const string ExecutableName = "reply";
+
+    /// <summary>The official package's id, which is also its directory name under <c>plugins/</c>.</summary>
+    public const string PluginId = "reply";
+
+    /// <summary>
+    /// The marketplace package as MSBuild copies it next to the tests. It is linked in rather than found by
+    /// walking up from the working directory, so no test depends on where it happens to be run from.
+    /// </summary>
+    public static string PackageSource => Path.Combine(TestTree, "Fixtures", "plugins", PluginId);
+
+    /// <summary>The package's error table, which is data and is read as data by the tests that hold it to the contracts.</summary>
+    public static string ErrorTableModule => Path.Combine(PackageSource, "modules", "errors.js");
+
+    /// <summary>Copies the official package into an installation's plugin directory and answers with its root.</summary>
+    public static string Install(JasonPaths paths)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        var root = paths.PluginPackageDirectory(PluginId);
+        TestPlugins.Copy(PackageSource, root);
+        return root;
+    }
+
+    /// <summary>
+    /// A runtime with the official package installed, granted the one program it declares, and resolving
+    /// executables on this class's own search path. Before it answers, the resolved program is held to the test
+    /// tree: a resolution that escaped would not be a wrong answer, it would be a call to somebody's real
+    /// account, so it fails here rather than in whatever the test went on to do.
+    /// </summary>
+    public static async Task<RuntimeApiFixture> StartAsync(CancellationToken cancellationToken, Action<JasonPaths>? prepare = null)
+    {
+        var fixture = await RuntimeApiFixture.StartAsync(
+            cancellationToken,
+            prepare: paths =>
+            {
+                Install(paths);
+                TestPlugins.Grant(paths, PluginId, exec: [ExecutableName]);
+                prepare?.Invoke(paths);
+            },
+            configureServices: services =>
+            {
+                services.AddSingleton<ISearchPath>(SearchPath);
+
+                // The shipped executable in plugin-host mode, as the tests can reach it: an invocation of this
+                // package runs a real child process, the same one an installation would run.
+                services.AddSingleton<IPluginHostLocator>(new JasonDllLocator());
+            });
+
+        try
+        {
+            var registry = await fixture.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, cancellationToken);
+            var plugin = Assert.Single(registry.Plugins, listed => listed.Id == PluginId);
+            AssertInsideTheTestTree(Assert.Single(plugin.Capabilities.Exec!.Requested).Path);
+            return fixture;
+        }
+        catch
+        {
+            await fixture.DisposeAsync();
+            throw;
+        }
+    }
 
     /// <summary>Where the tests and everything referenced by them live: the one tree an executable may come from.</summary>
     public static string TestTree => AppContext.BaseDirectory;

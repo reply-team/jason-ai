@@ -19,7 +19,9 @@ This directory is the plugin marketplace of the repository. Each plugin lives in
 └── modules/      # optional local JavaScript modules bundled with the plugin
 ```
 
-The index is empty: the official Reply plugin and a reference notification plugin will land here.
+The index so far: `reply/` — the official Reply plugin: Jason's canonical provider operations against
+a Reply account, performed through the Reply CLI, which owns the credential. A reference notification
+plugin will land beside it.
 
 **Writing one?** [docs/plugins.md](../docs/plugins.md) is the author's guide — package layout, every
 manifest rule and its problem code, the Host SDK with every limit, capabilities and grants, the

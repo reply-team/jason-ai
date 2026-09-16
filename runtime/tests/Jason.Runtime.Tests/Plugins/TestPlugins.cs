@@ -194,7 +194,8 @@ public static class TestPlugins
         return JsonDocument.Parse(File.ReadAllText(paths.UserSettingsFile));
     }
 
-    private static void Copy(string source, string destination)
+    /// <summary>Copies a checked-in package into an installation, which is the one way a test ever installs one.</summary>
+    internal static void Copy(string source, string destination)
     {
         Directory.CreateDirectory(destination);
         foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
