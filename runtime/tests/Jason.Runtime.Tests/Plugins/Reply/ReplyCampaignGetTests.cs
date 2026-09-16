@@ -439,25 +439,4 @@ public class ReplyCampaignGetTests
                 CampaignId: CampaignId),
             kill);
     }
-
-    /// <summary>
-    /// One process-wide variable, set for as long as a test needs it and put back afterwards. The stand-in
-    /// finds its account the way the real CLI finds its store, so this is how a test says which account it
-    /// planted — and it is carried to the child by the base environment, which is the runtime's own code doing
-    /// the work rather than a test arranging it.
-    /// </summary>
-    private sealed class ProcessVariable : IDisposable
-    {
-        private readonly string _name;
-        private readonly string? _was;
-
-        public ProcessVariable(string name, string value)
-        {
-            _name = name;
-            _was = Environment.GetEnvironmentVariable(name);
-            Environment.SetEnvironmentVariable(name, value);
-        }
-
-        public void Dispose() => Environment.SetEnvironmentVariable(_name, _was);
-    }
 }

@@ -136,7 +136,7 @@ export const ROWS = {
         "note": "Reply will not accept the address this person carries on the channel the call named. The contact's data has to be corrected; no later attempt would be accepted either."
       },
       "limit_reached": {
-        "when": "400 with code `contactLimitExceeded` on the ensure-contact call.",
+        "when": "400 with code `contactLimitExceeded`, on the ensure-contact call or on the add itself.",
         "code": "limit_reached",
         "class": "permanent",
         "note": "The account will hold no further contact. A list's own capacity, unlike the account's, publishes no code of its own — a refusal there arrives as an ordinary business 400 and is reported as a refusal this version has no word for, rather than guessed into this row."
@@ -235,6 +235,74 @@ export function lostAnswerRow(call) {
   return kindOf(call) === "read" ? "answer_lost_on_a_read" : "answer_lost_on_a_write";
 }
 
+// What was seen on one call, in the shape a failure is reported from. Reply's own code is read only where it is
+// a string on an object, because a 401 arrives with an empty body and parsing one is how a plugin fails on the
+// answer it meets most often. A caller may add `provider_item` afterwards, for the answers that refuse one
+// person inside a 200.
+export function observe(call, answer, row) {
+  const data = answer.data;
+  return {
+    call: call,
+    row: row,
+    status: answer.code,
+    provider_code: data !== null && typeof data === "object" && typeof data.code === "string" ? data.code : undefined,
+  };
+}
+
+// What came back, short enough to travel in a failure's details. A provider's answer is reported rather than
+// interpreted wherever this package has no word for it, and 200 characters is enough for an operator to
+// recognise it without the details becoming a copy of the body.
+export function describe(value) {
+  let text;
+  try {
+    text = typeof value === "string" ? value : JSON.stringify(value);
+  } catch (error) {
+    text = String(value);
+  }
+
+  if (typeof text !== "string") {
+    return String(value);
+  }
+
+  return text.length > 200 ? text.slice(0, 200) : text;
+}
+
+// Which row a refusal belongs in, for a call whose 400 has a meaning of its own. Reply's 400 is two shapes and
+// which member is present says which: a validation problem carries `errors[]` and no `code`, a business
+// rejection carries `code` and no `errors[]`. Everything else is decided by the status alone.
+//
+// The two rows this can name are per-operation ones that only the writes declare, so only a write may ask: a
+// `campaign.get` that reached for `invalid_channel_value` would name a code its document does not publish.
+export function refusalRow(answer, call, addressField) {
+  if (answer.code !== 400 && answer.code !== 422) {
+    return statusRow(answer.code, call);
+  }
+
+  const data = answer.data !== null && typeof answer.data === "object" ? answer.data : {};
+  if (Array.isArray(data.errors)) {
+    // A pointer naming the field the channel value went in is the provider saying the value itself is wrong,
+    // which no later attempt would accept either. A pointer naming anything else is a request this package
+    // built wrong, which is a defect rather than a person's data.
+    const named = data.errors.some(entry =>
+      entry !== null && typeof entry === "object" && lastSegment(entry.pointer) === addressField);
+    return named ? "invalid_channel_value" : "refusal_this_version_has_no_word_for";
+  }
+
+  // The account's own contact cap is the one capacity Reply publishes a code for; a list's or a sequence's is
+  // not, and guessing one out of an ordinary business refusal is how a full list comes to look like a full
+  // account.
+  return data.code === "contactLimitExceeded" ? "limit_reached" : "refusal_this_version_has_no_word_for";
+}
+
+function lastSegment(pointer) {
+  if (typeof pointer !== "string") {
+    return null;
+  }
+
+  const segments = pointer.split("/");
+  return segments[segments.length - 1];
+}
+
 // Which shared row a status Reply answered with belongs in. Only the statuses that mean the same thing on every
 // call are decided here: a business refusal carries a code whose meaning depends on what was asked, so the
 // operation that made the call reads that itself against its own rows and falls back to this for the rest.
@@ -266,6 +334,9 @@ export function fail(operation, observed, learned) {
     call: observed.call,
     status: observed.status,
     provider_code: observed.provider_code,
+    // What a 200 said about this one person, where it refused one inside an answer that reported success. It is
+    // reported and never read: the shape of that value is documented two incompatible ways.
+    provider_item: observed.provider_item,
     exit_code: observed.exit_code,
     timed_out: observed.timed_out,
   });
