@@ -246,6 +246,28 @@ public class ProviderOutcomeRecorderTests
     }
 
     /// <summary>
+    /// What the attempt kept says it kept the identifiers "as it returned them", and an undeclared kind is the
+    /// one case where that matters: nothing else in Jason will ever mention that key again. A provider that
+    /// spells its kind `contactId` has to be readable beside the pointer that refuses it, which names that same
+    /// spelling — so the key is written down as the plugin wrote it, not as Jason spells its own fields.
+    /// </summary>
+    [Fact]
+    public async Task The_key_a_plugin_returned_is_recorded_exactly_as_it_spelled_it()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db);
+        var externalIds = new JsonObject { ["contactId"] = "p_1001" };
+
+        await scene.RecordAsync(db, Add, Failed(new OutcomeError(FailureClass.Permanent, "list_not_found", "no such list", null, externalIds)));
+
+        var returned = Assert.Single((await scene.ProvenanceAsync(db)).ExternalIdsReturned!);
+        Assert.Equal("contactId", returned.Key);
+        Assert.Equal("p_1001", returned.Value);
+        Assert.Equal("/error/external_ids/contactId", Assert.Single(scene.Attempt.Error!.Details!).Field);
+    }
+
+    /// <summary>
     /// The rejected answer is evidence, and evidence is bounded: an attempt row is not where an unbounded
     /// document belongs, so past the setting that bounds what the invoker reads back it is replaced by a note
     /// saying so rather than by a truncation nothing could parse.
