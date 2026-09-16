@@ -200,7 +200,7 @@ public class PluginInvokerTests
         // A reload lands between the decision and the attempt, and this one leaves nothing installed at all.
         registry.Replace(
             PluginSnapshot.Empty(DateTime.UtcNow, SnapshotSource.Reload),
-            new ReloadReport(DateTime.UtcNow, SnapshotSource.Reload, Activated: true, []));
+            new ReloadReport(DateTime.UtcNow, SnapshotSource.Reload, Activated: true, [], []));
 
         var result = await InvokeAsync(api, Request("echo.run", new JsonObject { ["hello"] = "world" }) with { Pinned = pinned }, Ct);
 

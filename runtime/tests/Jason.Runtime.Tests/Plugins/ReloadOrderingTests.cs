@@ -2,6 +2,7 @@ using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Routing;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Jason.Runtime.Tests.Plugins;
@@ -33,7 +34,16 @@ public class ReloadOrderingTests
         // A context that can no longer write anything stands in for a database that refuses the save.
         var db = database.Open();
         await db.DisposeAsync();
-        var service = new PluginService(db, new JournalWriter(TimeProvider.System), registry, loader, new ReloadGate(), NullLogger<PluginService>.Instance);
+        var routes = new RouteRegistry(TimeProvider.System, registry);
+        var service = new PluginService(
+            db,
+            new JournalWriter(TimeProvider.System),
+            registry,
+            loader,
+            routes,
+            new RouteActivator(db, new TestOptionsMonitor<RoutesOptions>(new RoutesOptions()), routes, TimeProvider.System),
+            new ReloadGate(),
+            NullLogger<PluginService>.Instance);
 
         await Assert.ThrowsAsync<ObjectDisposedException>(() => service.ReloadAsync(new PluginReloadRequest(null, null), Ct));
 

@@ -13,11 +13,12 @@ public static class PluginMapper
     /// <summary>The prefix a problem's path carries when it is about the file rather than a field in it.</summary>
     public const string ManifestPrefix = "plugin.yaml#";
 
-    public static PluginRegistryDto ToDto(PluginSnapshot snapshot, ReloadReport? lastReload, bool activated)
+    public static PluginRegistryDto ToDto(PluginSnapshot snapshot, string routingSnapshotId, ReloadReport? lastReload, bool activated)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         return new PluginRegistryDto(
             new SnapshotDto(snapshot.Id, Utc(snapshot.LoadedAt), snapshot.Source, snapshot.Plugins.Count),
+            routingSnapshotId,
             [.. snapshot.Plugins.Select(ToDto)],
             lastReload is null ? null : ToDto(lastReload),
             activated);
@@ -67,12 +68,14 @@ public static class PluginMapper
                 candidate.Directory,
                 candidate.Id,
                 candidate.Status,
-                [.. candidate.Problems.Select(ToDto)]))]);
+                [.. candidate.Problems.Select(ToDto)]))],
+            [.. report.Routes.Select(route => new RouteProblemDto(route.Field, route.Code, route.Message))]);
     }
 
     /// <summary>
-    /// The problems of a rejected reload, each located for a person: the candidate's directory, the manifest,
-    /// and the place inside it. The file is named exactly once, whichever half the path already carries.
+    /// The problems of a rejected reload, each located for a person: a package problem by the candidate's
+    /// directory, the manifest and the place inside it — the file is named exactly once, whichever half the path
+    /// already carries — and a route problem by the route, which already names itself.
     /// </summary>
     public static IReadOnlyList<ErrorDetail> ToDetails(ReloadReport report)
     {
@@ -83,6 +86,7 @@ public static class PluginMapper
                 .Where(candidate => candidate.Status == CandidateStatus.Invalid)
                 .SelectMany(candidate => candidate.Problems.Select(problem =>
                     new ErrorDetail(Field(candidate.Directory, problem.Path), problem.Code, problem.Message))),
+            .. report.Routes,
         ];
     }
 

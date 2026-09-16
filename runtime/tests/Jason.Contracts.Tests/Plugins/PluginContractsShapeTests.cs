@@ -132,6 +132,7 @@ public class PluginContractsShapeTests
     {
         var dto = new PluginRegistryDto(
             new SnapshotDto("snp_01J", DateTimeOffset.UnixEpoch, SnapshotSource.Startup, 1),
+            "rts_01J",
             [
                 new PluginDto("fake-provider", "1.0.0", PluginKind.Provider, "Fake provider", null, null, "/packages/fake-provider", "sha256:ab",
                     new PluginContractsDto([1], [1]), ["echo.run"], new PluginEntry("main.js", "invoke"),
@@ -145,7 +146,7 @@ public class PluginContractsShapeTests
                     [new PluginProblemDto("executable_missing", "plugin.yaml#capabilities.exec.executables[0]", "provider-cli was not found")])
             ],
             new ReloadReportDto(DateTimeOffset.UnixEpoch, SnapshotSource.Startup, true,
-                [new CandidateDto("fake-provider", "fake-provider", CandidateStatus.Unavailable, [])]),
+                [new CandidateDto("fake-provider", "fake-provider", CandidateStatus.Unavailable, [])], []),
             Activated: true);
 
         var json = JsonSerializer.Serialize(dto, JasonJson.Options);

@@ -14,7 +14,9 @@ public static class RoutingModule
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // The snapshot is the registry itself: one per process, outliving every request.
-        return services.AddSingleton<RouteRegistry>();
+        // The snapshot is the registry itself: one per process, outliving every request. The activator reads
+        // the campaign rows, so it lives for as long as a request does.
+        services.AddSingleton<RouteRegistry>();
+        return services.AddScoped<RouteActivator>();
     }
 }
