@@ -204,8 +204,9 @@ public class ProviderOperationE2ETests
             var unrouted = Json(await Ok(JasonAsync(root, "plugin", "reload", "--reason", "took the global route away")));
             var emptySnapshot = (string)unrouted["routing_snapshot_id"]!;
             Assert.NotEqual(routedSnapshot, emptySnapshot);
-            Assert.Empty(Json(await Ok(JasonAsync(root, "route", "list")))["global"]!["operations"]!.AsObject());
-            Assert.Null(Json(await Ok(JasonAsync(root, "route", "list")))["global"]!["default"]);
+            var listed = Json(await Ok(JasonAsync(root, "route", "list")))["global"]!;
+            Assert.Empty(listed["operations"]!.AsObject());
+            Assert.Null(listed["default"]);
 
             // 9. Now the same work fails at the claim, before any child exists — and the attempt is kept, with
             //    the context it was claimed with and the provenance as far as the decision got.
