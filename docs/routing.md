@@ -118,13 +118,25 @@ written under "Routes" in settings.json and activated with 'jason plugin reload'
 The reason is worth stating rather than accepting: a reload freezes plugins and routes together, so a
 global route becomes active by the same explicit act as the packages it names.
 
-Three smaller rules, each of which somebody will meet:
+Four smaller rules, each of which somebody will meet:
 
 - **A route is checked before its row is written.** A `route set` that could never activate is refused
   as a 400 naming the route, rather than written and then refusing its own activation.
-- **An archived campaign is refused** with the same `campaign_archived` it answers everywhere else.
+- **A set replaces the route, whole.** `--binding` left out is *not* "keep the one that is there": the
+  route it writes has no binding, and whatever account the old one selected is gone. The change is
+  journaled with the old binding beside the new, and the answer shows the route that was written — so
+  nothing is lost, but nothing warns you either.
+- **An archived campaign is refused**, for `route set` and `route unset` alike, with the same
+  `campaign_archived` it answers everywhere else: archived work never dispatches again, so it is never
+  re-routed in either direction — including the direction that only takes something away.
 - **`route unset` of a route that is not there succeeds and changes nothing** — it is the state the
   caller asked for, and nothing is activated because nothing changed.
+
+**The read verbs still answer for an archived campaign**, because it can still be named — and what they
+answer about is a campaign whose own routes have left the snapshot: `route resolve` falls back to the
+global route, and `route list` shows no rows for it. Archiving is not itself an activation, so those
+rows leave at the next one — a reload, or any `route set` — and until then both verbs still show the
+route the campaign had.
 
 ### `route resolve` has two different answers
 

@@ -91,7 +91,9 @@ public static class RouteCommands
         };
         var binding = new Option<string?>("--binding")
         {
-            Description = "Which account, workspace or mailbox of the plugin to work through, as a JSON object. It never carries a credential.",
+            Description = "Which account, workspace or mailbox of the plugin to work through, as a JSON object. "
+                + "It never carries a credential. A set writes the whole route, so leaving this out clears the "
+                + "binding the route had rather than keeping it.",
         };
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
