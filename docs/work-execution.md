@@ -358,8 +358,11 @@ An item may override the three per-kind numbers for itself: `timeout_seconds` (3
 more: its `timeout_seconds` may not be shorter than the operation's own `timeout_ms` plus
 `Plugins:Invoker:KillGraceMs`, rounded up to whole seconds. A child is given the operation's budget
 and never what is left of the lease, so a shorter lease could only end with the lease gone and the
-provider's answer unknown. `workitem.create` and `workitem.update` refuse such an item rather than
-raising the number quietly: a lease silently changed is one the planner still believes.
+provider's answer unknown — **capped by the plugin's own ceiling where that is smaller**, which is
+`limits.timeout_ms` from its manifest or `Plugins:Limits:TimeoutMs` when it declares none, so a plugin
+that implements a slow operation must declare a ceiling at least as large as that operation's contract
+(`docs/routing.md` §9 has the whole rule). `workitem.create` and `workitem.update` refuse such an item
+rather than raising the number quietly: a lease silently changed is one the planner still believes.
 
 `jason runtime status --human` shows what the loop is doing:
 
