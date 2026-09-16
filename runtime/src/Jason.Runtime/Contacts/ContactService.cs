@@ -65,7 +65,7 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
         var limit = Paging.ResolveLimit(request.Limit);
         var after = Paging.DecodeCursor(request.Cursor);
 
-        var query = db.Contacts.Include(contact => contact.Channels).AsQueryable();
+        var query = db.Contacts.Include(contact => contact.Channels).Include(contact => contact.ExternalIds).AsQueryable();
         if (request.IncludeArchived != true)
         {
             query = query.Where(contact => contact.ArchivedAt == null);
@@ -174,7 +174,7 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
         return ContactMapper.ToDto(contact);
     }
 
-    /// <summary>The contact with its channels, or the 404 the caller is owed. Archived contacts are still readable.</summary>
+    /// <summary>The contact with its channels and its pins, or the 404 the caller is owed. Archived contacts are still readable.</summary>
     public static async Task<Contact> LoadAsync(JasonDbContext db, string? publicId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
@@ -185,7 +185,10 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
         }
 
         var id = publicId.Trim();
-        return await db.Contacts.Include(contact => contact.Channels).SingleOrDefaultAsync(contact => contact.PublicId == id, cancellationToken).ConfigureAwait(false)
+        return await db.Contacts
+            .Include(contact => contact.Channels)
+            .Include(contact => contact.ExternalIds)
+            .SingleOrDefaultAsync(contact => contact.PublicId == id, cancellationToken).ConfigureAwait(false)
             ?? throw DomainErrors.ContactNotFound(id);
     }
 

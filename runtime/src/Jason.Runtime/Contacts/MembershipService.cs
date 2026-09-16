@@ -239,6 +239,8 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         var query = db.CampaignContacts
             .Include(membership => membership.Contact!)
             .ThenInclude(contact => contact.Channels)
+            .Include(membership => membership.Contact!)
+            .ThenInclude(contact => contact.ExternalIds)
             .Where(membership => membership.CampaignId == campaign.Id);
 
         // Excluded members are the answer to "who did we take out", never to "who is in this campaign".

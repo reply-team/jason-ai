@@ -34,6 +34,7 @@ public static class CampaignRenderers
         }
 
         lines.Add(Line("Context keys:", RenderText.Keys(campaign.Context)));
+        lines.AddRange(RenderText.ExternalIds(campaign.ExternalIds));
         return RenderText.Lines(lines);
     }
 

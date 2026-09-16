@@ -13,12 +13,16 @@ public sealed record CampaignSummaryDto(
     DateTimeOffset UpdatedAt,
     DateTimeOffset? ArchivedAt);
 
-/// <summary>A campaign with its context: the shared knowledge every role working the campaign reads.</summary>
+/// <summary>
+/// A campaign with its context: the shared knowledge every role working the campaign reads. <c>external_ids</c>
+/// is always a list, possibly empty, for the same reason a contact's is.
+/// </summary>
 public sealed record CampaignDto(
     string Id,
     string Name,
     CampaignStatus Status,
     JsonObject Context,
+    IReadOnlyList<ExternalIdDto> ExternalIds,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     DateTimeOffset? ArchivedAt);

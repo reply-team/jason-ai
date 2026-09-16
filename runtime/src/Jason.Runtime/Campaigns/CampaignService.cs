@@ -59,7 +59,7 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
     {
         ArgumentNullException.ThrowIfNull(request);
         var id = RequireId(request.CampaignId);
-        var campaign = await db.Campaigns.AsNoTracking().FirstOrDefaultAsync(c => c.PublicId == id, cancellationToken).ConfigureAwait(false)
+        var campaign = await db.Campaigns.AsNoTracking().Include(c => c.ExternalIds).FirstOrDefaultAsync(c => c.PublicId == id, cancellationToken).ConfigureAwait(false)
             ?? throw DomainErrors.CampaignNotFound(id);
         return CampaignMapper.ToDto(campaign);
     }
@@ -233,7 +233,7 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
     {
         ArgumentNullException.ThrowIfNull(db);
         var id = RequireId(publicId);
-        return await db.Campaigns.FirstOrDefaultAsync(c => c.PublicId == id, cancellationToken).ConfigureAwait(false)
+        return await db.Campaigns.Include(c => c.ExternalIds).FirstOrDefaultAsync(c => c.PublicId == id, cancellationToken).ConfigureAwait(false)
             ?? throw DomainErrors.CampaignNotFound(id);
     }
 

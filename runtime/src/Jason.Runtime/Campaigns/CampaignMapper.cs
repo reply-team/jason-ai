@@ -1,5 +1,6 @@
 using Jason.Contracts.Api;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Plugins;
 
 namespace Jason.Runtime.Campaigns;
 
@@ -17,6 +18,7 @@ public static class CampaignMapper
             campaign.Name,
             campaign.Status,
             campaign.Context,
+            ExternalIdStore.ToDtos(campaign.ExternalIds),
             Utc(campaign.CreatedAt),
             Utc(campaign.UpdatedAt),
             campaign.ArchivedAt is { } archivedAt ? Utc(archivedAt) : null);

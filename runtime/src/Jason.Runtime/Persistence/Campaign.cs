@@ -30,4 +30,7 @@ public sealed class Campaign
     public DateTime? ArchivedAt { get; set; }
 
     public List<CampaignContact> Members { get; } = [];
+
+    /// <summary>What plugins call this campaign. Loaded wherever the campaign is answered with, so an empty list means none.</summary>
+    public List<ExternalId> ExternalIds { get; } = [];
 }

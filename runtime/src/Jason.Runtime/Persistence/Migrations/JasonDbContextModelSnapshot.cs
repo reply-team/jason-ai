@@ -892,13 +892,13 @@ namespace Jason.Runtime.Persistence.Migrations
             modelBuilder.Entity("Jason.Runtime.Persistence.ExternalId", b =>
                 {
                     b.HasOne("Jason.Runtime.Persistence.Campaign", "Campaign")
-                        .WithMany()
+                        .WithMany("ExternalIds")
                         .HasForeignKey("CampaignId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .HasConstraintName("fk_external_ids_campaigns_campaign_id");
 
                     b.HasOne("Jason.Runtime.Persistence.Contact", "Contact")
-                        .WithMany()
+                        .WithMany("ExternalIds")
                         .HasForeignKey("ContactId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .HasConstraintName("fk_external_ids_contacts_contact_id");
@@ -941,12 +941,16 @@ namespace Jason.Runtime.Persistence.Migrations
 
             modelBuilder.Entity("Jason.Runtime.Persistence.Campaign", b =>
                 {
+                    b.Navigation("ExternalIds");
+
                     b.Navigation("Members");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.Contact", b =>
                 {
                     b.Navigation("Channels");
+
+                    b.Navigation("ExternalIds");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.WorkItem", b =>
