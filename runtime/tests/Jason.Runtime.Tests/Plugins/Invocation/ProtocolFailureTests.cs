@@ -267,9 +267,8 @@ public class ProtocolFailureTests
         Assert.Equal(ProtocolCodes.PluginLaunchFailed, failure.Code);
         Assert.Null(result.Launch);
 
-        // The one protocol failure worth trying again: nothing ran, and the next attempt may find the program.
+        // The one protocol failure that is not even ambiguous: nothing ran, and the next attempt may find the program.
         Assert.Equal(FailureClass.Transient, OutcomeClassification.ClassOf(failure.Code));
-        Assert.True(OutcomeClassification.IsRetriable(OutcomeClassification.ClassOf(failure.Code)));
     }
 
     /// <summary>The stand-in vendor CLI, which ignores the protocol arguments the invoker appends to its own.</summary>

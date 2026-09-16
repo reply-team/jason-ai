@@ -69,22 +69,25 @@ internal static class Workspace
                 return await AnswerAsync(EnsureContact(root, request));
 
             case "list add":
-                return await EffectAsync(root, request, AddToList(root, request));
+                return await EffectAsync(root, request, Refusing(root, request) ?? AddToList(root, request));
+
+            case "list membership":
+                return await AnswerAsync(Membership(root, request));
 
             case "campaign get":
                 return await AnswerAsync(GetCampaign(root, request));
 
             case "campaign enroll":
-                return await EffectAsync(root, request, Enroll(root, request));
+                return await EffectAsync(root, request, Refusing(root, request) ?? Enroll(root, request));
 
             default:
                 return await AnswerAsync(GetLedgerEntry(root, request));
         }
     }
 
-    /// <summary>The five subcommands this account answers; anything else is the caller's usage error.</summary>
+    /// <summary>The six subcommands this account answers; anything else is the caller's usage error.</summary>
     private static bool Known(string verb) =>
-        verb is "contact ensure" or "list add" or "campaign get" or "campaign enroll" or "ledger get";
+        verb is "contact ensure" or "list add" or "list membership" or "campaign get" or "campaign enroll" or "ledger get";
 
     // -------------------------------------------------------------------------------------------------------
     // The subcommands
@@ -192,6 +195,26 @@ internal static class Workspace
         return new JsonObject { ["status"] = status, ["from_ledger"] = false };
     }
 
+    /// <summary>
+    /// Whether this account already has the contact on the list. It is a read and changes nothing, which is what
+    /// makes it half of the recovery this operation's contract obliges before it writes again.
+    /// </summary>
+    private static JsonObject Membership(string root, JsonObject request)
+    {
+        var lists = ReadObject(root, ListsFile);
+        var listId = Text(request, "list_id");
+        if (lists[listId] is not JsonObject list)
+        {
+            return Error("list_not_found", $"This account holds no list {listId}.");
+        }
+
+        var contactId = Text(request, "contact_id");
+        var member = list["members"]!.AsArray()
+            .Any(entry => string.Equals(entry!.GetValue<string>(), contactId, StringComparison.Ordinal));
+
+        return new JsonObject { ["list_id"] = listId, ["contact_id"] = contactId, ["member"] = member };
+    }
+
     private static JsonObject GetCampaign(string root, JsonObject request)
     {
         var campaigns = ReadObject(root, CampaignsFile);
@@ -205,7 +228,10 @@ internal static class Workspace
         return new JsonObject
         {
             ["id"] = id,
-            ["name"] = Text(campaign, "name"),
+
+            // Whatever this account holds, untouched: a provider that answers with something the operation's own
+            // schema refuses is a real failure mode, and coercing it here would hide it from every test.
+            ["name"] = campaign["name"]?.DeepClone(),
             ["status"] = status,
             ["live"] = IsLive(status),
             ["counts"] = new JsonObject { ["enrolled"] = campaign["enrollments"]!.AsArray().Count },
@@ -310,6 +336,24 @@ internal static class Workspace
 
         await Console.Error.WriteLineAsync("fake-cli: the effect was written and the answer was lost");
         return LostAnswer;
+    }
+
+    /// <summary>
+    /// The other failure a test can force, and the opposite of the one above: the account refuses before it has
+    /// done anything, which is what a rate limit is. Once per key, so the attempt after it does the work.
+    /// </summary>
+    private static JsonObject? Refusing(string root, JsonObject request)
+    {
+        var instructions = ReadObject(root, InstructionsFile);
+        if (instructions["refuse_once"] is not JsonObject instruction
+            || !string.Equals(Text(instruction, "key"), Text(request, "key"), StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        instructions.Remove("refuse_once");
+        Write(root, InstructionsFile, instructions);
+        return Error(Text(instruction, "code"), "This account will not take the call right now.");
     }
 
     private static bool ShouldFailAfterEffect(string root, string key)

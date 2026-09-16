@@ -294,11 +294,7 @@ public static class ProviderOpPreflight
         return contradicted;
     }
 
-    private static IReadOnlyList<ErrorDetail> Details(IReadOnlyList<SchemaProblem> problems) =>
-        [.. problems.Select(problem => new ErrorDetail(Pointer(problem.Pointer), problem.Reason, problem.Message))];
-
-    /// <summary>The whole document is a place too, and it is named rather than left blank.</summary>
-    private static string Pointer(string pointer) => pointer.Length == 0 ? "/" : pointer;
+    private static IReadOnlyList<ErrorDetail> Details(IReadOnlyList<SchemaProblem> problems) => ErrorDetail.From(problems);
 
     /// <summary>
     /// One refusal, carrying the resolution the decision had reached when it refused: the attempt records what

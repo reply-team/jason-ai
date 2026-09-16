@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Plugins;
 
 namespace Jason.Contracts.Operations;
 
@@ -17,6 +18,29 @@ public static class OutcomeContract
 {
     /// <summary>The longest a provider's own identifier may be, matching what the protocol already accepts.</summary>
     public const int MaxExternalIdLength = 256;
+
+    /// <summary>
+    /// Whether a failed attempt of <paramref name="contract"/> is worth another one. Three of the four classes
+    /// mean the same thing whatever was being attempted — a transient failure may pass, and a permanent or a
+    /// validation failure would fail the same way again — so only an ambiguous one reads the operation at all.
+    /// </summary>
+    /// <remarks>
+    /// Ambiguous says the provider may already have acted, and what that costs is the operation's own business:
+    /// a read may simply be repeated, a write whose contract obliges a recovery read first may be repeated
+    /// because of that obligation, and one that declares <c>never</c> ends for a person rather than risking a
+    /// second send. This is the only place the question is answered, so nothing can answer half of it.
+    /// </remarks>
+    public static bool Retriable(FailureClass failureClass, OperationContract contract)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+
+        return failureClass switch
+        {
+            FailureClass.Transient => true,
+            FailureClass.Ambiguous => contract.RepeatAfterAmbiguous is RepeatAfterAmbiguous.Safe or RepeatAfterAmbiguous.AfterRecoveryRead,
+            _ => false,
+        };
+    }
 
     /// <summary>Validates a succeeded result against the operation's output schema.</summary>
     public static IReadOnlyList<SchemaProblem> CheckResult(OperationContract contract, JsonNode? result)

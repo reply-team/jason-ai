@@ -68,6 +68,10 @@ An enrollment into a live campaign is a send, so a blind repeat sends the same p
 When the attempt number is above one, read the per-item outcome of the prior run under the idempotency key and the
 campaign's live state first, and answer from that reading when the effect already happened.
 
+Return the identifiers you learned on the failure as well — `host.fail({ external_ids: { contact: … } })`. They are
+recorded by the same rule as on a success, and after a lost answer they are the only trace of what the attempt did:
+without the pin the next attempt has nobody to read the prior outcome for.
+
 ## The properties
 
 <!-- BEGIN GENERATED properties -->

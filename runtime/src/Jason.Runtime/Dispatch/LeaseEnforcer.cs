@@ -20,7 +20,8 @@ public sealed class LeaseEnforcer(
     TimeProvider clock,
     IOptionsMonitor<DispatcherOptions> options,
     RunningAttemptRegistry registry,
-    DispatcherStatus status)
+    DispatcherStatus status,
+    UnansweredEnd unanswered)
 {
     public async Task<int> EnforceAsync(JasonDbContext db, CancellationToken ct)
     {
@@ -53,7 +54,20 @@ public sealed class LeaseEnforcer(
                 continue;
             }
 
-            outcomes.Fail(db, item, attempt, failure.Value.Code, failure.Value.Message, trace: null, details: null, Actors.Dispatcher);
+            // A1. A lease that ran out says nothing about whether a provider acted, and neither does silence,
+            // so for provider work both are the same fact as a lost answer and the contract decides the repeat.
+            var end = unanswered.Verdict(item);
+            outcomes.Fail(
+                db,
+                item,
+                attempt,
+                failure.Value.Code,
+                failure.Value.Message,
+                trace: null,
+                details: null,
+                Actors.Dispatcher,
+                failureClass: end?.Class,
+                retriable: end?.Retriable);
             try
             {
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);

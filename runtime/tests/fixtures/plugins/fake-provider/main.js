@@ -61,8 +61,10 @@ const REFUSED_THE_CALL = 2;
 // decided what that name means at reload; nothing here looks a program up for itself.
 const PROVIDER_CLI = "Jason.FakeProviderCli";
 
-// One call to the vendor CLI: the request goes in on stdin and exactly one answer comes back on stdout.
-function cli(context, subcommand, request) {
+// One call to the vendor CLI: the request goes in on stdin and exactly one answer comes back on stdout. The
+// `learned` argument is what this plugin already knows the provider calls our entities at the moment of the call:
+// it travels out with any failure, because after a lost answer a pin is the only trace of what was done.
+function cli(context, subcommand, request, learned) {
   const workspace = context.binding && context.binding.workspace;
   if (!workspace) {
     throw host.fail({
@@ -86,7 +88,7 @@ function cli(context, subcommand, request) {
     const acted = answer.timed_out === true
       || (answer.exit_code !== NOT_STARTED && answer.exit_code !== REFUSED_THE_CALL);
 
-    throw host.fail({
+    throw host.fail(compact({
       class: acted ? "ambiguous" : "permanent",
       code: acted ? "provider_answer_lost" : "provider_call_failed",
       message: acted
@@ -97,16 +99,18 @@ function cli(context, subcommand, request) {
         exit_code: answer.exit_code,
         timed_out: answer.timed_out === true,
       },
-    });
+      external_ids: learned,
+    }));
   }
 
   const parsed = JSON.parse(answer.stdout);
   if (parsed.error) {
-    throw host.fail({
+    throw host.fail(compact({
       class: FAILURE_CLASSES[parsed.error.code] || "permanent",
       code: parsed.error.code,
       message: parsed.error.message,
-    });
+      external_ids: learned,
+    }));
   }
 
   return parsed;
@@ -147,15 +151,53 @@ function ensureContact(context, input, channel) {
   }));
 }
 
-// The recovery read the contract obliges: on any attempt after the first, the ledger under this key is read
-// before anything is written, so a lost answer costs a round trip rather than a second effect.
-function recover(context, key) {
+// The provider's identifier for this person, where Jason already holds one. Everything a later attempt can read
+// about what an earlier one did hangs off it.
+function pinnedContact(input) {
+  const contact = input.contacts[0];
+  return (contact.external_ids && contact.external_ids.contact) || null;
+}
+
+// The ledger this account keeps per idempotency key: what the prior run under this key decided.
+function ledgerEntry(context, key) {
+  const recorded = cli(context, ["ledger", "get"], { key: key });
+  return recorded.found ? recorded.entry : null;
+}
+
+// The recovery read `list_membership.add` obliges, in full: on any attempt after the first, the membership of the
+// pinned contact in the list is read, and then the ledger under this key, before anything is written. Both,
+// because the contract names both — the ledger says what the prior run decided, the membership says what the
+// account actually holds, and an account can hold the member with no ledger entry a crash never reached.
+function recoverMembership(context, input, key) {
   if (!context.attempt_number || context.attempt_number < 2) {
     return null;
   }
 
-  const recorded = cli(context, ["ledger", "get"], { key: key });
-  return recorded.found ? recorded.entry : null;
+  const pinned = pinnedContact(input);
+  const held = pinned
+    ? cli(context, ["list", "membership"], { list_id: input.args.list.external_id, contact_id: pinned })
+    : { member: false };
+  const recorded = ledgerEntry(context, key);
+
+  if (held.member) {
+    return { contact_id: pinned };
+  }
+
+  return recorded;
+}
+
+// The same obligation for `campaign.enroll`: the prior run's own outcome under this key, and the campaign's live
+// state, because whether the enrollment was a send is what makes repeating it expensive.
+function recoverEnrollment(context, input, key) {
+  if (!context.attempt_number || context.attempt_number < 2) {
+    return null;
+  }
+
+  // In the order the document names them: what the prior run decided, then whether the campaign is live, which
+  // is what says whether that decision was a send.
+  const recorded = ledgerEntry(context, key);
+  const live = cli(context, ["campaign", "get"], { external_id: campaignOf(input) }).live === true;
+  return recorded ? { contact_id: recorded.contact_id, live: live } : null;
 }
 
 function membershipResult(contactId, status, providerContact) {
@@ -196,7 +238,7 @@ function listMembershipAdd(input, context) {
   const contact = input.contacts[0];
   const key = input.idempotency_key;
 
-  const already = recover(context, key);
+  const already = recoverMembership(context, input, key);
   if (already) {
     return membershipResult(contact.id, "already_member", already.contact_id);
   }
@@ -207,7 +249,7 @@ function listMembershipAdd(input, context) {
     list_id: input.args.list.external_id,
     contact_id: ensured.id,
     key: key,
-  });
+  }, { contact: ensured.id });
 
   return membershipResult(contact.id, added.status, ensured.id);
 }
@@ -217,7 +259,7 @@ function campaignEnroll(input, context) {
   const key = input.idempotency_key;
   const campaign = campaignOf(input);
 
-  const already = recover(context, key);
+  const already = recoverEnrollment(context, input, key);
   if (already) {
     return enrollmentResult(contact.id, "already_enrolled", already.contact_id, campaign, already.live);
   }
@@ -231,7 +273,7 @@ function campaignEnroll(input, context) {
     collision: input.args.collision,
     start: input.args.start.position === "step" ? "step:" + input.args.start.step : "first_step",
     first_touch: input.args.first_touch,
-  });
+  }, { contact: ensured.id, campaign: campaign });
 
   return enrollmentResult(contact.id, enrolled.status, ensured.id, campaign, enrolled.live);
 }

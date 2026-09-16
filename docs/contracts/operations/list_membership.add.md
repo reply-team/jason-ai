@@ -70,8 +70,12 @@ the identifier the call gave you, so the caller can match the answer to the pers
 If an attempt ends without an answer, the add may already have happened. The runtime will hand the item back with
 the next attempt number and **the same idempotency key**; it does not reason about what happened. You do:
 
-- Read the ledger under the idempotency key and the membership of the pinned contact in the list.
-- If the effect already happened, answer from that reading — `already_member` — and write nothing.
+- Read the membership of the pinned contact in the list, and the ledger entry under the idempotency key.
+- If either says the effect already happened, answer from that reading — `already_member` — and write nothing.
+
+Return the contact identifier you learned on the failure as well — `host.fail({ external_ids: { contact: … } })`.
+It is recorded by the same rule as on a success, and after a lost answer it is the only trace of the contact the
+attempt ensured: without it the next attempt has no pin to read the membership of.
 
 That obligation is why this operation is repeatable at all. A duplicate add is harmless at most providers, but the
 contact creation it implies may be metered, and a second contact is a merge nobody asked for.

@@ -155,9 +155,19 @@ A retriable failure below `max_attempts` returns the item to `created` with
 eligible hands it out again. At the limit, or on a non-retriable failure, the item becomes `failed`
 with the last error visible on the item.
 
+That table is the rule for **agent** work, where the failure happened inside this machine. A
+`provider_op` attempt is answered differently, because its work happened at somebody else's system:
+the failure carries one of four **classes** — `transient`, `permanent`, `validation`, `ambiguous` —
+and the class plus the operation's own `repeat_after_ambiguous` rule decide, not the code table. Every
+way such an attempt can end with nobody answering for it — the invoker's timeout, `lease_expired`,
+`heartbeat_missed`, and an attempt a restart found still out — is `ambiguous`, because a missing
+answer says nothing about whether the provider acted. A shape error in an answer that did arrive
+(`result_invalid`) is `ambiguous` and never repeated: the next attempt would run the same code over
+the same answer. A cancellation stays a cancellation in both kinds.
+
 `attempt_count` counts **failed** attempts — the ones that count toward the limit. Work that succeeds
-first time shows `attempt_count: 0` with one entry in `attempts`. Attempts that were `interrupted` by
-a restart or `cancelled` by a caller never count.
+first time shows `attempt_count: 0` with one entry in `attempts`. An agent attempt that was
+`interrupted` by a restart, and any attempt `cancelled` by a caller, never count.
 
 There is no separate inbox entity: what needs a human or a manager role is
 `jason workitem list --status failed --status expired`.
@@ -316,10 +326,12 @@ A shutdown stops claiming immediately, then waits up to `Dispatcher:DrainSeconds
 their children finish. Children still running are **not** killed: their leases are still good, and a
 survivor completes against the next runtime by re-reading the descriptor.
 
-On start the runtime releases what was only `scheduled` when it died — the attempt is marked
-`interrupted`, which does not count against the limit, and the item goes back to `created`. Items that
-were `processing` are left alone: their executor may still be alive, and the lease and heartbeat rules
-decide soon enough.
+On start the runtime releases what was only `scheduled` when it died. An agent attempt is marked
+`interrupted`, which does not count against the limit, and the item goes back to `created`. A
+`provider_op` attempt is not released so cheaply: it ends `interrupted` as an **ambiguous** failure and
+then follows its operation's repeat rule, so an operation that may never be repeated waits for a person
+rather than being handed out again. Items that were `processing` are left alone either way: their
+executor may still be alive, and the lease and heartbeat rules decide soon enough.
 
 ## Not here yet
 

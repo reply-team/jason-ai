@@ -177,7 +177,7 @@ public static class AttemptHandler
 
         if (attempt.Status == AttemptStatus.Running)
         {
-            Decide(services.GetRequiredService<AttemptOutcomes>(), db, item, attempt, outcome);
+            await DecideAsync(services, db, work, item, attempt, outcome).ConfigureAwait(false);
         }
 
         try
@@ -215,10 +215,28 @@ public static class AttemptHandler
         await db.SaveChangesAsync().ConfigureAwait(false);
     }
 
-    private static void Decide(AttemptOutcomes outcomes, JasonDbContext db, WorkItem item, Attempt attempt, CommandOutcome outcome)
+    private static async Task DecideAsync(
+        IServiceProvider services,
+        JasonDbContext db,
+        ClaimedWork work,
+        WorkItem item,
+        Attempt attempt,
+        CommandOutcome outcome)
     {
+        var outcomes = services.GetRequiredService<AttemptOutcomes>();
         switch (outcome)
         {
+            case CommandOutcome.Provider provider:
+
+                // What a plugin answered means something only against the operation it was asked to perform, and
+                // the claim is what decided which operation and which plugin that was. The handler carries the
+                // plan here and reads none of it: how an answer becomes an outcome is the recorder's alone.
+                var plan = work.Plan ?? throw new InvalidOperationException(
+                    $"Attempt {attempt.PublicId} answered as a provider operation without the plan its claim built.");
+                await services.GetRequiredService<ProviderOutcomeRecorder>()
+                    .RecordAsync(db, item, attempt, plan.Contract, plan.Plugin.Manifest.Id, provider.Result, CancellationToken.None)
+                    .ConfigureAwait(false);
+                break;
             case CommandOutcome.Exited exited:
                 outcomes.Fail(
                     db,

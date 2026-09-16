@@ -4,16 +4,12 @@ using Jason.Runtime.Plugins.Invocation;
 
 namespace Jason.Runtime.Tests.Execution;
 
+/// <summary>
+/// How far a protocol failure got, which is the only question this table answers. Whether that class is worth
+/// another attempt is the operation's own contract's to say, and <c>RetriabilityTests</c> is where it is asked.
+/// </summary>
 public class OutcomeClassificationTests
 {
-    [Theory]
-    [InlineData(FailureClass.Transient, true)]
-    [InlineData(FailureClass.Permanent, false)]
-    [InlineData(FailureClass.Validation, false)]
-    [InlineData(FailureClass.Ambiguous, false)]
-    public void Only_a_transient_failure_may_be_repeated(FailureClass failureClass, bool retriable) =>
-        Assert.Equal(retriable, OutcomeClassification.IsRetriable(failureClass));
-
     [Theory]
     [InlineData(ProtocolCodes.PluginLaunchFailed, FailureClass.Transient)]
     [InlineData(ProtocolCodes.PluginNotLoaded, FailureClass.Permanent)]
@@ -36,12 +32,5 @@ public class OutcomeClassificationTests
     {
         Assert.Equal(FailureClass.Ambiguous, OutcomeClassification.ClassOf("anything_else"));
         Assert.Equal(FailureClass.Ambiguous, OutcomeClassification.ClassOf(string.Empty));
-    }
-
-    [Fact]
-    public void Nothing_that_did_not_run_is_ever_repeated_blindly()
-    {
-        Assert.False(OutcomeClassification.IsRetriable(OutcomeClassification.ClassOf(ProtocolCodes.PluginTimeout)));
-        Assert.True(OutcomeClassification.IsRetriable(OutcomeClassification.ClassOf(ProtocolCodes.PluginLaunchFailed)));
     }
 }

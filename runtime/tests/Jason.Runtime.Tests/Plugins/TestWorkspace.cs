@@ -85,6 +85,24 @@ public sealed class TestWorkspace : IDisposable
             ["once"] = once,
         });
 
+    /// <summary>
+    /// The opposite failure, once: the account refuses the next call under this key before doing anything, which
+    /// is what a rate limit is and what the plugin reports as transient.
+    /// </summary>
+    public TestWorkspace RefuseOnce(string key, string code = "rate_limited") =>
+        Edit(InstructionsFile, instructions => instructions["refuse_once"] = new JsonObject
+        {
+            ["key"] = key,
+            ["code"] = code,
+        });
+
+    /// <summary>
+    /// What this account holds as a campaign's name, which need not be a string: a provider that answers with
+    /// something the operation's own schema refuses is what makes <c>result_invalid</c> reachable for real.
+    /// </summary>
+    public TestWorkspace WithCampaignName(string id, JsonNode? name) =>
+        Edit(CampaignsFile, campaigns => campaigns[id]!["name"] = name);
+
     public JsonObject Contacts => ReadObject(ContactsFile);
 
     public JsonObject Lists => ReadObject(ListsFile);
@@ -105,7 +123,13 @@ public sealed class TestWorkspace : IDisposable
     /// writing testable: the state left behind cannot tell a plugin that checked from one that guessed right.
     /// </summary>
     public IReadOnlyList<string> Calls =>
-        [.. ReadArray(CallsFile).Select(call => call!["subcommand"]!.GetValue<string>())];
+        [.. KeyedCalls.Select(call => call.Subcommand)];
+
+    /// <summary>The same log with the idempotency key each call carried, which is empty for the calls that take none.</summary>
+    public IReadOnlyList<(string Subcommand, string Key)> KeyedCalls =>
+        [.. ReadArray(CallsFile).Select(call => (
+            call!["subcommand"]!.GetValue<string>(),
+            call["key"]?.GetValue<string>() ?? string.Empty))];
 
     /// <summary>How the caller asked for this person each time: <c>by_id</c> once a pin exists, never by address.</summary>
     public IReadOnlyList<string> AsksFor(string contactId) =>

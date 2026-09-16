@@ -57,6 +57,9 @@ public static class AttemptErrors
     /// <summary>The composed input does not satisfy the operation's own schema.</summary>
     public const string InputInvalid = "input_invalid";
 
+    /// <summary>The plugin answered, and the answer is not the shape the operation publishes.</summary>
+    public const string ResultInvalid = "result_invalid";
+
     /// <summary>A runtime restart found the attempt still scheduled; it was never counted.</summary>
     public const string Interrupted = "interrupted";
 
