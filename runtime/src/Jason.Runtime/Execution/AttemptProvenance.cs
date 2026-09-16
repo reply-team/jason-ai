@@ -31,8 +31,11 @@ public sealed record InvocationRecord(
 /// </summary>
 public static class AttemptProvenance
 {
+    /// <summary>The path a rejected answer is written at, spelled as SQLite's JSON functions address it.</summary>
+    private const string RejectedResultPath = "$.rejected_result";
+
     /// <summary>
-    /// The four fields a completion adds, and nothing else: serialised without its nulls so that what is merged
+    /// The fields a completion merges, and nothing else: serialised without its nulls so that what is merged
     /// into the stored record names only what the invocation learned. The names come from the DTO itself, so the
     /// patch and the record it is merged into cannot come to spell a field differently.
     /// </summary>
@@ -115,18 +118,26 @@ public static class AttemptProvenance
                 InvocationId = invocation.InvocationId,
                 Diagnostics = invocation.Diagnostics,
                 ExternalIdsReturned = invocation.ExternalIdsReturned,
-                RejectedResult = invocation.RejectedResult,
             },
             OnlyWhatIsKnown);
 
-        var touched = await db.Database.ExecuteSqlInterpolatedAsync(
-            $"""
-             UPDATE attempts
-                SET provenance_json = json_patch(provenance_json, {patch})
-              WHERE public_id = {attemptId} AND provenance_json IS NOT NULL
-             """,
-            cancellationToken).ConfigureAwait(false);
+        // A merge patch reads a null as "remove this key", which is the right reading for the fields above —
+        // none of them can be null and still mean something — and the wrong one for a document a plugin wrote,
+        // where a null is a value it sent. The rejected answer is therefore set whole at its own path, so what
+        // is kept as evidence is what actually arrived rather than what survived a merge.
+        var statement = invocation.RejectedResult is { } rejected
+            ? (FormattableString)$"""
+               UPDATE attempts
+                  SET provenance_json = json_set(json_patch(provenance_json, {patch}), {RejectedResultPath}, json({rejected.ToJsonString()}))
+                WHERE public_id = {attemptId} AND provenance_json IS NOT NULL
+               """
+            : $"""
+               UPDATE attempts
+                  SET provenance_json = json_patch(provenance_json, {patch})
+                WHERE public_id = {attemptId} AND provenance_json IS NOT NULL
+               """;
 
+        var touched = await db.Database.ExecuteSqlInterpolatedAsync(statement, cancellationToken).ConfigureAwait(false);
         return touched == 1;
     }
 }

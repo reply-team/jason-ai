@@ -226,6 +226,29 @@ public class ProviderOutcomeRecorderTests
     }
 
     /// <summary>
+    /// A null inside the rejected answer is a value the plugin wrote, and it has to survive being written down.
+    /// The record is completed by merging into what the claim wrote, and a merge patch reads a null as "remove
+    /// this key" — so an answer full of nulls would come back as evidence of something nobody sent.
+    /// </summary>
+    [Fact]
+    public async Task A_null_inside_a_rejected_answer_survives_being_written_down()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db);
+        var refused = new JsonObject
+        {
+            ["items"] = new JsonArray(new JsonObject { ["contact_id"] = null, ["status"] = "added" }),
+            ["note"] = null,
+        };
+
+        await scene.RecordAsync(db, Add, Succeeded(refused, null));
+
+        Assert.Equal(AttemptErrors.ResultInvalid, scene.Attempt.Error!.Code);
+        Assert.Equal(refused.ToJsonString(), (await scene.ProvenanceAsync(db)).RejectedResult!.ToJsonString());
+    }
+
+    /// <summary>
     /// A1's first end. A protocol failure is not the plugin's answer — the runtime never got one — so its class
     /// comes from how far the invocation got, and the repeat from the operation's rule all the same.
     /// </summary>
