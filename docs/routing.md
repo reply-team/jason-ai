@@ -442,6 +442,13 @@ reconciliation — matching a person again, against two providers' answers — a
   work across a reload is open (DEF-ROUTE-002).
 - **No approvals.** `campaign.enroll` requires one, so it fails closed with `approval_required` every time.
   The contract is published complete; only the gate is missing.
+- **Three operations, not a catalog.** `campaign.get`, `list_membership.add` and `campaign.enroll` are the
+  whole published set; an operation outside it cannot be routed, created or named, and adding one is a
+  deliberate act with its own document, fixtures and version (DEF-OPS-001).
+- **No compatibility window and no deprecation policy.** Every published operation is at version 1, and a
+  plugin declares which contract family versions it implements. What happens when version 2 arrives — how
+  long version 1 keeps being served, and how a plugin is told — is not settled and is deliberately not
+  implied anywhere (DEF-OPS-002).
 - **One installed version per plugin id**, because the id is the directory name. Two plugins may implement
   the same operation, and routing is how you choose between them.
 - **Routes are not exported or imported.** The global half is a settings file you can copy; the campaign

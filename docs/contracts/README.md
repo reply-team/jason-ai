@@ -150,7 +150,7 @@ A route to a plugin whose family versions do not contain the operation's version
 route is activated, as `route_contract_incompatible`, and again at the claim as
 `contract_incompatible`: the plan a run is handed has to be true of the package in front of it.
 Compatibility windows and deprecation policy are not settled yet and are deliberately not
-implied here.
+implied here (DEF-OPS-002; `docs/routing.md` §12 lists it beside this version's other limitations).
 
 ## Running the fixtures
 

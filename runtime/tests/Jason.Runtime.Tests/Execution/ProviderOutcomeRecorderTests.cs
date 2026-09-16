@@ -118,6 +118,12 @@ public class ProviderOutcomeRecorderTests
         Assert.Equal(FailureClass.Ambiguous, scene.Attempt.Error.Class);
         Assert.False(scene.Attempt.Error.Retriable);
         Assert.Equal(WorkItemStatus.Failed, scene.Item.Status);
+
+        // And the answer itself is kept, for the same reason it is kept when the result is the wrong shape:
+        // the author has to see what was actually sent. What is kept is the result the plugin returned — the
+        // identifiers it refused travel as the pointer above, not as part of the document.
+        var provenance = await scene.ProvenanceAsync(db);
+        Assert.Contains(scene.Contact.PublicId, provenance.RejectedResult!.ToJsonString(), StringComparison.Ordinal);
     }
 
     /// <summary>
