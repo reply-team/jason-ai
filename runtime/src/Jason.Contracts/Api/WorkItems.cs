@@ -22,6 +22,41 @@ public sealed record AttemptErrorDto(
 /// <summary>How an attempt was actually run: provenance without secrets.</summary>
 public sealed record AttemptLaunchDto(IReadOnlyList<string> EntryCommand, string WorkDir, int? Pid, int? ExitCode);
 
+/// <summary>
+/// What was resolved to run one provider attempt, and what the invocation then added. Written at claim as far
+/// as resolution got and never edited afterwards: an attempt is a record of what happened, so a route changed,
+/// a plugin reloaded or a package edited later leaves it exactly as it stands.
+/// </summary>
+/// <remarks>
+/// Every field is nullable because the record is honest about how far the decision reached: an item refused
+/// before anything was routed names no plugin, and one refused because its plugin was unavailable still names
+/// the plugin it would have used, which is what a manager acts on. The binding is named by its identity rather
+/// than by its value — the same identity across attempts is what answers "was this retried against a different
+/// account?", while the value itself stays in the route.
+/// </remarks>
+/// <param name="CorrelationId">The attempt's own id, which is what ties an invocation back to the work.</param>
+/// <param name="RejectedResult">
+/// The answer a shape error refused, so a plugin author can see what was actually sent. Present only where an
+/// otherwise well-formed answer failed the operation's own schema.
+/// </param>
+public sealed record AttemptProvenanceDto(
+    string? PluginId,
+    string? PluginVersion,
+    string? PluginDigest,
+    int? ProtocolVersion,
+    int? OperationContractVersion,
+    string? Operation,
+    int? OperationVersion,
+    string? PluginSnapshotId,
+    string? RoutingSnapshotId,
+    RouteScope? RouteScope,
+    string? BindingIdentity,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? InvocationId = null,
+    string? CorrelationId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OutcomeDiagnostics? Diagnostics = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, string>? ExternalIdsReturned = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonNode? RejectedResult = null);
+
 /// <summary>One run of one work item. The id is also the fencing token every executor operation must carry.</summary>
 public sealed record AttemptDto(
     string Id,
@@ -36,7 +71,8 @@ public sealed record AttemptDto(
     DateTimeOffset? FinishedAt,
     DateTimeOffset? LastHeartbeatAt,
     DateTimeOffset LockUntil,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonObject? ContextSnapshot);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonObject? ContextSnapshot,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AttemptProvenanceDto? Provenance = null);
 
 /// <summary>
 /// One unit of durable work. <c>Eligible</c> is computed, never stored: it says whether the dispatcher would

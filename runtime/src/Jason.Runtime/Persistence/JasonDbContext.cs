@@ -69,6 +69,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         configurationBuilder.Properties<JsonNode>().HaveConversion<JsonNodeConverter, JsonNodeComparer>();
         configurationBuilder.Properties<AttemptErrorDto>().HaveConversion<JsonTextConverter<AttemptErrorDto>, JsonTextComparer<AttemptErrorDto>>();
         configurationBuilder.Properties<AttemptLaunchDto>().HaveConversion<JsonTextConverter<AttemptLaunchDto>, JsonTextComparer<AttemptLaunchDto>>();
+        configurationBuilder.Properties<AttemptProvenanceDto>().HaveConversion<JsonTextConverter<AttemptProvenanceDto>, JsonTextComparer<AttemptProvenanceDto>>();
         configurationBuilder.Properties<List<string>>().HaveConversion<StringListConverter, StringListComparer>();
     }
 

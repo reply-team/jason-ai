@@ -46,7 +46,12 @@ public static class WorkItemRenderers
         };
 
         var rendered = RenderText.Lines(lines);
-        return item.Attempts is null ? rendered : rendered + Environment.NewLine + Environment.NewLine + AttemptTable(item.Attempts);
+        if (item.Attempts is null)
+        {
+            return rendered;
+        }
+
+        return RenderText.Lines([rendered, string.Empty, AttemptTable(item.Attempts), .. Provenance(item.Attempts)]);
     }
 
     /// <summary>A page of work items, and the cursor that continues it.</summary>
@@ -115,6 +120,61 @@ public static class WorkItemRenderers
         }
 
         return table.Render();
+    }
+
+    /// <summary>
+    /// What ran each attempt that has a record of it: one block per provider attempt, and nothing at all for an
+    /// agent attempt, which has no provenance and must print exactly what it printed before.
+    /// </summary>
+    private static IReadOnlyList<string> Provenance(IReadOnlyList<AttemptDto> attempts)
+    {
+        var lines = new List<string>();
+        foreach (var attempt in attempts.Where(attempt => attempt.Provenance is not null))
+        {
+            var ran = attempt.Provenance!;
+            lines.Add(string.Empty);
+            lines.Add($"ATTEMPT {attempt.Number.ToString(CultureInfo.InvariantCulture)} ({attempt.Id}) RAN");
+            lines.Add(Line("Plugin:", Plugin(ran)));
+            lines.Add(Line("Operation:", Operation(ran.Operation, ran.OperationVersion)));
+            lines.Add(Line("Route:", Route(ran)));
+            lines.Add(Line("Snapshots:", Snapshots(ran)));
+            lines.Add(Line("Invocation:", Invocation(ran)));
+        }
+
+        return lines;
+    }
+
+    /// <summary>The package, as it was when it was chosen: a route that named nothing renders nothing.</summary>
+    private static string? Plugin(AttemptProvenanceDto ran) => ran.PluginId is null
+        ? null
+        : Parts(ran.PluginId + (ran.PluginVersion is null ? string.Empty : " " + ran.PluginVersion), RenderText.Digest(ran.PluginDigest));
+
+    private static string? Operation(string? operation, int? version) => operation is null
+        ? null
+        : version is null ? operation : operation + " v" + version.Value.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>Which level chose the plugin, and which account of it — by identity, never by value.</summary>
+    private static string? Route(AttemptProvenanceDto ran) => Parts(
+        ran.RouteScope is { } scope ? RenderText.Snake(scope) : null,
+        RenderText.Digest(ran.BindingIdentity) is { } binding ? "binding " + binding : null);
+
+    private static string? Snapshots(AttemptProvenanceDto ran) => Parts(
+        ran.PluginSnapshotId is null ? null : "plugins " + ran.PluginSnapshotId,
+        ran.RoutingSnapshotId is null ? null : "routes " + ran.RoutingSnapshotId);
+
+    /// <summary>The invocation and what it cost, which is the line an operator reads when something was slow.</summary>
+    private static string? Invocation(AttemptProvenanceDto ran) => Parts(
+        ran.InvocationId,
+        ran.Diagnostics is { } cost
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $"{cost.DurationMs} ms · exec {cost.ExecCalls} · http {cost.HttpCalls} · log {cost.LogLines}")
+            : null);
+
+    private static string? Parts(params string?[] parts)
+    {
+        var present = parts.Where(part => !string.IsNullOrEmpty(part)).ToList();
+        return present.Count == 0 ? null : string.Join(" · ", present);
     }
 
     private static string Kind(WorkItemKind kind, string? role, string? operation)

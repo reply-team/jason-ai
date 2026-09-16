@@ -12,6 +12,11 @@ namespace Jason.Cli.Human;
 /// </summary>
 internal static class RenderText
 {
+    private const string DigestPrefix = "sha256:";
+
+    /// <summary>How much of a digest a person needs to tell two packages apart at a glance.</summary>
+    private const int DigestShown = 12;
+
     /// <summary>A response body of the expected shape, or null when it is something else — the runner then prints the raw JSON.</summary>
     public static T? Read<T>(string json)
         where T : class
@@ -88,6 +93,22 @@ internal static class RenderText
         }
 
         return [string.Empty, "EXTERNAL IDS", table.Render()];
+    }
+
+    /// <summary>
+    /// The head of a content digest, which is what people compare at a glance; the whole value is in the JSON
+    /// output. One spelling of the shortening, because two renderers showing the same digest differently would
+    /// make a reader wonder which package they are looking at.
+    /// </summary>
+    public static string? Digest(string? digest)
+    {
+        if (string.IsNullOrEmpty(digest))
+        {
+            return null;
+        }
+
+        var hex = digest.StartsWith(DigestPrefix, StringComparison.Ordinal) ? digest[DigestPrefix.Length..] : digest;
+        return hex.Length <= DigestShown ? hex : hex[..DigestShown];
     }
 
     /// <summary>Appends the cursor that continues a listing, when the page has one.</summary>

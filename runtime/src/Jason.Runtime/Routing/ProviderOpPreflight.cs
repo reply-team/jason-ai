@@ -21,12 +21,18 @@ namespace Jason.Runtime.Routing;
 /// </param>
 /// <param name="Details">Where the input failed, by pointer, for the one check that can name more than one place.</param>
 /// <param name="Plan">Everything the run needs, and null whenever something refused it.</param>
+/// <param name="Resolution">
+/// Where the work was routed, present whenever routing succeeded — including when a later check refused the
+/// item. It is what lets a refused attempt still record the plugin it would have used: computing that answer a
+/// second time would make two places that can disagree about one decision.
+/// </param>
 public sealed record PreflightVerdict(
     string? Code,
     string? Message,
     FailureClass? Class,
     IReadOnlyList<ErrorDetail>? Details,
-    ProviderOpPlan? Plan)
+    ProviderOpPlan? Plan,
+    Resolution? Resolution)
 {
     public bool Passed => Code is null;
 }
@@ -82,18 +88,20 @@ public static class ProviderOpPreflight
         {
             // Creation refuses an operation this build does not publish; a row written by a build that did is the
             // reason this is checked rather than assumed.
-            return Refused(AttemptErrors.OperationUnknown, $"This runtime publishes no contract for operation '{operation}'.");
+            return Refused(null, AttemptErrors.OperationUnknown, $"This runtime publishes no contract for operation '{operation}'.");
         }
 
         if (RouteResolver.Resolve(routes, facts.Campaign.PublicId, operation) is not { } resolution)
         {
-            return Refused(AttemptErrors.NoRoute, $"No provider route exists yet for operation '{operation}'.");
+            return Refused(null, AttemptErrors.NoRoute, $"No provider route exists yet for operation '{operation}'.");
         }
 
         var route = resolution.Route;
         if (Routable(plugins, contract, route) is { } unroutable)
         {
-            return unroutable;
+            // Task 5 made these five checks shared with route.resolve, which predicts this decision; the
+            // resolution is attached here rather than inside them, because resolve has no attempt to record it on.
+            return unroutable with { Resolution = resolution };
         }
 
         // Nothing objected, so the plugin the checks above found is there to be found again.
@@ -102,13 +110,14 @@ public static class ProviderOpPreflight
         if (!string.Equals(contract.Approval.Value, Automatic, StringComparison.Ordinal))
         {
             return Refused(
+                resolution,
                 AttemptErrors.ApprovalRequired,
                 $"Operation '{operation}' is approved '{contract.Approval.Value}', and a dispatcher may not stand in for the person who approves it.");
         }
 
         if (contract.Preflight.Contact == ContactRequirement.Required && facts.Contact is null)
         {
-            return Refused(AttemptErrors.ContactRequired, $"Operation '{operation}' acts on a contact, and this work item names none.");
+            return Refused(resolution, AttemptErrors.ContactRequired, $"Operation '{operation}' acts on a contact, and this work item names none.");
         }
 
         // A channel the arguments never named is not a person's problem: the composed document says so by
@@ -118,6 +127,7 @@ public static class ProviderOpPreflight
             if (CanonicalInput.Reachable(contact, channel) is null)
             {
                 return Refused(
+                    resolution,
                     AttemptErrors.NoChannelValue,
                     $"The contact has no '{channel}' channel, and '{channel}' is the one '{operation}' consumes.");
             }
@@ -125,6 +135,7 @@ public static class ProviderOpPreflight
             if (facts.Suppressed)
             {
                 return Refused(
+                    resolution,
                     AttemptErrors.Suppressed,
                     $"The contact's '{channel}' value is on the suppression list, so this campaign does not reach them there.");
             }
@@ -134,6 +145,7 @@ public static class ProviderOpPreflight
         if (Contradictions(contract, facts, input) is { Count: > 0 } contradicted)
         {
             return Refused(
+                resolution,
                 AttemptErrors.InputInvalid,
                 $"The arguments of this work item contradict an identifier Jason has already recorded for '{operation}'.",
                 contradicted,
@@ -145,6 +157,7 @@ public static class ProviderOpPreflight
         if (SchemaValidator.Validate(input, contract.InputSchema) is { Count: > 0 } problems)
         {
             return Refused(
+                resolution,
                 AttemptErrors.InputInvalid,
                 $"The input composed for '{operation}' does not satisfy the schema that operation publishes.",
                 Details(problems),
@@ -164,7 +177,8 @@ public static class ProviderOpPreflight
                 route.Binding,
                 route.BindingIdentity,
                 contract,
-                input));
+                input),
+            resolution);
     }
 
     /// <summary>
@@ -277,10 +291,15 @@ public static class ProviderOpPreflight
     /// <summary>The whole document is a place too, and it is named rather than left blank.</summary>
     private static string Pointer(string pointer) => pointer.Length == 0 ? "/" : pointer;
 
+    /// <summary>
+    /// One refusal, carrying the resolution the decision had reached when it refused: the attempt records what
+    /// was chosen even where the work never ran, which is the half of a failure a manager can act on.
+    /// </summary>
     private static PreflightVerdict Refused(
+        Resolution? resolution,
         string code,
         string message,
         IReadOnlyList<ErrorDetail>? details = null,
         FailureClass failureClass = FailureClass.Permanent) =>
-        new(code, message, failureClass, details, null);
+        new(code, message, failureClass, details, null, resolution);
 }
