@@ -5,11 +5,13 @@ namespace Jason.Runtime.Routing;
 /// route set is being built, before anything is swapped, and it refuses the whole reload: a route that cannot be
 /// used is a mistake in the installation's configuration, and a registry that is only partly right hides it.
 /// <para>
-/// The seven codes are listed in the order they are checked, and the first one that fires is the one a route is
+/// The eight codes are listed in the order they are checked, and the first one that fires is the one a route is
 /// reported under. The order is not arbitrary: everything after <see cref="PluginUnknown"/> reads the plugin, and
 /// <see cref="BindingSecretLike"/> comes before <see cref="BindingInvalid"/> because a plugin's schema will
 /// usually refuse an unexpected field too, and "this looks like a credential" is the sentence the person who
-/// wrote it needs to read.
+/// wrote it needs to read. <see cref="BindingTooLarge"/> sits between them for the same reason read the other
+/// way: a credential is the more urgent sentence, and how big a binding is is a fact about the binding rather
+/// than about the plugin whose schema is asked next.
 /// </para>
 /// </summary>
 public static class RouteProblemCodes
@@ -32,11 +34,20 @@ public static class RouteProblemCodes
     /// <summary>The binding carries a field named like a credential, at any depth.</summary>
     public const string BindingSecretLike = "route_binding_secret_like";
 
+    /// <summary>
+    /// The binding's canonical JSON is larger than the protocol carries to a plugin. It is its own code rather
+    /// than a second meaning for <see cref="BindingInvalid"/>, which says a plugin's own schema refused the
+    /// binding: that is a different repair, read against a different document, and the operator who has to make
+    /// one of them must not be handed the other. The number is the protocol's, so this reads as the same rule
+    /// the invocation states in its own vocabulary.
+    /// </summary>
+    public const string BindingTooLarge = "route_binding_too_large";
+
     /// <summary>The binding does not satisfy the schema the plugin's manifest declares for a route to it.</summary>
     public const string BindingInvalid = "route_binding_invalid";
 
     /// <summary>
-    /// Not one of the seven: this is the <c>Routes</c> section itself failing the validator that reads it, which
+    /// Not one of the eight: this is the <c>Routes</c> section itself failing the validator that reads it, which
     /// happens when the file is edited into something no route could be built from. It is reported like a route
     /// problem — the same rejected reload, naming the same setting — because an operator who mistypes a route
     /// must get one answer, not a 500 that says the runtime broke rather than the edit.

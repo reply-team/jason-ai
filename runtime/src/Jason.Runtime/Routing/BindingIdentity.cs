@@ -33,7 +33,15 @@ public static class BindingIdentity
     private static readonly JsonWriterOptions Canonical = new() { Indented = false, MaxDepth = MaxDepth };
 
     /// <summary>The binding's identity, or null when there is no binding — which is not the identity of an empty one.</summary>
-    public static string? Of(JsonObject? binding)
+    public static string? Of(JsonObject? binding) => Measure(binding)?.Identity;
+
+    /// <summary>
+    /// The canonical form written once, and both facts about it that anybody needs: how many bytes it is, and
+    /// what it is called. They are answered together because the caller that bounds a binding is the caller that
+    /// records its identity, and serialising the same object twice to learn two things about it is how the two
+    /// numbers would eventually come to disagree.
+    /// </summary>
+    public static BindingMeasure? Measure(JsonObject? binding)
     {
         if (binding is null)
         {
@@ -46,8 +54,9 @@ public static class BindingIdentity
             Write(writer, binding);
         }
 
+        var bytes = buffer.Length;
         buffer.Position = 0;
-        return $"{PackageDigest.Algorithm}:{Convert.ToHexStringLower(SHA256.HashData(buffer))}";
+        return new BindingMeasure(bytes, $"{PackageDigest.Algorithm}:{Convert.ToHexStringLower(SHA256.HashData(buffer))}");
     }
 
     /// <summary>
@@ -137,3 +146,9 @@ public static class BindingIdentity
         public static Closing OfArray { get; } = new(false);
     }
 }
+
+/// <summary>
+/// One binding's canonical form, measured and named in the same pass: the bytes the protocol would have to carry
+/// it in, and the <c>sha256:</c> an attempt records it as.
+/// </summary>
+public readonly record struct BindingMeasure(long Bytes, string Identity);

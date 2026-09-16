@@ -19,7 +19,9 @@ namespace Jason.Runtime.Routing;
 /// kind before the operation, because a plugin that only notifies lists no operation at all and would otherwise
 /// be reported for what is missing rather than for what it is. Activation alone asks whether a binding reads
 /// like a credential, and asks it before the schema, because a plugin's schema will usually refuse an unexpected
-/// field too and "this looks like a credential" is the sentence whoever wrote it needs to read. The claim alone
+/// field too and "this looks like a credential" is the sentence whoever wrote it needs to read. Activation alone
+/// also asks how large a binding is — a question about the binding rather than about the plugin, which is why it
+/// is not one of these and why the invocation's own cap is a backstop rather than the rule. The claim alone
 /// asks whether the plugin is usable on this machine: a missing program is an environment's problem, and
 /// refusing every route to that plugin would turn it into a rejected reload.
 /// </para>

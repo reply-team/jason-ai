@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
@@ -281,6 +282,47 @@ public class RouteApiTests
         // Nothing was written, so a reload that reads the rows again still activates.
         var reloaded = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, new { }, Ct);
         Assert.True(reloaded.Activated);
+        Assert.Empty(api.Resolve<RouteRegistry>().Snapshot.Campaigns);
+    }
+
+    /// <summary>
+    /// A binding is bounded where it is written, not only where it is used. The cap belongs here because the
+    /// write is the irreversible half: a binding the invocation would refuse has by then been journaled into an
+    /// append-only table, listed by <c>route list</c> and answered as usable by <c>route resolve</c>, and every
+    /// item through that route would then die at the invocation with nothing naming the route that carried it.
+    /// </summary>
+    [Fact]
+    public async Task A_binding_larger_than_the_protocol_carries_is_refused_before_it_is_written()
+    {
+        await using var api = await StartAsync(TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, RouteActivationTests.Workspace()));
+        var campaign = await CampaignAsync(api);
+
+        // Built rather than parsed: this is the one shape no fixture file should carry, and it is schema-valid
+        // for fake-provider, so size is the only thing wrong with it.
+        var binding = new JsonObject { ["workspace"] = new string('w', PluginProtocol.MaxBindingBytes) };
+
+        var error = await api.PostErrorAsync(
+            Operations.RouteSet,
+            new { campaign_id = campaign, operation = "campaign.get", plugin = TestPlugins.FakeProviderId, binding },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        Assert.Equal("validation_failed", error.Code);
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(RouteActivator.CampaignField(campaign, "campaign.get"), detail.Field);
+        Assert.Equal(RouteProblemCodes.BindingTooLarge, detail.Code);
+
+        // The message says both numbers and never the value: an answer that quoted 64 KiB back would be the
+        // same mistake in a different table.
+        Assert.Contains(PluginProtocol.MaxBindingBytes.ToString(CultureInfo.InvariantCulture), detail.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(new string('w', 64), detail.Message, StringComparison.Ordinal);
+
+        // The journal is append-only, so a row written here could never be taken back. Nothing was written.
+        var entries = await api.PostOkAsync<Page<JournalEntryDto>>(
+            Operations.JournalList,
+            new { CampaignId = campaign, Kind = JournalKinds.RoutesUpdated },
+            Ct);
+        Assert.Empty(entries.Items);
         Assert.Empty(api.Resolve<RouteRegistry>().Snapshot.Campaigns);
     }
 
