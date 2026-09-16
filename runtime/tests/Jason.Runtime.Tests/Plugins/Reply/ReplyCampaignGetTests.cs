@@ -183,23 +183,24 @@ public class ReplyCampaignGetTests
     }
 
     [Fact]
-    public async Task The_counts_are_empty_because_the_provider_reports_none()
+    public async Task No_contact_is_paged_to_put_a_number_in_counts()
     {
+        // An empty `counts` is a real answer: it says the provider reports none, which is not the same as
+        // reporting zero, and a caller plans differently on each. A Reply sequence carries no people counts at
+        // all — the one count endpoint in the published description still says it is coming — so this package
+        // answers the empty object unconditionally, and that half of it cannot fail while it does.
+        //
+        // What can fail, and is the reason this test exists, is the other half: synthesising a number would mean
+        // paging every contact in the sequence inside a sixty-second budget, and nothing here does. One call is
+        // made, and it is the sequence read.
         using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 outbound", "active", false, 11, 12);
+        account.WithSequence(Sequence, "Q3 outbound", "active");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
         var answer = Succeeded(await InvokeAsync(api, Input(supplied: "7"), Ct));
 
-        // An empty object is a real answer, and here it is the true one: it says the provider reports no counts,
-        // which is not the same as reporting zero, and a caller plans differently on each. A Reply sequence
-        // carries no people counts at all — the one count endpoint in the published description still says
-        // "coming soon" — and synthesising a number would mean paging every contact in the sequence inside a
-        // sixty-second budget.
         Assert.Empty(answer["campaign"]!["counts"]!.AsObject());
-
-        // And nothing was paged to get there: one call, the sequence read.
         AssertTheSequenceWasRead(account);
     }
 
