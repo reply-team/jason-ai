@@ -6,6 +6,7 @@ using Jason.Runtime.Discovery;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Routing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -37,7 +38,8 @@ public static class SystemModule
              DispatcherStatus dispatcher,
              IOptionsMonitor<DispatcherOptions> dispatcherOptions,
              RunningAttemptRegistry running,
-             PluginRegistry plugins) =>
+             PluginRegistry plugins,
+             RouteRegistry routes) =>
                 TypedResults.Ok(new SystemInfoResponse(
                     runtimeInfo.RuntimeVersion,
                     ApiVersion.Current,
@@ -51,7 +53,13 @@ public static class SystemModule
                         plugins.Snapshot.Plugins.Count,
                         plugins.Snapshot.Id,
                         PluginMapper.Utc(plugins.Snapshot.LoadedAt),
-                        plugins.LastReload?.Activated))));
+                        plugins.LastReload?.Activated),
+                    new RoutesInfo(
+                        routes.Snapshot.Id,
+                        routes.Snapshot.ActivatedAt,
+                        routes.Snapshot.Global.Default?.PluginId,
+                        routes.Snapshot.Global.Operations.Count,
+                        routes.Snapshot.Campaigns.Values.Sum(set => set.Operations.Count + (set.Default is null ? 0 : 1))))));
 
         app.MapOperation<ShutdownCoordinator, ShutdownRequest, ShutdownResponse>(
             Operations.SystemShutdown,

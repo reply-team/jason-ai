@@ -172,18 +172,21 @@ public class PluginContractsShapeTests
     }
 
     [Fact]
-    public void System_info_carries_a_plugins_section()
+    public void System_info_carries_a_plugins_section_and_the_routes_frozen_beside_it()
     {
         var info = new SystemInfoResponse(
             "0.1.0", ApiVersion.Current, "rt_01J", 1234, DateTimeOffset.UnixEpoch, "/data",
             new DatabaseInfo([]),
             new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0),
-            new PluginsInfo(1, "snp_01J", DateTimeOffset.UnixEpoch, true));
+            new PluginsInfo(1, "snp_01J", DateTimeOffset.UnixEpoch, true),
+            new RoutesInfo("rts_01J", DateTimeOffset.UnixEpoch, "a-provider", 2, 3));
 
         var json = JsonSerializer.Serialize(info, JasonJson.Options);
 
         Assert.Contains("\"plugins\":{\"active_count\":1,\"snapshot_id\":\"snp_01J\"", json, StringComparison.Ordinal);
         Assert.Contains("\"last_reload_activated\":true", json, StringComparison.Ordinal);
+        Assert.Contains("\"routes\":{\"snapshot_id\":\"rts_01J\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"global_default_plugin\":\"a-provider\",\"global_override_count\":2,\"campaign_route_count\":3", json, StringComparison.Ordinal);
     }
 
     [Fact]

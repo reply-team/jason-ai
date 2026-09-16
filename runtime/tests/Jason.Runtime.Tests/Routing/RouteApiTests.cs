@@ -8,6 +8,7 @@ using Jason.Runtime.Journal;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Plugins;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Routing;
 
@@ -379,11 +380,23 @@ public class RouteApiTests
     private static async Task<string> CampaignAsync(RuntimeApiFixture api) =>
         (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { Name = "Routed" }, Ct)).Id;
 
-    /// <summary>Both checked-in providers installed, so a test can move work from one of them to the other.</summary>
+    /// <summary>
+    /// Both checked-in providers installed, so a test can move work from one of them to the other — and the
+    /// stand-in vendor program on the runtime's own search path, so the reference package loads as valid rather
+    /// than as "this machine cannot run it", which is a true answer and the wrong one for a test about routes.
+    /// </summary>
     private static Task<RuntimeApiFixture> StartAsync(string? routes = null) =>
-        RouteActivationTests.StartAsync(routes, paths =>
-        {
-            TestPlugins.InstallFakeProvider(paths);
-            TestPlugins.InstallOtherProvider(paths);
-        });
+        RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+                TestPlugins.InstallFakeProvider(paths);
+                TestPlugins.InstallOtherProvider(paths);
+                if (routes is not null)
+                {
+                    TestRoutes.WriteGlobal(paths, routes);
+                }
+            },
+            configureServices: services => services.AddSingleton(TestPlugins.SearchPath));
 }

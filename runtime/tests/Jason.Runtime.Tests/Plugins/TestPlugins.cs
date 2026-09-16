@@ -29,6 +29,17 @@ public static class TestPlugins
     /// <summary>Where the stand-in vendor CLI's apphost lives, for a search path that has to find something real.</summary>
     public static string FakeCliDirectory => FakeProviderCli.Directory;
 
+    /// <summary>
+    /// The search path a fixture hands a runtime so that the checked-in package resolves every program it
+    /// declares: the stand-in vendor program's own directory first, then the machine's path for anything else
+    /// the manifest names. Without it a perfectly good package loads as <c>unavailable</c> — a true answer, and
+    /// the wrong one for a test whose subject is something else entirely.
+    /// </summary>
+    public static ISearchPath SearchPath => new TestSearchPath
+    {
+        Path = string.Join(System.IO.Path.PathSeparator, FakeCliDirectory, Environment.GetEnvironmentVariable("PATH") ?? string.Empty),
+    };
+
     /// <summary>Copies the checked-in package into the data directory and answers with its root.</summary>
     public static string InstallFakeProvider(JasonPaths paths)
     {
