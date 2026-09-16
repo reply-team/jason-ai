@@ -5,7 +5,7 @@
 // operation: one call, nothing written, nothing to recover. The document's repeat rule is `safe` for exactly that
 // reason — an attempt that ended without an answer simply asks again, and there is no recovery read here.
 import { call } from "./cli.js";
-import { callOf, fail, lostAnswerRow, statusRow } from "./errors.js";
+import { callOf, fail, lostAnswerRow, observe, statusRow } from "./errors.js";
 
 const OPERATION = "campaign.get";
 
@@ -41,11 +41,11 @@ export function campaignGet(input, context) {
   if (answer.code === 404) {
     // Reply holds no sequence under this identifier. The identifier deliberately does not travel out as a pin:
     // the provider has just denied the link, and recording one it denies is worse than recording none.
-    fail(OPERATION, observed(known, answer, "campaign_not_found"), undefined);
+    fail(OPERATION, observe(known, answer, "campaign_not_found"), undefined);
   }
 
   if (answer.code !== 200) {
-    fail(OPERATION, observed(known, answer, statusRow(answer.code, known)), learned);
+    fail(OPERATION, observe(known, answer, statusRow(answer.code, known)), learned);
   }
 
   const sequenceRead = answer.data;
@@ -53,7 +53,7 @@ export function campaignGet(input, context) {
     // A 200 whose body is not a sequence is not an answer, whatever the status said. On a read that costs
     // nothing to ask again, so it is reported as the provider not having answered rather than as a shape this
     // package invented a meaning for.
-    fail(OPERATION, observed(known, answer, lostAnswerRow(known)), learned);
+    fail(OPERATION, observe(known, answer, lostAnswerRow(known)), learned);
   }
 
   // Being archived is a boolean beside the status at Reply rather than one of its values, so it decides first:
@@ -118,17 +118,4 @@ function identifier(input) {
   }
 
   return named;
-}
-
-// What was seen, in the shape the table reports failures from. Reply's own code is read only where it is a
-// string on an object, because a 401 arrives with an empty body and parsing one is how a plugin fails on the
-// answer it meets most often.
-function observed(known, answer, row) {
-  const data = answer.data;
-  return {
-    call: known,
-    row: row,
-    status: answer.code,
-    provider_code: data !== null && typeof data === "object" && typeof data.code === "string" ? data.code : undefined,
-  };
 }

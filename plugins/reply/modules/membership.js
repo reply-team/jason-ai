@@ -1,10 +1,132 @@
-// `list_membership.add`: the provider-contact precondition, the suppression read, the add itself, and the
-// recovery read on a repeated attempt. Not written yet — until it is, the call refuses rather than pretending to
-// have added anyone.
+// `list_membership.add`: put one person on one of the account's contact lists.
+//
+// Four things happen, in this order and for a reason. The provider's own contact is ensured, because a Reply
+// list holds Reply's contacts. Reply's opt-out register is read by that contact's identifier, because a person
+// who asked not to be contacted must not be put on an outreach list and only the provider knows — the same call
+// says whether a pin still resolves, so one read serves both. On any attempt after the first the declared
+// recovery read is made, because a repeat of a write that may have landed is a real cost and Reply documents
+// nothing about re-adding a contact already on a list. Then, and only then, the add.
+//
+// The answer's vocabulary is the output schema's, which is closed: `added` or `already_member`, one item naming
+// the contact the call was given, and no `vendor` bag for anything of Reply's to ride along in.
+import { call } from "./cli.js";
+import { callOf, describe, fail, lostAnswerRow, observe, refusalRow } from "./errors.js";
+import { ADDRESS_FIELD, ensureContact, refuseIfSuppressed } from "./contacts.js";
+
+const OPERATION = "list_membership.add";
+
+// Reply numbers its contact lists with a positive 32-bit integer, so this is what the planner's identifier has
+// to look like before there is anything worth asking about.
+const LIST_NUMBER = /^[1-9][0-9]{0,9}$/;
+const LARGEST_LIST_NUMBER = 2147483647;
+
 export function listMembershipAdd(input, context) {
-  throw host.fail({
-    class: "permanent",
-    code: "provider_call_failed",
-    message: "This version of the plugin does not perform list_membership.add yet.",
-  });
+  const contact = input.contacts[0];
+  const list = listOf(input);
+
+  // The precondition: the provider's own contact, worked by the pin where there is one and ensured from the
+  // channel value only where there is not.
+  const ensured = ensureContact(OPERATION, context, input);
+
+  // What this package now knows Reply calls this person. It travels out with a failure as well as with an
+  // answer, because after a lost answer the pin is the only trace that the contact was ensured at all — and
+  // without it the next attempt has nothing to read the membership by.
+  const learned = { contact: ensured };
+
+  refuseIfSuppressed(OPERATION, context, ensured, learned);
+
+  // The recovery read the document declares, made as a call rather than reasoned about. There is no ledger
+  // under the idempotency key at Reply, so this reading cannot tell this work item's own earlier write from
+  // somebody else's addition of the same person: it answers what the account holds now, which is the most the
+  // provider can be asked. That is a limitation of this version and not something to paper over.
+  if (context && context.attempt_number > 1 && holds(context, list, ensured, learned)) {
+    return membership(contact.id, "already_member", ensured);
+  }
+
+  add(context, list, ensured, learned);
+  return membership(contact.id, "added", ensured);
+}
+
+// Which list this call is about. Reply numbers its lists, so a value that is not a list number names nothing
+// this account could hold under any circumstance — the permanent absence the document has a word for, with
+// nothing to ask the provider about and therefore nothing asked.
+function listOf(input) {
+  const named = input.args.list.external_id;
+
+  if (typeof named !== "string" || !LIST_NUMBER.test(named) || Number(named) > LARGEST_LIST_NUMBER) {
+    fail(OPERATION, { call: null, row: "list_not_found" }, undefined);
+  }
+
+  return named;
+}
+
+// Whether this person is already on the list, read from the lists Reply holds them in. A bare array of
+// `{id, name}`, with no envelope around it.
+function holds(context, list, contactId, learned) {
+  const path = "/v3/contacts/" + contactId + "/lists";
+  const known = callOf("GET", path);
+  const answer = call(context, "GET", path, undefined, learned);
+
+  if (answer.code === 404) {
+    fail(OPERATION, observe(known, answer, "contact_not_found"), learned);
+  }
+
+  if (answer.code !== 200) {
+    fail(OPERATION, observe(known, answer, refusalRow(answer, known, ADDRESS_FIELD)), learned);
+  }
+
+  if (!Array.isArray(answer.data)) {
+    // Nothing was written yet, and this call changes nothing, so an answer that cannot be read is simply asked
+    // again. Reading silence as "not a member" would turn the reading into a second write.
+    fail(OPERATION, observe(known, answer, lostAnswerRow(known)), learned);
+  }
+
+  const wanted = Number(list);
+  return answer.data.some(entry => entry !== null && typeof entry === "object" && entry.id === wanted);
+}
+
+// The add itself. The identifiers go in the body, so nothing about this person reaches an argument.
+function add(context, list, contactId, learned) {
+  const path = "/v3/contact-lists/" + list + "/add-contacts";
+  const known = callOf("POST", path);
+  const answer = call(context, "POST", path, { contactIds: [Number(contactId)] }, learned);
+
+  if (answer.code === 404) {
+    // The path names the list and the body names the contact, and the contact was resolved two calls ago, so a
+    // 404 here is about the list.
+    fail(OPERATION, observe(known, answer, "list_not_found"), learned);
+  }
+
+  if (answer.code !== 200) {
+    fail(OPERATION, observe(known, answer, refusalRow(answer, known, ADDRESS_FIELD)), learned);
+  }
+
+  const failures = answer.data;
+  if (failures === null || typeof failures !== "object" || Array.isArray(failures)) {
+    // The write went out and what came back does not say who it took. This call is a write, so the read/write
+    // mark makes that the expensive ending it is: the next attempt reads the membership before it writes again.
+    const seen = observe(known, answer, lostAnswerRow(known));
+    seen.provider_item = describe(failures);
+    fail(OPERATION, seen, learned);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(failures, contactId)) {
+    // The answer is a failures-only dictionary: an identifier that is absent succeeded. What the value against
+    // a present one is, Reply's own documentation gives two incompatible answers to — a prose table says
+    // `8 | ContactNotProcessed`, the schema says a camelCase string — so the key's presence is the failure and
+    // the value is only ever reported. Branching on it would be branching on whichever of the two was read.
+    const seen = observe(known, answer, "refusal_this_version_has_no_word_for");
+    seen.provider_item = describe(failures[contactId]);
+    fail(OPERATION, seen, learned);
+  }
+}
+
+// One item per person, with the reason — a partial success reported as a single verdict is a defect. The
+// `contact_id` is the identifier the call was given, so the caller can match the answer to the person; Reply's
+// own travels beside it, in the two places the contract names and which are not copies of each other.
+function membership(contactId, status, providerContact) {
+  return {
+    result: { items: [{ contact_id: contactId, status: status, external_ids: { contact: providerContact } }] },
+    external_ids: { contact: providerContact },
+  };
 }
