@@ -90,17 +90,19 @@ public class ReplyPackageTests
 
         var result = await PluginInvokerTests.InvokeAsync(
             api,
-            new PluginInvocationRequest(ReplyPlugins.PluginId, "campaign.get", new JsonObject(), null, "att_01K0REPLYPACKAGE"),
+            new PluginInvocationRequest(ReplyPlugins.PluginId, "campaign.enroll", new JsonObject(), null, "att_01K0REPLYPACKAGE"),
             Ct);
 
         // The package is JavaScript, so "it loads" is not a property of the file sitting there: a child process
         // has to compile the entry module and the modules it imports, find the exported function the manifest
-        // names, and hand back one outcome. Until the operations themselves land, that answer is this package's
-        // own refusal — which is still a coded failure of the class the contract publishes, not an exception.
+        // names, and hand back one outcome. `campaign.enroll` is the operation still to land, so that answer is
+        // this package's own refusal — which is still a coded failure of the class the contract publishes,
+        // rather than an exception. When that operation lands this test moves to what it then answers; what it
+        // proves is that the entry module dispatches in a real child, not which operations exist yet.
         var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("provider_call_failed", failed.Error.Code);
-        Assert.Contains("campaign.get", failed.Error.Message, StringComparison.Ordinal);
+        Assert.Contains("campaign.enroll", failed.Error.Message, StringComparison.Ordinal);
         Assert.Equal(ReplyPlugins.PluginId, result.Provenance.PluginId);
         Assert.Equal("0.1.0", result.Provenance.Version);
     }

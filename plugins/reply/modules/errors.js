@@ -104,7 +104,7 @@ export const ROWS = {
   "per_operation": {
     "campaign.get": {
       "campaign_not_found": {
-        "when": "404 with code `sequence.notFound` on `GET /v3/sequences/{id}`.",
+        "when": "404 on `GET /v3/sequences/{id}`, whose path names exactly one sequence — Reply's own code there is `sequence.notFound` — or an identifier that is not a Reply sequence number at all, which is refused without a call.",
         "code": "campaign_not_found",
         "class": "permanent",
         "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
@@ -233,6 +233,27 @@ export function kindOf(call) {
 // expensive side is the safe side, so it stops for a person rather than being retried into a second send.
 export function lostAnswerRow(call) {
   return kindOf(call) === "read" ? "answer_lost_on_a_read" : "answer_lost_on_a_write";
+}
+
+// Which shared row a status Reply answered with belongs in. Only the statuses that mean the same thing on every
+// call are decided here: a business refusal carries a code whose meaning depends on what was asked, so the
+// operation that made the call reads that itself against its own rows and falls back to this for the rest.
+export function statusRow(status, call) {
+  if (status === 401 || status === 403) {
+    return "unauthorized";
+  }
+
+  if (status === 429) {
+    return "rate_limited";
+  }
+
+  if (status >= 500) {
+    // A failure on Reply's own side is the same ending as an answer that never arrived, and it is the read/write
+    // mark that decides what that costs: nothing on a read, possibly a person's email on a write.
+    return lostAnswerRow(call);
+  }
+
+  return "refusal_this_version_has_no_word_for";
 }
 
 // The one way this package reports a failure. `operation` is the canonical operation being performed, or null for
