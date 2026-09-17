@@ -249,8 +249,13 @@ public sealed class ReportService(JasonDbContext db, JournalWriter journal, Time
             return null;
         }
 
+        // A membership is never deleted: removing somebody sets the row to excluded, so the question is about the
+        // state and not about the row. Asking whether a row exists would answer "in the campaign" for a person
+        // who was taken out of it — which is precisely the person an out-of-band effect is worth reporting about.
         return await db.CampaignContacts.AsNoTracking()
-            .AnyAsync(m => m.CampaignId == campaign.Id && m.ContactId == contact.Id, cancellationToken)
+            .AnyAsync(
+                m => m.CampaignId == campaign.Id && m.ContactId == contact.Id && m.State != MembershipState.Excluded,
+                cancellationToken)
             .ConfigureAwait(false);
     }
 

@@ -1,6 +1,8 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Journal;
 using Jason.Runtime.Json;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -137,6 +139,37 @@ public class ReportSubmitTests
         Assert.Equal(stranger.PublicId, admitted.Correlation.ContactId);
         Assert.False(admitted.Correlation.ContactInCampaign);
         Assert.False((await db.Reports.AsNoTracking().SingleAsync(Ct)).ContactInCampaign);
+    }
+
+    /// <summary>
+    /// The case the marker exists for, and the one it is easiest to get wrong. A membership is never deleted —
+    /// removing somebody sets the row to excluded — so asking whether a row exists answers "yes" for a person
+    /// who was taken out, which is exactly who an out-of-band effect would be worth reporting about.
+    /// </summary>
+    [Fact]
+    public async Task A_contact_who_was_removed_from_the_campaign_is_not_said_to_be_in_it()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (campaign, contact, _) = await ReportedWorld.WriteAsync(db, Ct);
+
+        var clock = new FixedClock(ReportedWorld.Noon);
+        var memberships = new MembershipService(db, new JournalWriter(clock), clock, TestCanceller.New(clock));
+        await memberships.RemoveAsync(new RemoveContactsRequest(campaign.PublicId, [contact.PublicId], null, "taken out"), Ct);
+
+        var submitted = ReportedWorld.Submission();
+        submitted["campaign_id"] = campaign.PublicId;
+        submitted["contact_id"] = contact.PublicId;
+
+        var admitted = await ReportedWorld.Service(db).SubmitAsync(submitted, Ct);
+
+        Assert.False(admitted.Correlation.ContactInCampaign);
+        Assert.False((await db.Reports.AsNoTracking().SingleAsync(Ct)).ContactInCampaign);
+
+        // The row is still there, which is why the state and not the row is what the question is about.
+        Assert.Equal(
+            MembershipState.Excluded,
+            (await db.CampaignContacts.AsNoTracking().SingleAsync(m => m.ContactId == contact.Id, Ct)).State);
     }
 
     /// <summary>
