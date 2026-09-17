@@ -199,18 +199,21 @@ public class ReplyStubTests
     // -------------------------------------------------------------------------------------------------------
 
     [Fact]
-    public async Task An_unauthenticated_account_exits_one_with_nothing_parseable_on_stdout()
+    public async Task An_unauthenticated_account_is_refused_the_way_the_real_cli_refuses_one()
     {
         using var account = new ReplyAccount();
         account.WithSequence(7, "Nurture", "active");
 
-        // A profile nobody signed into: the store is there, the credential is not, and the CLI fails before it
-        // has an HTTP status to report. There is no {code, data} to read, which is its own ending to handle.
+        // A profile nobody signed into: the store is there, the credential is not, and the CLI decides that
+        // before it has built a request, let alone received an HTTP status. reply-cli 0.5.1 calls that a usage
+        // error — exit 2, nothing on stdout — and says why in the error envelope `--json` prints on stderr. The
+        // code in that envelope is the only thing that separates this from an unknown flag, which ends the same
+        // way, so it is what the package reads.
         var (exit, stdout, stderr) = await account.RunAsync([.. Prefix, "--profile", "nobody", "api", "/v3/sequences/7"], Ct);
 
-        Assert.Equal(1, exit);
+        Assert.Equal(2, exit);
         Assert.Null(Parsed(stdout));
-        Assert.NotEqual(string.Empty, stderr.Trim());
+        Assert.Equal("auth.required", JsonNode.Parse(stderr.Trim())!["error"]!["code"]!.GetValue<string>());
     }
 
     [Fact]
@@ -500,11 +503,15 @@ public class ReplyStubTests
     }
 
     [Fact]
-    public async Task A_contact_s_lists_are_a_bare_array()
+    public async Task A_contact_s_lists_are_a_bare_array_and_hold_only_the_shared_ones()
     {
+        // What a live account did, modelled here because the package's design turns on it: this endpoint
+        // answered `[]` for a contact provably on a list that was not shared — checked twice a minute apart,
+        // and confirmed from the other side by the search below. A stand-in that answered for private lists
+        // would let an offline test prove a recovery read the provider does not perform.
         using var account = new ReplyAccount();
         account.WithContact(1001, "held@example.test", "Held");
-        account.WithList(5, "Warm", 1001).WithList(6, "Cold");
+        account.WithList(5, "Warm", shared: true, 1001).WithList(6, "Private", 1001);
 
         var (_, stdout, _) = await account.RunAsync([.. Prefix, "api", "/v3/contacts/1001/lists"], Ct);
 
@@ -512,6 +519,53 @@ public class ReplyStubTests
         var only = Assert.Single(lists);
         Assert.Equal(5, only!["id"]!.GetValue<int>());
         Assert.Equal("Warm", only["name"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task The_search_answers_for_a_private_list_that_the_contacts_own_lists_do_not_mention()
+    {
+        // The other half of the same discovery, and the reason the recovery read is made from the list's side:
+        // the search scoped by `listId` returns the person at once for the very list the endpoint above will
+        // not mention.
+        using var account = new ReplyAccount();
+        account.WithContact(1001, "held@example.test", "Held");
+        account.WithList(6, "Private", 1001);
+
+        var (_, lists, _) = await account.RunAsync([.. Prefix, "api", "/v3/contacts/1001/lists"], Ct);
+        var (_, searched, _) = await account.RunAsync(
+            [.. Prefix, "api", "/v3/contacts/filter?top=1000", "--method", "POST", "--body", "-"],
+            """{"listId":6}""",
+            Ct);
+
+        Assert.Empty(Answer(lists).Data!.AsArray());
+        var page = Answer(searched).Data!.AsObject();
+        Assert.Equal(1001, Assert.Single(page["items"]!.AsArray())!["id"]!.GetValue<int>());
+        Assert.False(page["hasMore"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task The_search_pages_with_top_and_skip_and_says_whether_the_list_goes_on()
+    {
+        using var account = new ReplyAccount();
+        account.WithContact(1001, "first@example.test", "First");
+        account.WithContact(1002, "second@example.test", "Second");
+        account.WithList(6, "Private", 1001, 1002);
+
+        var (_, first, _) = await account.RunAsync(
+            [.. Prefix, "api", "/v3/contacts/filter?top=1&skip=0", "--method", "POST", "--body", "-"],
+            """{"listId":6}""",
+            Ct);
+        var (_, second, _) = await account.RunAsync(
+            [.. Prefix, "api", "/v3/contacts/filter?top=1&skip=1", "--method", "POST", "--body", "-"],
+            """{"listId":6}""",
+            Ct);
+
+        // The page says there is more where it came from, and the one after it says there is not — which is the
+        // difference the package reads to know whether it saw the whole list.
+        Assert.True(Answer(first).Data!["hasMore"]!.GetValue<bool>());
+        Assert.Equal(1001, Answer(first).Data!["items"]![0]!["id"]!.GetValue<int>());
+        Assert.False(Answer(second).Data!["hasMore"]!.GetValue<bool>());
+        Assert.Equal(1002, Answer(second).Data!["items"]![0]!["id"]!.GetValue<int>());
     }
 
     // -------------------------------------------------------------------------------------------------------

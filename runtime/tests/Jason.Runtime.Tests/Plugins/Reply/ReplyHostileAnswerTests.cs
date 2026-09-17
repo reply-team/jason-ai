@@ -21,7 +21,7 @@ public class ReplyHostileAnswerTests
 {
     private const string SequencePath = "/v3/sequences/7";
     private const string ImportPath = "/v3/contacts/import";
-    private const string ListsPath = "/v3/contacts/1001/lists";
+    private const string FilterPath = "/v3/contacts/filter?top=1000";
     private const string AddPath = "/v3/contact-lists/9/add-contacts";
     private const string BulkPath = "/v3/sequences/7/contact-links/bulk";
 
@@ -200,14 +200,14 @@ public class ReplyHostileAnswerTests
     }
 
     [Fact]
-    public async Task A_two_hundred_carrying_an_object_where_an_array_was_expected_is_no_answer_either()
+    public async Task A_two_hundred_carrying_an_array_where_a_page_was_expected_is_no_answer_either()
     {
-        // The recovery read answers a bare array of the lists this person is on. An object is not an empty
-        // array, and reading it as one would turn a reading into a second write.
-        var notAnArray = new JsonObject { ["items"] = new JsonArray() };
+        // The recovery read answers a page: the people this list holds, and whether it holds more. A bare array
+        // is not that page, and reading one as an empty page would turn a reading into a second write.
+        var notAPage = new JsonArray(new JsonObject { ["id"] = 1001 });
         using var account = ReplyOperations.Plant(new ReplyAccount());
         account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
-        account.Answers("GET", ListsPath, 200, notAnArray.ToJsonString());
+        account.Answers("POST", FilterPath, 200, notAPage.ToJsonString());
 
         var error = await FailedAsync(
             account,

@@ -124,13 +124,21 @@ public sealed class ReplyAccount : IDisposable
         return this;
     }
 
-    public ReplyAccount WithList(int id, string name, params int[] members)
+    /// <summary>
+    /// A contact list. It is not shared unless a test says so, which is how the lists a person makes for
+    /// themselves arrive — and a list that is not shared is one Reply's own <c>GET /v3/contacts/{id}/lists</c>
+    /// does not report, as a live account showed.
+    /// </summary>
+    public ReplyAccount WithList(int id, string name, params int[] members) => WithList(id, name, shared: false, members);
+
+    public ReplyAccount WithList(int id, string name, bool shared, params int[] members)
     {
         ArgumentNullException.ThrowIfNull(members);
         return Replace(ListsFile, id, new JsonObject
         {
             ["id"] = id,
             ["name"] = name,
+            ["isShared"] = shared,
             ["members"] = new JsonArray([.. members.Select(member => (JsonNode)JsonValue.Create(member))]),
         });
     }

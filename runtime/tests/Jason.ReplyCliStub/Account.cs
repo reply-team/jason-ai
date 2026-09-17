@@ -155,6 +155,7 @@ internal static class Account
             (["v3", "sequences", var sequence, "contact-links", "bulk"], "POST") => Enroll(root, sequence, body),
             (["v3", "contacts"], "POST") => CreateContact(root, body),
             (["v3", "contacts", "import"], "POST") => Import(root, body),
+            (["v3", "contacts", "filter"], "POST") => Filter(root, query, body),
             (["v3", "contacts", var contact, "statuses"], "GET") => Statuses(root, contact),
             (["v3", "contacts", var contact, "lists"], "GET") => ListsOf(root, contact),
             (["v3", "contact-lists"], "GET") => ContactLists(root, query),
@@ -460,6 +461,13 @@ internal static class Account
         });
     }
 
+    /// <summary>
+    /// The lists this person is on, as Reply answers it — which is to say: only the shared ones. Against a real
+    /// account this endpoint answered with an empty array for a contact provably on a list that was not shared,
+    /// checked twice a minute apart and confirmed from the other side by the search below. That is why the
+    /// package does not perform its recovery read here, and modelling the endpoint as it really behaves is what
+    /// keeps the offline tests from proving something the provider does not do.
+    /// </summary>
     private static (int, JsonNode?) ListsOf(string root, string contactId)
     {
         if (Find(root, ContactsFile, contactId) is not { } contact)
@@ -471,7 +479,7 @@ internal static class Account
         var lists = new JsonArray();
         foreach (var list in Records(root, ListsFile))
         {
-            if (list["members"]!.AsArray().Any(member => member!.GetValue<int>() == id))
+            if (Flag(list, "isShared") && list["members"]!.AsArray().Any(member => member!.GetValue<int>() == id))
             {
                 lists.Add(new JsonObject { ["id"] = list["id"]!.GetValue<int>(), ["name"] = Text(list, "name") });
             }
@@ -480,6 +488,36 @@ internal static class Account
         // A bare array, with no envelope around it: one of the shapes that makes reading Reply's answers a
         // per-path question rather than a general rule.
         return (200, lists);
+    }
+
+    /// <summary>
+    /// The contacts search, scoped to one list and paged with <c>top</c> and <c>skip</c>. It is the read the
+    /// package performs to answer whether a person is already on a list, and it answers for a private list as
+    /// readily as for a shared one — the difference that made it the read.
+    /// </summary>
+    private static (int, JsonNode?) Filter(string root, string query, string? body)
+    {
+        if (Request(body)?["listId"] is not JsonValue named || !named.TryGetValue<int>(out var listId))
+        {
+            // This stand-in searches by list and by nothing else: a rule set it cannot honour must not be
+            // answered as though it had been.
+            return Invalid("/listId", "This stand-in searches by list and by nothing else.");
+        }
+
+        var members = Find(Read(root, ListsFile), listId) is { } list
+            ? list["members"]!.AsArray().Select(member => member!.GetValue<int>()).ToList()
+            : [];
+
+        var contacts = Read(root, ContactsFile);
+        var found = new JsonArray([.. members
+            .Select(member => Find(contacts, member))
+            .Where(contact => contact is not null)
+            .Select(contact => (JsonNode)contact!.DeepClone())]);
+
+        var skip = Count(query, "skip") ?? 0;
+        var top = Count(query, "top") ?? 25;
+        var page = new JsonArray([.. found.Skip(skip).Take(top).Select(contact => contact!.DeepClone())]);
+        return (200, new JsonObject { ["items"] = page, ["hasMore"] = found.Count > skip + page.Count });
     }
 
     private static (int, JsonNode?) ContactLists(string root, string query) =>
@@ -687,6 +725,23 @@ internal static class Account
         }
 
         return identifiers;
+    }
+
+    /// <summary>One numeric query parameter, by name, or nothing where the call did not carry it.</summary>
+    private static int? Count(string query, string name)
+    {
+        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var separator = pair.IndexOf('=', StringComparison.Ordinal);
+            if (separator > 0
+                && string.Equals(pair[..separator], name, StringComparison.Ordinal)
+                && int.TryParse(pair[(separator + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     private static int? Limit(string query)

@@ -34,6 +34,17 @@ public class ReplyMembershipTests
     /// <summary>The identifier Reply gives the first contact an account creates.</summary>
     private const string Ensured = "1001";
 
+    /// <summary>
+    /// The recovery read, as it appears in the call log: the contacts search scoped to this list, asked for a
+    /// page at a time. Reply's own read from the person's side — <c>GET /v3/contacts/{id}/lists</c> — answers
+    /// nothing for a list that is not shared, which a live account settled, so this is the read the obligation
+    /// is performed with.
+    /// </summary>
+    private const string RecoveryRead = "POST " + FilterPath;
+
+    /// <summary>The path of that read, for a test that scripts what the search answers.</summary>
+    private const string FilterPath = "/v3/contacts/filter?top=1000";
+
     private const string Address = "marta@example.com";
     private const string FirstName = "Marta";
     private const string LastName = "Alvarez";
@@ -104,7 +115,7 @@ public class ReplyMembershipTests
         // what makes one crash cost one effect rather than two. The opt-out register is not consulted at all,
         // because nothing is going to be written.
         Assert.Equal("already_member", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal([$"GET /v3/contacts/{Ensured}/lists"], PathsSince(account, mark));
+        Assert.Equal([RecoveryRead], PathsSince(account, mark));
     }
 
     [Fact]
@@ -130,7 +141,7 @@ public class ReplyMembershipTests
         // No recovery read, and the add is made a second time. That is the honest shape of what this provider
         // supports: Reply has no ledger under a key to consult, so nothing but the attempt number distinguishes
         // a repeat, and it is the runtime that raises it.
-        Assert.DoesNotContain($"GET /v3/contacts/{Ensured}/lists", PathsSince(account, mark));
+        Assert.DoesNotContain(RecoveryRead, PathsSince(account, mark));
         Assert.Contains($"POST /v3/contact-lists/{List}/add-contacts", PathsSince(account, mark));
     }
 
@@ -180,7 +191,7 @@ public class ReplyMembershipTests
         // crash left one effect rather than two. The opt-out register is not read here because nothing is going
         // to be written — it is consulted only on the path that still has a write ahead of it.
         Assert.Equal("already_member", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal([$"GET /v3/contacts/{Ensured}/lists"], PathsSince(account, mark));
+        Assert.Equal([RecoveryRead], PathsSince(account, mark));
     }
 
     [Fact]
@@ -500,6 +511,88 @@ public class ReplyMembershipTests
     }
 
     // -------------------------------------------------------------------------------------------------------
+    // The recovery read, and the endpoint it is not made with
+    // -------------------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task The_recovery_read_asks_the_list_and_carries_nothing_about_the_person()
+    {
+        // Reply publishes a read from the person's side, and against a live account it answered `[]` for a
+        // contact provably on a list that was not shared. So the obligation is performed from the list's side,
+        // where the same account answered at once — and the only two things that travel are numbers: the list
+        // this call was given, and the identifier Reply itself issued for this person. Nothing they carry, and
+        // in particular no address, is part of asking.
+        using var account = new ReplyAccount();
+        account.WithContact(1001, Address, FirstName).WithList(List, "Q3 LatAm founders", 1001);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2));
+
+        Assert.Equal("already_member", answer["items"]![0]!["status"]!.GetValue<string>());
+        var read = Assert.Single(account.Calls, call => call.Path.StartsWith("/v3/contacts/filter", StringComparison.Ordinal));
+        var body = JsonNode.Parse(read.Body!)!.AsObject();
+        Assert.Equal("listId", Assert.Single(body).Key);
+        Assert.Equal(List, body["listId"]!.GetValue<int>());
+        Assert.DoesNotContain(Address, Everything(account), StringComparison.OrdinalIgnoreCase);
+
+        // And Reply's own per-contact read is not what answered, because for this list it would have answered
+        // nothing: the list is not shared, and the stand-in models that because the live account showed it.
+        Assert.DoesNotContain($"GET /v3/contacts/{Ensured}/lists", Paths(account));
+    }
+
+    [Fact]
+    public async Task A_person_the_page_does_not_hold_is_added_and_the_answer_says_so()
+    {
+        // The other direction, or the rule above would hold because the read always says yes: a list the search
+        // answers for in full, without this person in it, is a list they are not on. The add follows, and the
+        // answer is the one the add earns.
+        using var account = new ReplyAccount();
+        account.WithContact(1001, Address, FirstName).WithList(List, "Q3 LatAm founders");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2);
+        var answer = Succeeded(result);
+
+        Assert.Equal("added", answer["items"]![0]!["status"]!.GetValue<string>());
+        Assert.Equal(
+            [RecoveryRead, $"GET /v3/contacts/{Ensured}/statuses", $"POST /v3/contact-lists/{List}/add-contacts"],
+            Paths(account));
+
+        Assert.Equal([1001], account.MembersOf(List));
+
+        // Nothing is said, because there is nothing to say: the list was read to its end.
+        Assert.Equal(0, Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).Diagnostics.LogLines);
+    }
+
+    [Fact]
+    public async Task A_list_longer_than_one_page_is_added_to_and_the_unfinished_reading_is_said_out_loud()
+    {
+        // Reply publishes no call that asks whether one person is on one list — the only read is the list, and
+        // its largest page holds a thousand — so a longer list cannot be read to the end inside one attempt.
+        // The add is made, because at this provider it leaves one membership whichever was true and this
+        // operation costs nothing; what is not done is claiming the reading finished. The attempt says so in a
+        // diagnostic, so `added` on a long list can be told from `added` on a list that was read in full.
+        using var account = new ReplyAccount();
+        account.WithContact(1001, Address, FirstName).WithList(List, "Q3 LatAm founders", 1001);
+        account.Answers("POST", FilterPath, 200, Page(hasMore: true));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2);
+        var answer = Succeeded(result);
+
+        Assert.Equal("added", answer["items"]![0]!["status"]!.GetValue<string>());
+        Assert.Equal(
+            [RecoveryRead, $"GET /v3/contacts/{Ensured}/statuses", $"POST /v3/contact-lists/{List}/add-contacts"],
+            Paths(account));
+
+        // And the attempt carries the one diagnostic line that says so, which the reading below does not.
+        Assert.Equal(1, Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).Diagnostics.LogLines);
+    }
+
+    // -------------------------------------------------------------------------------------------------------
     // Composing the input, and checking both halves against the published document
     // -------------------------------------------------------------------------------------------------------
 
@@ -539,6 +632,20 @@ public class ReplyMembershipTests
         },
         ["idempotency_key"] = WorkItemId,
     };
+
+    /// <summary>
+    /// A page of that search as Reply shapes one: the people it holds, and whether the list goes on past them.
+    /// </summary>
+    private static string Page(bool hasMore, int? holds = null)
+    {
+        var items = new JsonArray();
+        if (holds is { } contact)
+        {
+            items.Add(new JsonObject { ["id"] = contact, ["email"] = Address });
+        }
+
+        return new JsonObject { ["items"] = items, ["hasMore"] = hasMore }.ToJsonString();
+    }
 
     /// <summary>A business rejection of the shape Reply answers one in: a code, and no <c>errors[]</c>.</summary>
     private static JsonObject Refusal(string code, int status = 400) => new()

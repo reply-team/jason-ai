@@ -164,7 +164,7 @@ creates people.
 | `GET /v3/sequences/{id}` | read | The sequence itself: what `campaign.get` answers from, and the live-state read before an enrollment. |
 | `GET /v3/sequences/{id}/contacts/{contact_id}` | read | Whether this person already takes part: `campaign.enroll`'s first recovery read. |
 | `GET /v3/contacts/{id}/statuses` | read | The opt-out register, and by the same call whether a pin still resolves. |
-| `GET /v3/contacts/{id}/lists` | read | Which lists hold this person: `list_membership.add`'s recovery read. |
+| `POST /v3/contacts/filter` | read | The people one list holds, a page of them: `list_membership.add`'s recovery read. |
 | `POST /v3/contacts/import` | write | Matches or creates the contact by email, in one call. |
 | `POST /v3/contacts` | write | Creates a contact the import will not take, because it carries no first name. |
 | `POST /v3/contact-lists/{id}/add-contacts` | write | The add itself. |
@@ -235,6 +235,24 @@ This operation is one read and nothing else, so the ambiguous ending above canno
   reads the membership or the participation itself, which is the nearest answer the provider can give: it
   cannot tell this work item's own earlier write from somebody else's addition or enrollment of the same
   person an hour ago. It is a substitution for the reading the contract asks for rather than that reading.
+- **Whether somebody is already on a list is read from the list, and only a page of it.** Reply publishes
+  a read from the person's side — `GET /v3/contacts/{id}/lists` — and against a live account it answered
+  with an empty array for a contact that was provably on the list, checked twice a minute apart, for a
+  list that was not shared. So `list_membership.add` does not use it: the recovery read is
+  `POST /v3/contacts/filter` scoped by `listId`, which answered for that same list at once, and the person
+  is on it when Reply's own identifier for them is among the people it returns. Two consequences follow.
+  Nothing about the person travels to ask — only two numbers — and a match is exact rather than a
+  resemblance. But the read is over the list, and its largest page holds a thousand: on a longer list a
+  person who is not in that page cannot be told from a person who is not on the list, so the attempt
+  writes a `warn` line saying the reading could not be finished and makes the add anyway. The answer is
+  then `added`, which is what that attempt did. Adding somebody who was already there left exactly one
+  membership at the live account, so nothing is done twice — but that is recorded rather than relied on:
+  it is not published anywhere, and the reason the add is made is that this operation's own contract costs
+  nothing and its duplicate is reversible.
+- **A hand-driven invocation gets no recovery read.** The repeat path is reached by
+  `context.attempt_number`, which the runtime raises; an invocation made by hand through the plugin host
+  ([docs/plugins.md](../../docs/plugins.md) §12) that leaves it out is a first attempt, and a first attempt
+  writes. Say `"attempt_number": 2` in the envelope to exercise the reading.
 - **A repeat with `collision: refuse` against an existing participation answers `already_enrolled`, not
   `collision_refused`.** The recovery read comes first and the document's instruction is to answer from it
   when the effect already happened, so that instruction wins over the collision policy — and it has to,

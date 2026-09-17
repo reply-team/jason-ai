@@ -21,6 +21,12 @@ const OPERATION = "list_membership.add";
 const LIST_NUMBER = /^[1-9][0-9]{0,9}$/;
 const LARGEST_LIST_NUMBER = 2147483647;
 
+// How much of the list the recovery read asks for: a thousand people, which is the largest page Reply's own
+// search publishes. One page and no more, because every call this package makes is a process of its own and the
+// budget an operation has is spent a call at a time — the alternative, walking a list of any length, is a read
+// whose cost is the account's and not this operation's.
+const PAGE = 1000;
+
 export function listMembershipAdd(input, context) {
   const contact = input.contacts[0];
   const list = listOf(input);
@@ -66,29 +72,62 @@ function listOf(input) {
   return named;
 }
 
-// Whether this person is already on the list, read from the lists Reply holds them in. A bare array of
-// `{id, name}`, with no envelope around it.
+/**
+ * Whether this person is already on the list, read from the list rather than from the person.
+ *
+ * Reply publishes a read from the person's side — `GET /v3/contacts/{id}/lists` — and against a real account it
+ * answers `[]` for a list that is not shared, whatever the account holds. So the read the document's obligation
+ * is performed with is the search over the list itself: it answered at once for the same private list, and the
+ * person is on it when their identifier is among the people it returns. Nothing about them travels to ask —
+ * neither the address nor anything else they carry, only the two numbers — and the answer is exact, because a
+ * match is on Reply's own identifier for this contact and never on a resemblance.
+ *
+ * The cost of reading from that side is that the list is paged, and a list can be longer than one attempt may
+ * read. That ending has a row of its own rather than being rounded to "not a member".
+ */
 function holds(context, list, contactId, learned) {
-  const path = "/v3/contacts/" + contactId + "/lists";
-  const known = callOf("GET", path);
-  const answer = call(context, "GET", path, undefined, learned);
-
-  if (answer.code === 404) {
-    fail(OPERATION, observe(known, answer, "contact_not_found"), learned);
-  }
+  const path = "/v3/contacts/filter?top=" + PAGE;
+  const known = callOf("POST", path);
+  const answer = call(context, "POST", path, { listId: Number(list) }, learned);
 
   if (answer.code !== 200) {
+    // A list this account does not hold is not recognised here — the path names no list, so a refusal is about
+    // the search — and it does not have to be: the add that follows names the list in its own path and reports
+    // that absence itself.
     fail(OPERATION, observe(known, answer, refusalRow(answer, known, ADDRESS_FIELD)), learned);
   }
 
-  if (!Array.isArray(answer.data)) {
+  const read = answer.data !== null && typeof answer.data === "object" && !Array.isArray(answer.data)
+    ? answer.data
+    : null;
+  const people = read === null ? null : read.items;
+  if (!Array.isArray(people)) {
     // Nothing was written yet, and this call changes nothing, so an answer that cannot be read is simply asked
     // again. Reading silence as "not a member" would turn the reading into a second write.
     fail(OPERATION, observe(known, answer, lostAnswerRow(known)), learned);
   }
 
-  const wanted = Number(list);
-  return answer.data.some(entry => entry !== null && typeof entry === "object" && entry.id === wanted);
+  // Reply's own identifier for this person, against the identifiers the list answered with. An exact match on a
+  // number the provider issued, never a resemblance: there is no way for this to find the wrong person.
+  const wanted = Number(contactId);
+  if (people.some(entry => entry !== null && typeof entry === "object" && entry.id === wanted)) {
+    return true;
+  }
+
+  if (read.hasMore === true) {
+    // The list is longer than the largest page Reply will answer with, and this person was not in it. There is
+    // no call that asks about one person, so the reading cannot be finished inside this attempt — and what
+    // follows is the add, which at this provider leaves one membership whether or not one was there already.
+    // It is said out loud rather than passed over: the answer will be `added`, and that is exactly what this
+    // attempt did, but it is not evidence that the person was not already on the list.
+    host.log("warn", "The recovery read could not be finished: this list holds more people than one page of it.", {
+      call: known,
+      list: list,
+      read: PAGE,
+    });
+  }
+
+  return false;
 }
 
 // The add itself. The identifiers go in the body, so nothing about this person reaches an argument.

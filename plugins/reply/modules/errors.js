@@ -29,9 +29,9 @@ export const CALLS = {
     "kind": "read",
     "note": "The opt-out register and, by the same call, whether a pinned contact still resolves. No address travels."
   },
-  "GET /v3/contacts/{id}/lists": {
+  "POST /v3/contacts/filter": {
     "kind": "read",
-    "note": "Which lists hold this person: list_membership.add's recovery read on a repeated attempt."
+    "note": "The people one list holds, a page at a time: list_membership.add's recovery read. A POST, and a read all the same."
   },
   "POST /v3/contacts/import": {
     "kind": "write",
