@@ -52,6 +52,44 @@ public class ApprovalResolutionTests
         Assert.Equal(["approval_cancelled", "workitem_expired"], kinds);
     }
 
+    /// <summary>
+    /// The clock ends a decision it outgrew; it does not rewrite one. An approved row whose work expired before
+    /// it could run still says who approved it and why — the status is the only thing about it that changed, and
+    /// "cancelled by the dispatcher" over the top of a person's name would be a record of the wrong event.
+    /// </summary>
+    [Fact]
+    public async Task An_approved_item_whose_due_date_passes_keeps_the_person_who_approved_it()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (item, approval) = await ParkedAsync(db, dueAt: Noon.AddMinutes(-1));
+
+        // The decision was made, and the work was let back into the queue with a date already behind it.
+        approval.Status = ApprovalStatus.Approved;
+        approval.DecidedAt = Noon.AddMinutes(-5);
+        approval.DecidedByType = ActorType.Human;
+        approval.DecidedById = "ada@example.test";
+        approval.DecisionReason = "checked the list";
+        WorkItemTransitions.Apply(item, WorkItemStatus.Created, Noon.AddMinutes(-5));
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(1, await new Expirer(new JournalWriter(new FixedClock(Noon)), new FixedClock(Noon)).ExpireAsync(db, Ct));
+
+        await using var fresh = database.Open();
+        Assert.Equal(WorkItemStatus.Expired, (await fresh.WorkItems.AsNoTracking().SingleAsync(Ct)).Status);
+        var resolved = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(ApprovalStatus.Cancelled, resolved.Status);
+        Assert.Equal(ActorType.Human, resolved.DecidedByType);
+        Assert.Equal("ada@example.test", resolved.DecidedById);
+        Assert.Equal("checked the list", resolved.DecisionReason);
+        Assert.Equal(Noon.AddMinutes(-5), resolved.DecidedAt);
+
+        // And the chronicle still says the dispatcher is what ended it, at the moment it did.
+        var cancelled = await fresh.Journal.AsNoTracking().SingleAsync(e => e.Kind == "approval_cancelled", Ct);
+        Assert.Equal(ActorType.System, cancelled.ActorType);
+        Assert.Equal("dispatcher", cancelled.ActorId);
+    }
+
     /// <summary>Work whose due date has not passed keeps waiting: the clock gives up on nothing early.</summary>
     [Fact]
     public async Task Work_parked_before_its_due_date_keeps_waiting()

@@ -138,6 +138,13 @@ public static class ApprovalGate
     /// expired, or its subject changed — and a pending row about work that can no longer run is the one thing
     /// that would make <c>approval.list</c> untrue.
     /// </summary>
+    /// <remarks>
+    /// A row that somebody already answered keeps what they answered: only its status moves. The alternative is
+    /// worse than untidy — a superseded row that read "approved by a person, because they checked the list"
+    /// would come to read "decided by the dispatcher, no reason", and the wave's whole promise is that every
+    /// decision names who made it. When the decision is ended rather than made, who ended it and when are what
+    /// the journal line is for.
+    /// </remarks>
     public static void Resolve(
         JasonDbContext db,
         JournalWriter journal,
@@ -153,11 +160,16 @@ public static class ApprovalGate
         ArgumentNullException.ThrowIfNull(approval);
         ArgumentNullException.ThrowIfNull(actor);
 
+        if (approval.Status == ApprovalStatus.Pending)
+        {
+            // Nobody had answered, so this is the answer: who ended the question, and when.
+            approval.DecidedAt = now;
+            approval.DecidedByType = actor.Type;
+            approval.DecidedById = actor.Id;
+            approval.DecisionReason = reason;
+        }
+
         approval.Status = status;
-        approval.DecidedAt = now;
-        approval.DecidedByType = actor.Type;
-        approval.DecidedById = actor.Id;
-        approval.DecisionReason = reason;
 
         journal.Append(
             db,

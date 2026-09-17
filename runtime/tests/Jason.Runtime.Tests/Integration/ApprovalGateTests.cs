@@ -122,7 +122,7 @@ public class ApprovalGateTests
         var first = Assert.Single((await api.PostOkAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, new { }, Ct)).Items);
         await api.PostOkAsync<ApprovalDto>(
             Operations.ApprovalApprove,
-            new { approval_id = first.Id, actor = new { type = "human", id = "ada" } },
+            new { approval_id = first.Id, actor = new { type = "human", id = "ada" }, reason = "checked the list" },
             Ct);
 
         // A planner edits the enrollment after it was approved: a different campaign at the provider.
@@ -146,6 +146,11 @@ public class ApprovalGateTests
 
         var outgrown = await api.PostOkAsync<ApprovalDto>(Operations.ApprovalGet, new { approval_id = first.Id }, Ct);
         Assert.Equal(ApprovalStatus.Superseded, outgrown.Status);
+
+        // What a person decided is still what the row says they decided. Only its status moved.
+        Assert.Equal(ActorType.Human, outgrown.DecidedBy!.Type);
+        Assert.Equal("ada", outgrown.DecidedBy.Id);
+        Assert.Equal("checked the list", outgrown.DecisionReason);
     }
 
     /// <summary>

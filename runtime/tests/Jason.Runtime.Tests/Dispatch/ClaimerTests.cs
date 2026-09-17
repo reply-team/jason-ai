@@ -684,6 +684,13 @@ public class ClaimerTests
         Assert.Equal(2, approvals.Count);
         Assert.Equal(first.PublicId, approvals[0].PublicId);
         Assert.Equal(ApprovalStatus.Superseded, approvals[0].Status);
+
+        // A decision the work outgrew is still a decision somebody made: only its status moves. The dispatcher
+        // writing itself over the approver here would leave the person's name in the chronicle and nowhere a
+        // reader of approval.get would ever look.
+        Assert.Equal(ActorType.Human, approvals[0].DecidedByType);
+        Assert.Equal("operator", approvals[0].DecidedById);
+        Assert.Equal("go ahead", approvals[0].DecisionReason);
         Assert.Equal(ApprovalStatus.Pending, approvals[1].Status);
         Assert.Equal("input_changed", approvals[1].Reason);
         Assert.NotEqual(approvals[0].SubjectHash, approvals[1].SubjectHash);
@@ -701,6 +708,7 @@ public class ClaimerTests
         approval.DecidedAt = Noon;
         approval.DecidedByType = ActorType.Human;
         approval.DecidedById = "operator";
+        approval.DecisionReason = "go ahead";
         if (status == ApprovalStatus.Approved)
         {
             WorkItemTransitions.Apply(approval.WorkItem!, WorkItemStatus.Created, Noon);
