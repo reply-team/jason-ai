@@ -183,7 +183,7 @@ public class LeaseEnforcerTests
 
         public TestOptionsMonitor<DispatcherOptions> Options { get; }
 
-        public DispatcherSettings Settings { get; }
+        public LiveSettings<DispatcherOptions> Settings { get; }
 
         public RunningAttemptRegistry Registry { get; }
 

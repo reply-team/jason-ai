@@ -104,7 +104,7 @@ public static class AttemptHandler
         }
 
         AttemptStarted(logger, work.AttemptPublicId, work.WorkItemPublicId, null);
-        var limits = EffectiveLimits.For(item, services.GetRequiredService<DispatcherSettings>().Current);
+        var limits = EffectiveLimits.For(item, services.GetRequiredService<LiveSettings<DispatcherOptions>>().Current);
         return (Context(item, attempt, limits, work.Plan), Pick(services, item.Kind));
     }
 

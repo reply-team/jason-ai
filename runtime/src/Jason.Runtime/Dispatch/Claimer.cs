@@ -32,7 +32,7 @@ public sealed class Claimer(
     RouteRegistry routes,
     ExternalIdStore identifiers,
     ISuppressionCheck suppression,
-    DispatcherSettings settings,
+    LiveSettings<DispatcherOptions> settings,
     JasonPaths paths,
     ILogger<Claimer> logger)
 {

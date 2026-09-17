@@ -33,6 +33,13 @@ public class SettingsRefusalTests
         {"Dispatcher":{"TickSeconds":0,"DrainSeconds":1},"Roles":{"DefaultEntryCommand":["agent-host"]}}
         """;
 
+    /// <summary>
+    /// A plugin memory limit below the floor the validator holds. It breaks a different section of the same
+    /// file: the dispatcher's own settings are untouched, so a runtime that answered every request from the
+    /// dispatcher's seam alone would still be broken by this one.
+    /// </summary>
+    private const string InvalidPlugins = """{"Dispatcher":{"Enabled":false},"Plugins":{"Limits":{"MemoryMb":0}}}""";
+
     private static readonly DateTime Noon = new(2026, 9, 14, 12, 0, 0, DateTimeKind.Utc);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -47,7 +54,7 @@ public class SettingsRefusalTests
     public async Task A_refused_settings_edit_does_not_turn_a_heartbeat_into_a_server_error()
     {
         await using var fixture = await RuntimeApiFixture.StartAsync(Ct, prepare: Settings(FastTick));
-        var settings = fixture.Resolve<DispatcherSettings>();
+        var settings = fixture.Resolve<LiveSettings<DispatcherOptions>>();
         Assert.True(await DispatchHarness.FirstScanDoneAsync(fixture.Resolve<DispatcherStatus>(), Ct));
         var seeded = SeedRunningAttempt(fixture.Paths);
 
@@ -70,7 +77,7 @@ public class SettingsRefusalTests
     public async Task A_refused_settings_edit_does_not_turn_a_failed_completion_into_a_server_error()
     {
         await using var fixture = await RuntimeApiFixture.StartAsync(Ct, prepare: Settings(FastTick));
-        var settings = fixture.Resolve<DispatcherSettings>();
+        var settings = fixture.Resolve<LiveSettings<DispatcherOptions>>();
         Assert.True(await DispatchHarness.FirstScanDoneAsync(fixture.Resolve<DispatcherStatus>(), Ct));
         var seeded = SeedRunningAttempt(fixture.Paths);
 
@@ -103,7 +110,7 @@ public class SettingsRefusalTests
         var fixture = await RuntimeApiFixture.StartAsync(Ct, prepare: Settings(FastTick));
         await using (fixture)
         {
-            var settings = fixture.Resolve<DispatcherSettings>();
+            var settings = fixture.Resolve<LiveSettings<DispatcherOptions>>();
             Assert.True(await DispatchHarness.FirstScanDoneAsync(fixture.Resolve<DispatcherStatus>(), Ct));
 
             File.WriteAllText(fixture.Paths.UserSettingsFile, Invalid);
@@ -113,12 +120,45 @@ public class SettingsRefusalTests
             await fixture.Runtime.StopAsync();
 
             var logs = ReadLogs(fixture.Paths);
-            Assert.Equal(1, Occurrences(logs, "Edited settings were refused"));
+            Assert.Equal(1, Occurrences(logs, "settings were refused"));
 
             // The refusal is logged at Error, so this count pins the reader against a line that is really there.
             // Without it the zero below would pass on a reader that matched nothing, before the fix and after.
-            Assert.Equal(1, ErrorLines(logs, "Edited settings were refused"));
+            Assert.Equal(1, ErrorLines(logs, "settings were refused"));
+            Assert.Contains("\"Section\":\"Dispatcher\"", logs, StringComparison.Ordinal);
             Assert.Equal(0, ErrorLines(logs, "Dispatcher scan failed"));
+        }
+    }
+
+    /// <summary>
+    /// Three sections are guarded now, and an operator told only that "settings were refused" would have the
+    /// whole file to search. The complaint names the section it came from and the setting inside it, and it is
+    /// still said once however many reads meet the same edit.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_edit_names_the_section_it_came_from_and_is_said_once()
+    {
+        var fixture = await RuntimeApiFixture.StartAsync(Ct, prepare: Settings(RuntimeApiFixture.DispatcherOff));
+        await using (fixture)
+        {
+            var plugins = fixture.Resolve<LiveSettings<PluginsOptions>>();
+
+            File.WriteAllText(fixture.Paths.UserSettingsFile, InvalidPlugins);
+            Assert.True(await RefusedOnceAsync(plugins, Ct));
+
+            // Four more reads of the same broken file: "said once" is a claim about the edit, not about one read.
+            for (var read = 0; read < 4; read++)
+            {
+                plugins.TryCurrent(out _);
+            }
+
+            Assert.Equal(5, plugins.Refusals);
+            await fixture.Runtime.StopAsync();
+
+            var logs = ReadLogs(fixture.Paths);
+            Assert.Equal(1, ErrorLines(logs, "settings were refused"));
+            Assert.Contains("\"Section\":\"Plugins\"", logs, StringComparison.Ordinal);
+            Assert.Equal(1, ErrorLines(logs, "Plugins:Limits:MemoryMb"));
         }
     }
 
@@ -139,7 +179,7 @@ public class SettingsRefusalTests
             configureServices: services => services.AddSingleton<ICommand>(command));
         await using (fixture)
         {
-            var settings = fixture.Resolve<DispatcherSettings>();
+            var settings = fixture.Resolve<LiveSettings<DispatcherOptions>>();
             Assert.True(await DispatchHarness.FirstScanDoneAsync(fixture.Resolve<DispatcherStatus>(), Ct));
 
             File.WriteAllText(fixture.Paths.UserSettingsFile, InvalidLaunchable);
@@ -222,6 +262,50 @@ public class SettingsRefusalTests
 
         Assert.Equal(WorkItemStatus.Succeeded, dto.Status);
     }
+
+    /// <summary>
+    /// The section an operator edits to raise a plugin's memory, or to give a child longer to stop, is read on
+    /// the way into every work item — it bounds the lease a provider operation may be given. A typo there used
+    /// to answer a creation with a 500, which tells a planner that the runtime broke rather than the file, and
+    /// there is nothing an agent can do with that sentence. The work item is written from the last settings that
+    /// validated, exactly as a tick is.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_plugins_edit_does_not_turn_a_work_item_into_a_server_error()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(Ct, prepare: Settings(RuntimeApiFixture.DispatcherOff));
+        var plugins = fixture.Resolve<LiveSettings<PluginsOptions>>();
+        var campaign = await fixture.PostOkAsync<CampaignDto>(
+            Operations.CampaignCreate, new CampaignCreateRequest("outreach", null, null, null), Ct);
+
+        File.WriteAllText(fixture.Paths.UserSettingsFile, InvalidPlugins);
+        Assert.True(await RefusedOnceAsync(plugins, Ct));
+
+        var item = await fixture.PostOkAsync<WorkItemDto>(
+            Operations.WorkItemCreate,
+            new WorkItemCreateRequest(
+                campaign.Id, WorkItemKind.AiRole, "researcher", null, null, null, null, null, null, null, null, null, null, null, null, null),
+            Ct);
+
+        Assert.Equal(WorkItemStatus.Created, item.Status);
+    }
+
+    /// <summary>
+    /// Waits for the edit to have been met, and never for anything else. The options system notices a file on
+    /// its own schedule, so a request that arrives first reads the settings that were still good — and a test
+    /// that inferred "the edit is in force" from "the request succeeded" would pass with the seam taken out
+    /// again. The seam's own counter is the one event that says the broken file has been read; nothing polls
+    /// this section on its own, so the waiting itself is what does the reading.
+    /// </summary>
+    private static Task<bool> RefusedOnceAsync<TOptions>(LiveSettings<TOptions> settings, CancellationToken ct)
+        where TOptions : class =>
+        DispatchHarness.EventuallyAsync(
+            () =>
+            {
+                settings.TryCurrent(out _);
+                return settings.Refusals == 1;
+            },
+            ct);
 
     private static ExecutorService NothingValidatedService(JasonDbContext db)
     {

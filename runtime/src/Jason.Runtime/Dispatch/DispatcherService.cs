@@ -16,7 +16,7 @@ namespace Jason.Runtime.Dispatch;
 public sealed class DispatcherService(
     ScanRunner runner,
     IServiceScopeFactory scopes,
-    DispatcherSettings settings,
+    LiveSettings<DispatcherOptions> settings,
     TimeProvider clock,
     DispatcherStatus status,
     HandlerPool pool,

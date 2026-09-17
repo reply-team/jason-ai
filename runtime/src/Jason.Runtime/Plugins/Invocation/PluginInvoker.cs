@@ -32,7 +32,7 @@ namespace Jason.Runtime.Plugins.Invocation;
 public sealed partial class PluginInvoker(
     PluginRegistry registry,
     IPluginHostLocator locator,
-    IOptionsMonitor<PluginsOptions> options,
+    LiveSettings<PluginsOptions> options,
     JasonPaths paths,
     RuntimeInfo info,
     TimeProvider clock,
@@ -191,7 +191,7 @@ public sealed partial class PluginInvoker(
         InvocationProvenance provenance,
         CancellationToken kill)
     {
-        var settings = options.CurrentValue;
+        var settings = options.Current;
 
         // The caller's budget may only lower the plugin's own, never raise it.
         var timeoutMs = (int)Math.Clamp(

@@ -21,7 +21,7 @@ public sealed partial class ExecutorService(
     JasonDbContext db,
     TimeProvider clock,
     AttemptOutcomes outcomes,
-    DispatcherSettings settings)
+    LiveSettings<DispatcherOptions> settings)
 {
     /// <summary>A result is read back into an agent's context; a megabyte is already more than that can hold.</summary>
     public const int MaxResultBytes = 1024 * 1024;
@@ -62,7 +62,7 @@ public sealed partial class ExecutorService(
         // say. What is missing is the interval to answer with, and there is nothing left to read it from.
         if (!settings.TryCurrent(out var current))
         {
-            throw DomainErrors.SettingsUnreadable();
+            throw DomainErrors.SettingsUnreadable(DispatcherOptions.Section);
         }
 
         var limits = EffectiveLimits.For(attempt.WorkItem!, current);
@@ -111,7 +111,7 @@ public sealed partial class ExecutorService(
         // needs an answer: a successful completion reads nothing from them and is never held up by them.
         if (request.Status == CompletionStatus.Failed && !settings.TryCurrent(out _))
         {
-            throw DomainErrors.SettingsUnreadable();
+            throw DomainErrors.SettingsUnreadable(DispatcherOptions.Section);
         }
 
         var now = clock.GetUtcNow().UtcDateTime;

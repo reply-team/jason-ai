@@ -136,7 +136,7 @@ public class DispatcherServiceTests
         await using (fixture)
         {
             var status = fixture.Resolve<DispatcherStatus>();
-            var settings = fixture.Resolve<DispatcherSettings>();
+            var settings = fixture.Resolve<LiveSettings<DispatcherOptions>>();
             var lifetime = fixture.Resolve<IHostApplicationLifetime>();
             Assert.True(await DispatchHarness.FirstScanDoneAsync(status, Ct));
 
@@ -166,7 +166,11 @@ public class DispatcherServiceTests
             // The validator's own sentence, said once for the edit and not once for every tick that read it.
             var logs = ReadLogs(fixture.Paths);
             Assert.Contains("Dispatcher:TickSeconds must be between 1 and 3600; got 0.", logs, StringComparison.Ordinal);
-            Assert.Equal(1, Occurrences(logs, "Edited settings were refused"));
+            Assert.Equal(1, Occurrences(logs, "settings were refused"));
+
+            // And it says which section the edit broke: three of them are guarded, and an operator told only
+            // that "settings" were refused would have the whole file to search.
+            Assert.Contains("\"Section\":\"Dispatcher\"", logs, StringComparison.Ordinal);
         }
     }
 

@@ -3,6 +3,8 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Hosting.Modules;
 
@@ -26,12 +28,26 @@ public static class DispatcherModule
         services.AddSingleton(new UnansweredEnd(OperationCatalog.Find));
 
         // What the loop and system.info both read the settings through, so the last value that validated is one
-        // value and the complaint about an edit that did not is said once.
-        services.AddSingleton<DispatcherSettings>();
+        // value and the complaint about an edit that did not is said once. The roles section is guarded beside
+        // it: a mistyped entry command is an edit like any other, and a claim that threw over one would cost the
+        // scan rather than the setting.
+        services.AddSingleton(Seam<DispatcherOptions>(DispatcherOptions.Section));
+        services.AddSingleton(Seam<RolesOptions>(RolesOptions.Section));
 
         // The pool is sized once and the counters are one per process, so both outlive any request scope.
         services.AddSingleton<HandlerPool>();
         services.AddSingleton<ScanRunner>();
         return services.AddHostedService<DispatcherService>();
     }
+
+    /// <summary>
+    /// One section behind one seam. The section name is passed rather than derived from the type, because what
+    /// an operator is told to open is the name they wrote in the file.
+    /// </summary>
+    internal static Func<IServiceProvider, LiveSettings<TOptions>> Seam<TOptions>(string section)
+        where TOptions : class =>
+        services => new LiveSettings<TOptions>(
+            services.GetRequiredService<IOptionsMonitor<TOptions>>(),
+            services.GetRequiredService<ILogger<LiveSettings<TOptions>>>(),
+            section);
 }

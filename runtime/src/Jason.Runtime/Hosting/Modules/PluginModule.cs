@@ -1,6 +1,7 @@
 using Jason.Contracts.Api;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Api;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Plugins;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Registry;
@@ -18,6 +19,10 @@ public static class PluginModule
     public static IServiceCollection AddPluginModule(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // The section every reader of a plugin's budget goes through, so an edit the validator refuses costs
+        // the edit and not the request that met it.
+        services.AddSingleton(DispatcherModule.Seam<PluginsOptions>(PluginsOptions.Section));
 
         // The snapshot and the gate are the registry itself: one per process, outliving every request.
         services.AddSingleton<PluginRegistry>();

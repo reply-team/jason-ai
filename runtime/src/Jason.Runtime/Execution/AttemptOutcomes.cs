@@ -15,7 +15,7 @@ namespace Jason.Runtime.Execution;
 /// canceller all come through here, so "what happens after an attempt" is decided once and journaled the same
 /// way every time. Nothing here saves: the caller commits the outcome together with whatever else it changed.
 /// </summary>
-public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, DispatcherSettings settings)
+public sealed class AttemptOutcomes(JournalWriter journal, TimeProvider clock, LiveSettings<DispatcherOptions> settings)
 {
     /// <summary>The attempt and its item both succeed; a result, when given, replaces whatever the item carried.</summary>
     public void Succeed(JasonDbContext db, WorkItem item, Attempt attempt, JsonNode? result, ActorRef actor, string? reason = null)

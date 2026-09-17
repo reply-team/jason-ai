@@ -498,7 +498,7 @@ public class ClaimerTests
                 journal,
                 clock,
                 new AttemptOutcomes(journal, clock, settings),
-                new EntryCommandResolver(new TestOptionsMonitor<RolesOptions>(roles ?? new RolesOptions())),
+                new EntryCommandResolver(TestOptions.RoleSettings(roles)),
                 plugins,
                 routing,
                 new ExternalIdStore(journal, clock),

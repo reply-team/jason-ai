@@ -4,25 +4,33 @@ using Microsoft.Extensions.Options;
 namespace Jason.Runtime.Configuration;
 
 /// <summary>
-/// The dispatcher's settings as a running runtime works from them. Hand-editing <c>settings.json</c> while the
-/// runtime runs is the operator's path to a tick, a budget or a route, and a value the validator refuses is a
-/// fact about the file rather than about the process: the last value that did validate stays in force, the
-/// validator's own sentence is said once for the edit that broke it — a loop complaining every tick is its own
-/// defect — and the loop keeps its tick until the file is put right.
+/// One section of the settings as a running runtime works from it. Hand-editing <c>settings.json</c> while the
+/// runtime runs is the operator's path to a tick, a budget, a plugin's memory or a role's entry command, and a
+/// value the validator refuses is a fact about the file rather than about the process: the last value that did
+/// validate stays in force, the validator's own sentence is said once for the edit that broke it — a loop
+/// complaining every tick is its own defect — and everything that reads this section keeps working meanwhile.
 /// </summary>
 /// <remarks>
 /// A runtime that has never read a value it accepted is a different thing: nothing is in force to fall back to,
 /// so the refusal stands and the start fails, which is what <c>ValidateOnStart</c> is there to do.
 /// </remarks>
-public sealed class DispatcherSettings(IOptionsMonitor<DispatcherOptions> monitor, ILogger<DispatcherSettings> logger)
+/// <param name="section">
+/// The section this seam guards, said in the complaint. Three of them are guarded, and an operator told only
+/// that "settings were refused" would not know which part of the file to open.
+/// </param>
+public sealed class LiveSettings<TOptions>(
+    IOptionsMonitor<TOptions> monitor,
+    ILogger<LiveSettings<TOptions>> logger,
+    string section)
+    where TOptions : class
 {
-    private static readonly Action<ILogger, string, Exception?> Refused = LoggerMessage.Define<string>(
+    private static readonly Action<ILogger, string, string, Exception?> Refused = LoggerMessage.Define<string, string>(
         LogLevel.Error,
         new EventId(1, nameof(Refused)),
-        "Edited settings were refused; the runtime keeps the last ones that validated: {Failure}");
+        "Edited {Section} settings were refused; the runtime keeps the last ones that validated: {Failure}");
 
     private readonly Lock _gate = new();
-    private DispatcherOptions? _lastGood;
+    private TOptions? _lastGood;
     private string? _complaint;
     private long _refusals;
 
@@ -30,11 +38,11 @@ public sealed class DispatcherSettings(IOptionsMonitor<DispatcherOptions> monito
     /// What the runtime is working from: the settings file where it validates, and the last value that did
     /// where it does not.
     /// </summary>
-    public DispatcherOptions Current
+    public TOptions Current
     {
         get
         {
-            DispatcherOptions current;
+            TOptions current;
             try
             {
                 current = monitor.CurrentValue;
@@ -69,7 +77,7 @@ public sealed class DispatcherSettings(IOptionsMonitor<DispatcherOptions> monito
     /// cannot act on an exception, so where the loop may fall back and carry on, an endpoint needs to know that
     /// there is nothing to fall back to and say so in its own vocabulary.
     /// </summary>
-    public bool TryCurrent(out DispatcherOptions options)
+    public bool TryCurrent(out TOptions options)
     {
         try
         {
@@ -83,7 +91,7 @@ public sealed class DispatcherSettings(IOptionsMonitor<DispatcherOptions> monito
         }
     }
 
-    private DispatcherOptions? Fallback(string failure)
+    private TOptions? Fallback(string failure)
     {
         Interlocked.Increment(ref _refusals);
         lock (_gate)
@@ -91,10 +99,26 @@ public sealed class DispatcherSettings(IOptionsMonitor<DispatcherOptions> monito
             if (!string.Equals(_complaint, failure, StringComparison.Ordinal))
             {
                 _complaint = failure;
-                Refused(logger, failure, null);
+                Refused(logger, section, failure, null);
             }
 
             return _lastGood;
         }
+    }
+}
+
+/// <summary>
+/// Which setting the validator was talking about. Its sentences begin with the setting's own path where there is
+/// one and name only the section where the shape itself is wrong — one implementation, because the seam, the
+/// plugin loader and the route activator all have to name it the same way.
+/// </summary>
+public static class SettingsFailure
+{
+    public static string Name(string section, string failure)
+    {
+        ArgumentNullException.ThrowIfNull(section);
+        ArgumentNullException.ThrowIfNull(failure);
+        var first = failure.Split(' ', 2)[0];
+        return first.StartsWith(section + ":", StringComparison.Ordinal) ? first : section;
     }
 }

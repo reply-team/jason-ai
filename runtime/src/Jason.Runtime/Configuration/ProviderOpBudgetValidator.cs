@@ -16,7 +16,7 @@ namespace Jason.Runtime.Configuration;
 /// being smuggled into the one that happens to own the section being validated. The floor comes from the
 /// published contracts, so an operation slower than the default moves it the day it is published.
 /// </remarks>
-public sealed class ProviderOpBudgetValidator(IOptionsMonitor<PluginsOptions> plugins) : IValidateOptions<DispatcherOptions>
+public sealed class ProviderOpBudgetValidator(LiveSettings<PluginsOptions> plugins) : IValidateOptions<DispatcherOptions>
 {
     public ValidateOptionsResult Validate(string? name, DispatcherOptions options)
     {
@@ -32,7 +32,7 @@ public sealed class ProviderOpBudgetValidator(IOptionsMonitor<PluginsOptions> pl
             return ValidateOptionsResult.Success;
         }
 
-        var killGraceMs = plugins.CurrentValue.Invoker.KillGraceMs;
+        var killGraceMs = plugins.Current.Invoker.KillGraceMs;
         var floorSeconds = FloorSeconds(slowest.TimeoutMs, killGraceMs);
         if (defaults.TimeoutSeconds >= floorSeconds)
         {

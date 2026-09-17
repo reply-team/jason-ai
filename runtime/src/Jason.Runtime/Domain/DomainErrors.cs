@@ -51,13 +51,14 @@ public static class DomainErrors
     /// <summary>
     /// The settings file is invalid and this runtime has never read one that was not, so there is nothing to
     /// work from. It is the file that is broken rather than the request: retryable, because repairing the file
-    /// is all it takes.
+    /// is all it takes. The section is named because three of them are read this way, and an operator told only
+    /// that "the settings" are invalid would have the whole file to search.
     /// </summary>
-    public static DomainException SettingsUnreadable() =>
+    public static DomainException SettingsUnreadable(string section) =>
         new(
             StatusCodes.Status503ServiceUnavailable,
             "settings_unreadable",
-            "The runtime's settings are invalid and none have validated since it started; repair the settings file and try again.",
+            $"The runtime's '{section}' settings are invalid and none have validated since it started; repair the settings file and try again.",
             retryable: true);
 
     /// <summary>
