@@ -25,6 +25,16 @@ public class ReplyHostileAnswerTests
     private const string AddPath = "/v3/contact-lists/9/add-contacts";
     private const string BulkPath = "/v3/sequences/7/contact-links/bulk";
 
+    /// <summary>A profile nobody has signed into, which is how an account with no credential is asked for.</summary>
+    private const string SignedOut = "signed-out";
+
+    /// <summary>
+    /// The CLI's own refusal of a profile it does not hold, in the envelope <c>--json</c> prints it in. The
+    /// exit code is the same one a missing credential ends with; the code beside it is what separates them.
+    /// </summary>
+    private const string UsageRefusal =
+        """{"error":{"code":"usage.profile","title":"Unknown profile 'acme'.","hint":"Create it with `profile add acme`."}}""";
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -260,6 +270,78 @@ public class ReplyHostileAnswerTests
         Assert.Contains("8", error.Details!["provider_item"]!.GetValue<string>(), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(ReplyOperations.MembershipAdd)]
+    [InlineData(ReplyOperations.Enroll)]
+    public async Task A_write_the_cli_refused_for_want_of_a_credential_is_not_a_write_that_may_have_happened(string operation)
+    {
+        // The day-one failure: the operator has not signed in. The CLI decides that before it builds a request,
+        // so nothing reached the account — and calling it a lost answer would stop a work item for a person over
+        // a write nobody made, on the two operations where that verdict is the expensive one. Both are driven
+        // here, because the read/write mark is what the old reading turned on.
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
+
+        var error = await FailedAsync(
+            account,
+            operation,
+            ReplyOperations.Input(operation),
+            binding: new JsonObject { ["profile"] = SignedOut });
+
+        Assert.Equal("unauthorized", error.Code);
+        Assert.Equal(FailureClass.Permanent, error.Class);
+
+        // Read from the CLI's own refusal rather than from its exit code, which says only that the call was
+        // refused and not what an operator has to do about it.
+        Assert.Equal("auth.required", error.Details!["provider_code"]!.GetValue<string>());
+        Assert.Equal(2, error.Details!["exit_code"]!.GetValue<int>());
+
+        // The account this test planted was never touched: the calls this run made went to the profile nobody
+        // signed into, and that profile answered before any of them was sent.
+        Assert.Empty(account.Calls);
+        Assert.Empty(account.MembersOf(ReplyOperations.List));
+    }
+
+    [Fact]
+    public async Task A_refusal_the_cli_makes_for_any_other_reason_stays_what_the_exit_code_says()
+    {
+        // The other half of the same reading, or the rule above would be "any stderr at all means unauthorized".
+        // An unknown profile is refused with the same exit code and a code outside the authentication namespace,
+        // and it is a call this package built wrong rather than an account nobody signed into.
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
+        account.Prints("POST", ImportPath, 2, string.Empty, stderr: UsageRefusal);
+
+        var error = await FailedAsync(
+            account,
+            ReplyOperations.MembershipAdd,
+            ReplyOperations.MembershipAddInput());
+
+        Assert.Equal("provider_call_failed", error.Code);
+        Assert.Equal(FailureClass.Permanent, error.Class);
+        Assert.Equal("usage.profile", error.Details!["provider_code"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task A_lost_answer_with_nothing_the_cli_said_is_still_a_lost_write()
+    {
+        // And the third: exit 1, nothing on stdout, nothing of the CLI's own on stderr. That is the ending the
+        // read/write mark was written for — the request may have gone out and been cut off — and it stays what
+        // it was.
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
+        account.Prints("POST", ImportPath, 1, string.Empty, stderr: "reply: connection reset while reading the response");
+
+        var error = await FailedAsync(
+            account,
+            ReplyOperations.MembershipAdd,
+            ReplyOperations.MembershipAddInput());
+
+        Assert.Equal("provider_answer_lost", error.Code);
+        Assert.Equal(FailureClass.Ambiguous, error.Class);
+        Assert.Null(error.Details!["provider_code"]);
+    }
+
     /// <summary>
     /// Drives one operation against an account that has already been told what to answer, and holds the ending
     /// to the operation's own document: a failure the package declared, under a code that document publishes,
@@ -271,12 +353,21 @@ public class ReplyHostileAnswerTests
         JsonObject input,
         int attempt = 1,
         TimeSpan? timeout = null,
-        Action<JasonPaths>? prepare = null)
+        Action<JasonPaths>? prepare = null,
+        JsonObject? binding = null)
     {
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct, prepare);
 
-        var result = await ReplyOperations.InvokeAsync(api, operation, input, Ct, attempt: attempt, timeout: timeout);
+        var result = await ReplyOperations.InvokeAsync(
+            api,
+            operation,
+            input,
+            Ct,
+            binding: binding,
+            attempt: attempt,
+            timeout: timeout);
+
         return ReplyOperations.Failed(operation, result);
     }
 

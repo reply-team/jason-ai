@@ -48,10 +48,22 @@ internal static class Account
 
         if (!File.Exists(Path.Combine(root, CredentialFile)))
         {
-            // The CLI's own failure, before there is any HTTP status to report: nothing parseable on stdout,
-            // which is an ending of its own for a caller to handle.
-            await Console.Error.WriteLineAsync($"reply: no credential for profile '{profile}'. Run 'reply auth login' first.");
-            return 1;
+            // The CLI's own refusal, before there is any HTTP status to report and before any request is built.
+            // reply-cli 0.5.1 spells it exactly this way: a usage error, so exit 2, with nothing on stdout and
+            // one line of its `--json` error envelope on stderr, whose `auth.` code is what says the refusal was
+            // about who is calling rather than about what was asked.
+            var refusal = new JsonObject
+            {
+                ["error"] = new JsonObject
+                {
+                    ["code"] = "auth.required",
+                    ["title"] = "Not authenticated.",
+                    ["hint"] = $"Run `reply auth login` or set REPLY_API_KEY (profile '{profile}').",
+                },
+            };
+
+            await Console.Error.WriteLineAsync(refusal.ToJsonString());
+            return 2;
         }
 
         var instruction = Take(root, method, path);
@@ -71,6 +83,14 @@ internal static class Account
                 // stdout that is not an envelope at all.
                 await Console.Out.WriteAsync(Text(instruction!, "stdout"));
                 await Console.Out.FlushAsync();
+
+                // And whatever it said beside it. The real CLI says why it refused on stderr and nowhere else,
+                // so an ending without that half is only half an ending.
+                if (Text(instruction!, "stderr") is { Length: > 0 } said)
+                {
+                    await Console.Error.WriteLineAsync(said);
+                }
+
                 return Number(instruction!, "exit_code");
 
             case "lost":

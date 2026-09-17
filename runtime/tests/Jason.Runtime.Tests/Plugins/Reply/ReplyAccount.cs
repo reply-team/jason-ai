@@ -249,12 +249,12 @@ public sealed class ReplyAccount : IDisposable
         Script(new JsonObject { ["kind"] = "lost", ["method"] = method, ["path"] = path });
 
     /// <summary>
-    /// The next call to this method and path writes exactly this on stdout and ends with exactly this code,
-    /// whatever it would otherwise have answered. It is the one ending <see cref="Answers"/> cannot express —
-    /// that one always prints the CLI's own <c>{code, data}</c> around whatever it is given — and a caller has
-    /// to survive stdout that is not an envelope at all: a stack trace, half a line, or nothing.
+    /// The next call to this method and path writes exactly this on stdout and on stderr and ends with exactly
+    /// this code, whatever it would otherwise have answered. It is the one ending <see cref="Answers"/> cannot
+    /// express — that one always prints the CLI's own <c>{code, data}</c> around whatever it is given — and a
+    /// caller has to survive stdout that is not an envelope at all: a stack trace, half a line, or nothing.
     /// </summary>
-    public ReplyAccount Prints(string method, string path, int exitCode, string stdout) =>
+    public ReplyAccount Prints(string method, string path, int exitCode, string stdout, string? stderr = null) =>
         Script(new JsonObject
         {
             ["kind"] = "prints",
@@ -262,6 +262,7 @@ public sealed class ReplyAccount : IDisposable
             ["path"] = path,
             ["exit_code"] = exitCode,
             ["stdout"] = stdout,
+            ["stderr"] = stderr ?? string.Empty,
         });
 
     /// <summary>The next call to this method and path takes this long before it answers.</summary>

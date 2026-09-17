@@ -19,6 +19,16 @@ const PROGRAM = "reply";
 const NEVER_STARTED = -1;
 const REFUSED_THE_CALL = 2;
 
+// The namespace reply-cli 0.5.1 gives the refusals that are about who is calling: `auth.required` when no
+// credential is stored, `auth.expired` and `auth.refresh_failed` when one is there and no longer works. All
+// three are decided before a request is built, and the set is open — a fourth would mean the same thing — so the
+// namespace is matched rather than the three names.
+const AUTHENTICATION = "auth.";
+
+// How much of a program's stderr is read to find its last line. A refusal is one short line; the rest is a
+// bound, not a budget.
+const STDERR_TAIL = 8192;
+
 // The SDK reads request objects strictly, so a key whose value is undefined is dropped rather than passed on.
 function compact(request) {
   const cleaned = {};
@@ -86,7 +96,7 @@ export function call(context, method, path, body, learned) {
   return read(answer, known, learned);
 }
 
-// The four endings that are not an answer, each turned into the row that says what it means. Nothing else is ever
+// The endings that are not an answer, each turned into the row that says what it means. Nothing else is ever
 // thrown from here: a plugin that threw something of its own would have the runtime call it `plugin_exception`,
 // which says nothing about whether the provider acted.
 function read(answer, known, learned) {
@@ -108,21 +118,71 @@ function read(answer, known, learned) {
     fail(null, observed, learned);
   }
 
-  if (answer.exit_code === REFUSED_THE_CALL) {
-    observed.row = "call_refused_before_it_was_sent";
+  const parsed = parse(answer.stdout);
+
+  // Where the CLI left no answer at all, its own refusal decides — and it says why in a structured envelope,
+  // because this package always passes `--json`. That vocabulary is finer than the exit code's: "not signed in"
+  // and "unknown flag" are both exit 2, and only one of them is something an operator fixes by signing in. A
+  // refusal that was printed beside a readable answer is not read: an answer on stdout is the answer.
+  const said = parsed === null ? refusal(answer.stderr) : null;
+  if (said !== null && said.slice(0, AUTHENTICATION.length) === AUTHENTICATION) {
+    // Nothing was sent: the CLI never had a credential to send it with. Saying a write may have happened here
+    // would stop a work item for a person over an account that was never touched.
+    observed.row = "unauthorized";
+    // The CLI's own word for its refusal, in the field that carries the vendor side's own code. It is the whole
+    // of what an operator has to go on here, because there is no HTTP status to report.
+    observed.provider_code = said;
     fail(null, observed, learned);
   }
 
-  const parsed = parse(answer.stdout);
+  if (answer.exit_code === REFUSED_THE_CALL) {
+    observed.row = "call_refused_before_it_was_sent";
+    observed.provider_code = said === null ? undefined : said;
+    fail(null, observed, learned);
+  }
+
   if (parsed === null) {
-    // Exit 1 with nothing to parse: the CLI holds no credential, or it was cut off after the request went out.
-    // Its exit vocabulary cannot separate those, so the read/write mark decides, and a write is the expensive
-    // ending on purpose.
+    // Exit 1 with nothing to parse and no refusal of the CLI's own: it was cut off, or the machine it runs on
+    // could not reach Reply — endings that can be met after the request went out. The read/write mark decides,
+    // and a write is the expensive ending on purpose.
     observed.row = lostAnswerRow(known);
     fail(null, observed, learned);
   }
 
   return parsed;
+}
+
+// The CLI's own refusal as it prints it under `--json`: one line of `{"error":{"code":…}}` on stderr, and the
+// exit code beside it. Only the code is read — the title and the hint are prose for a person — and only from the
+// last line, because anything the program said before it is not its verdict. Nothing here throws: stderr is
+// whatever the machine produced, and an unreadable one simply says nothing.
+function refusal(stderr) {
+  if (typeof stderr !== "string" || stderr.length === 0) {
+    return null;
+  }
+
+  // Bounded on purpose: a program that floods stderr may not make reading its last line expensive.
+  const tail = stderr.length > STDERR_TAIL ? stderr.slice(stderr.length - STDERR_TAIL) : stderr;
+  const lines = tail.split("\n");
+
+  for (let at = lines.length - 1; at >= 0; at--) {
+    const line = lines[at].trim();
+    if (line.length === 0) {
+      continue;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch (error) {
+      return null;
+    }
+
+    const error = parsed !== null && typeof parsed === "object" ? parsed.error : null;
+    return error !== null && typeof error === "object" && typeof error.code === "string" ? error.code : null;
+  }
+
+  return null;
 }
 
 // The CLI's own envelope: a status and the body Reply answered with, for any status. Anything else — an empty
