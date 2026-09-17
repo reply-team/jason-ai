@@ -149,6 +149,43 @@ public class ApprovalGateTests
     }
 
     /// <summary>
+    /// The other half of what a due date means, and it needs no code of its own: the expirer runs before the
+    /// claim in every scan, so work whose date passed while it waited for a person is given up on rather than
+    /// run late. The decision was given; the work was simply too late to do.
+    /// </summary>
+    [Fact]
+    public async Task Work_approved_after_its_due_date_expires_instead_of_running()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.WithCampaign(ProviderCampaign, "Autumn outreach", "Active");
+        await using var api = await StartAsync(workspace);
+        var (campaign, contact) = await WorkAsync(api);
+        var item = await ItemAsync(api, campaign, contact);
+        Assert.Equal(0, (await ScanAsync(api)).Claimed);
+        var approval = Assert.Single((await api.PostOkAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, new { }, Ct)).Items);
+
+        await api.PostOkAsync<ApprovalDto>(
+            Operations.ApprovalApprove,
+            new { approval_id = approval.Id, actor = new { type = "human", id = "ada" } },
+            Ct);
+
+        // The decision took a while, and the work was wanted before now.
+        await api.PostOkAsync<WorkItemDto>(
+            Operations.WorkItemUpdate,
+            new { work_item_id = item, due_at = DateTimeOffset.UtcNow.AddMinutes(-1) },
+            Ct);
+
+        var scan = await ScanAsync(api);
+
+        Assert.Equal(0, scan.Claimed);
+        Assert.Equal(1, scan.Expired);
+        var read = await api.PostOkAsync<WorkItemDto>(Operations.WorkItemGet, new { work_item_id = item }, Ct);
+        Assert.Equal(WorkItemStatus.Expired, read.Status);
+        Assert.Empty(read.Attempts!);
+        Assert.Empty(workspace.Calls);
+    }
+
+    /// <summary>
     /// A rejection is an accountable ending: the item is over, it carries the decision and the person, and the
     /// account was never asked for anything.
     /// </summary>
