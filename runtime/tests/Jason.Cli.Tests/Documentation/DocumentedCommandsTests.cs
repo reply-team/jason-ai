@@ -1,5 +1,6 @@
 using System.Text;
 using Jason.Cli;
+using Jason.Cli.Tests.Process;
 
 namespace Jason.Cli.Tests.Documentation;
 
@@ -21,6 +22,10 @@ public class DocumentedCommandsTests
     [Fact]
     public async Task Every_command_the_skill_prints_is_a_command_this_cli_parses() =>
         await AssertEveryCommandParsesAsync(Page("Skills", "runtime", "managed-campaign-work", "SKILL.md"));
+
+    [Fact]
+    public async Task Every_command_the_walkthrough_prints_is_a_command_this_cli_parses() =>
+        await AssertEveryCommandParsesAsync(Page("Documentation", "golden-path.md"));
 
     [Fact]
     public void The_skill_says_what_it_is_and_does_not_oversell_it()
@@ -55,10 +60,20 @@ public class DocumentedCommandsTests
             using var dir = new TempPaths();
             using var named = new NamedFiles(Arguments(command));
             var error = new StringWriter();
-            var exit = await CliApp.RunAsync(
-                [.. Arguments(command)],
-                new CliEnvironment(new StringWriter(), error, dir.Paths),
-                Ct);
+
+            // Nothing here may act on the machine. The data directory is this test's own and holds no
+            // descriptor, so every command that needs a runtime ends at "nothing is running" — and the one
+            // command that would start one is handed a process table that launches nothing.
+            var environment = new CliEnvironment(
+                new StringWriter(),
+                error,
+                dir.Paths,
+                Processes: new FakeProcessControl
+                {
+                    OnLaunch = _ => new FakeProcessHandle(0) { HasExited = true, ExitCode = 1 },
+                });
+
+            var exit = await CliApp.RunAsync([.. Arguments(command)], environment, Ct);
 
             Assert.True(
                 exit != ExitCodes.Usage,
