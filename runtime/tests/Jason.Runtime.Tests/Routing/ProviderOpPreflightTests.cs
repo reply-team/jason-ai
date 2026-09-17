@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
+using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
@@ -91,6 +92,48 @@ public class ProviderOpPreflightTests
         Assert.True(verdict.Passed);
         Assert.Null(verdict.Code);
         Assert.Null(verdict.Class);
+    }
+
+    /// <summary>
+    /// What the gate reads is the published value and nothing beside it. `campaign.enroll` states its approval
+    /// as a conditional block — `confirm_once`, with a condition that only decides whether a preview is
+    /// *mandatory* — and a conditional block always states the dangerous reading in `value`. Jason builds a
+    /// preview every time, so there is nothing here for a condition to soften, and no condition is evaluated:
+    /// the operation whose value is `confirm_once` parks, the operations whose value is `auto` run.
+    /// </summary>
+    [Fact]
+    public void The_gate_reads_the_dangerous_value_and_never_the_condition_beside_it()
+    {
+        // The case is a real one: this operation's approval is published as a condition, not as a plain value.
+        var enroll = OperationCatalog.Find(Enroll)!;
+        Assert.True(enroll.Approval.Conditional);
+        Assert.Equal("confirm_once", enroll.Approval.Value);
+        Assert.NotNull(enroll.Approval.Detail);
+
+        var parked = new Scenario
+        {
+            Operation = Enroll,
+            Route = Scenario.ToTheInstalledPackage,
+            Contact = Scenario.Person(("email", "ada@example.test")),
+            Arguments = Scenario.CompleteEnrollment,
+        }.Check();
+
+        Assert.True(parked.Parks);
+        Assert.Equal(AttemptErrors.ApprovalRequired, parked.Code);
+
+        // And the two whose value is `auto` are the one approval a runtime may give itself.
+        Assert.Equal("auto", OperationCatalog.Find(Add)!.Approval.Value);
+        Assert.Equal("auto", OperationCatalog.Find(Get)!.Approval.Value);
+        var runs = new Scenario
+        {
+            Operation = Add,
+            Route = Scenario.ToTheInstalledPackage,
+            Contact = Scenario.Person(("email", "ada@example.test")),
+            Arguments = Scenario.CompleteArguments,
+        }.Check();
+
+        Assert.True(runs.Passed);
+        Assert.False(runs.Parks);
     }
 
     /// <summary>
