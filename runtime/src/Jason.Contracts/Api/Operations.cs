@@ -36,6 +36,11 @@ public static class Operations
     public const string WorkItemSetResult = "workitem.set_result";
     public const string WorkItemComplete = "workitem.complete";
 
+    public const string ApprovalList = "approval.list";
+    public const string ApprovalGet = "approval.get";
+    public const string ApprovalApprove = "approval.approve";
+    public const string ApprovalReject = "approval.reject";
+
     public const string RoleList = "role.list";
     public const string RoleAdd = "role.add";
 

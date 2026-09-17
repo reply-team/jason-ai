@@ -73,5 +73,32 @@ public static class DomainErrors
             retryable: false,
             details);
 
+    public static NotFoundException ApprovalNotFound(string id) => new("approval_not_found", $"No approval with id '{id}'.");
+
+    /// <summary>
+    /// The decision has already been made, or the work it was about has moved on without it. Either way there is
+    /// nothing here to decide, and the row says which of the two happened.
+    /// </summary>
+    public static ConflictException ApprovalNotPending(string id, ApprovalStatus status) =>
+        new(
+            "approval_not_pending",
+            $"Approval '{id}' is {SnakeCaseEnumConverter<ApprovalStatus>.Format(status)}; only a pending decision about work that is still waiting can be made.");
+
+    /// <summary>
+    /// A role or an attempt tried to decide. Approval is a person's to give: the runtime's own actor is already
+    /// refused to every caller, and a role that asks on somebody's behalf is asking to be that person.
+    /// </summary>
+    public static InvalidRequestException ApprovalNotHuman(ActorType type) =>
+        new(
+            "approval_not_human",
+            $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot approve or reject; a decision is a person's to make.");
+
+    /// <summary>
+    /// An absent actor is an anonymous human, which is right for creating work and wrong for deciding it: an
+    /// accountable decision names the person who made it.
+    /// </summary>
+    public static InvalidRequestException ActorRequired() =>
+        new("actor_required", "actor.id is required on a decision: what is recorded has to name the person who made it.");
+
     public static ValidationException Required(string field) => new([new ErrorDetail(field, "required", $"{field} is required.")]);
 }

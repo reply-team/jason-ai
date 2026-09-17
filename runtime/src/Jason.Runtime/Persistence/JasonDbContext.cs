@@ -193,6 +193,13 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
                 t.HasCheckConstraint("ck_approvals_preview_json", "json_valid(preview_json)");
             });
 
+            // Two people answering the same preview, or a decision racing the cancellation of the work it is
+            // about, must not both win — and the status is what they both change. The guard is the same one a
+            // work item's status carries, so a decision is one UPDATE that either moves a pending row or moves
+            // nothing at all. Today the item's own guard is what refuses the races that exist; this one is what
+            // keeps the rule true of the row itself.
+            approval.Property(a => a.Status).IsConcurrencyToken();
+
             // One live decision per item, for the same reason there is one live attempt: two people answering
             // two previews of the same work is a race nobody could read afterwards.
             approval.HasIndex(a => a.WorkItemId).IsUnique().HasFilter("status = 'pending'").HasDatabaseName("ix_approvals_one_pending_per_item");

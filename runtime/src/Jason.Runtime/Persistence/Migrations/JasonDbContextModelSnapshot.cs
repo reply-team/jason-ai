@@ -107,6 +107,7 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnName("routing_snapshot_id");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("TEXT")

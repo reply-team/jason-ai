@@ -53,8 +53,8 @@ public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock,
             JournalKinds.WorkItemCancelled,
             campaign: null,
             key: "status",
-            old: Status(previous),
-            updated: Status(WorkItemStatus.Cancelled),
+            old: WorkItemJson.Status(previous),
+            updated: WorkItemJson.Status(WorkItemStatus.Cancelled),
             reason: reason,
             workItem: item,
             attempt: attempt);
@@ -110,5 +110,4 @@ public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock,
         return items.Count;
     }
 
-    private static JsonNode? Status(WorkItemStatus status) => JsonSerializer.SerializeToNode(status, JasonJson.Options);
 }

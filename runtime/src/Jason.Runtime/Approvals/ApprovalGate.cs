@@ -128,8 +128,8 @@ public static class ApprovalGate
             WorkItemTransitions.JournalKind(previous, WorkItemStatus.AwaitingApproval),
             campaign: null,
             key: "status",
-            old: Status(previous),
-            updated: Status(WorkItemStatus.AwaitingApproval),
+            old: WorkItemJson.Status(previous),
+            updated: WorkItemJson.Status(WorkItemStatus.AwaitingApproval),
             workItem: item);
     }
 
@@ -190,6 +190,4 @@ public static class ApprovalGate
         ApprovalStatus.Cancelled => JournalKinds.ApprovalCancelled,
         _ => throw new InvalidOperationException($"An approval is never journaled as {status}."),
     };
-
-    private static JsonNode? Status(WorkItemStatus status) => JsonSerializer.SerializeToNode(status, JasonJson.Options);
 }

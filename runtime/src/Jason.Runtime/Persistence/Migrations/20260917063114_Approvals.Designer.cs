@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Jason.Runtime.Persistence.Migrations
 {
     [DbContext(typeof(JasonDbContext))]
-    [Migration("20260917060912_Approvals")]
+    [Migration("20260917063114_Approvals")]
     partial class Approvals
     {
         /// <inheritdoc />
@@ -110,6 +110,7 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnName("routing_snapshot_id");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("TEXT")
