@@ -3,12 +3,11 @@
 **Version 1.** The machine-readable contract is [`campaign.enroll.json`](campaign.enroll.json); this page explains
 it. Where the two seem to differ, the document is right and this page is a bug.
 
-> **This version never runs it**, and the reason is now the approval alone. Routing, the composed input and the
-> answer check are all in place — the other two published operations run through them — but `campaign.enroll`
-> requires a person's approval, nothing in the runtime can ask for one, and a dispatcher may not stand in for the
-> person who approves. Every item naming it fails at the claim with `approval_required`, having reached no
-> provider. The contract is published complete so that the gate is the only thing left to add — and so that a
-> plugin author can implement and test the operation now.
+> **A dispatcher never runs this one on its own.** Routing, the composed input and the answer check are all in
+> place — the other two published operations run through them — and this operation's approval is `confirm_once`,
+> so an item naming it is parked at the claim for a person to decide: `approval_required`, no attempt, and a
+> record of exactly what would be enrolled. Approving releases it to the next scan, and nothing runs but the
+> subject that was approved. See `docs/work-execution.md` §Approvals.
 
 ## What it is for
 

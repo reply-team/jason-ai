@@ -75,19 +75,29 @@ created ──► scheduled ──► processing ──► succeeded
               │
               └──────────────────────► failed          (nothing can run this: no_route, role_not_launchable)
 
+created ──► awaiting_approval ──► created              (a person approved it)
+                   └───────────► failed                (a person rejected it)
+
 created ──► expired ──► created                        (by moving due_at into the future)
 
-created | scheduled | processing | expired ──► cancelled
+created | awaiting_approval | scheduled | processing | expired ──► cancelled
+created | awaiting_approval ──► expired                (the due date passed before anyone answered)
 ```
 
 - **`created`** — waiting. The only state from which work is claimed.
+- **`awaiting_approval`** — the operation this item names needs a person's approval, and the claim
+  parked it for one rather than performing it. No attempt was made: an attempt is a run, and nothing
+  has run. It leaves this state when a person answers, when the work is cancelled, or when its due
+  date passes. `docs/routing.md` §7 is the check that puts it here; `approval.list` is where it waits.
 - **`scheduled`** — claimed, with an attempt row and a lease, on its way to a handler. It lasts
   milliseconds.
 - **`processing`** — a handler is running the attempt.
 - **`succeeded`**, **`failed`**, **`cancelled`** — finished for good. `finished_at` is set and the
   result is frozen, in the service and by a database trigger.
-- **`expired`** — the due date passed before anyone claimed it. Not final: moving `due_at` into the
-  future through `workitem.update` returns it to `created`.
+- **`expired`** — the due date passed before anyone claimed it, or before anyone answered the
+  decision it was waiting for. Not final: moving `due_at` into the future through `workitem.update`
+  returns it to `created` — where, if its operation still needs a person's approval, the next claim
+  parks it again, because the decision it needed was never given.
 
 Nothing else in the runtime decides whether a move is legal; one transition table does, and every
 state change writes one journal entry.
@@ -96,7 +106,8 @@ state change writes one journal entry.
 
 An item is **eligible** — the dispatcher would claim it right now — when all five of these hold:
 
-1. its status is `created`;
+1. its status is `created` — work `awaiting_approval` is not eligible, and no number of scans makes
+   it so;
 2. its campaign is `active` (a draft campaign is a backlog, a paused one simply stops);
 3. `not_before` is unset or already past;
 4. `due_at` is unset or still ahead;
@@ -124,6 +135,57 @@ Work the runtime cannot perform is failed inside the same transaction rather tha
 `provider_op` fails with whichever of the twelve pre-flight reasons applies — `no_route` when nothing
 routes it at all — and an `ai_role` whose role has no entry command fails with `role_not_launchable`.
 A silent skip would leave the item looking claimable forever.
+
+## Approvals
+
+An operation's contract says what approval it needs. `campaign.get` and `list_membership.add` publish
+`auto`, which is the one approval a runtime may give itself. `campaign.enroll` publishes
+`confirm_once`, and work naming it is **parked** at the claim rather than run: the item moves to
+`awaiting_approval` and an `apr_` row records what is being approved.
+
+**What the gate reads is the published value, and never the condition beside it.** A conditional
+property always states the dangerous reading in `value` — `campaign.enroll` is `confirm_once` with a
+condition that only decides whether a preview is *mandatory* — and Jason builds a preview every time,
+so no condition is ever evaluated and none can soften the gate.
+
+**What is approved is a subject, not an item.** The row holds the operation and its contract version,
+the work item, the composed input the plugin would have received, the plugin that would perform it and
+the account's binding identity, together with the canonical `sha256:` of that document. Before a later
+claim runs the work it computes the subject again and compares the hash: an input edited after the
+decision no longer matches, so the item is parked again with the reason `input_changed` rather than
+run under a decision nobody made about it. The plugin's version and the package's digest are
+deliberately not part of the subject — they are provenance, recorded on the attempt that runs, and
+including them would supersede every pending decision the moment an operator reloaded a package.
+
+**Beside the subject is the preview**, assembled at the claim from the operation's own sentence about
+itself, the dangerous readings of what it reaches, undoes and costs, the campaign, the person it would
+reach and where, and the account. It is stored rather than re-assembled, so what a person reads is
+what the claim saw.
+
+**A park makes no attempt.** An attempt is a run; `max_attempts` counts attempts; an item parked three
+times that had spent three of its attempts would have been given up on for being patient. Everything
+else the pre-flight decides is a refusal and keeps exactly what it always had: an attempt, its
+provenance, the coded failure, and one against the budget.
+
+**Only a person decides.** `approval.approve` and `approval.reject` require an actor of type `human`
+with a name; a role or an attempt is refused with `approval_not_human`, and an absent actor with
+`actor_required`. What the runtime cannot do is tell a person from a process holding that person's own
+command line — that is the operator's trust to give. What it guarantees is that nothing inside it can
+approve anything, and that every decision names who made it.
+
+- **approve** releases the item to the next scan with its due date, priority and place untouched.
+- **reject** ends the item as `failed`, with `approval_rejected` and the person's reason as its last
+  error, and no attempt invented to carry it.
+- **cancelling the work, or its due date passing**, ends the decision with it: a live approval about
+  work that can never run is the one row that would make `approval.list` untrue.
+- **a second decision on the same approval** writes nothing and answers `approval_not_pending`: both
+  rows are moved in one transaction, each guarded by the status it was read at.
+
+Journal: `workitem_awaiting_approval`, `approval_requested`, `approval_approved`, `approval_rejected`,
+`approval_superseded`, `approval_cancelled`. Those lines carry identifiers only — the approval, the
+work item, the campaign, the operation, the subject hash, the actor and the reason. The subject and the
+preview live on the row and in what `approval.get` answers, which is where somebody entitled to read
+them reads them.
 
 ## Leases and heartbeats
 
@@ -297,19 +359,22 @@ campaign, the identifiers that plugin itself pinned, and the work item's own id 
 — and validates the whole composed document against the operation's input schema at the claim. A
 plugin never sees a work item's context.
 
-**Everything that can refuse it is decided at the claim, before a child process exists.** Twelve
-checks, in this order, and the first that fails is the one the attempt records:
+**Everything that can stop it is decided at the claim, before a child process exists.** Twelve checks,
+in this order, and the first that answers is the one that decides:
 
 ```text
 operation_unknown → no_route → plugin_not_loaded → plugin_unavailable → plugin_operation_unsupported →
-contract_incompatible → binding_invalid → approval_required → contact_required → no_channel_value →
-suppressed → input_invalid
+contract_incompatible → binding_invalid → contact_required → no_channel_value → suppressed →
+input_invalid → approval_required
 ```
 
-All twelve are final. Eleven are `permanent`; `input_invalid` is `validation`, because it is the one a
-planner can fix by editing the item. The attempt is kept with its context snapshot either way — a
-silent skip would leave the item looking claimable forever — and nothing ever falls back to another
-plugin. [docs/routing.md](routing.md) says what each one means and what to change.
+The first eleven are refusals and all of them are final: ten are `permanent` and `input_invalid` is
+`validation`, because it is the one a planner can fix by editing the item. The attempt is kept with its
+context snapshot either way — a silent skip would leave the item looking claimable forever — and
+nothing ever falls back to another plugin. The twelfth is not a refusal: `approval_required` parks the
+item for a person (§Approvals above), and it is asked last so that nobody is asked to approve work that
+would have been refused anyway. [docs/routing.md](routing.md) says what each one means and what to
+change.
 
 **A failure's class decides the retry, not the code table.** A provider attempt ends with one of four
 classes: `transient` comes back, `permanent` and `validation` are final, and `ambiguous` — the
@@ -397,8 +462,9 @@ waits for a person rather than being handed out again.
 
 ## Not here yet
 
-- **Approvals.** Nothing pauses for a human decision yet, and an operation that requires one —
-  `campaign.enroll` — therefore fails closed at the claim with `approval_required` every time.
+- **Approvals beyond one decision about one item.** There are no standing approvals, no bulk
+  decisions, no expiry windows and no anomaly rules; nothing notifies anybody, so a person finds out
+  what is waiting by asking (`jason approval list`). What exists is the gate itself, below.
 - **Execution profiles.** `execution_profile` is recorded verbatim as an opaque string; nothing
   resolves it.
 - **Session resume.** A host that is interrupted is retried from the start, not nudged to continue.

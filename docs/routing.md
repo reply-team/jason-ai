@@ -151,15 +151,15 @@ The problems in that second answer carry **attempt-error codes, not route-proble
 resolve is predicting what the claim would decide and therefore speaks the claim's vocabulary. §7 has
 both lists.
 
-**`usable: true` is about the route, not about an item.** Of the twelve reasons a claim can refuse work
-(§7), resolve answers the first two in its own words — an operation this build does not publish is a
-400, nothing resolving is the 404 above — and asks the five that need nothing but a route and a plugin
-set, numbers 3 to 7. The last five are questions about a work item, which resolve does not have:
-whether the operation needs a person's approval, whether a contact is named, whether that person is
-reachable on the channel the operation consumes, whether that value is suppressed, and whether the
-composed input satisfies the schema. So `route resolve --operation campaign.enroll` answers
-`usable: true` against a plugin that implements it, and every item of that operation still fails
-`approval_required` at the claim.
+**`usable: true` is about the route, not about an item.** Of the twelve answers a claim can give (§7),
+resolve answers the first two in its own words — an operation this build does not publish is a 400,
+nothing resolving is the 404 above — and asks the five that need nothing but a route and a plugin set,
+numbers 3 to 7. The last five are questions about a work item, which resolve does not have: whether a
+contact is named, whether that person is reachable on the channel the operation consumes, whether that
+value is suppressed, whether the composed input satisfies the schema, and whether the operation needs a
+person's approval. So `route resolve --operation campaign.enroll` answers `usable: true` against a
+plugin that implements it, and every item of that operation is still parked for a person at the
+claim.
 
 The most common real `usable: false` is a **default** route, and it is worth showing. A default route
 is validated only against the operations its plugin already claims, so a global default to a provider
@@ -285,6 +285,12 @@ Every one of these is decided **before a child process exists**, and the first t
 attempt records. The attempt is kept either way, with the context it was claimed with and the provenance
 as far as the decision got, so a manager can see what would have run. None of them is retried.
 
+The twelfth is not a refusal at all: it is the gate the runtime owes a person, and an item that reaches
+it is **parked** rather than failed — no attempt, nothing spent, and `approval.list` is where it waits.
+It is asked last on purpose. What a person is asked to approve is the composed input, so it has to be
+composed and to satisfy the operation's own schema before anybody can be shown it; and nobody is ever
+asked to approve reaching somebody the suppression register already protects.
+
 | # | Code | Class | What it means, and what to change |
 |---|---|---|---|
 | 1 | `operation_unknown` | permanent | this build publishes no contract for the operation the item names. The item was written by a build that did; nothing but a different build will run it |
@@ -294,11 +300,11 @@ as far as the decision got, so a manager can see what would have run. None of th
 | 5 | `plugin_operation_unsupported` | permanent | the plugin does not perform this operation, or is not a kind of plugin that performs any. Route this operation to a plugin that claims it |
 | 6 | `contract_incompatible` | permanent | the plugin speaks no version of this operation's contract that this runtime publishes. Upgrade the plugin |
 | 7 | `binding_invalid` | permanent | the route's binding does not satisfy the schema the plugin declares — including a route with no binding to a plugin that requires one. Fix the binding |
-| 8 | `approval_required` | permanent | the operation needs a person's approval, and a dispatcher may not stand in for the person who approves it. Nothing in this version can give one (§12) |
-| 9 | `contact_required` | permanent | the operation acts on somebody and the work item names nobody. Create the item with `--contact` |
-| 10 | `no_channel_value` | permanent | the person is not reachable on the channel the operation consumes. Add the channel to the contact, or name a channel they have |
-| 11 | `suppressed` | permanent | that channel value is on the do-not-contact register. It is not reached, and that is the register working |
-| 12 | `input_invalid` | validation | the composed input does not satisfy the operation's own schema, or an argument contradicts an identifier Jason has already pinned. The details carry a JSON pointer each |
+| 8 | `contact_required` | permanent | the operation acts on somebody and the work item names nobody. Create the item with `--contact` |
+| 9 | `no_channel_value` | permanent | the person is not reachable on the channel the operation consumes. Add the channel to the contact, or name a channel they have |
+| 10 | `suppressed` | permanent | that channel value is on the do-not-contact register. It is not reached, and that is the register working |
+| 11 | `input_invalid` | validation | the composed input does not satisfy the operation's own schema, or an argument contradicts an identifier Jason has already pinned. The details carry a JSON pointer each |
+| 12 | `approval_required` | — | **not a failure**: the operation needs a person's approval, and a dispatcher may not stand in for the person who approves it. The item is parked as `awaiting_approval` with a record of exactly what is being approved. `docs/work-execution.md` §Approvals |
 
 Two of these are worth a second sentence. `input_invalid` is the only one classed `validation` — it is
 the one a planner can fix by editing the item; everything else is structural. And an argument that
@@ -483,8 +489,10 @@ reconciliation — matching a person again, against two providers' answers — a
   retriable failure is claimed afresh, so a later attempt may run against a different package or a
   different account than the one before it, and nothing warns about that. What *should* happen to queued
   work across a reload is open (DEF-ROUTE-002).
-- **No approvals.** `campaign.enroll` requires one, so it fails closed with `approval_required` every time.
-  The contract is published complete; only the gate is missing.
+- **One decision, about one work item.** An approval names a subject and nothing wider: there are no
+  standing approvals, no bulk decisions over a population, no expiry windows and no anomaly stop rules
+  (DEF-APPROVAL-001). Nothing notifies anybody either, so a person finds out what is waiting by asking
+  — `jason approval list` is the floor this version ships.
 - **Three operations, not a catalog.** `campaign.get`, `list_membership.add` and `campaign.enroll` are the
   whole published set; an operation outside it cannot be routed, created or named, and adding one is a
   deliberate act with its own document, fixtures and version (DEF-OPS-001).
