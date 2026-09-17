@@ -85,13 +85,24 @@ public static class TestOptions
     /// The seam's own counter is the one event that says the broken file has been read, and where nothing else
     /// polls that section the waiting itself is what does the reading.
     /// </summary>
-    public static Task<bool> RefusedOnceAsync<TOptions>(LiveSettings<TOptions> settings, CancellationToken ct)
+    /// <summary>
+    /// Waits until the validator has refused the settings this test wrote.
+    /// </summary>
+    /// <remarks>
+    /// The condition is "has refused", not "has refused exactly once". <c>Refusals</c> counts every refused read
+    /// in the process, and this settings section has more than one reader — <c>ProviderOpBudgetValidator</c>
+    /// consults it whenever the dispatcher's own options are validated — so a caller who happens to read while
+    /// the watcher is landing the edit can carry the count past one before this poll ever sees it. Asking for
+    /// exactly one made the wait an assertion about what the rest of the process did, which is neither the
+    /// caller's claim nor anything it can control, and it failed intermittently under a full run.
+    /// </remarks>
+    public static Task<bool> RefusedAsync<TOptions>(LiveSettings<TOptions> settings, CancellationToken ct)
         where TOptions : class =>
         DispatchHarness.EventuallyAsync(
             () =>
             {
                 settings.TryCurrent(out _);
-                return settings.Refusals == 1;
+                return settings.Refusals >= 1;
             },
             ct);
 
