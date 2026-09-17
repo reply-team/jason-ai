@@ -483,6 +483,34 @@ public class ExecutableResolverTests
     }
 
     /// <summary>
+    /// And the level above: <c>node_modules</c> itself a junction. The package name is a name npm could have
+    /// written and every segment under it is too, so nothing about the shim's text says anything is wrong —
+    /// what says so is that the directory the name is resolved through leads out of the tree the shim sits in.
+    /// This is checked by where the package really is rather than by how its name reads, which is a different
+    /// expression from the per-segment one and a different escape.
+    /// </summary>
+    [Fact]
+    public void A_node_modules_that_is_a_junction_out_of_the_tree_is_refused()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
+        using var programs = new TestPrograms();
+        using var elsewhere = new TestPrograms();
+        programs.AddInterpreter("node.exe");
+        elsewhere.AddNested(@"vendor-cli\dist\index.js", "// the entry point, in somebody else's tree");
+        elsewhere.AddNested(@"vendor-cli\package.json", """{"name":"vendor-cli","bin":{"vendor":"dist/index.js"}}""");
+        Assert.SkipUnless(
+            TryJunction(Path.Combine(programs.Root, "node_modules"), elsewhere.Root),
+            "this machine would not create a directory junction.");
+        programs.Add("vendor.cmd", TestPrograms.NpmShim("vendor-cli", @"dist\index.js"));
+
+        var resolved = Resolve(programs, "vendor");
+
+        Assert.Null(resolved.Path);
+        Assert.Equal(ProblemCodes.ExecutableNotRunnable, resolved.Problem!.Code);
+        Assert.Contains("outside the package", resolved.Problem.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The same again one level down. Resolving only the package directory would leave a junction at any
     /// directory <em>inside</em> the package unnoticed, and the entry would still be lexically where the shim
     /// said while the file that actually runs sat somewhere else entirely.
