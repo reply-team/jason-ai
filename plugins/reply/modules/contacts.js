@@ -44,8 +44,12 @@ function compact(request) {
  * The provider's identifier for the one person this call is about: the pin when Jason holds one, and otherwise
  * the identifier Reply answers with for a contact matched or created from the channel value. Nothing is ever
  * looked up by address.
+ *
+ * `learned` is what the calling operation already knows Reply calls our entities — the campaign, where there is
+ * one. It travels out with every failure from here, because this is where the first write of an operation
+ * happens and a pin is the only trace a lost answer leaves behind.
  */
-export function ensureContact(operation, context, input) {
+export function ensureContact(operation, context, input, learned) {
   const contact = input.contacts[0];
   const pinned = contact.external_ids && contact.external_ids.contact;
 
@@ -53,18 +57,18 @@ export function ensureContact(operation, context, input) {
     if (typeof pinned !== "string" || !CONTACT_NUMBER.test(pinned) || Number(pinned) > LARGEST_CONTACT_NUMBER) {
       // A pin is worked by, never interpreted. One that is not a Reply contact identifier resolves to nobody,
       // and saying so is better than falling back to the address the pin was recorded to replace.
-      fail(operation, { call: null, row: "contact_not_found" }, undefined);
+      fail(operation, { call: null, row: "contact_not_found" }, learned);
     }
 
     return pinned;
   }
 
-  const channel = channelOf(operation, contact, input.args.channel);
+  const channel = channelOf(operation, contact, input.args.channel, learned);
 
   // The one rule that decides which path: Reply's import will not take an item without a first name.
   return typeof contact.first_name === "string" && contact.first_name.length > 0
-    ? imported(operation, context, contact, channel)
-    : created(operation, context, contact, channel);
+    ? imported(operation, context, contact, channel, learned)
+    : created(operation, context, contact, channel, learned);
 }
 
 /**
@@ -103,14 +107,14 @@ export function refuseIfSuppressed(operation, context, contactId, learned) {
 
 // The one channel this operation consumes. The projection carries exactly that channel and no other, so a person
 // who arrives without a value on it is a call no later attempt could accept either.
-function channelOf(operation, contact, name) {
+function channelOf(operation, contact, name, learned) {
   for (const channel of contact.channels) {
     if (channel.channel === name && typeof channel.value === "string" && channel.value.length > 0) {
       return channel;
     }
   }
 
-  fail(operation, { call: null, row: "invalid_channel_value" }, undefined);
+  fail(operation, { call: null, row: "invalid_channel_value" }, learned);
 }
 
 // One person as Reply's own vocabulary spells them, and only the fields the projection gives us that Reply
@@ -133,13 +137,13 @@ function text(value) {
 
 // The ordinary path: one call that matches an existing contact by email or creates one, answering the identifier
 // either way. A write, because it can create a person.
-function imported(operation, context, contact, channel) {
+function imported(operation, context, contact, channel, learned) {
   const path = "/v3/contacts/import";
   const known = callOf("POST", path);
-  const answer = call(context, "POST", path, { items: [item(contact, channel)] }, undefined);
+  const answer = call(context, "POST", path, { items: [item(contact, channel)] }, learned);
 
   if (answer.code !== 200) {
-    fail(operation, observe(known, answer, refusalRow(answer, known, ADDRESS_FIELD)), undefined);
+    fail(operation, observe(known, answer, refusalRow(answer, known, ADDRESS_FIELD)), learned);
   }
 
   const items = answer.data !== null && typeof answer.data === "object" ? answer.data.items : undefined;
@@ -153,7 +157,7 @@ function imported(operation, context, contact, channel) {
     // is nothing here to map: what Reply said travels in the details and the refusal is reported as itself.
     const seen = observe(known, answer, "refusal_this_version_has_no_word_for");
     seen.provider_item = describe(first);
-    fail(operation, seen, undefined);
+    fail(operation, seen, learned);
   }
 
   return String(first.id);
@@ -162,13 +166,13 @@ function imported(operation, context, contact, channel) {
 // The path for a person Reply's import will not take. It needs only an address — and it answers no code at all
 // for one this account already holds, so a duplicate there is an ordinary business refusal and is reported as
 // one. Branching on the code would be branching on something nobody published.
-function created(operation, context, contact, channel) {
+function created(operation, context, contact, channel, learned) {
   const path = "/v3/contacts";
   const known = callOf("POST", path);
-  const answer = call(context, "POST", path, item(contact, channel), undefined);
+  const answer = call(context, "POST", path, item(contact, channel), learned);
 
   if (answer.code !== 200 && answer.code !== 201) {
-    fail(operation, observe(known, answer, refusalRow(answer, known, ADDRESS_FIELD)), undefined);
+    fail(operation, observe(known, answer, refusalRow(answer, known, ADDRESS_FIELD)), learned);
   }
 
   const created = answer.data !== null && typeof answer.data === "object" ? answer.data : null;
@@ -177,7 +181,7 @@ function created(operation, context, contact, channel) {
     // The read/write mark decides what that costs, and this call is a write.
     const seen = observe(known, answer, lostAnswerRow(known));
     seen.provider_item = describe(created);
-    fail(operation, seen, undefined);
+    fail(operation, seen, learned);
   }
 
   return String(created.id);

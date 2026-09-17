@@ -27,7 +27,9 @@ export function listMembershipAdd(input, context) {
 
   // The precondition: the provider's own contact, worked by the pin where there is one and ensured from the
   // channel value only where there is not.
-  const ensured = ensureContact(OPERATION, context, input);
+  // Nothing is known of Reply's own names for our entities yet: this operation pins only the contact, and the
+  // list is the planner's own identifier rather than something this call learned.
+  const ensured = ensureContact(OPERATION, context, input, undefined);
 
   // What this package now knows Reply calls this person. It travels out with a failure as well as with an
   // answer, because after a lost answer the pin is the only trace that the contact was ensured at all — and

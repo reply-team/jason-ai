@@ -86,8 +86,11 @@ export function campaignEnroll(input, context) {
   const sequence = identifier(input);
 
   // The precondition every write in this package shares: the provider's own contact, worked by the pin where
-  // there is one and ensured from the channel value only where there is not.
-  const ensured = ensureContact(OPERATION, context, input);
+  // there is one and ensured from the channel value only where there is not. The campaign is already known —
+  // the argument named it and this operation pins it — so it travels with any failure the ensure meets,
+  // including the lost answer to the import, which is this operation's one ambiguous ending from before the
+  // person has an identifier at all.
+  const ensured = ensureContact(OPERATION, context, input, { campaign: sequence });
 
   // What this package now knows Reply calls our two entities. It travels out with a failure as well as with an
   // answer, because after a lost answer the pins are the only trace of what the attempt did — and without the
@@ -122,7 +125,7 @@ export function campaignEnroll(input, context) {
       learned);
   }
 
-  const request = enrolment(read, input.args, ensured);
+  const request = enrolment(read, input.args, ensured, learned);
 
   // Only now, with a write still to make: a person who asked not to be contacted must not be enrolled into a
   // campaign that may send to them this afternoon, and only the provider knows who asked.
@@ -314,23 +317,23 @@ function refuse(known, answer, row, refused, learned) {
 }
 
 // The whole request, and every decision it carries stated rather than left to Reply's defaults.
-function enrolment(read, args, contactId) {
+function enrolment(read, args, contactId, learned) {
   return compact({
     contactIds: [Number(contactId)],
     // Always false, and written out rather than left off. Reply's own switch would take this person out of
     // every other sequence they are in; nothing in the contract asked for that, and doing it silently would be
     // an external effect nobody requested — an outreach programme quietly cancelled by an enrollment.
     removeFromExisting: false,
-    ignoreStepDelay: ignoreStepDelay(args.first_touch),
+    ignoreStepDelay: ignoreStepDelay(args.first_touch, learned),
     // `first_step` is asked for by saying nothing: Reply's own idea of where its sequence begins is better than
     // this package walking the chain to name a step the provider would have chosen anyway.
-    startStepId: args.start.position === "step" ? stepAt(read, args.start.step) : undefined,
+    startStepId: args.start.position === "step" ? stepAt(read, args.start.step, learned) : undefined,
   });
 }
 
-function ignoreStepDelay(firstTouch) {
+function ignoreStepDelay(firstTouch, learned) {
   if (!Object.prototype.hasOwnProperty.call(IGNORE_STEP_DELAY, firstTouch)) {
-    refuseTheCall("this version has no word for a first touch of '" + describe(firstTouch) + "'.");
+    refuseTheCall("this version has no word for a first touch of '" + describe(firstTouch) + "'.", learned);
   }
 
   return IGNORE_STEP_DELAY[firstTouch];
@@ -346,17 +349,18 @@ function ignoreStepDelay(firstTouch) {
  * step to name and the call is refused — because taking the Nth element of the array instead would be a guess,
  * and the cost of that guess is a real person receiving the wrong message.
  */
-function stepAt(read, position) {
+function stepAt(read, position, learned) {
   const steps = Array.isArray(read.steps) ? read.steps.filter(isObject) : [];
   if (steps.length === 0) {
-    refuseTheCall("this sequence publishes no steps, so it has no step " + position + " to start at.");
+    refuseTheCall("this sequence publishes no steps, so it has no step " + position + " to start at.", learned);
   }
 
   const roots = steps.filter(step => step.parentId === null || step.parentId === undefined);
   if (roots.length !== 1) {
     refuseTheCall(
       "this sequence has " + roots.length + " steps with no parent, so its steps are not one chain and no "
-      + "position numbers them.");
+      + "position numbers them.",
+      learned);
   }
 
   let at = roots[0];
@@ -364,12 +368,13 @@ function stepAt(read, position) {
     if (typeof at.type === "string" && at.type.toLowerCase() === "condition") {
       refuseTheCall(
         "step " + index + " of this sequence is a condition, so the steps after it are branches rather than a "
-        + "chain and nothing is step " + position + ".");
+        + "chain and nothing is step " + position + ".",
+        learned);
     }
 
     if (index === position) {
       if (!Number.isInteger(at.id)) {
-        refuseTheCall("step " + position + " of this sequence carries no identifier to start at.");
+        refuseTheCall("step " + position + " of this sequence carries no identifier to start at.", learned);
       }
 
       return at.id;
@@ -377,13 +382,14 @@ function stepAt(read, position) {
 
     const next = steps.filter(step => step.parentId === at.id);
     if (next.length === 0) {
-      refuseTheCall("this sequence's chain ends at step " + index + ", so it has no step " + position + ".");
+      refuseTheCall("this sequence's chain ends at step " + index + ", so it has no step " + position + ".", learned);
     }
 
     if (next.length > 1) {
       refuseTheCall(
         "step " + index + " of this sequence has " + next.length + " steps after it, so no single step is step "
-        + position + ".");
+        + position + ".",
+        learned);
     }
 
     at = next[0];
@@ -391,13 +397,15 @@ function stepAt(read, position) {
 
   // A chain cannot be longer than the steps it is made of, so arriving here means they lead back into one
   // another. Nothing about that shape can be numbered either.
-  refuseTheCall("this sequence's steps lead back into one another, so no position numbers them.");
+  refuseTheCall("this sequence's steps lead back into one another, so no position numbers them.", learned);
 }
 
 // The package's own refusal, for the endings where the call could not be built at all. Nothing was sent and
-// nothing can be: the same arguments build the same impossible call on every attempt.
-function refuseTheCall(reason) {
-  fail(OPERATION, { call: null, row: "call_could_not_be_built", reason: reason }, undefined);
+// nothing can be: the same arguments build the same impossible call on every attempt. What the call learned on
+// the way here still travels: by this point a contact may have been created at Reply moments ago, and a refusal
+// that dropped that pin would leave the person behind at the provider with nothing in Jason pointing at them.
+function refuseTheCall(reason, learned) {
+  fail(OPERATION, { call: null, row: "call_could_not_be_built", reason: reason }, learned);
 }
 
 // Whether a refusal says the sequence will take no enrollment whatever is asked of it.

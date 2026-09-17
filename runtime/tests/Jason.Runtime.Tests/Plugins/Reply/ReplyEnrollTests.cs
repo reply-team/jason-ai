@@ -159,7 +159,7 @@ public class ReplyEnrollTests
         Assert.Equal("provider_answer_lost", failed.Error.Code);
         Assert.Equal(FailureClass.Ambiguous, failed.Error.Class);
         Assert.Equal(Ensured, failed.Error.ExternalIds!["contact"]!.GetValue<string>());
-        Assert.Equal("7", failed.Error.ExternalIds["campaign"]!.GetValue<string>());
+        Assert.Equal("7", failed.Error.ExternalIds?["campaign"]?.GetValue<string>());
         Assert.Equal([1001], account.EnrolledIn(Sequence));
 
         var mark = account.Mark();
@@ -505,6 +505,58 @@ public class ReplyEnrollTests
         Assert.Empty(account.EnrolledIn(Sequence));
     }
 
+    [Fact]
+    public async Task A_refusal_after_the_contact_was_created_still_carries_the_identifier_it_created()
+    {
+        // The person had no pin, so ensuring them created somebody at Reply — and only then did the arguments
+        // turn out to name a step this sequence does not have. The runtime pins what a failure carries, so a
+        // refusal that carried nothing would leave that person behind at the provider with nothing in Jason
+        // pointing at them: for somebody with no first name the next attempt would create them again, and the
+        // one after that, each ending in a duplicate this version has no word for.
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11, 12);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await InvokeAsync(api, Input(start: Step(4)), Ct);
+
+        var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
+        Assert.Equal("provider_call_failed", failed.Error.Code);
+        Assert.Contains("chain ends at", failed.Error.Details!["reason"]!.GetValue<string>(), StringComparison.Ordinal);
+
+        // The contact this attempt created, and the campaign it was refused against, both on the failure.
+        Assert.Equal(Ensured, failed.Error.ExternalIds!["contact"]!.GetValue<string>());
+        Assert.Equal("7", failed.Error.ExternalIds["campaign"]!.GetValue<string>());
+
+        // And the person really was created, or the pin would be a claim about nothing.
+        Assert.Equal(["POST /v3/contacts/import", LiveState], Paths(account));
+        Assert.Empty(account.EnrolledIn(Sequence));
+    }
+
+    [Fact]
+    public async Task A_lost_answer_to_the_ensure_carries_the_campaign_it_already_knows()
+    {
+        // The one ambiguous ending this operation can reach before the person has an identifier at all: the
+        // import went out and its answer did not come back, so Reply may hold a contact whose number nobody
+        // knows. There is one thing the call does know by then, and it is the campaign the argument named — so
+        // that is pinned, and the attempt after this one starts from a campaign it no longer has to resolve.
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11, 12);
+        account.LosesTheAnswerAfterWriting("POST", "/v3/contacts/import");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await InvokeAsync(api, Input(), Ct);
+
+        var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
+        Assert.Equal("provider_answer_lost", failed.Error.Code);
+        Assert.Equal(FailureClass.Ambiguous, failed.Error.Class);
+        Assert.Equal("7", failed.Error.ExternalIds!["campaign"]!.GetValue<string>());
+
+        // Nothing is claimed about the person: the call never learned what Reply called them.
+        Assert.Null(failed.Error.ExternalIds?["contact"]);
+    }
+
     // -------------------------------------------------------------------------------------------------------
     // The per-item words Reply answers with, and the open half of that set
     // -------------------------------------------------------------------------------------------------------
@@ -642,7 +694,7 @@ public class ReplyEnrollTests
         Assert.Equal("suppressed", failed.Error.Code);
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal(Ensured, failed.Error.ExternalIds!["contact"]!.GetValue<string>());
-        Assert.Equal("7", failed.Error.ExternalIds["campaign"]!.GetValue<string>());
+        Assert.Equal("7", failed.Error.ExternalIds?["campaign"]?.GetValue<string>());
         Assert.Equal([LiveState, Statuses], Paths(account));
         Assert.Empty(account.EnrolledIn(Sequence));
     }
