@@ -191,6 +191,11 @@ public class ApprovalServiceTests
 
         Assert.Equal("approval_not_pending", late.Code);
 
+        // And it says what the row actually is, not what this request was in the middle of writing to it: a
+        // loser reporting its own intention would tell an operator the decision was rejected when it was not.
+        Assert.Contains("approved", late.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("rejected", late.Message, StringComparison.Ordinal);
+
         await using var fresh = database.Open();
         var decided = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
         Assert.Equal(ApprovalStatus.Approved, decided.Status);

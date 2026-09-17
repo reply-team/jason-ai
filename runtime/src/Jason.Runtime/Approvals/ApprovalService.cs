@@ -113,11 +113,27 @@ public sealed class ApprovalService(JasonDbContext db, JournalWriter journal, Ti
         }
         catch (DbUpdateConcurrencyException)
         {
-            throw DomainErrors.ApprovalNotPending(approval.PublicId, approval.Status);
+            // The row in front of us is the one this request was in the middle of writing, so it says what this
+            // caller wanted rather than what happened. What an operator needs to be told is the decision that
+            // stands, which is only readable by asking the database again.
+            db.ChangeTracker.Clear();
+            throw DomainErrors.ApprovalNotPending(approval.PublicId, await StandsAsync(approval.PublicId, cancellationToken).ConfigureAwait(false));
         }
 
         return Detail(approval);
     }
+
+    /// <summary>
+    /// The decision as it stands now, read afresh. A row somebody deleted is impossible — nothing deletes an
+    /// approval — so the only way this finds nothing is a database that lost it, and <c>pending</c> is then the
+    /// honest answer: whatever refused this write, it was not a decision that had already been made.
+    /// </summary>
+    private async Task<ApprovalStatus> StandsAsync(string publicId, CancellationToken cancellationToken) =>
+        await db.Approvals.AsNoTracking()
+            .Where(a => a.PublicId == publicId)
+            .Select(a => (ApprovalStatus?)a.Status)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false) ?? ApprovalStatus.Pending;
 
     /// <summary>Back into the queue with everything else about it untouched: its due date, its priority, its place.</summary>
     private void Release(WorkItem item, ActorRef actor, string? reason, DateTime now)

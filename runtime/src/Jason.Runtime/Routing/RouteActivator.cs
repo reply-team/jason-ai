@@ -398,11 +398,7 @@ public sealed class RouteActivator(
     }
 
     /// <summary>The setting an options failure is about: every message in the house style begins with its name.</summary>
-    private static string Setting(string failure)
-    {
-        var name = failure.Split(' ', 2)[0];
-        return name.StartsWith(RoutesOptions.Section + ":", StringComparison.Ordinal) ? name : RoutesOptions.Section;
-    }
+    private static string Setting(string failure) => SettingsFailure.Name(RoutesOptions.Section, failure);
 
     private static string Where(string pointer) => pointer.Length == 0 ? string.Empty : pointer + ": ";
 }

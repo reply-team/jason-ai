@@ -82,7 +82,9 @@ public static class DomainErrors
     public static ConflictException ApprovalNotPending(string id, ApprovalStatus status) =>
         new(
             "approval_not_pending",
-            $"Approval '{id}' is {SnakeCaseEnumConverter<ApprovalStatus>.Format(status)}; only a pending decision about work that is still waiting can be made.");
+            status == ApprovalStatus.Pending
+                ? $"Approval '{id}' is still pending, and the work it is about is no longer waiting for it; read it again."
+                : $"Approval '{id}' is {SnakeCaseEnumConverter<ApprovalStatus>.Format(status)}; only a pending decision about work that is still waiting can be made.");
 
     /// <summary>
     /// A role or an attempt tried to decide. Approval is a person's to give: the runtime's own actor is already
