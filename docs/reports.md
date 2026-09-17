@@ -117,7 +117,10 @@ jason report submit --actor human:ada \
 ```
 
 `--external-id kind=value` repeats for each identifier the other tool gave it, `--evidence` takes a
-JSON object, and `--unknown` repeats for each field the reporter cannot supply. The API operation
+JSON object, and `--unknown` repeats for each field the reporter cannot supply. Times are ISO-8601,
+and **a time carrying no zone is read as UTC** rather than as the zone of the machine the runtime
+happens to run on — the reporter named an instant, and a host-local reading would mean a different
+instant per installation with nothing in the record to say which had been assumed. The API operation
 underneath is `POST /v1/report.submit`, and the answer is the admitted report:
 
 ```json
@@ -186,7 +189,9 @@ behaviour for a reporter who has not thought about it — where a repeat is far 
 retry than a genuine second effect — and the key is there for the reporter who has.
 
 Two subtleties are worth knowing. The key is part of the document that is hashed, so a submission
-with a key and one without are never the same words. And both rules are enforced by unique indexes
+with a key and one without are never the same words. Surrounding whitespace is trimmed from the
+values the runtime matches and files by, so ` intro-1` and `intro-1` are one key — while the
+assertion keeps the text exactly as it was sent, which is the one place it is never tidied. And both rules are enforced by unique indexes
 rather than by a read before the write, so two callers racing with the same report end with one row
 and one id: whoever loses the race re-reads and answers with the winner's report. A repeat writes no
 second journal line either.

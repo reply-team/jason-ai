@@ -37,6 +37,30 @@ public class ReportSubmitHostileInputTests
         Assert.Equal(0, await db.Reports.CountAsync(Ct));
     }
 
+    /// <summary>
+    /// The same rule, refused a step earlier and in the words every verb uses. A role or an attempt that carries
+    /// no id never reaches the report path: <c>Actors.Resolve</c> refuses it for the whole API, and a report
+    /// inventing a third spelling of "name yourself" would be a second place to keep in step. Only the case that
+    /// resolver allows — an anonymous human, which is the right default everywhere else — is this path's own.
+    /// </summary>
+    [Theory]
+    [InlineData("role")]
+    [InlineData("attempt")]
+    public async Task A_role_or_an_attempt_that_names_nobody_is_refused_where_every_verb_refuses_it(string type)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+
+        var submission = ReportedWorld.Submission();
+        submission["actor"] = new JsonObject { ["type"] = type };
+
+        var refused = await Assert.ThrowsAsync<ValidationException>(() => ReportedWorld.Service(db).SubmitAsync(submission, Ct));
+
+        Assert.Equal("actor.id", Assert.Single(refused.Details!).Field);
+        Assert.Equal("required", refused.Details![0].Code);
+        Assert.Equal(0, await db.Reports.CountAsync(Ct));
+    }
+
     /// <summary>The runtime performs effects; it does not report them.</summary>
     [Fact]
     public async Task A_reporter_may_not_claim_to_be_the_runtime()
@@ -195,6 +219,29 @@ public class ReportSubmitHostileInputTests
         var refused = await Assert.ThrowsAsync<ValidationException>(() => ReportedWorld.Service(db).SubmitAsync(submission, Ct));
 
         Assert.Contains(refused.Details!, detail => detail.Field == "occurred_at");
+    }
+
+    /// <summary>
+    /// A time with no zone is read as UTC, not as the zone of whatever machine the runtime happens to run on.
+    /// The reporter said an instant; a host-local reading would store a different one on every installation, and
+    /// nobody reading the column afterwards could tell which had been assumed.
+    /// </summary>
+    [Fact]
+    public async Task A_time_with_no_zone_is_read_as_utc()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+
+        var submission = ReportedWorld.Submission();
+        submission["occurred_at"] = "2026-09-17T11:04:00";
+
+        await ReportedWorld.Service(db).SubmitAsync(submission, Ct);
+
+        var stored = await db.Reports.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(new DateTime(2026, 9, 17, 11, 4, 0, DateTimeKind.Utc), stored.OccurredAt);
+
+        // And what the reporter wrote is still what the assertion holds, zone or no zone.
+        Assert.Equal("2026-09-17T11:04:00", stored.Assertion["occurred_at"]!.GetValue<string>());
     }
 
     [Theory]

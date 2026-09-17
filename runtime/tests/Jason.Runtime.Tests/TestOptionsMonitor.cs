@@ -79,14 +79,10 @@ public static class TestOptions
             PluginsOptions.Section);
 
     /// <summary>
-    /// Waits for an edit to have been met, and for nothing else. The options system notices a file on its own
-    /// schedule, so a request that arrives first reads the settings that were still good — and a test that
-    /// inferred "the edit is in force" from "the request succeeded" would pass with the seam taken out again.
-    /// The seam's own counter is the one event that says the broken file has been read, and where nothing else
-    /// polls that section the waiting itself is what does the reading.
-    /// </summary>
-    /// <summary>
-    /// Waits until the validator has refused the settings this test wrote.
+    /// Waits until the validator has refused the settings this test wrote, and for nothing else. The options
+    /// system notices a file on its own schedule, so a request that arrives first reads the settings that were
+    /// still good — and a test that inferred "the edit is in force" from "the request succeeded" would pass with
+    /// the seam taken out again. The seam's own counter is the one event that says the broken file has been read.
     /// </summary>
     /// <remarks>
     /// The condition is "has refused", not "has refused exactly once". <c>Refusals</c> counts every refused read

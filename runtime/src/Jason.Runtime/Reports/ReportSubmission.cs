@@ -201,7 +201,11 @@ internal sealed record ReportSubmission(
             return null;
         }
 
-        if (!DateTimeOffset.TryParse(value.GetValue<string>(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+        // A time carrying no zone is read as UTC rather than as the zone of whatever machine this runtime runs
+        // on: the reporter named an instant, and a host-local reading would store a different one per
+        // installation with nothing in the row to say which had been assumed.
+        const DateTimeStyles AsUtc = DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal;
+        if (!DateTimeOffset.TryParse(value.GetValue<string>(), CultureInfo.InvariantCulture, AsUtc, out var parsed))
         {
             errors.Add(field, "invalid", $"{field} must be an ISO-8601 timestamp.");
             return null;
