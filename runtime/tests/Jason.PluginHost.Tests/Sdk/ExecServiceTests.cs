@@ -3,6 +3,7 @@ using Jason.Contracts.Plugins;
 using Jason.PluginHost.Sdk;
 using Jason.PluginHost.Tests.Fixtures;
 using Jint;
+using Jint.Runtime;
 
 namespace Jason.PluginHost.Tests.Sdk;
 
@@ -28,6 +29,31 @@ public sealed class ExecServiceTests : IDisposable
         (JsonObject)JsJson.ToJson(harness.Engine, harness.Evaluate("host.exec(" + request + ")"))!;
 
     private static string Lines(JsonObject result) => result["stdout"]!.GetValue<string>().ReplaceLineEndings("\n");
+
+    /// <summary>
+    /// The engine's memory budget counts what a script allocates, not what it is still holding. Reading the same
+    /// answer four times over spends it four times, even though each answer is thrown away before the next one
+    /// arrives — so the budget bounds how many provider calls one invocation can make, and a package that needs
+    /// more says so in its own manifest rather than discovering this at the provider.
+    /// </summary>
+    [Fact]
+    public void A_plugin_that_reads_the_same_answer_four_times_over_spends_its_budget_four_times()
+    {
+        const string OneCall = "host.exec({ executable: \"" + Cli + "\", args: [\"spew\", \"200000\"] }).stdout.length";
+        const string Narrow = "let seen = 0; for (let i = 0; i < 4; i++) { seen = " + OneCall + "; } seen;";
+
+        using var once = Harness(builder => builder.Limits = builder.Limits with { MemoryBytes = 16 * 1024 * 1024 });
+        using var over = Harness(builder => builder.Limits = builder.Limits with { MemoryBytes = 16 * 1024 * 1024 });
+        using var raised = Harness(builder => builder.Limits = builder.Limits with { MemoryBytes = 64 * 1024 * 1024 });
+
+        // One answer fits the budget comfortably, and nothing is kept between the calls below either.
+        Assert.Equal(200_000, (int)once.Evaluate(OneCall).AsNumber());
+
+        Assert.Throws<MemoryLimitExceededException>(() => over.Evaluate(Narrow));
+
+        // The same script under the ceiling a manifest may ask for: the same four answers, and it finishes.
+        Assert.Equal(200_000, (int)raised.Evaluate(Narrow).AsNumber());
+    }
 
     [Fact]
     public void A_granted_program_runs_with_the_arguments_it_was_given()
