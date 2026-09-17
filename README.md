@@ -145,6 +145,15 @@ jason workitem create <campaign-id> --kind provider_op --operation list_membersh
 jason workitem get <work-item-id> --human
 ```
 
+Work whose operation asks for a person's approval — `campaign.enroll` does — is not performed by the
+dispatcher. It waits, with a record of exactly what would be done, until somebody decides:
+
+```sh
+jason approval list --human
+jason approval get <approval-id> --human
+jason approval approve <approval-id> --actor human:you@example.com --reason "checked the list"
+```
+
 ## Ecosystem
 
 | Repository | Role |

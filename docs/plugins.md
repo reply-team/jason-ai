@@ -143,6 +143,16 @@ no `limits` gets `Plugins:Limits:TimeoutMs` (300 000 ms — the budget of the sl
 build publishes, so the defaults can run everything the runtime publishes) and
 `Plugins:Limits:MemoryMb` (64 MiB).
 
+**The memory budget counts what an invocation allocates, not what it is still holding.** Every answer
+a script reads is charged against it — a `host.exec` answer, a `host.http` body, the JSON it parses
+out of them — whether or not the script keeps any of it, because the engine measures allocation
+rather than the live heap. So the budget is what bounds how many provider calls one invocation can
+make: four answers of a megabyte each cost four megabytes even though the script holds one at a time,
+and a package that reads ten large answers in one invocation will exceed the 64 MiB default and end
+with `plugin_memory_exceeded`. A package that needs more asks for it in its own manifest
+(`limits.memory_mb`, up to `Plugins:Limits:MaxMemoryMb` — 512 MiB by default); a package that can
+read less should, because a smaller answer is cheaper than a larger ceiling.
+
 `kind: notification` is accepted, validated, listed and granted like any other plugin, and refused by
 the invoker with `plugin_kind_not_invocable`; its operation contract is not written yet.
 

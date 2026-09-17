@@ -216,10 +216,13 @@ This operation is one read and nothing else, so the ambiguous ending above canno
 
 ## What it cannot do
 
-- **`campaign.enroll` is refused at the claim, with `approval_required`, in this build.** That operation
-  needs a person's approval and nothing here can ask for one, so every item of it fails closed before a
-  child process exists. The operation itself is implemented and tested, and it can be driven through the
-  plugin host by hand — [docs/plugins.md](../../docs/plugins.md) §7 and §12 say how.
+- **`campaign.enroll` waits for a person before it runs.** That operation's contract asks for an
+  approval, so the claim parks the item as `awaiting_approval` with a record of exactly what would be
+  enrolled, and nothing reaches Reply until somebody answers — `jason approval list`, then
+  `jason approval approve`. Editing the work after the decision parks it again rather than sending
+  something nobody approved. [docs/work-execution.md](../../docs/work-execution.md) §Approvals is the
+  contract; the operation can also be driven through the plugin host by hand, which
+  [docs/plugins.md](../../docs/plugins.md) §7 and §12 say how to do.
 - **`campaign.get` answers no counts.** `counts` is `{}`, which is the contract's way of saying the
   provider reports none: a Reply sequence carries no people counts at all, and the one count endpoint in
   the published description still says it is coming. An empty object is a different fact from a zero, and
