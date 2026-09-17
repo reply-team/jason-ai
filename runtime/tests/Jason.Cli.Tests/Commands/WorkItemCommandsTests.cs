@@ -728,6 +728,7 @@ public class WorkItemCommandsTests
         "att_A",
         new AttemptErrorDto("executor_exited", "the process exited with code 1", true),
         attempts,
+        null,
         Moment,
         Moment,
         null);
