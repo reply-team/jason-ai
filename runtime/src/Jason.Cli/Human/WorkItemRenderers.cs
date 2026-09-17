@@ -51,7 +51,38 @@ public static class WorkItemRenderers
             return rendered;
         }
 
-        return RenderText.Lines([rendered, string.Empty, AttemptTable(item.Attempts), .. Provenance(item.Attempts)]);
+        return RenderText.Lines(
+            [rendered, string.Empty, AttemptTable(item.Attempts), .. Provenance(item.Attempts), .. ExternalReports(item.ExternalReports)]);
+    }
+
+    /// <summary>
+    /// Effects somebody performed outside Jason, under the attempts and never mixed into them. The two sit on
+    /// one page because a person working out what happened to a contact needs both, and they are kept apart
+    /// because only one of them is something this runtime did. An item nobody has reported anything about
+    /// prints no table at all rather than an empty one.
+    /// </summary>
+    private static IEnumerable<string> ExternalReports(IReadOnlyList<ReportSummaryDto>? reports)
+    {
+        if (reports is not { Count: > 0 })
+        {
+            yield break;
+        }
+
+        var table = new HumanTable("RECEIVED", "EFFECT", "REPORTER", "TOOL", "ID");
+        foreach (var report in reports)
+        {
+            table.Row(
+                RenderText.Moment(report.ReceivedAt),
+                report.Effect,
+                RenderText.Actor(report.Reporter),
+                report.Tool,
+                report.Id);
+        }
+
+        yield return string.Empty;
+        yield return ReportRenderers.Heading;
+        yield return string.Empty;
+        yield return table.Render();
     }
 
     /// <summary>A page of work items, and the cursor that continues it.</summary>

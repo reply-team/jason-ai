@@ -592,6 +592,38 @@ public class WorkItemCommandsTests
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The two things a person must never confuse sit on the same page: what Jason tried, and what somebody
+    /// says they did themselves. They are kept apart by a table of their own and by the sentence above it.
+    /// </summary>
+    [Fact]
+    public async Task Work_item_human_view_lists_external_reports_under_the_attempts_and_prints_no_table_when_there_are_none()
+    {
+        var attempt = new AttemptDto(
+            "att_A", 1, AttemptStatus.Succeeded, WorkItemKind.AiRole, null, null, null,
+            Moment.AddMinutes(1), Moment.AddMinutes(1), null, null, Moment.AddHours(1), null);
+
+        using var reported = new CliRun(Serialize(Item([attempt], [Report("rpt_A", "email_sent"), Report("rpt_B", "call_made")])));
+        Assert.Equal(ExitCodes.Success, await reported.RunAsync("workitem", "get", "wi_A", "--human"));
+
+        var text = reported.Text;
+        Assert.Contains("Reported from outside Jason", text, StringComparison.Ordinal);
+        Assert.Contains("rpt_A", text, StringComparison.Ordinal);
+        Assert.Contains("rpt_B", text, StringComparison.Ordinal);
+        Assert.Contains("email_sent", text, StringComparison.Ordinal);
+
+        // Under the attempts, not among them: the attempt table is printed before the reported effects.
+        Assert.True(
+            text.IndexOf("att_A", StringComparison.Ordinal) < text.IndexOf("Reported from outside Jason", StringComparison.Ordinal),
+            "Externally reported effects belong under the attempts.");
+
+        using var quiet = new CliRun(Serialize(Item([attempt])));
+        Assert.Equal(ExitCodes.Success, await quiet.RunAsync("workitem", "get", "wi_A", "--human"));
+
+        Assert.DoesNotContain("Reported from outside Jason", quiet.Text, StringComparison.Ordinal);
+        Assert.Contains("att_A", quiet.Text, StringComparison.Ordinal);
+    }
+
     /// <summary>What ran, in the words a person reads: the package, the operation, the route and what it cost.</summary>
     [Fact]
     public async Task Human_mode_shows_what_ran_one_provider_attempt()
@@ -703,7 +735,7 @@ public class WorkItemCommandsTests
         Assert.Contains("{\"unexpected\":true}", cli.Text, StringComparison.Ordinal);
     }
 
-    private static WorkItemDto Item(IReadOnlyList<AttemptDto>? attempts) => new(
+    private static WorkItemDto Item(IReadOnlyList<AttemptDto>? attempts, IReadOnlyList<ReportSummaryDto>? externalReports = null) => new(
         "wi_A",
         "cmp_A",
         "cnt_A",
@@ -728,10 +760,20 @@ public class WorkItemCommandsTests
         "att_A",
         new AttemptErrorDto("executor_exited", "the process exited with code 1", true),
         attempts,
-        null,
+        externalReports,
         Moment,
         Moment,
         null);
+
+    private static ReportSummaryDto Report(string id, string effect) => new(
+        id,
+        Moment,
+        new ActorRef(ActorType.Human, "person-1"),
+        effect,
+        "some-other-cli",
+        null,
+        "Done by hand, outside the runtime.",
+        new ReportCorrelationDto("cmp_A", "cnt_A", "wi_A", null, false, true, false));
 
     private static string Serialize<T>(T value) => JsonSerializer.Serialize(value, JasonJson.Options);
 
