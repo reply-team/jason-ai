@@ -15,15 +15,15 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Jason.Runtime.Tests.Integration;
 
 /// <summary>
-/// The gate where it matters: a real runtime, a real plugin host, and a real provider account at the other end.
-/// What is proven here is not that a function returned something — it is that an operation nobody approved never
-/// reached the account, that approving it ran exactly what was approved, and that editing the work afterwards
-/// stopped it again.
+/// The gate where it matters: a real runtime, a real plugin host, and a stand-in provider account at the other
+/// end. What is proven here is not that a function returned something — it is that an operation nobody approved
+/// never reached the account, that approving it ran exactly what was approved, and that editing the work
+/// afterwards stopped it again.
 /// </summary>
 /// <remarks>
-/// The account's own call log is the evidence for "nothing was asked". An empty log is a strong claim, and it is
-/// the one the story asks for at the dispatcher boundary: a provider that would have answered the same either
-/// way cannot tell a runtime that asked from one that did not.
+/// The stand-in account's own call log is the evidence for "nothing was asked". An empty log is a strong claim,
+/// and it is the one the story asks for at the dispatcher boundary: a provider that would have answered the same
+/// either way cannot tell a runtime that asked from one that did not.
 /// </remarks>
 [Collection(ProcessEnvironmentCollection.Name)]
 public class ApprovalGateTests
