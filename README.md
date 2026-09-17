@@ -156,6 +156,18 @@ jason approval get <approval-id> --human
 jason approval approve <approval-id> --actor human:you@example.com --reason "checked the list"
 ```
 
+Effects that never went through Jason at all — something a person or an agent did with its own CLI, an
+MCP tool or by hand — are told to Jason afterwards and kept as the reporter's assertion, never as work
+Jason performed. What admitting one establishes, what it deliberately does not, and how reports are
+read back are in **[docs/reports.md](docs/reports.md)**:
+
+```sh
+jason report submit --actor human:you@example.com --effect email_sent --tool reply-cli \
+  --summary "Sent the intro by hand after the enrolment failed." \
+  --campaign <campaign-id> --contact <contact-id> --idempotency-key intro-1
+jason report list --campaign <campaign-id> --human
+```
+
 ## Ecosystem
 
 | Repository | Role |
