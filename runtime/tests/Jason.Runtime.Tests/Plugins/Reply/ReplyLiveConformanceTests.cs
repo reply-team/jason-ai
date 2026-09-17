@@ -140,10 +140,11 @@ public class ReplyLiveConformanceTests
         var again = await InvokeAsync(api, MembershipAdd, MembershipInput(list, recipient, pinned: pin), profile, Ct, attempt: 2);
 
         // The ambiguous-recovery path, proven against the provider rather than against a stand-in.
-        // `already_member` is a word the add path cannot produce: it exists only on the branch that read the
-        // contact's own lists first and found the membership already there. Answering it is therefore the
-        // evidence that the second attempt read before it wrote, which is what makes one interrupted attempt
-        // cost one effect rather than two.
+        // `already_member` is a word the add path cannot produce: it exists only on the branch that searched
+        // the list first and found this person already on it. Answering it is therefore the evidence that the
+        // second attempt read before it wrote, which is what makes one interrupted attempt cost one effect
+        // rather than two — and it is the assertion that failed against a live account while the read was made
+        // from the contact's own side, which is how that endpoint's silence for a private list was found.
         var repeat = Succeeded(MembershipAdd, again);
         Assert.Equal("already_member", repeat["items"]![0]!["status"]!.GetValue<string>());
         Assert.Equal(pin, repeat["items"]![0]!["external_ids"]!["contact"]!.GetValue<string>());
@@ -185,7 +186,17 @@ public class ReplyLiveConformanceTests
         // times this test reached the provider at all: the state read, and the enrollment.
         Assert.Equal(2, Directory.GetDirectories(api.Paths.PluginWorkDirectory).Length);
 
-        await AssertNothingLeakedAsync(api, recipient, result);
+        // And the repeat, which is the path that keeps one interrupted attempt from sending to a person twice.
+        // The participation this run just made is what it reads, and reading it is the whole of what it does:
+        // `already_enrolled` under `collision: skip` is a word the enrol path can also produce, so the evidence
+        // that nothing was written is the call log — the recovery read and the live state, and no bulk enrol.
+        var pin = item["external_ids"]!["contact"]!.GetValue<string>();
+        var again = await InvokeAsync(api, Enroll, EnrollInput(sequence, recipient, pinned: pin), profile, Ct, attempt: 2);
+        var repeat = Succeeded(Enroll, again);
+        Assert.Equal("already_enrolled", Assert.Single(repeat["items"]!.AsArray())!["status"]!.GetValue<string>());
+        Assert.Equal(live, repeat["campaign_live"]!.GetValue<bool>());
+
+        await AssertNothingLeakedAsync(api, recipient, result, again);
     }
 
     // -------------------------------------------------------------------------------------------------------
