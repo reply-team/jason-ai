@@ -41,8 +41,7 @@ public class GoldenPathTests
         await GoldenPath.WriteSettingsAsync(it, new SettingsShape());
         await GoldenPath.StartAsync(it);
         GoldenPath.InstallReplyPackage(it);
-        var loaded = GoldenPath.Json(await GoldenPath.Ok(
-            GoldenPath.JasonAsync(it, "plugin", "reload", "--reason", "installed the reply plugin")));
+        var loaded = await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: true);
         GoldenPath.AssertTheStandInAnswered(Assert.Single(loaded["plugins"]!.AsArray())!.AsObject());
         var digest = (string)Assert.Single(loaded["plugins"]!.AsArray())!["digest"]!;
         var pluginSnapshot = (string)loaded["snapshot"]!["id"]!;
@@ -210,7 +209,7 @@ public class GoldenPathTests
             await GoldenPath.WriteSettingsAsync(it, new SettingsShape(ProviderHeartbeatSeconds: 10));
             await GoldenPath.StartAsync(it);
             GoldenPath.InstallReplyPackage(it);
-            await GoldenPath.Ok(GoldenPath.JasonAsync(it, "plugin", "reload", "--reason", "installed the reply plugin"));
+            await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: true);
 
             var campaign = (string)GoldenPath.Json(await GoldenPath.Ok(
                 GoldenPath.JasonAsync(it, "campaign", "create", "--name", "Q3 LatAm founders")))["id"]!;

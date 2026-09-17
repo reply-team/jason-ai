@@ -50,8 +50,7 @@ public class BootstrapTests
         GoldenPath.InstallReplyPackage(it);
 
         // 4. The reload is the act that reads the package, recomputes its digest and swaps the snapshot.
-        var loaded = GoldenPath.Json(await GoldenPath.Ok(
-            GoldenPath.JasonAsync(it, "plugin", "reload", "--reason", "installed the reply plugin")));
+        var loaded = await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: false);
         Assert.True((bool)loaded["activated"]!);
         var plugin = Assert.Single(loaded["plugins"]!.AsArray())!.AsObject();
         Assert.Equal(GoldenPath.PluginId, (string?)plugin["id"]);
@@ -77,8 +76,7 @@ public class BootstrapTests
         // 5. The global route is written where an installer can write it before a runtime has ever run, and it
         //    becomes active by the same explicit act as the packages it names.
         await GoldenPath.WriteSettingsAsync(it, new SettingsShape(Routed: true));
-        var routed = GoldenPath.Json(await GoldenPath.Ok(
-            GoldenPath.JasonAsync(it, "plugin", "reload", "--reason", "routed provider work to the reply plugin")));
+        var routed = await GoldenPath.ReloadAsync(it, "routed provider work to the reply plugin", routed: true);
         Assert.True((bool)routed["activated"]!);
         Assert.Empty(routed["last_reload"]!["routes"]!.AsArray());
         var routedSnapshot = (string?)routed["routing_snapshot_id"];

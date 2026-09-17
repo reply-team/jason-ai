@@ -173,6 +173,64 @@ internal static class GoldenPath
         return settings.ToJsonString(JasonJson.Options);
     }
 
+    /// <summary>
+    /// A reload, and the settings edit it was meant to activate, observed rather than assumed. The runtime reads
+    /// an edited settings file through a watcher, so a reload asked for in the same breath as the write can
+    /// still read the file as it was; what a test can rely on is the answer afterwards, which is why this one
+    /// asks again until the routes say what the edit said. <paramref name="routed"/> is null where the reload is
+    /// expected to refuse the edit and keep what it had.
+    /// </summary>
+    public static async Task<JsonObject> ReloadAsync(Installation it, string reason, bool? routed = null)
+    {
+        ArgumentNullException.ThrowIfNull(it);
+        var deadline = DateTime.UtcNow.Add(Step);
+        while (true)
+        {
+            var report = Json(await Ok(JasonAsync(it, "plugin", "reload", "--reason", reason)));
+            if (routed is not { } expected)
+            {
+                return report;
+            }
+
+            var listed = Json(await Ok(JasonAsync(it, "route", "list")));
+            if (listed["global"]!["default"] is not null == expected)
+            {
+                return report;
+            }
+
+            Assert.True(DateTime.UtcNow < deadline, "The edited settings file never reached the runtime.");
+            await Task.Delay(200, Ct);
+        }
+    }
+
+    /// <summary>
+    /// The same wait for an edit that is meant to be refused: the reload is asked for until it answers with the
+    /// refusal, because until the watcher has caught up the runtime is still being asked about the old file and
+    /// would rightly accept it.
+    /// </summary>
+    /// <returns>
+    /// The refusal, and the routing snapshot that was live when it arrived — which is what "the previous
+    /// snapshot stays active" is asserted against, and which a reload the watcher had not caught up with can
+    /// have moved on in the meantime.
+    /// </returns>
+    public static async Task<(CliResult Refusal, string Live)> ReloadUntilRefusedAsync(Installation it, string reason)
+    {
+        var deadline = DateTime.UtcNow.Add(Step);
+        var live = (string)Json(await Ok(JasonAsync(it, "plugin", "list")))["routing_snapshot_id"]!;
+        while (true)
+        {
+            var result = await JasonAsync(it, "plugin", "reload", "--reason", reason);
+            if (result.ExitCode != ExitCodes.Success)
+            {
+                return (result, live);
+            }
+
+            live = (string)Json(result)["routing_snapshot_id"]!;
+            Assert.True(DateTime.UtcNow < deadline, "The edited settings file never reached the runtime.");
+            await Task.Delay(200, Ct);
+        }
+    }
+
     /// <summary>Installing a plugin is copying its directory. There is no install verb, and none is needed.</summary>
     public static void InstallReplyPackage(Installation it)
     {
