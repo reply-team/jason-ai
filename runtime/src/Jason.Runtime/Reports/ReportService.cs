@@ -120,6 +120,84 @@ public sealed class ReportService(JasonDbContext db, JournalWriter journal, Time
     }
 
     /// <summary>
+    /// One admitted report, as it was submitted.
+    /// </summary>
+    /// <remarks>
+    /// The dedup of a read always says <c>admitted</c>. It describes what this call did with what it was given,
+    /// and a read was given nothing: answering <c>duplicate</c> here would be reporting the history of somebody
+    /// else's submission back to a caller who never made one.
+    /// </remarks>
+    public async Task<ReportDto> GetAsync(ReportGetRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (string.IsNullOrWhiteSpace(request.ReportId))
+        {
+            throw DomainErrors.Required("report_id");
+        }
+
+        var id = request.ReportId.Trim();
+        var report = await Reports().FirstOrDefaultAsync(r => r.PublicId == id, cancellationToken).ConfigureAwait(false)
+            ?? throw DomainErrors.ReportNotFound(id);
+
+        return ReportMapper.ToDto(report, new ReportDedupDto(ReportDedupOutcome.Admitted, null));
+    }
+
+    /// <summary>
+    /// What has been reported, oldest first. The filters narrow by what a report was correlated to and by when
+    /// it landed; an id that names nothing is the loader's own 404, so a caller who mistyped a campaign is told
+    /// rather than shown an empty page they would read as a fact about the world.
+    /// </summary>
+    public async Task<Page<ReportSummaryDto>> ListAsync(ReportListRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var limit = Paging.ResolveLimit(request.Limit);
+        var after = Paging.DecodeCursor(request.Cursor);
+
+        var query = Reports();
+
+        if (request.CampaignId is not null)
+        {
+            var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
+            query = query.Where(r => r.CampaignId == campaign.Id);
+        }
+
+        if (request.ContactId is not null)
+        {
+            var contact = await ContactService.LoadAsync(db, request.ContactId, cancellationToken).ConfigureAwait(false);
+            query = query.Where(r => r.ContactId == contact.Id);
+        }
+
+        if (request.WorkItemId is not null)
+        {
+            var item = await WorkItemService.LoadAsync(db, request.WorkItemId, cancellationToken).ConfigureAwait(false);
+            query = query.Where(r => r.WorkItemId == item.Id);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Operation))
+        {
+            // The reporter's word, matched as they wrote it: an operation this installation has never published
+            // is still what somebody says they did, and narrowing to it is a fair question.
+            var operation = request.Operation.Trim();
+            query = query.Where(r => r.Operation == operation);
+        }
+
+        if (request.Since is { } since)
+        {
+            // Inclusive, so a walk of successive windows never loses what landed exactly on a boundary.
+            var from = since.UtcDateTime;
+            query = query.Where(r => r.ReceivedAt >= from);
+        }
+
+        if (after is not null)
+        {
+            query = query.Where(r => string.Compare(r.PublicId, after) > 0);
+        }
+
+        var fetched = await query.OrderBy(r => r.PublicId).Take(limit + 1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        return Paging.ToPage(fetched, limit, r => r.PublicId, ReportMapper.ToSummary);
+    }
+
+    /// <summary>
     /// The published order: the reporter's own key decides when they gave one, and what they said decides when
     /// they did not. Both are scoped to the reporter — two people describing one effect are two assertions.
     /// </summary>

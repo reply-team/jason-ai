@@ -27,5 +27,12 @@ public static class ReportModule
         // and a typed request would drop the keys it does not know instead of refusing them.
         app.MapOperation<ReportService, JsonObject, ReportDto>(
             Operations.ReportSubmit, (service, request, cancellationToken) => service.SubmitAsync(request, cancellationToken));
+
+        // Reading one back is an ordinary typed verb: what has to survive intact is the assertion inside the
+        // report, not the request that asks for it.
+        app.MapOperation<ReportService, ReportGetRequest, ReportDto>(
+            Operations.ReportGet, (service, request, cancellationToken) => service.GetAsync(request, cancellationToken));
+        app.MapOperation<ReportService, ReportListRequest, Page<ReportSummaryDto>>(
+            Operations.ReportList, (service, request, cancellationToken) => service.ListAsync(request, cancellationToken));
     }
 }
