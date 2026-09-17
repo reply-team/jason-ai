@@ -41,6 +41,10 @@ public static class Operations
     public const string ApprovalApprove = "approval.approve";
     public const string ApprovalReject = "approval.reject";
 
+    public const string ReportSubmit = "report.submit";
+    public const string ReportGet = "report.get";
+    public const string ReportList = "report.list";
+
     public const string RoleList = "role.list";
     public const string RoleAdd = "role.add";
 

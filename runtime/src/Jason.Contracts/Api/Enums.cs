@@ -129,3 +129,17 @@ public enum RemoveContactsItemStatus
     AlreadyExcluded,
     Rejected,
 }
+
+/// <summary>Whether a submitted report was admitted as a new one, or matched one already held.</summary>
+public enum ReportDedupOutcome
+{
+    Admitted,
+    Duplicate,
+}
+
+/// <summary>Which rule matched a duplicate: the reporter's own key, or the canonical form of what they said.</summary>
+public enum ReportDedupMatch
+{
+    Key,
+    Content,
+}

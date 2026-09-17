@@ -102,5 +102,20 @@ public static class DomainErrors
     public static InvalidRequestException ActorRequired() =>
         new("actor_required", "actor.id is required on a decision: what is recorded has to name the person who made it.");
 
+    /// <summary>
+    /// The runtime performs effects; it does not report them. Every caller is already refused the system actor,
+    /// but a reporter is told why in the words of the thing they were doing.
+    /// </summary>
+    public static InvalidRequestException ReporterReserved() =>
+        new("reporter_reserved", "actor type 'system' cannot report an effect: the runtime performs effects rather than reporting them, and a report has to name who did.");
+
+    /// <summary>
+    /// The ids in a report disagree with each other. Not a fact about the world worth keeping — a typo, and one
+    /// the caller can see at a glance once it is named.
+    /// </summary>
+    public static InvalidRequestException CorrelationInconsistent(string message) => new("correlation_inconsistent", message);
+
+    public static NotFoundException ReportNotFound(string id) => new("report_not_found", $"No report with id '{id}'.");
+
     public static ValidationException Required(string field) => new([new ErrorDetail(field, "required", $"{field} is required.")]);
 }
