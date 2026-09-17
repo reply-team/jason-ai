@@ -1,4 +1,5 @@
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Tests.Dispatch;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -38,19 +39,65 @@ public static class TestOptions
     }
 
     /// <summary>The guarded seam over test options, for the many tests that build a dispatcher part by hand.</summary>
-    public static DispatcherSettings Settings(Action<DispatcherOptions>? configure = null) =>
-        new(Dispatcher(configure), NullLogger<DispatcherSettings>.Instance);
+    public static LiveSettings<DispatcherOptions> Settings(Action<DispatcherOptions>? configure = null) =>
+        Seam(Dispatcher(configure), DispatcherOptions.Section);
 
     /// <summary>The same seam over options the test already holds, so it can still change them afterwards.</summary>
-    public static DispatcherSettings Settings(IOptionsMonitor<DispatcherOptions> monitor) =>
-        new(monitor, NullLogger<DispatcherSettings>.Instance);
+    public static LiveSettings<DispatcherOptions> Settings(IOptionsMonitor<DispatcherOptions> monitor) =>
+        Seam(monitor, DispatcherOptions.Section);
+
+    /// <summary>The seam over the plugins section, for the parts that read one number out of it.</summary>
+    public static LiveSettings<PluginsOptions> PluginSettings(Action<PluginsOptions>? configure = null) =>
+        Seam(Plugins(configure), PluginsOptions.Section);
+
+    /// <summary>The same seam over a value the test already built.</summary>
+    public static LiveSettings<PluginsOptions> PluginSettings(PluginsOptions options) =>
+        Seam(new TestOptionsMonitor<PluginsOptions>(options), PluginsOptions.Section);
+
+    /// <summary>The same seam over a monitor the test owns, so it can change the value afterwards.</summary>
+    public static LiveSettings<PluginsOptions> PluginSettings(IOptionsMonitor<PluginsOptions> monitor) =>
+        Seam(monitor, PluginsOptions.Section);
+
+    /// <summary>The seam over the roles section, which is read for one list: how a role is launched.</summary>
+    public static LiveSettings<RolesOptions> RoleSettings(RolesOptions? options = null) =>
+        Seam(new TestOptionsMonitor<RolesOptions>(options ?? new RolesOptions()), RolesOptions.Section);
 
     /// <summary>The seam of a runtime that has never read settings the validator accepted.</summary>
-    public static DispatcherSettings NothingValidated() =>
+    public static LiveSettings<DispatcherOptions> NothingValidated() =>
         Settings(new ThrowingOptionsMonitor<DispatcherOptions>(new OptionsValidationException(
             DispatcherOptions.Section,
             typeof(DispatcherOptions),
             ["Dispatcher:TickSeconds must be between 1 and 3600; got 0."])));
+
+    /// <summary>The plugins seam of a runtime that has never read a section the validator accepted.</summary>
+    public static LiveSettings<PluginsOptions> NoPluginsValidated() =>
+        Seam(
+            new ThrowingOptionsMonitor<PluginsOptions>(new OptionsValidationException(
+                PluginsOptions.Section,
+                typeof(PluginsOptions),
+                ["Plugins:Limits:MemoryMb must be between 16 and 1024; got 0."])),
+            PluginsOptions.Section);
+
+    /// <summary>
+    /// Waits for an edit to have been met, and for nothing else. The options system notices a file on its own
+    /// schedule, so a request that arrives first reads the settings that were still good — and a test that
+    /// inferred "the edit is in force" from "the request succeeded" would pass with the seam taken out again.
+    /// The seam's own counter is the one event that says the broken file has been read, and where nothing else
+    /// polls that section the waiting itself is what does the reading.
+    /// </summary>
+    public static Task<bool> RefusedOnceAsync<TOptions>(LiveSettings<TOptions> settings, CancellationToken ct)
+        where TOptions : class =>
+        DispatchHarness.EventuallyAsync(
+            () =>
+            {
+                settings.TryCurrent(out _);
+                return settings.Refusals == 1;
+            },
+            ct);
+
+    private static LiveSettings<TOptions> Seam<TOptions>(IOptionsMonitor<TOptions> monitor, string section)
+        where TOptions : class =>
+        new(monitor, NullLogger<LiveSettings<TOptions>>.Instance, section);
 
     /// <summary>Plugin options with the shipped defaults, adjusted by the test.</summary>
     public static TestOptionsMonitor<PluginsOptions> Plugins(Action<PluginsOptions>? configure = null)

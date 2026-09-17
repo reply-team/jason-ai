@@ -54,5 +54,5 @@ public class EntryCommandResolverTests
     }
 
     private static EntryCommandResolver NewResolver(params string[] defaultEntryCommand) =>
-        new(new TestOptionsMonitor<RolesOptions>(new RolesOptions { DefaultEntryCommand = [.. defaultEntryCommand] }));
+        new(TestOptions.RoleSettings(new RolesOptions { DefaultEntryCommand = [.. defaultEntryCommand] }));
 }

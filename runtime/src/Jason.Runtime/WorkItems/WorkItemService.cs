@@ -6,6 +6,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Approvals;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
@@ -24,14 +25,15 @@ namespace Jason.Runtime.WorkItems;
 /// <param name="plugins">
 /// Read for one number: the grace a child is given to stop, which together with an operation's own budget is the
 /// shortest lease a provider item may be run under. It is read at each request rather than captured, so an
-/// edited settings file governs the next item written.
+/// edited settings file governs the next item written — through the seam, so that an edit the validator refuses
+/// costs the edit rather than every creation until somebody notices.
 /// </param>
 public sealed class WorkItemService(
     JasonDbContext db,
     JournalWriter journal,
     TimeProvider clock,
     WorkItemCanceller canceller,
-    IOptionsMonitor<PluginsOptions> plugins)
+    LiveSettings<PluginsOptions> plugins)
 {
     /// <summary>
     /// The one context key a provider operation's arguments live under. Everything else in a work item's context
@@ -47,6 +49,16 @@ public sealed class WorkItemService(
 
     public const int MaxResultFormatBytes = 16 * 1024;
 
+    /// <summary>
+    /// The one number this service reads out of the plugins section. A file edited into something the validator
+    /// refuses leaves the last value that validated in force; a runtime that has never read one has nothing to
+    /// answer with, and says so rather than failing as though the request were at fault.
+    /// </summary>
+    private int KillGrace() =>
+        plugins.TryCurrent(out var options)
+            ? options.Invoker.KillGraceMs
+            : throw DomainErrors.SettingsUnreadable(PluginsOptions.Section);
+
     public async Task<WorkItemDto> CreateAsync(WorkItemCreateRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -56,7 +68,7 @@ public sealed class WorkItemService(
         WorkItemValidation.ValidateCreate(
             request,
             await RoleExistsAsync(request, cancellationToken).ConfigureAwait(false),
-            plugins.CurrentValue.Invoker.KillGraceMs,
+            KillGrace(),
             errors);
         errors.ThrowIfAny();
         await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
@@ -220,7 +232,7 @@ public sealed class WorkItemService(
         // this rule existed is left repairable rather than having every unrelated patch refused along with it.
         if (request.TimeoutSeconds.IsSet && item.Kind == WorkItemKind.ProviderOp && item.Operation is { } operation)
         {
-            WorkItemValidation.ValidateProviderTimeout(operation, timeoutSeconds, plugins.CurrentValue.Invoker.KillGraceMs, errors);
+            WorkItemValidation.ValidateProviderTimeout(operation, timeoutSeconds, KillGrace(), errors);
         }
 
         if (request.ResultFormat.IsSet)
@@ -350,7 +362,12 @@ public sealed class WorkItemService(
             throw DomainErrors.WorkItemTerminal(item.PublicId, item.Status);
         }
 
-        canceller.Cancel(db, item, actor, NormalizeReason(request.Reason));
+        canceller.Cancel(
+            db,
+            item,
+            actor,
+            NormalizeReason(request.Reason),
+            await ApprovalGate.LiveAsync(db, item.Id, cancellationToken).ConfigureAwait(false));
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return WorkItemMapper.ToDto(item, now, item.Attempts, includeSnapshots: false);
     }

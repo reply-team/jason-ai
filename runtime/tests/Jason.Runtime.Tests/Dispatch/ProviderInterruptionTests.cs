@@ -292,7 +292,7 @@ public class ProviderInterruptionTests
 
         public TestOptionsMonitor<DispatcherOptions> Options { get; }
 
-        public DispatcherSettings Settings { get; }
+        public LiveSettings<DispatcherOptions> Settings { get; }
 
         public AttemptOutcomes Outcomes { get; }
 

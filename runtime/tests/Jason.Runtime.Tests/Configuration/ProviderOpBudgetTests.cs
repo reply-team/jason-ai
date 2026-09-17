@@ -78,7 +78,7 @@ public class ProviderOpBudgetTests
     }
 
     private static ProviderOpBudgetValidator Validator(PluginsOptions plugins) =>
-        new(new TestOptionsMonitor<PluginsOptions>(plugins));
+        new(TestOptions.PluginSettings(plugins));
 
     private static PluginsOptions Grace(int killGraceMs) =>
         new() { Invoker = new PluginInvokerOptions { KillGraceMs = killGraceMs } };

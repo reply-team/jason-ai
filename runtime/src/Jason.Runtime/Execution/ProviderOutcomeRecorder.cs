@@ -34,7 +34,7 @@ namespace Jason.Runtime.Execution;
 public sealed class ProviderOutcomeRecorder(
     AttemptOutcomes outcomes,
     ExternalIdStore identifiers,
-    IOptionsMonitor<PluginsOptions> plugins)
+    LiveSettings<PluginsOptions> plugins)
 {
     /// <summary>
     /// Ends <paramref name="attempt"/> by what came back from the plugin. Nothing is saved: the outcome joins the
@@ -192,7 +192,7 @@ public sealed class ProviderOutcomeRecorder(
             return null;
         }
 
-        var limit = plugins.CurrentValue.Invoker.OutcomeBytes;
+        var limit = plugins.Current.Invoker.OutcomeBytes;
         var bytes = Encoding.UTF8.GetByteCount(result.ToJsonString());
         return bytes <= limit
             ? result.DeepClone()

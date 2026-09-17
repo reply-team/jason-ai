@@ -26,6 +26,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<CampaignRoute> CampaignRoutes => Set<CampaignRoute>();
 
+    public DbSet<Approval> Approvals => Set<Approval>();
+
     public DbSet<JournalEntry> Journal => Set<JournalEntry>();
 
     /// <summary>
@@ -65,6 +67,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         configurationBuilder.Properties<WorkItemKind>().HaveConversion<SnakeCaseEnumConverter<WorkItemKind>>().HaveMaxLength(32);
         configurationBuilder.Properties<WorkItemStatus>().HaveConversion<SnakeCaseEnumConverter<WorkItemStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<AttemptStatus>().HaveConversion<SnakeCaseEnumConverter<AttemptStatus>>().HaveMaxLength(32);
+        configurationBuilder.Properties<ApprovalStatus>().HaveConversion<SnakeCaseEnumConverter<ApprovalStatus>>().HaveMaxLength(32);
+        configurationBuilder.Properties<RouteScope>().HaveConversion<SnakeCaseEnumConverter<RouteScope>>().HaveMaxLength(32);
         configurationBuilder.Properties<JsonObject>().HaveConversion<JsonObjectConverter, JsonObjectComparer>();
         configurationBuilder.Properties<JsonNode>().HaveConversion<JsonNodeConverter, JsonNodeComparer>();
         configurationBuilder.Properties<AttemptErrorDto>().HaveConversion<JsonTextConverter<AttemptErrorDto>, JsonTextComparer<AttemptErrorDto>>();
@@ -166,6 +170,42 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             item.HasOne(w => w.Campaign).WithMany().HasForeignKey(w => w.CampaignId).OnDelete(DeleteBehavior.Restrict);
             item.HasOne(w => w.Contact).WithMany().HasForeignKey(w => w.ContactId).OnDelete(DeleteBehavior.Restrict);
             item.HasMany(w => w.Attempts).WithOne(a => a.WorkItem).HasForeignKey(a => a.WorkItemId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Approval>(approval =>
+        {
+            approval.HasKey(a => a.Id);
+            approval.Property(a => a.PublicId).HasMaxLength(40);
+            approval.HasIndex(a => a.PublicId).IsUnique();
+            approval.Property(a => a.Operation).HasMaxLength(200);
+            approval.Property(a => a.PluginId).HasMaxLength(64);
+            approval.Property(a => a.BindingIdentity).HasMaxLength(80);
+            approval.Property(a => a.SubjectHash).HasMaxLength(80);
+            approval.Property(a => a.PluginSnapshotId).HasMaxLength(40);
+            approval.Property(a => a.RoutingSnapshotId).HasMaxLength(40);
+            approval.Property(a => a.Reason).HasMaxLength(64);
+            approval.Property(a => a.DecidedById).HasMaxLength(100);
+            approval.Property(a => a.Subject).HasColumnName("subject_json").IsRequired();
+            approval.Property(a => a.Preview).HasColumnName("preview_json").IsRequired();
+            approval.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_approvals_subject_json", "json_valid(subject_json)");
+                t.HasCheckConstraint("ck_approvals_preview_json", "json_valid(preview_json)");
+            });
+
+            // Two people answering the same preview, or a decision racing the cancellation of the work it is
+            // about, must not both win — and the status is what they both change. The guard is the same one a
+            // work item's status carries, so a decision is one UPDATE that either moves a pending row or moves
+            // nothing at all. Today the item's own guard is what refuses the races that exist; this one is what
+            // keeps the rule true of the row itself.
+            approval.Property(a => a.Status).IsConcurrencyToken();
+
+            // One live decision per item, for the same reason there is one live attempt: two people answering
+            // two previews of the same work is a race nobody could read afterwards.
+            approval.HasIndex(a => a.WorkItemId).IsUnique().HasFilter("status = 'pending'").HasDatabaseName("ix_approvals_one_pending_per_item");
+            approval.HasIndex(a => new { a.Status, a.RequestedAt });
+            approval.HasIndex(a => a.CampaignId);
+            approval.HasOne(a => a.WorkItem).WithMany().HasForeignKey(a => a.WorkItemId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Attempt>(attempt =>

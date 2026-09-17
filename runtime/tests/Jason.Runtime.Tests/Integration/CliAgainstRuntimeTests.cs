@@ -1,6 +1,8 @@
 using System.Text.Json.Nodes;
 using Jason.Cli;
 using Jason.Contracts.Api;
+using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Approvals;
 
 namespace Jason.Runtime.Tests.Integration;
 
@@ -215,6 +217,60 @@ public class CliAgainstRuntimeTests
 
     private static JsonObject Single(JsonArray entries, string kind) =>
         Assert.Single(entries, entry => (string?)entry!["kind"] == kind)!.AsObject();
+
+    /// <summary>
+    /// The decision as a person makes it: see what is waiting, read what it would do, answer it, and be told
+    /// plainly when somebody has already answered. The work moves with the decision, which is what makes the
+    /// answer worth anything.
+    /// </summary>
+    [Fact]
+    public async Task A_person_reads_what_is_waiting_decides_it_and_cannot_decide_it_twice()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
+        string approval;
+        string workItem;
+        await using (var db = new JasonDbContext(JasonDbContext.CreateOptions(fixture.Paths.DatabaseFile)))
+        {
+            var parked = await ParkedWork.WriteAsync(db, Ct);
+            workItem = parked.Item.PublicId;
+            approval = parked.Approval.PublicId;
+        }
+
+        var waiting = (await OkAsync(fixture, "approval", "list"))["items"]!.AsArray();
+        Assert.Equal(approval, (string?)Assert.Single(waiting)!["id"]);
+
+        var read = await OkAsync(fixture, "approval", "get", approval);
+        Assert.Equal("campaign.enroll", (string?)read["operation"]);
+        Assert.Equal("ada@example.test", (string?)read["preview"]!["contact"]!["value"]);
+        Assert.Equal("approval_required", (string?)read["reason"]);
+
+        var decided = await OkAsync(fixture, "--actor", "human:ada@example.test", "approval", "approve", approval, "--reason", "go ahead");
+        Assert.Equal("approved", (string?)decided["status"]);
+        Assert.Equal("ada@example.test", (string?)decided["decided_by"]!["id"]);
+
+        // The work went back into the queue, and nothing is waiting for a person any more.
+        Assert.Equal("created", (string?)(await OkAsync(fixture, "workitem", "get", workItem))["status"]);
+        Assert.Empty((await OkAsync(fixture, "approval", "list"))["items"]!.AsArray());
+
+        var again = await ErrorAsync(fixture, "--actor", "human:ada@example.test", "approval", "reject", approval, "--reason", "changed my mind");
+        Assert.Equal("approval_not_pending", (string?)again["error"]!["code"]);
+    }
+
+    /// <summary>A decision that names nobody is refused by the runtime, whatever the shell wanted to send.</summary>
+    [Fact]
+    public async Task A_decision_the_cli_sends_without_an_actor_is_refused()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
+        string approval;
+        await using (var db = new JasonDbContext(JasonDbContext.CreateOptions(fixture.Paths.DatabaseFile)))
+        {
+            approval = (await ParkedWork.WriteAsync(db, Ct)).Approval.PublicId;
+        }
+
+        var refused = await ErrorAsync(fixture, "approval", "approve", approval);
+
+        Assert.Equal("actor_required", (string?)refused["error"]!["code"]);
+    }
 
     private static async Task<JsonObject> OkAsync(RuntimeApiFixture fixture, params string[] args)
     {

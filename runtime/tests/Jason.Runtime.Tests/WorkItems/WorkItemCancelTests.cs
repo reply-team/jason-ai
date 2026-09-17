@@ -134,7 +134,7 @@ public class WorkItemCancelTests
     }
 
     private static WorkItemService NewService(JasonDbContext db, TimeProvider clock, RunningAttemptRegistry registry) =>
-        new(db, new JournalWriter(clock), clock, TestCanceller.New(clock, registry), TestOptions.Plugins());
+        new(db, new JournalWriter(clock), clock, TestCanceller.New(clock, registry), TestOptions.PluginSettings());
 
     private static WorkItem Seed(JasonDbContext db, Action<WorkItem> configure)
     {

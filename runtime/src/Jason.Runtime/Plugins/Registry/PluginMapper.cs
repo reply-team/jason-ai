@@ -92,6 +92,7 @@ public static class PluginMapper
                 .SelectMany(candidate => candidate.Problems.Select(problem =>
                     new ErrorDetail(Field(candidate.Directory, problem.Path), problem.Code, problem.Message))),
             .. report.Routes,
+            .. report.Settings ?? [],
         ];
     }
 

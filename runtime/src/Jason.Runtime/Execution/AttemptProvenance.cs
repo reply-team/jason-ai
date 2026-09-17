@@ -56,12 +56,14 @@ public static class AttemptProvenance
     /// <param name="plugins">The plugin snapshot the decision was made against.</param>
     /// <param name="routes">The route snapshot the decision was made against.</param>
     /// <param name="correlationId">The attempt's own public id: what ties an invocation back to the work.</param>
+    /// <param name="approvalId">The decision a person made about this subject, where the operation needed one.</param>
     public static AttemptProvenanceDto AtClaim(
         string? operation,
         PreflightVerdict verdict,
         PluginSnapshot plugins,
         RouteSnapshot routes,
-        string correlationId)
+        string correlationId,
+        string? approvalId = null)
     {
         ArgumentNullException.ThrowIfNull(verdict);
         ArgumentNullException.ThrowIfNull(plugins);
@@ -89,6 +91,7 @@ public static class AttemptProvenance
             RouteScope = verdict.Resolution?.Scope,
             BindingIdentity = route?.BindingIdentity,
             CorrelationId = correlationId,
+            ApprovalId = approvalId,
         };
     }
 

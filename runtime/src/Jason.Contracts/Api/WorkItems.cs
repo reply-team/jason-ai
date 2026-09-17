@@ -63,7 +63,10 @@ public sealed record AttemptProvenanceDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [property: JsonConverter(typeof(VerbatimKeysConverter))]
     IReadOnlyDictionary<string, string>? ExternalIdsReturned = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonNode? RejectedResult = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonNode? RejectedResult = null,
+
+    /// <summary>The decision this attempt ran under, where a person had to make one.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ApprovalId = null);
 
 /// <summary>One run of one work item. The id is also the fencing token every executor operation must carry.</summary>
 public sealed record AttemptDto(

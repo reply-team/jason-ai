@@ -462,6 +462,285 @@ public class ClaimerTests
         role.EntryCommand = [.. entryCommand];
     }
 
+    /// <summary>
+    /// An operation a person has to approve is not refused and is not run: it waits, as a row that says exactly
+    /// what is being approved. And it waits without an attempt, because an attempt is a run — an item parked
+    /// three times that had spent three of its attempts would be given up on for being patient.
+    /// </summary>
+    [Fact]
+    public async Task An_operation_that_needs_approval_is_parked_before_any_attempt_exists()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.enroll"]),
+            route: new Route("stand-in-provider", new JsonObject { ["workspace"] = "west" }, "sha256:west"));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = Enrolment(db, campaign);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var parked = await fresh.WorkItems.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(WorkItemStatus.AwaitingApproval, parked.Status);
+        Assert.Equal(0, parked.AttemptCount);
+        Assert.Empty(await fresh.Attempts.AsNoTracking().ToListAsync(Ct));
+
+        var approval = await fresh.Approvals.AsNoTracking().SingleAsync(Ct);
+        Assert.StartsWith("apr_", approval.PublicId, StringComparison.Ordinal);
+        Assert.Equal(ApprovalStatus.Pending, approval.Status);
+        Assert.Equal("approval_required", approval.Reason);
+        Assert.Equal("campaign.enroll", approval.Operation);
+        Assert.Equal("stand-in-provider", approval.PluginId);
+        Assert.Equal("sha256:west", approval.BindingIdentity);
+        Assert.Equal(item.Id, approval.WorkItemId);
+        Assert.StartsWith("sha256:", approval.SubjectHash, StringComparison.Ordinal);
+
+        // What is being approved is the document the plugin would have received, not a summary of it.
+        Assert.Equal("ada@example.test", (string?)approval.Subject["input"]!["contacts"]![0]!["channels"]![0]!["value"]);
+
+        // And what a person reads says what it would do, to whom, and through which account.
+        Assert.Equal("act", (string?)approval.Preview["reach"]!["value"]);
+        Assert.Equal("ada@example.test", (string?)approval.Preview["contact"]!["value"]);
+        Assert.Equal("sha256:west", (string?)approval.Preview["binding_identity"]);
+
+        var lines = await fresh.Journal.AsNoTracking()
+            .Where(e => e.WorkItemId == item.PublicId)
+            .OrderBy(e => e.Id)
+            .Select(e => e.Kind)
+            .ToListAsync(Ct);
+        Assert.Equal(["workitem_awaiting_approval", "approval_requested"], lines);
+    }
+
+    /// <summary>
+    /// Only a park makes no attempt. Everything else the pre-flight decides is a refusal, and a refusal is a
+    /// thing that happened to the work: it keeps its attempt, its provenance, its coded failure and its one
+    /// against the attempt budget. Both halves are here, in one scan, so neither can quietly become the other.
+    /// </summary>
+    [Fact]
+    public async Task A_refusal_keeps_its_attempt_and_a_park_makes_none()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.enroll"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+
+        var parking = WorkItemFactory.NewCampaign(now: Noon);
+        var refusing = WorkItemFactory.NewCampaign("Other", now: Noon);
+        db.Campaigns.Add(parking);
+        db.Campaigns.Add(refusing);
+        var parked = Enrolment(db, parking);
+
+        // The same route, an operation this package does not perform: refused, and never handed to another.
+        var refused = WorkItemFactory.NewProviderOp(refusing, now: Noon);
+        db.WorkItems.Add(refused);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var attempt = Assert.Single(await fresh.Attempts.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal(refused.Id, attempt.WorkItemId);
+        Assert.Equal(AttemptErrors.PluginOperationUnsupported, attempt.Error!.Code);
+        Assert.Equal("stand-in-provider", attempt.Provenance!.PluginId);
+
+        var failed = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == refused.Id, Ct);
+        Assert.Equal(WorkItemStatus.Failed, failed.Status);
+        Assert.Equal(1, failed.AttemptCount);
+
+        var waiting = await fresh.WorkItems.AsNoTracking().SingleAsync(w => w.Id == parked.Id, Ct);
+        Assert.Equal(WorkItemStatus.AwaitingApproval, waiting.Status);
+        Assert.Equal(0, waiting.AttemptCount);
+        Assert.Null(waiting.LastError);
+    }
+
+    /// <summary>
+    /// The guarantee the gate makes, at the boundary that makes it: parked work is not claimable, and no number
+    /// of scans turns waiting into running.
+    /// </summary>
+    [Fact]
+    public async Task An_item_awaiting_approval_is_never_claimed_however_many_scans_pass()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.enroll"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        Enrolment(db, campaign);
+        await db.SaveChangesAsync(Ct);
+
+        for (var scan = 0; scan < 3; scan++)
+        {
+            Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        }
+
+        await using var fresh = database.Open();
+        Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(Ct)).Status);
+        Assert.Empty(await fresh.Attempts.AsNoTracking().ToListAsync(Ct));
+
+        // One decision, not one per scan: a person is asked once about one piece of work.
+        Assert.Single(await fresh.Approvals.AsNoTracking().ToListAsync(Ct));
+    }
+
+    /// <summary>
+    /// A campaign runs one thing at a time, and the rule keys on what is being worked on. Work waiting for a
+    /// person is not being worked on, so the rest of its campaign keeps moving — otherwise one unanswered
+    /// decision would quietly stop everything else.
+    /// </summary>
+    [Fact]
+    public async Task A_parked_item_does_not_stop_the_rest_of_its_campaign()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.enroll", "campaign.get"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        Enrolment(db, campaign);
+        var reading = WorkItemFactory.NewProviderOp(campaign, now: Noon);
+        reading.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject { ["campaign"] = new JsonObject { ["external_id"] = "c-7714" } },
+        };
+        db.WorkItems.Add(reading);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Equal(reading.PublicId, work.WorkItemPublicId);
+        Assert.Equal(WorkItemStatus.Scheduled, reading.Status);
+    }
+
+    /// <summary>
+    /// What a person approved is what runs, and the attempt says which decision released it — so the chronicle
+    /// reads decision, then act, rather than leaving somebody to line up two timestamps.
+    /// </summary>
+    [Fact]
+    public async Task An_approved_subject_is_claimed_and_its_attempt_names_the_approval_that_released_it()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.enroll"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = Enrolment(db, campaign);
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        var approval = await Decide(db, ApprovalStatus.Approved);
+
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Equal(item.PublicId, work.WorkItemPublicId);
+        Assert.Equal("campaign.enroll", work.Plan!.Contract.Id);
+
+        await using var fresh = database.Open();
+        var attempt = Assert.Single(await fresh.Attempts.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal(approval.PublicId, attempt.Provenance!.ApprovalId);
+        Assert.Equal(ApprovalStatus.Approved, (await fresh.Approvals.AsNoTracking().SingleAsync(Ct)).Status);
+    }
+
+    /// <summary>
+    /// The decision is about a subject, not about an item. An input edited after a person approved it is a
+    /// different subject, so the hash no longer matches and the work is parked again — with the reason saying
+    /// which of the two things happened — rather than running under a decision nobody made about it.
+    /// </summary>
+    [Fact]
+    public async Task An_input_changed_after_the_decision_is_parked_again_and_says_which_hash_moved()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.enroll"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = Enrolment(db, campaign);
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        var first = await Decide(db, ApprovalStatus.Approved);
+
+        // The planner edits the enrollment after it was approved: another campaign at the provider.
+        item.Status = WorkItemStatus.Created;
+        item.Context = new JsonObject { [WorkItemService.InputKey] = Enrol("sq-2240") };
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(Ct)).Status);
+        Assert.Empty(await fresh.Attempts.AsNoTracking().ToListAsync(Ct));
+
+        var approvals = await fresh.Approvals.AsNoTracking().OrderBy(a => a.Id).ToListAsync(Ct);
+        Assert.Equal(2, approvals.Count);
+        Assert.Equal(first.PublicId, approvals[0].PublicId);
+        Assert.Equal(ApprovalStatus.Superseded, approvals[0].Status);
+
+        // A decision the work outgrew is still a decision somebody made: only its status moves. The dispatcher
+        // writing itself over the approver here would leave the person's name in the chronicle and nowhere a
+        // reader of approval.get would ever look.
+        Assert.Equal(ActorType.Human, approvals[0].DecidedByType);
+        Assert.Equal("operator", approvals[0].DecidedById);
+        Assert.Equal("go ahead", approvals[0].DecisionReason);
+        Assert.Equal(ApprovalStatus.Pending, approvals[1].Status);
+        Assert.Equal("input_changed", approvals[1].Reason);
+        Assert.NotEqual(approvals[0].SubjectHash, approvals[1].SubjectHash);
+        Assert.Contains("approval_superseded", await fresh.Journal.AsNoTracking().Select(e => e.Kind).ToListAsync(Ct));
+    }
+
+    /// <summary>
+    /// A person's decision, exactly as the API verb will make it: the row is decided and the work it was holding
+    /// is let back into the queue. These tests are about what the claim does with that, not about the verb.
+    /// </summary>
+    private static async Task<Approval> Decide(JasonDbContext db, ApprovalStatus status)
+    {
+        var approval = await db.Approvals.Include(a => a.WorkItem).SingleAsync(a => a.Status == ApprovalStatus.Pending, Ct);
+        approval.Status = status;
+        approval.DecidedAt = Noon;
+        approval.DecidedByType = ActorType.Human;
+        approval.DecidedById = "operator";
+        approval.DecisionReason = "go ahead";
+        if (status == ApprovalStatus.Approved)
+        {
+            WorkItemTransitions.Apply(approval.WorkItem!, WorkItemStatus.Created, Noon);
+        }
+
+        await db.SaveChangesAsync(Ct);
+        return approval;
+    }
+
+    /// <summary>An enrollment with nothing wrong with it, so the only thing that can stop it is a person.</summary>
+    private static WorkItem Enrolment(JasonDbContext db, Campaign campaign)
+    {
+        var contact = new Contact { PublicId = PublicId.New("cnt"), FirstName = "Ada", CreatedAt = Noon, UpdatedAt = Noon };
+        contact.Channels.Add(new ContactChannel { Channel = "email", Value = "ada@example.test", IsPrimary = true });
+        db.Contacts.Add(contact);
+
+        var item = WorkItemFactory.NewProviderOp(campaign, "campaign.enroll", Noon);
+        item.Contact = contact;
+        item.Context = new JsonObject { [WorkItemService.InputKey] = Enrol() };
+        db.WorkItems.Add(item);
+        return item;
+    }
+
+    private static JsonObject Enrol(string campaignId = "sq-1129") => new()
+    {
+        ["campaign"] = new JsonObject { ["external_id"] = campaignId },
+        ["channel"] = "email",
+        ["collision"] = "skip",
+        ["start"] = new JsonObject { ["position"] = "first_step" },
+        ["first_touch"] = "authored_delay",
+    };
+
     private sealed class Harness : IDisposable
     {
         private readonly TempDataDir _dir = new();
@@ -498,7 +777,7 @@ public class ClaimerTests
                 journal,
                 clock,
                 new AttemptOutcomes(journal, clock, settings),
-                new EntryCommandResolver(new TestOptionsMonitor<RolesOptions>(roles ?? new RolesOptions())),
+                new EntryCommandResolver(TestOptions.RoleSettings(roles)),
                 plugins,
                 routing,
                 new ExternalIdStore(journal, clock),

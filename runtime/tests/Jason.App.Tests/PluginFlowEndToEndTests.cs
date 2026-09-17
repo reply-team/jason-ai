@@ -178,6 +178,11 @@ public class PluginFlowEndToEndTests
         (configuration as IDisposable)?.Dispose();
 
         var options = new FixedOptions<PluginsOptions>(settings);
+
+        // The invoker reads its budget through the same seam the runtime gives it, so this end-to-end run uses
+        // the real path rather than a monitor of its own.
+        var live = new LiveSettings<PluginsOptions>(
+            options, NullLogger<LiveSettings<PluginsOptions>>.Instance, PluginsOptions.Section);
         var loader = new PluginLoader(
             paths,
             new ExecutableResolver(new CliOnPath()),
@@ -193,7 +198,7 @@ public class PluginFlowEndToEndTests
         var invoker = new PluginInvoker(
             registry,
             new JasonDllLocator(),
-            options,
+            live,
             paths,
             RuntimeInfo.Create(),
             TimeProvider.System,

@@ -406,7 +406,7 @@ public class ProviderOutcomeRecorderTests
         db.Attempts.Add(attempt);
         await db.SaveChangesAsync(Ct);
 
-        var options = TestOptions.Plugins(o => o.Invoker.OutcomeBytes = invokerOutcomeBytes ?? o.Invoker.OutcomeBytes);
+        var options = TestOptions.PluginSettings(o => o.Invoker.OutcomeBytes = invokerOutcomeBytes ?? o.Invoker.OutcomeBytes);
         var recorder = new ProviderOutcomeRecorder(
             new AttemptOutcomes(new JournalWriter(clock), clock, TestOptions.Settings(o => o.RetryDelaySeconds = 0)),
             new ExternalIdStore(new JournalWriter(clock), clock),

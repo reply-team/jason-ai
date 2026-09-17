@@ -177,15 +177,12 @@ public class ProviderOperationE2ETests
                 refusedName,
                 (string?)refusal["provenance"]!["rejected_result"]!["campaign"]!["name"]!.AsArray()[0]);
 
-            // 6. PA3b. The gate a person owes is not here yet, and an operation that needs one says so out loud
-            //    rather than being performed by a dispatcher standing in for the person who approves it.
+            // 6. An operation that needs a person's approval is not performed by a dispatcher standing in for
+            //    that person. It waits, with no attempt behind it, until somebody decides.
             var gated = await ItemAsync(root, campaign, "campaign.enroll", ToEnroll(providerCampaign), contact);
-            var closed = await PollAsync(root, gated, item => Finished((string?)item["status"]));
-            Assert.Equal("failed", (string?)closed["status"]);
-            var refusedEnrollment = Assert.Single(closed["attempts"]!.AsArray())!;
-            Assert.Equal("approval_required", (string?)refusedEnrollment["error"]!["code"]);
-            Assert.False((bool)refusedEnrollment["error"]!["retriable"]!);
-            Assert.Equal(PluginId, (string?)refusedEnrollment["provenance"]!["plugin_id"]);
+            var waiting = await PollAsync(root, gated, item => (string?)item["status"] == "awaiting_approval");
+            Assert.Empty(waiting["attempts"]!.AsArray());
+            Assert.Equal(0, (int?)waiting["attempt_count"]);
 
             // Nothing reached the provider on its behalf. The account holds no enrollment — and, the claim that
             // actually matters, it was never asked for one: an empty array is what a refused write leaves behind

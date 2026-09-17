@@ -35,7 +35,7 @@ public static class SystemModule
              MigrationReport report,
              JasonPaths dataPaths,
              DispatcherStatus dispatcher,
-             DispatcherSettings dispatcherSettings,
+             LiveSettings<DispatcherOptions> dispatcherSettings,
              RunningAttemptRegistry running,
              PluginRegistry plugins,
              RouteRegistry routes) =>

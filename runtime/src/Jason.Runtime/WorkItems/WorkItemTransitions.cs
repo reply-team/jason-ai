@@ -13,7 +13,12 @@ public static class WorkItemTransitions
 {
     private static readonly Dictionary<WorkItemStatus, WorkItemStatus[]> Legal = new()
     {
-        [WorkItemStatus.Created] = [WorkItemStatus.Scheduled, WorkItemStatus.Cancelled, WorkItemStatus.Expired],
+        [WorkItemStatus.Created] = [WorkItemStatus.Scheduled, WorkItemStatus.AwaitingApproval, WorkItemStatus.Cancelled, WorkItemStatus.Expired],
+
+        // Parked work is unclaimed work: a person approves it back into the queue or rejects it, and meanwhile
+        // it can be cancelled or reach its due date like anything else nobody has picked up. What it cannot do
+        // is go to a dispatcher, which is the whole reason it is parked.
+        [WorkItemStatus.AwaitingApproval] = [WorkItemStatus.Created, WorkItemStatus.Failed, WorkItemStatus.Cancelled, WorkItemStatus.Expired],
         [WorkItemStatus.Scheduled] = [WorkItemStatus.Processing, WorkItemStatus.Created, WorkItemStatus.Cancelled, WorkItemStatus.Failed],
         [WorkItemStatus.Processing] = [WorkItemStatus.Succeeded, WorkItemStatus.Failed, WorkItemStatus.Created, WorkItemStatus.Cancelled],
         [WorkItemStatus.Expired] = [WorkItemStatus.Created, WorkItemStatus.Cancelled],
@@ -72,6 +77,7 @@ public static class WorkItemTransitions
         WorkItemStatus.Failed => JournalKinds.WorkItemFailed,
         WorkItemStatus.Cancelled => JournalKinds.WorkItemCancelled,
         WorkItemStatus.Expired => JournalKinds.WorkItemExpired,
+        WorkItemStatus.AwaitingApproval => JournalKinds.WorkItemAwaitingApproval,
         WorkItemStatus.Created when from == WorkItemStatus.Expired => JournalKinds.WorkItemReopened,
         WorkItemStatus.Created => JournalKinds.WorkItemReleased,
         _ => throw new InvalidOperationException($"No journal kind records {from} to {to}."),

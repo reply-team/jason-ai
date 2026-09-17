@@ -17,6 +17,143 @@ namespace Jason.Runtime.Persistence.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.Approval", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BindingIdentity")
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("binding_identity");
+
+                    b.Property<int>("CampaignId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("campaign_id");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("decided_at");
+
+                    b.Property<string>("DecidedById")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("decided_by_id");
+
+                    b.Property<string>("DecidedByType")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("decided_by_type");
+
+                    b.Property<string>("DecisionReason")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("decision_reason");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("operation");
+
+                    b.Property<int>("OperationVersion")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("operation_version");
+
+                    b.Property<string>("PluginId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("plugin_id");
+
+                    b.Property<string>("PluginSnapshotId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("plugin_snapshot_id");
+
+                    b.Property<string>("Preview")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("preview_json");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("requested_at");
+
+                    b.Property<string>("RouteScope")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("route_scope");
+
+                    b.Property<string>("RoutingSnapshotId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("routing_snapshot_id");
+
+                    b.Property<string>("Status")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("subject_json");
+
+                    b.Property<string>("SubjectHash")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("subject_hash");
+
+                    b.Property<int>("WorkItemId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("work_item_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_approvals");
+
+                    b.HasIndex("CampaignId")
+                        .HasDatabaseName("ix_approvals_campaign_id");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_approvals_public_id");
+
+                    b.HasIndex("WorkItemId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_approvals_one_pending_per_item")
+                        .HasFilter("status = 'pending'");
+
+                    b.HasIndex("Status", "RequestedAt")
+                        .HasDatabaseName("ix_approvals_status_requested_at");
+
+                    b.ToTable("approvals", t =>
+                        {
+                            t.HasCheckConstraint("ck_approvals_preview_json", "json_valid(preview_json)");
+
+                            t.HasCheckConstraint("ck_approvals_subject_json", "json_valid(subject_json)");
+                        });
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.Attempt", b =>
                 {
                     b.Property<int>("Id")
@@ -830,6 +967,18 @@ namespace Jason.Runtime.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_work_items_result_json", "result_json IS NULL OR json_valid(result_json)");
                         });
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.Approval", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.WorkItem", "WorkItem")
+                        .WithMany()
+                        .HasForeignKey("WorkItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_approvals_work_items_work_item_id");
+
+                    b.Navigation("WorkItem");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.Attempt", b =>

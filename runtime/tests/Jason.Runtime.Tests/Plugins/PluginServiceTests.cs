@@ -2,6 +2,7 @@ using System.Net;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Plugins.Registry;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -314,6 +315,50 @@ public class PluginServiceTests
         Assert.Equal("validation_failed", error.Code);
         Assert.Equal("actor.type", Assert.Single(error.Details!).Field);
     }
+
+    /// <summary>
+    /// A reload is an operator asking to make the file true now, so the seam's answer — work from the last value
+    /// that validated — would be the wrong one here: it would activate a set of packages built from settings the
+    /// file no longer holds. What it must not be either is an exception nobody translated, which is what a
+    /// mistyped plugin ceiling used to produce. It is the same rejected reload a bad package gets, naming the
+    /// setting that broke, with the previous snapshot still active and still listed.
+    /// </summary>
+    [Fact]
+    public async Task A_reload_against_a_refused_plugins_section_is_rejected_with_the_setting_it_names()
+    {
+        using var programs = new TestPrograms();
+        programs.AddProgram(FakeProviderCli.ExecutableName);
+        var search = new TestSearchPath { Path = programs.Root };
+        await using var api = await StartAsync(search, paths =>
+        {
+            TestPlugins.InstallFakeProvider(paths);
+            TestPlugins.Grant(paths, TestPlugins.FakeProviderId, exec: ["*"]);
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+        });
+
+        var active = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, null, Ct);
+        Assert.Single(active.Plugins);
+
+        // A memory ceiling below the floor the validator holds: the section, refused.
+        File.WriteAllText(api.Paths.UserSettingsFile, InvalidPlugins);
+        Assert.True(await TestOptions.RefusedOnceAsync(api.Resolve<LiveSettings<PluginsOptions>>(), Ct));
+
+        var error = await api.PostErrorAsync(Operations.PluginReload, null, HttpStatusCode.Conflict, Ct);
+
+        Assert.Equal("plugin_reload_rejected", error.Code);
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal("plugins_settings_invalid", detail.Code);
+        Assert.Equal("Plugins:Limits:MemoryMb", detail.Field);
+
+        // Nothing moved: the package that was active still is, and the report says why nothing changed.
+        var listed = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, Ct);
+        Assert.Equal(active.Snapshot.Id, listed.Snapshot.Id);
+        Assert.Single(listed.Plugins);
+        Assert.False(listed.Activated);
+    }
+
+    /// <summary>A plugin memory ceiling below the floor the validator holds, which refuses the whole section.</summary>
+    private const string InvalidPlugins = """{"Dispatcher":{"Enabled":false},"Plugins":{"Limits":{"MemoryMb":0}}}""";
 
     internal static void Install(JasonPaths paths, string variable) => TestPlugins.Write(
         paths,

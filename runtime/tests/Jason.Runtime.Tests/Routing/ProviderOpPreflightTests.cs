@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
+using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
@@ -56,12 +57,6 @@ public class ProviderOpPreflightTests
 
         scenario.Route = new Route(Scenario.PluginId, new JsonObject { ["workspace"] = "west" }, "sha256:west");
 
-        // The approval gate sits between the package and the planner's own mistakes: an operation a person has to
-        // confirm is refused here, although this item also names nobody for an operation that needs somebody.
-        scenario.Operation = Enroll;
-        met.Add(Refused(scenario, FailureClass.Permanent));
-
-        scenario.Operation = Add;
         scenario.Arguments = new JsonObject { ["channel"] = "email" };
         met.Add(Refused(scenario, FailureClass.Permanent));
 
@@ -76,14 +71,69 @@ public class ProviderOpPreflightTests
         met.Add(Refused(scenario, FailureClass.Validation));
         Assert.Equal("/args/list", Assert.Single(scenario.Check().Details!).Field);
 
+        // Last of the twelve, and the only one that is not a refusal: an operation a person has to confirm is
+        // parked rather than failed, and it is asked here — after the input it would be approved for has been
+        // composed and held to its own schema — rather than before any of that was known.
+        scenario.Operation = Enroll;
+        scenario.Arguments = Scenario.CompleteEnrollment;
+        var parked = scenario.Check();
+        Assert.True(parked.Parks);
+        Assert.False(parked.Refused);
+        Assert.NotNull(parked.Plan);
+        Assert.Null(parked.Class);
+        met.Add(parked.Code!);
+
         // Every check in the published order, met one at a time, and then an item with nothing left wrong.
         Assert.Equal(ProviderOpPreflight.Codes, met);
 
+        scenario.Operation = Add;
         scenario.Arguments = Scenario.CompleteArguments;
         var verdict = scenario.Check();
         Assert.True(verdict.Passed);
         Assert.Null(verdict.Code);
         Assert.Null(verdict.Class);
+    }
+
+    /// <summary>
+    /// What the gate reads is the published value and nothing beside it. `campaign.enroll` states its approval
+    /// as a conditional block — `confirm_once`, with a condition that only decides whether a preview is
+    /// *mandatory* — and a conditional block always states the dangerous reading in `value`. Jason builds a
+    /// preview every time, so there is nothing here for a condition to soften, and no condition is evaluated:
+    /// the operation whose value is `confirm_once` parks, the operations whose value is `auto` run.
+    /// </summary>
+    [Fact]
+    public void The_gate_reads_the_dangerous_value_and_never_the_condition_beside_it()
+    {
+        // The case is a real one: this operation's approval is published as a condition, not as a plain value.
+        var enroll = OperationCatalog.Find(Enroll)!;
+        Assert.True(enroll.Approval.Conditional);
+        Assert.Equal("confirm_once", enroll.Approval.Value);
+        Assert.NotNull(enroll.Approval.Detail);
+
+        var parked = new Scenario
+        {
+            Operation = Enroll,
+            Route = Scenario.ToTheInstalledPackage,
+            Contact = Scenario.Person(("email", "ada@example.test")),
+            Arguments = Scenario.CompleteEnrollment,
+        }.Check();
+
+        Assert.True(parked.Parks);
+        Assert.Equal(AttemptErrors.ApprovalRequired, parked.Code);
+
+        // And the two whose value is `auto` are the one approval a runtime may give itself.
+        Assert.Equal("auto", OperationCatalog.Find(Add)!.Approval.Value);
+        Assert.Equal("auto", OperationCatalog.Find(Get)!.Approval.Value);
+        var runs = new Scenario
+        {
+            Operation = Add,
+            Route = Scenario.ToTheInstalledPackage,
+            Contact = Scenario.Person(("email", "ada@example.test")),
+            Arguments = Scenario.CompleteArguments,
+        }.Check();
+
+        Assert.True(runs.Passed);
+        Assert.False(runs.Parks);
     }
 
     /// <summary>
@@ -270,6 +320,16 @@ public class ProviderOpPreflightTests
         {
             ["list"] = new JsonObject { ["external_id"] = "L-1129" },
             ["channel"] = "email",
+        };
+
+        /// <summary>An enrollment with nothing wrong with it, so that the only thing left to stop it is a person.</summary>
+        public static JsonObject CompleteEnrollment => new()
+        {
+            ["campaign"] = new JsonObject { ["external_id"] = "sq-1129" },
+            ["channel"] = "email",
+            ["collision"] = "skip",
+            ["start"] = new JsonObject { ["position"] = "first_step" },
+            ["first_touch"] = "authored_delay",
         };
 
         public string RoutingSnapshotId { get; } = PublicId.New(RouteSnapshot.IdPrefix);

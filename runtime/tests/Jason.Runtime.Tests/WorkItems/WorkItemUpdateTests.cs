@@ -235,7 +235,7 @@ public class WorkItemUpdateTests
     }
 
     private static WorkItemService NewService(JasonDbContext db, TimeProvider clock) =>
-        new(db, new JournalWriter(clock), clock, NewCanceller(clock), TestOptions.Plugins());
+        new(db, new JournalWriter(clock), clock, NewCanceller(clock), TestOptions.PluginSettings());
 
     private static WorkItemCanceller NewCanceller(TimeProvider clock) => TestCanceller.New(clock);
 

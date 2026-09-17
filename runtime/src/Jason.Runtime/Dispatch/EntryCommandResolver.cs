@@ -10,7 +10,7 @@ namespace Jason.Runtime.Dispatch;
 /// makes the whole builtin roster launchable from a single line of settings. Nothing else is invented: a role
 /// nothing can start is a visible failure, not a silent skip.
 /// </summary>
-public sealed class EntryCommandResolver(IOptionsMonitor<RolesOptions> roles)
+public sealed class EntryCommandResolver(LiveSettings<RolesOptions> roles)
 {
     public async Task<IReadOnlyList<string>?> ResolveAsync(JasonDbContext db, string roleName, CancellationToken ct)
     {
@@ -27,7 +27,7 @@ public sealed class EntryCommandResolver(IOptionsMonitor<RolesOptions> roles)
             return own;
         }
 
-        var configured = roles.CurrentValue.DefaultEntryCommand;
+        var configured = roles.Current.DefaultEntryCommand;
         return configured.Count > 0 ? [.. configured] : null;
     }
 }

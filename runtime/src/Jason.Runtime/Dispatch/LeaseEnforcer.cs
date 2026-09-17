@@ -17,7 +17,7 @@ namespace Jason.Runtime.Dispatch;
 public sealed class LeaseEnforcer(
     AttemptOutcomes outcomes,
     TimeProvider clock,
-    DispatcherSettings settings,
+    LiveSettings<DispatcherOptions> settings,
     RunningAttemptRegistry registry,
     DispatcherStatus status,
     UnansweredEnd unanswered)
