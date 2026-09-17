@@ -45,7 +45,7 @@ binding:
     profile:
       type: string
       minLength: 1
-      maxLength: 128
+      maxLength: 64
       description: >-
         The reply-cli profile this route acts as — one of the profiles `reply profile list` shows, each with its
         own stored credential. Absent means whichever profile the CLI itself is currently set to.

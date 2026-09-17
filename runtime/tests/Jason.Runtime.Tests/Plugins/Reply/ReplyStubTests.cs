@@ -199,6 +199,31 @@ public class ReplyStubTests
     // -------------------------------------------------------------------------------------------------------
 
     [Fact]
+    public async Task A_store_this_stand_in_did_not_plant_is_refused_before_anything_is_written()
+    {
+        // The safety rule this program is held to. Which directory it reads is decided by a variable a test
+        // sets, and a test that forgot would find the operator's own Reply configuration — where it would
+        // create profiles, plant accounts and write a log of every call. So the store has to carry a file that
+        // says a test made it, and without that file nothing at all happens: no directory, no record, no
+        // answer.
+        using var account = new ReplyAccount();
+        account.WithSequence(7, "Nurture", "active");
+
+        // A directory that is not one of this stand-in's, modelled by taking the mark off one that is.
+        File.Delete(Path.Combine(Directory.GetParent(account.Root)!.FullName, ".jason-stand-in"));
+
+        var (exit, stdout, stderr) = await account.RunAsync([.. Prefix, "api", "/v3/sequences/7"], Ct);
+
+        Assert.Equal(2, exit);
+        Assert.Equal(string.Empty, stdout);
+        Assert.Equal("usage.store", JsonNode.Parse(stderr.Trim())!["error"]!["code"]!.GetValue<string>());
+
+        // Nothing was read and nothing was written: the call is not even in the log, which is the first thing
+        // this program does for a call it will answer.
+        Assert.Empty(account.Calls);
+    }
+
+    [Fact]
     public async Task An_unauthenticated_account_is_refused_the_way_the_real_cli_refuses_one()
     {
         using var account = new ReplyAccount();

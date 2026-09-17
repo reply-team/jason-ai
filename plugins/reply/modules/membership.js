@@ -55,8 +55,7 @@ export function listMembershipAdd(input, context) {
   // turn a finished piece of work into a permanent failure.
   refuseIfSuppressed(OPERATION, context, ensured, learned);
 
-  add(context, list, ensured, learned);
-  return membership(contact.id, "added", ensured);
+  return membership(contact.id, add(context, list, ensured, learned), ensured);
 }
 
 // Which list this call is about. Reply numbers its lists, so a value that is not a list number names nothing
@@ -130,11 +129,20 @@ function holds(context, list, contactId, learned) {
   return false;
 }
 
-// The add itself. The identifiers go in the body, so nothing about this person reaches an argument.
+// The add itself, and which of the two words the answer earns. The identifiers go in the body, so nothing
+// about this person reaches an argument.
 function add(context, list, contactId, learned) {
   const path = "/v3/contact-lists/" + list + "/add-contacts";
   const known = callOf("POST", path);
   const answer = call(context, "POST", path, { contactIds: [Number(contactId)] }, learned);
+
+  if (answer.code === 409) {
+    // A conflict on an add names the one conflict there is: this person is on this list already. Reply is not
+    // documented to answer it — the live account answers 200 and says nothing about who was already there —
+    // but it is the one status whose meaning here is not a failure, and reporting it as one would fail an item
+    // over work that was already done.
+    return "already_member";
+  }
 
   if (answer.code === 404) {
     // The path names the list and the body names the contact, and the contact was resolved two calls ago, so a
@@ -164,6 +172,8 @@ function add(context, list, contactId, learned) {
     seen.provider_item = describe(failures[contactId]);
     fail(OPERATION, seen, learned);
   }
+
+  return "added";
 }
 
 // One item per person, with the reason — a partial success reported as a single verdict is a defect. The

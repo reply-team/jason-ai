@@ -592,6 +592,30 @@ public class ReplyMembershipTests
         Assert.Equal(1, Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).Diagnostics.LogLines);
     }
 
+    [Fact]
+    public async Task A_conflict_on_the_add_is_the_membership_it_names_rather_than_a_failure()
+    {
+        // The one status whose meaning on this call is not a failure: a conflict on an add names the conflict
+        // there is, which is that the person is on the list already. Reply is not documented to answer it and
+        // the live account answers 200 instead, saying nothing about who was already there — but a provider
+        // that did answer it would have this item fail over work that was already done.
+        using var account = new ReplyAccount();
+        account.WithContact(1001, Address, FirstName).WithList(List, "Q3 LatAm founders", 1001);
+        account.Answers(
+            "POST",
+            $"/v3/contact-lists/{List}/add-contacts",
+            409,
+            Refusal("contactList.contactAlreadyInList", status: 409).ToJsonString());
+
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct));
+
+        Assert.Equal("already_member", answer["items"]![0]!["status"]!.GetValue<string>());
+        Assert.Equal([1001], account.MembersOf(List));
+    }
+
     // -------------------------------------------------------------------------------------------------------
     // Composing the input, and checking both halves against the published document
     // -------------------------------------------------------------------------------------------------------

@@ -66,7 +66,7 @@ export function campaignGet(input, context) {
   // longer one straight through would make the whole answer `result_invalid` — final, never repeated — and cost
   // an operator the read of that campaign for good, over a display string. So the neutral half carries what it
   // can hold and the provider's own name survives beside it, whole.
-  const name = named.length > MAX_NAME ? named.slice(0, MAX_NAME) : named;
+  const name = named.length > MAX_NAME ? shortened(named) : named;
 
   return {
     result: {
@@ -99,6 +99,16 @@ export function campaignGet(input, context) {
     // does not declare would make the whole answer `result_invalid`.
     external_ids: learned,
   };
+}
+
+// The first five hundred characters of a name, cut where a character ends rather than in the middle of one.
+// JavaScript counts a name in UTF-16 units and an emoji is two of them, so a cut at the limit can leave the
+// first half of a pair behind — and half a character is not text: it cannot be written as JSON, so the whole
+// answer would be a protocol failure instead of a campaign with a shortened name.
+function shortened(named) {
+  const cut = named.slice(0, MAX_NAME);
+  const last = cut.charCodeAt(MAX_NAME - 1);
+  return last >= 0xD800 && last <= 0xDBFF ? cut.slice(0, MAX_NAME - 1) : cut;
 }
 
 // Which sequence this call is about. A pin is worked by whenever there is one — that is what a link is for — and

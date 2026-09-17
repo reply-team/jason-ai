@@ -226,6 +226,29 @@ public class ReplyCampaignGetTests
     }
 
     [Fact]
+    public async Task A_name_cut_at_the_limit_is_cut_between_characters_and_never_through_one()
+    {
+        // A name is counted in UTF-16 units and an emoji is two of them, so a cut at the five-hundredth unit
+        // can land inside one character. Half a character cannot be written as JSON: the answer would not be a
+        // shortened name, it would be a protocol failure, and the operator would lose the read of that campaign
+        // over a character nobody chose to put there. The name is built here rather than written out, so the
+        // pair really does straddle the limit.
+        var straddles = new string('a', 499) + char.ConvertFromUtf32(0x1F600) + " and then some more of it";
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, straddles, "active");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = Succeeded(await InvokeAsync(api, Input(supplied: "7"), Ct));
+
+        // One unit short of the limit, because the character at it was not whole, and no lone half left behind.
+        var name = answer["campaign"]!["name"]!.GetValue<string>();
+        Assert.Equal(499, name.Length);
+        Assert.DoesNotContain(name, character => char.IsSurrogate(character));
+        Assert.Equal(straddles, answer["vendor"]!["name"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task A_name_that_fits_is_not_repeated_beside_itself()
     {
         // The provider's name travels under `vendor` only where the two halves really differ. Repeating it

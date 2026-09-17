@@ -31,6 +31,14 @@ internal static class Account
     private const string OptOutsFile = "optouts.json";
     private const string InstructionsFile = "instructions.json";
     private const string CredentialFile = "credential.json";
+
+    /// <summary>
+    /// The file that says a store belongs to this stand-in. It is looked for before anything is created, read
+    /// or written, because the directory this program finds is decided by a variable a test sets — and a test
+    /// that forgot to set it would otherwise find the operator's own Reply configuration and start writing call
+    /// logs and planted accounts into it.
+    /// </summary>
+    private const string MarkerFile = ".jason-stand-in";
     private const string CallsFile = "calls.jsonl";
 
     /// <summary>Where this provider's identifiers start; the number is meaningless, its stability is not.</summary>
@@ -38,7 +46,25 @@ internal static class Account
 
     public static async Task<int> RunAsync(string profile, string method, string path, string? body, string[] argv)
     {
-        var root = Locate(profile);
+        var store = Locate();
+        if (!File.Exists(Path.Combine(store, MarkerFile)))
+        {
+            // Not a store this stand-in planted. Refused before the directory is even created, in the shape the
+            // real CLI refuses a call it will not make: a usage error, and its own code on stderr.
+            await Console.Error.WriteLineAsync(new JsonObject
+            {
+                ["error"] = new JsonObject
+                {
+                    ["code"] = "usage.store",
+                    ["title"] = "This is not a stand-in store.",
+                    ["hint"] = $"No '{MarkerFile}' under '{store}'. A test sets the configuration directory; this one did not.",
+                },
+            }.ToJsonString());
+
+            return 2;
+        }
+
+        var root = Path.Combine(store, profile);
         Directory.CreateDirectory(root);
 
         // Recorded before anything is answered. What a plugin did is then a fact a test can read rather than
@@ -108,27 +134,39 @@ internal static class Account
 
     /// <summary>
     /// Where the real CLI keeps its store, and therefore where this one looks: the platform's own configuration
-    /// directory and then the profile name. No flag carries it, because the child's environment is built from
-    /// nothing and the package declares no environment capability — so this is the only way an account can be
-    /// chosen, and choosing one exercises the base environment for real.
+    /// directory. No flag carries it, because the child's environment is built from nothing and the package
+    /// declares no environment capability — so this is the only way an account can be chosen, and choosing one
+    /// exercises the base environment for real.
     /// </summary>
-    private static string Locate(string profile)
+    /// <remarks>
+    /// A variable that is missing or empty gives a directory of this program's own under the temporary tree,
+    /// never a relative path: a relative one would resolve against whatever the caller's working directory
+    /// happened to be. Nothing is written there either, because no store of this program's making carries the
+    /// marker — the two rules together are what keep a forgotten variable from reaching anybody's real account.
+    /// </remarks>
+    private static string Locate()
     {
-        string store;
+        string configured;
         if (OperatingSystem.IsWindows())
         {
-            store = Environment.GetEnvironmentVariable("APPDATA") ?? string.Empty;
+            configured = Environment.GetEnvironmentVariable("APPDATA") ?? string.Empty;
         }
-        else if (Environment.GetEnvironmentVariable("XDG_CONFIG_HOME") is { Length: > 0 } configured)
+        else if (Environment.GetEnvironmentVariable("XDG_CONFIG_HOME") is { Length: > 0 } home)
         {
-            store = configured;
+            configured = home;
+        }
+        else if (Environment.GetEnvironmentVariable("HOME") is { Length: > 0 } user)
+        {
+            configured = Path.Combine(user, ".config");
         }
         else
         {
-            store = Path.Combine(Environment.GetEnvironmentVariable("HOME") ?? string.Empty, ".config");
+            configured = string.Empty;
         }
 
-        return Path.Combine(store, "reply", profile);
+        return configured.Length == 0
+            ? Path.Combine(Path.GetTempPath(), "jason-reply-stand-in", "reply")
+            : Path.Combine(configured, "reply");
     }
 
     // -------------------------------------------------------------------------------------------------------

@@ -684,12 +684,17 @@ recorded rather than the one it disputes.
 
 ### The worked example
 
-`runtime/tests/fixtures/plugins/fake-provider/` implements all three published operations against a
-stand-in vendor program: the provider-contact precondition, the recovery read under the idempotency
-key, the neutral-to-vendor mapping, and a binding that names the account it acts in. It is a test
-fixture rather than a marketplace plugin, and it is the shortest path to a working one.
-`other-provider/` beside it implements two of the three, because a provider that covers part of the
-catalog is the ordinary case rather than an error.
+`plugins/reply/` is the one to read: a marketplace package that implements all three published
+operations against a real provider by driving that provider's own command-line program. Its README
+says what each operation maps onto, what the provider will not answer, and which of its claims were
+checked against a live account; its `modules/errors.js` is the whole error table written as data, so
+the mapping can be read rather than traced through code.
+
+`runtime/tests/fixtures/plugins/fake-provider/` is the shorter one: the same three operations against
+a stand-in vendor program, with no provider to understand first — the provider-contact precondition,
+the recovery read, the neutral-to-vendor mapping, and a binding that names the account it acts in. It
+is a test fixture rather than a marketplace package. `other-provider/` beside it implements two of the
+three, because a provider that covers part of the catalog is the ordinary case rather than an error.
 
 ## 8. Failure classes
 

@@ -61,6 +61,11 @@ public sealed class ReplyAccount : IDisposable
         Root = Path.Combine(ConfigHome, StoreDirectory, profile);
         Directory.CreateDirectory(Root);
 
+        // The one file that says this store is a test's and not a person's. The stand-in refuses to touch a
+        // store without it, so a test that forgot to point the configuration directory here cannot reach the
+        // operator's own Reply account — it fails instead, which is the only safe way for it to fail.
+        File.WriteAllText(Path.Combine(ConfigHome, StoreDirectory, ".jason-stand-in"), string.Empty);
+
         // Signed in from the start: an account with no credential is a state a test asks for by naming a profile
         // nobody signed into, which is exactly how the real thing fails.
         Write(CredentialFile, new JsonObject { ["token"] = DefaultToken });
