@@ -6,9 +6,15 @@
     <ProjectReference Include="../Jason.FakeAgentHost/Jason.FakeAgentHost.csproj" />
     <!-- The stand-in vendor CLI: the end-to-end plugin flow runs a real program through host.exec. -->
     <ProjectReference Include="../Jason.FakeProviderCli/Jason.FakeProviderCli.csproj" />
+    <!-- The stand-in for the Reply CLI, whose apphost is named `reply`, so the official package's own manifest resolves to it rather than to anything the machine has installed. -->
+    <ProjectReference Include="../Jason.ReplyCliStub/Jason.ReplyCliStub.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- The canonical plugin package, kept in one place and linked into every test project that installs it. -->
     <None Include="../fixtures/plugins/**" LinkBase="Fixtures/plugins" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The marketplace package itself, linked beside the fixtures, so the golden path installs the same package an operator would. -->
+    <None Include="../../../plugins/reply/**" LinkBase="Fixtures/plugins/reply" CopyToOutputDirectory="PreserveNewest" />
+    <!-- One definition of what a Reply account is, shared with the runtime tests rather than copied: the file holds the store's shape, the call log and the instructions the stand-in reads. -->
+    <Compile Include="../Jason.Runtime.Tests/Plugins/Reply/ReplyAccount.cs" Link="EndToEnd/ReplyAccount.cs" />
   </ItemGroup>
 </Project>

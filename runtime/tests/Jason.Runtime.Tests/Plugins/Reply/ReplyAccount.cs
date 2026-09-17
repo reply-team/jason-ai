@@ -85,6 +85,15 @@ public sealed class ReplyAccount : IDisposable
     /// </summary>
     public static string ConfigHomeVariable => OperatingSystem.IsWindows() ? "APPDATA" : "XDG_CONFIG_HOME";
 
+    /// <summary>
+    /// The stand-in itself, as MSBuild copies it beside whatever test project references it. It lives here
+    /// rather than beside the search path it is resolved through, because this file is the whole of what a
+    /// process-boundary test needs to drive a Reply account, and a helper that dragged a dependency along would
+    /// have to be copied instead of shared.
+    /// </summary>
+    public static string StandInPath =>
+        Path.Combine(AppContext.BaseDirectory, "reply" + (OperatingSystem.IsWindows() ? ".exe" : string.Empty));
+
     /// <summary>That name and value, for a test that has to put them on the process which will start the CLI.</summary>
     public IReadOnlyDictionary<string, string> Variables =>
         new Dictionary<string, string>(StringComparer.Ordinal) { [ConfigHomeVariable] = ConfigHome };
@@ -384,7 +393,7 @@ public sealed class ReplyAccount : IDisposable
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        var info = new ProcessStartInfo(ReplyPlugins.ExecutablePath)
+        var info = new ProcessStartInfo(StandInPath)
         {
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
