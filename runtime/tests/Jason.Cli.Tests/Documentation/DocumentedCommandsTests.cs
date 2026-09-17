@@ -15,6 +15,7 @@ namespace Jason.Cli.Tests.Documentation;
 /// and then cannot reach a runtime answers 3 instead, and that is a pass: what is being guarded is the spelling
 /// of the vocabulary, not whether a runtime happens to be running while the tests are.
 /// </remarks>
+[Collection(WorkingDirectoryCollection.Name)]
 public class DocumentedCommandsTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -58,7 +59,7 @@ public class DocumentedCommandsTests
         foreach (var command in commands)
         {
             using var dir = new TempPaths();
-            using var named = new NamedFiles(Arguments(command));
+            using var named = new NamedFiles(Arguments(command), dir.Paths.Root);
             var error = new StringWriter();
 
             // Nothing here may act on the machine. The data directory is this test's own and holds no
@@ -86,12 +87,22 @@ public class DocumentedCommandsTests
     /// afterwards. The CLI reads such a file as it parses, so without this the guard would be reporting that a
     /// page's example data is not on this machine rather than that its command has the wrong spelling.
     /// </summary>
+    /// <remarks>
+    /// A page prints a relative name, and the CLI resolves one against the working directory — so the working
+    /// directory becomes this test's own for as long as the command is parsed, and the placeholder is written
+    /// there. The guard writes nothing outside the directory it owns, and this class is in a collection of its
+    /// own so that nothing else in the assembly runs while the working directory is somewhere else.
+    /// </remarks>
     private sealed class NamedFiles : IDisposable
     {
         private readonly List<string> _created = [];
+        private readonly string _previous = Directory.GetCurrentDirectory();
 
-        public NamedFiles(IReadOnlyList<string> arguments)
+        public NamedFiles(IReadOnlyList<string> arguments, string root)
         {
+            Directory.CreateDirectory(root);
+            Directory.SetCurrentDirectory(root);
+
             for (var index = 0; index < arguments.Count - 1; index++)
             {
                 if (arguments[index] != "--file" || File.Exists(arguments[index + 1]))
@@ -99,13 +110,15 @@ public class DocumentedCommandsTests
                     continue;
                 }
 
-                File.WriteAllText(arguments[index + 1], "[]");
-                _created.Add(arguments[index + 1]);
+                var placeholder = Path.Combine(root, arguments[index + 1]);
+                File.WriteAllText(placeholder, "[]");
+                _created.Add(placeholder);
             }
         }
 
         public void Dispose()
         {
+            Directory.SetCurrentDirectory(_previous);
             foreach (var file in _created)
             {
                 File.Delete(file);
@@ -206,4 +219,15 @@ public class DocumentedCommandsTests
 
         return [.. arguments.Skip(1)];
     }
+}
+
+/// <summary>
+/// The tests that move the process's working directory, kept away from everything else in this assembly while
+/// they do: a directory is process-wide, and a test that read the wrong one would fail for a reason that has
+/// nothing to do with what it is about.
+/// </summary>
+[CollectionDefinition(WorkingDirectoryCollection.Name, DisableParallelization = true)]
+public class WorkingDirectoryCollection
+{
+    public const string Name = "working directory";
 }

@@ -34,6 +34,7 @@ public class FailClosedTests
         await GoldenPath.StartAsync(it);
         GoldenPath.InstallReplyPackage(it);
         var loaded = await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: false);
+        GoldenPath.AssertTheStandInAnswered(Assert.Single(loaded["plugins"]!.AsArray())!.AsObject());
         var unrouted = (string)loaded["routing_snapshot_id"]!;
 
         var campaign = (string)GoldenPath.Json(await GoldenPath.Ok(

@@ -209,7 +209,8 @@ public class GoldenPathTests
             await GoldenPath.WriteSettingsAsync(it, new SettingsShape(ProviderHeartbeatSeconds: 10));
             await GoldenPath.StartAsync(it);
             GoldenPath.InstallReplyPackage(it);
-            await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: true);
+            var loaded = await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: true);
+            GoldenPath.AssertTheStandInAnswered(Assert.Single(loaded["plugins"]!.AsArray())!.AsObject());
 
             var campaign = (string)GoldenPath.Json(await GoldenPath.Ok(
                 GoldenPath.JasonAsync(it, "campaign", "create", "--name", "Q3 LatAm founders")))["id"]!;
@@ -328,7 +329,10 @@ public class GoldenPathTests
         }
         finally
         {
-            // The child outlives the runtime by design, so it is let go, waited for, and only then ended.
+            // The child outlives the runtime by design. Letting it go is what actually ends it — it answers the
+            // call it was holding and exits — and the settle below is best-effort: a child that is still
+            // running has no pid the API can name, so what keeps the cleanup honest is that removing the
+            // directory retries while anything still holds a file in it.
             if (!File.Exists(release))
             {
                 await File.WriteAllTextAsync(release, string.Empty, CancellationToken.None);
@@ -341,8 +345,11 @@ public class GoldenPathTests
 
     /// <summary>
     /// The state a crash between the claim and the launch leaves behind: the item is scheduled, and its live
-    /// attempt has no start on it. Written with the runtime down, because nothing may write a work item's
-    /// status but the transition table while one is running.
+    /// attempt is <c>scheduled</c> too, with no start on it — the handler is what moves an attempt to
+    /// <c>running</c>, and it does that in the same breath as the start this crash happened before. Written with
+    /// the runtime down, because nothing may write a work item's status but the transition table while one is
+    /// running. The provenance the claim pins is deliberately left out: nothing in what a restart decides reads
+    /// it, and inventing a plausible-looking one would be inventing evidence.
     /// </summary>
     private static void ClaimWithoutLaunching(Installation it, string workItemId)
     {
@@ -359,7 +366,7 @@ public class GoldenPathTests
             INSERT INTO attempts (
                 public_id, work_item_id, number, command, status, context_snapshot_json, claimed_at, lock_until)
             SELECT
-                $attempt, id, 1, 'provider_op', 'running', '{}',
+                $attempt, id, 1, 'provider_op', 'scheduled', '{}',
                 strftime('%Y-%m-%d %H:%M:%S', 'now'), strftime('%Y-%m-%d %H:%M:%S', 'now', '+10 minutes')
             FROM work_items WHERE public_id = $item;
             """;

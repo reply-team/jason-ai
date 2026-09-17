@@ -302,6 +302,14 @@ internal static class GoldenPath
     /// Waits for everything this installation started to go, and ends what has not. A bounded wait rather than
     /// a kill outright: a child that is finishing its call is doing the very thing the proof is about.
     /// </summary>
+    /// <remarks>
+    /// Best-effort, and it is worth being plain about how little it can promise: a provider attempt's launch —
+    /// its command, its pid, its exit code — is written when the invocation ends, so a child that is still
+    /// running has no pid to learn and this settles nothing for it. What actually ends an orphaned child is the
+    /// child itself, once the call it was holding is released; what protects the cleanup is
+    /// <see cref="Delete"/>, which retries while something still holds a file. This stays for the children whose
+    /// pid a finished attempt does name.
+    /// </remarks>
     public static async Task SettleAsync(Installation it, TimeSpan within)
     {
         ArgumentNullException.ThrowIfNull(it);
