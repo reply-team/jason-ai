@@ -119,9 +119,49 @@ The chronicle is the record of all of it:
 jason journal list --work-item wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
+## When you did it yourself, outside Jason
+
+Sometimes the effect happens somewhere else: you sent the email through the provider's own CLI because the
+managed path was not available, or somebody asked you to do it by hand and you did. That is allowed — Jason
+does not own every tool you have. What is not allowed is leaving Jason believing it never happened. Until you
+say so, Jason's view of the world is wrong and it will act on that view: a second enrolment for somebody who
+has already had one, an approval question about work that is already done. Report it as soon as you know, in
+the session where you know it.
+
+```
+jason report submit --actor human:ada --effect email_sent --tool reply-cli --summary "Sent the intro by hand after the enrolment failed." --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --work-item wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation campaign.enroll --provider reply --account team@example.com --occurred-at 2026-09-17T11:04:00Z --unknown observed_at --idempotency-key intro-marta-1
+```
+
+It is recorded as your word and as nothing else. Jason does not route it, verify it, retry it, or move any
+work item because of it — it writes down what you said, who said it and when it arrived, and shows it where
+somebody reading the campaign later will find it, including on the work item itself, listed apart from that
+item's own attempts so that neither can be mistaken for the other.
+
+Four things to get right:
+
+- **Say what you do not know with `--unknown <field>`, rather than guessing it.** A guessed timestamp is
+  worse than a missing one, because nobody reading it afterwards can tell it was a guess. `--uncertainty`
+  takes prose for whatever the field names cannot carry.
+- **`--account` names an identity — a mailbox, a workspace, a login. Never a credential.** Jason holds no
+  credential anywhere, and a report is something people read.
+- **Give `--idempotency-key` a value of your own.** If the submission fails halfway and you send it again,
+  the same key answers with the same report instead of recording a second effect. Without a key, a resend of
+  the same words is matched by its content and still answers with the first report.
+- **Use a fresh key when the same effect genuinely happened twice.** Two sends really did reach that person,
+  and a key each puts both on record. With no key, the second is taken for a repeat of the first and you
+  will never see it again.
+
+Read them back the way you read anything else:
+
+```
+jason report list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
+```
+
+What admission does and deliberately does not establish — and why nothing is held or reconsidered
+automatically — is in `docs/reports.md`.
+
 ## What this skill does not cover
 
-Reporting an effect you produced yourself, outside Jason, through some other tool; background AI work and the
-roles that perform it; anything a campaign manager or planner does with an approval; and installing plugins or
-writing routes. Those are other people's jobs or other skills, and guessing at them here would be worse than
-saying so.
+Background AI work and the roles that perform it; anything a campaign manager or planner does with an
+approval; and installing plugins or writing routes. Those are other people's jobs or other skills, and
+guessing at them here would be worse than saying so.
