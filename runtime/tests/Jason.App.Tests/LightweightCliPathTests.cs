@@ -5,9 +5,21 @@ namespace Jason.App.Tests;
 
 public class LightweightCliPathTests
 {
+    /// <summary>
+    /// The CLI path carries none of the server with it: no database, no web host, no logging pipeline, and no
+    /// script engine. A command that answered by loading the runtime would be a different program from the one
+    /// this repository claims to ship.
+    /// </summary>
+    /// <remarks>
+    /// Measured as what this call added rather than as what the process holds: other end-to-end tests in this
+    /// assembly legitimately load a database driver of their own — one of them opens the runtime's own database
+    /// to construct a state a crash leaves behind — and which of them runs first is not this test's business.
+    /// What is asserted is therefore the causal claim, which is the claim worth making.
+    /// </remarks>
     [Fact]
     public async Task Running_a_cli_command_does_not_load_server_side_assemblies()
     {
+        var before = Loaded();
         var root = Path.Combine(Path.GetTempPath(), "jason-app-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         var previous = Environment.GetEnvironmentVariable(JasonPaths.DataDirectoryVariable);
@@ -26,10 +38,10 @@ public class LightweightCliPathTests
             Directory.Delete(root, recursive: true);
         }
 
-        var loaded = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetName().Name ?? string.Empty).ToList();
+        var added = Loaded().Except(before, StringComparer.Ordinal).ToList();
         foreach (var forbidden in new[] { "Microsoft.EntityFrameworkCore", "Microsoft.Data.Sqlite", "Microsoft.AspNetCore", "Serilog", "Jint" })
         {
-            Assert.DoesNotContain(loaded, name => name.StartsWith(forbidden, StringComparison.Ordinal));
+            Assert.DoesNotContain(added, name => name.StartsWith(forbidden, StringComparison.Ordinal));
         }
     }
 
