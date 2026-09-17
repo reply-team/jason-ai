@@ -13,6 +13,7 @@
     <Project Path="tests/Jason.FakeAgentHost/Jason.FakeAgentHost.csproj" />
     <Project Path="tests/Jason.FakeProviderCli/Jason.FakeProviderCli.csproj" />
     <Project Path="tests/Jason.PluginHost.Tests/Jason.PluginHost.Tests.csproj" />
+    <Project Path="tests/Jason.ReplyCliStub/Jason.ReplyCliStub.csproj" />
     <Project Path="tests/Jason.Runtime.Tests/Jason.Runtime.Tests.csproj" />
   </Folder>
 </Solution>

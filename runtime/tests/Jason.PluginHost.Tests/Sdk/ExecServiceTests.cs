@@ -323,6 +323,30 @@ public sealed class ExecServiceTests : IDisposable
         Assert.Equal("exit", line["data"]!["args"]![0]!.GetValue<string>());
     }
 
+    /// <summary>
+    /// A name the runtime resolved through an npm shim is a program <em>plus</em> leading arguments — node and
+    /// the entry script it was told to run. They are the runtime's arguments, not the plugin's: a plugin never
+    /// sees them and can never set them, and they go ahead of everything it asked for.
+    /// </summary>
+    [Fact]
+    public void What_the_runtime_resolved_a_name_to_goes_ahead_of_what_the_plugin_asked_for()
+    {
+        using var harness = Harness(builder => builder.Grants = new InvocationGrants(
+            new ExecGrants([new ExecutableGrant("shimmed", FakeProviderCli.ExecutablePath, ["echo-args", "resolved"])]), null, null));
+
+        var result = Exec(harness, "{ executable: \"shimmed\", args: [\"asked-for\"] }");
+
+        Assert.Equal(0, result["exit_code"]!.GetValue<int>());
+        Assert.Equal("resolved\nasked-for\n", Lines(result));
+
+        // What was actually started is recorded rather than inferred: the name alone no longer says it.
+        var line = Assert.Single(harness.Lines);
+        Assert.Equal("shimmed", line["data"]!["executable"]!.GetValue<string>());
+        Assert.Equal("echo-args", line["data"]!["launch"]![0]!.GetValue<string>());
+        Assert.Equal("resolved", line["data"]!["launch"]![1]!.GetValue<string>());
+        Assert.Equal("asked-for", line["data"]!["args"]![0]!.GetValue<string>());
+    }
+
     [Fact]
     public void An_option_the_call_does_not_have_is_a_type_error()
     {

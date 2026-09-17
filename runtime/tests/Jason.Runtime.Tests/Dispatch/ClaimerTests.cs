@@ -473,7 +473,7 @@ public class ClaimerTests
             Route? route = null)
         {
             var clock = new FixedClock(Noon);
-            var options = TestOptions.Dispatcher(dispatcher);
+            var settings = TestOptions.Settings(dispatcher);
             var journal = new JournalWriter(clock);
             var plugins = new PluginRegistry(clock);
             if (plugin is not null)
@@ -497,13 +497,13 @@ public class ClaimerTests
             Claimer = new Claimer(
                 journal,
                 clock,
-                new AttemptOutcomes(journal, clock, options),
+                new AttemptOutcomes(journal, clock, settings),
                 new EntryCommandResolver(new TestOptionsMonitor<RolesOptions>(roles ?? new RolesOptions())),
                 plugins,
                 routing,
                 new ExternalIdStore(journal, clock),
                 new NothingIsSuppressed(),
-                options,
+                settings,
                 _dir.Paths,
                 NullLogger<Claimer>.Instance);
         }

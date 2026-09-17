@@ -151,11 +151,15 @@ public class DispatcherServiceTests
             Assert.Equal(DispatcherState.Running, info.Dispatcher.State);
             Assert.Equal(1, info.Dispatcher.TickSeconds);
 
-            // The loop was there all along to see the file put right: it scans again without a restart.
+            // The loop was there all along to see the file put right: it scans again without a restart, and it
+            // works from the edit. Both are waited for together, because a scan no longer implies the other: the
+            // seam lets a tick run on the settings it already had, so scans rise again while the file is still
+            // invalid and one more of them says nothing about whether the configuration has been re-read.
             var scans = status.Scans;
             File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"TickSeconds":2,"DrainSeconds":1}}""");
-            Assert.True(await DispatchHarness.EventuallyAsync(() => status.Scans > scans, Ct));
-            Assert.Equal(2, settings.Current.TickSeconds);
+            Assert.True(await DispatchHarness.EventuallyAsync(
+                () => settings.Current.TickSeconds == 2 && status.Scans > scans,
+                Ct));
 
             await fixture.Runtime.StopAsync();
 

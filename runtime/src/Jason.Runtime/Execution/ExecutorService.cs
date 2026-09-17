@@ -9,7 +9,6 @@ using Jason.Runtime.Domain;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Execution;
 
@@ -22,7 +21,7 @@ public sealed partial class ExecutorService(
     JasonDbContext db,
     TimeProvider clock,
     AttemptOutcomes outcomes,
-    IOptionsMonitor<DispatcherOptions> options)
+    DispatcherSettings settings)
 {
     /// <summary>A result is read back into an agent's context; a megabyte is already more than that can hold.</summary>
     public const int MaxResultBytes = 1024 * 1024;
@@ -59,7 +58,14 @@ public sealed partial class ExecutorService(
             .Include(a => a.WorkItem)
             .FirstAsync(a => a.PublicId == attemptId, cancellationToken)
             .ConfigureAwait(false);
-        var limits = EffectiveLimits.For(attempt.WorkItem!, options.CurrentValue);
+        // The fence has already written down that this executor is alive, which is true whatever the settings
+        // say. What is missing is the interval to answer with, and there is nothing left to read it from.
+        if (!settings.TryCurrent(out var current))
+        {
+            throw DomainErrors.SettingsUnreadable();
+        }
+
+        var limits = EffectiveLimits.For(attempt.WorkItem!, current);
 
         // Twice the interval, so one late heartbeat is not a lost executor; the dispatcher enforces the same rule.
         var dueBy = limits.HeartbeatSeconds == 0 ? (DateTimeOffset?)null : WorkItemMapper.Utc(now.AddSeconds(2L * limits.HeartbeatSeconds));
@@ -99,6 +105,15 @@ public sealed partial class ExecutorService(
         });
 
         EnsureResultWithinLimits(request.Result);
+
+        // A failure is where the settings decide what happens next — how many attempts this kind of work gets,
+        // and how long before the next one. Asked before anything is touched, and asked only of the branch that
+        // needs an answer: a successful completion reads nothing from them and is never held up by them.
+        if (request.Status == CompletionStatus.Failed && !settings.TryCurrent(out _))
+        {
+            throw DomainErrors.SettingsUnreadable();
+        }
+
         var now = clock.GetUtcNow().UtcDateTime;
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);

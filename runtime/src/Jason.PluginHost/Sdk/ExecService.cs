@@ -119,6 +119,14 @@ public sealed partial class ExecService(HostServices services)
             RedirectStandardError = true,
         };
 
+        // What the runtime resolved this name to, ahead of anything the plugin asked for. A plugin never sees
+        // these and can never set them: they are how a program the user granted is actually started — node and
+        // an entry script, where the name resolved to a shim rather than to a program of its own.
+        foreach (var argument in executable.Launch ?? [])
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
         foreach (var argument in arguments)
         {
             startInfo.ArgumentList.Add(argument);
@@ -214,6 +222,10 @@ public sealed partial class ExecService(HostServices services)
                 new JsonObject
                 {
                     ["executable"] = executable.Name,
+
+                    // What the name was resolved to, beside what the plugin asked for: with an interpreter in
+                    // front, the name alone no longer says which program ran.
+                    ["launch"] = new JsonArray([.. (executable.Launch ?? []).Select(argument => JsonValue.Create(argument))]),
                     ["args"] = new JsonArray([.. arguments.Select(argument => JsonValue.Create(argument))]),
                     ["exit_code"] = exitCode,
                     ["timed_out"] = timedOut,

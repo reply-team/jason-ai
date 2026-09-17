@@ -167,12 +167,13 @@ public class LeaseEnforcerTests
                 o.ExitGraceSeconds = 30;
                 o.AiRole.HeartbeatSeconds = 120;
             });
+            Settings = TestOptions.Settings(Options);
             Registry = new RunningAttemptRegistry();
             Status = new DispatcherStatus();
             Enforcer = new LeaseEnforcer(
-                new AttemptOutcomes(new JournalWriter(Clock), Clock, Options),
+                new AttemptOutcomes(new JournalWriter(Clock), Clock, Settings),
                 Clock,
-                Options,
+                Settings,
                 Registry,
                 Status,
                 new UnansweredEnd(OperationCatalog.Find));
@@ -181,6 +182,8 @@ public class LeaseEnforcerTests
         public FixedClock Clock { get; }
 
         public TestOptionsMonitor<DispatcherOptions> Options { get; }
+
+        public DispatcherSettings Settings { get; }
 
         public RunningAttemptRegistry Registry { get; }
 

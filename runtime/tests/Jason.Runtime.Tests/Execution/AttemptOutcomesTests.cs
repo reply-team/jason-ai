@@ -244,7 +244,7 @@ public class AttemptOutcomesTests
             o.RetryDelaySeconds = 60;
             o.AiRole.MaxAttempts = 2;
         });
-        return (new AttemptOutcomes(new JournalWriter(clock), clock, options), options);
+        return (new AttemptOutcomes(new JournalWriter(clock), clock, TestOptions.Settings(options)), options);
     }
 
     private static async Task<(WorkItem Item, Attempt Attempt)> SeedAsync(JasonDbContext db, AttemptStatus attemptStatus, WorkItemStatus itemStatus)

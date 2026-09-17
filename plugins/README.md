@@ -19,7 +19,13 @@ This directory is the plugin marketplace of the repository. Each plugin lives in
 └── modules/      # optional local JavaScript modules bundled with the plugin
 ```
 
-The index is empty: the official Reply plugin and a reference notification plugin will land here.
+The index so far:
+
+| Plugin | What it implements |
+|---|---|
+| [`reply/`](reply/README.md) | `campaign.get`, `list_membership.add` and `campaign.enroll` against a Reply account, performed through the Reply CLI, which owns the credential. Its README is the operator's page: what it needs, how it is installed today, the account a route names, every failure it reports, and what it cannot do. |
+
+A reference notification plugin will land beside it.
 
 **Writing one?** [docs/plugins.md](../docs/plugins.md) is the author's guide — package layout, every
 manifest rule and its problem code, the Host SDK with every limit, capabilities and grants, the

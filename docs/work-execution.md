@@ -255,6 +255,16 @@ error, about 4 KiB of it, are kept on the attempt as the trace, with the token t
 A process that reported its result and then stayed around is stopped once `Dispatcher:ExitGraceSeconds`
 have passed since its attempt finished: the attempt is over, so nothing it does now can be recorded.
 
+**A settings file that does not validate is not the executor's problem.** `settings.json` can be edited
+while the runtime runs, and an edit the validator refuses costs the edit and not the runtime: the last
+settings that did validate stay in force, and every part of the runtime that reads them — the scan, the
+lease sweep, the claim, the handler, and these three operations — reads them the same way, so a child
+goes on heartbeating and reporting while a person repairs the file. Only a runtime that has never read
+settings the validator accepted has nothing to work from; `workitem.heartbeat` and a **failed**
+`workitem.complete` then answer `503 settings_unreadable`, `retryable: true`, and the whole remedy is
+to repair the file and call again. A successful `workitem.complete` and `workitem.cancel` read no
+settings at all and are never refused for this reason.
+
 ### Error codes
 
 | Code | Where | Meaning |
@@ -266,6 +276,7 @@ have passed since its attempt finished: the attempt is over, so nothing it does 
 | `campaign_archived` | 409 | an archived campaign takes no new work |
 | `result_too_large` | 400 | the result exceeds 1 MiB |
 | `role_exists` | 409 | a role of that name already exists |
+| `settings_unreadable` | 503 | the settings are invalid and none have validated since the runtime started; repair the file and call again |
 | `lease_expired` | attempt | the whole budget of the attempt was spent |
 | `heartbeat_missed` | attempt | nothing was heard for twice the heartbeat interval |
 | `executor_exited` | attempt | the child ended without reporting |

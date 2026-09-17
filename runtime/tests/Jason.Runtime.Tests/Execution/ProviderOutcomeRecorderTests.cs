@@ -408,7 +408,7 @@ public class ProviderOutcomeRecorderTests
 
         var options = TestOptions.Plugins(o => o.Invoker.OutcomeBytes = invokerOutcomeBytes ?? o.Invoker.OutcomeBytes);
         var recorder = new ProviderOutcomeRecorder(
-            new AttemptOutcomes(new JournalWriter(clock), clock, TestOptions.Dispatcher(o => o.RetryDelaySeconds = 0)),
+            new AttemptOutcomes(new JournalWriter(clock), clock, TestOptions.Settings(o => o.RetryDelaySeconds = 0)),
             new ExternalIdStore(new JournalWriter(clock), clock),
             options);
         return new Scene(recorder, campaign, contact, item, attempt);

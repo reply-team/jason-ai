@@ -106,8 +106,8 @@ public class FencingTests
     private static ExecutorService NewService(JasonDbContext db)
     {
         var clock = new FixedClock(Noon);
-        var options = TestOptions.Dispatcher();
-        return new ExecutorService(db, clock, new AttemptOutcomes(new JournalWriter(clock), clock, options), options);
+        var settings = TestOptions.Settings();
+        return new ExecutorService(db, clock, new AttemptOutcomes(new JournalWriter(clock), clock, settings), settings);
     }
 
     private static async Task<(string ItemId, string LiveAttemptId, string SupersededAttemptId)> SeedAsync(TestDatabase database)

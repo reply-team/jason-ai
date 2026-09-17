@@ -14,8 +14,11 @@ public sealed record PluginProblemDto(string Code, string Path, string Message);
 /// <summary>
 /// A declared executable as the machine answered for it: the path it resolved to, the version it reported when
 /// the user granted it (an ungranted one is never run, so its version stays null), and the minimum asked for.
+/// <c>Launch</c> is what goes on the command line before anything a plugin asks for — absent for an ordinary
+/// program, and the entry script where a Windows npm shim resolved to an interpreter plus that script, so a
+/// person reading a listing sees which file will actually run.
 /// </summary>
-public sealed record ExecutableDto(string Name, string? Path, string? Version, string? MinVersion);
+public sealed record ExecutableDto(string Name, string? Path, string? Version, string? MinVersion, IReadOnlyList<string>? Launch = null);
 
 public sealed record ExecCapabilityDto(IReadOnlyList<ExecutableDto> Requested, IReadOnlyList<string> Granted);
 
