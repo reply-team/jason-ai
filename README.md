@@ -25,7 +25,11 @@ durable outbound-sales operation.
 > and the account by identity. **No provider is built in.** One arrives as a plugin, and a fresh
 > runtime routes nothing anywhere until somebody writes a route
 > ([docs/routing.md](docs/routing.md)); an operation that needs a person's approval still fails
-> closed, because nothing here can ask for one. The runtime is being built in the open, one
+> closed, because nothing here can ask for one. **The first such plugin is in this repository**:
+> [`plugins/reply/`](plugins/reply/README.md) performs all three published operations against a Reply
+> account through the Reply CLI, which owns the credential — so an operator installs that CLI, signs in
+> with it, copies the package into `~/.jason/plugins/`, grants it that one program, and writes the
+> route. The runtime is being built in the open, one
 > self-contained increment at a time; no dates, no roadmap promises.
 
 ## What this is

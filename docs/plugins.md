@@ -116,7 +116,7 @@ binding:                         # optional; a schema, in the published dialect,
 | `entry.module` | `.js` or `.mjs`, relative, no `..` segments, inside the package, must exist | `field_invalid`, `entry_module_outside_package`, `entry_module_missing` |
 | `entry.function` | `^[A-Za-z_$][A-Za-z0-9_$]*$` | `entry_function_invalid` |
 | `capabilities.exec.executables` | required inside `exec`; 1..16 entries | `field_required`, `field_invalid` |
-| `…executables[i].name` | required; `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, no separators, no duplicates | `field_required`, `field_invalid` |
+| `…executables[i].name` | required; `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, no separators, no duplicates. Resolved on the search path at every reload: an executable file, or on Windows the cmd shim npm writes, which resolves to `node.exe` plus the entry script the shim names (§13) | `field_required`, `field_invalid`, `executable_missing`, `executable_not_runnable` |
 | `…executables[i].min_version` | `major.minor.patch`; needs a `version_command` | `field_invalid` |
 | `…executables[i].version_command` | exactly one of `["--version"]`, `["-v"]`, `["-V"]`, `["version"]` | `field_invalid` |
 | `capabilities.http.hosts` | required inside `http`; 1..32 lowercase `host` or `host:port` (port 1–65535), exact, unique, no scheme, no path, no wildcards | `field_required`, `field_invalid`, `host_invalid` |
@@ -179,7 +179,7 @@ it in full:
       "digest": "sha256:3f2a9c1b4d5e…", "contracts": { "protocol": [1], "operations": [1] },
       "operations": ["echo.run", "exec.run"], "entry": { "module": "main.js", "function": "invoke" },
       "capabilities": {
-        "exec": { "requested": [ { "name": "provider-cli", "path": "/usr/local/bin/provider-cli", "version": "2.4.1", "min_version": null } ], "granted": ["provider-cli"] },
+        "exec": { "requested": [ { "name": "provider-cli", "path": "/usr/local/bin/provider-cli", "version": "2.4.1", "min_version": null, "launch": null } ], "granted": ["provider-cli"] },
         "http": { "requested": ["localhost:5555", "api.example.com"], "granted": [] },
         "env":  { "requested": ["FAKE_TOKEN", "OTHER_TOKEN"], "granted": ["FAKE_TOKEN"] } },
       "limits": { "timeout_ms": 20000, "memory_mb": 64 }, "status": "valid", "problems": [] } ],
@@ -346,6 +346,13 @@ There is no path lookup in the child, absolute paths are not accepted, and nothi
 a shell: arguments go through an argument array, one at a time. A name that is not granted — or any
 name containing `/`, `\` or `:` — fails with `executable_not_allowed`.
 
+A name may resolve to a program **plus leading arguments** — on Windows, where npm installed the CLI
+as a cmd shim, that is `node.exe` and the entry script the shim named (§13). Those arguments are the
+runtime's: they go ahead of everything in `args`, a plugin can neither see nor set them, and they are
+not counted against the `args` cap, because a limit should not depend on how a vendor packaged its
+CLI. They travel in the envelope as the grant's `launch` and are recorded on the `exec` line, so what
+was actually started is on the record rather than inferred from the name.
+
 | Key | Rule |
 |---|---|
 | `executable` | required string, at most 256 characters, a granted name |
@@ -371,7 +378,8 @@ about what it left behind, and the call comes back with whatever was captured ra
 a handle the program it ran no longer holds. A granted program that will not start at all is an answer too: `exit_code: -1` with the
 reason in `stderr`, and an `exec_launch_failed` line on stderr. At most `Plugins:Exec:MaxCalls` (64)
 calls per invocation; the next fails `exec_limit`. Every call is logged as one `exec` line:
-executable, arguments, exit code, duration, timed out, truncated.
+executable, what the runtime resolved that name to (`launch`), arguments, exit code, duration, timed
+out, truncated.
 
 ### `host.http`
 
@@ -458,8 +466,8 @@ The plugin-host process — and therefore every program `host.exec` starts — i
   `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `APPDATA`, `LOCALAPPDATA`, `ProgramData`, `ProgramFiles`,
   `ProgramFiles(x86)`, `ProgramW6432`, `NUMBER_OF_PROCESSORS`, `PROCESSOR_ARCHITECTURE`, `OS`,
   `USERNAME`;
-- on everything else: `HOME`, `TMPDIR`, `LANG`, `LC_ALL`, `LC_CTYPE`, `USER`, `LOGNAME`, `SHELL`,
-  `TERM`;
+- on everything else: `HOME`, `XDG_CONFIG_HOME`, `TMPDIR`, `LANG`, `LC_ALL`, `LC_CTYPE`, `USER`,
+  `LOGNAME`, `SHELL`, `TERM`;
 - plus the granted `env` variables, by name.
 
 Never anything else, and **never a `JASON_*` variable** — not even `JASON_DATA_DIR`. A plugin that
@@ -676,12 +684,17 @@ recorded rather than the one it disputes.
 
 ### The worked example
 
-`runtime/tests/fixtures/plugins/fake-provider/` implements all three published operations against a
-stand-in vendor program: the provider-contact precondition, the recovery read under the idempotency
-key, the neutral-to-vendor mapping, and a binding that names the account it acts in. It is a test
-fixture rather than a marketplace plugin, and it is the shortest path to a working one.
-`other-provider/` beside it implements two of the three, because a provider that covers part of the
-catalog is the ordinary case rather than an error.
+`plugins/reply/` is the one to read: a marketplace package that implements all three published
+operations against a real provider by driving that provider's own command-line program. Its README
+says what each operation maps onto, what the provider will not answer, and which of its claims were
+checked against a live account; its `modules/errors.js` is the whole error table written as data, so
+the mapping can be read rather than traced through code.
+
+`runtime/tests/fixtures/plugins/fake-provider/` is the shorter one: the same three operations against
+a stand-in vendor program, with no provider to understand first — the provider-contact precondition,
+the recovery read, the neutral-to-vendor mapping, and a binding that names the account it acts in. It
+is a test fixture rather than a marketplace package. `other-provider/` beside it implements two of the
+three, because a provider that covers part of the catalog is the ordinary case rather than an error.
 
 ## 8. Failure classes
 
@@ -808,7 +821,7 @@ disagreement. Everything else, the input, the binding and the resolved grants in
   "input": { "…": "the operation's arguments, at most 1 MiB" },
   "context": { "binding": null, "attempt_id": null, "attempt_number": null,
                "work_item_id": null, "campaign_id": null, "runtime_version": "0.1.0" },
-  "grants": { "exec": { "executables": [ { "name": "provider-cli", "path": "/usr/local/bin/provider-cli" } ] },
+  "grants": { "exec": { "executables": [ { "name": "provider-cli", "path": "/usr/local/bin/provider-cli", "launch": null } ] },
               "http": { "hosts": ["api.example.com"] },
               "env": { "variables": ["FAKE_TOKEN"] } },
   "limits": { "timeout_ms": 20000, "memory_bytes": 67108864, "max_statements": 10000000, "max_recursion": 64,
@@ -820,7 +833,9 @@ disagreement. Everything else, the input, the binding and the resolved grants in
 
 The grants here are the **resolved policy** — what the user granted out of what the manifest
 requested — so the child enforces what the runtime decided and has no configuration of its own. No
-secret value is in the envelope. A capability the manifest never requested is `null` here.
+secret value is in the envelope. A capability the manifest never requested is `null` here. An
+executable's `launch` is `null` for an ordinary program and carries the arguments that go before the
+plugin's own where the name resolved to an interpreter and a script (§13).
 
 ### The outcome: stdout, exactly one JSON object
 
@@ -956,11 +971,40 @@ are the operations' own examples; §7 says how to drive one through the host by 
 
 ## 13. Known limitations of this version
 
-- **Windows: only `.exe` and `.com` can be declared.** A bare name that resolves only to a `.cmd`,
-  `.bat` or `.ps1` is `executable_not_runnable`, because starting one means `cmd.exe` interprets the
-  arguments — the shell the argument-array rule exists to exclude. A Node-based CLI installed through
-  npm resolves to a `.cmd` shim and so needs a native executable today; resolving a shim into its
-  interpreter and entry script is a possible future step inside the executable resolver.
+- **Windows: only `.exe`, `.com` and npm's own cmd shim.** A bare name that resolves only to a `.bat`
+  or a `.ps1` — or to a `.cmd` that is anything other than the shim `npm install -g` writes today — is
+  `executable_not_runnable`, because starting one means `cmd.exe` interprets the arguments, the shell
+  the argument-array rule exists to exclude. The one exception is that shim, which every Node-based
+  vendor CLI installed by npm resolves to: the runtime reads it, takes the entry script it names, and
+  starts `node.exe <entry script> <your arguments>` through the argument array, so no shell is
+  involved at any point. It is the **last** resort, never the first: the search path is walked to its
+  end, any `.exe` or `.com` in any directory wins outright, and only then is the first `.cmd` that was
+  found read. Every one of these has to hold, and a file that breaks one is refused with that rule
+  named:
+  - the file is at most 8 KiB and matches npm's current `:find_dp0` template exactly, so an older
+    template is refused;
+  - the package is one directory under `node_modules`, and that directory reads as a package name
+    before any path is built from it — so a **scoped package** (`node_modules\@scope\name\…`) is
+    refused and says so, and so is a segment that is not a name at all, such as `..` or a drive letter;
+  - that package's own `package.json` maps **this declared name** to **this same entry**, either as a
+    `bin` object keyed by the name or as a bare `bin` string on a package whose own `name` is the
+    declared name — no other shape is read;
+  - the entry lies inside the package directory as the disk really holds it, followed link by link
+    from that directory down — so a `..` in the entry path is refused, and so is a junction or a
+    symbolic link that leaves the package, at `node_modules`, at the package itself, at any directory
+    inside it, or at the entry file;
+  - `node.exe` is found beside the shim or on the same search path, and recorded as an absolute path.
+
+  What the name resolved to is visible in `plugin list` and in the envelope as `launch`, and every
+  `host.exec` line records it.
+
+  Resolving a shim means the runtime now reads a file to decide what to start, which it did not do
+  before. It does not widen who can substitute the program — anyone who can write npm's directory can
+  already replace an `.exe` on the search path — but it is a new kind of trust, so it is narrow on
+  purpose: npm's exact template, the package's own `bin` entry as a cross-check, the entry script held
+  inside the package directory, an absolute interpreter, and the whole thing re-read at every reload,
+  never remembered from the last one. A file that deviates in any of those is refused with the rule it
+  broke, exactly as a `.cmd` is refused today.
 - **Proxies come from the base environment.** `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and their
   lowercase forms are passed through and honoured; there is no proxy configuration of Jason's own and
   no custom TLS.
