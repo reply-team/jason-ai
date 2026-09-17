@@ -1,4 +1,5 @@
 using System.Collections;
+using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Plugins;
@@ -27,6 +28,11 @@ public sealed class PluginLoader(
         new EventId(1, nameof(Loaded)),
         "Plugin load ({Source}): activated {Activated}, {Plugins} plugins from {Candidates} candidates");
 
+    private static readonly Action<ILogger, int, Exception?> SectionRefused = LoggerMessage.Define<int>(
+        LogLevel.Error,
+        new EventId(5, nameof(SectionRefused)),
+        "Plugin load refused: the Plugins section of the settings file has {Problems} problem(s); the previous snapshot stays active");
+
     private static readonly Action<ILogger, string, string, Exception?> CandidateRejected = LoggerMessage.Define<string, string>(
         LogLevel.Warning,
         new EventId(2, nameof(CandidateRejected)),
@@ -44,7 +50,21 @@ public sealed class PluginLoader(
 
     public async Task<LoadResult> LoadAsync(SnapshotSource source, CancellationToken cancellationToken)
     {
-        var settings = options.CurrentValue;
+        PluginsOptions settings;
+        try
+        {
+            settings = options.CurrentValue;
+        }
+        catch (OptionsValidationException refused)
+        {
+            // A load reads the ceilings every package is held to, so it cannot be performed against a section
+            // the validator will not hand over. Working from the last value that validated would be the wrong
+            // answer here and not the kind one: a reload is an operator asking to make the file true now, and
+            // activating a set built from settings the file no longer holds is exactly what they did not ask
+            // for. So it is the same rejected reload a bad package gets, naming the setting, with the previous
+            // snapshot left active — and never an exception nobody translated, which says the runtime broke.
+            return Refused(source, refused);
+        }
         var bounds = new ManifestBounds(settings.Limits.MaxTimeoutMs, settings.Limits.MaxMemoryMb);
         var environment = CurrentEnvironment();
         var candidates = new List<CandidateReport>();
@@ -91,6 +111,24 @@ public sealed class PluginLoader(
         return new LoadResult(
             activated ? new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), now, source, plugins) : null,
             report);
+    }
+
+    /// <summary>
+    /// A load that never looked at a package, because the section it reads its own ceilings from is invalid. The
+    /// report is what <c>plugin.list</c> shows afterwards and what the caller is answered with, in the
+    /// vocabulary an operator repairing an installation already reads.
+    /// </summary>
+    private LoadResult Refused(SnapshotSource source, OptionsValidationException refused)
+    {
+        var problems = refused.Failures
+            .Select(failure => new ErrorDetail(
+                SettingsFailure.Name(PluginsOptions.Section, failure),
+                ProblemCodes.PluginsSettingsInvalid,
+                failure))
+            .ToList();
+
+        SectionRefused(logger, problems.Count, null);
+        return new LoadResult(null, new ReloadReport(clock.GetUtcNow().UtcDateTime, source, Activated: false, [], [], problems));
     }
 
     /// <summary>

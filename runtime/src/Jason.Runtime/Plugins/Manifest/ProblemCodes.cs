@@ -51,6 +51,13 @@ public static class ProblemCodes
     public const string PackageTooLarge = "package_too_large";
     public const string PackageUnreadable = "package_unreadable";
 
+    /// <summary>
+    /// Not a package's problem at all: the <c>Plugins</c> section a load reads its own ceilings from is invalid,
+    /// so no package can be measured against it. Named the way the routes section names its own
+    /// (<c>routes_settings_invalid</c>), because an operator meets both while repairing one file.
+    /// </summary>
+    public const string PluginsSettingsInvalid = "plugins_settings_invalid";
+
     /// <summary>A warning: the settings grant something the manifest never asked for, so nothing was granted.</summary>
     public const string GrantUnrequested = "grant_unrequested";
 

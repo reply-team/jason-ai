@@ -1,4 +1,5 @@
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Tests.Dispatch;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -76,6 +77,23 @@ public static class TestOptions
                 typeof(PluginsOptions),
                 ["Plugins:Limits:MemoryMb must be between 16 and 1024; got 0."])),
             PluginsOptions.Section);
+
+    /// <summary>
+    /// Waits for an edit to have been met, and for nothing else. The options system notices a file on its own
+    /// schedule, so a request that arrives first reads the settings that were still good — and a test that
+    /// inferred "the edit is in force" from "the request succeeded" would pass with the seam taken out again.
+    /// The seam's own counter is the one event that says the broken file has been read, and where nothing else
+    /// polls that section the waiting itself is what does the reading.
+    /// </summary>
+    public static Task<bool> RefusedOnceAsync<TOptions>(LiveSettings<TOptions> settings, CancellationToken ct)
+        where TOptions : class =>
+        DispatchHarness.EventuallyAsync(
+            () =>
+            {
+                settings.TryCurrent(out _);
+                return settings.Refusals == 1;
+            },
+            ct);
 
     private static LiveSettings<TOptions> Seam<TOptions>(IOptionsMonitor<TOptions> monitor, string section)
         where TOptions : class =>

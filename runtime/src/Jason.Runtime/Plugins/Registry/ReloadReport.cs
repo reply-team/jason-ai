@@ -13,7 +13,8 @@ public sealed record CandidateReport(string Directory, string? Id, CandidateStat
 /// <para>
 /// <see cref="Routes"/> carries what the candidate route set was refused for, each detail's <c>Field</c> naming
 /// the route. It is a field of its own rather than a candidate called "routes", because a candidate is a package
-/// and a route is not one.
+/// and a route is not one. <see cref="Settings"/> is the same again for the section a load reads its own
+/// ceilings from: a file edited into something the validator refuses is neither a package's fault nor a route's.
 /// </para>
 /// </summary>
 public sealed record ReloadReport(
@@ -21,7 +22,8 @@ public sealed record ReloadReport(
     SnapshotSource Source,
     bool Activated,
     IReadOnlyList<CandidateReport> Candidates,
-    IReadOnlyList<ErrorDetail> Routes);
+    IReadOnlyList<ErrorDetail> Routes,
+    IReadOnlyList<ErrorDetail>? Settings = null);
 
 /// <summary>A load: the snapshot it would activate, or none when some candidate's package is not valid.</summary>
 public sealed record LoadResult(PluginSnapshot? Snapshot, ReloadReport Report);
