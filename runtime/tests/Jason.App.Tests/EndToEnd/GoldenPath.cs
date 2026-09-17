@@ -219,7 +219,12 @@ internal static class GoldenPath
         process.WaitForExit();
     }
 
-    /// <summary>The child that one attempt launched, once the runtime has written it down.</summary>
+    /// <summary>
+    /// The child one attempt launched, where the runtime has written it down. A provider attempt records its
+    /// launch — command, pid and exit code — when the invocation ends, so an attempt that is still in flight
+    /// has no pid to learn: what a test can observe about a running child is what the child itself says, which
+    /// is why the hold writes a marker file rather than the runtime being asked.
+    /// </summary>
     public static async Task<int?> ChildPidAsync(Installation it, string workItemId)
     {
         var item = Json(await Ok(JasonAsync(it, "workitem", "get", workItemId)));
@@ -458,18 +463,37 @@ internal static class GoldenPath
         }
     }
 
+    /// <summary>
+    /// Removes a temporary directory, waiting a little for whatever still holds a file in it. A runtime killed
+    /// without its tree leaves a plugin host and a vendor CLI finishing their work, and on Windows a live child
+    /// holding one file is enough to refuse the whole delete — so this retries rather than failing a proof over
+    /// its own cleanup, and gives up quietly if something outlives the wait.
+    /// </summary>
     public static void Delete(string directory)
     {
-        try
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (true)
         {
-            Directory.Delete(directory, recursive: true);
-        }
-        catch (IOException)
-        {
-            // A handle may outlive the process that held it; a temporary directory left behind is harmless.
-        }
-        catch (UnauthorizedAccessException)
-        {
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+                return;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                return;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                if (DateTime.UtcNow >= deadline)
+                {
+                    // A handle may outlive the process that held it; a temporary directory left behind is
+                    // harmless, and failing a test over it would be a test about the operating system.
+                    return;
+                }
+
+                Thread.Sleep(100);
+            }
         }
     }
 }

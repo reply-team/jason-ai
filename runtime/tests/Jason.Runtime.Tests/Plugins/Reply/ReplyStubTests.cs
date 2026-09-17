@@ -731,6 +731,81 @@ public class ReplyStubTests
     }
 
     // -------------------------------------------------------------------------------------------------------
+    // Holding a call open, for the tests that have to interrupt one
+    // -------------------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task A_call_the_account_was_told_to_hold_says_it_started_and_waits_to_be_let_go()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(7, "Nurture", "active");
+        var directory = Path.Combine(Path.GetTempPath(), "jason-hold", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var started = Path.Combine(directory, "started");
+        var release = Path.Combine(directory, "release");
+
+        try
+        {
+            account.HoldsOn("GET", "/v3/sequences/7", started, release);
+            var call = account.RunAsync([.. Prefix, "api", "/v3/sequences/7"], Ct);
+
+            // It says it has started, which is the whole point: a caller can now interrupt a call it has
+            // observed rather than one it hopes is running.
+            var appeared = DateTime.UtcNow.AddSeconds(30);
+            while (!File.Exists(started) && DateTime.UtcNow < appeared)
+            {
+                await Task.Delay(25, Ct);
+            }
+
+            Assert.True(File.Exists(started), "The held call never said it had started.");
+            Assert.False(call.IsCompleted, "The call answered without waiting to be let go.");
+
+            await File.WriteAllTextAsync(release, string.Empty, Ct);
+            var (exit, stdout, _) = await call.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+
+            // And once let go it answers exactly as it would have: holding is about when, never about what.
+            Assert.Equal(0, exit);
+            Assert.Equal(200, Answer(stdout).Code);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task A_held_call_that_is_never_let_go_ends_at_its_cap_rather_than_holding_the_run_open()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(7, "Nurture", "active");
+        var directory = Path.Combine(Path.GetTempPath(), "jason-hold", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+
+        try
+        {
+            // Nothing will ever create the sentinel. The cap is the last resort, so it is proven in
+            // milliseconds rather than left as a promise about minutes.
+            account.HoldsOn(
+                "GET",
+                "/v3/sequences/7",
+                Path.Combine(directory, "started"),
+                Path.Combine(directory, "never"),
+                capMs: 200);
+
+            var (exit, stdout, _) = await account
+                .RunAsync([.. Prefix, "api", "/v3/sequences/7"], Ct)
+                .WaitAsync(TimeSpan.FromSeconds(30), Ct);
+
+            Assert.Equal(0, exit);
+            Assert.Equal(200, Answer(stdout).Code);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    // -------------------------------------------------------------------------------------------------------
     // Reading what it printed
     // -------------------------------------------------------------------------------------------------------
 

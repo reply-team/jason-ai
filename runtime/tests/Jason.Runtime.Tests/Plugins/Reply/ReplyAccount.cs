@@ -287,6 +287,24 @@ public sealed class ReplyAccount : IDisposable
             ["stderr"] = stderr ?? string.Empty,
         });
 
+    /// <summary>
+    /// The next call to this method and path says it has started — by creating <paramref name="marker"/> — and
+    /// then waits for <paramref name="until"/> to appear before answering as it otherwise would. It is what
+    /// <see cref="Hangs"/> cannot do: a delay says how long to wait, never that the waiting has begun, and a
+    /// test that has to interrupt a call in flight can only be deterministic if it observes the call rather
+    /// than sleeping for it. The cap stops a test that never releases the call from holding a run open.
+    /// </summary>
+    public ReplyAccount HoldsOn(string method, string path, string marker, string until, int capMs = 120_000) =>
+        Script(new JsonObject
+        {
+            ["kind"] = "hold",
+            ["method"] = method,
+            ["path"] = path,
+            ["marker"] = marker,
+            ["until"] = until,
+            ["timeout_ms"] = capMs,
+        });
+
     /// <summary>The next call to this method and path takes this long before it answers.</summary>
     public ReplyAccount Hangs(string method, string path, int milliseconds) =>
         Script(new JsonObject
