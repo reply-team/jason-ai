@@ -56,12 +56,6 @@ public class ProviderOpPreflightTests
 
         scenario.Route = new Route(Scenario.PluginId, new JsonObject { ["workspace"] = "west" }, "sha256:west");
 
-        // The approval gate sits between the package and the planner's own mistakes: an operation a person has to
-        // confirm is refused here, although this item also names nobody for an operation that needs somebody.
-        scenario.Operation = Enroll;
-        met.Add(Refused(scenario, FailureClass.Permanent));
-
-        scenario.Operation = Add;
         scenario.Arguments = new JsonObject { ["channel"] = "email" };
         met.Add(Refused(scenario, FailureClass.Permanent));
 
@@ -76,9 +70,22 @@ public class ProviderOpPreflightTests
         met.Add(Refused(scenario, FailureClass.Validation));
         Assert.Equal("/args/list", Assert.Single(scenario.Check().Details!).Field);
 
+        // Last of the twelve, and the only one that is not a refusal: an operation a person has to confirm is
+        // parked rather than failed, and it is asked here — after the input it would be approved for has been
+        // composed and held to its own schema — rather than before any of that was known.
+        scenario.Operation = Enroll;
+        scenario.Arguments = Scenario.CompleteEnrollment;
+        var parked = scenario.Check();
+        Assert.True(parked.Parks);
+        Assert.False(parked.Refused);
+        Assert.NotNull(parked.Plan);
+        Assert.Null(parked.Class);
+        met.Add(parked.Code!);
+
         // Every check in the published order, met one at a time, and then an item with nothing left wrong.
         Assert.Equal(ProviderOpPreflight.Codes, met);
 
+        scenario.Operation = Add;
         scenario.Arguments = Scenario.CompleteArguments;
         var verdict = scenario.Check();
         Assert.True(verdict.Passed);
@@ -270,6 +277,16 @@ public class ProviderOpPreflightTests
         {
             ["list"] = new JsonObject { ["external_id"] = "L-1129" },
             ["channel"] = "email",
+        };
+
+        /// <summary>An enrollment with nothing wrong with it, so that the only thing left to stop it is a person.</summary>
+        public static JsonObject CompleteEnrollment => new()
+        {
+            ["campaign"] = new JsonObject { ["external_id"] = "sq-1129" },
+            ["channel"] = "email",
+            ["collision"] = "skip",
+            ["start"] = new JsonObject { ["position"] = "first_step" },
+            ["first_touch"] = "authored_delay",
         };
 
         public string RoutingSnapshotId { get; } = PublicId.New(RouteSnapshot.IdPrefix);

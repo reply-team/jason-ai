@@ -26,21 +26,32 @@ namespace Jason.Runtime.Routing;
 /// item. It is what lets a refused attempt still record the plugin it would have used: computing that answer a
 /// second time would make two places that can disagree about one decision.
 /// </param>
+/// <param name="Parks">
+/// True where nothing is wrong with the work and it still may not run: its operation needs a person's approval.
+/// A park carries both a code and a plan — the code is what the item says about itself while it waits, and the
+/// plan is what the subject of that decision is built from.
+/// </param>
 public sealed record PreflightVerdict(
     string? Code,
     string? Message,
     FailureClass? Class,
     IReadOnlyList<ErrorDetail>? Details,
     ProviderOpPlan? Plan,
-    Resolution? Resolution)
+    Resolution? Resolution,
+    bool Parks = false)
 {
+    /// <summary>Nothing objected: the item may be claimed and run now.</summary>
     public bool Passed => Code is null;
+
+    /// <summary>The work is over before it began: a refusal, and never a decision somebody still has to make.</summary>
+    public bool Refused => Code is not null && !Parks;
 }
 
 /// <summary>
 /// Everything that can stop a provider work item, decided before a child process exists. Twelve checks in one
-/// order: what the runtime cannot do at all, then the gate it owes a person, then what the planner got wrong —
-/// so a manager meets the reason the item can never run before the reasons that need their attention.
+/// order: what the runtime cannot do at all, then what the planner got wrong, and last the gate it owes a
+/// person — so a manager meets the reasons an item can never run before the reasons that need their attention,
+/// and nobody is asked to approve work that would have been refused anyway.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -69,11 +80,11 @@ public static class ProviderOpPreflight
         AttemptErrors.PluginOperationUnsupported,
         AttemptErrors.ContractIncompatible,
         AttemptErrors.BindingInvalid,
-        AttemptErrors.ApprovalRequired,
         AttemptErrors.ContactRequired,
         AttemptErrors.NoChannelValue,
         AttemptErrors.Suppressed,
         AttemptErrors.InputInvalid,
+        AttemptErrors.ApprovalRequired,
     ];
 
     /// <summary>The whole decision, in the published order.</summary>
@@ -106,14 +117,6 @@ public static class ProviderOpPreflight
 
         // Nothing objected, so the plugin the checks above found is there to be found again.
         var plugin = plugins.Find(route.PluginId)!;
-
-        if (!string.Equals(contract.Approval.Value, Automatic, StringComparison.Ordinal))
-        {
-            return Refused(
-                resolution,
-                AttemptErrors.ApprovalRequired,
-                $"Operation '{operation}' is approved '{contract.Approval.Value}', and a dispatcher may not stand in for the person who approves it.");
-        }
 
         if (contract.Preflight.Contact == ContactRequirement.Required && facts.Contact is null)
         {
@@ -164,21 +167,36 @@ public static class ProviderOpPreflight
                 FailureClass.Validation);
         }
 
-        return new PreflightVerdict(
-            null,
-            null,
-            null,
-            null,
-            new ProviderOpPlan(
-                plugin,
-                plugins.Id,
-                routes.Id,
-                resolution.Scope,
-                route.Binding,
-                route.BindingIdentity,
-                contract,
-                input),
-            resolution);
+        var plan = new ProviderOpPlan(
+            plugin,
+            plugins.Id,
+            routes.Id,
+            resolution.Scope,
+            route.Binding,
+            route.BindingIdentity,
+            contract,
+            input);
+
+        // Asked last, and last on purpose. What a person is asked to approve is the composed input, so it has to
+        // be composed and to satisfy the operation's own schema before anybody can be shown it — and nobody is
+        // ever asked to approve reaching somebody the suppression register already protects.
+        //
+        // The published value is read and the condition beside it is not. A conditional block always states the
+        // dangerous reading in `value`; campaign.enroll's condition only decides whether a preview is mandatory,
+        // and a preview is built every time, so there is nothing here for a condition to soften.
+        if (!string.Equals(contract.Approval.Value, Automatic, StringComparison.Ordinal))
+        {
+            return new PreflightVerdict(
+                AttemptErrors.ApprovalRequired,
+                $"Operation '{operation}' is approved '{contract.Approval.Value}', and a dispatcher may not stand in for the person who approves it.",
+                Class: null,
+                Details: null,
+                plan,
+                resolution,
+                Parks: true);
+        }
+
+        return new PreflightVerdict(null, null, null, null, plan, resolution);
     }
 
     /// <summary>

@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Runtime.Approvals;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -20,11 +21,20 @@ public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock,
     /// <summary>Everything that is not finished for good, derived from the transition table so the two can never drift.</summary>
     private static readonly WorkItemStatus[] Finished = [.. WorkItemTransitions.Final];
 
-    /// <summary>The caller has already established that the item may still be cancelled.</summary>
-    public void Cancel(JasonDbContext db, WorkItem item, ActorRef actor, string? reason)
+    /// <summary>
+    /// The caller has already established that the item may still be cancelled. A decision this item was waiting
+    /// for — or one it had already been given — goes with it: a live approval about work that can never run is
+    /// the one row that would make <c>approval.list</c> untrue.
+    /// </summary>
+    public void Cancel(JasonDbContext db, WorkItem item, ActorRef actor, string? reason, Approval? live = null)
     {
         ArgumentNullException.ThrowIfNull(item);
         var now = clock.GetUtcNow().UtcDateTime;
+        if (live is not null)
+        {
+            ApprovalGate.Resolve(db, journal, item, live, ApprovalStatus.Cancelled, actor, reason, now);
+        }
+
         var attempt = WorkItemQueries.LiveAttempt(item);
         if (attempt is not null)
         {
@@ -60,7 +70,7 @@ public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock,
             query = query.Where(w => w.ContactId == contact);
         }
 
-        return CancelAll(db, await query.ToListAsync(cancellationToken).ConfigureAwait(false), actor, reason);
+        return await CancelAllAsync(db, await query.ToListAsync(cancellationToken).ConfigureAwait(false), actor, reason, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Everything still open about one person, wherever it lives: archiving a contact is not a per-campaign act.</summary>
@@ -72,14 +82,29 @@ public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock,
             .Where(w => w.ContactId == contactId && !Finished.Contains(w.Status))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        return CancelAll(db, items, actor, reason);
+        return await CancelAllAsync(db, items, actor, reason, cancellationToken).ConfigureAwait(false);
     }
 
-    private int CancelAll(JasonDbContext db, List<WorkItem> items, ActorRef actor, string reason)
+    /// <summary>
+    /// The live decisions of a whole batch, read in one query rather than one per item: archiving a campaign can
+    /// cancel a great deal of work, and a query per item is how that becomes slow without anybody noticing.
+    /// </summary>
+    private async Task<int> CancelAllAsync(
+        JasonDbContext db,
+        List<WorkItem> items,
+        ActorRef actor,
+        string reason,
+        CancellationToken cancellationToken)
     {
+        var ids = items.Select(item => item.Id).ToList();
+        var live = await db.Approvals
+            .Where(a => ids.Contains(a.WorkItemId) && (a.Status == ApprovalStatus.Pending || a.Status == ApprovalStatus.Approved))
+            .ToDictionaryAsync(a => a.WorkItemId, cancellationToken)
+            .ConfigureAwait(false);
+
         foreach (var item in items)
         {
-            Cancel(db, item, actor, reason);
+            Cancel(db, item, actor, reason, live.GetValueOrDefault(item.Id));
         }
 
         return items.Count;

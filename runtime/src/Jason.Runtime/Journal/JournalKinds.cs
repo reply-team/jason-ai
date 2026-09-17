@@ -34,8 +34,27 @@ public static partial class JournalKinds
     public const string WorkItemCancelled = "workitem_cancelled";
     public const string WorkItemExpired = "workitem_expired";
 
-    /// <summary>The item went back to <c>created</c>: its attempt was lost, or a restart interrupted it.</summary>
+    /// <summary>
+    /// The item went back to <c>created</c>: its attempt was lost, a restart interrupted it, or a person
+    /// approved what it was waiting for.
+    /// </summary>
     public const string WorkItemReleased = "workitem_released";
+
+    /// <summary>The item needs a person's approval before it can be run, and is waiting for one.</summary>
+    public const string WorkItemAwaitingApproval = "workitem_awaiting_approval";
+
+    /// <summary>A decision was asked of a person: which approval, about which work, over which subject.</summary>
+    public const string ApprovalRequested = "approval_requested";
+
+    public const string ApprovalApproved = "approval_approved";
+
+    public const string ApprovalRejected = "approval_rejected";
+
+    /// <summary>The decision was outgrown: the subject changed, or a newer parking replaced it.</summary>
+    public const string ApprovalSuperseded = "approval_superseded";
+
+    /// <summary>The work the decision was about is gone, so the decision is not one anybody needs to make.</summary>
+    public const string ApprovalCancelled = "approval_cancelled";
 
     /// <summary>An expired item was given a future due date and is work again.</summary>
     public const string WorkItemReopened = "workitem_reopened";
@@ -78,6 +97,12 @@ public static partial class JournalKinds
         WorkItemCancelled,
         WorkItemExpired,
         WorkItemReleased,
+        WorkItemAwaitingApproval,
+        ApprovalRequested,
+        ApprovalApproved,
+        ApprovalRejected,
+        ApprovalSuperseded,
+        ApprovalCancelled,
         WorkItemReopened,
         RoleAdded,
         PluginsReloaded,

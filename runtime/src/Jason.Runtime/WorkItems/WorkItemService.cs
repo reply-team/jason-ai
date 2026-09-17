@@ -6,6 +6,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Approvals;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
@@ -361,7 +362,12 @@ public sealed class WorkItemService(
             throw DomainErrors.WorkItemTerminal(item.PublicId, item.Status);
         }
 
-        canceller.Cancel(db, item, actor, NormalizeReason(request.Reason));
+        canceller.Cancel(
+            db,
+            item,
+            actor,
+            NormalizeReason(request.Reason),
+            await ApprovalGate.LiveAsync(db, item.Id, cancellationToken).ConfigureAwait(false));
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return WorkItemMapper.ToDto(item, now, item.Attempts, includeSnapshots: false);
     }

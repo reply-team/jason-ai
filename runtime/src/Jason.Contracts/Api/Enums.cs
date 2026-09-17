@@ -54,16 +54,36 @@ public enum RouteScope
 /// <summary>
 /// created → scheduled → processing → succeeded | failed, with cancelled and expired as the two ways an item
 /// ends without running. A retriable failure returns the item to created; an expired item can be reopened.
+/// <para>
+/// Work whose operation needs a person's approval waits in <c>awaiting_approval</c> instead of being claimed:
+/// approving it returns it to created, rejecting it ends it as failed, and it can still be cancelled or expire
+/// there like any other unclaimed work.
+/// </para>
 /// </summary>
 public enum WorkItemStatus
 {
     Created,
+    AwaitingApproval,
     Scheduled,
     Processing,
     Succeeded,
     Failed,
     Cancelled,
     Expired,
+}
+
+/// <summary>
+/// One decision about one work item. <c>superseded</c> is a decision the work outgrew — its input changed, or a
+/// newer parking replaced it; <c>cancelled</c> is a decision nobody will ever need, because the work it was
+/// about is gone.
+/// </summary>
+public enum ApprovalStatus
+{
+    Pending,
+    Approved,
+    Rejected,
+    Superseded,
+    Cancelled,
 }
 
 /// <summary>One run of one work item. <c>Interrupted</c> is a leftover of a runtime restart and is never counted.</summary>

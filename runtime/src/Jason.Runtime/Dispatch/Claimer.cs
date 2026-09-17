@@ -3,6 +3,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Approvals;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
@@ -73,6 +74,24 @@ public sealed class Claimer(
                 continue;
             }
 
+            // The decision before the record of it. Everything that can refuse a provider item is decided here,
+            // and one of the answers is not a refusal at all: work whose operation needs a person's approval is
+            // parked, and parking makes no attempt, because an attempt is a run and nothing has run.
+            var verdict = item.Kind == WorkItemKind.ProviderOp
+                ? ProviderOpPreflight.Check(await FactsAsync(db, item, routing, ct).ConfigureAwait(false), packages, routing)
+                : null;
+
+            var released = verdict is { Parks: true }
+                ? await DecideAsync(db, item, verdict, now, ct).ConfigureAwait(false)
+                : null;
+            if (verdict is { Parks: true } && released is null)
+            {
+                // Parked: nothing is handed out and no attempt exists to hand out. The save is the same guarded
+                // one the claim itself uses, so a caller who cancelled this item a moment ago still wins.
+                await SaveAsync(db, item, ct).ConfigureAwait(false);
+                continue;
+            }
+
             var attempt = Claim(item, current, now, await CommandForAsync(db, item, ct).ConfigureAwait(false));
             db.Attempts.Add(attempt);
             journal.Append(
@@ -84,16 +103,10 @@ public sealed class Claimer(
                 updated: JsonValue.Create(attempt.Number),
                 workItem: item,
                 attempt: attempt);
-            var plan = await FailClosedAsync(db, item, attempt, packages, routing, ct).ConfigureAwait(false);
+            var plan = FailClosed(db, item, attempt, verdict, packages, routing, released);
 
-            try
+            if (!await SaveAsync(db, item, ct).ConfigureAwait(false))
             {
-                await db.SaveChangesAsync(ct).ConfigureAwait(false);
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                ClaimSkipped(logger, item.PublicId, null);
-                db.ChangeTracker.Clear();
                 continue;
             }
 
@@ -173,23 +186,22 @@ public sealed class Claimer(
     /// here, before a child process exists, and what comes back is either the plan the run needs or the one
     /// reason the item cannot run. Nothing is retried and nothing falls back to another plugin.
     /// </remarks>
-    private async Task<ProviderOpPlan?> FailClosedAsync(
+    private ProviderOpPlan? FailClosed(
         JasonDbContext db,
         WorkItem item,
         Attempt attempt,
+        PreflightVerdict? verdict,
         PluginSnapshot packages,
         RouteSnapshot routing,
-        CancellationToken ct)
+        Approval? released)
     {
-        if (item.Kind == WorkItemKind.ProviderOp)
+        if (verdict is not null)
         {
-            var facts = await FactsAsync(db, item, routing, ct).ConfigureAwait(false);
-            var verdict = ProviderOpPreflight.Check(facts, packages, routing);
-
             // What was decided, recorded before anything acts on it and whichever way the decision went: an item
             // that never ran still says what would have run it, which is the half of a refusal a manager can act on.
-            attempt.Provenance = AttemptProvenance.AtClaim(item.Operation, verdict, packages, routing, attempt.PublicId);
-            if (verdict.Passed)
+            // Where a person released this work, the attempt names the decision it runs under.
+            attempt.Provenance = AttemptProvenance.AtClaim(item.Operation, verdict, packages, routing, attempt.PublicId, released?.PublicId);
+            if (verdict.Passed || released is not null)
             {
                 return verdict.Plan;
             }
@@ -227,6 +239,74 @@ public sealed class Claimer(
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Whether this work may run now: the decision a person has already made about exactly this subject, or
+    /// nothing — in which case the item has been parked for one by the time this returns.
+    /// </summary>
+    /// <remarks>
+    /// The comparison is between two hashes and nothing else. An approval authorizes its subject until something
+    /// supersedes it, so a retriable failure runs again under the same decision — the operator approved an
+    /// effect, and a provider timing out did not change what that effect is. What they did not approve is a
+    /// different document, and that is what the hash is for.
+    /// </remarks>
+    private async Task<Approval?> DecideAsync(JasonDbContext db, WorkItem item, PreflightVerdict verdict, DateTime now, CancellationToken ct)
+    {
+        var plan = verdict.Plan!;
+        var subject = ApprovalSubject.Of(plan, item);
+        var live = await ApprovalGate.LiveAsync(db, item.Id, ct).ConfigureAwait(false);
+        var matches = live is not null && string.Equals(live.SubjectHash, subject.Hash, StringComparison.Ordinal);
+
+        if (live is { Status: ApprovalStatus.Approved } && matches)
+        {
+            return live;
+        }
+
+        if (live is { Status: ApprovalStatus.Pending } && matches)
+        {
+            // The decision has not been made yet and is still about this work, so it is not asked for twice.
+            ApprovalGate.Wait(db, journal, item, now);
+            return null;
+        }
+
+        var preview = ApprovalPreview.Of(
+            plan.Contract,
+            subject,
+            item.Campaign!,
+            item.Contact,
+            CanonicalInput.ConsumedChannel(plan.Contract, item));
+
+        ApprovalGate.Park(
+            db,
+            journal,
+            item,
+            plan,
+            subject,
+            preview,
+            live,
+            live is null ? ApprovalGate.ApprovalRequired : ApprovalGate.InputChanged,
+            now);
+        return null;
+    }
+
+    /// <summary>
+    /// The one write of this loop, guarded the way every claim is: another writer who changed this item first
+    /// keeps their change, and this scan moves on to the next item rather than failing the whole transaction.
+    /// </summary>
+    private async Task<bool> SaveAsync(JasonDbContext db, WorkItem item, CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            ClaimSkipped(logger, item.PublicId, null);
+            db.ChangeTracker.Clear();
+            return false;
+        }
     }
 
     /// <summary>

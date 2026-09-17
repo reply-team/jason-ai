@@ -22,9 +22,11 @@ namespace Jason.Runtime.Tests.Routing;
 /// work item ends failed rather than sitting in the queue looking claimable.
 /// </summary>
 /// <remarks>
-/// Eleven of the twelve are here. The twelfth, <c>contract_incompatible</c>, cannot be reached through an
-/// installed package — the manifest rules refuse a plugin that does not speak the operation-contract version this
-/// build publishes — so it is proven over a built snapshot in <see cref="ProviderOpPreflightTests"/> instead.
+/// Ten of the twelve are here. <c>contract_incompatible</c> cannot be reached through an installed package — the
+/// manifest rules refuse a plugin that does not speak the operation-contract version this build publishes — so it
+/// is proven over a built snapshot in <see cref="ProviderOpPreflightTests"/> instead. <c>approval_required</c> is
+/// not in this matrix at all, because it is the one answer that does not fail an item: work whose operation needs
+/// a person's approval is parked for one, which <c>ClaimerTests</c> is where to read about.
 /// Routes are placed into the registry directly: which plugin an operation goes to is a decision this test takes
 /// rather than the subject of it.
 /// </remarks>
@@ -145,13 +147,6 @@ public class PreflightMatrixTests
             AttemptErrors.BindingInvalid,
             FailureClass.Permanent),
 
-        [AttemptErrors.ApprovalRequired] = new(
-            Nothing,
-            ToTheReferenceProvider,
-            (api, campaign, ct) => ItemAsync(api, campaign, "campaign.enroll", ToEnrol(), ct),
-            AttemptErrors.ApprovalRequired,
-            FailureClass.Permanent),
-
         [AttemptErrors.ContactRequired] = new(
             Nothing,
             ToTheReferenceProvider,
@@ -224,15 +219,6 @@ public class PreflightMatrixTests
     {
         ["list"] = new JsonObject { ["external_id"] = "L-1129" },
         ["channel"] = "email",
-    };
-
-    private static JsonObject ToEnrol() => new()
-    {
-        ["campaign"] = new JsonObject { ["external_id"] = "c-7714" },
-        ["channel"] = "email",
-        ["collision"] = "skip",
-        ["start"] = new JsonObject { ["position"] = "first_step" },
-        ["first_touch"] = "immediately",
     };
 
     private static async Task<string> CampaignAsync(RuntimeApiFixture api)

@@ -11,8 +11,13 @@ public class WorkItemTransitionsTests
     private static readonly (WorkItemStatus From, WorkItemStatus To)[] LegalPairs =
     [
         (WorkItemStatus.Created, WorkItemStatus.Scheduled),
+        (WorkItemStatus.Created, WorkItemStatus.AwaitingApproval),
         (WorkItemStatus.Created, WorkItemStatus.Cancelled),
         (WorkItemStatus.Created, WorkItemStatus.Expired),
+        (WorkItemStatus.AwaitingApproval, WorkItemStatus.Created),
+        (WorkItemStatus.AwaitingApproval, WorkItemStatus.Failed),
+        (WorkItemStatus.AwaitingApproval, WorkItemStatus.Cancelled),
+        (WorkItemStatus.AwaitingApproval, WorkItemStatus.Expired),
         (WorkItemStatus.Scheduled, WorkItemStatus.Processing),
         (WorkItemStatus.Scheduled, WorkItemStatus.Created),
         (WorkItemStatus.Scheduled, WorkItemStatus.Cancelled),
@@ -37,6 +42,26 @@ public class WorkItemTransitionsTests
             }
         }
     }
+
+    /// <summary>
+    /// Work parked for a person's decision leaves that state in four ways and no others: the person approves it
+    /// and it is queued again, the person rejects it and it is over, somebody cancels the work, or its due date
+    /// passes and the clock gives up on it. What it may never do is go straight to a dispatcher — a claim is
+    /// precisely the thing the parking is there to prevent.
+    /// </summary>
+    [Theory]
+    [InlineData(WorkItemStatus.Created, WorkItemStatus.AwaitingApproval, true)]
+    [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Created, true)]
+    [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Failed, true)]
+    [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Cancelled, true)]
+    [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Expired, true)]
+    [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Scheduled, false)]
+    [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Processing, false)]
+    [InlineData(WorkItemStatus.AwaitingApproval, WorkItemStatus.Succeeded, false)]
+    [InlineData(WorkItemStatus.Scheduled, WorkItemStatus.AwaitingApproval, false)]
+    public void Work_waiting_for_a_person_may_only_go_where_a_person_or_the_clock_sends_it(
+        WorkItemStatus from, WorkItemStatus to, bool legal) =>
+        Assert.Equal(legal, WorkItemTransitions.IsLegal(from, to));
 
     [Fact]
     public void Final_and_terminal_say_what_can_still_change()
