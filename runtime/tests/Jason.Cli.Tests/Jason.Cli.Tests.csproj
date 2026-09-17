@@ -2,4 +2,8 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Jason.Cli/Jason.Cli.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- What the repository teaches somebody to type, linked beside the tests that hand every printed command to the real parser. -->
+    <None Include="../../../skills/**/SKILL.md" LinkBase="Skills" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
