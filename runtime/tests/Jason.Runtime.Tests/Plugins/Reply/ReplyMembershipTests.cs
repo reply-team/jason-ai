@@ -9,8 +9,9 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>
 /// <c>list_membership.add</c> as the official package performs it: the real plugin JavaScript, loaded by a real
-/// plugin-host child, driving the stand-in vendor CLI against an account a test planted. One test per entry of
-/// the document's own <c>conformance</c> list, and then the decisions this provider forces — Reply's import
+/// plugin-host child, driving the stand-in vendor CLI against an account a test planted. Every entry of the
+/// document's own <c>conformance</c> list has a test, some of them more than one, and then come the decisions
+/// this provider forces — Reply's import
 /// refuses an item that carries no first name, its create path publishes no word for a duplicate address, and
 /// its list add answers per-item failure in a shape its own documentation describes two incompatible ways.
 /// </summary>
@@ -55,7 +56,7 @@ public class ReplyMembershipTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     // -------------------------------------------------------------------------------------------------------
-    // The document's conformance list, one test each
+    // The document's conformance list, every entry of it covered
     // -------------------------------------------------------------------------------------------------------
 
     [Fact]

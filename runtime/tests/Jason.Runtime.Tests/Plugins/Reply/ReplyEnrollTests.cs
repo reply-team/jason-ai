@@ -9,8 +9,9 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>
 /// <c>campaign.enroll</c> as the official package performs it: the real plugin JavaScript, loaded by a real
-/// plugin-host child, driving the stand-in vendor CLI against an account a test planted. One test per entry of
-/// the document's own <c>conformance</c> list, and then the decisions this provider forces — an enrollment into a
+/// plugin-host child, driving the stand-in vendor CLI against an account a test planted. Every entry of the
+/// document's own <c>conformance</c> list has a test, some of them more than one, and then come the decisions
+/// this provider forces — an enrollment into a
 /// live sequence is a send, so the two declared recovery reads are proven by the ordered call log rather than by
 /// the state left behind; a Reply sequence carries no step ordering at all, so a step position it cannot answer
 /// is refused rather than guessed; and <c>immediately</c> and <c>next_open_window</c> are the same request here,
@@ -59,7 +60,7 @@ public class ReplyEnrollTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     // -------------------------------------------------------------------------------------------------------
-    // The document's conformance list, one test each
+    // The document's conformance list, every entry of it covered
     // -------------------------------------------------------------------------------------------------------
 
     [Fact]

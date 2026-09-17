@@ -29,11 +29,19 @@ public class ReplyHostileAnswerTests
     private const string SignedOut = "signed-out";
 
     /// <summary>
-    /// The CLI's own refusal of a profile it does not hold, in the envelope <c>--json</c> prints it in. The
-    /// exit code is the same one a missing credential ends with; the code beside it is what separates them.
+    /// The CLI's own refusal of a profile it does not hold, in the envelope <c>--json</c> prints it in — built
+    /// here rather than written out, like every other input these tests hand the package. The exit code is the
+    /// same one a missing credential ends with; the code beside it is what separates them.
     /// </summary>
-    private const string UsageRefusal =
-        """{"error":{"code":"usage.profile","title":"Unknown profile 'acme'.","hint":"Create it with `profile add acme`."}}""";
+    private static string UsageRefusal => new JsonObject
+    {
+        ["error"] = new JsonObject
+        {
+            ["code"] = "usage.profile",
+            ["title"] = "Unknown profile 'acme'.",
+            ["hint"] = "Create it with `profile add acme`.",
+        },
+    }.ToJsonString();
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

@@ -32,7 +32,7 @@ public class ReplyCampaignGetTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     // -------------------------------------------------------------------------------------------------------
-    // The document's conformance list, one test each
+    // The document's conformance list, every entry of it covered
     // -------------------------------------------------------------------------------------------------------
 
     [Fact]
