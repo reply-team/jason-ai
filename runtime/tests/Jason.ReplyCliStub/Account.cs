@@ -102,6 +102,29 @@ internal static class Account
                 await Task.Delay(Number(instruction!, "milliseconds"));
                 break;
 
+            case "hold":
+                {
+                    // A test that kills something in the middle of a provider call needs the call to be
+                    // demonstrably in flight, which no delay can promise: a sleep says how long to wait, never
+                    // that the waiting started. So this one says it has started — the marker file — and then
+                    // waits to be let go. The cap is not the mechanism; it is what stops a test that never
+                    // releases it from holding a CI run open, and reaching it is a failed test either way.
+                    if (Text(instruction!, "marker") is { Length: > 0 } marker)
+                    {
+                        await File.WriteAllTextAsync(marker, string.Empty);
+                    }
+
+                    var until = Text(instruction!, "until");
+                    var capMs = Number(instruction!, "timeout_ms");
+                    var deadline = DateTime.UtcNow.AddMilliseconds(capMs > 0 ? capMs : 120_000);
+                    while (until.Length > 0 && !File.Exists(until) && DateTime.UtcNow < deadline)
+                    {
+                        await Task.Delay(25);
+                    }
+
+                    break;
+                }
+
             case "prints":
                 // Whatever the test built, written out exactly as it is: no envelope, no status, nothing this
                 // program decides. It is the one answer `Answers` cannot express, because that one always

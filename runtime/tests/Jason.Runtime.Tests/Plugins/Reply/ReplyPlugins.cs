@@ -83,8 +83,7 @@ public static class ReplyPlugins
     /// <summary>Where the tests and everything referenced by them live: the one tree an executable may come from.</summary>
     public static string TestTree => AppContext.BaseDirectory;
 
-    public static string ExecutablePath =>
-        Path.Combine(TestTree, ExecutableName + (OperatingSystem.IsWindows() ? ".exe" : string.Empty));
+    public static string ExecutablePath => ReplyAccount.StandInPath;
 
     /// <summary>
     /// The stand-in's own directory, and then only what a .NET program needs to start at all. The machine's

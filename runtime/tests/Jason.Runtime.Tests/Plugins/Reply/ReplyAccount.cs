@@ -85,6 +85,15 @@ public sealed class ReplyAccount : IDisposable
     /// </summary>
     public static string ConfigHomeVariable => OperatingSystem.IsWindows() ? "APPDATA" : "XDG_CONFIG_HOME";
 
+    /// <summary>
+    /// The stand-in itself, as MSBuild copies it beside whatever test project references it. It lives here
+    /// rather than beside the search path it is resolved through, because this file is the whole of what a
+    /// process-boundary test needs to drive a Reply account, and a helper that dragged a dependency along would
+    /// have to be copied instead of shared.
+    /// </summary>
+    public static string StandInPath =>
+        Path.Combine(AppContext.BaseDirectory, "reply" + (OperatingSystem.IsWindows() ? ".exe" : string.Empty));
+
     /// <summary>That name and value, for a test that has to put them on the process which will start the CLI.</summary>
     public IReadOnlyDictionary<string, string> Variables =>
         new Dictionary<string, string>(StringComparer.Ordinal) { [ConfigHomeVariable] = ConfigHome };
@@ -278,6 +287,24 @@ public sealed class ReplyAccount : IDisposable
             ["stderr"] = stderr ?? string.Empty,
         });
 
+    /// <summary>
+    /// The next call to this method and path says it has started — by creating <paramref name="marker"/> — and
+    /// then waits for <paramref name="until"/> to appear before answering as it otherwise would. It is what
+    /// <see cref="Hangs"/> cannot do: a delay says how long to wait, never that the waiting has begun, and a
+    /// test that has to interrupt a call in flight can only be deterministic if it observes the call rather
+    /// than sleeping for it. The cap stops a test that never releases the call from holding a run open.
+    /// </summary>
+    public ReplyAccount HoldsOn(string method, string path, string marker, string until, int capMs = 120_000) =>
+        Script(new JsonObject
+        {
+            ["kind"] = "hold",
+            ["method"] = method,
+            ["path"] = path,
+            ["marker"] = marker,
+            ["until"] = until,
+            ["timeout_ms"] = capMs,
+        });
+
     /// <summary>The next call to this method and path takes this long before it answers.</summary>
     public ReplyAccount Hangs(string method, string path, int milliseconds) =>
         Script(new JsonObject
@@ -384,7 +411,7 @@ public sealed class ReplyAccount : IDisposable
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        var info = new ProcessStartInfo(ReplyPlugins.ExecutablePath)
+        var info = new ProcessStartInfo(StandInPath)
         {
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
