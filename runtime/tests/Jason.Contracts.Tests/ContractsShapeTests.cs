@@ -259,6 +259,7 @@ public class ContractsShapeTests
         null,
         null,
         attempts,
+        null,
         DateTimeOffset.UnixEpoch,
         DateTimeOffset.UnixEpoch,
         null);

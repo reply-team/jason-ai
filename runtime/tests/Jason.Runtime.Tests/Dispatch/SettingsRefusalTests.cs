@@ -144,7 +144,7 @@ public class SettingsRefusalTests
             var plugins = fixture.Resolve<LiveSettings<PluginsOptions>>();
 
             File.WriteAllText(fixture.Paths.UserSettingsFile, InvalidPlugins);
-            Assert.True(await TestOptions.RefusedOnceAsync(plugins, Ct));
+            Assert.True(await TestOptions.RefusedAsync(plugins, Ct));
 
             // Four more reads of the same broken file: "said once" is a claim about the edit, not about one read.
             for (var read = 0; read < 4; read++)
@@ -279,7 +279,7 @@ public class SettingsRefusalTests
             Operations.CampaignCreate, new CampaignCreateRequest("outreach", null, null, null), Ct);
 
         File.WriteAllText(fixture.Paths.UserSettingsFile, InvalidPlugins);
-        Assert.True(await TestOptions.RefusedOnceAsync(plugins, Ct));
+        Assert.True(await TestOptions.RefusedAsync(plugins, Ct));
 
         var item = await fixture.PostOkAsync<WorkItemDto>(
             Operations.WorkItemCreate,

@@ -1,5 +1,6 @@
 using Jason.Contracts.Api;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Reports;
 
 namespace Jason.Runtime.WorkItems;
 
@@ -10,7 +11,16 @@ namespace Jason.Runtime.WorkItems;
 public static class WorkItemMapper
 {
     /// <param name="attempts">The attempts to include, or null to omit them entirely; ordered newest first here.</param>
-    public static WorkItemDto ToDto(WorkItem item, DateTime now, IReadOnlyList<Attempt>? attempts, bool includeSnapshots)
+    /// <param name="externalReports">
+    /// Effects reported from outside, or null to omit them entirely. Ordered and capped by the caller, which is
+    /// the only place that knows how many of them are worth reading back.
+    /// </param>
+    public static WorkItemDto ToDto(
+        WorkItem item,
+        DateTime now,
+        IReadOnlyList<Attempt>? attempts,
+        bool includeSnapshots,
+        IReadOnlyList<Report>? externalReports = null)
     {
         ArgumentNullException.ThrowIfNull(item);
         return new WorkItemDto(
@@ -38,6 +48,7 @@ public static class WorkItemMapper
             WorkItemQueries.LiveAttempt(item)?.PublicId,
             item.LastError,
             attempts is null ? null : [.. attempts.OrderByDescending(a => a.Number).Select(a => ToDto(a, includeSnapshots))],
+            externalReports is null ? null : [.. externalReports.Select(ReportMapper.ToSummary)],
             Utc(item.CreatedAt),
             Utc(item.UpdatedAt),
             Utc(item.FinishedAt));

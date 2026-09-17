@@ -12,6 +12,7 @@ using Jason.Runtime.Contacts;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Reports;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -134,8 +135,34 @@ public sealed class WorkItemService(
             .ConfigureAwait(false)
             ?? throw DomainErrors.WorkItemNotFound(id);
 
-        return WorkItemMapper.ToDto(item, clock.GetUtcNow().UtcDateTime, item.Attempts, request.IncludeSnapshots == true);
+        return WorkItemMapper.ToDto(
+            item,
+            clock.GetUtcNow().UtcDateTime,
+            item.Attempts,
+            request.IncludeSnapshots == true,
+            await ExternalReportsAsync(item.Id, cancellationToken).ConfigureAwait(false));
     }
+
+    /// <summary>
+    /// What somebody says they did about this item outside Jason. Read here and nowhere else in this service: a
+    /// listing that carried twenty assertions per row would be paying for the one view that actually asks the
+    /// question. Past the cap the report listing has the rest, which is why the cap is a constant rather than a
+    /// page: a work item's view is not a place to paginate from.
+    /// </summary>
+    private Task<List<Report>> ExternalReportsAsync(int workItemId, CancellationToken cancellationToken) =>
+        db.Reports
+            .AsNoTracking()
+            .Include(r => r.Campaign)
+            .Include(r => r.Contact)
+            .Include(r => r.WorkItem)
+            .Where(r => r.WorkItemId == workItemId)
+
+            // Two reports admitted inside one tick of the clock fall back on the order they were written in, so
+            // newest-first stays true at whatever resolution the clock happens to have.
+            .OrderByDescending(r => r.ReceivedAt)
+            .ThenByDescending(r => r.Id)
+            .Take(ReportService.MaxReportsOnWorkItem)
+            .ToListAsync(cancellationToken);
 
     public async Task<Page<WorkItemSummaryDto>> ListAsync(WorkItemListRequest request, CancellationToken cancellationToken)
     {

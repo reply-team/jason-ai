@@ -114,6 +114,14 @@ public sealed record WorkItemDto(
     string? CurrentAttemptId,
     AttemptErrorDto? LastError,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<AttemptDto>? Attempts,
+
+    /// <summary>
+    /// Effects somebody performed outside this runtime and reported into it afterwards, newest first. They are
+    /// a list of their own so that nobody can mistake one for work: an attempt is something this runtime
+    /// claimed, ran and stands behind, a report is somebody's word about something it never touched. Sent when
+    /// one item is fetched, and capped — past the cap the report listing is where the rest of them are.
+    /// </summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ReportSummaryDto>? ExternalReports,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     DateTimeOffset? FinishedAt);

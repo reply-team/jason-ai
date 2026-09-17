@@ -17,8 +17,13 @@ internal static class RuntimeVerbs
     public const string Token = "the-token";
     public const string BaseUrl = "http://127.0.0.1:5000";
 
-    /// <summary>Long enough that a test waiting for a descriptor never expires by accident.</summary>
-    public static TimeSpan Timeout => TimeSpan.FromSeconds(5);
+    /// <summary>
+    /// Long enough that a test waiting for a descriptor never expires by accident. The descriptor these tests
+    /// wait for is published by a thread-pool continuation, and a machine running the whole suite — real
+    /// runtimes and all — can hold one for seconds, so this is sized for the worst scheduling rather than for
+    /// the delay itself. A wait whose expiry is the subject uses <see cref="ShortTimeout"/>.
+    /// </summary>
+    public static TimeSpan Timeout => TimeSpan.FromSeconds(30);
 
     /// <summary>For the tests whose subject is the wait running out.</summary>
     public static TimeSpan ShortTimeout => TimeSpan.FromMilliseconds(300);

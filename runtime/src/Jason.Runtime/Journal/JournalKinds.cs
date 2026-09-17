@@ -72,6 +72,10 @@ public static partial class JournalKinds
     /// <summary>A plugin answered with a different identifier than the one already pinned; both are kept.</summary>
     public const string ExternalIdDiverged = "external_id_diverged";
 
+    /// <summary>Somebody reported an effect they performed outside Jason. The line names the report; the report
+    /// holds what they said.</summary>
+    public const string ExternalEffectReported = "external_effect_reported";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -109,6 +113,7 @@ public static partial class JournalKinds
         RoutesUpdated,
         ExternalIdPinned,
         ExternalIdDiverged,
+        ExternalEffectReported,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);

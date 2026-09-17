@@ -36,7 +36,7 @@ public class SchemaTests
         Assert.Equal(
             [
                 "attempts_provenance_valid_insert", "attempts_provenance_valid_update", "journal_no_delete", "journal_no_update",
-                "work_items_result_frozen",
+                "reports_no_delete", "reports_no_update", "work_items_result_frozen",
             ],
             Names(connection, "SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name"));
     }

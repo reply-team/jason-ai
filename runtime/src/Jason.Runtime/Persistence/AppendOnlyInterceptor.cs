@@ -3,8 +3,11 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Jason.Runtime.Persistence;
 
-/// <summary>Second line of defence after the database triggers: the runtime itself never updates or deletes journal rows.</summary>
-public sealed class AppendOnlyJournalInterceptor : SaveChangesInterceptor
+/// <summary>
+/// Second line of defence after the database triggers, for the two tables nothing may rewrite: the runtime
+/// itself never updates or deletes a journal entry or an admitted report.
+/// </summary>
+public sealed class AppendOnlyInterceptor : SaveChangesInterceptor
 {
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
@@ -22,9 +25,23 @@ public sealed class AppendOnlyJournalInterceptor : SaveChangesInterceptor
 
     private static void Check(DbContext? context)
     {
-        if (context is not null && context.ChangeTracker.Entries<JournalEntry>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+        if (context is null)
+        {
+            return;
+        }
+
+        if (Touched<JournalEntry>(context))
         {
             throw new InvalidOperationException("Journal entries are append-only; they are never updated or deleted.");
         }
+
+        if (Touched<Report>(context))
+        {
+            throw new InvalidOperationException("An admitted report is immutable; it is never updated or deleted.");
+        }
     }
+
+    private static bool Touched<TEntity>(DbContext context)
+        where TEntity : class =>
+        context.ChangeTracker.Entries<TEntity>().Any(e => e.State is EntityState.Modified or EntityState.Deleted);
 }

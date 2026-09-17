@@ -28,6 +28,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<Approval> Approvals => Set<Approval>();
 
+    public DbSet<Report> Reports => Set<Report>();
+
     public DbSet<JournalEntry> Journal => Set<JournalEntry>();
 
     /// <summary>
@@ -46,7 +48,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         ArgumentNullException.ThrowIfNull(builder);
         return builder
             .UseSqlite(ConnectionString(databaseFile))
-            .AddInterceptors(new AppendOnlyJournalInterceptor());
+            .AddInterceptors(new AppendOnlyInterceptor());
     }
 
     /// <summary>One connection string for the whole runtime: WAL is set by the migrator, busy timeout here.</summary>
@@ -206,6 +208,44 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             approval.HasIndex(a => new { a.Status, a.RequestedAt });
             approval.HasIndex(a => a.CampaignId);
             approval.HasOne(a => a.WorkItem).WithMany().HasForeignKey(a => a.WorkItemId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Report>(report =>
+        {
+            report.HasKey(r => r.Id);
+            report.Property(r => r.PublicId).HasMaxLength(40);
+            report.HasIndex(r => r.PublicId).IsUnique();
+            report.Property(r => r.ReporterId).HasMaxLength(100);
+            report.Property(r => r.Effect).HasMaxLength(200);
+            report.Property(r => r.Tool).HasMaxLength(200);
+            report.Property(r => r.Provider).HasMaxLength(200);
+            report.Property(r => r.Account).HasMaxLength(200);
+            report.Property(r => r.Operation).HasMaxLength(200);
+            report.Property(r => r.IdempotencyKey).HasMaxLength(200);
+            report.Property(r => r.AssertionHash).HasMaxLength(80);
+            report.Property(r => r.Summary).HasMaxLength(2000);
+            report.Property(r => r.Reason).HasMaxLength(2000);
+            report.Property(r => r.Assertion).HasColumnName("assertion_json").IsRequired();
+            report.ToTable(t => t.HasCheckConstraint("ck_reports_assertion_json", "json_valid(assertion_json)"));
+
+            // A retry is matched by the reporter's own key, and where they gave none, by what they said. Both are
+            // scoped to the reporter: two people describing the same effect are two assertions, and collapsing
+            // them would throw one reporter's word away.
+            report.HasIndex(r => new { r.ReporterType, r.ReporterId, r.IdempotencyKey })
+                .IsUnique().HasFilter("idempotency_key IS NOT NULL").HasDatabaseName("ix_reports_one_per_reporter_key");
+            report.HasIndex(r => new { r.ReporterType, r.ReporterId, r.AssertionHash })
+                .IsUnique().HasFilter("idempotency_key IS NULL").HasDatabaseName("ix_reports_one_per_reporter_content");
+
+            report.HasIndex(r => r.CampaignId);
+            report.HasIndex(r => r.ContactId);
+            report.HasIndex(r => r.WorkItemId);
+            report.HasIndex(r => r.ReceivedAt);
+
+            // Correlation is a reference, not ownership: a report outlives the work it mentions and nothing
+            // about it cascades.
+            report.HasOne(r => r.Campaign).WithMany().HasForeignKey(r => r.CampaignId).OnDelete(DeleteBehavior.Restrict);
+            report.HasOne(r => r.Contact).WithMany().HasForeignKey(r => r.ContactId).OnDelete(DeleteBehavior.Restrict);
+            report.HasOne(r => r.WorkItem).WithMany().HasForeignKey(r => r.WorkItemId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Attempt>(attempt =>

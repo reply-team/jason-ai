@@ -341,7 +341,7 @@ public class PluginServiceTests
 
         // A memory ceiling below the floor the validator holds: the section, refused.
         File.WriteAllText(api.Paths.UserSettingsFile, InvalidPlugins);
-        Assert.True(await TestOptions.RefusedOnceAsync(api.Resolve<LiveSettings<PluginsOptions>>(), Ct));
+        Assert.True(await TestOptions.RefusedAsync(api.Resolve<LiveSettings<PluginsOptions>>(), Ct));
 
         var error = await api.PostErrorAsync(Operations.PluginReload, null, HttpStatusCode.Conflict, Ct);
 
