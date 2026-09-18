@@ -172,10 +172,56 @@ public class AiRoleCommandTests
         Assert.Equal(ApiVersion.Current, envelope.Runtime.ApiVersion);
     }
 
-    /// <summary>The kill signal is handed over as its source, not as a token: it is the attempt's, not the test's.</summary>
-    private static Task<CommandOutcome> RunAsync(JasonPaths paths, string workDir, IReadOnlyList<string> entryCommand, CancellationTokenSource? kill = null)
+    [Fact]
+    public async Task The_child_starts_in_a_directory_that_already_says_what_it_may_not_do()
     {
-        var command = new AiRoleCommand(paths, new TokenRedactor(new RuntimeSecrets(Token)), NullLogger<AiRoleCommand>.Instance);
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("silent"), deny: ["Bash(rm *)"]);
+
+        var settings = await File.ReadAllTextAsync(Path.Combine(workDir, ".claude", "settings.json"), Ct);
+        Assert.Contains("Bash(rm *)", settings, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_role_whose_skill_names_another_role_ends_the_attempt_before_any_process_exists()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+        await SkillAsync(directory.Paths, "---\nname: someone-else\ndescription: not this role\n---\n");
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("silent"));
+
+        var failed = Assert.IsType<CommandOutcome.LaunchFailed>(outcome);
+        Assert.Equal(AttemptErrors.RoleSkillInvalid, failed.Code);
+        Assert.Null(failed.Launch.Pid);
+        Assert.Contains("someone-else", failed.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(workDir, "stderr.log")), "a process was started for an attempt that was refused");
+    }
+
+    [Fact]
+    public async Task A_role_is_taught_its_job_where_its_host_will_look_for_it()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+        await SkillAsync(directory.Paths, "---\nname: researcher\ndescription: finds the decision maker\n---\n\nthe job\n");
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("silent"));
+
+        Assert.IsType<CommandOutcome.Exited>(outcome);
+        Assert.True(File.Exists(Path.Combine(workDir, ".claude", "skills", "researcher", "SKILL.md")));
+    }
+
+    /// <summary>The kill signal is handed over as its source, not as a token: it is the attempt's, not the test's.</summary>
+    private static Task<CommandOutcome> RunAsync(
+        JasonPaths paths,
+        string workDir,
+        IReadOnlyList<string> entryCommand,
+        CancellationTokenSource? kill = null,
+        IReadOnlyList<string>? deny = null)
+    {
+        var command = new AiRoleCommand(paths, new TokenRedactor(new RuntimeSecrets(Token)), TestOptions.RoleSettings(), NullLogger<AiRoleCommand>.Instance);
         var context = new CommandContext(
             WorkItemId,
             AttemptId,
@@ -191,10 +237,18 @@ public class AiRoleCommandTests
             new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.Zero),
             entryCommand,
             workDir,
-            kill?.Token ?? CancellationToken.None);
+            kill?.Token ?? CancellationToken.None,
+            Deny: deny);
 
         return command.RunAsync(context, Ct);
     }
+
+    /// <summary>The role's own skill, where the runtime keeps them.</summary>
+    private static Task SkillAsync(JasonPaths paths, string text) =>
+        File.WriteAllTextAsync(
+            Path.Combine(Directory.CreateDirectory(Path.Combine(paths.RoleSkillsDirectory, "researcher")).FullName, "SKILL.md"),
+            text,
+            Ct);
 
     /// <summary>The <c>cwd=</c> value of the host's diagnostic line, which runs up to the next field.</summary>
     private static string CurrentDirectoryReportedIn(string stderr)

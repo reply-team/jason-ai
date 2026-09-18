@@ -38,6 +38,13 @@ public sealed class JasonPaths
     /// <summary>The directory one attempt runs in; created by the launcher, never cleaned up in this version.</summary>
     public string AttemptWorkDirectory(string workItemId, string attemptId) => Path.Combine(WorkDirectory, workItemId, attemptId);
 
+    /// <summary>
+    /// Where the skills that teach a role its job are kept: one directory per role, named as the role is. The
+    /// launcher copies a role's own into the attempt's work directory, so an agent is taught by what was there
+    /// when its attempt started rather than by whatever a host happens to find on the machine.
+    /// </summary>
+    public string RoleSkillsDirectory => Path.Combine(Root, "skills", "roles");
+
     /// <summary>Where one installed plugin lives: the directory name is the plugin's id, and the manifest must agree.</summary>
     public string PluginPackageDirectory(string pluginId) => Path.Combine(PluginsDirectory, pluginId);
 

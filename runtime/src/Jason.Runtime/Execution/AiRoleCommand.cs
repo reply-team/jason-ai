@@ -6,6 +6,8 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Execution;
 using Jason.Contracts.Json;
+using Jason.Runtime.Configuration;
+using Jason.Runtime.Execution.Hosts;
 using Microsoft.Extensions.Logging;
 
 namespace Jason.Runtime.Execution;
@@ -21,7 +23,11 @@ namespace Jason.Runtime.Execution;
 /// as the trace of a failed attempt.
 /// </para>
 /// </summary>
-public sealed class AiRoleCommand(JasonPaths paths, TokenRedactor redactor, ILogger<AiRoleCommand> logger) : ICommand
+public sealed class AiRoleCommand(
+    JasonPaths paths,
+    TokenRedactor redactor,
+    LiveSettings<RolesOptions> roles,
+    ILogger<AiRoleCommand> logger) : ICommand
 {
     /// <summary>How much of the child's stderr is worth keeping on the attempt: enough to explain, not enough to store a log.</summary>
     public const int StderrTailBytes = 4096;
@@ -38,6 +44,24 @@ public sealed class AiRoleCommand(JasonPaths paths, TokenRedactor redactor, ILog
         if (context.EntryCommand.Count == 0)
         {
             return new CommandOutcome.LaunchFailed("The role has no entry command.", launch);
+        }
+
+        // What the agent will find where it runs: what it may not do, and how to do the job. Both are written
+        // before the child exists, and a role whose skill a host would silently ignore ends the attempt here.
+        var prepared = WorkDirectory.Prepare(
+            context.WorkDir,
+            context.Deny ?? [],
+            context.Role,
+            paths.RoleSkillsDirectory,
+            roles.Current.MaxSkillBytes);
+        if (prepared.RefusalCode is { } refusal)
+        {
+            return new CommandOutcome.LaunchFailed(prepared.Message!, launch, refusal);
+        }
+
+        if (prepared.Message is { } note)
+        {
+            logger.LogWarning("Attempt {AttemptId} of work item {WorkItemId}: {Note}", context.AttemptId, context.WorkItemId, note);
         }
 
         var startInfo = new ProcessStartInfo(context.EntryCommand[0])

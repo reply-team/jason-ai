@@ -248,7 +248,7 @@ public static class AttemptHandler
                     Actors.Dispatcher);
                 break;
             case CommandOutcome.LaunchFailed failed:
-                Unanswered(services, outcomes, db, item, attempt, AttemptErrors.ExecutorLaunchFailed, failed.Message);
+                Unanswered(services, outcomes, db, item, attempt, failed.Code, failed.Message);
                 break;
             case CommandOutcome.Killed:
                 Unanswered(services, outcomes, db, item, attempt, AttemptErrors.ExecutorExited, "The executor was stopped.");

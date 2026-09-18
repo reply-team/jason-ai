@@ -251,6 +251,20 @@ The child is started in a per-attempt **work directory**, `~/.jason/work/<wi_…
 launcher creates. Its standard output and standard error are written there as `stdout.log` and
 `stderr.log`. Nothing is cleaned up in this version.
 
+The launcher puts two things in that directory before the child starts:
+
+- `.claude/settings.json`, carrying the **deny** rules of the execution profile that runs the attempt
+  and nothing else. It never carries an allow list: a directory the runtime created is not a workspace
+  the host trusts, and an allow entry there is ignored without being reported, so what the agent *may*
+  do travels on the command line instead.
+- `.claude/skills/<role>/`, a copy of `~/.jason/skills/roles/<role>/` when the role has one. Files
+  only; a link is neither copied nor followed, and a directory past `Roles:MaxSkillBytes` is left where
+  it is and said so in the log. If the skill's `SKILL.md` names something other than the role, the
+  attempt fails with `role_skill_invalid` before the child starts — a host answers that mismatch by
+  ignoring the skill without saying so, and an agent that was never taught its job reads afterwards as
+  a model that refused to do it. A role with no skill directory launches normally; its brief travels
+  in the envelope either way.
+
 Its environment is the runtime's own plus `JASON_DATA_DIR`, pointing at the data directory. Nothing is
 appended to the command's arguments. **The capability token is never on the command line, never in the
 environment, and never stored**: every occurrence of it is replaced with `[redacted]` before anything
