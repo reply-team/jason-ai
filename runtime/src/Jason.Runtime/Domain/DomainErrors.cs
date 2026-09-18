@@ -59,6 +59,13 @@ public static class DomainErrors
 
     public static NotFoundException RoleNotFound(string name) => new("role_not_found", $"No role named '{name}'.");
 
+    /// <summary>
+    /// A note past the cap. Its own code rather than the campaign context's: a role reading the refusal has to
+    /// know which of the two documents it was writing is too big.
+    /// </summary>
+    public static InvalidRequestException RoleNoteTooLarge(int limitBytes) =>
+        new("role_note_too_large", string.Create(CultureInfo.InvariantCulture, $"A role note must serialize to at most {limitBytes} bytes."));
+
     public static ConflictException ProfileExists(string name) => new("profile_exists", $"An execution profile named '{name}' already exists.");
 
     public static NotFoundException ProfileNotFound(string name) => new("profile_not_found", $"No execution profile named '{name}'.");

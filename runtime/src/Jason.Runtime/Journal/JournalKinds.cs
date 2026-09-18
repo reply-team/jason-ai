@@ -63,6 +63,13 @@ public static partial class JournalKinds
     /// <summary>A role's own settings changed — which execution profile its work uses, and nothing else yet.</summary>
     public const string RoleUpdated = "role_updated";
 
+    /// <summary>
+    /// A role replaced its memory of a campaign. The line names the campaign, the role, how big the note is and
+    /// what it hashes to — never what it says, because a note holds half-formed guesses about people and the
+    /// chronicle is the one table nobody can edit afterwards.
+    /// </summary>
+    public const string RoleNoteSet = "role_note_set";
+
     /// <summary>A new execution profile exists: which host it names, and what it was verified against.</summary>
     public const string ProfileCreated = "profile_created";
 
@@ -124,6 +131,7 @@ public static partial class JournalKinds
         WorkItemReopened,
         RoleAdded,
         RoleUpdated,
+        RoleNoteSet,
         ProfileCreated,
         ProfileRevised,
         ProfileDisabled,

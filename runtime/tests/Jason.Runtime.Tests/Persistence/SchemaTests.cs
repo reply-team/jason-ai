@@ -127,6 +127,28 @@ public class SchemaTests
     }
 
     [Fact]
+    public void Role_note_table_columns_and_index_exist()
+    {
+        using var database = new TestDatabase();
+        using var connection = new SqliteConnection($"Data Source={database.File}");
+        connection.Open();
+
+        Assert.Contains("role_notes", Names(connection, "SELECT name FROM sqlite_master WHERE type = 'table'"));
+
+        Assert.Equal(
+            [
+                "campaign_id", "created_at", "id", "note_bytes", "note_hash", "note_json", "role", "updated_at",
+                "updated_by_id", "updated_by_type",
+            ],
+            Sorted(connection, "SELECT name FROM pragma_table_info('role_notes')"));
+
+        // One document per campaign and role, which is what makes a write a replacement: there is nowhere for a
+        // second note to go.
+        var perRole = Scalar(connection, "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'ix_role_notes_one_per_campaign_role'");
+        Assert.Contains("UNIQUE", perRole, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Invalid_json_is_rejected_by_the_database()
     {
         using var database = new TestDatabase();
