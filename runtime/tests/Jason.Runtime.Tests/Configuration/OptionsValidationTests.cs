@@ -1,9 +1,15 @@
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Tests.Configuration;
 
 public class OptionsValidationTests
 {
+    private static readonly RuntimeHostOptions Quiet = new(ShippedSettingsDirectory: null, ConsoleLogging: false);
+
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
     [Fact]
     public void The_defaults_of_every_option_class_validate_clean()
     {
@@ -180,6 +186,45 @@ public class OptionsValidationTests
 
         Assert.True(result.Failed);
         Assert.Contains("Roles:DefaultEntryCommand[1] must not be blank.", result.Failures!);
+    }
+
+    /// <summary>
+    /// The global default is a profile name, so a value that could never be one is the operator's mistake and is
+    /// reported the way every other malformed setting is: before the runtime is listening.
+    /// </summary>
+    [Fact]
+    public async Task A_default_execution_profile_that_is_not_a_role_name_refuses_to_start()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(dir.Paths.UserSettingsFile, """{"Roles":{"DefaultExecutionProfile":"Not A Name"}}""");
+
+        var failure = await Assert.ThrowsAsync<OptionsValidationException>(() => RuntimeHost.StartAsync(dir.Paths, Quiet, Ct));
+
+        Assert.Contains("Roles:DefaultExecutionProfile", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A well-formed name nothing answers is not a refusal to start. Settings are read before the database is
+    /// open, so whether a profile of that name exists is a question only the claim can ask — and it answers it
+    /// on the work item, where the person who has to fix it will see it.
+    /// </summary>
+    [Fact]
+    public void A_default_execution_profile_no_profile_answers_is_not_a_settings_problem()
+    {
+        var result = new RolesOptionsValidator().Validate(null, new RolesOptions { DefaultExecutionProfile = "nothing-answers-this" });
+
+        Assert.True(result.Succeeded, string.Join(" ", result.Failures ?? []));
+    }
+
+    [Fact]
+    public void The_two_bounds_the_launcher_holds_a_child_to_are_reported_with_their_rule()
+    {
+        var result = new RolesOptionsValidator().Validate(null, new RolesOptions { MaxStdoutBytes = 65_535, MaxSkillBytes = 16_777_217 });
+
+        Assert.True(result.Failed);
+        Assert.Contains("Roles:MaxStdoutBytes must be between 65536 and 67108864; got 65535.", result.Failures!);
+        Assert.Contains("Roles:MaxSkillBytes must be between 4096 and 16777216; got 16777217.", result.Failures!);
     }
 
     [Fact]

@@ -20,7 +20,68 @@ public sealed record AttemptErrorDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] FailureClass? Class = null);
 
 /// <summary>How an attempt was actually run: provenance without secrets.</summary>
-public sealed record AttemptLaunchDto(IReadOnlyList<string> EntryCommand, string WorkDir, int? Pid, int? ExitCode);
+/// <param name="StdoutTruncated">
+/// True when the child said more than the configured maximum and its transcript was cut. Nothing about the
+/// outcome depends on it — a result reaches the runtime through the API and never through standard output — so
+/// this says only that the file is not the whole story.
+/// </param>
+/// <param name="OutputAbandoned">
+/// True when the child ended and something it left behind still held its output pipes, so the launcher stopped
+/// reading rather than waiting for a writer that may never let go. The attempt's own outcome is unaffected; the
+/// files are simply not the whole story.
+/// </param>
+/// <param name="Deny">The deny rules written into the work directory for this attempt, as they were written.</param>
+/// <param name="RoleSkill">
+/// What the role was taught: the skill copied in for it, or that there was none to copy. Whether a launched role
+/// had its instructions is otherwise unrecoverable after the fact.
+/// </param>
+public sealed record AttemptLaunchDto(
+    IReadOnlyList<string> EntryCommand,
+    string WorkDir,
+    int? Pid,
+    int? ExitCode,
+    bool StdoutTruncated = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool OutputAbandoned = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Deny = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RoleSkillDto? RoleSkill = null);
+
+/// <summary>Whether the role that ran this attempt was given its skill, and how large the one it was given was.</summary>
+public sealed record RoleSkillDto(bool Copied, string Name, long Bytes);
+
+/// <summary>
+/// What was resolved to run one agent attempt: which profile, chosen by which level of the published order, and
+/// the arguments the host was actually started with. Written at the claim and never rewritten, so an edit to the
+/// profile afterwards leaves this exactly as it stands — which is why it names a revision and not just a name.
+/// </summary>
+/// <param name="ProfileRevision">The revision in force when the attempt was claimed; the one that actually ran.</param>
+/// <param name="LineageRevision">
+/// What the item inherited, where the profile came from lineage. It may differ from <paramref name="ProfileRevision"/>,
+/// because inherited work runs the profile as it is now rather than as it was when the ancestor ran; both
+/// numbers are kept so that difference can be read rather than guessed.
+/// </param>
+/// <param name="Args">The whole argument list as launched: the runtime's own, then the profile's.</param>
+public sealed record AgentProvenanceDto(
+    ProfileResolutionSource ResolutionSource,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ProfileId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ProfileName = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? ProfileRevision = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? LineageRevision = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AgentHostKind? Host = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Program = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Args = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? HostVersionVerified = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SessionId = null);
+
+/// <summary>
+/// Where a work item's execution profile comes from when nothing more specific says. Materialized once, when the
+/// item is created, from the run that caused it — so it is a fact about this item rather than a walk back
+/// through a history that may since have changed.
+/// </summary>
+public sealed record LineageDto(
+    LineageState State,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ProfileName = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? ProfileRevision = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromAttemptId = null);
 
 /// <summary>
 /// What was resolved to run one provider attempt, and what the invocation then added. Written at claim as far
@@ -66,7 +127,13 @@ public sealed record AttemptProvenanceDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonNode? RejectedResult = null,
 
     /// <summary>The decision this attempt ran under, where a person had to make one.</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ApprovalId = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ApprovalId = null,
+
+    /// <summary>
+    /// The agent half: which execution profile ran this attempt and how it was chosen. Present on agent
+    /// attempts, absent on provider ones, so there is still exactly one provenance record per attempt.
+    /// </summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AgentProvenanceDto? Agent = null);
 
 /// <summary>One run of one work item. The id is also the fencing token every executor operation must carry.</summary>
 public sealed record AttemptDto(
@@ -124,7 +191,10 @@ public sealed record WorkItemDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ReportSummaryDto>? ExternalReports,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    DateTimeOffset? FinishedAt);
+    DateTimeOffset? FinishedAt,
+
+    /// <summary>Where this item's execution profile comes from when nothing more specific says.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] LineageDto? Lineage = null);
 
 /// <summary>A listing stays small: no context, no result, no attempts.</summary>
 public sealed record WorkItemSummaryDto(
@@ -191,6 +261,19 @@ public sealed record WorkItemUpdateRequest(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<int?> HeartbeatSeconds,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<int?> MaxAttempts,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<JsonNode?> ResultFormat,
+
+    /// <summary>
+    /// Which profile runs this work. Patchable, unlike the campaign, contact, kind, role and operation that say
+    /// what the item <em>is</em>: this is how the work runs, and it belongs beside the timeout, the heartbeat,
+    /// the attempt limit and the result format, which are patchable for the same reason.
+    /// <para>
+    /// It is the repair for an item whose ancestry cannot be resolved, and the repair has to be made
+    /// <em>before</em> the work is claimed. A refused attempt fails the item, and a finished item is not
+    /// changed — so an item that has already been refused is asked for again rather than reopened, exactly as
+    /// every other fail-closed refusal in this runtime behaves.
+    /// </para>
+    /// </summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> ExecutionProfile,
     ActorRef? Actor,
     string? Reason);
 

@@ -83,11 +83,22 @@ internal static class Diagnostics
     /// questions the launcher is judged on: which attempt it was told about, whether the data directory reached
     /// it, where it was started, and — the one that matters — whether the capability token is anywhere in its
     /// environment. It must never be, so the answer is expected to be <c>false</c> whenever it can be checked.
+    /// The environment it was handed follows, because what an agent is told without being asked is as much the
+    /// launcher's contract as the envelope is.
     /// </summary>
     public static Task WriteStartLineAsync(string behaviour, LaunchEnvelope envelope, string? token) =>
         WriteAsync(string.Create(
             CultureInfo.InvariantCulture,
-            $"behaviour={behaviour} attempt={envelope.AttemptId} number={envelope.AttemptNumber} data-dir={DataDirectory()} cwd={Environment.CurrentDirectory} token-in-env={TokenInEnvironment(token)}"));
+            $"behaviour={behaviour} attempt={envelope.AttemptId} number={envelope.AttemptNumber} data-dir={DataDirectory()} cwd={Environment.CurrentDirectory} token-in-env={TokenInEnvironment(token)} attempt-in-env={Variable(ExecutionEnvironment.AttemptIdVariable)} work-item-in-env={Variable(ExecutionEnvironment.WorkItemIdVariable)} path-head={PathHead()}"));
+
+    private static string Variable(string name) =>
+        Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : "unset";
+
+    /// <summary>The first directory of the search path, which is where the command that calls home should be.</summary>
+    private static string PathHead() =>
+        (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator, 2)[0] is { Length: > 0 } head
+            ? head
+            : "unset";
 
     private static string DataDirectory() =>
         string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(JasonPaths.DataDirectoryVariable)) ? "unset" : "set";

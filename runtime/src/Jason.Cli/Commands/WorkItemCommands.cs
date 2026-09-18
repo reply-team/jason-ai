@@ -22,7 +22,7 @@ public static class WorkItemCommands
 
     /// <summary>The fields <c>--clear</c> may set back to nothing; every one of them is nullable on the API.</summary>
     private static readonly string[] Clearable =
-        ["not_before", "due_at", "timeout_seconds", "heartbeat_seconds", "max_attempts", "result_format"];
+        ["not_before", "due_at", "timeout_seconds", "heartbeat_seconds", "max_attempts", "execution_profile", "result_format"];
 
     public static Command Build(CliEnvironment env, Option<string?> actor)
     {
@@ -195,11 +195,17 @@ public static class WorkItemCommands
         var timeout = new Option<int?>("--timeout") { Description = "The new attempt budget in seconds." };
         var heartbeat = new Option<int?>("--heartbeat") { Description = "The new heartbeat interval in seconds." };
         var maxAttempts = new Option<int?>("--max-attempts") { Description = "The new attempt limit." };
+        var executionProfile = new Option<string?>("--execution-profile")
+        {
+            Description = "The execution profile the next attempt should run under; --clear execution_profile gives the item back to the levels below it.",
+        };
         var resultFormat = new Option<string?>("--result-format") { Description = "The new result format, as any JSON value." };
         var clear = VerbOptions.Repeatable(
             "--clear",
             $"A field to set back to nothing: {string.Join(", ", Clearable)}. Repeat the option for more than one; clearing wins over a value given for the same field.");
-        var file = VerbOptions.File("The object holds the fields to patch (set, unset, not_before, due_at, priority, timeout_seconds, heartbeat_seconds, max_attempts, result_format).");
+        var file = VerbOptions.File(
+            "The object holds the fields to patch (set, unset, not_before, due_at, priority, timeout_seconds, heartbeat_seconds, "
+            + "max_attempts, execution_profile, result_format).");
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
@@ -211,6 +217,7 @@ public static class WorkItemCommands
         command.Options.Add(timeout);
         command.Options.Add(heartbeat);
         command.Options.Add(maxAttempts);
+        command.Options.Add(executionProfile);
         command.Options.Add(resultFormat);
         command.Options.Add(clear);
         command.Options.Add(file);
@@ -229,6 +236,7 @@ public static class WorkItemCommands
                 .Set("timeout_seconds", parseResult.GetValue(timeout))
                 .Set("heartbeat_seconds", parseResult.GetValue(heartbeat))
                 .Set("max_attempts", parseResult.GetValue(maxAttempts))
+                .Set("execution_profile", parseResult.GetValue(executionProfile))
                 .Set("result_format", VerbOptions.Json(parseResult.GetValue(resultFormat), "--result-format"))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));

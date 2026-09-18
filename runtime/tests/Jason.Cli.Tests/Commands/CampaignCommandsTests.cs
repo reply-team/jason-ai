@@ -102,6 +102,35 @@ public class CampaignCommandsTests
         cli.AssertPosted(Operations.CampaignUpdate, "{\"campaign_id\":\"cmp_A\",\"name\":\"LatAm Q4\",\"reason\":\"renamed after the split\"}");
     }
 
+    [Fact]
+    public async Task Update_sends_the_execution_profile_and_clears_it_with_an_explicit_null()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("campaign", "update", "cmp_A", "--execution-profile", "local-claude");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.CampaignUpdate, "{\"campaign_id\":\"cmp_A\",\"execution_profile\":\"local-claude\"}");
+
+        using var clearing = new CliRun();
+
+        var cleared = await clearing.RunAsync("campaign", "update", "cmp_A", "--clear", "execution_profile");
+
+        Assert.Equal(ExitCodes.Success, cleared);
+        clearing.AssertPosted(Operations.CampaignUpdate, "{\"campaign_id\":\"cmp_A\",\"execution_profile\":null}");
+    }
+
+    [Fact]
+    public async Task Update_refuses_to_clear_a_field_that_is_not_one()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("campaign", "update", "cmp_A", "--clear", "name");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains("--clear", cli.Error.ToString(), StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("start", Operations.CampaignStart)]
     [InlineData("pause", Operations.CampaignPause)]
@@ -228,7 +257,7 @@ public class CampaignCommandsTests
     public async Task Human_mode_renders_one_campaign()
     {
         var campaign = JsonSerializer.Serialize(
-            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, [], Moment, Moment, null),
+            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, [], "local-claude", Moment, Moment, null),
             JasonJson.Options);
         using var cli = new CliRun(campaign);
 
@@ -239,6 +268,10 @@ public class CampaignCommandsTests
         Assert.Contains("LatAm", cli.Text, StringComparison.Ordinal);
         Assert.Contains("active", cli.Text, StringComparison.Ordinal);
         Assert.Contains("icp, tone", cli.Text, StringComparison.Ordinal);
+
+        // Which host this campaign's agent work uses is part of what the campaign is, so it is shown with it.
+        Assert.Contains("Profile:", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("local-claude", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 

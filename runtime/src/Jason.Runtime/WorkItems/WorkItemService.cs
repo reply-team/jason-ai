@@ -69,6 +69,7 @@ public sealed class WorkItemService(
         WorkItemValidation.ValidateCreate(
             request,
             await RoleExistsAsync(request, cancellationToken).ConfigureAwait(false),
+            await ProfileExistsAsync(request.ExecutionProfile, cancellationToken).ConfigureAwait(false),
             KillGrace(),
             errors);
         errors.ThrowIfAny();
@@ -84,6 +85,10 @@ public sealed class WorkItemService(
         var context = request.Context?.DeepClone().AsObject() ?? new JsonObject();
         ContextRules.EnsureWithinLimits(context);
 
+        // Read once, here, for work of every kind: what the run that asked for this hands down. After this line
+        // it is a fact about the row, and nothing recomputes it.
+        var lineage = await Lineage.ForCreationAsync(db, actor, cancellationToken).ConfigureAwait(false);
+
         var now = clock.GetUtcNow().UtcDateTime;
         var item = new WorkItem
         {
@@ -94,6 +99,10 @@ public sealed class WorkItemService(
             Role = Trimmed(request.Role),
             Operation = Trimmed(request.Operation),
             ExecutionProfile = Trimmed(request.ExecutionProfile),
+            LineageState = lineage.State,
+            LineageProfileName = lineage.ProfileName,
+            LineageProfileRevision = lineage.ProfileRevision,
+            LineageFromAttemptId = lineage.FromAttemptId,
             Status = WorkItemStatus.Created,
             Priority = request.Priority ?? 0,
             NotBefore = request.NotBefore?.UtcDateTime,
@@ -225,9 +234,10 @@ public sealed class WorkItemService(
     }
 
     /// <summary>
-    /// A partial patch of what a caller owns: the window, the priority, the per-item limits, the result format
-    /// and the context. What the item is — its campaign, contact, kind, role or operation — is not patchable;
-    /// work that should be something else is new work.
+    /// A partial patch of what a caller owns: the window, the priority, the per-item limits, the execution
+    /// profile, the result format and the context — every one of them a statement about how the work runs. What
+    /// the item is — its campaign, contact, kind, role or operation — is not patchable; work that should be
+    /// something else is new work.
     /// </summary>
     public async Task<WorkItemDto> UpdateAsync(WorkItemUpdateRequest request, CancellationToken cancellationToken)
     {
@@ -251,9 +261,21 @@ public sealed class WorkItemService(
         var timeoutSeconds = request.TimeoutSeconds.IsSet ? request.TimeoutSeconds.Value : item.TimeoutSeconds;
         var heartbeatSeconds = request.HeartbeatSeconds.IsSet ? request.HeartbeatSeconds.Value : item.HeartbeatSeconds;
         var maxAttempts = request.MaxAttempts.IsSet ? request.MaxAttempts.Value : item.MaxAttempts;
+        var executionProfile = request.ExecutionProfile.IsSet ? Trimmed(request.ExecutionProfile.Value) : item.ExecutionProfile;
 
         WorkItemValidation.ValidateOverrides(timeoutSeconds, heartbeatSeconds, maxAttempts, errors);
         WorkItemValidation.ValidateWindow(notBefore, dueAt, errors);
+
+        // Read against the registry exactly as at create, and only where the patch names the field: an item
+        // whose profile was removed from the registry afterwards stays repairable rather than having every
+        // unrelated patch refused along with it.
+        if (request.ExecutionProfile.IsSet)
+        {
+            WorkItemValidation.ValidateExecutionProfile(
+                executionProfile,
+                await ProfileExistsAsync(executionProfile, cancellationToken).ConfigureAwait(false),
+                errors);
+        }
 
         // The same mistake arriving later. Only a patch that names the lease is measured: an item written before
         // this rule existed is left repairable rather than having every unrelated patch refused along with it.
@@ -320,6 +342,12 @@ public sealed class WorkItemService(
         {
             changes.Add(new FieldChange("max_attempts", Number(item.MaxAttempts), Number(maxAttempts)));
             item.MaxAttempts = maxAttempts;
+        }
+
+        if (request.ExecutionProfile.IsSet && !string.Equals(item.ExecutionProfile, executionProfile, StringComparison.Ordinal))
+        {
+            changes.Add(new FieldChange("execution_profile", Text(item.ExecutionProfile), Text(executionProfile)));
+            item.ExecutionProfile = executionProfile;
         }
 
         if (request.ResultFormat.IsSet && !JsonNode.DeepEquals(item.ResultFormat, request.ResultFormat.Value))
@@ -421,6 +449,21 @@ public sealed class WorkItemService(
 
         var name = request.Role.Trim();
         return await db.Roles.AsNoTracking().AnyAsync(r => r.Name == name, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Whether the registry holds the profile the request names. A disabled one counts: it exists, and whether
+    /// it may run this work is the claim's question, not this one's.
+    /// </summary>
+    private async Task<bool> ProfileExistsAsync(string? executionProfile, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(executionProfile))
+        {
+            return false;
+        }
+
+        var name = executionProfile.Trim();
+        return await db.ExecutionProfiles.AsNoTracking().AnyAsync(p => p.Name == name, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -562,6 +605,8 @@ public sealed class WorkItemService(
         value is { } moment ? JsonSerializer.SerializeToNode(WorkItemMapper.Utc(moment), JasonJson.Options) : null;
 
     private static JsonNode? Number(int? value) => value is { } number ? JsonValue.Create(number) : null;
+
+    private static JsonNode? Text(string? value) => value is null ? null : JsonValue.Create(value);
 
     private static JsonNode? Status(WorkItemStatus status) => JsonSerializer.SerializeToNode(status, JasonJson.Options);
 

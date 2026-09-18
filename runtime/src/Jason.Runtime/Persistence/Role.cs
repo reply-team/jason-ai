@@ -26,6 +26,12 @@ public sealed class Role
     /// <summary>Opaque to the runtime and handed to whoever launches the role.</summary>
     public JsonObject ProfileDefaults { get; set; } = new();
 
+    /// <summary>
+    /// Which execution profile this role's work uses where the item and its campaign say nothing: a statement
+    /// about a kind of worker everywhere, which is why a campaign's own policy outranks it.
+    /// </summary>
+    public string? ExecutionProfile { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }

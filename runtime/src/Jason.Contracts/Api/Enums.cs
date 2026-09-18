@@ -30,6 +30,42 @@ public enum ActorType
     Attempt,
 }
 
+/// <summary>
+/// Which launchable agent host an execution profile describes. A closed vocabulary on purpose: an unknown host
+/// is refused when a profile is written, rather than discovered when an attempt is already running.
+/// </summary>
+public enum AgentHostKind
+{
+    ClaudeCode,
+}
+
+/// <summary>
+/// Which level of the published order decided an attempt's execution profile — or, for
+/// <see cref="RoleEntryCommand"/>, that no profile did and the role's own command ran it.
+/// </summary>
+public enum ProfileResolutionSource
+{
+    WorkItemOverride,
+    CampaignPolicy,
+    RolePolicy,
+    Lineage,
+    GlobalDefault,
+    RoleEntryCommand,
+}
+
+/// <summary>
+/// What a work item's materialized causal ancestry amounts to. <c>Root</c> is work nobody's run caused;
+/// <c>Inherited</c> carries a profile forward from the run that caused it, across deterministic work as well as
+/// agent work; <c>Unresolved</c> says a run caused this and nothing about its profile can be read — which
+/// blocks rather than falling through to the global default.
+/// </summary>
+public enum LineageState
+{
+    Root,
+    Inherited,
+    Unresolved,
+}
+
 /// <summary>What a work item is: a role doing its job, or one provider operation performed through a plugin.</summary>
 public enum WorkItemKind
 {

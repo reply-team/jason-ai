@@ -282,6 +282,11 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("ExecutionProfile")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("execution_profile");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -531,6 +536,141 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.ToTable("contact_channels", t =>
                         {
                             t.HasCheckConstraint("ck_contact_channels_data_json", "data_json IS NULL OR json_valid(data_json)");
+                        });
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.ExecutionProfile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("CurrentRevision")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("current_revision");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
+
+                    b.Property<DateTime?>("DisabledAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("disabled_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_execution_profiles");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_execution_profiles_name");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_execution_profiles_public_id");
+
+                    b.ToTable("execution_profiles");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.ExecutionProfileRevision", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Args")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("args_json")
+                        .HasDefaultValueSql("'[]'");
+
+                    b.Property<string>("CliCommand")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("cli_command");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedById")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_by_id");
+
+                    b.Property<string>("CreatedByType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_by_type");
+
+                    b.Property<string>("Deny")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("deny_json")
+                        .HasDefaultValueSql("'[]'");
+
+                    b.Property<string>("Host")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("host");
+
+                    b.Property<string>("HostVersionVerified")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("host_version_verified");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("number");
+
+                    b.Property<int>("ProfileId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("profile_id");
+
+                    b.Property<string>("Program")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("program");
+
+                    b.HasKey("Id")
+                        .HasName("pk_execution_profile_revisions");
+
+                    b.HasIndex("ProfileId", "Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_execution_profile_revisions_one_per_number");
+
+                    b.ToTable("execution_profile_revisions", t =>
+                        {
+                            t.HasCheckConstraint("ck_execution_profile_revisions_args_json", "json_valid(args_json)");
+
+                            t.HasCheckConstraint("ck_execution_profile_revisions_deny_json", "json_valid(deny_json)");
                         });
                 });
 
@@ -871,6 +1011,11 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnName("entry_command_json")
                         .HasDefaultValueSql("'[]'");
 
+                    b.Property<string>("ExecutionProfile")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("execution_profile");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -1029,6 +1174,26 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("last_error_json");
 
+                    b.Property<string>("LineageFromAttemptId")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("lineage_from_attempt_id");
+
+                    b.Property<string>("LineageProfileName")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("lineage_profile_name");
+
+                    b.Property<int?>("LineageProfileRevision")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("lineage_profile_revision");
+
+                    b.Property<string>("LineageState")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("lineage_state");
+
                     b.Property<int?>("MaxAttempts")
                         .HasColumnType("INTEGER")
                         .HasColumnName("max_attempts");
@@ -1184,6 +1349,18 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Navigation("Contact");
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.ExecutionProfileRevision", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.ExecutionProfile", "Profile")
+                        .WithMany("Revisions")
+                        .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_execution_profile_revisions_execution_profiles_profile_id");
+
+                    b.Navigation("Profile");
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.ExternalId", b =>
                 {
                     b.HasOne("Jason.Runtime.Persistence.Campaign", "Campaign")
@@ -1273,6 +1450,11 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Navigation("Channels");
 
                     b.Navigation("ExternalIds");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.ExecutionProfile", b =>
+                {
+                    b.Navigation("Revisions");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.WorkItem", b =>

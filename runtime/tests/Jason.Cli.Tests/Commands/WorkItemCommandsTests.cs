@@ -44,7 +44,7 @@ public class WorkItemCommandsTests
             "--context",
             "{\"icp\":\"founders\"}",
             "--result-format",
-            "{\"shape\":\"summary\"}",
+            "{\"type\":\"object\"}",
             "--reason",
             "the plan asks for it",
             "--actor",
@@ -55,7 +55,7 @@ public class WorkItemCommandsTests
             Operations.WorkItemCreate,
             "{\"campaign_id\":\"cmp_A\",\"kind\":\"ai_role\",\"role\":\"researcher\",\"contact_id\":\"cnt_A\",\"execution_profile\":\"fast\",\"priority\":5,"
                 + "\"not_before\":\"2026-09-14T10:00:00Z\",\"due_at\":\"2026-09-15T10:00:00Z\",\"timeout_seconds\":60,\"heartbeat_seconds\":10,\"max_attempts\":2,"
-                + "\"context\":{\"icp\":\"founders\"},\"result_format\":{\"shape\":\"summary\"},\"reason\":\"the plan asks for it\",\"actor\":{\"type\":\"role\",\"id\":\"planner\"}}");
+                + "\"context\":{\"icp\":\"founders\"},\"result_format\":{\"type\":\"object\"},\"reason\":\"the plan asks for it\",\"actor\":{\"type\":\"role\",\"id\":\"planner\"}}");
     }
 
     [Fact]
@@ -314,7 +314,7 @@ public class WorkItemCommandsTests
             "--max-attempts",
             "4",
             "--result-format",
-            "{\"shape\":\"summary\"}",
+            "{\"type\":\"object\"}",
             "--reason",
             "the plan changed",
             "--actor",
@@ -324,7 +324,7 @@ public class WorkItemCommandsTests
         cli.AssertPosted(
             Operations.WorkItemUpdate,
             "{\"work_item_id\":\"wi_A\",\"set\":{\"tone\":\"direct\"},\"unset\":[\"old_pitch\"],\"not_before\":\"2026-09-14T12:00:00Z\",\"priority\":7,"
-                + "\"timeout_seconds\":90,\"heartbeat_seconds\":15,\"max_attempts\":4,\"result_format\":{\"shape\":\"summary\"},"
+                + "\"timeout_seconds\":90,\"heartbeat_seconds\":15,\"max_attempts\":4,\"result_format\":{\"type\":\"object\"},"
                 + "\"reason\":\"the plan changed\",\"actor\":{\"type\":\"role\",\"id\":\"planner\"}}");
     }
 
@@ -337,6 +337,29 @@ public class WorkItemCommandsTests
 
         Assert.Equal(ExitCodes.Success, exit);
         cli.AssertPosted(Operations.WorkItemUpdate, "{\"work_item_id\":\"wi_A\",\"set\":{\"a\":1},\"due_at\":null,\"max_attempts\":null}");
+    }
+
+    [Fact]
+    public async Task Update_names_a_new_execution_profile()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("workitem", "update", "wi_A", "--execution-profile", "fast-claude");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.WorkItemUpdate, "{\"work_item_id\":\"wi_A\",\"execution_profile\":\"fast-claude\"}");
+    }
+
+    /// <summary>Giving it back is the same <c>--clear</c> every other nullable field already uses.</summary>
+    [Fact]
+    public async Task Update_gives_the_execution_profile_back_through_the_clear_option()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("workitem", "update", "wi_A", "--clear", "execution_profile");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.WorkItemUpdate, "{\"work_item_id\":\"wi_A\",\"execution_profile\":null}");
     }
 
     [Fact]
@@ -523,6 +546,7 @@ public class WorkItemCommandsTests
             Campaign:     cmp_A
             Contact:      cnt_A
             Kind:         ai_role (role researcher)
+            Lineage:      root
             Status:       created (eligible)
             Priority:     5
             Not before:   -
@@ -538,6 +562,34 @@ public class WorkItemCommandsTests
             Result:       none
             """.ReplaceLineEndings() + Environment.NewLine,
             cli.Text);
+    }
+
+    /// <summary>
+    /// Where this item's executor comes from, on the page a person reads before asking why work is stuck. The
+    /// inherited line names the profile, the revision it was pinned at, and the attempt it came from, so the
+    /// chain can be walked back without a database.
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_says_what_an_item_inherited_and_where_from()
+    {
+        using var cli = new CliRun(Serialize(Item(null, lineage: new LineageDto(LineageState.Inherited, "fast-claude", 3, "att_B"))));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Lineage:      inherited · profile fast-claude r3 · from att_B", cli.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>The one state that will not run: it says so on the item rather than only in the error afterwards.</summary>
+    [Fact]
+    public async Task Human_mode_shows_an_unresolved_ancestry_as_the_state_it_is()
+    {
+        using var cli = new CliRun(Serialize(Item(null, lineage: new LineageDto(LineageState.Unresolved))));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Lineage:      unresolved", cli.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -735,7 +787,10 @@ public class WorkItemCommandsTests
         Assert.Contains("{\"unexpected\":true}", cli.Text, StringComparison.Ordinal);
     }
 
-    private static WorkItemDto Item(IReadOnlyList<AttemptDto>? attempts, IReadOnlyList<ReportSummaryDto>? externalReports = null) => new(
+    private static WorkItemDto Item(
+        IReadOnlyList<AttemptDto>? attempts,
+        IReadOnlyList<ReportSummaryDto>? externalReports = null,
+        LineageDto? lineage = null) => new(
         "wi_A",
         "cmp_A",
         "cnt_A",
@@ -763,7 +818,10 @@ public class WorkItemCommandsTests
         externalReports,
         Moment,
         Moment,
-        null);
+        null,
+
+        // The runtime answers with one for every item, so the default here is what a root item actually sends.
+        lineage ?? new LineageDto(LineageState.Root));
 
     private static ReportSummaryDto Report(string id, string effect) => new(
         id,

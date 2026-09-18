@@ -60,6 +60,20 @@ public static partial class JournalKinds
     public const string WorkItemReopened = "workitem_reopened";
     public const string RoleAdded = "role_added";
 
+    /// <summary>A role's own settings changed — which execution profile its work uses, and nothing else yet.</summary>
+    public const string RoleUpdated = "role_updated";
+
+    /// <summary>A new execution profile exists: which host it names, and what it was verified against.</summary>
+    public const string ProfileCreated = "profile_created";
+
+    /// <summary>A profile was edited, which appends a revision rather than changing one: the line names both numbers.</summary>
+    public const string ProfileRevised = "profile_revised";
+
+    /// <summary>The profile is out of service; work that resolves to it blocks until somebody says otherwise.</summary>
+    public const string ProfileDisabled = "profile_disabled";
+
+    public const string ProfileEnabled = "profile_enabled";
+
     /// <summary>A new plugin snapshot became the active one: which packages, at which digests, from when.</summary>
     public const string PluginsReloaded = "plugins_reloaded";
 
@@ -109,6 +123,11 @@ public static partial class JournalKinds
         ApprovalCancelled,
         WorkItemReopened,
         RoleAdded,
+        RoleUpdated,
+        ProfileCreated,
+        ProfileRevised,
+        ProfileDisabled,
+        ProfileEnabled,
         PluginsReloaded,
         RoutesUpdated,
         ExternalIdPinned,

@@ -17,6 +17,15 @@ namespace Jason.Runtime.Execution;
 /// composed input. It travels in memory from the claim rather than being looked up again, so a reload between
 /// the claim and the run cannot change what was already decided. Null for agent work.
 /// </param>
+/// <param name="Deny">
+/// What the launched agent may not do, in its host's own vocabulary, as the execution profile froze it. It is
+/// the half of a policy that a work directory can carry; the other half is already composed into
+/// <paramref name="EntryCommand"/>. Empty where no profile ran this item.
+/// </param>
+/// <param name="CliCommand">
+/// The bare word the launched agent calls home with, as its profile names it. Null means this executable's own
+/// name, which is the one the launcher puts within the child's reach.
+/// </param>
 public sealed record CommandContext(
     string WorkItemId,
     string AttemptId,
@@ -34,7 +43,9 @@ public sealed record CommandContext(
     string WorkDir,
     CancellationToken Kill,
     string? Operation = null,
-    ProviderOpPlan? Plan = null);
+    ProviderOpPlan? Plan = null,
+    IReadOnlyList<string>? Deny = null,
+    string? CliCommand = null);
 
 /// <summary>How the run ended, as the command saw it. What it means for the work item is decided elsewhere.</summary>
 public abstract record CommandOutcome
@@ -45,8 +56,12 @@ public abstract record CommandOutcome
     /// <summary>The process ended while the attempt was still running — nobody told the runtime how it went.</summary>
     public sealed record Exited(int ExitCode, string? StderrTail, AttemptLaunchDto Launch) : CommandOutcome;
 
-    /// <summary>The command could not be started at all.</summary>
-    public sealed record LaunchFailed(string Message, AttemptLaunchDto Launch) : CommandOutcome;
+    /// <summary>
+    /// The command could not be started at all. <paramref name="Code"/> is the attempt error it ends with: a
+    /// launch that failed for a reason of its own — a role whose skill a host would silently ignore — says so
+    /// rather than being flattened into "the executor could not be started".
+    /// </summary>
+    public sealed record LaunchFailed(string Message, AttemptLaunchDto Launch, string Code = AttemptErrors.ExecutorLaunchFailed) : CommandOutcome;
 
     /// <summary>The kill signal was given and honoured.</summary>
     public sealed record Killed(AttemptLaunchDto? Launch) : CommandOutcome;

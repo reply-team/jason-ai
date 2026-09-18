@@ -15,7 +15,8 @@ public sealed record CampaignSummaryDto(
 
 /// <summary>
 /// A campaign with its context: the shared knowledge every role working the campaign reads. <c>external_ids</c>
-/// is always a list, possibly empty, for the same reason a contact's is.
+/// is always a list, possibly empty, for the same reason a contact's is. <c>execution_profile</c> is the
+/// campaign's policy on which host its agent work uses, and null means it has none of its own.
 /// </summary>
 public sealed record CampaignDto(
     string Id,
@@ -23,6 +24,7 @@ public sealed record CampaignDto(
     CampaignStatus Status,
     JsonObject Context,
     IReadOnlyList<ExternalIdDto> ExternalIds,
+    string? ExecutionProfile,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     DateTimeOffset? ArchivedAt);
@@ -33,10 +35,15 @@ public sealed record CampaignGetRequest(string? CampaignId);
 
 public sealed record CampaignListRequest(CampaignStatus? Status, int? Limit, string? Cursor);
 
-/// <summary>A partial patch: an absent <c>name</c> leaves the campaign's name alone.</summary>
+/// <summary>
+/// A partial patch: an absent <c>name</c> leaves the campaign's name alone, and an absent
+/// <c>execution_profile</c> leaves its policy alone. An explicit null clears the policy; a value has to name a
+/// profile this runtime knows.
+/// </summary>
 public sealed record CampaignUpdateRequest(
     string? CampaignId,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> Name,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> ExecutionProfile,
     ActorRef? Actor,
     string? Reason);
 

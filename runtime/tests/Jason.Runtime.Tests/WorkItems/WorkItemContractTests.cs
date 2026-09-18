@@ -377,7 +377,7 @@ public class WorkItemContractTests
         new(campaignId, WorkItemKind.ProviderOp, null, operation, null, null, null, null, null, null, null, null, null, null, null, null);
 
     private static WorkItemUpdateRequest Patch(string workItemId) =>
-        new(workItemId, null, null, default, default, default, default, default, default, default, null, null);
+        new(workItemId, null, null, default, default, default, default, default, default, default, default, null, null);
 
     /// <summary>A complete set of <c>list_membership.add</c> arguments, as a planner would write them.</summary>
     private static JsonObject Membership() => new()

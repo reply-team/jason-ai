@@ -96,6 +96,17 @@ public static class AttemptProvenance
     }
 
     /// <summary>
+    /// The agent counterpart: an attempt that runs a host has no plugin, no route and no operation, so every
+    /// provider field is null and the whole record is the agent half. One record per attempt either way, so
+    /// nothing reading provenance has to know which kind of work it is looking at first.
+    /// </summary>
+    public static AttemptProvenanceDto ForAgent(AgentProvenanceDto agent, string correlationId)
+    {
+        ArgumentNullException.ThrowIfNull(agent);
+        return Unknown with { CorrelationId = correlationId, Agent = agent };
+    }
+
+    /// <summary>
     /// Adds what the invocation learned to the record the claim already wrote, through one guarded UPDATE: the
     /// attempt's public id is the fencing token, the merge touches only the fields the completion names, and
     /// nothing is read back first — a lease enforcer may be writing the same row, and reading a row to write it

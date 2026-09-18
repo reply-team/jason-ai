@@ -29,6 +29,8 @@ public sealed class Claimer(
     TimeProvider clock,
     AttemptOutcomes outcomes,
     EntryCommandResolver resolver,
+    AgentLaunchPlanner agents,
+    LiveSettings<RolesOptions> roles,
     PluginRegistry plugins,
     RouteRegistry routes,
     ExternalIdStore identifiers,
@@ -63,6 +65,10 @@ public sealed class Claimer(
         var packages = plugins.Snapshot;
         var routing = routes.Snapshot;
 
+        // And the one setting an agent claim reads, for the same reason and in the same place: a default edited
+        // halfway through a scan belongs to the next scan, not to half of this one.
+        var globalDefault = roles.Current.DefaultExecutionProfile;
+
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         foreach (var id in await CandidatesAsync(db, now, freeSlots, ct).ConfigureAwait(false))
         {
@@ -81,6 +87,12 @@ public sealed class Claimer(
                 ? ProviderOpPreflight.Check(await FactsAsync(db, item, routing, ct).ConfigureAwait(false), packages, routing)
                 : null;
 
+            // The same question for agent work, asked in the same place and with the same rule: everything that
+            // can refuse it is decided before a child exists, and the answer is one reason the attempt keeps.
+            var agent = item.Kind == WorkItemKind.AiRole
+                ? await agents.PlanAsync(db, item, globalDefault, ct).ConfigureAwait(false)
+                : null;
+
             var released = verdict is { Parks: true }
                 ? await DecideAsync(db, item, verdict, now, ct).ConfigureAwait(false)
                 : null;
@@ -92,7 +104,14 @@ public sealed class Claimer(
                 continue;
             }
 
-            var attempt = Claim(item, current, now, await CommandForAsync(db, item, ct).ConfigureAwait(false));
+            var command = agent switch
+            {
+                AgentLaunchDecision.Ready ready => ready.Plan.Command,
+                AgentLaunchDecision.Legacy => await CommandForAsync(db, item, ct).ConfigureAwait(false),
+                _ => null,
+            };
+
+            var attempt = Claim(item, current, now, command);
             db.Attempts.Add(attempt);
             journal.Append(
                 db,
@@ -103,7 +122,7 @@ public sealed class Claimer(
                 updated: JsonValue.Create(attempt.Number),
                 workItem: item,
                 attempt: attempt);
-            var plan = FailClosed(db, item, attempt, verdict, packages, routing, released);
+            var plan = FailClosed(db, item, attempt, verdict, agent, packages, routing, released);
 
             if (!await SaveAsync(db, item, ct).ConfigureAwait(false))
             {
@@ -112,7 +131,13 @@ public sealed class Claimer(
 
             if (item.Status == WorkItemStatus.Scheduled)
             {
-                claimed.Add(new ClaimedWork(item.Id, attempt.Id, item.PublicId, attempt.PublicId, plan));
+                claimed.Add(new ClaimedWork(
+                    item.Id,
+                    attempt.Id,
+                    item.PublicId,
+                    attempt.PublicId,
+                    plan,
+                    agent is AgentLaunchDecision.Ready ready ? new AgentLaunch(ready.Plan.Deny, ready.Plan.CliCommand) : null));
             }
         }
 
@@ -191,10 +216,45 @@ public sealed class Claimer(
         WorkItem item,
         Attempt attempt,
         PreflightVerdict? verdict,
+        AgentLaunchDecision? agent,
         PluginSnapshot packages,
         RouteSnapshot routing,
         Approval? released)
     {
+        if (agent is not null)
+        {
+            // Written before anything acts on it and whichever way it went, exactly as a provider decision is:
+            // an attempt that never ran still says which profile would have run it, and which level chose it.
+            attempt.Provenance = agent switch
+            {
+                AgentLaunchDecision.Ready ready => AttemptProvenance.ForAgent(ready.Plan.Provenance, attempt.PublicId),
+                AgentLaunchDecision.Legacy legacy => AttemptProvenance.ForAgent(legacy.Provenance, attempt.PublicId),
+                AgentLaunchDecision.Refused { Decided: { } decided } => AttemptProvenance.ForAgent(decided, attempt.PublicId),
+
+                // Nothing was chosen at all, which is what work with unreadable ancestry means: the record says
+                // so by staying empty, and the attempt's error says why.
+                _ => attempt.Provenance,
+            };
+
+            if (agent is AgentLaunchDecision.Refused refused)
+            {
+                outcomes.Fail(
+                    db,
+                    item,
+                    attempt,
+                    refused.Code,
+                    refused.Message,
+                    trace: null,
+                    details: null,
+                    Actors.Dispatcher,
+
+                    // Nothing about the work changed between two scans, so an item put back would be refused for
+                    // the same reason for as long as the queue existed.
+                    retriable: false);
+                return null;
+            }
+        }
+
         if (verdict is not null)
         {
             // What was decided, recorded before anything acts on it and whichever way the decision went: an item

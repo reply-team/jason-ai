@@ -30,6 +30,10 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<Report> Reports => Set<Report>();
 
+    public DbSet<ExecutionProfile> ExecutionProfiles => Set<ExecutionProfile>();
+
+    public DbSet<ExecutionProfileRevision> ExecutionProfileRevisions => Set<ExecutionProfileRevision>();
+
     public DbSet<JournalEntry> Journal => Set<JournalEntry>();
 
     /// <summary>
@@ -71,6 +75,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         configurationBuilder.Properties<AttemptStatus>().HaveConversion<SnakeCaseEnumConverter<AttemptStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<ApprovalStatus>().HaveConversion<SnakeCaseEnumConverter<ApprovalStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<RouteScope>().HaveConversion<SnakeCaseEnumConverter<RouteScope>>().HaveMaxLength(32);
+        configurationBuilder.Properties<AgentHostKind>().HaveConversion<SnakeCaseEnumConverter<AgentHostKind>>().HaveMaxLength(32);
+        configurationBuilder.Properties<LineageState>().HaveConversion<SnakeCaseEnumConverter<LineageState>>().HaveMaxLength(32);
         configurationBuilder.Properties<JsonObject>().HaveConversion<JsonObjectConverter, JsonObjectComparer>();
         configurationBuilder.Properties<JsonNode>().HaveConversion<JsonNodeConverter, JsonNodeComparer>();
         configurationBuilder.Properties<AttemptErrorDto>().HaveConversion<JsonTextConverter<AttemptErrorDto>, JsonTextComparer<AttemptErrorDto>>();
@@ -89,6 +95,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             campaign.Property(c => c.PublicId).HasMaxLength(40);
             campaign.HasIndex(c => c.PublicId).IsUnique();
             campaign.Property(c => c.Name).HasMaxLength(200);
+            campaign.Property(c => c.ExecutionProfile).HasMaxLength(64);
             campaign.Property(c => c.Context).HasColumnName("context_json").IsRequired().HasDefaultValueSql("'{}'");
             campaign.ToTable(t => t.HasCheckConstraint("ck_campaigns_context_json", "json_valid(context_json)"));
             campaign.HasMany(c => c.Members).WithOne(m => m.Campaign).HasForeignKey(m => m.CampaignId).OnDelete(DeleteBehavior.Restrict);
@@ -149,6 +156,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             item.Property(w => w.Role).HasMaxLength(64);
             item.Property(w => w.Operation).HasMaxLength(200);
             item.Property(w => w.ExecutionProfile).HasMaxLength(100);
+            item.Property(w => w.LineageProfileName).HasMaxLength(64);
+            item.Property(w => w.LineageFromAttemptId).HasMaxLength(40);
             item.Property(w => w.CreatedById).HasMaxLength(100);
             item.Property(w => w.Context).HasColumnName("context_json").IsRequired().HasDefaultValueSql("'{}'");
             item.Property(w => w.ResultFormat).HasColumnName("result_format_json");
@@ -208,6 +217,40 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             approval.HasIndex(a => new { a.Status, a.RequestedAt });
             approval.HasIndex(a => a.CampaignId);
             approval.HasOne(a => a.WorkItem).WithMany().HasForeignKey(a => a.WorkItemId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ExecutionProfile>(profile =>
+        {
+            profile.HasKey(p => p.Id);
+            profile.Property(p => p.PublicId).HasMaxLength(40);
+            profile.HasIndex(p => p.PublicId).IsUnique();
+            profile.Property(p => p.Name).HasMaxLength(64);
+            profile.HasIndex(p => p.Name).IsUnique();
+            profile.Property(p => p.Description).HasMaxLength(500);
+
+            // A revision belongs to its profile and outlives nothing: profiles are disabled rather than deleted,
+            // so there is no cascade to arrange.
+            profile.HasMany(p => p.Revisions).WithOne(r => r.Profile).HasForeignKey(r => r.ProfileId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ExecutionProfileRevision>(revision =>
+        {
+            revision.HasKey(r => r.Id);
+            revision.Property(r => r.Program).HasMaxLength(500);
+            revision.Property(r => r.CliCommand).HasMaxLength(200);
+            revision.Property(r => r.HostVersionVerified).HasMaxLength(100);
+            revision.Property(r => r.CreatedById).HasMaxLength(100);
+            revision.Property(r => r.Args).HasColumnName("args_json").IsRequired().HasDefaultValueSql("'[]'");
+            revision.Property(r => r.Deny).HasColumnName("deny_json").IsRequired().HasDefaultValueSql("'[]'");
+            revision.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_execution_profile_revisions_args_json", "json_valid(args_json)");
+                t.HasCheckConstraint("ck_execution_profile_revisions_deny_json", "json_valid(deny_json)");
+            });
+
+            // Revision numbers are the profile's own sequence, and an attempt names one of them for ever.
+            revision.HasIndex(r => new { r.ProfileId, r.Number })
+                .IsUnique().HasDatabaseName("ix_execution_profile_revisions_one_per_number");
         });
 
         modelBuilder.Entity<Report>(report =>
@@ -283,6 +326,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             role.Property(r => r.Name).HasMaxLength(64);
             role.HasIndex(r => r.Name).IsUnique();
             role.Property(r => r.Description).HasMaxLength(500);
+            role.Property(r => r.ExecutionProfile).HasMaxLength(64);
             role.Property(r => r.EntryCommand).HasColumnName("entry_command_json").IsRequired().HasDefaultValueSql("'[]'");
             role.Property(r => r.ProfileDefaults).HasColumnName("profile_defaults_json").IsRequired().HasDefaultValueSql("'{}'");
             role.ToTable(t =>

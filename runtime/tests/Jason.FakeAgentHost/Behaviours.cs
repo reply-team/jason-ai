@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -58,6 +59,29 @@ internal static class Behaviours
         return ("script", []);
     }
 
+    /// <summary>The names this host answers to, so a caller can tell whether argv named one of them.</summary>
+    public static bool Known(string behaviour) =>
+        behaviour is "succeed" or "hang" or "mute" or "crash" or "silent" or "stale" or "leak" or "echo-envelope"
+            or "abandon" or "flood";
+
+    /// <summary>
+    /// The behaviour a launched host is told to perform through its brief rather than its arguments. A host
+    /// started through an execution profile does not choose what is on its command line — the runtime composes
+    /// that from the profile and its own constants — so a test that needs a particular behaviour says so in the
+    /// work item's context, which is where everything else about the job already travels.
+    /// </summary>
+    public static (string Behaviour, IReadOnlyList<string> Options) FromContext(LaunchEnvelope envelope)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+        if (envelope.Context["behaviour"]?.GetValue<string>() is not { } named)
+        {
+            return (string.Empty, []);
+        }
+
+        var parts = named.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return parts.Length == 0 ? (string.Empty, []) : (parts[0], [.. parts.Skip(1)]);
+    }
+
     public static async Task<int> RunAsync(string behaviour, IReadOnlyList<string> options, LaunchEnvelope envelope, string rawEnvelope, RuntimeApi api)
     {
         switch (behaviour)
@@ -76,12 +100,83 @@ internal static class Behaviours
                 return await StaleAsync(envelope, api).ConfigureAwait(false);
             case "leak":
                 return await LeakAsync(envelope, api).ConfigureAwait(false);
+            case "abandon":
+                return await AbandonAsync(envelope, api).ConfigureAwait(false);
+            case "flood":
+                return await FloodAsync(options).ConfigureAwait(false);
             case "echo-envelope":
                 return await EchoEnvelopeAsync(rawEnvelope).ConfigureAwait(false);
             default:
                 await Diagnostics.WriteAsync($"unknown behaviour '{behaviour}'").ConfigureAwait(false);
                 return UnknownBehaviour;
         }
+    }
+
+    /// <summary>
+    /// A host that finishes its work, leaves something behind still holding its output, and exits. A shell-capable
+    /// agent does this whenever it starts a background command and does not wait for it: the child ends, the pipe
+    /// does not, and a launcher that waits for the pipe waits for the helper instead. The attempt is completed
+    /// first, so what is being measured afterwards is only the launcher.
+    /// </summary>
+    private static async Task<int> AbandonAsync(LaunchEnvelope envelope, RuntimeApi api)
+    {
+        await CompleteAsync(envelope, api, new JsonObject { ["summary"] = "done, and something is still running" })
+            .ConfigureAwait(false);
+
+        var start = new ProcessStartInfo(Environment.ProcessPath ?? "dotnet")
+        {
+            UseShellExecute = false,
+
+            // Inherited, which is the whole point: this helper holds the pipe the launcher is reading.
+            RedirectStandardOutput = false,
+            RedirectStandardError = false,
+            RedirectStandardInput = false,
+        };
+
+        foreach (var argument in HelperArguments())
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var helper = Process.Start(start);
+        await Diagnostics.WriteAsync($"left pid {helper?.Id.ToString(CultureInfo.InvariantCulture) ?? "none"} holding the pipes").ConfigureAwait(false);
+        return Success;
+    }
+
+    /// <summary>
+    /// The helper, which is this same program asked to sleep: started with no behaviour and no envelope, it reads
+    /// an empty standard input, fails to parse it and would exit at once — so it is told to linger instead.
+    /// </summary>
+    private static IEnumerable<string> HelperArguments()
+    {
+        if (Environment.ProcessPath is null || Environment.ProcessPath.EndsWith("dotnet", StringComparison.OrdinalIgnoreCase)
+            || Environment.ProcessPath.EndsWith("dotnet.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return Environment.GetCommandLineArgs()[0];
+        }
+
+        yield return "linger";
+    }
+
+    /// <summary>
+    /// More output than any pipe will hold, so that a launcher which stopped reading would deadlock rather than
+    /// merely lose the tail. That deadlock is the thing the pumps exist to prevent, and a test writing a few
+    /// kilobytes never reaches it.
+    /// </summary>
+    private static async Task<int> FloodAsync(IReadOnlyList<string> options)
+    {
+        var megabytes = int.TryParse(Option(options, "--megabytes"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var asked)
+            ? asked
+            : 2;
+
+        var line = new string('x', 1024);
+        for (var written = 0; written < megabytes * 1024; written++)
+        {
+            await Console.Out.WriteLineAsync(line).ConfigureAwait(false);
+        }
+
+        await Console.Out.FlushAsync().ConfigureAwait(false);
+        return Success;
     }
 
     /// <summary>The whole happy path: progress, proof of life, a result.</summary>
@@ -163,8 +258,25 @@ internal static class Behaviours
     private static Task<(int Status, string Body)> SetHalfDoneAsync(LaunchEnvelope envelope, RuntimeApi api) =>
         api.CallAsync(Operations.WorkItemSetResult, new WorkItemSetResultRequest(envelope.WorkItemId, envelope.AttemptId, new JsonObject { ["progress"] = "half" }));
 
-    private static Task<(int Status, string Body)> CompleteAsync(LaunchEnvelope envelope, RuntimeApi api, JsonNode? result) =>
-        api.CallAsync(Operations.WorkItemComplete, new WorkItemCompleteRequest(envelope.WorkItemId, envelope.AttemptId, CompletionStatus.Succeeded, result, null, null));
+    /// <summary>
+    /// Finishing, and saying so when the runtime refuses to let it finish. A host told its answer is not the
+    /// shape that was asked for and then exiting silently would leave an attempt that ended for no visible
+    /// reason; a real one would try again, and this one at least says what it was told.
+    /// </summary>
+    private static async Task<(int Status, string Body)> CompleteAsync(LaunchEnvelope envelope, RuntimeApi api, JsonNode? result)
+    {
+        var answer = await api.CallAsync(
+            Operations.WorkItemComplete,
+            new WorkItemCompleteRequest(envelope.WorkItemId, envelope.AttemptId, CompletionStatus.Succeeded, result, null, null))
+            .ConfigureAwait(false);
+
+        if (answer.Status != 200)
+        {
+            await Diagnostics.WriteAsync($"complete refused with {answer.Status.ToString(CultureInfo.InvariantCulture)}: {answer.Body}").ConfigureAwait(false);
+        }
+
+        return answer;
+    }
 
     private static JsonNode? ParseResult(string? json)
     {

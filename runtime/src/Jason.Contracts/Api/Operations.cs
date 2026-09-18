@@ -47,6 +47,14 @@ public static class Operations
 
     public const string RoleList = "role.list";
     public const string RoleAdd = "role.add";
+    public const string RoleSetProfile = "role.set_profile";
+
+    public const string ProfileCreate = "profile.create";
+    public const string ProfileUpdate = "profile.update";
+    public const string ProfileGet = "profile.get";
+    public const string ProfileList = "profile.list";
+    public const string ProfileDisable = "profile.disable";
+    public const string ProfileEnable = "profile.enable";
 
     public const string JournalAppend = "journal.append";
     public const string JournalList = "journal.list";

@@ -239,7 +239,12 @@ public sealed class RoutesOptionsValidator : IValidateOptions<RoutesOptions>
     }
 }
 
-public sealed class RolesOptionsValidator : IValidateOptions<RolesOptions>
+/// <summary>
+/// How roles are launched when nothing more specific says. The global default profile is held to the shape of a
+/// name and nothing more: settings are read before the database is open, so whether a profile of that name
+/// exists is not a question this validator can ask.
+/// </summary>
+public sealed partial class RolesOptionsValidator : IValidateOptions<RolesOptions>
 {
     public ValidateOptionsResult Validate(string? name, RolesOptions options)
     {
@@ -254,6 +259,21 @@ public sealed class RolesOptionsValidator : IValidateOptions<RolesOptions>
             }
         }
 
+        // Optional, and only a name. A well-formed name nothing answers is not a reason to refuse to start —
+        // the profile it names may be created a minute later — so it becomes a visible refusal on the work item
+        // when that item is claimed, where the person who has to fix it can see which work it stopped.
+        if (options.DefaultExecutionProfile is { } profile && !ProfileName().IsMatch(profile))
+        {
+            failures.Add($"Roles:DefaultExecutionProfile must be lowercase letters, digits and hyphens, starting with a letter, at most 64 characters; got '{profile}'.");
+        }
+
+        OptionRules.Range(failures, "Roles:MaxStdoutBytes", options.MaxStdoutBytes, 65_536, 67_108_864);
+        OptionRules.Range(failures, "Roles:MaxSkillBytes", options.MaxSkillBytes, 4_096, 16_777_216);
+
         return OptionRules.Result(failures);
     }
+
+    /// <summary>The shape of a role's name, which is the shape a profile's name is written under.</summary>
+    [GeneratedRegex("^[a-z][a-z0-9-]{0,63}$")]
+    private static partial Regex ProfileName();
 }

@@ -21,6 +21,28 @@ public static class AttemptErrors
     /// <summary>The role has no entry command and none is configured for every role.</summary>
     public const string RoleNotLaunchable = "role_not_launchable";
 
+    /// <summary>
+    /// A run caused this work and nothing about that run's execution profile can be read, so there is no
+    /// profile to inherit. It blocks here rather than quietly using the global default, which would change the
+    /// executor behind somebody's back. Name a profile on the item, or give the campaign or the role a policy.
+    /// </summary>
+    public const string LineageResolutionUnsupported = "lineage_resolution_unsupported";
+
+    /// <summary>The profile named — by the item, by a policy, or as the global default — does not exist.</summary>
+    public const string ProfileNotFound = "profile_not_found";
+
+    /// <summary>The resolved profile has been taken out of service.</summary>
+    public const string ProfileDisabled = "profile_disabled";
+
+    /// <summary>The resolved profile's program is not on this machine, so no host can be started.</summary>
+    public const string HostNotAvailable = "host_not_available";
+
+    /// <summary>
+    /// The role's skill is there but its name does not match the directory it lives in, which a host answers by
+    /// ignoring the skill without saying so. Refused here instead, where it can be read.
+    /// </summary>
+    public const string RoleSkillInvalid = "role_skill_invalid";
+
     /// <summary>This build publishes no contract for the operation the work item names.</summary>
     public const string OperationUnknown = "operation_unknown";
 

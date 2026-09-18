@@ -21,6 +21,28 @@ public class ActorOptionTests
         Assert.Null(ActorOption.Parse("   "));
     }
 
+    /// <summary>
+    /// A launched executor reports through this CLI, and what it creates has to stay traceable to the run that
+    /// asked for it. Relying on every agent to remember <c>--actor attempt:att_…</c> would make that traceability
+    /// a matter of the agent's memory: forget it, and the work looks like nobody's, which is exactly the silence
+    /// this vocabulary exists to prevent. The launcher therefore states it in the child's environment, and the
+    /// CLI reads it when nothing was said on the command line.
+    /// </summary>
+    [Fact]
+    public void Without_an_actor_flag_a_launched_executor_still_journals_as_its_attempt() =>
+        Assert.Equal("{\"type\":\"attempt\",\"id\":\"att_01J\"}", Serialize(ActorOption.Parse(null, "att_01J")));
+
+    [Fact]
+    public void An_actor_given_on_the_command_line_wins_over_the_environment() =>
+        Assert.Equal("{\"type\":\"human\",\"id\":\"ada\"}", Serialize(ActorOption.Parse("human:ada", "att_01J")));
+
+    [Fact]
+    public void A_blank_attempt_in_the_environment_claims_nothing()
+    {
+        Assert.Null(ActorOption.Parse(null, null));
+        Assert.Null(ActorOption.Parse(null, "   "));
+    }
+
     [Fact]
     public void A_bare_type_parses_without_an_id() =>
         Assert.Equal("{\"type\":\"human\"}", Serialize(ActorOption.Parse("human")));

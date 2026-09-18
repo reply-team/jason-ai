@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Persistence;
@@ -87,6 +88,11 @@ public sealed partial class ExecutorService(
         await FenceAsync(workItemId, attemptId, now, cancellationToken).ConfigureAwait(false);
 
         var item = await LoadAsync(workItemId, cancellationToken).ConfigureAwait(false);
+
+        // Deliberately not held to the item's result_format. This is progress on unfinished work — the point of it
+        // is that an executor killed halfway leaves behind what it had — and half of an answer is not the shape of
+        // a whole one. What must satisfy the shape is what stands when the work is called done, and completion is
+        // where that is decided, including when it is this value that stands.
         item.Result = request.Result?.DeepClone();
         item.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -128,6 +134,12 @@ public sealed partial class ExecutorService(
 
         if (request.Status == CompletionStatus.Succeeded)
         {
+            // What is judged is the result that will stand: the one given here, or — where this call carries none —
+            // whatever the last set_result left behind, because that is what the work will be remembered by.
+            // Only a success is judged at all. A failure has an error to report and no result to be measured
+            // against, and holding it to a shape would leave an executor that could not do the job with nothing
+            // it could say.
+            EnsureResultSatisfiesFormat(item, request.Result ?? item.Result);
             outcomes.Succeed(db, item, attempt, request.Result, actor, reason);
         }
         else
@@ -241,6 +253,25 @@ public sealed partial class ExecutorService(
         if (reason is not null && reason.Trim().Length > MaxReasonLength)
         {
             errors.Add("reason", "too_long", string.Create(CultureInfo.InvariantCulture, $"reason must be at most {MaxReasonLength} characters."));
+        }
+    }
+
+    /// <summary>
+    /// A work item may declare the shape of the answer it wants, and a declaration nothing enforces is only
+    /// decoration: an agent asked for findings could answer with a paragraph about how thoroughly it had looked
+    /// and the work would be recorded as a success. The schema is the published dialect, checked when the item
+    /// was written, so applying it here is bounded work over a document that has already been weighed.
+    /// </summary>
+    private static void EnsureResultSatisfiesFormat(WorkItem item, JsonNode? result)
+    {
+        if (item.ResultFormat is not JsonObject schema)
+        {
+            return;
+        }
+
+        if (SchemaValidator.Validate(result, schema) is { Count: > 0 } problems)
+        {
+            throw DomainErrors.ResultInvalid(ErrorDetail.From(problems));
         }
     }
 

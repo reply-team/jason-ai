@@ -51,7 +51,11 @@ public static class WorkItemMapper
             externalReports is null ? null : [.. externalReports.Select(ReportMapper.ToSummary)],
             Utc(item.CreatedAt),
             Utc(item.UpdatedAt),
-            Utc(item.FinishedAt));
+            Utc(item.FinishedAt),
+
+            // Always sent: every item has an answer to where its profile would come from, and the answer that
+            // blocks a claim is exactly the one a caller must be able to read without asking anywhere else.
+            new LineageDto(item.LineageState, item.LineageProfileName, item.LineageProfileRevision, item.LineageFromAttemptId));
     }
 
     public static WorkItemSummaryDto ToSummary(WorkItem item, DateTime now)

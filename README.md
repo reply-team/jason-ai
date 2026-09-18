@@ -114,6 +114,20 @@ How work items are claimed, launched and reported on — the lifecycle, the laun
 executor is handed, the operations it reports through, and the settings that pace all of it — is
 documented in **[docs/work-execution.md](docs/work-execution.md)**.
 
+Which agent host runs a piece of AI work — the profile that names it, the revisions that make an
+attempt's record of it permanent, the order the choice is made in, what a launched agent finds in its
+work directory, and every reason AI work can be blocked while everything else keeps running — is
+documented in **[docs/execution-profiles.md](docs/execution-profiles.md)**:
+
+```sh
+jason profile create local-claude --host claude_code --program claude   --deny Write --host-version-verified 2.1.275
+jason profile list --human
+jason workitem create <campaign-id> --kind ai_role --role researcher --execution-profile local-claude
+```
+
+Jason ships no AI client and holds no model credentials: a profile names a host the user already
+installed and authenticated, and has nowhere to put a secret.
+
 What a plugin package is, every rule its manifest is held to, what the Host SDK offers and under
 which limits, how capabilities are granted, and the invocation protocol between the runtime and the
 plugin host, are documented in **[docs/plugins.md](docs/plugins.md)**:
