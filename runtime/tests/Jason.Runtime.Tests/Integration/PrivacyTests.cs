@@ -95,7 +95,7 @@ public class PrivacyTests
                     kind = "ai_role",
                     role = "fake-succeed",
                     context = new { brief = Brief },
-                    result_format = new { shape = Shape },
+                    result_format = new { type = "object", description = Shape },
                 },
                 Ct);
             await host.ScanAsync(Ct);

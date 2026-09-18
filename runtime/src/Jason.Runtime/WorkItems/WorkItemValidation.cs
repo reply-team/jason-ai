@@ -117,6 +117,12 @@ internal static partial class WorkItemValidation
         }
     }
 
+    /// <summary>
+    /// The shape an answer must have, as a schema in the dialect this build publishes — the same one operation
+    /// contracts are written in, so there is one shape language here and not two. It is a schema rather than a
+    /// free-form sketch because the runtime enforces it when the answer arrives: a shape nothing can check is a
+    /// request an executor may satisfy with a paragraph, and this is where that stops being possible.
+    /// </summary>
     public static void ValidateResultFormat(JsonNode? resultFormat, ValidationErrors errors)
     {
         ArgumentNullException.ThrowIfNull(errors);
@@ -125,12 +131,29 @@ internal static partial class WorkItemValidation
             return;
         }
 
+        // Weighed before it is read: the dialect check walks the document, and an unbounded document is not
+        // something to walk first and measure afterwards.
         if (JsonSerializer.SerializeToUtf8Bytes(resultFormat, JasonJson.Options).Length > WorkItemService.MaxResultFormatBytes)
         {
             errors.Add(
                 "result_format",
                 "too_large",
                 string.Create(CultureInfo.InvariantCulture, $"result_format must serialize to at most {WorkItemService.MaxResultFormatBytes} bytes."));
+            return;
+        }
+
+        if (resultFormat is not JsonObject schema)
+        {
+            errors.Add("result_format", "invalid", "result_format must be a JSON object: a schema describing the answer.");
+            return;
+        }
+
+        foreach (var problem in SchemaValidator.CheckDialect(schema))
+        {
+            errors.Add(
+                string.IsNullOrEmpty(problem.Pointer) ? "result_format" : $"result_format{problem.Pointer}",
+                problem.Reason,
+                problem.Message);
         }
     }
 

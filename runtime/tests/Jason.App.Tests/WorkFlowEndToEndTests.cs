@@ -94,7 +94,7 @@ public class WorkFlowEndToEndTests
                 "--context",
                 "{\"icp\":\"founders\"}",
                 "--result-format",
-                "{\"shape\":\"summary\"}")));
+                "{\"type\":\"object\",\"description\":\"a summary\"}")));
             var work = (string)first["id"]!;
             workItems.Add(work);
             Assert.StartsWith("wi_", work, StringComparison.Ordinal);

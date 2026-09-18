@@ -42,6 +42,19 @@ public static class DomainErrors
     public static InvalidRequestException ResultTooLarge(int limitBytes) =>
         new("result_too_large", string.Create(CultureInfo.InvariantCulture, $"A result must serialize to at most {limitBytes} bytes."));
 
+    /// <summary>
+    /// The answer is not the shape the work item asked for. Refused rather than stored: an executor still holds
+    /// its attempt when it hears this, so it can answer again properly, and a paragraph explaining how thoroughly
+    /// the job was done is never recorded as the job being done.
+    /// </summary>
+    public static DomainException ResultInvalid(IReadOnlyList<ErrorDetail> details) =>
+        new(
+            StatusCodes.Status400BadRequest,
+            "result_invalid",
+            "The result does not satisfy the result_format this work item declared.",
+            retryable: false,
+            details);
+
     public static ConflictException RoleExists(string name) => new("role_exists", $"A role named '{name}' already exists.");
 
     /// <summary>Two writers reached the same row; the loser is told to read again rather than given a merged result.</summary>

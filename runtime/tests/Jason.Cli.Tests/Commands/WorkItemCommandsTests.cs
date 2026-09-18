@@ -44,7 +44,7 @@ public class WorkItemCommandsTests
             "--context",
             "{\"icp\":\"founders\"}",
             "--result-format",
-            "{\"shape\":\"summary\"}",
+            "{\"type\":\"object\"}",
             "--reason",
             "the plan asks for it",
             "--actor",
@@ -55,7 +55,7 @@ public class WorkItemCommandsTests
             Operations.WorkItemCreate,
             "{\"campaign_id\":\"cmp_A\",\"kind\":\"ai_role\",\"role\":\"researcher\",\"contact_id\":\"cnt_A\",\"execution_profile\":\"fast\",\"priority\":5,"
                 + "\"not_before\":\"2026-09-14T10:00:00Z\",\"due_at\":\"2026-09-15T10:00:00Z\",\"timeout_seconds\":60,\"heartbeat_seconds\":10,\"max_attempts\":2,"
-                + "\"context\":{\"icp\":\"founders\"},\"result_format\":{\"shape\":\"summary\"},\"reason\":\"the plan asks for it\",\"actor\":{\"type\":\"role\",\"id\":\"planner\"}}");
+                + "\"context\":{\"icp\":\"founders\"},\"result_format\":{\"type\":\"object\"},\"reason\":\"the plan asks for it\",\"actor\":{\"type\":\"role\",\"id\":\"planner\"}}");
     }
 
     [Fact]
@@ -314,7 +314,7 @@ public class WorkItemCommandsTests
             "--max-attempts",
             "4",
             "--result-format",
-            "{\"shape\":\"summary\"}",
+            "{\"type\":\"object\"}",
             "--reason",
             "the plan changed",
             "--actor",
@@ -324,7 +324,7 @@ public class WorkItemCommandsTests
         cli.AssertPosted(
             Operations.WorkItemUpdate,
             "{\"work_item_id\":\"wi_A\",\"set\":{\"tone\":\"direct\"},\"unset\":[\"old_pitch\"],\"not_before\":\"2026-09-14T12:00:00Z\",\"priority\":7,"
-                + "\"timeout_seconds\":90,\"heartbeat_seconds\":15,\"max_attempts\":4,\"result_format\":{\"shape\":\"summary\"},"
+                + "\"timeout_seconds\":90,\"heartbeat_seconds\":15,\"max_attempts\":4,\"result_format\":{\"type\":\"object\"},"
                 + "\"reason\":\"the plan changed\",\"actor\":{\"type\":\"role\",\"id\":\"planner\"}}");
     }
 
