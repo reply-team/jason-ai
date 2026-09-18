@@ -22,7 +22,9 @@ public class JasonDbContextTests
         Assert.Contains("ix_campaigns_public_id", Names(connection, "SELECT name FROM sqlite_master WHERE type = 'index'"));
         // Adding the context column together with its json_valid check rebuilds the table on SQLite, which
         // leaves the primary key first and the rest in name order. The names are what this test is about.
-        Assert.Equal(["id", "archived_at", "context_json", "created_at", "name", "public_id", "status", "updated_at"], Names(connection, "SELECT name FROM pragma_table_info('campaigns')"));
+        Assert.Equal(
+            ["id", "archived_at", "context_json", "created_at", "name", "public_id", "status", "updated_at", "execution_profile"],
+            Names(connection, "SELECT name FROM pragma_table_info('campaigns')"));
     }
 
     [Fact]

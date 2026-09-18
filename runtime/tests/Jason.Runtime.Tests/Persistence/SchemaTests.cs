@@ -20,7 +20,7 @@ public class SchemaTests
         Assert.Contains("journal", tables);
 
         Assert.Equal(
-            ["id", "archived_at", "context_json", "created_at", "name", "public_id", "status", "updated_at"],
+            ["id", "archived_at", "context_json", "created_at", "name", "public_id", "status", "updated_at", "execution_profile"],
             Names(connection, "SELECT name FROM pragma_table_info('campaigns')"));
         Assert.Equal(
             ["id", "public_id", "ts", "actor_type", "actor_id", "kind", "campaign_id", "key", "old_json", "new_json", "reason", "attempt_id", "work_item_id"],
@@ -35,8 +35,9 @@ public class SchemaTests
 
         Assert.Equal(
             [
-                "attempts_provenance_valid_insert", "attempts_provenance_valid_update", "journal_no_delete", "journal_no_update",
-                "reports_no_delete", "reports_no_update", "work_items_result_frozen",
+                "attempts_provenance_valid_insert", "attempts_provenance_valid_update", "execution_profile_revisions_no_delete",
+                "execution_profile_revisions_no_update", "journal_no_delete", "journal_no_update", "reports_no_delete",
+                "reports_no_update", "work_items_result_frozen",
             ],
             Names(connection, "SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name"));
     }
@@ -56,9 +57,10 @@ public class SchemaTests
         Assert.Equal(
             [
                 "attempt_count", "campaign_id", "contact_id", "context_json", "created_at", "created_by_id", "created_by_type", "due_at",
-                "execution_profile", "finished_at", "heartbeat_seconds", "id", "kind", "last_error_json", "max_attempts", "not_before",
-                "operation", "priority", "public_id", "result_format_json", "result_json", "retry_after", "role", "status",
-                "timeout_seconds", "updated_at",
+                "execution_profile", "finished_at", "heartbeat_seconds", "id", "kind", "last_error_json", "lineage_from_attempt_id",
+                "lineage_profile_name", "lineage_profile_revision", "lineage_state", "max_attempts", "not_before", "operation",
+                "priority", "public_id", "result_format_json", "result_json", "retry_after", "role", "status", "timeout_seconds",
+                "updated_at",
             ],
             Sorted(connection, "SELECT name FROM pragma_table_info('work_items')"));
 
@@ -71,7 +73,10 @@ public class SchemaTests
             Sorted(connection, "SELECT name FROM pragma_table_info('attempts')"));
 
         Assert.Equal(
-            ["builtin", "created_at", "description", "entry_command_json", "id", "name", "profile_defaults_json", "public_id", "updated_at"],
+            [
+                "builtin", "created_at", "description", "entry_command_json", "execution_profile", "id", "name",
+                "profile_defaults_json", "public_id", "updated_at",
+            ],
             Sorted(connection, "SELECT name FROM pragma_table_info('roles')"));
 
         var indexes = Names(connection, "SELECT name FROM sqlite_master WHERE type = 'index'");
@@ -87,6 +92,38 @@ public class SchemaTests
         var singleFlight = Scalar(connection, "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'ix_attempts_one_live_per_item'");
         Assert.Contains("UNIQUE", singleFlight, StringComparison.Ordinal);
         Assert.Contains("WHERE status IN ('scheduled','running')", singleFlight, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Execution_profile_tables_columns_and_indexes_exist()
+    {
+        using var database = new TestDatabase();
+        using var connection = new SqliteConnection($"Data Source={database.File}");
+        connection.Open();
+
+        var tables = Names(connection, "SELECT name FROM sqlite_master WHERE type = 'table'");
+        Assert.Contains("execution_profiles", tables);
+        Assert.Contains("execution_profile_revisions", tables);
+
+        Assert.Equal(
+            ["created_at", "current_revision", "description", "disabled_at", "id", "name", "public_id", "updated_at"],
+            Sorted(connection, "SELECT name FROM pragma_table_info('execution_profiles')"));
+
+        // No environment, no secret, no free-form bag: a credential has nowhere to go, which is the whole of the
+        // rule that a profile never holds one.
+        Assert.Equal(
+            [
+                "args_json", "cli_command", "created_at", "created_by_id", "created_by_type", "deny_json", "host",
+                "host_version_verified", "id", "number", "profile_id", "program",
+            ],
+            Sorted(connection, "SELECT name FROM pragma_table_info('execution_profile_revisions')"));
+
+        var indexes = Names(connection, "SELECT name FROM sqlite_master WHERE type = 'index'");
+        Assert.Contains("ix_execution_profiles_name", indexes);
+        Assert.Contains("ix_execution_profiles_public_id", indexes);
+
+        var perNumber = Scalar(connection, "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'ix_execution_profile_revisions_one_per_number'");
+        Assert.Contains("UNIQUE", perNumber, StringComparison.Ordinal);
     }
 
     [Fact]

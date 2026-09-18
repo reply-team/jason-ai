@@ -4,8 +4,8 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 namespace Jason.Runtime.Persistence;
 
 /// <summary>
-/// Second line of defence after the database triggers, for the two tables nothing may rewrite: the runtime
-/// itself never updates or deletes a journal entry or an admitted report.
+/// Second line of defence after the database triggers, for the three tables nothing may rewrite: the runtime
+/// itself never updates or deletes a journal entry, an admitted report, or an execution-profile revision.
 /// </summary>
 public sealed class AppendOnlyInterceptor : SaveChangesInterceptor
 {
@@ -38,6 +38,11 @@ public sealed class AppendOnlyInterceptor : SaveChangesInterceptor
         if (Touched<Report>(context))
         {
             throw new InvalidOperationException("An admitted report is immutable; it is never updated or deleted.");
+        }
+
+        if (Touched<ExecutionProfileRevision>(context))
+        {
+            throw new InvalidOperationException("An execution-profile revision is immutable; an edit appends a new one.");
         }
     }
 

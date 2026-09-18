@@ -30,8 +30,26 @@ public sealed class WorkItem
     /// <summary>Set for <c>provider_op</c> work: the vendor-neutral operation a plugin will perform.</summary>
     public string? Operation { get; set; }
 
-    /// <summary>Opaque to the runtime: whoever launches the work decides what a profile means.</summary>
+    /// <summary>
+    /// The execution profile this item asks for by name: the most specific level of the resolution order, and
+    /// the one repair for work whose lineage cannot be resolved. Validated against the registry when it is
+    /// written, so a name nothing answers is refused where it is typed rather than an hour later.
+    /// </summary>
     public string? ExecutionProfile { get; set; }
+
+    /// <summary>
+    /// What the run that caused this item can hand down. Materialized once, when the item is created, so a
+    /// later edit anywhere in the ancestry changes nothing here — and <see cref="LineageState.Unresolved"/>
+    /// blocks the claim rather than falling through to the global default.
+    /// </summary>
+    public LineageState LineageState { get; set; } = LineageState.Root;
+
+    public string? LineageProfileName { get; set; }
+
+    public int? LineageProfileRevision { get; set; }
+
+    /// <summary>The attempt this was inherited from, so a chain can be read back.</summary>
+    public string? LineageFromAttemptId { get; set; }
 
     /// <summary>The concurrency token: two writers racing over one item cannot both win.</summary>
     public WorkItemStatus Status { get; set; } = WorkItemStatus.Created;

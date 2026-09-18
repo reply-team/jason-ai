@@ -23,6 +23,12 @@ public sealed class Campaign
     /// <summary>Mutable current-state JSON: the campaign's shared knowledge. Changes are journaled by the caller.</summary>
     public JsonObject Context { get; set; } = new();
 
+    /// <summary>
+    /// Which execution profile this campaign's agent work uses, unless an item names its own. A campaign is the
+    /// unit of isolation here, so its policy outranks a role's.
+    /// </summary>
+    public string? ExecutionProfile { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
