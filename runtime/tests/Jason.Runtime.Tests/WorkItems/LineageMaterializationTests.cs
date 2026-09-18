@@ -128,6 +128,25 @@ public class LineageMaterializationTests
     }
 
     /// <summary>
+    /// An attempt this runtime cannot read is not work nobody's run caused: it is ancestry nothing can be said
+    /// about, and the two are never collapsed. Asserted on the function itself, because a caller cannot reach it
+    /// — <c>workitem.create</c> verifies the actor first and refuses an attempt it does not know, which
+    /// <c>WorkItemServiceTests</c> covers — so this is the answer the rule gives when it is asked anyway.
+    /// </summary>
+    [Fact]
+    public async Task An_ancestor_attempt_that_cannot_be_read_is_unresolved_rather_than_root()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+
+        var record = await Lineage.ForCreationAsync(db, new ActorRef(ActorType.Attempt, "att_01JASONNOTHERE"), Ct);
+
+        Assert.Equal(LineageState.Unresolved, record.State);
+        Assert.Null(record.ProfileName);
+        Assert.Null(record.FromAttemptId);
+    }
+
+    /// <summary>
     /// An attempt that ran under the role's own entry command resolved no profile at all, so there is none to
     /// hand down and nothing being changed behind anybody's back: the ancestor's own record carries on.
     /// </summary>
