@@ -121,6 +121,50 @@ public class ProfileRevisionTests
         Assert.Equal(Document(created), Document(answered));
     }
 
+    /// <summary>
+    /// A revision number is not a change counter. It says which statement of the launch an attempt ran under, and
+    /// attempts pin it for ever — so comparing "this attempt ran revision 3, the profile is at 5" has to mean the
+    /// launch changed twice, not that somebody twice rewrote the sentence describing it. The description lives on
+    /// the profile rather than in a revision for exactly that reason, and editing it moves nothing.
+    /// </summary>
+    [Fact]
+    public async Task Rewording_the_description_does_not_move_a_number_attempts_pin()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileCreate, Minimal("reworded"), Ct);
+
+        var updated = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileUpdate,
+            new { name = "reworded", description = "The host installed on this machine." },
+            Ct);
+
+        Assert.Equal("The host installed on this machine.", updated.Description);
+        Assert.Equal(1, updated.CurrentRevision);
+        Assert.Equal(1, updated.Revision.Number);
+
+        // And there is one revision to read, not two that say the same thing.
+        var error = await api.PostErrorAsync(
+            Operations.ProfileGet, new { name = "reworded", revision = 2 }, System.Net.HttpStatusCode.NotFound, Ct);
+        Assert.Equal("profile_revision_not_found", error.Code);
+    }
+
+    /// <summary>A description reworded alongside a real change rides on the revision that change appends.</summary>
+    [Fact]
+    public async Task A_description_changed_beside_the_launch_itself_travels_with_that_revision()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileCreate, Minimal("both-at-once"), Ct);
+
+        var updated = await api.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileUpdate,
+            new { name = "both-at-once", description = "Now with a deny rule.", deny = new[] { "Write" } },
+            Ct);
+
+        Assert.Equal("Now with a deny rule.", updated.Description);
+        Assert.Equal(2, updated.CurrentRevision);
+        Assert.Equal(["Write"], updated.Revision.Deny);
+    }
+
     /// <summary>A revision the profile has never had is a 404, not an empty answer somebody would read as a fact.</summary>
     [Fact]
     public async Task A_revision_that_was_never_written_is_not_found()

@@ -148,6 +148,31 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         }
 
         var now = clock.GetUtcNow().UtcDateTime;
+
+        // The description is the profile's, not the revision's, and a revision number is not a change counter: it
+        // says which statement of the launch an attempt ran under. Rewording the sentence that describes a host
+        // changes no launch, so appending a revision for it would put distance between a pinned number and the
+        // current one that means nothing happened. Reworded beside a real change, it simply rides along.
+        if (request.Description.IsSet)
+        {
+            profile.Description = Text(request.Description.Value);
+        }
+
+        if (named.Count == 1 && request.Description.IsSet)
+        {
+            profile.UpdatedAt = now;
+            journal.Append(
+                db,
+                actor,
+                JournalKinds.ProfileRevised,
+                campaign: null,
+                key: name,
+                old: new JsonObject { ["revision"] = current.Number },
+                updated: new JsonObject { ["revision"] = current.Number, ["fields"] = new JsonArray(JsonValue.Create("description")) },
+                reason: Text(request.Reason));
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return ProfileMapper.ToDto(profile, current);
+        }
         var next = new ExecutionProfileRevision
         {
             ProfileId = profile.Id,
@@ -164,11 +189,6 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         };
 
         db.ExecutionProfileRevisions.Add(next);
-        if (request.Description.IsSet)
-        {
-            profile.Description = Text(request.Description.Value);
-        }
-
         profile.CurrentRevision = next.Number;
         profile.UpdatedAt = now;
 
