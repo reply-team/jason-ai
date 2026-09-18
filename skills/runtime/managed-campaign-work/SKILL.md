@@ -102,6 +102,26 @@ redirect or a chained command is refused. And answer in the shape the item asked
 item declares a `result_format`, a completion that does not satisfy it is refused, however well it
 reads.
 
+### A role's notes are its memory, not the truth
+
+A role can keep one note per campaign — what it looked at, what it ruled out, what is still open — and
+read it again on its next run. The launch envelope names where it is; the note itself is read when it
+is wanted:
+
+```
+jason rolenote get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher
+jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher --note-file note.json
+```
+
+A note is written **whole** — there is no patch, so read it, add to it and write all of it back — and
+it is at most 64 KiB of JSON object. A campaign nobody has written about yet answers with an empty
+note rather than an error.
+
+**It is not authoritative.** It is one role's own account, in its own words, from whenever it was
+written. Where a note disagrees with what the runtime says now, the runtime is right. Read a note for
+where to look first; check what it claims before you repeat it. Campaign context is the campaign's
+shared knowledge and a different thing — do not write one into the other.
+
 ## When work waits for a person
 
 An operation whose contract says a person must confirm it parks at the claim: the item's status becomes
