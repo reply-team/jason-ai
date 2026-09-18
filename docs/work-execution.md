@@ -251,6 +251,12 @@ The child is started in a per-attempt **work directory**, `~/.jason/work/<wi_…
 launcher creates. Its standard output and standard error are written there as `stdout.log` and
 `stderr.log`. Nothing is cleaned up in this version.
 
+Both files stop growing past `Roles:MaxStdoutBytes` and end with one line naming the maximum and the
+setting; the attempt's launch record then says `stdout_truncated: true`. The pipes are drained to end
+of file regardless — a pipe nobody empties blocks the child writing into it. A cut transcript never
+changes an outcome: the runtime reads no result from standard output, only from `workitem.set_result`
+and `workitem.complete`.
+
 The launcher puts two things in that directory before the child starts:
 
 - `.claude/settings.json`, carrying the **deny** rules of the execution profile that runs the attempt

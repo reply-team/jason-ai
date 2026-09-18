@@ -6,6 +6,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Execution;
 using Jason.Contracts.Json;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Hosting;
@@ -235,15 +236,54 @@ public class AiRoleCommandTests
         Assert.True(File.Exists(Path.Combine(workDir, ".claude", "skills", "researcher", "SKILL.md")));
     }
 
+    [Fact]
+    public async Task A_host_that_says_more_than_the_maximum_has_its_transcript_cut_and_the_attempt_says_so()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        // The envelope is far longer than this, and echo-envelope writes the whole of it to standard output.
+        var outcome = await RunAsync(
+            directory.Paths,
+            workDir,
+            FakeAgentHost.EntryCommand("echo-envelope"),
+            roles: new RolesOptions { MaxStdoutBytes = 64 });
+
+        var exited = Assert.IsType<CommandOutcome.Exited>(outcome);
+        Assert.True(exited.Launch.StdoutTruncated);
+        var transcript = await File.ReadAllTextAsync(Path.Combine(workDir, "stdout.log"), Ct);
+        Assert.Contains("Roles:MaxStdoutBytes", transcript, StringComparison.Ordinal);
+
+        // The exit code is the child's own and owes nothing to what was kept of its output.
+        Assert.Equal(0, exited.ExitCode);
+    }
+
+    [Fact]
+    public async Task A_host_inside_the_maximum_leaves_a_whole_transcript_and_the_attempt_says_nothing()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        var outcome = await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("echo-envelope"));
+
+        var exited = Assert.IsType<CommandOutcome.Exited>(outcome);
+        Assert.False(exited.Launch.StdoutTruncated);
+        Assert.DoesNotContain(
+            "Roles:MaxStdoutBytes",
+            await File.ReadAllTextAsync(Path.Combine(workDir, "stdout.log"), Ct),
+            StringComparison.Ordinal);
+    }
+
     /// <summary>The kill signal is handed over as its source, not as a token: it is the attempt's, not the test's.</summary>
     private static Task<CommandOutcome> RunAsync(
         JasonPaths paths,
         string workDir,
         IReadOnlyList<string> entryCommand,
         CancellationTokenSource? kill = null,
-        IReadOnlyList<string>? deny = null)
+        IReadOnlyList<string>? deny = null,
+        RolesOptions? roles = null)
     {
-        var command = new AiRoleCommand(paths, new TokenRedactor(new RuntimeSecrets(Token)), TestOptions.RoleSettings(), NullLogger<AiRoleCommand>.Instance);
+        var command = new AiRoleCommand(paths, new TokenRedactor(new RuntimeSecrets(Token)), TestOptions.RoleSettings(roles), NullLogger<AiRoleCommand>.Instance);
         var context = new CommandContext(
             WorkItemId,
             AttemptId,

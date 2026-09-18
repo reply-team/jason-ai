@@ -14,8 +14,9 @@ namespace Jason.Runtime.Execution;
 
 /// <summary>
 /// Runs one attempt of an <c>ai_role</c> work item by starting the role's entry command as a child process.
-/// It is deliberately generic: the runtime knows how to launch a program, hand it one JSON envelope on stdin
-/// and watch it end, and nothing more. Which agent framework is behind that command is the user's business.
+/// It is deliberately generic: the runtime prepares the directory the attempt runs in, launches a program,
+/// hands it one JSON envelope on stdin and watches it end, and nothing more. Which agent framework is behind
+/// that command is the user's business, and no flag of any host's is composed here.
 /// <para>
 /// The envelope never carries the capability token — the child reads the descriptor file named in it — and
 /// neither does the environment, so a host that dumps its own environment leaks nothing. What the child writes
@@ -126,20 +127,22 @@ public sealed class AiRoleCommand(
             // The pipes are drained from the first moment. A child that talks before it reads would otherwise
             // fill its output buffer and wait forever for a reader that is itself waiting to finish writing.
             var tail = new StringBuilder();
-            var pumps = new[]
-            {
-                OutputPump.PumpAsync(process.StandardOutput, Path.Combine(context.WorkDir, "stdout.log"), redactor, null, StderrTailBytes),
-                OutputPump.PumpAsync(process.StandardError, Path.Combine(context.WorkDir, "stderr.log"), redactor, tail, StderrTailBytes),
-            };
+
+            // The same bound guards both files, because a file is a file; only the transcript's truncation is
+            // reported on the attempt, since that is what the launch record publishes. The stderr tail is cut
+            // to its own length either way, so what explains an exit is unaffected by what the file kept.
+            var maxBytes = roles.Current.MaxStdoutBytes;
+            var transcript = OutputPump.PumpAsync(process.StandardOutput, Path.Combine(context.WorkDir, "stdout.log"), redactor, null, StderrTailBytes, maxBytes);
+            var diagnostics = OutputPump.PumpAsync(process.StandardError, Path.Combine(context.WorkDir, "stderr.log"), redactor, tail, StderrTailBytes, maxBytes);
 
             await WriteEnvelopeAsync(process, context).ConfigureAwait(false);
 
             // Deliberately not the runtime's own token: a shutdown drains and lets children finish, and a
             // survivor completes its attempt against the next runtime instance rather than dying with this one.
             await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-            await Task.WhenAll(pumps).ConfigureAwait(false);
+            await Task.WhenAll(transcript, diagnostics).ConfigureAwait(false);
 
-            launch = launch with { ExitCode = process.ExitCode };
+            launch = launch with { ExitCode = process.ExitCode, StdoutTruncated = await transcript.ConfigureAwait(false) };
             logger.LogInformation(
                 "Attempt {AttemptId} of work item {WorkItemId} ended with exit code {ExitCode}",
                 context.AttemptId,
