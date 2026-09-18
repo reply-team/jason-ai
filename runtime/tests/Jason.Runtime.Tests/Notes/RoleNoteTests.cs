@@ -154,6 +154,31 @@ public class RoleNoteTests
     }
 
     /// <summary>
+    /// A listing pages by cursor the way every listing in this API does, keyed on the role name: a campaign with
+    /// nine roles writing is a page, not a special case.
+    /// </summary>
+    [Fact]
+    public async Task A_listing_pages_by_cursor_like_every_other_listing()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var campaign = await NewCampaignAsync(api);
+        foreach (var role in (string[])["analyst", "critic", "planner"])
+        {
+            await SetAsync(api, campaign, role, new { written = role });
+        }
+
+        var page = await api.PostOkAsync<Page<RoleNoteSummaryDto>>(
+            Operations.RoleNoteList, new { campaign_id = campaign, limit = 2 }, Ct);
+        Assert.Equal(["analyst", "critic"], page.Items.Select(n => n.Role));
+        Assert.NotNull(page.NextCursor);
+
+        var rest = await api.PostOkAsync<Page<RoleNoteSummaryDto>>(
+            Operations.RoleNoteList, new { campaign_id = campaign, limit = 2, cursor = page.NextCursor }, Ct);
+        Assert.Equal(["planner"], rest.Items.Select(n => n.Role));
+        Assert.Null(rest.NextCursor);
+    }
+
+    /// <summary>
     /// An archived campaign takes no more writes, like every other write against one. Reading stays open: the
     /// memory of a finished campaign is exactly what somebody looking back at it wants.
     /// </summary>
