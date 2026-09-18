@@ -5,17 +5,15 @@ using System.Text.Json.Nodes;
 namespace Jason.Runtime.Execution.Hosts;
 
 /// <summary>
-/// What preparing a work directory came to. A message without a refusal is worth saying and nothing more: a
-/// skill that quietly did not arrive reads afterwards as a model that ignored it, so the launcher says it out
-/// loud. A refusal ends the attempt before a child exists and carries the code it ends with.
+/// What preparing a work directory came to: ready, or the one reason the attempt cannot run. A refusal ends the
+/// attempt before a child exists and carries the code it ends with, because a skill that quietly did not arrive
+/// reads afterwards as a model that ignored it.
 /// </summary>
 public sealed record WorkDirectoryReport(string? RefusalCode, string? Message)
 {
     public static WorkDirectoryReport Ready { get; } = new(null, null);
 
     public static WorkDirectoryReport Refused(string code, string message) => new(code, message);
-
-    public static WorkDirectoryReport Noted(string message) => new(null, message);
 }
 
 /// <summary>
@@ -112,11 +110,17 @@ public static class WorkDirectory
             files.Add(file);
         }
 
+        // A skill that was configured and did not arrive is the failure worth refusing over: the role would do
+        // the job untaught, at the price of a real launch, and the only trace would be a log line nobody is
+        // reading at the time. Left behind for being too large is the same thing to the agent as left behind for
+        // being misnamed, so it is answered the same way.
         if (bytes > maxSkillBytes)
         {
-            return WorkDirectoryReport.Noted(string.Create(
-                CultureInfo.InvariantCulture,
-                $"The skill in '{source}' is {bytes} bytes and Roles:MaxSkillBytes allows {maxSkillBytes}, so it was not copied into the work directory."));
+            return WorkDirectoryReport.Refused(
+                AttemptErrors.RoleSkillInvalid,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The skill in '{source}' is {bytes} bytes and Roles:MaxSkillBytes allows {maxSkillBytes}, so it cannot be given to the role. Trim the skill, or raise Roles:MaxSkillBytes."));
         }
 
         var target = Path.Combine(host, SkillsDirectory, role);

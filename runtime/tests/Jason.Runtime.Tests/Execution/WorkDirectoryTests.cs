@@ -115,17 +115,21 @@ public class WorkDirectoryTests : IDisposable
         Assert.True(File.Exists(Path.Combine(WorkDir, ".claude", "skills", Role, "SKILL.md")));
     }
 
+    /// <summary>
+    /// A skill somebody configured and the agent never received is the failure this whole file is careful about:
+    /// the role does the job untaught, at the price of a real launch, and the only trace is a log line nobody is
+    /// reading at the time. Whether it was left behind because its name did not match or because it was too
+    /// large to copy makes no difference to the agent, so it makes none here either. A role with no skill
+    /// directory at all is a different thing and still launches: nothing was configured, so nothing is missing.
+    /// </summary>
     [Fact]
-    public void A_skill_directory_past_the_maximum_is_left_behind_and_says_which_setting_said_so()
+    public void A_skill_directory_past_the_maximum_refuses_the_attempt_rather_than_running_the_role_untaught()
     {
         Skill($"---\nname: {Role}\ndescription: finds the decision maker\n---\n\n{new string('x', 4096)}\n");
 
         var report = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024);
 
-        // Not a refusal: the setting says what may be copied into a work directory, and the attempt runs on the
-        // brief in its envelope. It is said out loud, because a skill that quietly did not arrive reads as a
-        // model that ignored it.
-        Assert.Null(report.RefusalCode);
+        Assert.Equal("role_skill_invalid", report.RefusalCode);
         Assert.Contains("Roles:MaxSkillBytes", report.Message!, StringComparison.Ordinal);
         Assert.False(Directory.Exists(Path.Combine(WorkDir, ".claude", "skills")));
     }

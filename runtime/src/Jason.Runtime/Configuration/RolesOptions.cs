@@ -25,6 +25,11 @@ public sealed class RolesOptions
     /// </summary>
     public int MaxStdoutBytes { get; set; } = 1024 * 1024;
 
-    /// <summary>How large a role's skill directory may be before the launcher refuses to copy it into a work directory.</summary>
+    /// <summary>
+    /// How large a role's skill may be. Past it the attempt is refused rather than run: a role that was given a
+    /// skill and did not receive it would do the job untaught, at the price of a real launch, and the only trace
+    /// would be a log line nobody is reading at the time. A role with no skill at all is a different thing and
+    /// runs normally — nothing was configured, so nothing is missing.
+    /// </summary>
     public int MaxSkillBytes { get; set; } = 1024 * 1024;
 }
