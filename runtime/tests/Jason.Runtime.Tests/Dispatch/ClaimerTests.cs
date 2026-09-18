@@ -6,6 +6,7 @@ using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins;
@@ -778,6 +779,10 @@ public class ClaimerTests
                 clock,
                 new AttemptOutcomes(journal, clock, settings),
                 new EntryCommandResolver(TestOptions.RoleSettings(roles)),
+                new AgentLaunchPlanner(
+                    new AgentPreflight(TestOptions.RoleSettings(roles)),
+                    new ProgramResolver(new ThisMachineHasNothing()),
+                    [new ClaudeCodeHost()]),
                 plugins,
                 routing,
                 new ExternalIdStore(journal, clock),
@@ -792,6 +797,17 @@ public class ClaimerTests
         public Claimer Claimer { get; }
 
         public void Dispose() => _dir.Dispose();
+
+        /// <summary>
+        /// No profile is configured in these tests, so nothing reaches the resolver; a search path that answers
+        /// nothing keeps that true rather than letting a machine's own PATH decide what they prove.
+        /// </summary>
+        private sealed class ThisMachineHasNothing : ISearchPath
+        {
+            public string? Path => null;
+
+            public string? PathExt => null;
+        }
 
         /// <summary>The register these tests are not about; the suppression check itself is tested where it lives.</summary>
         private sealed class NothingIsSuppressed : ISuppressionCheck

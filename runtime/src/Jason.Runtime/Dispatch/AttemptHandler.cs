@@ -105,7 +105,7 @@ public static class AttemptHandler
 
         AttemptStarted(logger, work.AttemptPublicId, work.WorkItemPublicId, null);
         var limits = EffectiveLimits.For(item, services.GetRequiredService<LiveSettings<DispatcherOptions>>().Current);
-        return (Context(item, attempt, limits, work.Plan), Pick(services, item.Kind));
+        return (Context(item, attempt, limits, work.Plan, work.Agent), Pick(services, item.Kind));
     }
 
     /// <summary>
@@ -318,7 +318,7 @@ public static class AttemptHandler
     private static ICommand? Pick(IServiceProvider services, WorkItemKind kind) =>
         services.GetServices<ICommand>().LastOrDefault(command => command.Kind == kind);
 
-    private static CommandContext Context(WorkItem item, Attempt attempt, EffectiveLimits limits, ProviderOpPlan? plan) => new(
+    private static CommandContext Context(WorkItem item, Attempt attempt, EffectiveLimits limits, ProviderOpPlan? plan, AgentLaunch? agent) => new(
         item.PublicId,
         attempt.PublicId,
         attempt.Number,
@@ -335,5 +335,7 @@ public static class AttemptHandler
         attempt.Launch?.WorkDir ?? string.Empty,
         CancellationToken.None,
         item.Operation,
-        plan);
+        plan,
+        agent?.Deny,
+        agent?.CliCommand);
 }

@@ -78,7 +78,7 @@ public class AttemptProvenanceTests
 
     /// <summary>An attempt of the other kind carries none, and its JSON says so by leaving the field out.</summary>
     [Fact]
-    public async Task An_agent_attempt_carries_no_provenance_at_all()
+    public async Task An_agent_attempt_carries_the_agent_half_and_none_of_the_provider_one()
     {
         await using var api = await StartAsync(FakeCommand.Returning(new CommandOutcome.Completed(null)), ToTheReferenceProvider);
         var campaign = await CampaignAsync(api);
@@ -89,11 +89,23 @@ public class AttemptProvenanceTests
 
         await RunOneAsync(api);
 
+        // There is one provenance record per attempt whatever kind of work it is, so a reader never has to
+        // know which kind it is looking at first. What differs is which half of it is filled in: an agent
+        // attempt has no plugin, no route and no operation, and every one of those stays null.
         var attempt = await AttemptAsync(api, item.Id);
-        Assert.Null(attempt.Provenance);
+        Assert.NotNull(attempt.Provenance);
+        var provenance = attempt.Provenance;
+        Assert.Null(provenance.PluginId);
+        Assert.Null(provenance.Operation);
+        Assert.Null(provenance.RouteScope);
+        Assert.Null(provenance.PluginSnapshotId);
 
-        var (_, body) = await api.PostAsync(Operations.WorkItemGet, new { work_item_id = item.Id }, Ct);
-        Assert.DoesNotContain("provenance", body, StringComparison.Ordinal);
+        // No profile is configured in this test, so the role's own entry command ran it — and the record says
+        // that rather than leaving it to be inferred from an absent name.
+        Assert.NotNull(provenance.Agent);
+        var agent = provenance.Agent;
+        Assert.Equal(ProfileResolutionSource.RoleEntryCommand, agent.ResolutionSource);
+        Assert.Null(agent.ProfileName);
     }
 
     /// <summary>
@@ -227,9 +239,17 @@ public class AttemptProvenanceTests
         await using var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
 
-        Assert.False(await AttemptProvenance.CompleteAsync(db, agent.Id, Answered, Ct));
+        // An attempt that does not exist: nothing to complete, and nothing written.
         Assert.False(await AttemptProvenance.CompleteAsync(db, "att_00000000000000000000000000", Answered, Ct));
 
+        // And an attempt with no claim-time record — the shape every agent attempt written before execution
+        // profiles existed still has on an upgraded database. The merge is one guarded UPDATE over a row that
+        // holds a record, so a row that holds none is left alone rather than given one.
+        var bare = await db.Attempts.SingleAsync(a => a.PublicId == agent.Id, Ct);
+        bare.Provenance = null;
+        await db.SaveChangesAsync(Ct);
+
+        Assert.False(await AttemptProvenance.CompleteAsync(db, agent.Id, Answered, Ct));
         Assert.Null((await AttemptAsync(api, item.Id)).Provenance);
     }
 

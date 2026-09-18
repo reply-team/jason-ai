@@ -2,7 +2,10 @@ using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Execution.Hosts;
+using Jason.Runtime.Plugins.Registry;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -21,8 +24,21 @@ public static class DispatcherModule
             .AddScoped<Expirer>()
             .AddScoped<LeaseEnforcer>()
             .AddScoped<EntryCommandResolver>()
+            .AddScoped<AgentPreflight>()
+            .AddScoped<AgentLaunchPlanner>()
             .AddScoped<Claimer>()
             .AddScoped<StartupRecovery>();
+
+        // One implementation per host and no fallback, so a profile naming a host this build cannot start is a
+        // refusal with a reason rather than a guess. Resolving a program is a question about the machine and is
+        // asked once per process.
+        services.AddSingleton<ProgramResolver>();
+        services.AddSingleton<IAgentHost, ClaudeCodeHost>();
+
+        // The plugin module registers the same seam for its own executable checks, and whichever module is added
+        // first is the one that answers. Named here too because this module now needs it: a registration a
+        // module depends on but never states is one a smaller composition silently lacks.
+        services.TryAddSingleton<ISearchPath, EnvironmentSearchPath>();
 
         // The rule is a pure function over the published catalog: one per process, like the catalog itself.
         services.AddSingleton(new UnansweredEnd(OperationCatalog.Find));
