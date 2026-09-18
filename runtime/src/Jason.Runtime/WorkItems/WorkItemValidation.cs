@@ -27,11 +27,15 @@ internal static partial class WorkItemValidation
     /// <summary>A vendor-neutral operation is dotted lowercase, as in <c>campaign.get</c>.</summary>
     public static Regex OperationName { get; } = OperationNamePattern();
 
+    /// <param name="profileExists">
+    /// Whether the registry holds a profile of the name this request asks for. The caller reads it, because
+    /// every rule in here is a reading of what was sent and nothing else.
+    /// </param>
     /// <param name="killGraceMs">
     /// How long the invoker gives a child to stop once its budget is spent, which is part of the shortest lease
     /// a provider operation can be run under.
     /// </param>
-    public static void ValidateCreate(WorkItemCreateRequest request, bool roleExists, int killGraceMs, ValidationErrors errors)
+    public static void ValidateCreate(WorkItemCreateRequest request, bool roleExists, bool profileExists, int killGraceMs, ValidationErrors errors)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(errors);
@@ -72,7 +76,7 @@ internal static partial class WorkItemValidation
             }
         }
 
-        ValidateExecutionProfile(request.ExecutionProfile, errors);
+        ValidateExecutionProfile(request.ExecutionProfile, profileExists, errors);
         ValidateWindow(request.NotBefore?.UtcDateTime, request.DueAt?.UtcDateTime, errors);
         ValidateOverrides(request.TimeoutSeconds, request.HeartbeatSeconds, request.MaxAttempts, errors);
 
@@ -157,15 +161,41 @@ internal static partial class WorkItemValidation
         }
     }
 
-    public static void ValidateExecutionProfile(string? executionProfile, ValidationErrors errors)
+    /// <summary>
+    /// The profile the item asks to run under: a name, and therefore one the registry must already answer.
+    /// A name nothing answers is refused where it is typed rather than discovered by the claim that could not
+    /// resolve it.
+    /// </summary>
+    /// <remarks>
+    /// A <em>disabled</em> profile is accepted here on purpose. Work is written long before it is claimed, and a
+    /// profile taken out of service this morning may well be back by the time this item runs; the claim resolves
+    /// the profile as it stands then, and refuses a disabled one there. Refusing it here would be refusing a
+    /// name that is going to be perfectly good.
+    /// </remarks>
+    public static void ValidateExecutionProfile(string? executionProfile, bool profileExists, ValidationErrors errors)
     {
         ArgumentNullException.ThrowIfNull(errors);
-        if (executionProfile is not null && executionProfile.Trim().Length > WorkItemService.MaxExecutionProfileLength)
+        if (string.IsNullOrWhiteSpace(executionProfile))
+        {
+            return;
+        }
+
+        // One mistake, one message: a name too long to be stored is not also reported as a name nobody knows.
+        if (executionProfile.Trim().Length > WorkItemService.MaxExecutionProfileLength)
         {
             errors.Add(
                 "execution_profile",
                 "too_long",
                 string.Create(CultureInfo.InvariantCulture, $"execution_profile must be at most {WorkItemService.MaxExecutionProfileLength} characters."));
+            return;
+        }
+
+        if (!profileExists)
+        {
+            errors.Add(
+                "execution_profile",
+                "unknown",
+                "execution_profile must name an execution profile this runtime knows; create it with profile.create first.");
         }
     }
 

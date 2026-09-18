@@ -69,6 +69,7 @@ public sealed class WorkItemService(
         WorkItemValidation.ValidateCreate(
             request,
             await RoleExistsAsync(request, cancellationToken).ConfigureAwait(false),
+            await ProfileExistsAsync(request.ExecutionProfile, cancellationToken).ConfigureAwait(false),
             KillGrace(),
             errors);
         errors.ThrowIfAny();
@@ -421,6 +422,21 @@ public sealed class WorkItemService(
 
         var name = request.Role.Trim();
         return await db.Roles.AsNoTracking().AnyAsync(r => r.Name == name, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Whether the registry holds the profile the request names. A disabled one counts: it exists, and whether
+    /// it may run this work is the claim's question, not this one's.
+    /// </summary>
+    private async Task<bool> ProfileExistsAsync(string? executionProfile, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(executionProfile))
+        {
+            return false;
+        }
+
+        var name = executionProfile.Trim();
+        return await db.ExecutionProfiles.AsNoTracking().AnyAsync(p => p.Name == name, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
