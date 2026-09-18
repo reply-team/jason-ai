@@ -59,6 +59,17 @@ public static class DomainErrors
 
     public static NotFoundException RoleNotFound(string name) => new("role_not_found", $"No role named '{name}'.");
 
+    public static ConflictException ProfileExists(string name) => new("profile_exists", $"An execution profile named '{name}' already exists.");
+
+    public static NotFoundException ProfileNotFound(string name) => new("profile_not_found", $"No execution profile named '{name}'.");
+
+    /// <summary>
+    /// A revision the profile has never had. Its own code rather than the profile's: the profile is there, and a
+    /// caller who asked for a revision number needs to be told which of the two they got wrong.
+    /// </summary>
+    public static NotFoundException ProfileRevisionNotFound(string name, int revision) =>
+        new("profile_revision_not_found", string.Create(CultureInfo.InvariantCulture, $"Execution profile '{name}' has no revision {revision}."));
+
     /// <summary>Two writers reached the same row; the loser is told to read again rather than given a merged result.</summary>
     public static DomainException ConcurrentUpdate() =>
         new(StatusCodes.Status409Conflict, "concurrent_update", "Another change reached the same row first; read it again and retry.", retryable: true);
