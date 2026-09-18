@@ -78,6 +78,30 @@ jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
+### Which host runs AI work, and what that means for work you create
+
+An `ai_role` item runs on an agent host the operator installed, named by an **execution profile**. You
+rarely choose one: work you create inherits the profile of the run that created it, so a chain of work
+keeps running where it started. `jason workitem get` shows that as a lineage line.
+
+Two consequences worth knowing.
+
+**Work you create from inside a launched run is that run's.** You do not have to say so — the runtime
+tells the command line which attempt it is — and that is what the inheritance is read from. Naming a
+different actor on such a call breaks the chain, so do not.
+
+**If the runtime cannot tell where your work should run, it stops rather than guessing.** An item that
+fails with `lineage_resolution_unsupported`, `profile_not_found`, `profile_disabled`,
+`host_not_available` or `role_skill_invalid` is a configuration problem, not a refusal by a model:
+nothing was started and nothing was spent. The message names what to change. Fix it and ask for the
+work again — a failed item is finished, and finished items are not reopened.
+
+**If you are the launched role**, two rules travel with you. Call home with the plain command word the
+launch envelope names, exactly as it is: the runtime permits that form and only that form, so a
+redirect or a chained command is refused. And answer in the shape the item asked for — where a work
+item declares a `result_format`, a completion that does not satisfy it is refused, however well it
+reads.
+
 ## When work waits for a person
 
 An operation whose contract says a person must confirm it parks at the claim: the item's status becomes
