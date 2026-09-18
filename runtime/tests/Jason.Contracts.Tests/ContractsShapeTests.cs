@@ -202,15 +202,18 @@ public class ContractsShapeTests
             120,
             DateTimeOffset.UnixEpoch,
             "/work/wi_A/att_A",
-            new RuntimeLocation("/run/runtime.json", "v1"));
+            new RuntimeLocation("/run/runtime.json", "v1", "jason"));
 
         var json = JsonSerializer.Serialize(envelope, JasonJson.Options);
 
-        Assert.Contains("\"envelope_version\":1", json, StringComparison.Ordinal);
+        Assert.Contains("\"envelope_version\":2", json, StringComparison.Ordinal);
         Assert.Contains("\"attempt_id\":\"att_A\"", json, StringComparison.Ordinal);
         Assert.Contains("\"attempt_number\":2", json, StringComparison.Ordinal);
         Assert.Contains("\"work_dir\":\"/work/wi_A/att_A\"", json, StringComparison.Ordinal);
-        Assert.Contains("\"runtime\":{\"descriptor_file\":\"/run/runtime.json\",\"api_version\":\"v1\"}", json, StringComparison.Ordinal);
+        Assert.Contains(
+            "\"runtime\":{\"descriptor_file\":\"/run/runtime.json\",\"api_version\":\"v1\",\"cli_command\":\"jason\"}",
+            json,
+            StringComparison.Ordinal);
 
         var back = JsonSerializer.Deserialize<LaunchEnvelope>(json, JasonJson.Options)!;
         Assert.Equal(LaunchEnvelope.CurrentVersion, back.EnvelopeVersion);
@@ -220,6 +223,25 @@ public class ContractsShapeTests
         Assert.Equal("founders", (string?)back.Context["icp"]);
         Assert.Equal(envelope.Runtime, back.Runtime);
         Assert.Equal(DateTimeOffset.UnixEpoch, back.LockUntil);
+    }
+
+    [Fact]
+    public void An_envelope_written_before_the_command_word_existed_still_reads()
+    {
+        // The change that took the envelope to version 2 was additive, which is only a claim until a document
+        // written without the new field is read by the code that knows about it.
+        const string version1 = """
+            {"envelope_version":1,"attempt_id":"att_A","attempt_number":1,"work_item_id":"wi_A","campaign_id":"cmp_A",
+             "contact_id":null,"kind":"ai_role","role":"researcher","execution_profile":null,"context":{},
+             "result_format":null,"timeout_seconds":3600,"heartbeat_seconds":120,"lock_until":"1970-01-01T00:00:00.000Z",
+             "work_dir":"/work/wi_A/att_A","runtime":{"descriptor_file":"/run/runtime.json","api_version":"v1"}}
+            """;
+
+        var envelope = JsonSerializer.Deserialize<LaunchEnvelope>(version1, JasonJson.Options)!;
+
+        Assert.Equal(1, envelope.EnvelopeVersion);
+        Assert.Equal("/run/runtime.json", envelope.Runtime.DescriptorFile);
+        Assert.Null(envelope.Runtime.CliCommand);
     }
 
     private static AttemptDto NewAttemptDto() => new(

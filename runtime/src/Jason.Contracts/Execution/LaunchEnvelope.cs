@@ -26,8 +26,17 @@ public sealed record LaunchEnvelope(
     string WorkDir,
     RuntimeLocation Runtime)
 {
-    public const int CurrentVersion = 1;
+    /// <summary>
+    /// 2 since <see cref="RuntimeLocation.CliCommand"/> was added. Every change here is additive, so a host
+    /// written against version 1 keeps working: it reads the fields it knows and ignores the rest.
+    /// </summary>
+    public const int CurrentVersion = 2;
 }
 
 /// <summary>Where the runtime is, as a file to read rather than a secret to carry.</summary>
-public sealed record RuntimeLocation(string DescriptorFile, string ApiVersion);
+/// <param name="CliCommand">
+/// The bare command word that reaches this runtime, so an agent never has to guess it. The launcher puts the
+/// directory that word resolves in at the front of the child's search path, and where a host confines what the
+/// agent may run, it is the same word that rule was built from. Absent in a version 1 envelope.
+/// </param>
+public sealed record RuntimeLocation(string DescriptorFile, string ApiVersion, string? CliCommand = null);

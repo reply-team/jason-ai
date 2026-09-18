@@ -7,6 +7,7 @@ using Jason.Contracts.Discovery;
 using Jason.Contracts.Execution;
 using Jason.Contracts.Json;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.WorkItems;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -152,7 +153,7 @@ public class AiRoleCommandTests
         await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("echo-envelope"));
 
         var echoed = await File.ReadAllTextAsync(Path.Combine(workDir, "stdout.log"), Ct);
-        Assert.Contains("\"envelope_version\":1", echoed, StringComparison.Ordinal);
+        Assert.Contains("\"envelope_version\":2", echoed, StringComparison.Ordinal);
         Assert.Contains("\"work_dir\":", echoed, StringComparison.Ordinal);
 
         var envelope = JsonSerializer.Deserialize<LaunchEnvelope>(echoed, JasonJson.Options)!;
@@ -170,6 +171,27 @@ public class AiRoleCommandTests
         Assert.Equal(workDir, envelope.WorkDir);
         Assert.Equal(directory.Paths.DescriptorFile, envelope.Runtime.DescriptorFile);
         Assert.Equal(ApiVersion.Current, envelope.Runtime.ApiVersion);
+
+        // The word the child calls home with, so it never has to guess one.
+        Assert.Equal(ProgramResolver.DefaultCliCommand, envelope.Runtime.CliCommand);
+    }
+
+    [Fact]
+    public async Task The_child_is_told_which_attempt_it_is_and_finds_the_cli_first_on_its_path()
+    {
+        using var directory = new TempDataDir();
+        var workDir = directory.Paths.AttemptWorkDirectory(WorkItemId, AttemptId);
+
+        await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("silent"));
+
+        var stderr = await File.ReadAllTextAsync(Path.Combine(workDir, "stderr.log"), Ct);
+        Assert.Contains($"attempt-in-env={AttemptId}", stderr, StringComparison.Ordinal);
+        Assert.Contains($"work-item-in-env={WorkItemId}", stderr, StringComparison.Ordinal);
+
+        // Named first, so that the bare command word an agent is allowed to run reaches this build of Jason.
+        var directoryOfThisBuild = ProgramResolver.ExecutableDirectory;
+        Assert.NotNull(directoryOfThisBuild);
+        Assert.Contains($"path-head={directoryOfThisBuild}", stderr, StringComparison.Ordinal);
     }
 
     [Fact]

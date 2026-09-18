@@ -81,9 +81,15 @@ public sealed class AiRoleCommand(
             startInfo.ArgumentList.Add(context.EntryCommand[index]);
         }
 
-        // The child works against the same data directory this runtime owns. Nothing else is added and nothing
-        // is taken away — least of all the token, which belongs in the descriptor file and nowhere else.
-        startInfo.Environment[JasonPaths.DataDirectoryVariable] = paths.Root;
+        // The child works against the same data directory this runtime owns, knows which attempt it is, and can
+        // find the command that calls home. Nothing else is added and nothing is taken away — least of all the
+        // token, which belongs in the descriptor file and nowhere else.
+        LaunchEnvironment.Apply(
+            startInfo.Environment,
+            paths.Root,
+            context.AttemptId,
+            context.WorkItemId,
+            ProgramResolver.ExecutableDirectory);
 
         Process process;
         try
@@ -168,7 +174,7 @@ public sealed class AiRoleCommand(
             context.Limits.HeartbeatSeconds,
             context.LockUntil,
             context.WorkDir,
-            new RuntimeLocation(paths.DescriptorFile, ApiVersion.Current));
+            new RuntimeLocation(paths.DescriptorFile, ApiVersion.Current, ProgramResolver.CliCommandFor(context.CliCommand)));
 
         try
         {

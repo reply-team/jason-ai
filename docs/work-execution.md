@@ -265,10 +265,17 @@ The launcher puts two things in that directory before the child starts:
   a model that refused to do it. A role with no skill directory launches normally; its brief travels
   in the envelope either way.
 
-Its environment is the runtime's own plus `JASON_DATA_DIR`, pointing at the data directory. Nothing is
-appended to the command's arguments. **The capability token is never on the command line, never in the
-environment, and never stored**: every occurrence of it is replaced with `[redacted]` before anything
-the child wrote is put in a file or in an attempt's error trace.
+Its environment is the runtime's own plus four values and not one more:
+
+- `JASON_DATA_DIR`, pointing at the data directory;
+- `JASON_ATTEMPT_ID` and `JASON_WORK_ITEM_ID`, both non-secret values the envelope already carries, so
+  that an agent reporting through the CLI is its attempt without having to say so;
+- the directory this build of Jason runs from, at the front of `PATH`, so the bare command word in
+  `runtime.cli_command` reaches this runtime rather than whatever else answers for that name.
+
+**The capability token is never on the command line, never in the environment, and never stored**:
+every occurrence of it is replaced with `[redacted]` before anything the child wrote is put in a file
+or in an attempt's error trace.
 
 ### The launch envelope
 
@@ -276,7 +283,7 @@ One JSON object is written to the child's standard input, which is then closed:
 
 ```json
 {
-  "envelope_version": 1,
+  "envelope_version": 2,
   "attempt_id": "att_…",
   "attempt_number": 1,
   "work_item_id": "wi_…",
@@ -291,11 +298,15 @@ One JSON object is written to the child's standard input, which is then closed:
   "heartbeat_seconds": 120,
   "lock_until": "2026-09-14T13:00:00.000Z",
   "work_dir": "…/.jason/work/wi_…/att_…",
-  "runtime": { "descriptor_file": "…/.jason/run/runtime.json", "api_version": "v1" }
+  "runtime": { "descriptor_file": "…/.jason/run/runtime.json", "api_version": "v1", "cli_command": "jason" }
 }
 ```
 
 `context` is a snapshot: an edit made while the attempt runs belongs to the next attempt, not this one.
+
+`runtime.cli_command` is the bare word that reaches this runtime, so an agent never has to guess it.
+Every change to this envelope is additive — `cli_command` is what took it to version 2 — so a host
+written against an earlier version keeps working: it reads the fields it knows and ignores the rest.
 
 ### Finding the API
 
