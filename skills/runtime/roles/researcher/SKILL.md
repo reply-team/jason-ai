@@ -42,6 +42,11 @@ jason rolenote get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher
 A campaign nobody has researched yet answers with an empty note and `updated_at: null`. That is not an error and
 nothing is wrong; it is your first pass.
 
+This note is the scratch file you would otherwise keep beside the job — the one an agent working on somebody's
+own machine leaves in its working directory and opens again next time. You have no such directory: the one you
+are standing in belongs to this attempt and goes away with it. So the file lives in the runtime's store instead,
+where your next run can reach it. That is the only reason it is there, and it does not make it true.
+
 **Your note is not authoritative.** It is your own working memory — what an earlier run of you believed, in its
 own words, at some earlier time. It is not campaign context, which is the campaign's shared knowledge; it is not
 this skill, which teaches the job; and it is not a record of anything that happened. Where a note disagrees with
@@ -56,8 +61,15 @@ claims against what you can see now.
 `context` holds the brief. Work within it. If the brief asks about a person or an account, find what it asks
 for and satisfy yourself it is true; say plainly in your answer what you could not establish.
 
-You may read what the runtime knows, the same way you read your note — `jason campaign get`, `jason contact
-get`, `jason workitem list --campaign …`. Check in while you work so the runtime knows you are alive:
+You may read what the runtime knows, the same way you read your note:
+
+```
+jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason contact get cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+Check in while you work so the runtime knows you are alive:
 
 ```
 jason workitem set-result wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --result '{"progress":"read the brief"}'
@@ -78,6 +90,11 @@ jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher --note-file note.js
 
 Write `note.json` first with your own tools, then name it. The whole file is the note; it must be a JSON object
 and at most 64 KiB.
+
+That 64 KiB is measured on the canonical form, in which **characters outside ASCII are escaped** — six bytes for
+a character your editor counts as one. A note in Cyrillic, Greek or Japanese therefore holds roughly a third of
+the characters the figure suggests. Do not count characters: the `note_bytes` in the answer to `rolenote get` is
+the number the cap compares, so read it back and keep it well under the limit.
 
 What belongs in it: what you checked and what you found, what you ruled out and why, what is still open, and
 where the good sources were. What does not: anything you can read back from the runtime whenever you want it,

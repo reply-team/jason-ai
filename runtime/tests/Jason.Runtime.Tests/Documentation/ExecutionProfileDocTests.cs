@@ -57,6 +57,12 @@ public class ExecutionProfileDocTests
             (Jason.Runtime.Notes.RoleNoteService.MaxNoteBytes / 1024).ToString(System.Globalization.CultureInfo.InvariantCulture) + " KiB",
             contract,
             StringComparison.Ordinal);
+
+        // And what that number counts. The canonical form escapes everything outside ASCII, so the figure alone
+        // is misleading by a factor of three to anybody writing in another script — and the page that gives the
+        // figure is where they will look after a refusal.
+        Assert.Contains("outside ASCII are escaped", contract, StringComparison.Ordinal);
+        Assert.Contains("note_bytes", contract, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -47,6 +47,36 @@ public class RoleNoteHostileInputTests
         Assert.Equal(exact.NoteHash, held.NoteHash);
     }
 
+    /// <summary>
+    /// The cap counts the canonical form's bytes, and that form escapes everything outside ASCII — six bytes
+    /// for a character that UTF-8 spells in two. A role writing in Cyrillic, Greek or Japanese therefore gets
+    /// roughly a third of the characters the figure suggests, and is refused while its note is a quarter of
+    /// 64 KiB as a file. That is a fact about the one canonical form this runtime names everything by — a
+    /// report's assertion and a route's binding are hashed in the same one — so it is documented rather than
+    /// special-cased here, and pinned here so the documentation cannot quietly become false.
+    /// </summary>
+    [Fact]
+    public async Task A_note_outside_ascii_is_measured_on_its_escaped_form()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+        var campaign = await RoleNoteTests.NewCampaignAsync(api);
+        const int Overhead = 13;
+        const char Cyrillic = 'д';
+
+        // 10,000 characters: 20,000 bytes as UTF-8, 60,000 as the escaped form the cap is measured on.
+        var written = await api.PostOkAsync<RoleNoteDto>(
+            Operations.RoleNoteSet, Body(campaign, "researcher", Filler(10_000, Cyrillic)), Ct);
+        Assert.Equal((6 * 10_000) + Overhead, written.NoteBytes);
+
+        // And so 12,000 of them — 24 KiB of text by any file manager's count — is past a 64 KiB cap.
+        var error = await api.PostErrorAsync(
+            Operations.RoleNoteSet, Body(campaign, "researcher", Filler(12_000, Cyrillic)), HttpStatusCode.BadRequest, Ct);
+        Assert.Equal("role_note_too_large", error.Code);
+
+        // The receipt is what a role has to steer by: the number it reports is the number the cap compares.
+        Assert.True(written.NoteBytes < RoleNoteService.MaxNoteBytes);
+    }
+
     /// <summary>A note past the cap several times over is the same refusal, and the runtime still answers.</summary>
     [Fact]
     public async Task A_note_of_a_megabyte_is_refused_rather_than_stored_or_truncated()
@@ -217,7 +247,7 @@ public class RoleNoteHostileInputTests
         Assert.Equal("validation_failed", error.Code);
     }
 
-    private static JsonObject Filler(int length) => new() { ["filler"] = new string('x', length) };
+    private static JsonObject Filler(int length, char character = 'x') => new() { ["filler"] = new string(character, length) };
 
     private static JsonObject Body(string campaign, string role, JsonObject note) => new()
     {

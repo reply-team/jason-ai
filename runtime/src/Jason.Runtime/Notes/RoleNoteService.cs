@@ -90,6 +90,7 @@ public sealed class RoleNoteService(JasonDbContext db, JournalWriter journal, Ti
             .ConfigureAwait(false);
 
         var before = note is null ? null : new JsonObject { ["bytes"] = note.NoteBytes, ["hash"] = note.NoteHash };
+        var inserting = note is null;
 
         if (note is null)
         {
@@ -140,10 +141,12 @@ public sealed class RoleNoteService(JasonDbContext db, JournalWriter journal, Ti
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException) when (inserting)
         {
-            // Two sessions of one role wrote the first note at once. The unique index is what decides, and the
-            // loser is told to read the row and write again rather than handed a merge nobody asked for.
+            // Two sessions of one role wrote the *first* note at once: the unique index decided, and the loser
+            // is told to read the row and write again rather than handed a merge nobody asked for. Only the
+            // insert can lose that race, so only the insert is answered this way — a failure on the update path
+            // is some other problem, and calling it retryable would send a caller back for more of it.
             db.ChangeTracker.Clear();
             if (!await db.RoleNotes.AsNoTracking()
                     .AnyAsync(n => n.CampaignId == campaign.Id && n.Role == role, cancellationToken)

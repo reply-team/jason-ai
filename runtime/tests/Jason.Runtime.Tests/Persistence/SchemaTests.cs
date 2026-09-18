@@ -146,6 +146,12 @@ public class SchemaTests
         // second note to go.
         var perRole = Scalar(connection, "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'ix_role_notes_one_per_campaign_role'");
         Assert.Contains("UNIQUE", perRole, StringComparison.Ordinal);
+
+        // A note belongs to a campaign that exists, and what it holds is JSON — both enforced by the database
+        // rather than only by the service that writes through it.
+        var table = Scalar(connection, "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'role_notes'");
+        Assert.Contains("json_valid(note_json)", table, StringComparison.Ordinal);
+        Assert.Contains("REFERENCES \"campaigns\" (\"id\")", table, StringComparison.Ordinal);
     }
 
     [Fact]

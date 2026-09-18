@@ -27,29 +27,46 @@ public class ShippedRoleSkillTests
     }
 
     /// <summary>
-    /// And it really is deliverable: composed into a data directory the way an operator composes one, it is
-    /// copied into the work directory rather than refused for its name or its size. The launcher's own code
-    /// decides that here, so the pack cannot pass a test and fail a launch.
+    /// And every one of them really is deliverable: composed into a data directory the way an operator composes
+    /// one, it is copied into the work directory rather than refused for its name or its size. The launcher's
+    /// own code decides that here, over the whole pack, so no skill can pass the loop above and fail a launch.
     /// </summary>
     [Fact]
-    public void The_shipped_role_skill_reaches_a_work_directory_rather_than_being_refused()
+    public void Every_shipped_role_skill_reaches_a_work_directory_rather_than_being_refused()
     {
-        using var data = new TempDataDir();
-        var composed = Path.Combine(data.Paths.RoleSkillsDirectory, "researcher");
-        Directory.CreateDirectory(composed);
-        foreach (var file in Directory.GetFiles(Path.Combine(RoleSkillsPack(), "researcher")))
+        var packs = Directory.GetDirectories(RoleSkillsPack());
+        Assert.NotEmpty(packs);
+
+        foreach (var pack in packs)
         {
-            File.Copy(file, Path.Combine(composed, Path.GetFileName(file)));
+            var role = Path.GetFileName(pack);
+            using var data = new TempDataDir();
+            Compose(pack, Path.Combine(data.Paths.RoleSkillsDirectory, role));
+
+            var workDir = data.Paths.AttemptWorkDirectory("wi_A", "att_A");
+            var report = WorkDirectory.Prepare(workDir, ["Write"], role, data.Paths.RoleSkillsDirectory, new RolesOptions().MaxSkillBytes);
+
+            Assert.Null(report.RefusalCode);
+            Assert.NotNull(report.Skill);
+            Assert.True(report.Skill.Copied, $"The skill in '{pack}' was not given to the role.");
+            Assert.Equal(role, report.Skill.Name);
+            Assert.True(File.Exists(Path.Combine(workDir, ".claude", "skills", role, WorkDirectory.SkillFile)));
+        }
+    }
+
+    /// <summary>The pack, files and directories alike, as an operator would have composed it.</summary>
+    private static void Compose(string source, string target)
+    {
+        Directory.CreateDirectory(target);
+        foreach (var file in Directory.GetFiles(source))
+        {
+            File.Copy(file, Path.Combine(target, Path.GetFileName(file)));
         }
 
-        var workDir = data.Paths.AttemptWorkDirectory("wi_A", "att_A");
-        var report = WorkDirectory.Prepare(workDir, ["Write"], "researcher", data.Paths.RoleSkillsDirectory, new RolesOptions().MaxSkillBytes);
-
-        Assert.Null(report.RefusalCode);
-        Assert.NotNull(report.Skill);
-        Assert.True(report.Skill.Copied);
-        Assert.Equal("researcher", report.Skill.Name);
-        Assert.True(File.Exists(Path.Combine(workDir, ".claude", "skills", "researcher", WorkDirectory.SkillFile)));
+        foreach (var child in Directory.GetDirectories(source))
+        {
+            Compose(child, Path.Combine(target, Path.GetFileName(child)));
+        }
     }
 
     /// <summary>
@@ -72,6 +89,33 @@ public class ShippedRoleSkillTests
 
         // And the answer's shape, which is the other thing a refused completion is usually about.
         Assert.Contains("result_format", skill, StringComparison.Ordinal);
+
+        // Why the note is in the runtime's store at all, in the role's own terms: it is the scratch file it
+        // would keep beside the job, and it has nowhere else to keep one. Half of that sentence without the
+        // other half reads as "the runtime keeps notes for you", which is the belief this whole thing is
+        // arranged to prevent.
+        Assert.Contains("scratch file", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("goes away with it", skill, StringComparison.OrdinalIgnoreCase);
+
+        // And what the cap really counts, which a role writing in another script would otherwise meet as a
+        // refusal naming a number three times what it thought it had written.
+        Assert.Contains("outside ASCII are escaped", skill, StringComparison.Ordinal);
+        Assert.Contains("note_bytes", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An honest status, the way the other shipped skill carries one. A first draft that called itself
+    /// finished would be the one claim in it a reader could not check.
+    /// </summary>
+    [Fact]
+    public void Every_shipped_role_skill_says_what_it_is()
+    {
+        foreach (var pack in Directory.GetDirectories(RoleSkillsPack()))
+        {
+            var file = Path.Combine(pack, WorkDirectory.SkillFile);
+            Assert.Equal("draft", FrontMatter(file, "status"));
+            Assert.False(string.IsNullOrWhiteSpace(FrontMatter(file, "description")), $"'{file}' describes nothing.");
+        }
     }
 
     /// <summary>The name a skill gives itself, read the way the launcher reads it.</summary>

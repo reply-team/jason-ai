@@ -70,6 +70,12 @@ public class RoleMemoryTests
     /// Deterministic work has no memory to be given, and is told so in the envelope's own way: the field is
     /// there and null, exactly as <c>role</c> is null beside it. A reader never has to tell a missing field
     /// from a field this build does not write.
+    /// <para>
+    /// This is the contract's default rather than a path through the runtime — the only command that writes an
+    /// envelope is the one that runs <c>ai_role</c> work, so nothing launched today can reach the null branch.
+    /// It is pinned anyway because the field is part of a published contract that hosts other than this one
+    /// read, and "absent" and "null" are different answers to a host that checks.
+    /// </para>
     /// </summary>
     [Fact]
     public void Work_that_is_not_a_role_is_told_about_no_memory_at_all()
