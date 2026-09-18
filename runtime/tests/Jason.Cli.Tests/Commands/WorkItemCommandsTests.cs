@@ -523,6 +523,7 @@ public class WorkItemCommandsTests
             Campaign:     cmp_A
             Contact:      cnt_A
             Kind:         ai_role (role researcher)
+            Lineage:      root
             Status:       created (eligible)
             Priority:     5
             Not before:   -
@@ -538,6 +539,34 @@ public class WorkItemCommandsTests
             Result:       none
             """.ReplaceLineEndings() + Environment.NewLine,
             cli.Text);
+    }
+
+    /// <summary>
+    /// Where this item's executor comes from, on the page a person reads before asking why work is stuck. The
+    /// inherited line names the profile, the revision it was pinned at, and the attempt it came from, so the
+    /// chain can be walked back without a database.
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_says_what_an_item_inherited_and_where_from()
+    {
+        using var cli = new CliRun(Serialize(Item(null, lineage: new LineageDto(LineageState.Inherited, "fast-claude", 3, "att_B"))));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Lineage:      inherited · profile fast-claude r3 · from att_B", cli.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>The one state that will not run: it says so on the item rather than only in the error afterwards.</summary>
+    [Fact]
+    public async Task Human_mode_shows_an_unresolved_ancestry_as_the_state_it_is()
+    {
+        using var cli = new CliRun(Serialize(Item(null, lineage: new LineageDto(LineageState.Unresolved))));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Lineage:      unresolved", cli.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -735,7 +764,10 @@ public class WorkItemCommandsTests
         Assert.Contains("{\"unexpected\":true}", cli.Text, StringComparison.Ordinal);
     }
 
-    private static WorkItemDto Item(IReadOnlyList<AttemptDto>? attempts, IReadOnlyList<ReportSummaryDto>? externalReports = null) => new(
+    private static WorkItemDto Item(
+        IReadOnlyList<AttemptDto>? attempts,
+        IReadOnlyList<ReportSummaryDto>? externalReports = null,
+        LineageDto? lineage = null) => new(
         "wi_A",
         "cmp_A",
         "cnt_A",
@@ -763,7 +795,10 @@ public class WorkItemCommandsTests
         externalReports,
         Moment,
         Moment,
-        null);
+        null,
+
+        // The runtime answers with one for every item, so the default here is what a root item actually sends.
+        lineage ?? new LineageDto(LineageState.Root));
 
     private static ReportSummaryDto Report(string id, string effect) => new(
         id,

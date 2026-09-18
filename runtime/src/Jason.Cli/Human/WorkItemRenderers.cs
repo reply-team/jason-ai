@@ -30,6 +30,7 @@ public static class WorkItemRenderers
             Line("Campaign:", item.CampaignId),
             Line("Contact:", item.ContactId),
             Line("Kind:", Kind(item.Kind, item.Role, item.Operation)),
+            Line("Lineage:", Lineage(item.Lineage)),
             Line("Status:", RenderText.Snake(item.Status) + (item.Eligible ? " (eligible)" : string.Empty)),
             Line("Priority:", item.Priority.ToString(CultureInfo.InvariantCulture)),
             Line("Not before:", RenderText.Moment(item.NotBefore)),
@@ -207,6 +208,22 @@ public static class WorkItemRenderers
         var present = parts.Where(part => !string.IsNullOrEmpty(part)).ToList();
         return present.Count == 0 ? null : string.Join(" · ", present);
     }
+
+    /// <summary>
+    /// Where this item's execution profile comes from when nothing more specific says. An inherited line names
+    /// the profile, the revision it was pinned at and the attempt it came from, so the chain can be read back
+    /// from here; <c>unresolved</c> is the one state that will not run, and says so on the item rather than only
+    /// in the error afterwards.
+    /// </summary>
+    private static string? Lineage(LineageDto? lineage) => lineage is null
+        ? null
+        : Parts(
+            RenderText.Snake(lineage.State),
+            lineage.ProfileName is null ? null : "profile " + lineage.ProfileName + Revision(lineage.ProfileRevision),
+            lineage.FromAttemptId is null ? null : "from " + lineage.FromAttemptId);
+
+    private static string Revision(int? revision) =>
+        revision is { } number ? " r" + number.ToString(CultureInfo.InvariantCulture) : string.Empty;
 
     private static string Kind(WorkItemKind kind, string? role, string? operation)
     {

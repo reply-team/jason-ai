@@ -85,6 +85,10 @@ public sealed class WorkItemService(
         var context = request.Context?.DeepClone().AsObject() ?? new JsonObject();
         ContextRules.EnsureWithinLimits(context);
 
+        // Read once, here, for work of every kind: what the run that asked for this hands down. After this line
+        // it is a fact about the row, and nothing recomputes it.
+        var lineage = await Lineage.ForCreationAsync(db, actor, cancellationToken).ConfigureAwait(false);
+
         var now = clock.GetUtcNow().UtcDateTime;
         var item = new WorkItem
         {
@@ -95,6 +99,10 @@ public sealed class WorkItemService(
             Role = Trimmed(request.Role),
             Operation = Trimmed(request.Operation),
             ExecutionProfile = Trimmed(request.ExecutionProfile),
+            LineageState = lineage.State,
+            LineageProfileName = lineage.ProfileName,
+            LineageProfileRevision = lineage.ProfileRevision,
+            LineageFromAttemptId = lineage.FromAttemptId,
             Status = WorkItemStatus.Created,
             Priority = request.Priority ?? 0,
             NotBefore = request.NotBefore?.UtcDateTime,
