@@ -1,3 +1,4 @@
+using Jason.Contracts.Api;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -9,9 +10,12 @@ namespace Jason.Runtime.Execution.Hosts;
 /// attempt before a child exists and carries the code it ends with, because a skill that quietly did not arrive
 /// reads afterwards as a model that ignored it.
 /// </summary>
-public sealed record WorkDirectoryReport(string? RefusalCode, string? Message)
+public sealed record WorkDirectoryReport(string? RefusalCode, string? Message, RoleSkillDto? Skill = null)
 {
     public static WorkDirectoryReport Ready { get; } = new(null, null);
+
+    /// <summary>Ready, and carrying what the role was taught so the attempt can record it.</summary>
+    public static WorkDirectoryReport Taught(RoleSkillDto skill) => new(null, null, skill);
 
     public static WorkDirectoryReport Refused(string code, string message) => new(code, message);
 }
@@ -87,8 +91,9 @@ public static class WorkDirectory
         if (!Directory.Exists(source))
         {
             // The brief travels in the envelope. A role without a skill was never given one, which is not a
-            // failure of this attempt.
-            return WorkDirectoryReport.Ready;
+            // failure of this attempt — but it is recorded, because "was this role taught anything?" is a
+            // question about a finished attempt that nothing else can answer afterwards.
+            return WorkDirectoryReport.Taught(new RoleSkillDto(false, role, 0));
         }
 
         var introduction = Path.Combine(source, SkillFile);
@@ -131,7 +136,7 @@ public static class WorkDirectory
             File.Copy(file, copy, overwrite: true);
         }
 
-        return WorkDirectoryReport.Ready;
+        return WorkDirectoryReport.Taught(new RoleSkillDto(true, role!, bytes));
     }
 
     /// <summary>

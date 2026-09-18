@@ -52,7 +52,7 @@ public class ProfileVerbsTests
                 description = "The host installed on this machine.",
                 host = "claude_code",
                 program = "claude",
-                args = new[] { "--permission-mode", "dontAsk" },
+                args = new[] { "--model", "sonnet" },
                 deny = new[] { "Write", "WebFetch" },
                 cli_command = "jason",
                 host_version_verified = "2.1.275",
@@ -68,7 +68,7 @@ public class ProfileVerbsTests
         Assert.Equal(1, created.CurrentRevision);
         Assert.Equal(AgentHostKind.ClaudeCode, created.Revision.Host);
         Assert.Equal("claude", created.Revision.Program);
-        Assert.Equal(["--permission-mode", "dontAsk"], created.Revision.Args);
+        Assert.Equal(["--model", "sonnet"], created.Revision.Args);
         Assert.Equal(["Write", "WebFetch"], created.Revision.Deny);
         Assert.Equal("jason", created.Revision.CliCommand);
         Assert.Equal("2.1.275", created.Revision.HostVersionVerified);

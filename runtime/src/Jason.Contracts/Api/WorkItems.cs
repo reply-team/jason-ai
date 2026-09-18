@@ -25,12 +25,28 @@ public sealed record AttemptErrorDto(
 /// outcome depends on it — a result reaches the runtime through the API and never through standard output — so
 /// this says only that the file is not the whole story.
 /// </param>
+/// <param name="OutputAbandoned">
+/// True when the child ended and something it left behind still held its output pipes, so the launcher stopped
+/// reading rather than waiting for a writer that may never let go. The attempt's own outcome is unaffected; the
+/// files are simply not the whole story.
+/// </param>
+/// <param name="Deny">The deny rules written into the work directory for this attempt, as they were written.</param>
+/// <param name="RoleSkill">
+/// What the role was taught: the skill copied in for it, or that there was none to copy. Whether a launched role
+/// had its instructions is otherwise unrecoverable after the fact.
+/// </param>
 public sealed record AttemptLaunchDto(
     IReadOnlyList<string> EntryCommand,
     string WorkDir,
     int? Pid,
     int? ExitCode,
-    bool StdoutTruncated = false);
+    bool StdoutTruncated = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool OutputAbandoned = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Deny = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RoleSkillDto? RoleSkill = null);
+
+/// <summary>Whether the role that ran this attempt was given its skill, and how large the one it was given was.</summary>
+public sealed record RoleSkillDto(bool Copied, string Name, long Bytes);
 
 /// <summary>
 /// What was resolved to run one agent attempt: which profile, chosen by which level of the published order, and
@@ -249,9 +265,13 @@ public sealed record WorkItemUpdateRequest(
     /// <summary>
     /// Which profile runs this work. Patchable, unlike the campaign, contact, kind, role and operation that say
     /// what the item <em>is</em>: this is how the work runs, and it belongs beside the timeout, the heartbeat,
-    /// the attempt limit and the result format, which are patchable for the same reason. It has to be, because
-    /// it is the repair for an item whose ancestry cannot be resolved — and an item that is already blocked
-    /// cannot be repaired by creating a different one.
+    /// the attempt limit and the result format, which are patchable for the same reason.
+    /// <para>
+    /// It is the repair for an item whose ancestry cannot be resolved, and the repair has to be made
+    /// <em>before</em> the work is claimed. A refused attempt fails the item, and a finished item is not
+    /// changed — so an item that has already been refused is asked for again rather than reopened, exactly as
+    /// every other fail-closed refusal in this runtime behaves.
+    /// </para>
     /// </summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> ExecutionProfile,
     ActorRef? Actor,

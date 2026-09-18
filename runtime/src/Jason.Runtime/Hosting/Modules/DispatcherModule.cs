@@ -30,8 +30,10 @@ public static class DispatcherModule
             .AddScoped<StartupRecovery>();
 
         // One implementation per host and no fallback, so a profile naming a host this build cannot start is a
-        // refusal with a reason rather than a guess. Resolving a program is a question about the machine and is
-        // asked once per process.
+        // refusal with a reason rather than a guess. The resolver holds no state of its own — it is a singleton
+        // because it has nothing to keep, not because the answer is cached: whether a program is on this machine
+        // is asked again for every agent item claimed, which is what makes installing one take effect without a
+        // restart.
         services.AddSingleton<ProgramResolver>();
         services.AddSingleton<IAgentHost, ClaudeCodeHost>();
 

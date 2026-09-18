@@ -275,8 +275,13 @@ The child is started in a per-attempt **work directory**, `~/.jason/work/<wi_…
 launcher creates. Its standard output and standard error are written there as `stdout.log` and
 `stderr.log`. Nothing is cleaned up in this version.
 
-Both files stop growing past `Roles:MaxStdoutBytes` and end with one line naming the maximum and the
-setting; the attempt's launch record then says `stdout_truncated: true`. The pipes are drained to end
+Both files stop growing past `Roles:MaxStdoutBytes` and end with the line
+
+```text
+[jason] The transcript passed 1048576 bytes and is cut here; Roles:MaxStdoutBytes says how much is kept. The child kept running, and no outcome depends on this file.
+```
+
+after which the attempt's launch record says `stdout_truncated: true`. The pipes are drained to end
 of file regardless — a pipe nobody empties blocks the child writing into it. A cut transcript never
 changes an outcome: the runtime reads no result from standard output, only from `workitem.set_result`
 and `workitem.complete`.
@@ -324,7 +329,7 @@ One JSON object is written to the child's standard input, which is then closed:
   "role": "researcher",
   "execution_profile": null,
   "context": { "…": "the brief, exactly as it stood when the work was claimed" },
-  "result_format": { "…": "the shape asked for, or null" },
+  "result_format": { "type": "object", "required": ["findings"], "…": "a schema, or null" },
   "timeout_seconds": 3600,
   "heartbeat_seconds": 120,
   "lock_until": "2026-09-14T13:00:00.000Z",

@@ -154,10 +154,12 @@ the host trusts, and an allow rule in an untrusted directory is ignored without 
 what the agent *may* do goes on the command line, where it is read, and what it *may not* do goes in
 the directory, where a deny rule is honoured either way. Verified against Claude Code 2.1.275.
 
-The allow rule is composed from a **bare command word** and never a path: bare words are what has
-been verified, and a path inside an allow pattern has not been. The runtime therefore puts its own
-directory on the child's `PATH` and tells the agent the word in the launch envelope, so the skill can
-teach exactly what the rule permits. Allow rules match the command the agent actually issues, so a
+The allow rule is composed from a **bare command word** and never a path: bare words are what has been
+verified, and a path inside an allow pattern has not been. The runtime therefore puts its own directory at the
+front of the child's `PATH` and tells the agent the word in the launch envelope, so the skill can teach exactly
+what the rule permits. In a published installation that directory holds the one executable; in a development
+layout it holds everything built beside it, which is worth knowing before concluding that a child reached
+something by accident. Allow rules match the command the agent actually issues, so a
 skill that teaches it to redirect or chain its callback would break the rule silently.
 
 A role with no skill directory launches normally: nothing was configured, so nothing is missing. A
@@ -167,9 +169,10 @@ real launch and leaves only a log line behind.
 
 ## 7. When AI work cannot run
 
-Every one of these is decided before a child process exists, keeps its attempt so the refusal can be
-read, names the level that chose the profile, and is **not retried** — nothing about the work changes
-between two scans.
+Every one of these is decided before a child process exists, keeps its attempt so the refusal can be read, and
+is **not retried** — nothing about the work changes between two scans. The first four name the level that chose
+the profile, and the attempt records how far the choice got; the last two are about the role rather than the
+profile, so there is no level to name.
 
 | Code | Meaning |
 |---|---|
@@ -179,6 +182,9 @@ between two scans.
 | `host_not_available` | its program is not on this machine |
 | `role_skill_invalid` | the role's skill could not be given to it |
 | `role_not_launchable` | no profile at any level, and the role has no entry command either |
+
+None of them is classified, and an attempt error the failure rules do not name is final. That is the right
+answer for every one of these: a profile that does not exist will not exist on the next scan either.
 
 The repair is to name a profile on the item, its campaign or its role — or to fix the configuration —
 **before the work is claimed**. A refused attempt fails the item, and a finished item is not changed,

@@ -186,7 +186,7 @@ public static class ProfileCommands
         private readonly Option<string[]> _arg = VerbOptions.Repeatable("--arg", "One argument added after the ones the runtime composes. Repeat the option once per argument, in order.");
         private readonly Option<string[]> _deny = VerbOptions.Repeatable("--deny", "One thing the launched agent may not do, in the host's own vocabulary. Repeat for more.");
         private readonly Option<string?> _cliCommand = new("--cli-command") { Description = "The bare command word the launched agent calls home with. Absent means the runtime's own." };
-        private readonly Option<string?> _hostVersion = new("--host-version") { Description = "The host version this profile was verified against. Recorded, never enforced." };
+        private readonly Option<string?> _hostVersion = new("--host-version-verified") { Description = "The host version this profile was verified against. Recorded, never enforced." };
 
         public void AddTo(Command command)
         {

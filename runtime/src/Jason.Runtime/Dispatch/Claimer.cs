@@ -30,6 +30,7 @@ public sealed class Claimer(
     AttemptOutcomes outcomes,
     EntryCommandResolver resolver,
     AgentLaunchPlanner agents,
+    LiveSettings<RolesOptions> roles,
     PluginRegistry plugins,
     RouteRegistry routes,
     ExternalIdStore identifiers,
@@ -64,6 +65,10 @@ public sealed class Claimer(
         var packages = plugins.Snapshot;
         var routing = routes.Snapshot;
 
+        // And the one setting an agent claim reads, for the same reason and in the same place: a default edited
+        // halfway through a scan belongs to the next scan, not to half of this one.
+        var globalDefault = roles.Current.DefaultExecutionProfile;
+
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         foreach (var id in await CandidatesAsync(db, now, freeSlots, ct).ConfigureAwait(false))
         {
@@ -85,7 +90,7 @@ public sealed class Claimer(
             // The same question for agent work, asked in the same place and with the same rule: everything that
             // can refuse it is decided before a child exists, and the answer is one reason the attempt keeps.
             var agent = item.Kind == WorkItemKind.AiRole
-                ? await agents.PlanAsync(db, item, ct).ConfigureAwait(false)
+                ? await agents.PlanAsync(db, item, globalDefault, ct).ConfigureAwait(false)
                 : null;
 
             var released = verdict is { Parks: true }
@@ -224,6 +229,10 @@ public sealed class Claimer(
             {
                 AgentLaunchDecision.Ready ready => AttemptProvenance.ForAgent(ready.Plan.Provenance, attempt.PublicId),
                 AgentLaunchDecision.Legacy legacy => AttemptProvenance.ForAgent(legacy.Provenance, attempt.PublicId),
+                AgentLaunchDecision.Refused { Decided: { } decided } => AttemptProvenance.ForAgent(decided, attempt.PublicId),
+
+                // Nothing was chosen at all, which is what work with unreadable ancestry means: the record says
+                // so by staying empty, and the attempt's error says why.
                 _ => attempt.Provenance,
             };
 

@@ -9,6 +9,14 @@ using Jason.FakeAgentHost;
 // process.
 const int UnreadableEnvelope = 64;
 
+// Not a behaviour and not a host: this program asked to hold a pipe open. It reads no envelope and answers
+// nothing, because what it is for is being something a finished host left behind.
+if (args is ["linger"])
+{
+    await Task.Delay(TimeSpan.FromSeconds(30));
+    return 0;
+}
+
 string raw;
 LaunchEnvelope envelope;
 try

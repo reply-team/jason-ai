@@ -175,6 +175,25 @@ public class ResultValidationTests
         Assert.Equal(WorkItemStatus.Succeeded, item.Status);
     }
 
+    /// <summary>
+    /// Finishing with nothing at all, where a shape was asked for. There is no result to judge and therefore
+    /// nothing that satisfies the schema, so it is refused for the same reason prose is: the work would be
+    /// recorded as done with no answer to show for it.
+    /// </summary>
+    [Fact]
+    public async Task A_success_with_no_result_at_all_is_refused_where_a_shape_was_asked_for()
+    {
+        using var database = new TestDatabase();
+        var seeded = await SeedAsync(database, Shape());
+        await using var ctx = database.Open();
+
+        var refused = await Assert.ThrowsAsync<DomainException>(() => NewService(ctx).CompleteAsync(
+            new WorkItemCompleteRequest(seeded.ItemId, seeded.AttemptId, CompletionStatus.Succeeded, Result: null, Error: null, Reason: null),
+            Ct));
+
+        Assert.Equal("result_invalid", refused.Code);
+    }
+
     private static async Task<(string ItemId, string AttemptId)> SeedAsync(TestDatabase database, JsonNode? resultFormat)
     {
         await using var db = database.Open();

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -60,7 +61,8 @@ internal static class Behaviours
 
     /// <summary>The names this host answers to, so a caller can tell whether argv named one of them.</summary>
     public static bool Known(string behaviour) =>
-        behaviour is "succeed" or "hang" or "mute" or "crash" or "silent" or "stale" or "leak" or "echo-envelope";
+        behaviour is "succeed" or "hang" or "mute" or "crash" or "silent" or "stale" or "leak" or "echo-envelope"
+            or "abandon" or "flood";
 
     /// <summary>
     /// The behaviour a launched host is told to perform through its brief rather than its arguments. A host
@@ -98,12 +100,83 @@ internal static class Behaviours
                 return await StaleAsync(envelope, api).ConfigureAwait(false);
             case "leak":
                 return await LeakAsync(envelope, api).ConfigureAwait(false);
+            case "abandon":
+                return await AbandonAsync(envelope, api).ConfigureAwait(false);
+            case "flood":
+                return await FloodAsync(options).ConfigureAwait(false);
             case "echo-envelope":
                 return await EchoEnvelopeAsync(rawEnvelope).ConfigureAwait(false);
             default:
                 await Diagnostics.WriteAsync($"unknown behaviour '{behaviour}'").ConfigureAwait(false);
                 return UnknownBehaviour;
         }
+    }
+
+    /// <summary>
+    /// A host that finishes its work, leaves something behind still holding its output, and exits. A shell-capable
+    /// agent does this whenever it starts a background command and does not wait for it: the child ends, the pipe
+    /// does not, and a launcher that waits for the pipe waits for the helper instead. The attempt is completed
+    /// first, so what is being measured afterwards is only the launcher.
+    /// </summary>
+    private static async Task<int> AbandonAsync(LaunchEnvelope envelope, RuntimeApi api)
+    {
+        await CompleteAsync(envelope, api, new JsonObject { ["summary"] = "done, and something is still running" })
+            .ConfigureAwait(false);
+
+        var start = new ProcessStartInfo(Environment.ProcessPath ?? "dotnet")
+        {
+            UseShellExecute = false,
+
+            // Inherited, which is the whole point: this helper holds the pipe the launcher is reading.
+            RedirectStandardOutput = false,
+            RedirectStandardError = false,
+            RedirectStandardInput = false,
+        };
+
+        foreach (var argument in HelperArguments())
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var helper = Process.Start(start);
+        await Diagnostics.WriteAsync($"left pid {helper?.Id.ToString(CultureInfo.InvariantCulture) ?? "none"} holding the pipes").ConfigureAwait(false);
+        return Success;
+    }
+
+    /// <summary>
+    /// The helper, which is this same program asked to sleep: started with no behaviour and no envelope, it reads
+    /// an empty standard input, fails to parse it and would exit at once — so it is told to linger instead.
+    /// </summary>
+    private static IEnumerable<string> HelperArguments()
+    {
+        if (Environment.ProcessPath is null || Environment.ProcessPath.EndsWith("dotnet", StringComparison.OrdinalIgnoreCase)
+            || Environment.ProcessPath.EndsWith("dotnet.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return Environment.GetCommandLineArgs()[0];
+        }
+
+        yield return "linger";
+    }
+
+    /// <summary>
+    /// More output than any pipe will hold, so that a launcher which stopped reading would deadlock rather than
+    /// merely lose the tail. That deadlock is the thing the pumps exist to prevent, and a test writing a few
+    /// kilobytes never reaches it.
+    /// </summary>
+    private static async Task<int> FloodAsync(IReadOnlyList<string> options)
+    {
+        var megabytes = int.TryParse(Option(options, "--megabytes"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var asked)
+            ? asked
+            : 2;
+
+        var line = new string('x', 1024);
+        for (var written = 0; written < megabytes * 1024; written++)
+        {
+            await Console.Out.WriteLineAsync(line).ConfigureAwait(false);
+        }
+
+        await Console.Out.FlushAsync().ConfigureAwait(false);
+        return Success;
     }
 
     /// <summary>The whole happy path: progress, proof of life, a result.</summary>

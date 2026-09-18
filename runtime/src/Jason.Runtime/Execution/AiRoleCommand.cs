@@ -33,6 +33,13 @@ public sealed class AiRoleCommand(
     /// <summary>How much of the child's stderr is worth keeping on the attempt: enough to explain, not enough to store a log.</summary>
     public const int StderrTailBytes = 4096;
 
+    /// <summary>
+    /// How long the launcher waits for the child's pipes once the child itself has ended. A constant rather than
+    /// a setting: by this point the work is over and the only question left is how long to hold a handler slot
+    /// open for output nobody is waiting on, which is not a choice an installation gains anything by making.
+    /// </summary>
+    public const int OutputGraceMs = 5_000;
+
     public WorkItemKind Kind => WorkItemKind.AiRole;
 
     public async Task<CommandOutcome> RunAsync(CommandContext context, CancellationToken cancellationToken)
@@ -59,6 +66,10 @@ public sealed class AiRoleCommand(
         {
             return new CommandOutcome.LaunchFailed(prepared.Message!, launch, refusal);
         }
+
+        // What this attempt was given, kept where the rest of the launch is kept: which rules the agent ran
+        // under, and whether it was taught anything at all.
+        launch = launch with { Deny = context.Deny, RoleSkill = prepared.Skill };
 
         if (prepared.Message is { } note)
         {
@@ -140,9 +151,20 @@ public sealed class AiRoleCommand(
             // Deliberately not the runtime's own token: a shutdown drains and lets children finish, and a
             // survivor completes its attempt against the next runtime instance rather than dying with this one.
             await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-            await Task.WhenAll(transcript, diagnostics).ConfigureAwait(false);
 
-            launch = launch with { ExitCode = process.ExitCode, StdoutTruncated = await transcript.ConfigureAwait(false) };
+            // The child has ended, and what it left behind may still hold its pipes: a read end ends only when
+            // every writer has let go, so a background command the agent started and abandoned would hold this
+            // attempt open for as long as that helper lived — and the handler with it, which is a slot of
+            // Dispatcher:MaxParallel gone until the runtime restarts. Bounded by the same grace the plugin
+            // invoker waits for its own pipes, and the fact recorded rather than guessed at afterwards.
+            var settled = await SettleAsync(transcript, diagnostics, OutputGraceMs).ConfigureAwait(false);
+
+            launch = launch with
+            {
+                ExitCode = process.ExitCode,
+                StdoutTruncated = settled && await transcript.ConfigureAwait(false),
+                OutputAbandoned = !settled,
+            };
             logger.LogInformation(
                 "Attempt {AttemptId} of work item {WorkItemId} ended with exit code {ExitCode}",
                 context.AttemptId,
@@ -154,6 +176,33 @@ public sealed class AiRoleCommand(
                 : new CommandOutcome.Exited(process.ExitCode, tail.ToString(), launch);
         }
     }
+
+    /// <summary>
+    /// Waits for the two tasks holding the child's pipes, for no longer than the kill grace, and says whether
+    /// they finished. An abandoned pump is left to end on its own — its pipe closes when the last writer does —
+    /// and its failure is observed there rather than thrown here, where the attempt is already over.
+    /// </summary>
+    private static async Task<bool> SettleAsync(Task<bool> transcript, Task<bool> diagnostics, int killGraceMs)
+    {
+        var both = Task.WhenAll(transcript, diagnostics);
+        if (await Task.WhenAny(both, Task.Delay(killGraceMs)).ConfigureAwait(false) == both)
+        {
+            await both.ConfigureAwait(false);
+            return true;
+        }
+
+        Observe(transcript);
+        Observe(diagnostics);
+        Observe(both);
+        return false;
+    }
+
+    private static void Observe(Task abandoned) =>
+        _ = abandoned.ContinueWith(
+            static finished => _ = finished.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 
     /// <summary>
     /// One JSON object, then end of file. Closing stdin is part of the contract: a host reads until the stream

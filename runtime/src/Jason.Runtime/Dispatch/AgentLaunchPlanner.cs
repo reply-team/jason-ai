@@ -23,7 +23,11 @@ public abstract record AgentLaunchDecision
     /// <summary>No profile anywhere: the role's own entry command runs it, and the attempt says that is what happened.</summary>
     public sealed record Legacy(AgentProvenanceDto Provenance) : AgentLaunchDecision;
 
-    public sealed record Refused(string Code, string Message) : AgentLaunchDecision;
+    /// <param name="Decided">
+    /// How far the choice got before it was refused, where a level did name a profile. Null where nothing was
+    /// chosen at all — which is itself the answer for work whose ancestry could not be read.
+    /// </param>
+    public sealed record Refused(string Code, string Message, AgentProvenanceDto? Decided = null) : AgentLaunchDecision;
 }
 
 /// <summary>
@@ -38,16 +42,21 @@ public abstract record AgentLaunchDecision
 /// </summary>
 public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver programs, IEnumerable<IAgentHost> hosts)
 {
-    public async Task<AgentLaunchDecision> PlanAsync(JasonDbContext db, WorkItem item, CancellationToken cancellationToken)
+    /// <param name="globalDefault">The configured default profile, read once for the whole scan.</param>
+    public async Task<AgentLaunchDecision> PlanAsync(
+        JasonDbContext db,
+        WorkItem item,
+        string? globalDefault,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(item);
 
-        var verdict = await preflight.DecideAsync(db, item, cancellationToken).ConfigureAwait(false);
+        var verdict = await preflight.DecideAsync(db, item, globalDefault, cancellationToken).ConfigureAwait(false);
         switch (verdict)
         {
             case AgentVerdict.Refused refused:
-                return new AgentLaunchDecision.Refused(refused.Code, refused.Message);
+                return new AgentLaunchDecision.Refused(refused.Code, refused.Message, Decided(refused));
 
             case AgentVerdict.Legacy:
                 return new AgentLaunchDecision.Legacy(new AgentProvenanceDto(ProfileResolutionSource.RoleEntryCommand));
@@ -66,11 +75,12 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
 
         // A machine fact, decided here rather than by a child that fails to start: the profile names a program,
         // and either this machine has it or the work cannot run and says which program was missing.
-        if (programs.Resolve(revision.Program) is not { } program)
+        if (programs.Resolve(revision.Program) is not { Count: > 0 } startedAs)
         {
             return new AgentLaunchDecision.Refused(
                 AttemptErrors.HostNotAvailable,
-                $"The execution profile '{launch.Profile.Name}' runs '{revision.Program}', which is not on this machine.");
+                $"The execution profile '{launch.Profile.Name}' runs '{revision.Program}', which is not on this machine.",
+                Chosen(launch));
         }
 
         // One implementation per host, and no fallback: a profile written against a host this build does not
@@ -80,10 +90,11 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
         {
             return new AgentLaunchDecision.Refused(
                 AttemptErrors.HostNotAvailable,
-                $"The execution profile '{launch.Profile.Name}' names a host this build cannot start.");
+                $"The execution profile '{launch.Profile.Name}' names a host this build cannot start.",
+                Chosen(launch));
         }
 
-        var composed = host.Compose(revision, program);
+        var composed = host.Compose(revision, startedAs);
         var provenance = new AgentProvenanceDto(
             launch.Source,
             launch.Profile.PublicId,
@@ -91,7 +102,10 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
             revision.Number,
             launch.LineageRevision,
             revision.Host,
-            program,
+
+            // The file this machine actually starts, which is the shim's interpreter where a name resolved to
+            // one: the whole command is in the arguments beside it.
+            startedAs[0],
             composed.Command,
             revision.HostVersionVerified,
             composed.SessionId);
@@ -102,4 +116,24 @@ public sealed class AgentLaunchPlanner(AgentPreflight preflight, ProgramResolver
             ProgramResolver.CliCommandFor(revision.CliCommand),
             provenance));
     }
+
+    /// <summary>What the pre-flight had decided when it refused: the level and the profile, and no more.</summary>
+    private static AgentProvenanceDto? Decided(AgentVerdict.Refused refused) =>
+        refused.Source is { } source
+            ? new AgentProvenanceDto(source, refused.ProfileId, refused.ProfileName, refused.ProfileRevision)
+            : null;
+
+    /// <summary>
+    /// The same for a refusal of this class: the profile resolved and the machine or the build refused it, so
+    /// everything but the launch itself is known and worth keeping.
+    /// </summary>
+    private static AgentProvenanceDto Chosen(AgentVerdict.Launch launch) =>
+        new(
+            launch.Source,
+            launch.Profile.PublicId,
+            launch.Profile.Name,
+            launch.Revision.Number,
+            launch.LineageRevision,
+            launch.Revision.Host,
+            launch.Revision.Program);
 }

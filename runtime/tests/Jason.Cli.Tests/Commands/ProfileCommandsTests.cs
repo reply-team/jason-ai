@@ -14,6 +14,9 @@ public class ProfileCommandsTests
 {
     private static readonly DateTimeOffset Moment = new(2026, 9, 18, 10, 0, 0, TimeSpan.Zero);
 
+    /// <summary>A rendered row with its column padding collapsed, so a test reads the row rather than the ruler.</summary>
+    private static string Squeezed(string row) => string.Join(' ', row.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
     [Fact]
     public async Task Profile_list_human_shows_the_host_the_program_and_the_current_revision()
     {
@@ -25,12 +28,13 @@ public class ProfileCommandsTests
         var exit = await cli.RunAsync("profile", "list", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Contains("NAME", cli.Text, StringComparison.Ordinal);
-        Assert.Contains("local-claude", cli.Text, StringComparison.Ordinal);
-        Assert.Contains("claude_code", cli.Text, StringComparison.Ordinal);
-        Assert.Contains("claude", cli.Text, StringComparison.Ordinal);
-        Assert.Contains("3", cli.Text, StringComparison.Ordinal);
-        Assert.Contains("retired", cli.Text, StringComparison.Ordinal);
+
+        // The row itself, not the characters in it: "3" and "claude" both appear elsewhere in this table, so
+        // asking whether they are present somewhere would pass however the columns were arranged.
+        var rows = cli.Text.Split('\n').Select(row => Squeezed(row)).ToList();
+        Assert.Contains("NAME HOST PROGRAM REVISION DISABLED ID", rows);
+        Assert.Contains("local-claude claude_code claude 3 no prf_local-claude", rows);
+        Assert.Contains("retired claude_code claude 1 yes prf_retired", rows);
         Assert.Contains("next cursor: cHJmX0E", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
@@ -51,7 +55,7 @@ public class ProfileCommandsTests
             "--deny", "Write",
             "--deny", "WebFetch",
             "--cli-command", "jason",
-            "--host-version", "2.1.275",
+            "--host-version-verified", "2.1.275",
             "--reason", "Registering the host that is installed.");
 
         Assert.Equal(ExitCodes.Success, exit);
@@ -196,7 +200,7 @@ public class ProfileCommandsTests
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains("local-claude", cli.Text, StringComparison.Ordinal);
         Assert.Contains("claude_code", cli.Text, StringComparison.Ordinal);
-        Assert.Contains("--permission-mode dontAsk", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("--model sonnet", cli.Text, StringComparison.Ordinal);
         Assert.Contains("Deny:", cli.Text, StringComparison.Ordinal);
         Assert.Contains("Write", cli.Text, StringComparison.Ordinal);
         Assert.Contains("Revision:", cli.Text, StringComparison.Ordinal);
@@ -266,7 +270,7 @@ public class ProfileCommandsTests
             "The host installed on this machine.",
             disabled,
             revision,
-            new ExecutionProfileRevisionDto(revision, AgentHostKind.ClaudeCode, "claude", ["--permission-mode", "dontAsk"], ["Write"], "jason", "2.1.275", Moment),
+            new ExecutionProfileRevisionDto(revision, AgentHostKind.ClaudeCode, "claude", ["--model", "sonnet"], ["Write"], "jason", "2.1.275", Moment),
             Moment,
             Moment);
 }

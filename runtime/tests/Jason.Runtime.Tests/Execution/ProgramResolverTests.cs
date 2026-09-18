@@ -19,7 +19,7 @@ public class ProgramResolverTests : IDisposable
     {
         var program = Executable("host");
 
-        Assert.Equal(program, new ProgramResolver(Search(string.Empty)).Resolve(program));
+        Assert.Equal([program], new ProgramResolver(Search(string.Empty)).Resolve(program));
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public class ProgramResolverTests : IDisposable
 
         var resolved = new ProgramResolver(Search(_directory)).Resolve("host");
 
-        Assert.Equal(program, resolved);
+        Assert.Equal([program], resolved);
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public class ProgramResolverTests : IDisposable
         var winner = Executable("host", first);
         Executable("host", second);
 
-        Assert.Equal(winner, new ProgramResolver(Search(first + Path.PathSeparator + second)).Resolve("host"));
+        Assert.Equal([winner], new ProgramResolver(Search(first + Path.PathSeparator + second)).Resolve("host"));
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class ProgramResolverTests : IDisposable
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows is the platform whose bare names carry an extension.");
         var program = Executable("host.exe");
 
-        Assert.Equal(program, new ProgramResolver(Search(_directory)).Resolve("host"));
+        Assert.Equal([program], new ProgramResolver(Search(_directory)).Resolve("host"));
     }
 
     [Fact]
@@ -153,6 +153,31 @@ public class ProgramResolverTests : IDisposable
         {
             File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite);
         }
+    }
+
+    /// <summary>
+    /// The mainstream way an agent host arrives on Windows: npm writes a <c>.cmd</c> shim, and no <c>.exe</c>
+    /// answers for the name anywhere on the search path. Starting the shim would mean handing a command line
+    /// to <c>cmd.exe</c> to interpret, which is the shell this runtime composes argument arrays to avoid — so
+    /// the shim is read instead, and what runs is the interpreter and entry script it names. The plugin
+    /// registry already does exactly this for a plugin's declared program, and a profile's program is resolved
+    /// the same way: two answers to "where is this program" would be one answer too many.
+    /// </summary>
+    [Fact]
+    public void A_host_installed_by_npm_resolves_to_its_interpreter_and_entry_script()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "npm writes a .cmd shim only on Windows.");
+        using var programs = new Plugins.TestPrograms();
+        var node = programs.AddInterpreter("node.exe");
+        var entry = programs.AddNested(@"node_modules\vendor-host\cli.js", "// the host");
+        programs.AddNested(
+            @"node_modules\vendor-host\package.json",
+            """{"name":"vendor-host","bin":{"vendor-host":"cli.js"}}""");
+        programs.Add("vendor-host.cmd", Plugins.TestPrograms.NpmShim("vendor-host", "cli.js"));
+
+        var launch = new ProgramResolver(Search(programs.Root)).Resolve("vendor-host");
+
+        Assert.Equal([node, entry], launch);
     }
 
     private static TestSearchPath Search(string path) => new() { Path = path };

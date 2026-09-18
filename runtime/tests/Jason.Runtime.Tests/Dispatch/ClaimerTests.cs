@@ -780,9 +780,10 @@ public class ClaimerTests
                 new AttemptOutcomes(journal, clock, settings),
                 new EntryCommandResolver(TestOptions.RoleSettings(roles)),
                 new AgentLaunchPlanner(
-                    new AgentPreflight(TestOptions.RoleSettings(roles)),
+                    new AgentPreflight(),
                     new ProgramResolver(new ThisMachineHasNothing()),
                     [new ClaudeCodeHost()]),
+                TestOptions.RoleSettings(roles),
                 plugins,
                 routing,
                 new ExternalIdStore(journal, clock),

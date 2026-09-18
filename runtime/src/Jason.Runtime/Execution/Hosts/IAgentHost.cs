@@ -15,14 +15,24 @@ public interface IAgentHost
     AgentHostKind Kind { get; }
 
     /// <summary>
+    /// The flags this host's shape is made of, which a profile may therefore not carry. They are refused where a
+    /// profile is written rather than dropped where it is launched: a host parser takes the last value it is
+    /// given, so an argument added at the end silently replaces what the runtime composed, and a profile that
+    /// could do that could make a session interactive, unconfined or unable to report — the three things every
+    /// attempt depends on.
+    /// </summary>
+    IReadOnlySet<string> ReservedFlags { get; }
+
+    /// <summary>
     /// The command one attempt of <paramref name="revision"/> is started with. Called once per attempt: the
     /// session it names is minted here and belongs to that attempt alone.
     /// </summary>
     /// <param name="revision">The profile as it was frozen — the arguments, the command word, nothing secret.</param>
-    /// <param name="program">
-    /// The revision's program as this machine answered for it. Resolving it is a separate step on purpose: a
-    /// host that is not installed is decided before a child exists, and is a fact about the machine rather than
-    /// a failed run.
+    /// <param name="launch">
+    /// How this machine starts the revision's program: usually one path, and two where the name resolved to a
+    /// shim whose interpreter and entry script are what actually run. Resolving it is a separate step on
+    /// purpose — a host that is not installed is a fact about the machine, decided before a child exists rather
+    /// than discovered by failing to start one.
     /// </param>
-    HostLaunch Compose(ExecutionProfileRevision revision, string program);
+    HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch);
 }

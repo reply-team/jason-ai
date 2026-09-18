@@ -4,7 +4,9 @@ using Jason.Contracts.Discovery;
 using Jason.Contracts.Ids;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Persistence;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Profiles;
@@ -19,7 +21,7 @@ namespace Jason.Runtime.Profiles;
 /// points at is not the runtime's to remove; a profile that should not be used again is disabled.
 /// </para>
 /// </summary>
-public sealed class ProfileService(JasonDbContext db, JournalWriter journal, TimeProvider clock)
+public sealed class ProfileService(JasonDbContext db, JournalWriter journal, TimeProvider clock, IEnumerable<IAgentHost> hosts)
 {
     public const string IdPrefix = "prf";
 
@@ -59,7 +61,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         var actor = Actors.Resolve(request.Actor);
 
         var errors = new ValidationErrors();
-        ProfileValidation.ValidateCreate(request, errors);
+        ProfileValidation.ValidateCreate(request, ReservedFor(ProfileValidation.ParseHost(request.Host)), errors);
         errors.ThrowIfAny();
         await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
 
@@ -131,7 +133,7 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         var actor = Actors.Resolve(request.Actor);
 
         var errors = new ValidationErrors();
-        ProfileValidation.ValidateUpdate(request, errors);
+        ProfileValidation.ValidateUpdate(request, ReservedFor(HostOfPatch(request)), errors);
         errors.ThrowIfAny();
         await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
 
@@ -153,9 +155,17 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         // says which statement of the launch an attempt ran under. Rewording the sentence that describes a host
         // changes no launch, so appending a revision for it would put distance between a pinned number and the
         // current one that means nothing happened. Reworded beside a real change, it simply rides along.
+        var described = request.Description.IsSet && !string.Equals(profile.Description, Text(request.Description.Value), StringComparison.Ordinal);
         if (request.Description.IsSet)
         {
             profile.Description = Text(request.Description.Value);
+        }
+
+        // Setting a description to what it already said changed nothing, and a chronicle line saying a profile
+        // was revised when it was not is worse than no line at all.
+        if (named.Count == 1 && request.Description.IsSet && !described)
+        {
+            return ProfileMapper.ToDto(profile, current);
         }
 
         if (named.Count == 1 && request.Description.IsSet)
@@ -192,6 +202,10 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
         profile.CurrentRevision = next.Number;
         profile.UpdatedAt = now;
 
+        // The next number was read a moment ago, and a second editor may have taken it since. The unique index
+        // on (profile, number) is what decides, and the loser is told to read the profile again rather than
+        // being handed an internal error for a race the API can describe.
+
         journal.Append(
             db,
             actor,
@@ -201,8 +215,57 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
             old: new JsonObject { ["revision"] = current.Number },
             updated: new JsonObject { ["revision"] = next.Number, ["fields"] = new JsonArray([.. named.Select(field => (JsonNode?)JsonValue.Create(field))]) },
             reason: Text(request.Reason));
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (Conflicts(ex))
+        {
+            throw DomainErrors.ConcurrentUpdate();
+        }
+
         return ProfileMapper.ToDto(profile, next);
+    }
+
+    /// <summary>
+    /// Whether a failed save is the revision race rather than something else: the unique index on a profile's
+    /// revision numbers is the only constraint this write can break, and a caller is owed the difference between
+    /// "somebody edited first" and "the database refused for a reason nobody predicted".
+    /// </summary>
+    private static bool Conflicts(DbUpdateException exception) =>
+        exception.InnerException is SqliteException { SqliteErrorCode: 19 };
+
+    /// <summary>
+    /// The flags the host of this profile composes for itself, which the profile therefore may not carry. An
+    /// unknown host answers none: the host itself is refused by the same validation, and reporting a second
+    /// problem about arguments nobody can act on would only bury the first.
+    /// </summary>
+    private IReadOnlySet<string>? ReservedFor(AgentHostKind? host) =>
+        host is { } kind ? hosts.LastOrDefault(candidate => candidate.Kind == kind)?.ReservedFlags : null;
+
+    /// <summary>
+    /// Which host a patch's arguments would run under: the one it names, or the one the profile already has.
+    /// A patch that changes the host and the arguments together is held to the new host's flags, which is the
+    /// pair it would be launched as.
+    /// </summary>
+    private AgentHostKind? HostOfPatch(ProfileUpdateRequest request)
+    {
+        if (request.Host.IsSet)
+        {
+            return ProfileValidation.ParseHost(request.Host.Value);
+        }
+
+        var name = request.Name?.Trim();
+        return string.IsNullOrEmpty(name)
+            ? null
+            : db.ExecutionProfiles.AsNoTracking()
+                .Where(profile => profile.Name == name)
+                .Select(profile => (AgentHostKind?)profile.Revisions
+                    .Where(revision => revision.Number == profile.CurrentRevision)
+                    .Select(revision => revision.Host)
+                    .FirstOrDefault())
+                .FirstOrDefault();
     }
 
     /// <summary>One profile, at the revision in force or at the one asked for.</summary>

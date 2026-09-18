@@ -18,10 +18,39 @@ public sealed class ClaudeCodeHost : IAgentHost
 {
     public AgentHostKind Kind => AgentHostKind.ClaudeCode;
 
-    public HostLaunch Compose(ExecutionProfileRevision revision, string program)
+    /// <summary>
+    /// Everything this host reads that would change the shape composed below, plus the ones that would undo the
+    /// confinement it rests on. A profile says which program and what to add; it does not get to say that the
+    /// session is interactive, that it reports in another format, that it may do anything it likes, or that the
+    /// per-attempt work directory is inert. Verified against Claude Code 2.1.275.
+    /// </summary>
+    public IReadOnlySet<string> ReservedFlags { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "-p", "--print",
+        "--output-format",
+        "--include-partial-messages",
+        "--allowed-tools", "--allowedTools",
+        "--permission-mode",
+        "--session-id",
+        "--restricted",
+        "--tools",
+        "--dangerously-skip-permissions",
+        "--allow-dangerously-skip-permissions",
+        "-r", "--resume",
+        "-c", "--continue",
+        "--fork-session",
+        "--bare",
+        "--safe-mode",
+    };
+
+    public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch)
     {
         ArgumentNullException.ThrowIfNull(revision);
-        ArgumentException.ThrowIfNullOrWhiteSpace(program);
+        ArgumentNullException.ThrowIfNull(launch);
+        if (launch.Count == 0)
+        {
+            throw new ArgumentException("A launch names at least the program to start.", nameof(launch));
+        }
 
         // The runtime's own, so that an attempt can be found again by the session it ran in. A host that minted
         // its own would leave the runtime with a session id it could only learn by reading the transcript.
@@ -39,7 +68,7 @@ public sealed class ClaudeCodeHost : IAgentHost
         // reached through a tool, so naming tools costs the role its skills.
         return new HostLaunch(
             [
-                program,
+                .. launch,
                 "-p",
                 "--output-format",
                 "stream-json",

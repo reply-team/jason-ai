@@ -26,8 +26,18 @@ public abstract record AgentVerdict
     /// </summary>
     public sealed record Legacy : AgentVerdict;
 
-    /// <summary>The work cannot run, and this is the one reason it could not.</summary>
-    public sealed record Refused(string Code, string Message) : AgentVerdict;
+    /// <summary>
+    /// The work cannot run, and this is the one reason it could not — together with how far the decision got.
+    /// A refusal that names the profile a level chose is the half a manager acts on: "disabled" is only useful
+    /// beside the name of the profile that is disabled and the level that named it.
+    /// </summary>
+    public sealed record Refused(
+        string Code,
+        string Message,
+        ProfileResolutionSource? Source = null,
+        string? ProfileName = null,
+        string? ProfileId = null,
+        int? ProfileRevision = null) : AgentVerdict;
 }
 
 /// <summary>
@@ -40,9 +50,18 @@ public abstract record AgentVerdict
 /// still in service.
 /// </para>
 /// </summary>
-public sealed class AgentPreflight(LiveSettings<RolesOptions> roles)
+public sealed class AgentPreflight
 {
-    public async Task<AgentVerdict> DecideAsync(JasonDbContext db, WorkItem item, CancellationToken cancellationToken)
+    /// <param name="globalDefault">
+    /// The configured default, read once for the whole scan by the caller. Every other snapshot a claim decides
+    /// against is read once per scan for the same reason: an edit that lands mid-scan belongs to the next one,
+    /// so two items claimed together are claimed against one set of answers.
+    /// </param>
+    public async Task<AgentVerdict> DecideAsync(
+        JasonDbContext db,
+        WorkItem item,
+        string? globalDefault,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(item);
@@ -63,7 +82,7 @@ public sealed class AgentPreflight(LiveSettings<RolesOptions> roles)
             item.LineageState,
             item.LineageProfileName,
             item.LineageProfileRevision,
-            roles.Current.DefaultExecutionProfile));
+            globalDefault));
 
         switch (decision)
         {
@@ -93,14 +112,20 @@ public sealed class AgentPreflight(LiveSettings<RolesOptions> roles)
         {
             return new AgentVerdict.Refused(
                 AttemptErrors.ProfileNotFound,
-                $"The execution profile '{use.Name}' does not exist; it was chosen by {Source(use.Source)}.");
+                $"The execution profile '{use.Name}' does not exist; it was chosen by {Source(use.Source)}.",
+                use.Source,
+                use.Name);
         }
 
         if (profile.DisabledAt is not null)
         {
             return new AgentVerdict.Refused(
                 AttemptErrors.ProfileDisabled,
-                $"The execution profile '{use.Name}' is disabled; it was chosen by {Source(use.Source)}. Enable it, or name another.");
+                $"The execution profile '{use.Name}' is disabled; it was chosen by {Source(use.Source)}. Enable it, or name another.",
+                use.Source,
+                profile.Name,
+                profile.PublicId,
+                profile.CurrentRevision);
         }
 
         // The revision in force now, not the one an ancestor ran: a profile repaired since is a profile whose
@@ -112,7 +137,11 @@ public sealed class AgentPreflight(LiveSettings<RolesOptions> roles)
         {
             return new AgentVerdict.Refused(
                 AttemptErrors.ProfileNotFound,
-                $"The execution profile '{use.Name}' has no revision {profile.CurrentRevision} to run.");
+                $"The execution profile '{use.Name}' has no revision {profile.CurrentRevision} to run.",
+                use.Source,
+                profile.Name,
+                profile.PublicId,
+                profile.CurrentRevision);
         }
 
         return new AgentVerdict.Launch(profile, revision, use.Source, use.LineageRevision);

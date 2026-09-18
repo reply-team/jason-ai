@@ -27,7 +27,7 @@ public class ProfileRevisionTests
                 description = "The host installed on this machine.",
                 host = "claude_code",
                 program = "claude",
-                args = new[] { "--permission-mode", "dontAsk" },
+                args = new[] { "--model", "sonnet" },
                 deny = new[] { "Write" },
                 cli_command = "jason",
                 host_version_verified = "2.1.275",

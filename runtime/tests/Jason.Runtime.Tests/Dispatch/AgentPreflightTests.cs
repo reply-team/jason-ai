@@ -110,6 +110,60 @@ public class AgentPreflightTests
         Assert.Equal(1, agent.LineageRevision);
     }
 
+    /// <summary>
+    /// Inherited work runs the profile as it stands now, not as it stood when the ancestor ran — otherwise a
+    /// profile repaired today could never reach the work that inherited it yesterday. Both numbers are kept, so
+    /// "this attempt ran revision 2 and inherited revision 1" is a sentence somebody can read rather than a
+    /// difference they have to infer.
+    /// </summary>
+    [Fact]
+    public async Task Inherited_work_runs_the_profile_as_it_stands_now_and_says_what_it_inherited()
+    {
+        using var harness = new Harness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedProfileAsync(db, "moved-on", "claude");
+        await ReviseAsync(db, "moved-on");
+
+        var item = await SeedItemAsync(db, configure: w =>
+        {
+            w.LineageState = LineageState.Inherited;
+            w.LineageProfileName = "moved-on";
+            w.LineageProfileRevision = 1;
+            w.LineageFromAttemptId = "att_ancestor";
+        });
+
+        await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        var agent = await AgentOf(database, item);
+        Assert.Equal(ProfileResolutionSource.Lineage, agent.ResolutionSource);
+        Assert.Equal(2, agent.ProfileRevision);
+        Assert.Equal(1, agent.LineageRevision);
+    }
+
+    /// <summary>
+    /// A refusal that names nothing is only half an answer. Where a level did choose a profile, the attempt says
+    /// which level and which profile, because "disabled" is actionable only beside the name of what is disabled.
+    /// Work whose ancestry could not be read is the exception, and it is the honest one: nothing was chosen.
+    /// </summary>
+    [Fact]
+    public async Task A_refusal_records_how_far_the_choice_got()
+    {
+        using var harness = new Harness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        await SeedProfileAsync(db, "retired", "claude", disabled: true);
+        var item = await SeedItemAsync(db, configure: w => w.ExecutionProfile = "retired");
+
+        await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        var agent = await AgentOf(database, item);
+        Assert.Equal(ProfileResolutionSource.WorkItemOverride, agent.ResolutionSource);
+        Assert.Equal("retired", agent.ProfileName);
+        Assert.Null(agent.Args);
+        Assert.Null(agent.SessionId);
+    }
+
     [Fact]
     public async Task Root_work_with_no_policy_anywhere_runs_under_the_house_default()
     {
@@ -276,6 +330,24 @@ public class AgentPreflightTests
         return attempt.Provenance!.Agent!;
     }
 
+    /// <summary>A second revision, so that "the one in force" and "the one inherited" are different numbers.</summary>
+    private static async Task ReviseAsync(JasonDbContext db, string name)
+    {
+        var profile = await db.ExecutionProfiles.Include(p => p.Revisions).SingleAsync(p => p.Name == name, Ct);
+        profile.Revisions.Add(new ExecutionProfileRevision
+        {
+            Number = profile.CurrentRevision + 1,
+            Host = AgentHostKind.ClaudeCode,
+            Program = "claude",
+            Deny = ["Write", "WebFetch"],
+            CreatedByType = ActorType.Human,
+            CreatedAt = Noon,
+        });
+
+        profile.CurrentRevision += 1;
+        await db.SaveChangesAsync(Ct);
+    }
+
     private static async Task SeedProfileAsync(JasonDbContext db, string name, string program, bool disabled = false)
     {
         var profile = new ExecutionProfile
@@ -350,9 +422,10 @@ public class AgentPreflightTests
                 new AttemptOutcomes(journal, clock, settings),
                 new EntryCommandResolver(roles),
                 new AgentLaunchPlanner(
-                    new AgentPreflight(roles),
+                    new AgentPreflight(),
                     new ProgramResolver(new OneProgramOnly(_dir.Paths.Root)),
                     [new ClaudeCodeHost()]),
+                roles,
                 plugins,
                 new RouteRegistry(clock, plugins),
                 new ExternalIdStore(journal, clock),

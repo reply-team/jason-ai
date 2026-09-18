@@ -1,4 +1,5 @@
 using Jason.Contracts.Discovery;
+using Jason.Runtime.Plugins.Manifest;
 using Jason.Runtime.Plugins.Registry;
 
 namespace Jason.Runtime.Execution.Hosts;
@@ -12,13 +13,6 @@ namespace Jason.Runtime.Execution.Hosts;
 /// </summary>
 public sealed class ProgramResolver(ISearchPath searchPath)
 {
-    /// <summary>
-    /// What Windows starts without a shell. A name is looked up through the machine's own <c>PATHEXT</c>, and
-    /// through these two when it says nothing, because they are the extensions that are a program rather than a
-    /// script something else has to interpret.
-    /// </summary>
-    private static readonly string[] ExecutableExtensions = [".exe", ".com"];
-
     /// <summary>
     /// The bare word a launched agent calls home with when a profile names none: this executable's own name.
     /// One binary serves both the runtime and the CLI, so the name this process runs under is the name an agent
@@ -38,34 +32,31 @@ public sealed class ProgramResolver(ISearchPath searchPath)
         string.IsNullOrWhiteSpace(configured) ? DefaultCliCommand : configured.Trim();
 
     /// <summary>
-    /// The program as it will be started, or null when this machine has none. A value with a directory in it is
-    /// a path and is answered for by the file system alone; a bare name is looked up on the search path in
-    /// order, through the platform's executable extensions. Nothing is ever resolved against the runtime's own
-    /// working directory, which is not a place a profile can mean.
+    /// How this machine starts the program a profile names, or null where it has no way to. A value with a
+    /// directory in it is a path and is answered for by the file system alone. A bare name is looked up the way
+    /// the plugin registry looks one up — the machine's own <c>PATHEXT</c> in order, and, where the search path
+    /// yields only the shim npm writes, the interpreter and entry script that shim names. Nothing is ever
+    /// resolved against the runtime's own working directory, which is not a place a profile can mean.
+    /// <para>
+    /// A list rather than a path, because starting an npm-installed host means starting its interpreter with
+    /// its entry script: reading the shim is how a command stays an argument array instead of becoming a line
+    /// for <c>cmd.exe</c> to interpret.
+    /// </para>
     /// </summary>
-    public string? Resolve(string program)
+    public IReadOnlyList<string>? Resolve(string program)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(program);
 
         if (program.Contains(Path.DirectorySeparatorChar, StringComparison.Ordinal)
             || program.Contains(Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
         {
-            return Runnable(program) ? Full(program) : null;
+            return Runnable(program) && Full(program) is { } path ? [path] : null;
         }
 
-        foreach (var directory in Directories())
-        {
-            foreach (var candidate in Candidates(program))
-            {
-                var file = Path.Combine(directory, candidate);
-                if (Runnable(file))
-                {
-                    return file;
-                }
-            }
-        }
-
-        return null;
+        // The same walk, the same order and the same reading of a shim that a plugin's declared program gets.
+        // Two answers to "where is this program" would be one answer too many.
+        var resolved = new ExecutableResolver(searchPath).Resolve(new ExecutableRequest(program, null, null), 0);
+        return resolved is { Problem: null, Path: { } found } ? [found, .. resolved.Launch] : null;
     }
 
     /// <summary>A file that exists and that this operating system would start; a directory is neither.</summary>
@@ -110,46 +101,4 @@ public sealed class ProgramResolver(ISearchPath searchPath)
         return string.IsNullOrEmpty(directory) ? null : directory;
     }
 
-    /// <summary>
-    /// The name itself everywhere, and on Windows the name through the extensions that are a program. The other
-    /// extensions <c>PATHEXT</c> names are scripts a shell would have to interpret, and a command this runtime
-    /// composed argument by argument never goes through one, so a name that only a <c>.cmd</c> answers for is a
-    /// host this machine does not have.
-    /// </summary>
-    private static IEnumerable<string> Candidates(string program)
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            yield return program;
-            yield break;
-        }
-
-        if (ExecutableExtensions.Any(extension => program.EndsWith(extension, StringComparison.OrdinalIgnoreCase)))
-        {
-            yield return program;
-            yield break;
-        }
-
-        foreach (var extension in ExecutableExtensions)
-        {
-            yield return program + extension;
-        }
-    }
-
-    private IEnumerable<string> Directories()
-    {
-        foreach (var entry in (searchPath.Path ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var directory = entry.Trim('"');
-            if (directory.Length == 0)
-            {
-                continue;
-            }
-
-            if (Full(directory) is { } full)
-            {
-                yield return full;
-            }
-        }
-    }
 }

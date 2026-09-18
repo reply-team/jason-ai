@@ -17,7 +17,7 @@ internal static partial class ProfileValidation
     /// <summary>The same shape as a role's name: work, campaigns, roles and settings all spell it from memory.</summary>
     public static Regex ProfileName { get; } = Name();
 
-    public static void ValidateCreate(ProfileCreateRequest request, ValidationErrors errors)
+    public static void ValidateCreate(ProfileCreateRequest request, IReadOnlySet<string>? reserved, ValidationErrors errors)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(errors);
@@ -26,7 +26,7 @@ internal static partial class ProfileValidation
         ValidateDescription(request.Description, errors);
         ValidateHost(request.Host, errors);
         ValidateProgram(request.Program, errors);
-        ValidateArgs(request.Args, errors);
+        ValidateArgs(request.Args, reserved, errors);
         ValidateDeny(request.Deny, errors);
         ValidateCliCommand(request.CliCommand, errors);
         ValidateHostVersion(request.HostVersionVerified, errors);
@@ -37,7 +37,7 @@ internal static partial class ProfileValidation
     /// A patch is checked for what it names. An absent field is not a value the caller offered, so there is
     /// nothing to hold it to; a present one is held to exactly the rule it would have been held to at creation.
     /// </summary>
-    public static void ValidateUpdate(ProfileUpdateRequest request, ValidationErrors errors)
+    public static void ValidateUpdate(ProfileUpdateRequest request, IReadOnlySet<string>? reserved, ValidationErrors errors)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(errors);
@@ -62,7 +62,7 @@ internal static partial class ProfileValidation
 
         if (request.Args.IsSet)
         {
-            ValidateArgs(request.Args.Value, errors);
+            ValidateArgs(request.Args.Value, reserved, errors);
         }
 
         if (request.Deny.IsSet)
@@ -171,6 +171,14 @@ internal static partial class ProfileValidation
         if (program.Trim().Length > ProfileService.MaxProgramLength)
         {
             errors.Add("program", "too_long", string.Create(CultureInfo.InvariantCulture, $"program must be at most {ProfileService.MaxProgramLength} characters."));
+            return;
+        }
+
+        // A path is handed to the operating system as it stands. A control character in one is never a file
+        // somebody meant, and storing it would leave a profile that can only ever fail at the claim.
+        if (program.Any(char.IsControl))
+        {
+            errors.Add("program", "invalid", "program must not contain control characters.");
         }
     }
 
@@ -178,8 +186,43 @@ internal static partial class ProfileValidation
     public static List<string> Strings(IReadOnlyList<JsonNode?>? values) =>
         values is null ? [] : [.. values.Select(value => value!.GetValue<string>().Trim())];
 
-    private static void ValidateArgs(IReadOnlyList<JsonNode?>? args, ValidationErrors errors) =>
+    private static void ValidateArgs(IReadOnlyList<JsonNode?>? args, IReadOnlySet<string>? reserved, ValidationErrors errors)
+    {
         ValidateStrings(args, "args", ProfileService.MaxArgs, ProfileService.MaxArgLength, errors);
+        if (args is null || reserved is null)
+        {
+            return;
+        }
+
+        // A host parser takes the last value it is given, and a profile's arguments go last, so an argument
+        // naming a flag the runtime composed would silently replace it — making a session interactive,
+        // unconfined, or unable to report, while every document still promised otherwise. Refused where it is
+        // written, not dropped where it is launched: a profile that quietly lost half of what it said would be
+        // its own kind of lie. Anything the host takes and the runtime does not compose — a model, say — is
+        // untouched by this.
+        for (var index = 0; index < args.Count; index++)
+        {
+            if (Text(args[index]) is not { } value)
+            {
+                continue;
+            }
+
+            var flag = value.Trim();
+            var separator = flag.IndexOf('=', StringComparison.Ordinal);
+            if (separator > 0)
+            {
+                flag = flag[..separator];
+            }
+
+            if (reserved.Contains(flag))
+            {
+                errors.Add(
+                    string.Create(CultureInfo.InvariantCulture, $"args[{index}]"),
+                    "reserved",
+                    $"'{flag}' is composed by the runtime for every attempt and cannot be set by a profile.");
+            }
+        }
+    }
 
     private static void ValidateDeny(IReadOnlyList<JsonNode?>? deny, ValidationErrors errors) =>
         ValidateStrings(deny, "deny", ProfileService.MaxDenyEntries, ProfileService.MaxDenyEntryLength, errors);
@@ -243,10 +286,18 @@ internal static partial class ProfileValidation
             return;
         }
 
-        var separated = value.AsSpan().IndexOfAny('/', '\\', ':') >= 0;
-        if (separated || value is "." or ".." || value.Any(char.IsControl))
+        // One word, and nothing that could turn the allow rule into a different rule. The rule is built by
+        // putting this word inside a pattern, so a space or a bracket here does not break the word — it changes
+        // what the agent is permitted to run, which is the one thing that rule exists to state exactly.
+        var shaped = value.AsSpan().IndexOfAny('/', '\\', ':') >= 0
+            || value.Any(character => char.IsControl(character) || char.IsWhiteSpace(character))
+            || value.AsSpan().IndexOfAny("()*\"'") >= 0;
+        if (shaped || value is "." or "..")
         {
-            errors.Add("cli_command", "invalid", "cli_command must be a bare command name: no directory, no path, no drive.");
+            errors.Add(
+                "cli_command",
+                "invalid",
+                "cli_command must be a bare command word: no directory, no path, no drive, no spaces and no brackets.");
         }
     }
 
