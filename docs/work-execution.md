@@ -346,8 +346,9 @@ One JSON object is written to the child's standard input, which is then closed:
 `role_memory` is the address of the role's own note for this campaign, and never the note. A document
 copied in here would be what the role believed when the attempt was launched, arriving beside the
 brief as though it were current; read through the API at the moment it is wanted, it is plainly a
-document with an age. It is null for work that is not a role. What a note is worth is covered in
-[execution-profiles.md](execution-profiles.md#role-notes).
+document with an age. It is null for work that is not a role. What a note is worth — and why a
+launched role's memory lives in the runtime's store at all — is in the role-notes section of
+[execution-profiles.md](execution-profiles.md).
 
 Every change to this envelope is additive — `cli_command` took it to version 2 and `role_memory` to
 version 3 — so a host written against an earlier version keeps working: it reads the fields it knows

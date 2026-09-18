@@ -39,6 +39,27 @@ public class ExecutionProfileDocTests
     }
 
     /// <summary>
+    /// Why a launched role's memory is a table here at all, and what that does not make it. The claim is easy
+    /// to lose in a later edit — a section about a feature drifts into describing what it does and stops saying
+    /// what it is worth — and a reader who loses it will write code that believes a note.
+    /// </summary>
+    [Fact]
+    public void The_profile_contract_says_why_a_launched_roles_memory_lives_here_and_what_it_is_worth()
+    {
+        var contract = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md"));
+
+        Assert.Contains("no harness that survives its attempt", contract, StringComparison.Ordinal);
+        Assert.Contains("not authoritative", contract, StringComparison.Ordinal);
+        Assert.Contains("INV-MEM-001", contract, StringComparison.Ordinal);
+
+        // The cap and the size of a note are what a role is held to, so the page has to carry the number.
+        Assert.Contains(
+            (Jason.Runtime.Notes.RoleNoteService.MaxNoteBytes / 1024).ToString(System.Globalization.CultureInfo.InvariantCulture) + " KiB",
+            contract,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The one sentence a reader has to be able to trust: a profile holds no credential. It is true because the
     /// revision has nowhere to put one, and the document says so — if the entity ever grows a field that could
     /// hold a secret, the sentence becomes a lie and this is where it is noticed.
