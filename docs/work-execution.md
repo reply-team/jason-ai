@@ -21,7 +21,8 @@ must be a member of the campaign and not excluded.
 There are two kinds:
 
 - **`ai_role`** — work a role does. It names a `role` (`researcher`, `copywriter`, …), carries a
-  `context` object that is the brief, and may declare a `result_format` describing what the answer
+  `context` object that is the brief, and may declare a `result_format` — a schema, in the dialect
+  `docs/contracts/` publishes — describing what the answer
   should look like. The runtime never reads the meaning of either; it hands them to the role's entry
   command and records what comes back.
 - **`provider_op`** — work a provider performs. It names an `operation` — one of the canonical
@@ -243,9 +244,32 @@ There is no separate inbox entity: what needs a human or a manager role is
 
 ## Launching an executor
 
-An `ai_role` item is run by starting the role's **entry command** as a child process. The command is
-resolved as: the role's own `entry_command` if it has one, otherwise `Roles:DefaultEntryCommand` from
-settings, otherwise the attempt fails with `role_not_launchable`.
+An `ai_role` item is run by starting an **agent host** as a child process. Which host, and with which
+arguments, comes from the item's **execution profile** — resolved at the claim from the item, its
+campaign, its role, what it inherited and the configured default, in that order.
+[docs/execution-profiles.md](execution-profiles.md) is the contract for all of it.
+
+Where no level names a profile, the role's **entry command** runs the work as it always has: the
+role's own `entry_command` if it has one, otherwise `Roles:DefaultEntryCommand` from settings,
+otherwise the attempt fails with `role_not_launchable`. The attempt records which of the two
+happened, so an absent profile name is a fact rather than an inference.
+
+### The agent pre-flight, in the order it is checked
+
+Every one of these is decided **before a child process exists**, and the first that fails is the one
+the attempt records. The attempt is kept either way, with the context it was claimed with and the
+provenance as far as the decision got. None of them is retried: nothing about the work changes
+between two scans, so an item put back would be refused for the same reason for as long as the queue
+existed. It is the same rule the twelve provider checks follow.
+
+| # | Code | What it means, and what to change |
+|---|---|---|
+| 1 | `lineage_resolution_unsupported` | a run created this work and no profile can be inherited from it. Name one on the item, its campaign or its role |
+| 2 | `profile_not_found` | the profile a level named does not exist. The message says which level named it |
+| 3 | `profile_disabled` | it exists and is out of service. Enable it, or name another |
+| 4 | `host_not_available` | the profile's program is not on this machine. Install it, or point the profile somewhere else |
+| 5 | `role_skill_invalid` | the role's skill could not be given to it — misnamed, or past `Roles:MaxSkillBytes` |
+| 6 | `role_not_launchable` | no profile anywhere, and the role has no entry command either |
 
 The child is started in a per-attempt **work directory**, `~/.jason/work/<wi_…>/<att_…>/`, which the
 launcher creates. Its standard output and standard error are written there as `stdout.log` and
@@ -264,12 +288,13 @@ The launcher puts two things in that directory before the child starts:
   the host trusts, and an allow entry there is ignored without being reported, so what the agent *may*
   do travels on the command line instead.
 - `.claude/skills/<role>/`, a copy of `~/.jason/skills/roles/<role>/` when the role has one. Files
-  only; a link is neither copied nor followed, and a directory past `Roles:MaxSkillBytes` is left where
-  it is and said so in the log. If the skill's `SKILL.md` names something other than the role, the
-  attempt fails with `role_skill_invalid` before the child starts — a host answers that mismatch by
-  ignoring the skill without saying so, and an agent that was never taught its job reads afterwards as
-  a model that refused to do it. A role with no skill directory launches normally; its brief travels
-  in the envelope either way.
+  only; a link is neither copied nor followed. A skill that cannot be given to the role fails the
+  attempt with `role_skill_invalid` before the child starts — whether because its `SKILL.md` names
+  something other than the role, which a host answers by ignoring the skill without saying so, or
+  because it is past `Roles:MaxSkillBytes`. Either way the role would do the job untaught, at the
+  price of a real launch, with only a log line to show for it. A role with no skill directory
+  launches normally; nothing was configured, so nothing is missing, and its brief travels in the
+  envelope either way.
 
 Its environment is the runtime's own plus four values and not one more:
 
@@ -335,8 +360,21 @@ is alive.
 | `workitem.set_result` | `work_item_id`, `attempt_id`, `result` (any JSON) | the work item |
 | `workitem.complete` | `work_item_id`, `attempt_id`, `status: succeeded\|failed`, `result?`, `error?: {code, message, details?}` | the work item |
 
+**An answer is held to the shape that was asked for.** Where the item declares a `result_format`, a
+completion whose result does not satisfy it is refused with `result_invalid` (400, not retryable) and
+the item stays `processing`, so the executor still holds its attempt and can answer again; one that
+gives up instead ends as `executor_exited`. What is judged is the result that will stand — the one
+the completion carries, or the one an earlier `set_result` left — so an executor cannot check in with
+a paragraph and then finish empty-handed. A **failed** completion is never judged against the shape:
+a failure has an error to report and no result to measure.
+
+`result_format` was an opaque value in earlier versions and is now a schema, validated when the item
+is written. A shape nothing can check is a request an executor may answer with persuasion.
+
 `set_result` replaces the whole result and works only while the item is `processing`, so an executor
-that is killed halfway leaves behind what it had rather than nothing. `complete {status: succeeded}`
+that is killed halfway leaves behind what it had rather than nothing. It is deliberately **not** held
+to the `result_format`: half an answer cannot be expected to have the shape of a whole one, and a
+rule that refused checkpoints would only stop executors from making them. `complete {status: succeeded}`
 may carry a final result, which replaces it again. `complete {status: failed}` requires an `error`,
 whose `code` goes through the retriable rule set above. A result larger than 1 MiB is refused with
 `result_too_large`.
@@ -368,6 +406,7 @@ settings at all and are never refused for this reason.
 | `contact_not_member` | 409 | the contact is not an active member of the campaign |
 | `campaign_archived` | 409 | an archived campaign takes no new work |
 | `result_too_large` | 400 | the result exceeds 1 MiB |
+| `result_invalid` | 400 | the result does not satisfy the `result_format` the item declared |
 | `role_exists` | 409 | a role of that name already exists |
 | `settings_unreadable` | 503 | the settings are invalid and none have validated since the runtime started; repair the file and call again |
 | `lease_expired` | attempt | the whole budget of the attempt was spent |
@@ -496,9 +535,15 @@ waits for a person rather than being handed out again.
 - **Approvals beyond one decision about one item.** There are no standing approvals, no bulk
   decisions, no expiry windows and no anomaly rules; nothing notifies anybody, so a person finds out
   what is waiting by asking (`jason approval list`). What exists is the gate itself, below.
-- **Execution profiles.** `execution_profile` is recorded verbatim as an opaque string; nothing
-  resolves it.
 - **Session resume.** A host that is interrupted is retried from the start, not nudged to continue.
+  The session id is minted per attempt and recorded, which is what a nudge would need, but nothing
+  uses it yet.
+- **Lineage from work the runtime creates itself.** Lineage is read from the actor that created a work
+  item, and only an attempt carries a profile to hand down. Dispatcher-created and event-triggered
+  work — neither of which exists yet — must name the attempt that caused it explicitly when it
+  arrives, or the chain it belongs to is erased at that step.
+- **Anything above one hop.** Lineage is materialized once, from the run that created the item. There
+  is no resolver walking a graph, and no branch selection.
 - **Backoff.** The retry delay is linear in the failure count; the tick and the one-item-per-campaign
   rule do the rest of the pacing.
 - **Work-directory retention.** Nothing is ever cleaned up.
