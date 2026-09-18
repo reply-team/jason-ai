@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Jason.Runtime.Execution;
 
 namespace Jason.Runtime.Tests.Documentation;
@@ -7,7 +8,7 @@ namespace Jason.Runtime.Tests.Documentation;
 /// actionable if the page they go to names it, and a page that names five of six codes is worse than one that
 /// names none: it reads as complete.
 /// </summary>
-public class ExecutionProfileDocTests
+public partial class ExecutionProfileDocTests
 {
     /// <summary>The codes an agent claim can refuse with, each of which the published order must name.</summary>
     private static readonly string[] AgentPreflightCodes =
@@ -46,7 +47,10 @@ public class ExecutionProfileDocTests
     [Fact]
     public void The_profile_contract_says_why_a_launched_roles_memory_lives_here_and_what_it_is_worth()
     {
-        var contract = File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md"));
+        // Read with its line breaks flattened. A published page wraps where the column runs out, so a guard
+        // that searched the raw text would be asserting where a paragraph happens to break rather than what
+        // it says — and would go red on a reflow that changed nothing.
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
 
         Assert.Contains("no harness that survives its attempt", contract, StringComparison.Ordinal);
         Assert.Contains("not authoritative", contract, StringComparison.Ordinal);
@@ -85,6 +89,12 @@ public class ExecutionProfileDocTests
             || name.Contains("Credential", StringComparison.OrdinalIgnoreCase)
             || name.Contains("Key", StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>
+    private static string Flattened(string text) => Whitespace().Replace(text, " ");
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex Whitespace();
 
     private static string DocumentsDirectory()
     {

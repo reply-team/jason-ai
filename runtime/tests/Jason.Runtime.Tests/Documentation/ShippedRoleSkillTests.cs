@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution.Hosts;
 
@@ -8,7 +9,7 @@ namespace Jason.Runtime.Tests.Documentation;
 /// by the directory it lives in and must name itself the same way; a host answers a mismatch by loading nothing
 /// and saying nothing, so a shipped skill that got this wrong would teach nobody and nobody would notice.
 /// </summary>
-public class ShippedRoleSkillTests
+public partial class ShippedRoleSkillTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -76,7 +77,10 @@ public class ShippedRoleSkillTests
     [Fact]
     public async Task The_researchers_skill_teaches_the_plain_callback_and_what_a_note_is_worth()
     {
-        var skill = await File.ReadAllTextAsync(Path.Combine(RoleSkillsPack(), "researcher", WorkDirectory.SkillFile), Ct);
+        // Flattened, so a fragment may span a line break: what is guarded is what the skill says, not where
+        // its paragraphs happen to wrap.
+        var skill = Whitespace().Replace(
+            await File.ReadAllTextAsync(Path.Combine(RoleSkillsPack(), "researcher", WorkDirectory.SkillFile), Ct), " ");
 
         // The callback, in the form the allow rule grants — and the two shapes it does not.
         Assert.Contains("rolenote set", skill, StringComparison.Ordinal);
@@ -117,6 +121,9 @@ public class ShippedRoleSkillTests
             Assert.False(string.IsNullOrWhiteSpace(FrontMatter(file, "description")), $"'{file}' describes nothing.");
         }
     }
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex Whitespace();
 
     /// <summary>The name a skill gives itself, read the way the launcher reads it.</summary>
     private static string? FrontMatter(string file, string key)
