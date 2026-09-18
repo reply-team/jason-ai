@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Jason.Runtime.Execution;
 
 namespace Jason.Runtime.Tests.Documentation;
@@ -7,7 +8,7 @@ namespace Jason.Runtime.Tests.Documentation;
 /// actionable if the page they go to names it, and a page that names five of six codes is worse than one that
 /// names none: it reads as complete.
 /// </summary>
-public class ExecutionProfileDocTests
+public partial class ExecutionProfileDocTests
 {
     /// <summary>The codes an agent claim can refuse with, each of which the published order must name.</summary>
     private static readonly string[] AgentPreflightCodes =
@@ -39,6 +40,36 @@ public class ExecutionProfileDocTests
     }
 
     /// <summary>
+    /// Why a launched role's memory is a table here at all, and what that does not make it. The claim is easy
+    /// to lose in a later edit — a section about a feature drifts into describing what it does and stops saying
+    /// what it is worth — and a reader who loses it will write code that believes a note.
+    /// </summary>
+    [Fact]
+    public void The_profile_contract_says_why_a_launched_roles_memory_lives_here_and_what_it_is_worth()
+    {
+        // Read with its line breaks flattened. A published page wraps where the column runs out, so a guard
+        // that searched the raw text would be asserting where a paragraph happens to break rather than what
+        // it says — and would go red on a reflow that changed nothing.
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+
+        Assert.Contains("no harness that survives its attempt", contract, StringComparison.Ordinal);
+        Assert.Contains("not authoritative", contract, StringComparison.Ordinal);
+        Assert.Contains("INV-MEM-001", contract, StringComparison.Ordinal);
+
+        // The cap and the size of a note are what a role is held to, so the page has to carry the number.
+        Assert.Contains(
+            (Jason.Runtime.Notes.RoleNoteService.MaxNoteBytes / 1024).ToString(System.Globalization.CultureInfo.InvariantCulture) + " KiB",
+            contract,
+            StringComparison.Ordinal);
+
+        // And what that number counts. The canonical form escapes everything outside ASCII, so the figure alone
+        // is misleading by a factor of three to anybody writing in another script — and the page that gives the
+        // figure is where they will look after a refusal.
+        Assert.Contains("outside ASCII are escaped", contract, StringComparison.Ordinal);
+        Assert.Contains("note_bytes", contract, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The one sentence a reader has to be able to trust: a profile holds no credential. It is true because the
     /// revision has nowhere to put one, and the document says so — if the entity ever grows a field that could
     /// hold a secret, the sentence becomes a lie and this is where it is noticed.
@@ -58,6 +89,12 @@ public class ExecutionProfileDocTests
             || name.Contains("Credential", StringComparison.OrdinalIgnoreCase)
             || name.Contains("Key", StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>One space wherever the source had any run of whitespace, so a fragment can span a line break.</summary>
+    private static string Flattened(string text) => Whitespace().Replace(text, " ");
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex Whitespace();
 
     private static string DocumentsDirectory()
     {

@@ -226,7 +226,11 @@ public sealed class AiRoleCommand(
             context.Limits.HeartbeatSeconds,
             context.LockUntil,
             context.WorkDir,
-            new RuntimeLocation(paths.DescriptorFile, ApiVersion.Current, ProgramResolver.CliCommandFor(context.CliCommand)));
+            new RuntimeLocation(paths.DescriptorFile, ApiVersion.Current, ProgramResolver.CliCommandFor(context.CliCommand)),
+
+            // A signpost, not a copy. The role is told where its own memory of this campaign is so it never has
+            // to work the address out; what the note says it reads through the API, at the moment it wants it.
+            context.Role is { Length: > 0 } role ? new RoleMemoryLocation(context.CampaignId, role) : null);
 
         try
         {

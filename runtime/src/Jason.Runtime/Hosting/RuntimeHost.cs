@@ -146,7 +146,7 @@ public static class RuntimeHost
         builder.Services.AddScoped<ProviderOutcomeRecorder>();
         builder.Services.AddSystemModule().AddCampaignModule().AddContactModule();
         builder.Services.AddWorkItemModule().AddExecutorModule().AddRoleModule().AddPluginModule().AddRoutingModule().AddDispatcherModule().AddCommandModule();
-        builder.Services.AddApprovalModule().AddReportModule().AddProfileModule();
+        builder.Services.AddApprovalModule().AddReportModule().AddProfileModule().AddRoleNoteModule();
 
         // Last, so a test's registration wins over the runtime's own for the services that resolve by "the last one".
         options.ConfigureServices?.Invoke(builder.Services);
@@ -168,6 +168,7 @@ public static class RuntimeHost
         app.MapApprovalOperations();
         app.MapReportOperations();
         app.MapProfileOperations();
+        app.MapRoleNoteOperations();
         app.MapPluginOperations();
         app.MapRouteOperations();
 

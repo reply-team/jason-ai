@@ -167,7 +167,56 @@ skill that *was* configured and could not be given to the role — misnamed, or 
 `Roles:MaxSkillBytes` — refuses the attempt instead, because a role doing the job untaught costs a
 real launch and leaves only a log line behind.
 
-## 7. When AI work cannot run
+## 7. Role notes
+
+A launched role has no harness that survives its attempt. On somebody's own machine, a role's notes are
+ordinary working files — a scratch document it keeps beside the work and reads again next time. A role
+Jason launches gets a fresh work directory per attempt and loses it afterwards, so the same working
+file has to live somewhere the next attempt can reach: here, in the runtime's own store. That is the
+whole of why notes are a table. It does not make them true.
+
+**A note is not authoritative** (INV-MEM-001). It is one role's own memory of one campaign, in that
+role's words, from whenever it was written. Where a note disagrees with campaign state, **the state is
+what is true** and the note is out of date. Nothing in the runtime reads a note, and no decision is
+taken because of what one says.
+
+It is also none of the other three knowledge concepts: a **skill** teaches the job, **campaign
+context** is the campaign's shared knowledge, **learned practice** would be cross-campaign and does not
+exist in this version.
+
+One document per campaign and role:
+
+```sh
+jason rolenote get <campaign-id> researcher
+jason rolenote set <campaign-id> researcher --note-file note.json
+jason rolenote list <campaign-id> --human
+```
+
+- **Replaced whole.** There is no patch verb: a role merging into its own memory would have to reason
+  about what an earlier session of itself meant by a key, and the rule that needs no reasoning is that
+  the last writer owns the document. Clearing a note is writing `{}`.
+- **A JSON object, at most 64 KiB** of its canonical form. A role that needs more than that is keeping
+  a record rather than a note. The measurement is the canonical form, in which **characters outside
+  ASCII are escaped** — six bytes for a character UTF-8 spells in two — so a note in Cyrillic, Greek
+  or Japanese holds roughly a third of the characters the figure suggests, and is refused while it is
+  still a quarter of 64 KiB as a file. The receipt's `note_bytes` is the number to steer by: it is the
+  number the cap compares. That form is the one this runtime names everything by — a report's
+  assertion and a route's binding are hashed in the same one — so it is a fact to know rather than a
+  rule of notes.
+- **A role that has never written reads an empty note**, with `updated_at: null`, rather than a 404.
+  Reading its memory is the first thing a launched role does, and every role would otherwise carry the
+  code that tells "nothing yet" from "something went wrong".
+- **The chronicle records that a note was set** — the campaign, the role, its size, its content hash,
+  the actor, and the size and hash it replaced — and **never what it said**. A note holds half-formed
+  guesses about people, and the journal is the one table nobody can edit afterwards.
+- An archived campaign takes no more notes, like every other write against one. Reading stays open.
+
+The launch envelope carries `role_memory: {campaign_id, role}` and never the content. A document
+copied in at launch would be what the role believed then, arriving beside the brief as though it were
+current; read through the API at the moment it is wanted, it is plainly a document with an age — and
+current runtime state is read the same way, through the same CLI, so the two are never confused.
+
+## 8. When AI work cannot run
 
 Every one of these is decided before a child process exists, keeps its attempt so the refusal can be read, and
 is **not retried** — nothing about the work changes between two scans. The first four name the level that chose
@@ -195,7 +244,7 @@ Deterministic work is untouched by any of it. A machine with no agent host insta
 provider operations and everything else; only the AI work blocks, and it says which program it went
 looking for.
 
-## 8. Settings
+## 9. Settings
 
 | Setting | Default | What it does |
 |---|---|---|
@@ -204,7 +253,7 @@ looking for.
 | `Roles:MaxStdoutBytes` | 1 MiB | how much of a child's transcript is kept before it is cut |
 | `Roles:MaxSkillBytes` | 1 MiB | how large a role's skill may be |
 
-## 9. What this version does not do
+## 10. What this version does not do
 
 **Session resume.** A session id is minted per attempt and recorded, which is what a later nudge
 needs, but nothing resumes one: a host that is interrupted is retried from the start.

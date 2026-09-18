@@ -79,15 +79,32 @@ internal static class RuntimeVerbs
         new FakeHandler(_ => throw new InvalidOperationException("the runtime must not be called here"));
 
     /// <summary>A launch that publishes a descriptor a moment later, the way a runtime coming up does.</summary>
+    /// <summary>
+    /// A launch whose child publishes its descriptor a moment later, so the CLI really does wait for one.
+    /// </summary>
+    /// <remarks>
+    /// On a thread of its own rather than the thread pool. The publish is the single thing the waiting CLI is
+    /// waiting for, and a pool queued behind a whole suite's blocked work can take longer to get around to a
+    /// 60 ms delay than the wait allows — which is this helper failing at its one job and reporting it as the
+    /// command under test failing at its own. It has happened twice in this repository now: once against a
+    /// five-second wait, which was answered by lengthening the wait to thirty seconds, and once against the
+    /// thirty. A thread that is not the pool's cannot be starved by the pool.
+    /// </remarks>
     public static Func<JasonPaths, IProcessHandle> PublishesAfterAWhile(TempPaths dir, RuntimeDescriptor descriptor) =>
         paths =>
         {
             _ = paths;
-            _ = Task.Run(async () =>
+            var publisher = new Thread(() =>
             {
-                await Task.Delay(60);
+                Thread.Sleep(60);
                 dir.WriteDescriptor(descriptor);
-            });
+            })
+            {
+                IsBackground = true,
+                Name = "descriptor-publisher",
+            };
+
+            publisher.Start();
             return new FakeProcessHandle(4242);
         };
 

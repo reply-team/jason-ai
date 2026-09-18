@@ -8,15 +8,23 @@ namespace Jason.Cli.Tests.Documentation;
 /// runs, and an example that answers "unrecognized option" teaches them the tool is broken before it teaches
 /// them anything else.
 /// <para>
-/// Every <c>jason profile …</c> line in the pages is run against the real command line, pointed at a data
-/// directory with no runtime in it. What is asserted is that it is not a **usage** error: exit 2 is the CLI
-/// saying it does not understand what was typed, which is the way a documented command stops working when an
-/// option is renamed. Exit 3 — no runtime listening — is the right answer here and is what a passing line gives.
+/// Every line in the pages that begins with one of the nouns below is run against the real command line,
+/// pointed at a data directory with no runtime in it. What is asserted is that it is not a **usage** error:
+/// exit 2 is the CLI saying it does not understand what was typed, which is the way a documented command stops
+/// working when an option is renamed. Exit 3 — no runtime listening — is the right answer here and is what a
+/// passing line gives.
 /// </para>
 /// </summary>
-public partial class DocumentedProfileCommandsTests
+public partial class DocumentedPageCommandsTests
 {
     private const int UsageError = 2;
+
+    /// <summary>
+    /// The verb groups these pages print. Anything an operator is told to type belongs here; what keeps the
+    /// list honest is that a noun added to the pages and not to this list is simply unguarded, which is how the
+    /// profile pages came to document an option the CLI did not have.
+    /// </summary>
+    private static readonly string[] Nouns = ["jason profile ", "jason rolenote "];
 
     public static TheoryData<string, string> DocumentedCommands()
     {
@@ -34,13 +42,13 @@ public partial class DocumentedProfileCommandsTests
 
     [Theory]
     [MemberData(nameof(DocumentedCommands))]
-    public async Task Every_documented_profile_command_is_understood(string page, string command)
+    public async Task Every_documented_command_is_understood(string page, string command)
     {
         using var dir = new TempPaths();
         var error = new StringWriter();
 
         var exit = await CliApp.RunAsync(
-            Tokens(command),
+            Named(Tokens(command), dir.Paths.Root),
             new CliEnvironment(new StringWriter(), error, dir.Paths),
             TestContext.Current.CancellationToken);
 
@@ -49,7 +57,38 @@ public partial class DocumentedProfileCommandsTests
 
     /// <summary>At least one line, or the theory above asserts nothing at all.</summary>
     [Fact]
-    public void The_pages_carry_profile_commands_to_check() => Assert.NotEmpty(DocumentedCommands());
+    public void The_pages_carry_commands_to_check() => Assert.NotEmpty(DocumentedCommands());
+
+    /// <summary>
+    /// The documents a printed command names, made to exist. The CLI reads such a file while it parses, so
+    /// without this the guard would be reporting that a page's example data is not on this machine rather than
+    /// that its command has the wrong spelling. The placeholder differs by option because the CLI checks the
+    /// shape as it reads: a list of contacts is an array, a note or a result is an object.
+    /// </summary>
+    private static string[] Named(string[] tokens, string root)
+    {
+        for (var index = 0; index < tokens.Length - 1; index++)
+        {
+            var content = tokens[index] switch
+            {
+                "--file" => "[]",
+                "--note-file" or "--result-file" => "{}",
+                _ => null,
+            };
+
+            if (content is null || File.Exists(tokens[index + 1]))
+            {
+                continue;
+            }
+
+            Directory.CreateDirectory(root);
+            var placeholder = Path.Combine(root, Path.GetFileName(tokens[index + 1]));
+            File.WriteAllText(placeholder, content);
+            tokens[index + 1] = placeholder;
+        }
+
+        return tokens;
+    }
 
     private static IEnumerable<string> Commands(string page)
     {
@@ -60,7 +99,7 @@ public partial class DocumentedProfileCommandsTests
         foreach (var line in joined.Split('\n'))
         {
             var trimmed = line.Trim();
-            if (trimmed.StartsWith("jason profile ", StringComparison.Ordinal))
+            if (Nouns.Any(noun => trimmed.StartsWith(noun, StringComparison.Ordinal)))
             {
                 yield return trimmed;
             }

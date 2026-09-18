@@ -34,6 +34,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<ExecutionProfileRevision> ExecutionProfileRevisions => Set<ExecutionProfileRevision>();
 
+    public DbSet<RoleNote> RoleNotes => Set<RoleNote>();
+
     public DbSet<JournalEntry> Journal => Set<JournalEntry>();
 
     /// <summary>
@@ -289,6 +291,25 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             report.HasOne(r => r.Campaign).WithMany().HasForeignKey(r => r.CampaignId).OnDelete(DeleteBehavior.Restrict);
             report.HasOne(r => r.Contact).WithMany().HasForeignKey(r => r.ContactId).OnDelete(DeleteBehavior.Restrict);
             report.HasOne(r => r.WorkItem).WithMany().HasForeignKey(r => r.WorkItemId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RoleNote>(note =>
+        {
+            note.HasKey(n => n.Id);
+            note.Property(n => n.Role).HasMaxLength(64);
+            note.Property(n => n.NoteHash).HasMaxLength(80);
+            note.Property(n => n.UpdatedById).HasMaxLength(100);
+            note.Property(n => n.Note).HasColumnName("note_json").IsRequired().HasDefaultValueSql("'{}'");
+            note.ToTable(t => t.HasCheckConstraint("ck_role_notes_note_json", "json_valid(note_json)"));
+
+            // One document per campaign and role, which is what makes a write a replacement rather than an
+            // append: there is nowhere for a second note to go.
+            note.HasIndex(n => new { n.CampaignId, n.Role })
+                .IsUnique().HasDatabaseName("ix_role_notes_one_per_campaign_role");
+
+            // A note belongs to its campaign and is not the campaign's business: nothing cascades, the way
+            // nothing else in this schema does.
+            note.HasOne(n => n.Campaign).WithMany().HasForeignKey(n => n.CampaignId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Attempt>(attempt =>

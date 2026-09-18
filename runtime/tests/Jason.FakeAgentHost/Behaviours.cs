@@ -62,7 +62,7 @@ internal static class Behaviours
     /// <summary>The names this host answers to, so a caller can tell whether argv named one of them.</summary>
     public static bool Known(string behaviour) =>
         behaviour is "succeed" or "hang" or "mute" or "crash" or "silent" or "stale" or "leak" or "echo-envelope"
-            or "abandon" or "flood";
+            or "abandon" or "flood" or "researcher";
 
     /// <summary>
     /// The behaviour a launched host is told to perform through its brief rather than its arguments. A host
@@ -104,6 +104,8 @@ internal static class Behaviours
                 return await AbandonAsync(envelope, api).ConfigureAwait(false);
             case "flood":
                 return await FloodAsync(options).ConfigureAwait(false);
+            case "researcher":
+                return await ResearcherAsync(options, envelope, api).ConfigureAwait(false);
             case "echo-envelope":
                 return await EchoEnvelopeAsync(rawEnvelope).ConfigureAwait(false);
             default:
@@ -253,6 +255,147 @@ internal static class Behaviours
     {
         await Console.Out.WriteLineAsync(rawEnvelope.Trim()).ConfigureAwait(false);
         return Success;
+    }
+
+    /// <summary>
+    /// The one behaviour that does the job rather than a failure mode: a role that reads its skill out of the
+    /// directory it was started in, reads its own note through the API, answers in the shape it was asked for
+    /// and writes down what it learned before it finishes.
+    /// <para>
+    /// It is the smallest honest researcher. What it "finds" is what it can see — whether it was taught, and
+    /// what it remembered — because everything else in this run is real: the process, the work directory, the
+    /// callbacks, the note. <c>--prose</c> makes it answer with a sentence instead of the structure, which is
+    /// the sibling case: the same role, taught the same way, refused only for the shape of its answer.
+    /// </para>
+    /// </summary>
+    private static async Task<int> ResearcherAsync(IReadOnlyList<string> options, LaunchEnvelope envelope, RuntimeApi api)
+    {
+        var taught = SkillName(envelope);
+        var remembered = await NoteAsync(envelope, api).ConfigureAwait(false);
+        // How much was recalled, never which keys. A note's key names are its content as much as its values
+        // are, and this line ends up in the trace of a failed attempt — which is exactly where the rest of
+        // this wave takes care to put nothing.
+        await Diagnostics.WriteAsync(
+            $"taught-by={taught ?? "nothing"} recalled={(remembered?.Count ?? 0).ToString(CultureInfo.InvariantCulture)}").ConfigureAwait(false);
+
+        var findings = new JsonArray(
+            JsonValue.Create(taught is null ? "no skill reached this run" : $"the skill named '{taught}' was in the work directory"),
+            JsonValue.Create(remembered is null || remembered.Count == 0 ? "nothing was remembered about this campaign" : "the note from an earlier pass was read"));
+
+        await api.CallAsync(
+            Operations.WorkItemSetResult,
+            new WorkItemSetResultRequest(envelope.WorkItemId, envelope.AttemptId, new JsonObject { ["progress"] = "read the brief, the skill and the note" }))
+            .ConfigureAwait(false);
+
+        // Written before the answer, because the note is what survives the attempt: an answer refused for its
+        // shape still leaves the next run better informed than this one was.
+        await RememberAsync(envelope, api, remembered).ConfigureAwait(false);
+
+        JsonNode result = options.Contains("--prose")
+            ? JsonValue.Create("I had a thorough look at the question and formed a view.")!
+            : new JsonObject
+            {
+                ["findings"] = findings,
+                ["taught_by"] = taught,
+                ["recalled"] = new JsonArray([.. (remembered?.Select(pair => (JsonNode?)JsonValue.Create(pair.Key)) ?? [])]),
+            };
+
+        var answer = await CompleteAsync(envelope, api, result).ConfigureAwait(false);
+        return answer.Status == 200 ? Success : UnexpectedAnswer;
+    }
+
+    /// <summary>
+    /// The name the skill in this attempt's own work directory gives itself, or null where none arrived. Read
+    /// out of the file rather than assumed from the envelope: what is being proved is that the runtime really
+    /// put the skill where a host looks for it.
+    /// </summary>
+    private static string? SkillName(LaunchEnvelope envelope)
+    {
+        if (envelope.Role is not { Length: > 0 } role)
+        {
+            return null;
+        }
+
+        var file = Path.Combine(envelope.WorkDir, ".claude", "skills", role, "SKILL.md");
+        try
+        {
+            foreach (var line in File.ReadLines(file).Take(64))
+            {
+                if (line.StartsWith("name:", StringComparison.Ordinal))
+                {
+                    return line["name:".Length..].Trim().Trim('"', '\'');
+                }
+            }
+
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The role's note for this campaign, read through the API at the moment it is wanted. The envelope carries
+    /// the address and never the document, so this is the only way to have it — which is the point: what comes
+    /// back is plainly a document with an age rather than something that arrived looking like current truth.
+    /// </summary>
+    private static async Task<JsonObject?> NoteAsync(LaunchEnvelope envelope, RuntimeApi api)
+    {
+        if (envelope.RoleMemory is not { } memory)
+        {
+            return null;
+        }
+
+        var (status, body) = await api.CallAsync(
+            Operations.RoleNoteGet, new RoleNoteGetRequest(memory.CampaignId, memory.Role)).ConfigureAwait(false);
+        if (status != 200)
+        {
+            await Diagnostics.WriteAsync($"the note could not be read: {status.ToString(CultureInfo.InvariantCulture)} {body}").ConfigureAwait(false);
+            return null;
+        }
+
+        try
+        {
+            return JsonNode.Parse(body)?["note"]?.AsObject();
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// What this pass learned, written whole: a note is replaced rather than merged, so appending to one means
+    /// reading it, adding to what was there and writing all of it back.
+    /// </summary>
+    private static async Task RememberAsync(LaunchEnvelope envelope, RuntimeApi api, JsonObject? remembered)
+    {
+        if (envelope.RoleMemory is not { } memory)
+        {
+            return;
+        }
+
+        var note = remembered is null ? new JsonObject() : remembered.DeepClone().AsObject();
+        note["passes"] = (note["passes"]?.GetValue<int>() ?? 0) + 1;
+        note["last_attempt"] = envelope.AttemptId;
+
+        var (status, body) = await api.CallAsync(
+            Operations.RoleNoteSet,
+            new RoleNoteSetRequest(
+                memory.CampaignId,
+                memory.Role,
+                note,
+
+                // The run that wrote it, claimed the way a host calling the API directly has to claim it. An
+                // agent reporting through the CLI gets this from its environment and never types it.
+                new ActorRef(ActorType.Attempt, envelope.AttemptId),
+                "What this pass learned."))
+            .ConfigureAwait(false);
+        if (status != 200)
+        {
+            await Diagnostics.WriteAsync($"the note could not be written: {status.ToString(CultureInfo.InvariantCulture)} {body}").ConfigureAwait(false);
+        }
     }
 
     private static Task<(int Status, string Body)> SetHalfDoneAsync(LaunchEnvelope envelope, RuntimeApi api) =>

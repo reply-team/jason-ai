@@ -49,6 +49,10 @@ public static class Operations
     public const string RoleAdd = "role.add";
     public const string RoleSetProfile = "role.set_profile";
 
+    public const string RoleNoteGet = "rolenote.get";
+    public const string RoleNoteSet = "rolenote.set";
+    public const string RoleNoteList = "rolenote.list";
+
     public const string ProfileCreate = "profile.create";
     public const string ProfileUpdate = "profile.update";
     public const string ProfileGet = "profile.get";

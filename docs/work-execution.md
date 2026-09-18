@@ -319,7 +319,7 @@ One JSON object is written to the child's standard input, which is then closed:
 
 ```json
 {
-  "envelope_version": 2,
+  "envelope_version": 3,
   "attempt_id": "att_…",
   "attempt_number": 1,
   "work_item_id": "wi_…",
@@ -334,15 +334,27 @@ One JSON object is written to the child's standard input, which is then closed:
   "heartbeat_seconds": 120,
   "lock_until": "2026-09-14T13:00:00.000Z",
   "work_dir": "…/.jason/work/wi_…/att_…",
-  "runtime": { "descriptor_file": "…/.jason/run/runtime.json", "api_version": "v1", "cli_command": "jason" }
+  "runtime": { "descriptor_file": "…/.jason/run/runtime.json", "api_version": "v1", "cli_command": "jason" },
+  "role_memory": { "campaign_id": "cmp_…", "role": "researcher" }
 }
 ```
 
 `context` is a snapshot: an edit made while the attempt runs belongs to the next attempt, not this one.
 
 `runtime.cli_command` is the bare word that reaches this runtime, so an agent never has to guess it.
-Every change to this envelope is additive — `cli_command` is what took it to version 2 — so a host
-written against an earlier version keeps working: it reads the fields it knows and ignores the rest.
+
+`role_memory` is the address of the role's own note for this campaign, and never the note. A document
+copied in here would be what the role believed when the attempt was launched, arriving beside the
+brief as though it were current; read through the API at the moment it is wanted, it is plainly a
+document with an age. It is null for work that is not a role — which is true by
+construction rather than by a decision taken at launch: the only command that writes an envelope is the
+one that runs `ai_role` work. What a note is worth — and why a
+launched role's memory lives in the runtime's store at all — is in the role-notes section of
+[execution-profiles.md](execution-profiles.md).
+
+Every change to this envelope is additive — `cli_command` took it to version 2 and `role_memory` to
+version 3 — so a host written against an earlier version keeps working: it reads the fields it knows
+and ignores the rest.
 
 ### Finding the API
 

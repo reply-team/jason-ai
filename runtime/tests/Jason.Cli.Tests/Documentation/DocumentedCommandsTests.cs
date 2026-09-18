@@ -28,6 +28,14 @@ public class DocumentedCommandsTests
     public async Task Every_command_the_walkthrough_prints_is_a_command_this_cli_parses() =>
         await AssertEveryCommandParsesAsync(Page("Documentation", "golden-path.md"));
 
+    /// <summary>
+    /// The role skill is read by a launched agent that has no way to ask what a command should have been: a
+    /// wrong spelling there is a refused callback in the middle of somebody's paid attempt.
+    /// </summary>
+    [Fact]
+    public async Task Every_command_the_role_skill_prints_is_a_command_this_cli_parses() =>
+        await AssertEveryCommandParsesAsync(Page("Skills", "runtime", "roles", "researcher", "SKILL.md"));
+
     [Fact]
     public void The_skill_says_what_it_is_and_does_not_oversell_it()
     {
@@ -105,13 +113,23 @@ public class DocumentedCommandsTests
 
             for (var index = 0; index < arguments.Count - 1; index++)
             {
-                if (arguments[index] != "--file" || File.Exists(arguments[index + 1]))
+                // Every option that names a document the CLI reads while it parses. The placeholder differs by
+                // option because the CLI checks the shape as it reads: a list of contacts is an array, and a
+                // note or a result is an object.
+                var content = arguments[index] switch
+                {
+                    "--file" => "[]",
+                    "--note-file" or "--result-file" => "{}",
+                    _ => null,
+                };
+
+                if (content is null || File.Exists(arguments[index + 1]))
                 {
                     continue;
                 }
 
                 var placeholder = Path.Combine(root, arguments[index + 1]);
-                File.WriteAllText(placeholder, "[]");
+                File.WriteAllText(placeholder, content);
                 _created.Add(placeholder);
             }
         }
