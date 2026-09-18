@@ -95,4 +95,13 @@ recorded as a run that stopped talking.
 jason workitem complete wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status succeeded --result-file findings.json
 ```
 
-If you cannot do the work, complete with `--status failed` and say why. That is an answer. Silence is not.
+If you cannot do the work, say so as a failure rather than inventing an answer. A failed completion must carry
+an error with a `code` in lowercase snake_case and a `message` a person can act on, and it is never judged
+against `result_format` — a failure has a reason to report and no result to measure:
+
+```
+jason workitem complete wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status failed --error '{"code":"source_unavailable","message":"the account has no public site and no filing I could reach"}'
+```
+
+A code the runtime does not recognise ends the item rather than retrying it, which is the right outcome for
+something no second attempt would change. That is an answer. Silence is not.
