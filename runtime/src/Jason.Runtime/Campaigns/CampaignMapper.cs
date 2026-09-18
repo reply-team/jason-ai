@@ -19,6 +19,7 @@ public static class CampaignMapper
             campaign.Status,
             campaign.Context,
             ExternalIdStore.ToDtos(campaign.ExternalIds),
+            campaign.ExecutionProfile,
             Utc(campaign.CreatedAt),
             Utc(campaign.UpdatedAt),
             campaign.ArchivedAt is { } archivedAt ? Utc(archivedAt) : null);

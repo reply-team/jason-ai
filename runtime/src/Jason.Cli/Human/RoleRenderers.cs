@@ -27,6 +27,7 @@ public static class RoleRenderers
             Line("Description:", role.Description),
             Line("Entry command:", EntryCommand(role.EntryCommand)),
             Line("Defaults:", RenderText.Keys(role.ProfileDefaults)),
+            Line("Profile:", role.ExecutionProfile),
             Line("Created:", RenderText.Moment(role.CreatedAt)),
             Line("Updated:", RenderText.Moment(role.UpdatedAt)),
         ]);
@@ -41,10 +42,10 @@ public static class RoleRenderers
             return null;
         }
 
-        var table = new HumanTable("NAME", "BUILTIN", "ENTRY COMMAND", "ID");
+        var table = new HumanTable("NAME", "BUILTIN", "PROFILE", "ENTRY COMMAND", "ID");
         foreach (var role in page.Items)
         {
-            table.Row(role.Name, role.Builtin ? "yes" : "no", EntryCommand(role.EntryCommand), role.Id);
+            table.Row(role.Name, role.Builtin ? "yes" : "no", role.ExecutionProfile, EntryCommand(role.EntryCommand), role.Id);
         }
 
         return RenderText.WithCursor(table.Render(), page.NextCursor);

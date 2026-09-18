@@ -11,6 +11,9 @@ namespace Jason.Cli.Commands;
 /// </summary>
 public static class CampaignCommands
 {
+    /// <summary>The fields <c>--clear</c> can set back to nothing. A campaign always has a name, so that is not one.</summary>
+    private static readonly string[] Clearable = ["execution_profile"];
+
     public static Command Build(CliEnvironment env, Option<string?> actor)
     {
         ArgumentNullException.ThrowIfNull(env);
@@ -110,11 +113,20 @@ public static class CampaignCommands
         var command = new Command("update", "Change a campaign attribute. Absent options leave their field alone.");
         var id = CampaignId();
         var name = new Option<string?>("--name") { Description = "The new campaign name." };
-        var file = VerbOptions.File("The object holds the fields to patch (name).");
+        var executionProfile = new Option<string?>("--execution-profile")
+        {
+            Description = "The execution profile this campaign's agent work uses, unless a work item names its own.",
+        };
+        var clear = VerbOptions.Repeatable(
+            "--clear",
+            $"A field to set back to nothing: {string.Join(", ", Clearable)}. Repeat the option for more than one.");
+        var file = VerbOptions.File("The object holds the fields to patch (name, execution_profile).");
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
         command.Options.Add(name);
+        command.Options.Add(executionProfile);
+        command.Options.Add(clear);
         command.Options.Add(file);
         command.Options.Add(reason);
         command.Options.Add(human);
@@ -124,7 +136,21 @@ public static class CampaignCommands
             var body = await VerbOptions.BodyAsync(env, parseResult.GetValue(file), null, cancellationToken).ConfigureAwait(false);
             body.Set("campaign_id", parseResult.GetValue(id))
                 .Set("name", parseResult.GetValue(name))
-                .Set("reason", parseResult.GetValue(reason))
+                .Set("execution_profile", parseResult.GetValue(executionProfile));
+
+            // An explicit null is what tells the runtime "take this away" from "say nothing about it", and it
+            // is written after the value options so that clearing wins over a value given for the same field.
+            foreach (var field in parseResult.GetValue(clear) ?? [])
+            {
+                if (!Clearable.Contains(field, StringComparer.Ordinal))
+                {
+                    throw new UsageException($"--clear names one of: {string.Join(", ", Clearable)}.");
+                }
+
+                body.Set(field, null, onlyIfNotNull: false);
+            }
+
+            body.Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
 
             return await OperationRunner

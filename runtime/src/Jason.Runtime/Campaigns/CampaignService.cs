@@ -107,29 +107,45 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
             throw DomainErrors.CampaignArchived(campaign.PublicId);
         }
 
-        if (!request.Name.IsSet)
+        // The profile is the one patched field that cannot be checked before the campaign is loaded: it is a
+        // name, and whether anything answers it is a question for the database.
+        string? profile = null;
+        if (request.ExecutionProfile.IsSet)
+        {
+            profile = await ExecutionProfilePolicy
+                .ResolveAsync(db, "execution_profile", request.ExecutionProfile.Value, errors, cancellationToken)
+                .ConfigureAwait(false);
+            errors.ThrowIfAny();
+        }
+
+        // Only the fields that really moved, so asking a campaign for what it already says writes nothing: a
+        // retry after a lost response is never a second event in the chronicle.
+        var changes = new List<FieldChange>();
+        var name = request.Name.IsSet ? request.Name.Value!.Trim() : campaign.Name;
+        if (!string.Equals(campaign.Name, name, StringComparison.Ordinal))
+        {
+            changes.Add(new FieldChange("name", JsonValue.Create(campaign.Name), JsonValue.Create(name)));
+            campaign.Name = name;
+        }
+
+        if (request.ExecutionProfile.IsSet && !string.Equals(campaign.ExecutionProfile, profile, StringComparison.Ordinal))
+        {
+            changes.Add(new FieldChange("execution_profile", JsonValue.Create(campaign.ExecutionProfile), JsonValue.Create(profile)));
+            campaign.ExecutionProfile = profile;
+        }
+
+        if (changes.Count == 0)
         {
             return CampaignMapper.ToDto(campaign);
         }
 
-        var name = request.Name.Value!.Trim();
-        if (string.Equals(campaign.Name, name, StringComparison.Ordinal))
-        {
-            return CampaignMapper.ToDto(campaign);
-        }
-
-        var previous = campaign.Name;
-        campaign.Name = name;
         campaign.UpdatedAt = clock.GetUtcNow().UtcDateTime;
-        journal.Append(
-            db,
-            actor,
-            JournalKinds.CampaignUpdated,
-            campaign,
-            key: "name",
-            old: JsonValue.Create(previous),
-            updated: JsonValue.Create(name),
-            reason: NormalizeReason(request.Reason));
+        var updateReason = NormalizeReason(request.Reason);
+        foreach (var change in changes)
+        {
+            journal.Append(db, actor, JournalKinds.CampaignUpdated, campaign, key: change.Key, old: change.Old, updated: change.New, reason: updateReason);
+        }
+
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return CampaignMapper.ToDto(campaign);
     }
@@ -175,7 +191,7 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         }
 
         var context = campaign.Context.DeepClone().AsObject();
-        var changes = new List<ContextChange>();
+        var changes = new List<FieldChange>();
 
         if (request.Set is not null)
         {
@@ -189,7 +205,7 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
 
                 // Every node is cloned into its own tree: a JSON node belongs to exactly one parent, and the
                 // journal entry must keep the value even after the context moves on.
-                changes.Add(new ContextChange(key, current?.DeepClone(), value?.DeepClone()));
+                changes.Add(new FieldChange(key, current?.DeepClone(), value?.DeepClone()));
                 context[key] = value?.DeepClone();
             }
         }
@@ -205,7 +221,7 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
 
                 // Setting a key to JSON null and unsetting it both journal a null new value; what tells them
                 // apart is the context itself, where one keeps the key and the other no longer has it.
-                changes.Add(new ContextChange(key, current?.DeepClone(), null));
+                changes.Add(new FieldChange(key, current?.DeepClone(), null));
                 context.Remove(key);
             }
         }
@@ -331,5 +347,6 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
 
     private static string? NormalizeReason(string? reason) => string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
 
-    private readonly record struct ContextChange(string Key, JsonNode? Old, JsonNode? New);
+    /// <summary>One field that moved, and what it moved from: a campaign attribute, or a key of its context.</summary>
+    private readonly record struct FieldChange(string Key, JsonNode? Old, JsonNode? New);
 }

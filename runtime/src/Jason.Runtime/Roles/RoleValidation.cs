@@ -29,6 +29,20 @@ internal static partial class RoleValidation
         ValidateReason(request.Reason, errors);
     }
 
+    /// <summary>
+    /// The narrow verb that moves a role's policy. The name identifies the role, so it is held to the same
+    /// shape a registration is — a name that could never have been registered is the caller's typo rather than
+    /// a role nobody added.
+    /// </summary>
+    public static void ValidateSetProfile(RoleSetProfileRequest request, ValidationErrors errors)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(errors);
+
+        ValidateName(request.Name, errors);
+        ValidateReason(request.Reason, errors);
+    }
+
     private static void ValidateName(string? name, ValidationErrors errors)
     {
         if (string.IsNullOrWhiteSpace(name))

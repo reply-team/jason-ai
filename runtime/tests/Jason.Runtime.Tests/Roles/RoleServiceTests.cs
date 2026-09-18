@@ -45,7 +45,7 @@ public class RoleServiceTests
         using var database = new TestDatabase();
         await using var db = database.Open();
         var service = NewService(db);
-        await service.AddAsync(new RoleAddRequest("fake", null, null, null, null, null), Ct);
+        await service.AddAsync(new RoleAddRequest("fake", null, null, null, null, null, null), Ct);
 
         var page = await service.ListAsync(new RoleListRequest(null, null), Ct);
 
@@ -59,7 +59,7 @@ public class RoleServiceTests
         using var database = new TestDatabase();
         await using var db = database.Open();
         var service = NewService(db);
-        await service.AddAsync(new RoleAddRequest("fake", null, null, null, null, null), Ct);
+        await service.AddAsync(new RoleAddRequest("fake", null, null, null, null, null, null), Ct);
 
         var names = new List<string>();
         string? cursor = null;
@@ -85,7 +85,7 @@ public class RoleServiceTests
                 " fake ",
                 ["node", "host.js", "--role", "fake"],
                 JsonNode.Parse("""{"model":"sonnet"}""")!.AsObject(),
-                "A role a test made up.",
+                "A role a test made up.",null,
                 null,
                 "wiring the host up"),
             Ct);
@@ -112,7 +112,7 @@ public class RoleServiceTests
         using var database = new TestDatabase();
         await using var db = database.Open();
 
-        await NewService(db).AddAsync(new RoleAddRequest("fake", [], null, null, null, null), Ct);
+        await NewService(db).AddAsync(new RoleAddRequest("fake", [], null, null, null, null, null), Ct);
 
         var entry = Assert.Single(await db.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.RoleAdded).ToListAsync(Ct));
         Assert.False((bool)entry.New!["entry_command_present"]!);
@@ -125,7 +125,7 @@ public class RoleServiceTests
         await using var db = database.Open();
 
         var error = await Assert.ThrowsAsync<ConflictException>(
-            () => NewService(db).AddAsync(new RoleAddRequest("manager", null, null, null, null, null), Ct));
+            () => NewService(db).AddAsync(new RoleAddRequest("manager", null, null, null, null, null, null), Ct));
 
         Assert.Equal("role_exists", error.Code);
         Assert.False(error.Retryable);
@@ -137,10 +137,10 @@ public class RoleServiceTests
         using var database = new TestDatabase();
         await using var db = database.Open();
         var service = NewService(db);
-        await service.AddAsync(new RoleAddRequest("fake", null, null, null, null, null), Ct);
+        await service.AddAsync(new RoleAddRequest("fake", null, null, null, null, null, null), Ct);
 
         var error = await Assert.ThrowsAsync<ConflictException>(
-            () => service.AddAsync(new RoleAddRequest("fake", null, null, null, null, null), Ct));
+            () => service.AddAsync(new RoleAddRequest("fake", null, null, null, null, null, null), Ct));
 
         Assert.Equal("role_exists", error.Code);
     }
@@ -152,7 +152,7 @@ public class RoleServiceTests
         await using var db = database.Open();
 
         var error = await Assert.ThrowsAsync<ValidationException>(
-            () => NewService(db).AddAsync(new RoleAddRequest("Fake", null, null, null, null, null), Ct));
+            () => NewService(db).AddAsync(new RoleAddRequest("Fake", null, null, null, null, null, null), Ct));
 
         var detail = Assert.Single(error.Details!);
         Assert.Equal("name", detail.Field);
@@ -166,7 +166,7 @@ public class RoleServiceTests
         await using var db = database.Open();
 
         var error = await Assert.ThrowsAsync<ValidationException>(
-            () => NewService(db).AddAsync(new RoleAddRequest(null, null, null, null, null, null), Ct));
+            () => NewService(db).AddAsync(new RoleAddRequest(null, null, null, null, null, null, null), Ct));
 
         var detail = Assert.Single(error.Details!);
         Assert.Equal("name", detail.Field);
@@ -180,7 +180,7 @@ public class RoleServiceTests
         await using var db = database.Open();
 
         var error = await Assert.ThrowsAsync<ValidationException>(
-            () => NewService(db).AddAsync(new RoleAddRequest("fake", ["node", "   "], null, null, null, null), Ct));
+            () => NewService(db).AddAsync(new RoleAddRequest("fake", ["node", "   "], null, null, null, null, null), Ct));
 
         var detail = Assert.Single(error.Details!);
         Assert.Equal("entry_command[1]", detail.Field);
@@ -195,7 +195,7 @@ public class RoleServiceTests
         var arguments = Enumerable.Range(0, RoleService.MaxEntryCommandArgs + 1).Select(i => $"arg{i}").ToArray();
 
         var error = await Assert.ThrowsAsync<ValidationException>(
-            () => NewService(db).AddAsync(new RoleAddRequest("fake", arguments, null, null, null, null), Ct));
+            () => NewService(db).AddAsync(new RoleAddRequest("fake", arguments, null, null, null, null, null), Ct));
 
         var detail = Assert.Single(error.Details!);
         Assert.Equal("entry_command", detail.Field);
@@ -210,7 +210,7 @@ public class RoleServiceTests
         var defaults = new JsonObject { ["blob"] = JsonValue.Create(new string('x', RoleService.MaxProfileDefaultsBytes)) };
 
         var error = await Assert.ThrowsAsync<ValidationException>(
-            () => NewService(db).AddAsync(new RoleAddRequest("fake", null, defaults, null, null, null), Ct));
+            () => NewService(db).AddAsync(new RoleAddRequest("fake", null, defaults, null, null, null, null), Ct));
 
         var detail = Assert.Single(error.Details!);
         Assert.Equal("profile_defaults", detail.Field);
@@ -224,7 +224,7 @@ public class RoleServiceTests
         await using var db = database.Open();
 
         var error = await Assert.ThrowsAsync<ValidationException>(
-            () => NewService(db).AddAsync(new RoleAddRequest("fake", null, null, new string('x', RoleService.MaxDescriptionLength + 1), null, null), Ct));
+            () => NewService(db).AddAsync(new RoleAddRequest("fake", null, null, new string('x', RoleService.MaxDescriptionLength + 1), null, null, null), Ct));
 
         var detail = Assert.Single(error.Details!);
         Assert.Equal("description", detail.Field);
@@ -239,7 +239,7 @@ public class RoleServiceTests
 
         var error = await Assert.ThrowsAsync<ValidationException>(
             () => NewService(db).AddAsync(
-                new RoleAddRequest("fake", null, null, null, new ActorRef(ActorType.Attempt, "att_01JASONNOTHERE"), null), Ct));
+                new RoleAddRequest("fake", null, null, null, null, new ActorRef(ActorType.Attempt, "att_01JASONNOTHERE"), null), Ct));
 
         var detail = Assert.Single(error.Details!);
         Assert.Equal("actor.id", detail.Field);

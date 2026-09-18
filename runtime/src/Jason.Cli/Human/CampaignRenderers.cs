@@ -33,6 +33,8 @@ public static class CampaignRenderers
             lines.Add(Line("Archived:", RenderText.Moment(campaign.ArchivedAt.Value)));
         }
 
+        // "none" rather than a blank, the same word this renderer uses for a campaign that carries no context.
+        lines.Add(Line("Profile:", campaign.ExecutionProfile ?? "none"));
         lines.Add(Line("Context keys:", RenderText.Keys(campaign.Context)));
         lines.AddRange(RenderText.ExternalIds(campaign.ExternalIds));
         return RenderText.Lines(lines);

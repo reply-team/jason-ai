@@ -68,6 +68,7 @@ public class ExternalIdRenderingTests
                 CampaignStatus.Active,
                 new JsonObject { ["icp"] = "founders" },
                 [new ExternalIdDto("fake-provider", "campaign", "seq-42", Moment, "att_A")],
+                null,
                 Moment,
                 Moment,
                 null),

@@ -52,6 +52,47 @@ public class RoleEndpointTests
         Assert.False(error.Retryable);
     }
 
+    /// <summary>
+    /// The one verb that changes a role, reachable under its own name. Roles have no general update verb, and
+    /// this wave is not the one that gives them one.
+    /// </summary>
+    [Fact]
+    public async Task Set_profile_over_http_moves_the_policy_and_refuses_a_profile_nothing_answers()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.RoleSetProfile,
+            new { Name = "researcher", ExecutionProfile = "nothing-answers-this" },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        Assert.Equal("validation_failed", error.Code);
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal("execution_profile", detail.Field);
+        Assert.Equal("unknown", detail.Code);
+
+        // Clearing needs no profile to exist, so it is the half of the verb a runtime with no profiles can prove.
+        var (status, body) = await api.PostAsync(Operations.RoleSetProfile, new { Name = "researcher", ExecutionProfile = (string?)null }, Ct);
+
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Contains("\"execution_profile\":null", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Set_profile_on_a_role_nobody_registered_is_a_404()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct);
+
+        var error = await api.PostErrorAsync(
+            Operations.RoleSetProfile,
+            new { Name = "nobody-registered-this", ExecutionProfile = (string?)null },
+            HttpStatusCode.NotFound,
+            Ct);
+
+        Assert.Equal("role_not_found", error.Code);
+    }
+
     [Fact]
     public async Task A_role_without_a_name_names_the_field()
     {

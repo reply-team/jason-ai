@@ -71,6 +71,65 @@ public class RoleCommandsTests
     }
 
     [Fact]
+    public async Task Add_sends_the_execution_profile_the_role_is_registered_with()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("role", "add", "fake", "--execution-profile", "local-claude");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.RoleAdd, "{\"name\":\"fake\",\"execution_profile\":\"local-claude\"}");
+    }
+
+    [Fact]
+    public async Task Set_profile_names_the_role_and_the_profile()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("role", "set-profile", "researcher", "--execution-profile", "local-claude", "--reason", "the laptop runs this one");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.RoleSetProfile,
+            "{\"name\":\"researcher\",\"execution_profile\":\"local-claude\",\"reason\":\"the laptop runs this one\"}");
+    }
+
+    [Fact]
+    public async Task Set_profile_clears_the_policy_with_an_explicit_null()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("role", "set-profile", "researcher", "--clear");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.RoleSetProfile, "{\"name\":\"researcher\",\"execution_profile\":null}");
+    }
+
+    /// <summary>Setting and clearing at once asks two contradictory things, and the CLI can tell without the runtime.</summary>
+    [Fact]
+    public async Task Set_profile_refuses_a_call_that_both_names_a_profile_and_clears_one()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("role", "set-profile", "researcher", "--execution-profile", "local-claude", "--clear");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains("--execution-profile", cli.Error.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>And a call that names neither asks for nothing at all, which is not what somebody typing this verb wants.</summary>
+    [Fact]
+    public async Task Set_profile_refuses_a_call_that_says_neither()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("role", "set-profile", "researcher");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains("--execution-profile", cli.Error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Add_lays_the_options_over_a_file_body()
     {
         using var file = new TempFile("{\"name\":\"from the file\",\"entry_command\":[\"dotnet\",\"host.dll\"],\"profile_defaults\":{\"model\":\"small\"}}");
@@ -112,8 +171,8 @@ public class RoleCommandsTests
         var page = JsonSerializer.Serialize(
             new Page<RoleDto>(
                 [
-                    new RoleDto("rol_A", "manager", true, "Runs the campaign.", [], new JsonObject(), Moment, Moment),
-                    new RoleDto("rol_B", "fake", false, null, ["dotnet", "host.dll", "succeed"], new JsonObject(), Moment, Moment),
+                    new RoleDto("rol_A", "manager", true, "Runs the campaign.", [], new JsonObject(), null, Moment, Moment),
+                    new RoleDto("rol_B", "fake", false, null, ["dotnet", "host.dll", "succeed"], new JsonObject(), "local-claude", Moment, Moment),
                 ],
                 null),
             JasonJson.Options);
@@ -124,10 +183,10 @@ public class RoleCommandsTests
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal(
             """
-            NAME     BUILTIN  ENTRY COMMAND            ID
-            -------  -------  -----------------------  -----
-            manager  yes      -                        rol_A
-            fake     no       dotnet host.dll succeed  rol_B
+            NAME     BUILTIN  PROFILE       ENTRY COMMAND            ID
+            -------  -------  ------------  -----------------------  -----
+            manager  yes      -             -                        rol_A
+            fake     no       local-claude  dotnet host.dll succeed  rol_B
             """.ReplaceLineEndings() + Environment.NewLine,
             cli.Text);
     }
@@ -136,7 +195,7 @@ public class RoleCommandsTests
     public async Task Human_mode_renders_one_role()
     {
         var role = JsonSerializer.Serialize(
-            new RoleDto("rol_B", "fake", false, "A stand-in agent host", ["dotnet", "host.dll", "succeed"], new JsonObject { ["model"] = "small" }, Moment, Moment),
+            new RoleDto("rol_B", "fake", false, "A stand-in agent host", ["dotnet", "host.dll", "succeed"], new JsonObject { ["model"] = "small" }, "local-claude", Moment, Moment),
             JasonJson.Options);
         using var cli = new CliRun(role);
 
@@ -151,6 +210,7 @@ public class RoleCommandsTests
             Description:   A stand-in agent host
             Entry command: dotnet host.dll succeed
             Defaults:      model
+            Profile:       local-claude
             Created:       2026-09-14 10:00:00 UTC
             Updated:       2026-09-14 10:00:00 UTC
             """.ReplaceLineEndings() + Environment.NewLine,

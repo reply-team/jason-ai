@@ -57,6 +57,8 @@ public static class DomainErrors
 
     public static ConflictException RoleExists(string name) => new("role_exists", $"A role named '{name}' already exists.");
 
+    public static NotFoundException RoleNotFound(string name) => new("role_not_found", $"No role named '{name}'.");
+
     /// <summary>Two writers reached the same row; the loser is told to read again rather than given a merged result.</summary>
     public static DomainException ConcurrentUpdate() =>
         new(StatusCodes.Status409Conflict, "concurrent_update", "Another change reached the same row first; read it again and retry.", retryable: true);

@@ -16,6 +16,7 @@ public static class RoleMapper
             role.Description,
             role.EntryCommand,
             role.ProfileDefaults,
+            role.ExecutionProfile,
             WorkItems.WorkItemMapper.Utc(role.CreatedAt),
             WorkItems.WorkItemMapper.Utc(role.UpdatedAt));
     }

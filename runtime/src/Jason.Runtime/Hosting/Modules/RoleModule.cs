@@ -23,5 +23,7 @@ public static class RoleModule
             Operations.RoleList, (service, request, cancellationToken) => service.ListAsync(request, cancellationToken));
         app.MapOperation<RoleService, RoleAddRequest, RoleDto>(
             Operations.RoleAdd, (service, request, cancellationToken) => service.AddAsync(request, cancellationToken));
+        app.MapOperation<RoleService, RoleSetProfileRequest, RoleDto>(
+            Operations.RoleSetProfile, (service, request, cancellationToken) => service.SetProfileAsync(request, cancellationToken));
     }
 }
