@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Execution;
 
 namespace Jason.Cli;
 
@@ -19,12 +20,25 @@ public static class ActorOption
         Recursive = true,
     };
 
-    /// <summary>Turns the option text into the <c>actor</c> object of a request body; absent text means no claim.</summary>
-    public static JsonObject? Parse(string? text)
+    /// <summary>
+    /// Turns the option text into the <c>actor</c> object of a request body. Absent text means no claim of the
+    /// caller's own — but a CLI running inside a launched executor is that attempt whether or not it says so, and
+    /// the launcher puts the attempt's id in the environment for exactly this reason. Traceability that depended
+    /// on an agent remembering a flag would be lost the first time one forgot.
+    /// </summary>
+    public static JsonObject? Parse(string? text) =>
+        Parse(text, Environment.GetEnvironmentVariable(ExecutionEnvironment.AttemptIdVariable));
+
+    /// <summary>The same decision with the environment handed in, so it can be read and tested without one.</summary>
+    public static JsonObject? Parse(string? text, string? attemptFromEnvironment)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
-            return null;
+            // The claim is still verified against the attempt this runtime knows, so a variable set by hand buys
+            // nothing that was not already true of anyone who could set it.
+            return string.IsNullOrWhiteSpace(attemptFromEnvironment)
+                ? null
+                : new JsonObject { ["type"] = "attempt", ["id"] = attemptFromEnvironment.Trim() };
         }
 
         var separator = text.IndexOf(':');
