@@ -92,7 +92,12 @@ public class ResearcherRoleTests
                 "--context",
                 """{"behaviour":"researcher","brief":"who signs off on this"}"""));
 
-            var done = await FinishedAsync(root, (string)item["id"]!, "succeeded");
+            // Finished *and* accounted for. The item becomes succeeded the moment the child's own
+            // `workitem.complete` lands; how the run actually went — the pid, the exit code, the deny rules,
+            // the role's skill — is written by the handler afterwards, once the child has exited and its
+            // output is drained. A test that reads both has to wait for the later of the two, or it races the
+            // drain.
+            var done = await FinishedAsync(root, (string)item["id"]!, "succeeded", untilAccountedFor: true);
 
             // 1. The skill reached the work directory, and the child read it there: the name comes out of the
             //    file's own front matter, which nothing else in this run could have supplied.
@@ -194,22 +199,41 @@ public class ResearcherRoleTests
         }
     }
 
-    private static async Task<JsonObject> FinishedAsync(string root, string workItemId, string expected)
+    /// <param name="untilAccountedFor">
+    /// Also wait for the handler to have finished the attempt's launch record. The two halves are written by
+    /// different parties: the item's terminal status arrives with the executor's own call, and how the run went
+    /// is recorded afterwards by the handler that was watching the process.
+    /// <para>
+    /// The signal is the **exit code**, not the presence of a launch record: the claim writes one before the
+    /// child exists, carrying the command and the work directory, and the handler replaces it at the end with
+    /// the pid, the exit code, the deny rules and the role's skill. Waiting for `launch` to exist waits for
+    /// nothing at all.
+    /// </para>
+    /// </param>
+    private static async Task<JsonObject> FinishedAsync(string root, string workItemId, string expected, bool untilAccountedFor = false)
     {
         var deadline = DateTime.UtcNow.Add(StepTimeout);
+        JsonObject? finished = null;
         while (DateTime.UtcNow < deadline)
         {
             var read = Json(await JasonAsync(root, "workitem", "get", workItemId));
             if ((string?)read["status"] is { } status && status is "succeeded" or "failed")
             {
                 Assert.Equal(expected, status);
-                return read;
+                finished = read;
+                if (!untilAccountedFor || read["attempts"]?[0]?["launch"]?["exit_code"] is not null)
+                {
+                    return read;
+                }
             }
 
             await Task.Delay(200, Ct);
         }
 
-        throw new InvalidOperationException($"Work item {workItemId} never finished.");
+        throw new InvalidOperationException(
+            finished is null
+                ? $"Work item {workItemId} never finished."
+                : $"Work item {workItemId} finished and the handler never recorded how its attempt ran.");
     }
 
     private static JsonObject Json(CliResult result)
