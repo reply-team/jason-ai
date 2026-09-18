@@ -245,6 +245,15 @@ public sealed record WorkItemUpdateRequest(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<int?> HeartbeatSeconds,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<int?> MaxAttempts,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<JsonNode?> ResultFormat,
+
+    /// <summary>
+    /// Which profile runs this work. Patchable, unlike the campaign, contact, kind, role and operation that say
+    /// what the item <em>is</em>: this is how the work runs, and it belongs beside the timeout, the heartbeat,
+    /// the attempt limit and the result format, which are patchable for the same reason. It has to be, because
+    /// it is the repair for an item whose ancestry cannot be resolved — and an item that is already blocked
+    /// cannot be repaired by creating a different one.
+    /// </summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> ExecutionProfile,
     ActorRef? Actor,
     string? Reason);
 

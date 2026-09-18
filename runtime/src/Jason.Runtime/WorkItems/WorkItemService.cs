@@ -234,9 +234,10 @@ public sealed class WorkItemService(
     }
 
     /// <summary>
-    /// A partial patch of what a caller owns: the window, the priority, the per-item limits, the result format
-    /// and the context. What the item is — its campaign, contact, kind, role or operation — is not patchable;
-    /// work that should be something else is new work.
+    /// A partial patch of what a caller owns: the window, the priority, the per-item limits, the execution
+    /// profile, the result format and the context — every one of them a statement about how the work runs. What
+    /// the item is — its campaign, contact, kind, role or operation — is not patchable; work that should be
+    /// something else is new work.
     /// </summary>
     public async Task<WorkItemDto> UpdateAsync(WorkItemUpdateRequest request, CancellationToken cancellationToken)
     {
@@ -260,9 +261,21 @@ public sealed class WorkItemService(
         var timeoutSeconds = request.TimeoutSeconds.IsSet ? request.TimeoutSeconds.Value : item.TimeoutSeconds;
         var heartbeatSeconds = request.HeartbeatSeconds.IsSet ? request.HeartbeatSeconds.Value : item.HeartbeatSeconds;
         var maxAttempts = request.MaxAttempts.IsSet ? request.MaxAttempts.Value : item.MaxAttempts;
+        var executionProfile = request.ExecutionProfile.IsSet ? Trimmed(request.ExecutionProfile.Value) : item.ExecutionProfile;
 
         WorkItemValidation.ValidateOverrides(timeoutSeconds, heartbeatSeconds, maxAttempts, errors);
         WorkItemValidation.ValidateWindow(notBefore, dueAt, errors);
+
+        // Read against the registry exactly as at create, and only where the patch names the field: an item
+        // whose profile was removed from the registry afterwards stays repairable rather than having every
+        // unrelated patch refused along with it.
+        if (request.ExecutionProfile.IsSet)
+        {
+            WorkItemValidation.ValidateExecutionProfile(
+                executionProfile,
+                await ProfileExistsAsync(executionProfile, cancellationToken).ConfigureAwait(false),
+                errors);
+        }
 
         // The same mistake arriving later. Only a patch that names the lease is measured: an item written before
         // this rule existed is left repairable rather than having every unrelated patch refused along with it.
@@ -329,6 +342,12 @@ public sealed class WorkItemService(
         {
             changes.Add(new FieldChange("max_attempts", Number(item.MaxAttempts), Number(maxAttempts)));
             item.MaxAttempts = maxAttempts;
+        }
+
+        if (request.ExecutionProfile.IsSet && !string.Equals(item.ExecutionProfile, executionProfile, StringComparison.Ordinal))
+        {
+            changes.Add(new FieldChange("execution_profile", Text(item.ExecutionProfile), Text(executionProfile)));
+            item.ExecutionProfile = executionProfile;
         }
 
         if (request.ResultFormat.IsSet && !JsonNode.DeepEquals(item.ResultFormat, request.ResultFormat.Value))
@@ -586,6 +605,8 @@ public sealed class WorkItemService(
         value is { } moment ? JsonSerializer.SerializeToNode(WorkItemMapper.Utc(moment), JasonJson.Options) : null;
 
     private static JsonNode? Number(int? value) => value is { } number ? JsonValue.Create(number) : null;
+
+    private static JsonNode? Text(string? value) => value is null ? null : JsonValue.Create(value);
 
     private static JsonNode? Status(WorkItemStatus status) => JsonSerializer.SerializeToNode(status, JasonJson.Options);
 

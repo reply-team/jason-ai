@@ -240,7 +240,7 @@ public class WorkItemUpdateTests
     private static WorkItemCanceller NewCanceller(TimeProvider clock) => TestCanceller.New(clock);
 
     private static WorkItemUpdateRequest Patch(string workItemId) =>
-        new(workItemId, null, null, default, default, default, default, default, default, default, null, null);
+        new(workItemId, null, null, default, default, default, default, default, default, default, default, null, null);
 
     private static WorkItem Seed(JasonDbContext db, Action<WorkItem>? configure)
     {

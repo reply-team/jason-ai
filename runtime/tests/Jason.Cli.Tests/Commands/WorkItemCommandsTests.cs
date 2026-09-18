@@ -340,6 +340,29 @@ public class WorkItemCommandsTests
     }
 
     [Fact]
+    public async Task Update_names_a_new_execution_profile()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("workitem", "update", "wi_A", "--execution-profile", "fast-claude");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.WorkItemUpdate, "{\"work_item_id\":\"wi_A\",\"execution_profile\":\"fast-claude\"}");
+    }
+
+    /// <summary>Giving it back is the same <c>--clear</c> every other nullable field already uses.</summary>
+    [Fact]
+    public async Task Update_gives_the_execution_profile_back_through_the_clear_option()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("workitem", "update", "wi_A", "--clear", "execution_profile");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.WorkItemUpdate, "{\"work_item_id\":\"wi_A\",\"execution_profile\":null}");
+    }
+
+    [Fact]
     public async Task Clearing_a_field_that_cannot_be_cleared_is_a_usage_error()
     {
         using var cli = new CliRun();
