@@ -154,7 +154,7 @@ public class AiRoleCommandTests
         await RunAsync(directory.Paths, workDir, FakeAgentHost.EntryCommand("echo-envelope"));
 
         var echoed = await File.ReadAllTextAsync(Path.Combine(workDir, "stdout.log"), Ct);
-        Assert.Contains("\"envelope_version\":2", echoed, StringComparison.Ordinal);
+        Assert.Contains("\"envelope_version\":3", echoed, StringComparison.Ordinal);
         Assert.Contains("\"work_dir\":", echoed, StringComparison.Ordinal);
 
         var envelope = JsonSerializer.Deserialize<LaunchEnvelope>(echoed, JasonJson.Options)!;

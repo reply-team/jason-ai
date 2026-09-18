@@ -202,11 +202,12 @@ public class ContractsShapeTests
             120,
             DateTimeOffset.UnixEpoch,
             "/work/wi_A/att_A",
-            new RuntimeLocation("/run/runtime.json", "v1", "jason"));
+            new RuntimeLocation("/run/runtime.json", "v1", "jason"),
+            new RoleMemoryLocation("cmp_A", "researcher"));
 
         var json = JsonSerializer.Serialize(envelope, JasonJson.Options);
 
-        Assert.Contains("\"envelope_version\":2", json, StringComparison.Ordinal);
+        Assert.Contains("\"envelope_version\":3", json, StringComparison.Ordinal);
         Assert.Contains("\"attempt_id\":\"att_A\"", json, StringComparison.Ordinal);
         Assert.Contains("\"attempt_number\":2", json, StringComparison.Ordinal);
         Assert.Contains("\"work_dir\":\"/work/wi_A/att_A\"", json, StringComparison.Ordinal);
@@ -215,6 +216,10 @@ public class ContractsShapeTests
             json,
             StringComparison.Ordinal);
 
+        // The address of the role's memory, and never the memory: what the note says is read through the API at
+        // the moment the role wants it, so a stale document can never arrive looking like current truth.
+        Assert.Contains("\"role_memory\":{\"campaign_id\":\"cmp_A\",\"role\":\"researcher\"}", json, StringComparison.Ordinal);
+
         var back = JsonSerializer.Deserialize<LaunchEnvelope>(json, JasonJson.Options)!;
         Assert.Equal(LaunchEnvelope.CurrentVersion, back.EnvelopeVersion);
         Assert.Equal("att_A", back.AttemptId);
@@ -222,7 +227,28 @@ public class ContractsShapeTests
         Assert.Equal(WorkItemKind.AiRole, back.Kind);
         Assert.Equal("founders", (string?)back.Context["icp"]);
         Assert.Equal(envelope.Runtime, back.Runtime);
+        Assert.Equal(envelope.RoleMemory, back.RoleMemory);
         Assert.Equal(DateTimeOffset.UnixEpoch, back.LockUntil);
+    }
+
+    [Fact]
+    public void An_envelope_written_before_role_memory_existed_still_reads()
+    {
+        // Version 2, as this runtime wrote it the day before role notes existed. The claim that the change was
+        // additive is only a claim until a document written without the new field is read by the code that
+        // knows about it.
+        const string version2 = """
+            {"envelope_version":2,"attempt_id":"att_A","attempt_number":1,"work_item_id":"wi_A","campaign_id":"cmp_A",
+             "contact_id":null,"kind":"ai_role","role":"researcher","execution_profile":null,"context":{},
+             "result_format":null,"timeout_seconds":3600,"heartbeat_seconds":120,"lock_until":"1970-01-01T00:00:00.000Z",
+             "work_dir":"/work/wi_A/att_A","runtime":{"descriptor_file":"/run/runtime.json","api_version":"v1","cli_command":"jason"}}
+            """;
+
+        var envelope = JsonSerializer.Deserialize<LaunchEnvelope>(version2, JasonJson.Options)!;
+
+        Assert.Equal(2, envelope.EnvelopeVersion);
+        Assert.Equal("jason", envelope.Runtime.CliCommand);
+        Assert.Null(envelope.RoleMemory);
     }
 
     [Fact]
