@@ -58,6 +58,28 @@ internal static class Behaviours
         return ("script", []);
     }
 
+    /// <summary>The names this host answers to, so a caller can tell whether argv named one of them.</summary>
+    public static bool Known(string behaviour) =>
+        behaviour is "succeed" or "hang" or "mute" or "crash" or "silent" or "stale" or "leak" or "echo-envelope";
+
+    /// <summary>
+    /// The behaviour a launched host is told to perform through its brief rather than its arguments. A host
+    /// started through an execution profile does not choose what is on its command line — the runtime composes
+    /// that from the profile and its own constants — so a test that needs a particular behaviour says so in the
+    /// work item's context, which is where everything else about the job already travels.
+    /// </summary>
+    public static (string Behaviour, IReadOnlyList<string> Options) FromContext(LaunchEnvelope envelope)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+        if (envelope.Context["behaviour"]?.GetValue<string>() is not { } named)
+        {
+            return (string.Empty, []);
+        }
+
+        var parts = named.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return parts.Length == 0 ? (string.Empty, []) : (parts[0], [.. parts.Skip(1)]);
+    }
+
     public static async Task<int> RunAsync(string behaviour, IReadOnlyList<string> options, LaunchEnvelope envelope, string rawEnvelope, RuntimeApi api)
     {
         switch (behaviour)
@@ -163,8 +185,25 @@ internal static class Behaviours
     private static Task<(int Status, string Body)> SetHalfDoneAsync(LaunchEnvelope envelope, RuntimeApi api) =>
         api.CallAsync(Operations.WorkItemSetResult, new WorkItemSetResultRequest(envelope.WorkItemId, envelope.AttemptId, new JsonObject { ["progress"] = "half" }));
 
-    private static Task<(int Status, string Body)> CompleteAsync(LaunchEnvelope envelope, RuntimeApi api, JsonNode? result) =>
-        api.CallAsync(Operations.WorkItemComplete, new WorkItemCompleteRequest(envelope.WorkItemId, envelope.AttemptId, CompletionStatus.Succeeded, result, null, null));
+    /// <summary>
+    /// Finishing, and saying so when the runtime refuses to let it finish. A host told its answer is not the
+    /// shape that was asked for and then exiting silently would leave an attempt that ended for no visible
+    /// reason; a real one would try again, and this one at least says what it was told.
+    /// </summary>
+    private static async Task<(int Status, string Body)> CompleteAsync(LaunchEnvelope envelope, RuntimeApi api, JsonNode? result)
+    {
+        var answer = await api.CallAsync(
+            Operations.WorkItemComplete,
+            new WorkItemCompleteRequest(envelope.WorkItemId, envelope.AttemptId, CompletionStatus.Succeeded, result, null, null))
+            .ConfigureAwait(false);
+
+        if (answer.Status != 200)
+        {
+            await Diagnostics.WriteAsync($"complete refused with {answer.Status.ToString(CultureInfo.InvariantCulture)}: {answer.Body}").ConfigureAwait(false);
+        }
+
+        return answer;
+    }
 
     private static JsonNode? ParseResult(string? json)
     {
