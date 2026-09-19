@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
 
@@ -28,8 +29,8 @@ internal static class Watchdog
     private static readonly TimeSpan Beat = TimeSpan.FromSeconds(1);
 
     /// <summary>
-    /// How long a host started with no runtime at all may live. Nothing can ever tell it to stop, so it is the
-    /// one case that needs a clock rather than an observation.
+    /// How long a host that has never reached a runtime may live. Nothing can ever tell it to stop, so it is
+    /// the one case that needs a clock rather than an observation.
     /// </summary>
     private static readonly TimeSpan NoRuntimeCeiling = TimeSpan.FromSeconds(120);
 
@@ -40,20 +41,41 @@ internal static class Watchdog
 
     private static async Task WatchAsync(LaunchEnvelope envelope, RuntimeApi api)
     {
-        if (string.IsNullOrWhiteSpace(envelope.Runtime?.DescriptorFile))
-        {
-            await Task.Delay(NoRuntimeCeiling).ConfigureAwait(false);
-            await Diagnostics.WriteAsync("no runtime was named and the ceiling passed; stopping").ConfigureAwait(false);
-            Environment.Exit(Abandoned);
-        }
-
+        var started = Stopwatch.StartNew();
+        var answered = false;
         var missed = 0;
+
         while (true)
         {
             await Task.Delay(Beat).ConfigureAwait(false);
-            if (await AnswersAsync(envelope, api).ConfigureAwait(false))
+
+            // A descriptor that has stopped being readable is the whole answer: a runtime takes its descriptor
+            // with it, and nothing else removes one.
+            var gone = api.ReadDescriptor() is null;
+
+            if (!gone)
+            {
+                var answers = await AnswersAsync(envelope, api).ConfigureAwait(false);
+                answered |= answers;
+
+                // A descriptor that outlived its runtime — a directory that could not be removed — is caught
+                // here instead. Only after an answer, though: a host pointed at a descriptor nothing is
+                // listening behind is not an orphan, it is the case where an unreachable API is reported and
+                // survived, which is a behaviour of its own.
+                gone = answered && !answers;
+            }
+
+            if (!gone)
             {
                 missed = 0;
+
+                // The one case nothing can ever tell to stop.
+                if (!answered && started.Elapsed >= NoRuntimeCeiling)
+                {
+                    await Diagnostics.WriteAsync("no runtime ever answered and the ceiling passed; stopping").ConfigureAwait(false);
+                    Environment.Exit(Abandoned);
+                }
+
                 continue;
             }
 
@@ -65,18 +87,9 @@ internal static class Watchdog
         }
     }
 
-    /// <summary>
-    /// Cheapest first: a descriptor that cannot be read answers the question by itself, and it is the ordinary
-    /// case, because a runtime takes its descriptor with it. A descriptor that survives its runtime — a
-    /// directory that could not be removed — is caught by the call that follows.
-    /// </summary>
+    /// <summary>One harmless read, to see whether anything is still behind the descriptor.</summary>
     private static async Task<bool> AnswersAsync(LaunchEnvelope envelope, RuntimeApi api)
     {
-        if (api.ReadDescriptor() is null)
-        {
-            return false;
-        }
-
         var (status, _) = await api.CallAsync(Operations.WorkItemGet, new WorkItemGetRequest(envelope.WorkItemId, false))
             .ConfigureAwait(false);
         return status != RuntimeApi.NoAnswer;
