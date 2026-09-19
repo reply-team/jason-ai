@@ -136,9 +136,10 @@ public static class ManagerCheckIn
                 ["work_item_id"] = because.WorkItemId,
                 ["attempt_id"] = because.AttemptId,
 
-                // Present when the answer to a question is what woke this review, and absent otherwise — a
-                // scan's read is one review, so a decision answered behind a failure is read by the manager
-                // rather than named in its brief.
+                // The question whose answer woke this review, and null otherwise — the key stays either way,
+                // as it does for the others, which is what ManagerCheckInTests pins. A scan's read is one
+                // review, so a decision answered behind a failure is read by the manager rather than named
+                // in its brief.
                 ["decision_id"] = because.DecisionId,
                 ["qualifying_count"] = because.QualifyingCount,
             };
