@@ -1,11 +1,16 @@
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Update;
+using Jason.Runtime.Persistence;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.Tests.Routing;
 using Jason.Runtime.Update;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Hosting;
@@ -13,6 +18,61 @@ namespace Jason.Runtime.Tests.Hosting;
 public class SystemInfoTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>
+    /// A start that migrated says what it applied and where it put the backup. Both are things only that start
+    /// knows, and the one caller that has to know them cannot open the database to find out.
+    /// </summary>
+    /// <remarks>
+    /// The applier is that caller. After it swaps a binary and starts it, the question it must answer is "did
+    /// this start migrate, and if it did, which file is the database as it was before?" — because the answer
+    /// decides what a rollback has to put back. The migration report has carried both since it was written;
+    /// only the answer left them out.
+    /// </remarks>
+    [Fact]
+    public async Task A_start_that_migrated_says_what_it_applied_and_where_it_put_the_backup()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(Ct, prepare: AtTheMigrationBeforeLast);
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        Assert.NotEmpty(info.Database.AppliedMigrations);
+        var newly = Assert.Single(info.Database.NewlyApplied);
+        Assert.Equal(info.Database.AppliedMigrations[^1], newly);
+
+        Assert.NotNull(info.Database.BackupFile);
+        Assert.True(
+            File.Exists(info.Database.BackupFile),
+            $"system.info named a backup that is not there: {info.Database.BackupFile}");
+        Assert.StartsWith(fixture.Paths.BackupsDirectory, info.Database.BackupFile, StringComparison.Ordinal);
+    }
+
+    /// <summary>And a start that migrated nothing says so, rather than leaving a caller to guess from a null.</summary>
+    [Fact]
+    public async Task A_start_that_migrated_nothing_says_that_too()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        // A database this runtime created is not a database this runtime migrated: there was nothing to back up
+        // and nothing was replaced, which is exactly what a second start of an up-to-date installation looks
+        // like to the applier.
+        Assert.NotEmpty(info.Database.AppliedMigrations);
+        Assert.Null(info.Database.BackupFile);
+    }
+
+    /// <summary>
+    /// A database at the migration before the last one, made by EF's own migrator rather than by a file checked
+    /// in: the triggers and the indexes live in the migrations, so what comes out is a real older database.
+    /// </summary>
+    private static void AtTheMigrationBeforeLast(JasonPaths paths)
+    {
+        Directory.CreateDirectory(paths.StateDirectory);
+        using var db = new JasonDbContext(JasonDbContext.CreateOptions(paths.DatabaseFile));
+        var all = db.Database.GetMigrations().ToList();
+        db.GetService<IMigrator>().Migrate(all[^2]);
+    }
 
     [Fact]
     public async Task A_fixture_the_test_wrote_no_settings_for_runs_without_a_dispatcher()

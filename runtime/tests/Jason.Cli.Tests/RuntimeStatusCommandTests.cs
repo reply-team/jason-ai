@@ -48,7 +48,7 @@ public class RuntimeStatusCommandTests
             77,
             DateTimeOffset.UnixEpoch,
             "/home/u/.jason",
-            new DatabaseInfo(["20260913225419_InitialCreate"]),
+            new DatabaseInfo(["20260913225419_InitialCreate"], [], null),
             dispatcher,
             plugins,
             routes,

@@ -50,7 +50,7 @@ public static class SystemModule
                     runtimeInfo.Pid,
                     runtimeInfo.StartedAt,
                     dataPaths.Root,
-                    new DatabaseInfo(report.AppliedMigrations),
+                    new DatabaseInfo(report.AppliedMigrations, report.NewlyApplied, report.BackupFile),
                     // Through the settings, not the file: an operator whose edit was refused asks this operation
                     // what the runtime is working from, and is answered with what it is actually working from.
                     dispatcher.Snapshot(dispatcherSettings.Current, running.Count),
