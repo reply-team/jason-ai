@@ -147,6 +147,43 @@ public class DecisionAnswerTests
         Assert.Equal("stop", (await second.Decisions.AsNoTracking().SingleAsync(Ct)).Answer);
     }
 
+    /// <summary>
+    /// Two people answering at once. The sibling above catches the second caller at the status check, because
+    /// it read the row after the first had saved; this one is the race that check cannot see — both callers
+    /// hold the row as pending, and what refuses the second is the guard on the status itself.
+    /// </summary>
+    /// <remarks>
+    /// The row in front of the loser says what that caller wanted rather than what happened, so the decision
+    /// it is told about is read afresh. And exactly one answered line is written, because the line and the row
+    /// commit together or not at all.
+    /// </remarks>
+    [Fact]
+    public async Task Two_people_answering_at_once_leave_one_answer_and_one_line()
+    {
+        using var database = new TestDatabase();
+        await using var first = database.Open();
+        var decision = await RaiseAsync(first);
+
+        // Both read the question while it is still pending: this one now, the winner a moment later.
+        var loser = Service(first);
+        await first.Decisions.AsNoTracking().SingleAsync(Ct);
+
+        await using (var winner = database.Open())
+        {
+            await Service(winner).AnswerAsync(new DecisionAnswerRequest(decision.Id, "stop", null, Ada, null), Ct);
+        }
+
+        var refused = await Assert.ThrowsAsync<ConflictException>(() => loser.AnswerAsync(
+            new DecisionAnswerRequest(decision.Id, "keep going", null, new ActorRef(ActorType.Human, "bo"), null), Ct));
+
+        Assert.Equal("decision_not_pending", refused.Code);
+        Assert.Contains("answered", refused.Message, StringComparison.Ordinal);
+
+        await using var fresh = database.Open();
+        Assert.Equal("stop", (await fresh.Decisions.AsNoTracking().SingleAsync(Ct)).Answer);
+        Assert.Single(await fresh.Journal.AsNoTracking().Where(e => e.Kind == JournalKinds.DecisionAnswered).ToListAsync(Ct));
+    }
+
     [Fact]
     public async Task An_option_outside_the_named_ones_is_refused()
     {
