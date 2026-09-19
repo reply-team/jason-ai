@@ -94,7 +94,13 @@ public static class ManagerCheckIn
             Actor: null,
             Reason: cause is null ? "the review cadence came round" : "the chronicle asked for a review");
 
-        return await items.CreateCoreAsync(request, Actors.Dispatcher, lineage, cancellationToken).ConfigureAwait(false);
+        var item = await items.CreateCoreAsync(request, Actors.Dispatcher, lineage, cancellationToken).ConfigureAwait(false);
+
+        // The cadence is measured from the last check-in the runtime created, not from the last one that
+        // finished: a review whose host was missing, or whose answer was refused, must not stop the loop. The
+        // next one comes round on time either way.
+        campaign.ManagerReviewAnchor = item.CreatedAt;
+        return item;
     }
 
     /// <summary>
