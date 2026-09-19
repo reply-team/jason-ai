@@ -47,7 +47,7 @@ public class DispatcherServiceTests
         var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
         Assert.Equal(DispatcherState.Disabled, info.Dispatcher.State);
 
-        Assert.Equal(new ScanReport(0, 0, 0), await fixture.Resolve<ScanRunner>().ScanOnceAsync(Ct));
+        Assert.Equal(new ScanReport(0, 0, 0, 0), await fixture.Resolve<ScanRunner>().ScanOnceAsync(Ct));
         Assert.Equal(0, fixture.Resolve<DispatcherStatus>().Scans);
         Assert.Equal(WorkItemStatus.Created, await StatusOfAsync(fixture.Paths, item, Ct));
     }

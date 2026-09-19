@@ -48,7 +48,12 @@ internal sealed class DispatchHarness : IDisposable
     private readonly ServiceProvider _provider;
     private Action? _interfere;
 
-    public DispatchHarness(DateTime now, Action<DispatcherOptions>? dispatcher = null, RolesOptions? roles = null, params ICommand[] commands)
+    public DispatchHarness(
+        DateTime now,
+        Action<DispatcherOptions>? dispatcher = null,
+        RolesOptions? roles = null,
+        ManagerOptions? manager = null,
+        params ICommand[] commands)
     {
         Clock = new FixedClock(now);
         Options = TestOptions.Dispatcher(dispatcher);
@@ -61,6 +66,11 @@ internal sealed class DispatchHarness : IDisposable
         services.AddSingleton<IOptionsMonitor<DispatcherOptions>>(Options);
         services.AddSingleton<IOptions<DispatcherOptions>>(new OptionsWrapper<DispatcherOptions>(Options.CurrentValue));
         services.AddSingleton<IOptionsMonitor<RolesOptions>>(new TestOptionsMonitor<RolesOptions>(roles ?? new RolesOptions { DefaultEntryCommand = ["agent-host"] }));
+        // The loop's own settings, and the plugin section the work-item service reads for a provider item's
+        // timeout floor. Both are seams the dispatcher module now names, so a test that composes the module
+        // composes them too.
+        services.AddSingleton<IOptionsMonitor<ManagerOptions>>(new TestOptionsMonitor<ManagerOptions>(manager ?? new ManagerOptions()));
+        services.AddSingleton<IOptionsMonitor<PluginsOptions>>(new TestOptionsMonitor<PluginsOptions>(new PluginsOptions()));
         services.AddSingleton(_dir.Paths);
         services.AddSingleton(Registry);
         services.AddSingleton(Status);
@@ -123,6 +133,14 @@ internal sealed class DispatchHarness : IDisposable
         db.WorkItems.Add(item);
         await db.SaveChangesAsync(ct);
         return item;
+    }
+
+    /// <summary>Runs one summon, in a scope of its own, the way the scan runs it.</summary>
+    public async Task<int> SummonAsync(CancellationToken ct)
+    {
+        using var scope = _provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        return await scope.ServiceProvider.GetRequiredService<Summoner>().SummonAsync(db, ct);
     }
 
     /// <summary>Claims whatever is ready and hands the claims back without dispatching them.</summary>

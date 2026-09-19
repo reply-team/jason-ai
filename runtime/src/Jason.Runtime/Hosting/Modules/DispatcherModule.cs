@@ -2,6 +2,7 @@ using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
+using Jason.Runtime.WorkItems;
 using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Plugins.Registry;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,6 +27,7 @@ public static class DispatcherModule
             .AddScoped<EntryCommandResolver>()
             .AddScoped<AgentPreflight>()
             .AddScoped<AgentLaunchPlanner>()
+            .AddScoped<Summoner>()
             .AddScoped<Claimer>()
             .AddScoped<StartupRecovery>();
 
@@ -34,6 +36,12 @@ public static class DispatcherModule
         // because it has nothing to keep, not because the answer is cached: whether a program is on this machine
         // is asked again for every agent item claimed, which is what makes installing one take effect without a
         // restart.
+        // The summon creates work through the routine every caller creates work through, so the dispatcher
+        // depends on the work-item module's service. Stated here as well as there: a registration a module
+        // depends on but never names is one a smaller composition silently lacks.
+        services.TryAddScoped<WorkItemService>();
+        services.TryAddScoped<WorkItemCanceller>();
+
         services.AddSingleton<ProgramResolver>();
         services.AddSingleton<IAgentHost, ClaudeCodeHost>();
 
@@ -52,6 +60,11 @@ public static class DispatcherModule
         services.AddSingleton(Seam<DispatcherOptions>(DispatcherOptions.Section));
         services.AddSingleton(Seam<RolesOptions>(RolesOptions.Section));
         services.AddSingleton(Seam<ManagerOptions>(ManagerOptions.Section));
+
+        // Named here because the summon creates work through the work-item service, and that service reads the
+        // plugin section for a provider item's timeout floor. The plugin module registers the same seam; either
+        // may be first.
+        services.TryAddSingleton(Seam<PluginsOptions>(PluginsOptions.Section));
 
         // The pool is sized once and the counters are one per process, so both outlive any request scope.
         services.AddSingleton<HandlerPool>();
