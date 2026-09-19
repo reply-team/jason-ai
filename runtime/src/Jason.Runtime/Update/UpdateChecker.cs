@@ -98,6 +98,12 @@ public sealed class UpdateChecker(
         {
             // Everything else too. A check that could take the runtime down is a check nobody would dare leave
             // on, and this one has to be on to be any use.
+            //
+            // The code is not one of the three the feed publishes, deliberately: reaching here means the reader
+            // let something through that it should have named itself, so the line says "this was not one of the
+            // failures we know about" rather than dressing an unknown up as a known one. It was reachable once —
+            // a body that died after the headers threw a raw IOException from outside the reader's guard — and
+            // that is now an update_feed_unreachable like any other network failure.
             CheckFailed(logger, "update_check_failed", error.Message, error);
         }
     }

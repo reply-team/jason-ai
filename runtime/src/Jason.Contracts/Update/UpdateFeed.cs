@@ -68,18 +68,22 @@ public sealed class UpdateFeed(HttpClient client)
         // what this product tells a web page about itself stays one line in one place.
         request.Headers.UserAgent.Add(new ProductInfoHeaderValue("jason", JasonVersion.Current));
 
-        HttpResponseMessage response;
-        try
+        // The whole exchange under one deadline, because reading the headers and reading the body are two waits
+        // and the client's own timeout covers only the first: with ResponseHeadersRead it is satisfied the
+        // moment the headers arrive, and a feed that then sends one byte a minute would hold the runtime's
+        // checker for ever and a person's `update check` until they pressed Ctrl+C.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (client.Timeout != Timeout.InfiniteTimeSpan)
         {
-            response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception error) when (error is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
-        {
-            throw new UpdateFeedException(UpdateFeedException.Unreachable, $"The update feed at {feed} could not be reached.", error);
+            deadline.CancelAfter(client.Timeout);
         }
 
-        using (response)
+        try
         {
+            using var response = await client
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token)
+                .ConfigureAwait(false);
+
             if (!response.IsSuccessStatusCode)
             {
                 throw new UpdateFeedException(
@@ -87,7 +91,15 @@ public sealed class UpdateFeed(HttpClient client)
                     $"The update feed at {feed} answered {(int)response.StatusCode}.");
             }
 
-            return UpdateManifest.Read(await BoundedAsync(response, cancellationToken).ConfigureAwait(false));
+            // Inside the guard, not after it. A body that stops arriving mid-transfer — a dropped connection,
+            // which is an ordinary thing on a hotel network — threw a raw IOException out of here, so the CLI
+            // printed a bare line with nothing on stdout and the checker logged a code that does not exist.
+            return UpdateManifest.Read(await BoundedAsync(response, deadline.Token).ConfigureAwait(false));
+        }
+        catch (Exception error) when (error is HttpRequestException or IOException or OperationCanceledException
+                                      && !cancellationToken.IsCancellationRequested)
+        {
+            throw new UpdateFeedException(UpdateFeedException.Unreachable, $"The update feed at {feed} could not be reached.", error);
         }
     }
 

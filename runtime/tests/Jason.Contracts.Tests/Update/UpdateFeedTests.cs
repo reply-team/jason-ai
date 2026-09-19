@@ -171,6 +171,128 @@ public class UpdateFeedTests
         Assert.Contains("longer than", refused.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A body that dies after the headers. The response arrives, the status is 200, and the bytes stop coming —
+    /// a connection dropped mid-transfer, which is an ordinary thing on a train or a hotel network.
+    /// </summary>
+    /// <remarks>
+    /// The reading was outside the guard that turns a network failure into this product's own refusal, so what
+    /// came out was a raw IOException: <c>jason update check</c> printed a bare line on stderr with nothing on
+    /// stdout, and the runtime's checker logged a code that does not exist. A caller cannot handle what it
+    /// cannot name.
+    /// </remarks>
+    [Fact]
+    public async Task A_body_that_dies_after_the_headers_is_unreachable_like_any_other_failure()
+    {
+        var feed = new UpdateFeed(new HttpClient(new Recording(null, Dying())));
+
+        var refused = await Assert.ThrowsAsync<UpdateFeedException>(() => feed.ReadAsync(UpdateFeed.Default, Ct));
+
+        Assert.Equal("update_feed_unreachable", refused.Code);
+        Assert.IsType<IOException>(refused.InnerException);
+    }
+
+    /// <summary>
+    /// A feed that answers and then drips. The bound on how much is read is a bound on bytes, and bytes are not
+    /// the only way to wait for ever: headers arrive, the client's own timeout is satisfied and stops applying,
+    /// and one byte a minute would hold the runtime's checker and a person's <c>update check</c> until somebody
+    /// pressed Ctrl+C.
+    /// </summary>
+    [Fact]
+    public async Task A_feed_that_never_finishes_sending_is_given_up_on()
+    {
+        using var client = new HttpClient(new Recording(null, Silent())) { Timeout = TimeSpan.FromMilliseconds(250) };
+        var feed = new UpdateFeed(client);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        // Bounded by the test as well as by the code under test: without the deadline this hangs rather than
+        // fails, and a test that hangs takes the suite with it instead of reporting what is wrong.
+        var refused = await Assert.ThrowsAsync<UpdateFeedException>(
+            () => feed.ReadAsync(UpdateFeed.Default, Ct).WaitAsync(TimeSpan.FromSeconds(10), Ct));
+
+        Assert.Equal("update_feed_unreachable", refused.Code);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(10), $"the read took {clock.Elapsed}, so it was not the deadline that ended it");
+    }
+
+    /// <summary>And the caller's own cancellation is still the caller's, not a feed that could not be reached.</summary>
+    [Fact]
+    public async Task A_caller_who_cancels_is_not_told_the_feed_was_unreachable()
+    {
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        var feed = new UpdateFeed(new HttpClient(new Recording(null, Silent())));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => feed.ReadAsync(UpdateFeed.Default, cancelled.Token));
+    }
+
+    /// <summary>A response whose body throws as soon as it is read.</summary>
+    private static HttpResponseMessage Dying() =>
+        new(HttpStatusCode.OK) { Content = new StreamContent(new ThrowingStream()) };
+
+    /// <summary>A response whose body never delivers a byte and never ends.</summary>
+    private static HttpResponseMessage Silent() =>
+        new(HttpStatusCode.OK) { Content = new StreamContent(new SilentStream()) };
+
+    private sealed class ThrowingStream : Stream
+    {
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => 0; set => throw new NotSupportedException(); }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new IOException("the connection was reset");
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken) =>
+            throw new IOException("the connection was reset");
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    private sealed class SilentStream : Stream
+    {
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => 0; set => throw new NotSupportedException(); }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        /// <summary>Never a byte, and never an end: only the token can finish this.</summary>
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+            return 0;
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
     private static UpdateFeed Feed(List<HttpRequestMessage>? seen, HttpResponseMessage answer) =>
         new(new HttpClient(new Recording(seen, answer)));
 
