@@ -97,19 +97,65 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
-    /// PA9: the line in the profile is marked, and the mark is looked for before the line is written, so that a
-    /// second run adds nothing. The order in the text is what can be read here; the ubuntu job runs the script
-    /// three times and counts the marks.
+    /// PA9: the line in the profile is marked, and the profile is searched before it is appended to, so that a
+    /// second run adds nothing. What is searched for is the whole line the script wrote — the one naming the
+    /// install directory — and not the comment above it: that comment is an English sentence a person's own
+    /// profile could carry, pasted from somewhere or typed by hand, and keying the decision on it also meant
+    /// that a run with a different <c>--install-dir</c> found "the mark", wrote nothing, and left the directory
+    /// it had just installed into off the PATH.
     /// </summary>
+    /// <remarks>
+    /// The order in the text is what can be read here; the ubuntu job runs the script three times and counts
+    /// the marks.
+    /// </remarks>
     [Fact]
-    public void Install_sh_marks_its_line_in_the_profile_and_looks_for_the_mark_before_writing_it()
+    public void The_path_mark_is_matched_by_the_whole_line_the_script_wrote()
     {
         var code = Code("install.sh");
-        var looked = code.IndexOf("grep -qF \"$MARKER\"", StringComparison.Ordinal);
+        var looked = code.IndexOf("grep -qxF \"$LINE\"", StringComparison.Ordinal);
         var written = code.IndexOf(">>", StringComparison.Ordinal);
 
         Assert.Contains($"MARKER=\"{Marker}\"", code, StringComparison.Ordinal);
-        Assert.True(looked >= 0 && looked < written, "The profile is not searched for the mark before it is appended to.");
+        Assert.True(looked >= 0 && looked < written, "The profile is not searched for the line the script wrote before it is appended to.");
+        Assert.DoesNotContain("grep -qF \"$MARKER\"", code, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <c>--version X</c> names a release, and the manifest that comes back has to be that release's. Neither
+    /// script looked: a feed that answered with another version — a stale mirror, a directory holding the wrong
+    /// release, a download URL that resolved to something else — was installed anyway, under the version that
+    /// had been asked for, and the only thing that noticed was the executable's own <c>--version</c> line,
+    /// compared against the manifest rather than against the request.
+    /// </summary>
+    /// <remarks>
+    /// <c>install.sh</c>'s half of the same rule is read rather than run, for the reason given at the top of
+    /// this file; the two scripts' checks are written to say the same thing.
+    /// </remarks>
+    [Fact]
+    public void A_pinned_install_refuses_a_manifest_naming_another_version()
+    {
+        using var tree = new TempTree();
+        var feed = tree.NewDirectory("feed");
+        File.WriteAllText(Path.Combine(feed, "manifest.json"), """{ "schema": 1, "version": "0.0.1" }""");
+
+        var (exit, _, stderr) = RunInstallPs1(tree, feed, "-Version", "9.9.9");
+
+        Assert.NotEqual(0, exit);
+        Assert.Contains("9.9.9", stderr, StringComparison.Ordinal);
+        Assert.Contains("0.0.1", stderr, StringComparison.Ordinal);
+    }
+
+    /// <summary>The same rule in <c>install.sh</c>: compared, and compared before the archive is downloaded.</summary>
+    [Fact]
+    public void Install_sh_compares_the_manifest_with_the_version_that_was_asked_for()
+    {
+        var lines = Code("install.sh").Split('\n');
+        var compared = Array.FindIndex(lines, line => line.Contains("\"$LATEST\"", StringComparison.Ordinal) && line.Contains("\"$VERSION\"", StringComparison.Ordinal));
+        var downloaded = Array.FindIndex(lines, line => line.Contains("fetch \"$ASSET\"", StringComparison.Ordinal));
+
+        Assert.True(compared >= 0, "install.sh never compares the manifest's version with the one --version asked for.");
+        Assert.True(downloaded > compared, "install.sh downloads the archive before checking that the manifest names the version that was asked for.");
+        Assert.Contains(lines, line => line.Contains("fail ", StringComparison.Ordinal) && line.Contains("$VERSION", StringComparison.Ordinal) && line.Contains("$LATEST", StringComparison.Ordinal));
     }
 
     /// <summary>

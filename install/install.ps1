@@ -109,6 +109,13 @@ function Install-Jason {
         $latest = (Get-Content -LiteralPath (Join-Path $tmp 'manifest.json') -Raw | ConvertFrom-Json).version
         if (-not $latest) { throw "$base/manifest.json does not name a version." }
 
+        # -Version names a release, and the manifest that came back has to be that release's. A feed that
+        # answered with another version - a stale mirror, a directory holding the wrong release, a download URL
+        # that resolved to something else - would otherwise be installed anyway, under the version asked for.
+        if ($Version -and $latest -ne $Version) {
+            throw "-Version asked for $Version and $base/manifest.json names $latest; nothing was installed."
+        }
+
         $target = Join-Path $InstallDir 'jason.exe'
         $installed = $null
         if (Test-Path -LiteralPath $target -PathType Leaf) {
