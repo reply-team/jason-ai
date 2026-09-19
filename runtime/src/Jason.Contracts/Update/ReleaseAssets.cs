@@ -63,6 +63,8 @@ public static class ReleaseAssets
     /// </remarks>
     public static bool IsWellFormedAssetName(string? name)
     {
+        // The first character must be a letter or a digit, which is also what refuses "." and ".." and every
+        // other name that is only dots: a leading dot never gets past this line.
         if (string.IsNullOrEmpty(name) || name.Length > MaxAssetNameLength || !char.IsAsciiLetterOrDigit(name[0]))
         {
             return false;
@@ -76,8 +78,6 @@ public static class ReleaseAssets
             }
         }
 
-        // "..", and anything else that is only dots, is a directory rather than a file — and the one shape the
-        // rule above would otherwise let through.
-        return name.AsSpan().ContainsAnyExcept('.');
+        return true;
     }
 }

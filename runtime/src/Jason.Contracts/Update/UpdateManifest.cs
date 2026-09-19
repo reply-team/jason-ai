@@ -45,9 +45,13 @@ public sealed record UpdateManifest(
     public static UpdateManifest Read(string json)
     {
         ArgumentNullException.ThrowIfNull(json);
+
+        // Characters here, bytes where the bytes are: the reader stops at MaxBytes of them and this is the
+        // backstop for a caller that arrived with a string already. A character is at most four bytes, so this
+        // is the looser of the two bounds and says so rather than calling a character count a byte count.
         if (json.Length > MaxBytes)
         {
-            throw Invalid($"the feed is longer than the {MaxBytes} bytes a manifest is read to.");
+            throw Invalid($"the feed is longer than the {MaxBytes} characters a manifest is read to.");
         }
 
         using var document = Parse(json);

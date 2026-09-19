@@ -97,6 +97,22 @@ jobs:
           if ($statusExit -ne 3) { throw "expected exit code 3 without a running runtime, got $statusExit" }
           if ($status -notmatch '"code":"no_descriptor"') { throw "expected a no_descriptor error envelope" }
 
+          # And it opens the database. Everything above passes on a build that cannot: a single-file publish
+          # leaves SQLite's native library beside the executable unless it is told to bundle it, `--version`
+          # and a status with no runtime never touch it, and the archive carries the executable alone — so the
+          # one build this whole wave exists to deliver would have gone out green. Starting the runtime is what
+          # loads it.
+          & $exe runtime start | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "jason runtime start exited with $LASTEXITCODE; the published executable cannot open its database" }
+
+          & $exe runtime status | Tee-Object -Variable running | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "jason runtime status exited with $LASTEXITCODE while a runtime was running" }
+          if ($running -notmatch '"applied_migrations":\["') { throw "runtime status reported no applied migrations: $running" }
+          Write-Host "the runtime started, migrated and answered"
+
+          & $exe runtime stop | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "jason runtime stop exited with $LASTEXITCODE" }
+
           # The last command of this step is expected to exit 3, and pwsh would hand that on as the step's
           # own exit code. Everything asserted above passed, so the step succeeded.
           exit 0
@@ -136,6 +152,13 @@ jobs:
           sh install/install.sh --no-modify-path
           installed="$("$HOME/.local/bin/jason" --version)"
           [ "${installed%%+*}" = "$VERSION" ] || { echo "installed '$installed', expected $VERSION"; exit 1; }
+
+          # What was installed opens its database, which is the half of "it runs" that --version cannot see.
+          export JASON_DATA_DIR="$RUNNER_TEMP/installed-data"
+          "$HOME/.local/bin/jason" runtime start
+          "$HOME/.local/bin/jason" runtime status | grep -q '"applied_migrations":\["'
+          "$HOME/.local/bin/jason" runtime stop
+          unset JASON_DATA_DIR
           if [ -f "$HOME/.profile" ] && grep -q '# added by jason install' "$HOME/.profile"; then echo "--no-modify-path edited the profile"; exit 1; fi
 
           # The same version again: nothing is downloaded, the script says so, and this time the PATH line is written.
@@ -182,6 +205,16 @@ jobs:
           ./install/install.ps1 -NoModifyPath
           $installed = & $exe --version
           if (($installed -split '\+')[0] -ne $env:VERSION) { throw "installed '$installed', expected $env:VERSION" }
+
+          # What was installed opens its database, which is the half of "it runs" that --version cannot see.
+          $env:JASON_DATA_DIR = Join-Path $env:RUNNER_TEMP 'installed-data'
+          & $exe runtime start | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "the installed jason could not start a runtime ($LASTEXITCODE)" }
+          $running = & $exe runtime status
+          if ($LASTEXITCODE -ne 0 -or $running -notmatch '"applied_migrations":\["') { throw "the installed jason did not migrate: $running" }
+          & $exe runtime stop | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "the installed jason could not stop its runtime ($LASTEXITCODE)" }
+          Remove-Item Env:\JASON_DATA_DIR
           if ((UserPathEntries).Count -ne 0) { throw "-NoModifyPath edited the user PATH" }
 
           # The same version again: nothing is downloaded, the script says so, and this time the PATH gains the directory.

@@ -161,7 +161,13 @@ repository with no releases has none.
 
 The **data directory** is `~/.jason`, or whatever `JASON_DATA_DIR` names: the database, the configuration, the
 plugins, the skills, the logs and the work directories. The **install directory** is wherever the executable
-happens to be, and Jason writes nothing into it. They are separate on purpose — updating the program and keeping
+happens to be, and Jason writes nothing into it.
+
+There is a third place, which nothing here controls. The executable is a single file with the .NET runtime and
+its native libraries inside it, and the first run of each version unpacks those natives to a cache — 
+`%TEMP%\.net\jason\<hash>\` on Windows, `/tmp/.net/jason/<hash>/` elsewhere, or under
+`DOTNET_BUNDLE_EXTRACT_BASE_DIR` where that is set. It is per user and per build, it is why the first start of a
+new version is slower than the next, and it is safe to delete when nothing is running. They are separate on purpose — updating the program and keeping
 your work are different things, and a person who installed the binary somewhere unusual should never find Jason
 writing files beside it.
 

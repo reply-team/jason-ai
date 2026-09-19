@@ -389,6 +389,34 @@ public class ReleaseWorkflowTests
     /// than failing it: the workflows run on runners that have it, and this suite has nothing to install.
     /// </summary>
     /// <summary>
+    /// Every place that checks a published or installed executable starts a runtime with it, not only asks it
+    /// for its version.
+    /// </summary>
+    /// <remarks>
+    /// A single-file publish leaves SQLite's native library beside the executable unless it is told to bundle
+    /// it, and the archive carries the executable alone. Such a build answers <c>--version</c> with 0 and
+    /// <c>runtime status</c> with 3 and <c>no_descriptor</c> — both of the assertions this smoke test used to
+    /// make — and then dies on <c>runtime start</c> with a missing DLL. The one build this wave exists to
+    /// deliver would have gone out green, which is why opening the database is now part of every one of these.
+    /// </remarks>
+    [Theory]
+    [InlineData("ci.yml")]
+    [InlineData("release.yml")]
+    public void Every_executable_check_opens_the_database(string workflow)
+    {
+        var text = Read(workflow == "ci.yml" ? Ci : Release);
+        var steps = text.Split("- name:").Where(step => step.Contains("--version", StringComparison.Ordinal)).ToList();
+
+        Assert.NotEmpty(steps);
+        foreach (var step in steps)
+        {
+            Assert.Contains("runtime start", step, StringComparison.Ordinal);
+            Assert.Contains("applied_migrations", step, StringComparison.Ordinal);
+            Assert.Contains("runtime stop", step, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// A release candidate is published as a pre-release, so that it does not become the latest release.
     /// </summary>
     /// <remarks>
