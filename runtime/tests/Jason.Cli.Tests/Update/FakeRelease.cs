@@ -20,7 +20,7 @@ public sealed class FakeRelease : HttpMessageHandler
     {
         Version = version;
         Asset = asset ?? ReleaseAssets.For(Rid);
-        var bytes = archive ?? Archive(Asset);
+        var bytes = archive ?? Archive(Asset, Contents(version));
         _files[Asset] = bytes;
 
         Digest = digest ?? Convert.ToHexStringLower(SHA256.HashData(bytes));
@@ -47,6 +47,16 @@ public sealed class FakeRelease : HttpMessageHandler
 
     /// <summary>Set to fail the next download in the way a network does.</summary>
     public HttpStatusCode? FailWith { get; set; }
+
+    /// <summary>
+    /// What a release's archive holds: an executable that says which version it is — the same thing a real one
+    /// says when it is asked — and the licence the archive is required to carry.
+    /// </summary>
+    public static IEnumerable<(string Name, byte[] Content)> Contents(SemanticVersion version) =>
+    [
+        (ReleaseAssets.ExecutableName, Encoding.UTF8.GetBytes($"jason {version}")),
+        ("LICENSE", Encoding.UTF8.GetBytes("MIT")),
+    ];
 
     /// <summary>The bytes of a well-formed archive holding one executable and a licence, as a release publishes.</summary>
     public static byte[] Archive(string asset, IEnumerable<(string Name, byte[] Content)>? entries = null)
@@ -76,20 +86,28 @@ public sealed class FakeRelease : HttpMessageHandler
     /// <summary>Replaces the manifest this feed answers with, for a test about what a feed says.</summary>
     public void Says(string manifest) => _files[ReleaseAssets.Manifest] = Encoding.UTF8.GetBytes(manifest);
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+        Task.FromResult(Answer(request));
+
+    /// <summary>
+    /// The same answer, for a handler that stands in front of this one: an installation routes the runtime's
+    /// own address to itself and everything else to the release.
+    /// </summary>
+    public HttpResponseMessage Answer(HttpRequestMessage request)
     {
+        ArgumentNullException.ThrowIfNull(request);
         var path = request.RequestUri!.AbsolutePath;
         Requested.Add(path);
 
         if (FailWith is { } failure)
         {
-            return Task.FromResult(new HttpResponseMessage(failure) { Content = new ByteArrayContent([]) });
+            return new HttpResponseMessage(failure) { Content = new ByteArrayContent([]) };
         }
 
         var name = path[(path.LastIndexOf('/') + 1)..];
-        return Task.FromResult(_files.TryGetValue(name, out var bytes)
+        return _files.TryGetValue(name, out var bytes)
             ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) }
-            : new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new ByteArrayContent([]) });
+            : new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new ByteArrayContent([]) };
     }
 
     private static byte[] Zip(IReadOnlyList<(string Name, byte[] Content)> entries)

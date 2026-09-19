@@ -147,11 +147,24 @@ public sealed record UpdateLedger(
     }
 
     /// <summary>The ledger at this path, or null where there is none: nothing in flight is not a failure.</summary>
+    /// <remarks>
+    /// Opened so that nothing else is blocked by the reading. An update replaces this file by renaming over it,
+    /// and on Windows a reader holding it with ordinary sharing makes that rename fail — so
+    /// <c>jason update status</c>, run at the wrong instant, would stop an update in its tracks. Readers give
+    /// way to the writer here rather than the other way round.
+    /// </remarks>
     /// <exception cref="UpdateLedgerException">There is a file and it is not a ledger.</exception>
     public static UpdateLedger? ReadFile(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
-        return File.Exists(path) ? Read(File.ReadAllText(path)) : null;
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(file);
+        return Read(reader.ReadToEnd());
     }
 
     /// <summary>

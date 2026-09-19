@@ -14,6 +14,42 @@ public static class UpdateCodes
 
     /// <summary>The archive does not carry the one file this platform's release is supposed to contain.</summary>
     public const string ArtifactUnexpected = "update_artifact_unexpected";
+
+    /// <summary>A different version is already in flight. The same one is resumed rather than refused.</summary>
+    public const string InProgress = "update_in_progress";
+
+    /// <summary>The feed offers nothing newer than what is installed.</summary>
+    public const string UpToDate = "update_up_to_date";
+
+    /// <summary>The release says it cannot be reached from this version in one step.</summary>
+    public const string NotDirectlyApplicable = "update_not_directly_applicable";
+
+    /// <summary>There is no single executable to replace: this build runs through the muxer.</summary>
+    public const string NotUpdatable = "update_not_updatable";
+
+    /// <summary>The staged file and the install path are on different volumes, and an update renames rather than copies.</summary>
+    public const string CrossVolume = "update_cross_volume";
+
+    /// <summary>The runtime would not do its part — drain, or stop — so nothing was replaced.</summary>
+    public const string RuntimeUnreachable = "update_runtime_unreachable";
+
+    /// <summary>The new version is in place but the runtime it starts is not the one this update installed.</summary>
+    public const string NotHealthy = "update_not_healthy";
+
+    /// <summary>Every code above, for the page's guard to read rather than for anything to iterate at runtime.</summary>
+    public static IReadOnlyList<string> All { get; } =
+    [
+        ArtifactCorrupt,
+        ArtifactUnreachable,
+        ArtifactUnexpected,
+        InProgress,
+        UpToDate,
+        NotDirectlyApplicable,
+        NotUpdatable,
+        CrossVolume,
+        RuntimeUnreachable,
+        NotHealthy,
+    ];
 }
 
 /// <summary>
