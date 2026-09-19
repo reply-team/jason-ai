@@ -52,7 +52,7 @@ public class ReplyOutcomeReportingTests
         Assert.Contains(ReplyOperations.MembershipAdd, thrown.Message, StringComparison.Ordinal);
         Assert.Contains("host_failure", thrown.Message, StringComparison.Ordinal);
         Assert.Contains("The plugin host did not answer.", thrown.Message, StringComparison.Ordinal);
-        Assert.Contains("4", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("Exit code: 4", thrown.Message, StringComparison.Ordinal);
         Assert.Contains("Error: reply-cli not found on PATH", thrown.Message, StringComparison.Ordinal);
     }
 

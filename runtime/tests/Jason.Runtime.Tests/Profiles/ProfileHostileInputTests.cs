@@ -277,6 +277,21 @@ public class ProfileHostileInputTests
     [InlineData("--fork-session")]
     [InlineData("--safe-mode")]
     [InlineData("--resume")]
+
+    // The three the shape itself carries, and the six that would hand a session back the reach those three
+    // take away: another settings file, a plugin directory or source, another MCP configuration, a second
+    // working directory, or no slash commands. One of them written the way a profile is likeliest to write
+    // it, so the check is the validator's own trimming and splitting rather than a lookup in a set.
+    [InlineData("--verbose")]
+    [InlineData("--setting-sources")]
+    [InlineData("--setting-sources=user")]
+    [InlineData("--strict-mcp-config")]
+    [InlineData("--mcp-config")]
+    [InlineData("--plugin-dir")]
+    [InlineData("--plugin-url")]
+    [InlineData("--settings")]
+    [InlineData("--add-dir")]
+    [InlineData("--disable-slash-commands")]
     public async Task A_profile_cannot_carry_a_flag_the_runtime_composes(string flag)
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
