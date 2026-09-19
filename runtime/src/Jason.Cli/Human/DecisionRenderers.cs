@@ -108,7 +108,9 @@ public static partial class DecisionRenderers
         var table = new HumanTable("KIND", "ID");
         foreach (var reference in references)
         {
-            table.Row(RenderText.Snake(reference.Kind), reference.Id);
+            // A stored reference always says what it points at — the runtime refuses one that does not — so a
+            // kind missing here is a row written by something older than that rule, not a thing to guess at.
+            table.Row(reference.Kind is { } kind ? RenderText.Snake(kind) : "unknown", reference.Id);
         }
 
         return [string.Empty, "REFERENCES", table.Render()];

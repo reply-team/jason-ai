@@ -348,6 +348,14 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
             for (var index = 0; index < references.Count; index++)
             {
                 var field = string.Create(CultureInfo.InvariantCulture, $"references[{index}]");
+                if (references[index].Kind is null)
+                {
+                    errors.Add(
+                        string.Create(CultureInfo.InvariantCulture, $"{field}.kind"),
+                        "required",
+                        "a reference says what it points at: work_item, attempt, journal_entry, report or approval.");
+                }
+
                 var id = references[index].Id?.Trim();
                 if (string.IsNullOrEmpty(id))
                 {
@@ -378,7 +386,9 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
         foreach (var reference in references)
         {
             var id = reference.Id.Trim();
-            var resolved = reference.Kind switch
+
+            // Validated before this ran: a reference with no kind never reaches a lookup.
+            var resolved = reference.Kind!.Value switch
             {
                 DecisionReferenceKind.WorkItem => await db.WorkItems.AsNoTracking()
                     .AnyAsync(w => w.PublicId == id && w.CampaignId == campaignId, cancellationToken).ConfigureAwait(false),
@@ -396,7 +406,7 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
             if (!resolved)
             {
                 throw DomainErrors.DecisionReferenceUnresolved(
-                    SnakeCaseEnumConverter<DecisionReferenceKind>.Format(reference.Kind),
+                    SnakeCaseEnumConverter<DecisionReferenceKind>.Format(reference.Kind.Value),
                     id);
             }
         }

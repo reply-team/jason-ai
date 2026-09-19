@@ -7,7 +7,12 @@ public sealed record DecisionOption(string Label, string? Detail);
 /// Something to read before deciding, named by its identifier. Never a copy: a person opening a question an
 /// hour later reads the row as it stands, not as it stood when a role described it.
 /// </summary>
-public sealed record DecisionReference(DecisionReferenceKind Kind, string Id);
+/// <remarks>
+/// The kind is nullable so that leaving it out is a refusal rather than a guess. A non-nullable enum would
+/// have taken an absent field as the first value in the vocabulary, and a caller who forgot to say what they
+/// were pointing at would get a lookup against the wrong table instead of an answer about what they left out.
+/// </remarks>
+public sealed record DecisionReference(DecisionReferenceKind? Kind, string Id);
 
 /// <summary>
 /// A question a running role could not answer for itself, as a caller reads it. The attempt that asked is
