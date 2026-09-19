@@ -29,17 +29,6 @@ public sealed class UpdateFeed(HttpClient client)
     /// </summary>
     public static Uri Default { get; } = new("https://github.com/reply-team/jason-ai/releases/latest/download/manifest.json");
 
-    /// <summary>The same feed for one named release, for a caller that asked for a version rather than for the newest.</summary>
-    public static Uri PinnedFor(Uri feed, SemanticVersion version)
-    {
-        ArgumentNullException.ThrowIfNull(feed);
-        var latest = feed.ToString();
-        var marker = "/releases/latest/download/";
-        return latest.Contains(marker, StringComparison.Ordinal)
-            ? new Uri(latest.Replace(marker, $"/releases/download/v{version}/", StringComparison.Ordinal))
-            : new Uri(feed, $"../download/v{version}/{ReleaseAssets.Manifest}");
-    }
-
     /// <summary>
     /// Where one artifact is fetched from: the feed's own directory and the name the manifest carried, which
     /// has already been held to being a file name.

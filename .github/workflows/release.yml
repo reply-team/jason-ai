@@ -160,6 +160,12 @@ jobs:
           # A tag push is the release, and the tag must already exist. The button makes a draft pointed at the
           # commit it built, so a dry run can be inspected and deleted; publishing the draft is what creates its tag.
           $how = if ($env:EVENT -eq 'workflow_dispatch') { @('--draft', '--target', $env:SHA) } else { @('--verify-tag') }
+
+          # A version carrying a pre-release part is published as one. `latest` is what the default update feed
+          # advertises and what both install one-liners download, so a candidate released without this would be
+          # offered to every runtime that checks and installed by anybody who typed the one-liner that day. The
+          # rule is the version's, not the event's: a candidate is a candidate however it arrived.
+          if ($env:VERSION -clike '*-*') { $how += '--prerelease' } else { $how += '--latest' }
           $assets = 'jason-win-x64.zip', 'jason-linux-x64.tar.gz', 'jason-osx-arm64.tar.gz', 'manifest.json', 'checksums.txt' | ForEach-Object { "artifacts/release/$_" }
           gh release create "v$env:VERSION" @how --title "Jason $env:VERSION" --notes-file artifacts/release/notes.md @assets
           if ($LASTEXITCODE -ne 0) { throw "gh release create exited with $LASTEXITCODE" }

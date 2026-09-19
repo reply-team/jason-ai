@@ -53,12 +53,6 @@ public class UpdateFeedTests
             "https://github.com/reply-team/jason-ai/releases/latest/download/manifest.json",
             UpdateFeed.Default.ToString());
 
-    [Fact]
-    public void A_pinned_version_is_read_from_that_release_rather_than_from_the_latest() =>
-        Assert.Equal(
-            "https://github.com/reply-team/jason-ai/releases/download/v0.2.0/manifest.json",
-            UpdateFeed.PinnedFor(UpdateFeed.Default, SemanticVersion.Parse("0.2.0")).ToString());
-
     /// <summary>
     /// The download is composed from the feed's own directory and a name the manifest was allowed to carry —
     /// never from a URL inside the document. A feed that could name where to fetch from could name anywhere.

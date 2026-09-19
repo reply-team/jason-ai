@@ -389,6 +389,34 @@ public class ReleaseWorkflowTests
     /// than failing it: the workflows run on runners that have it, and this suite has nothing to install.
     /// </summary>
     /// <summary>
+    /// A release candidate is published as a pre-release, so that it does not become the latest release.
+    /// </summary>
+    /// <remarks>
+    /// This is the one place where a missing flag reaches everybody at once. `latest` is what the default feed
+    /// advertises and what both install one-liners download, so pushing <c>v1.0.0-rc.1</c> without
+    /// <c>--prerelease</c> would offer a release candidate to every runtime that checks and install it for
+    /// anybody who typed the one-liner that day — the opposite of what the page promises, which is that 0.x
+    /// releases are ordinary releases and the pre-release flag is kept for candidates.
+    /// </remarks>
+    [Fact]
+    public void A_version_with_a_pre_release_part_is_published_as_a_pre_release()
+    {
+        var release = Read(Release);
+
+        Assert.Contains("--prerelease", release, StringComparison.Ordinal);
+
+        // And the flag is decided from the version rather than from the event: a candidate is a candidate
+        // whether it arrived as a tag or from the button.
+        var deciding = release
+            .Split('\n')
+            .FirstOrDefault(line => line.Contains("--prerelease", StringComparison.Ordinal));
+
+        Assert.NotNull(deciding);
+        Assert.Contains("VERSION", deciding, StringComparison.Ordinal);
+        Assert.Contains("-", deciding, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Every line a workflow really types to run the manifest script, typed — through the PowerShell parser it
     /// will meet there, and not as a list of argv strings.
     /// </summary>
