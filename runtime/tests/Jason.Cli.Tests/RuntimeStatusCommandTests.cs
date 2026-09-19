@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Jason.Cli;
 using Jason.Cli.Commands;
+using Jason.Cli.Tests.Commands;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
@@ -77,6 +78,31 @@ public class RuntimeStatusCommandTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains("· 0 summoned", output.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The descriptor publisher some of these tests launch runs on a thread of its own, and an exception
+    /// escaping a bare thread does not fail a test — it terminates the test host, taking every unrelated test
+    /// in the process with it and naming none of them. This is the way it really fails: the CLI it serves
+    /// polls the same file, and a reader holds it in a way that denies a writer while it reads, so a publish
+    /// landing mid-poll is refused.
+    /// </summary>
+    [Fact]
+    public void A_descriptor_refused_while_somebody_is_reading_it_is_survived_and_retried()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+
+        // Held exactly as a reader holds it: others may read, nobody may write.
+        using (File.Open(dir.Paths.DescriptorFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            RuntimeVerbs.Publish(dir, Descriptor);
+        }
+
+        // It gave up rather than throwing, which is what keeps three hundred unrelated tests alive; and the
+        // test that was waiting for a descriptor is left to fail in its own words.
+        RuntimeVerbs.Publish(dir, Descriptor);
+        Assert.True(File.Exists(dir.Paths.DescriptorFile));
     }
 
     [Fact]

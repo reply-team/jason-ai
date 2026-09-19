@@ -94,11 +94,7 @@ internal static class RuntimeVerbs
         paths =>
         {
             _ = paths;
-            var publisher = new Thread(() =>
-            {
-                Thread.Sleep(60);
-                dir.WriteDescriptor(descriptor);
-            })
+            var publisher = new Thread(() => Publish(dir, descriptor))
             {
                 IsBackground = true,
                 Name = "descriptor-publisher",
@@ -107,6 +103,38 @@ internal static class RuntimeVerbs
             publisher.Start();
             return new FakeProcessHandle(4242);
         };
+
+    /// <summary>
+    /// The publish itself, a moment later, and survivable. This runs on a thread of its own, so an exception
+    /// escaping it does not fail a test — it terminates the whole test host, taking every unrelated test in
+    /// the process with it and reporting nothing about which test was to blame.
+    /// </summary>
+    /// <remarks>
+    /// And it can fail for a reason that is nobody's bug. The CLI this serves is polling the same file, and a
+    /// reader holds it in a way that denies a writer for as long as it is reading — so a publish landing in
+    /// the middle of a poll is refused. It is retried for a moment, because a publish arriving slightly later
+    /// is what this helper promises anyway, and then given up on quietly: by that point the test waiting for a
+    /// descriptor has its own opinion about not getting one, and that opinion is a legible failure rather
+    /// than a dead process.
+    /// </remarks>
+    public static void Publish(TempPaths dir, RuntimeDescriptor descriptor)
+    {
+        ArgumentNullException.ThrowIfNull(dir);
+        Thread.Sleep(60);
+
+        for (var attempt = 0; attempt < 40; attempt++)
+        {
+            try
+            {
+                dir.WriteDescriptor(descriptor);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Thread.Sleep(25);
+            }
+        }
+    }
 
     /// <summary>A launch whose child is gone by the time the CLI looks at it.</summary>
     public static Func<JasonPaths, IProcessHandle> DiesWith(int exitCode) =>
