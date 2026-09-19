@@ -295,8 +295,9 @@ The launcher puts two things in that directory before the child starts:
   settings come from: the composed command reads no user-scope settings and loads no MCP server, so a
   launched role inherits neither the operator's plugins and hooks nor their providers
   ([docs/execution-profiles.md](execution-profiles.md) §7 says what a session is and is not given,
-  including the two things that surprise people: every built-in tool is listed but refused by the mode
-  unless the allow rule names it, and the role has no file-writing tool at all).
+  including the two things that surprise people: every built-in tool is listed, and of the ones a role
+  reached for the mode refused everything but reading, so what the allow rule grants is a floor and not
+  a ceiling; and the role has no file-writing tool at all).
 - `.claude/skills/<role>/`, a copy of `~/.jason/skills/roles/<role>/` when the role has one. Files
   only; a link is neither copied nor followed. A skill that cannot be given to the role fails the
   attempt with `role_skill_invalid` before the child starts — whether because its `SKILL.md` names

@@ -172,8 +172,9 @@ real launch and leaves only a log line behind.
 
 An agent host is installed and configured by a person, for their own work. Starting one for a background work
 item borrows that installation, and unless the launch says otherwise it borrows the whole of it. The launch says
-otherwise, and this section is what that comes to. Every line here was established by running the composed
-command against Claude Code 2.1.275 rather than by reading a flag's description.
+otherwise, and this section is what that comes to. What follows was **measured** by running the composed command
+against Claude Code 2.1.275; where a sentence states the mode's own rule rather than something measured, it says
+so, because the two are not equally strong.
 
 **Settings come from the work directory and nowhere else.** The command carries `--setting-sources project`, so
 the only settings the session reads are the ones the launcher wrote into `.claude/`. The operator's own
@@ -184,16 +185,21 @@ commands and three MCP servers when those flags were absent, and with 27 built-i
 built-ins plus the role's own, which still loads — 54 commands and no MCP server when they were present.
 
 **The tools are all still listed; the mode and the allow rule decide what runs.** Every built-in tool the host
-has appears to the session, and one the allow rule does not name is **refused by the mode** at the moment it is
-used. The rule grants a command that begins with the callback word. The host may also decide for itself that
-some read-only command is harmless and let it run, so the rule is a floor rather than a ceiling and this is not
-a sandbox; what holds is that nothing which changes anything is permitted.
+has appears to the session, and the allow rule names one thing: the callback. Of the tools a role reached for,
+the host let `Read` through on its own, while `Glob`, `Write`, `Edit` and its PowerShell tool were **refused by
+the mode**. One chained read-only shell command ran and one piped one was refused, so the host's own reading of
+what is harmless is a floor under the rule, and how far that floor extends was not isolated.
 
-**The role has no file-writing tool.** Under this permission mode the file-editing tools are refused however the
-allow list is written — a rule naming them was tried and granted nothing — so a role cannot create a file even
-in its own work directory. Anything it wants to keep travels inside a command: `rolenote.set` with `--note`,
-`workitem.set_result`, and `workitem.complete` with `--result`. A role skill that says "write the file first" is
-teaching a role to fail in the middle of a real attempt.
+The mode's rule — as the mode states it, not as a measurement here — is that anything needing permission is
+refused. What was seen is narrower: nothing outside the callback was seen to change anything, and nothing
+state-changing outside it was tried. So this is not a sandbox, the allow rule is not a ceiling, and an
+installation that needs one should not read this section as providing it.
+
+**The role has no file-writing tool.** A rule naming the file-editing tools, in the host's own documented form,
+was tried and granted neither writing nor editing; no form that grants them is known. Under the composed shape,
+then, a role cannot create a file even in its own work directory. Anything it wants to keep travels inside a
+command: `rolenote.set` with `--note`, `workitem.set_result`, and `workitem.complete` with `--result`. A role
+skill that says "write the file first" is teaching a role to fail in the middle of a real attempt.
 
 **The transcript is larger than the work.** A session that streams partial messages and runs verbose writes a
 great deal for very little: a nine-turn errand measured 129 KB and a twelve-turn one 203 KB, against the 1 MiB
@@ -203,7 +209,8 @@ installation running longer roles should know the bound is nearer than it sounds
 **One thing is not confined.** The host still writes its own per-session **auto-memory** directory under the
 operator's user configuration, whatever the setting sources say. Jason neither reads nor writes it, the
 capability token is not in it, and nothing in the work directory points at it — but a machine that launches
-background roles accumulates those directories in the operator's home, and no flag in this version prevents it.
+background roles accumulates those directories in the operator's home. None of the flags composed here prevents
+that, and no other flag was tried.
 
 ## 8. Role notes
 
@@ -226,10 +233,12 @@ One document per campaign and role:
 
 ```sh
 jason rolenote get <campaign-id> researcher
-jason rolenote set <campaign-id> researcher --note-file note.json
+jason rolenote set <campaign-id> researcher --note '{"gatekeeper":"the switchboard hangs up after six"}'
 jason rolenote list <campaign-id> --human
 ```
 
+- **Written in one command.** A launched role has no file-writing tool (§7), so its note travels inside the
+  call as one compact JSON object; a person at a keyboard may use `--note-file` instead.
 - **Replaced whole.** There is no patch verb: a role merging into its own memory would have to reason
   about what an earlier session of itself meant by a key, and the rule that needs no reasoning is that
   the last writer owns the document. Clearing a note is writing `{}`.
