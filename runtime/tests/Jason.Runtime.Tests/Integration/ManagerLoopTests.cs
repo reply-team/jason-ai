@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Jason.Contracts.Api;
+using Jason.Contracts.Execution;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
@@ -312,6 +313,55 @@ public class ManagerLoopTests
         Assert.Equal("stand-in", checkIn.Lineage.ProfileName);
         Assert.Equal(escalating.Provenance.Agent.ProfileRevision, checkIn.Lineage.ProfileRevision);
         Assert.Equal(escalating.Id, checkIn.Lineage.FromAttemptId);
+    }
+
+    /// <summary>
+    /// What a manager believes when its own note disagrees with the campaign. The note is what a role
+    /// remembered and the runtime is what is true, and a review that reported the note would be reporting
+    /// something that stopped being so before it was woken.
+    /// </summary>
+    /// <remarks>
+    /// The envelope cannot hand a note's content to a role even in principle: what it carries is the note's
+    /// <em>address</em> — a campaign and a role — so the note and the state are read the same way, through the
+    /// same API, and cannot be confused for one another by the thing reading them.
+    /// </remarks>
+    [Fact]
+    public async Task A_manager_reports_the_state_where_its_note_disagrees_with_it()
+    {
+        // The address, by shape: two identifiers and nowhere to put a note.
+        Assert.Equal(
+            ["CampaignId", "Role"],
+            typeof(RoleMemoryLocation).GetProperties().Select(property => property.Name).Order());
+
+        await using var host = await FakeHostRuntime.StartAsync(Ct, Settings(reviewSeconds: 3_600, "--note-check"));
+        var campaign = await host.CampaignAsync(Ct);
+
+        // What the manager remembered last time, and what is true now. The campaign is active.
+        await host.Fixture.PostOkAsync<RoleNoteDto>(
+            Operations.RoleNoteSet,
+            new
+            {
+                campaign_id = campaign,
+                role = ManagerCheckIn.Role,
+                note = new { campaign_status = "paused" },
+                actor = new { type = "human", id = "ada" },
+            },
+            Ct);
+
+        host.Clock.Advance(TimeSpan.FromSeconds(3_600));
+        Assert.Equal(1, (await host.ScanAsync(Ct)).Summoned);
+
+        var checkIn = await CheckInAsync(host, campaign);
+        host.Track(checkIn.Id);
+        var finished = await host.WaitForStatusAsync(checkIn.Id, WorkItemStatus.Succeeded, Ct);
+
+        // It read both and reported the state, naming what it had believed so the disagreement is visible.
+        var summary = (string?)finished.Result!["summary"];
+        Assert.Contains("active", summary!, StringComparison.Ordinal);
+        Assert.DoesNotContain("paused", summary, StringComparison.Ordinal);
+
+        var said = FakeHostRuntime.StderrOf(host.Paths, checkIn.Id, finished.Attempts!.Single());
+        Assert.Contains("believed=paused state=active", said, StringComparison.Ordinal);
     }
 
     private static async Task<WorkItemDto> CheckInAsync(FakeHostRuntime host, string campaignId)
