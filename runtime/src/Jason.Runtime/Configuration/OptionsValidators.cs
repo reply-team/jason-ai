@@ -346,8 +346,19 @@ public sealed class UpdateOptionsValidator : IValidateOptions<UpdateOptions>
             failures.Add($"Update:FeedUrl must be an absolute https address, or http on loopback; got '{options.FeedUrl}'.");
         }
 
-        OptionRules.Range(failures, "Update:InitialDelayMinutes", options.InitialDelayMinutes, 1, 1440);
-        OptionRules.Range(failures, "Update:IntervalHours", options.IntervalHours, 1, 168);
+        OptionRules.Range(
+            failures,
+            "Update:InitialDelayMinutes",
+            options.InitialDelayMinutes,
+            UpdateOptions.MinimumInitialDelayMinutes,
+            UpdateOptions.MaximumInitialDelayMinutes);
+
+        OptionRules.Range(
+            failures,
+            "Update:IntervalHours",
+            options.IntervalHours,
+            UpdateOptions.MinimumIntervalHours,
+            UpdateOptions.MaximumIntervalHours);
 
         return OptionRules.Result(failures);
     }

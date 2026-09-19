@@ -12,6 +12,19 @@ public sealed class UpdateOptions
     public const string Section = "Update";
 
     /// <summary>
+    /// The narrowest and widest the two waits may be, named here rather than in the validator for the reason
+    /// the manager's cadence is: the page prints these numbers, and a bound nobody can print is a bound that
+    /// drifts from the rule that enforces it.
+    /// </summary>
+    public const int MinimumInitialDelayMinutes = 1;
+
+    public const int MaximumInitialDelayMinutes = 1440;
+
+    public const int MinimumIntervalHours = 1;
+
+    public const int MaximumIntervalHours = 168;
+
+    /// <summary>
     /// Off means the runtime never opens a connection for this. The check is the one thing a runtime does that
     /// reaches past the machine without being asked, so it has a switch of its own — and every test runtime
     /// turns it off.
@@ -24,9 +37,9 @@ public sealed class UpdateOptions
     /// </summary>
     public string FeedUrl { get; set; } = UpdateFeed.Default.ToString();
 
-    /// <summary>1..1440. How long after start the first check runs; a runtime that lives less than this never asks.</summary>
+    /// <summary>How long after start the first check runs; a runtime that lives less than this never asks.</summary>
     public int InitialDelayMinutes { get; set; } = 5;
 
-    /// <summary>1..168. How long between one check and the next.</summary>
+    /// <summary>How long between one check and the next.</summary>
     public int IntervalHours { get; set; } = 24;
 }

@@ -78,6 +78,29 @@ design — lives in **[docs/architecture.md](docs/architecture.md)**.
 | `skills/business/` | Skills that teach an agent the SDR profession |
 | `docs/` | Maintained documentation |
 
+## Installing
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.sh | sh
+```
+
+```powershell
+irm https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.ps1 | iex
+```
+
+Each script works out your platform, verifies the download's SHA-256 before unpacking it, installs the
+executable under your own account — `~/.local/bin` on macOS and Linux, `%LOCALAPPDATA%\Programs\jason` on
+Windows — and puts that directory on your PATH unless you pass `--no-modify-path`. Nothing needs administrator
+rights. **Both lines resolve to the latest release, so until the first release is published they answer 404**;
+build from source until then. `docs/release-and-update.md` is the contract for what a release publishes and how
+a running runtime finds out that a newer one exists:
+
+```sh
+jason update check
+```
+
+Nothing is downloaded or installed by that command, and nothing in this version replaces a binary.
+
 ## Building from source
 
 Requires the .NET SDK version pinned in `global.json`. From the repository root:
