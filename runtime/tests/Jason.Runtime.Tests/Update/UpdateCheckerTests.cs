@@ -21,7 +21,6 @@ public class UpdateCheckerTests
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly RuntimeHostOptions Quiet = new(ShippedSettingsDirectory: null, ConsoleLogging: false);
 
     /// <summary>Long enough that a wait on a completed check never expires by accident under a full run.</summary>
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
@@ -38,7 +37,7 @@ public class UpdateCheckerTests
         File.WriteAllText(dir.Paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
         var clock = new FixedClock(Noon);
         var feed = new StubFeed(_ => Ok(Manifest("0.2.0")));
-        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, Quiet with { Clock = clock, FeedHandler = feed }, Ct);
+        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, Checking(clock, feed), Ct);
         var armed = await ArmedAsync(clock, atLeast: 1);
 
         clock.Advance(TimeSpan.FromMinutes(4) + TimeSpan.FromSeconds(59));
@@ -75,7 +74,7 @@ public class UpdateCheckerTests
         File.WriteAllText(dir.Paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
         var clock = new FixedClock(Noon);
         var feed = new StubFeed(_ => throw new InvalidOperationException("nothing may ask the feed here"));
-        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, Quiet with { Clock = clock, FeedHandler = feed }, Ct);
+        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, Checking(clock, feed), Ct);
         var advertisement = runtime.Services.GetRequiredService<UpdateAdvertisement>();
         await ArmedAsync(clock, atLeast: 1);
 
@@ -226,6 +225,14 @@ public class UpdateCheckerTests
     /// the clock straight after starting could move it past a wait that was not yet on the clock — and would
     /// then be proving nothing at all, or only what a slow start happened to let it prove.
     /// </summary>
+    /// <summary>
+    /// The shared options with the check deliberately left on and a stub where the network would be. Every
+    /// other test in this suite starts from options that turn it off; these are the tests it is for, so they
+    /// say so in one place rather than each quietly dropping the hook that turns it off.
+    /// </summary>
+    private static RuntimeHostOptions Checking(FixedClock clock, HttpMessageHandler feed) =>
+        TestRuntimeOptions.Quiet with { Clock = clock, FeedHandler = feed, ConfigureServices = null };
+
     private static async Task<int> ArmedAsync(FixedClock clock, int atLeast)
     {
         Assert.True(

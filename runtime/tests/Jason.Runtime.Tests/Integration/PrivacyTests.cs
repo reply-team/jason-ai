@@ -19,7 +19,6 @@ public class PrivacyTests
     private const string Secret = "canary-9c1d";
     private const string Rejected = "bad-canary-2b8e";
 
-    private static readonly RuntimeHostOptions Quiet = new(ShippedSettingsDirectory: null, ConsoleLogging: false);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -27,7 +26,7 @@ public class PrivacyTests
     public async Task Contact_data_and_the_token_never_reach_the_log_files()
     {
         using var dir = new TempDataDir();
-        var runtime = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct);
+        var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
         var token = runtime.Token;
         try
         {

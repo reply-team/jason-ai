@@ -10,9 +10,10 @@ namespace Jason.Runtime.Tests;
 /// </summary>
 /// <remarks>
 /// The switch travels as <c>JASON_Update__CheckEnabled</c>: the runtime reads <c>JASON_</c>-prefixed variables
-/// into its configuration, and the double underscore is how a nested key is spelled there. That the flag reaches
-/// the child through that mapping is the configuration system's contract rather than something a test here can
-/// watch happen inside another process; the in-process half of the same guarantee is asserted on the fixture.
+/// into its configuration, and the double underscore is how a nested key is spelled there. That it really
+/// arrives that way is not taken on the configuration system's word —
+/// <c>EndToEndTests.A_spawned_runtime_says_in_its_own_log_that_it_will_not_ask_the_release_feed</c> reads the
+/// line the child writes about itself, and goes red when this assignment is removed.
 /// </remarks>
 public static class TestRuntimeEnvironment
 {

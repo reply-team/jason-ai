@@ -116,6 +116,43 @@ public class EndToEndTests
     /// The runtime under test as a real child process, with its console output drained so a full pipe can
     /// never wedge it and a failing test can show what the runtime said.
     /// </summary>
+    /// <summary>
+    /// A spawned runtime really is offline: it says so itself, in its own log, from inside the child process.
+    /// </summary>
+    /// <remarks>
+    /// The eight places that start a real runtime turn the update check off by putting
+    /// <c>JASON_Update__CheckEnabled=false</c> in the child's environment, and until now nothing checked that
+    /// this arrives: that a double underscore binds to a nested key, that the <c>JASON_</c> prefix is read at
+    /// all, and that the setting reaches the checker rather than being bound too late to matter are three
+    /// facts about the configuration system, and a suite's promise not to reach the network should not rest on
+    /// somebody's reading of a contract. The runtime writes one line when the check is off; this reads it out
+    /// of the child's own logs directory.
+    /// </remarks>
+    [Fact]
+    public async Task A_spawned_runtime_says_in_its_own_log_that_it_will_not_ask_the_release_feed()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "jason-e2e", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var paths = new JasonPaths(root);
+
+        using var runtime = new RuntimeProcess(root);
+        try
+        {
+            await WaitForDescriptorAsync(paths, expectedNot: null, runtime);
+        }
+        finally
+        {
+            await runtime.StopAsync();
+        }
+
+        var logs = Directory.EnumerateFiles(paths.LogsDirectory, "runtime-*.jsonl").ToList();
+        var written = string.Join('\n', logs.Select(File.ReadAllText));
+
+        Assert.Contains("Update check is disabled by configuration", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("Update check failed", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("releases/latest/download", written, StringComparison.Ordinal);
+    }
+
     private sealed class RuntimeProcess : IDisposable
     {
         private readonly StringBuilder _diagnostics = new();

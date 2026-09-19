@@ -9,7 +9,6 @@ namespace Jason.Runtime.Tests.Configuration;
 
 public class OptionsHotReloadTests
 {
-    private static readonly RuntimeHostOptions Quiet = new(ShippedSettingsDirectory: null, ConsoleLogging: false);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -90,7 +89,7 @@ public class OptionsHotReloadTests
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
         File.WriteAllText(dir.Paths.UserSettingsFile, """{"Dispatcher":{"TickSeconds":0}}""");
 
-        var failure = await Assert.ThrowsAsync<OptionsValidationException>(() => RuntimeHost.StartAsync(dir.Paths, Quiet, Ct));
+        var failure = await Assert.ThrowsAsync<OptionsValidationException>(() => RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct));
 
         Assert.Contains("Dispatcher:TickSeconds", failure.Message, StringComparison.Ordinal);
 

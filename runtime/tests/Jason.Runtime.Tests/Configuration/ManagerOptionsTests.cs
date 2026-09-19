@@ -215,7 +215,7 @@ public class ManagerOptionsTests
         File.WriteAllText(dir.Paths.UserSettingsFile, """{"Manager":{"Triggers":["inbound_reply"]}}""");
 
         var failure = await Assert.ThrowsAsync<OptionsValidationException>(
-            () => RuntimeHost.StartAsync(dir.Paths, new RuntimeHostOptions(ShippedSettingsDirectory: null, ConsoleLogging: false), Ct));
+            () => RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct));
 
         Assert.Contains("Manager:Triggers[0]", failure.Message, StringComparison.Ordinal);
     }

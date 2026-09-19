@@ -12,7 +12,6 @@ namespace Jason.Runtime.Tests.Configuration;
 /// </summary>
 public class ProviderOpBudgetTests
 {
-    private static readonly RuntimeHostOptions Quiet = new(ShippedSettingsDirectory: null, ConsoleLogging: false);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -28,7 +27,7 @@ public class ProviderOpBudgetTests
             dir.Paths.UserSettingsFile,
             """{"Dispatcher":{"ProviderOp":{"TimeoutSeconds":120}},"Plugins":{"Invoker":{"KillGraceMs":5000}}}""");
 
-        var failure = await Assert.ThrowsAsync<OptionsValidationException>(() => RuntimeHost.StartAsync(dir.Paths, Quiet, Ct));
+        var failure = await Assert.ThrowsAsync<OptionsValidationException>(() => RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct));
 
         // An operator who raised a timeout has to be told which contract forces the number, not only the number.
         Assert.Contains("campaign.enroll", failure.Message, StringComparison.Ordinal);

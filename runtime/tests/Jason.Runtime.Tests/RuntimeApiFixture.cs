@@ -22,7 +22,6 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
     /// </summary>
     public const string DispatcherOff = """{"Dispatcher":{"Enabled":false}}""";
 
-    private static readonly RuntimeHostOptions Quiet = new(ShippedSettingsDirectory: null, ConsoleLogging: false);
 
     private readonly TempDataDir _dir = new();
     private RunningRuntime? _runtime;
@@ -59,7 +58,7 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
             prepare(fixture._dir.Paths);
         }
 
-        var options = Quiet with
+        var options = TestRuntimeOptions.Quiet with
         {
             Clock = clock,
             ConfigureServices = services =>
@@ -67,8 +66,9 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
                 // Whatever settings the test wrote, a fixture's runtime never asks the release feed: the check
                 // is the one thing a runtime does that reaches past the machine without being asked, and a
                 // test suite is no place to be asking from. An override after binding rather than a line in
-                // the settings file, because the file is the test's to write.
-                services.PostConfigure<UpdateOptions>(update => update.CheckEnabled = false);
+                // the settings file, because the file is the test's to write — and the same call the shared
+                // options make, so the rule is written once.
+                TestRuntimeOptions.TurnTheUpdateCheckOff(services);
                 configureServices?.Invoke(services);
             },
         };

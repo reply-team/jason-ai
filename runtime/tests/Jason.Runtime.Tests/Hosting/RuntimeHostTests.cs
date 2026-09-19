@@ -12,7 +12,6 @@ namespace Jason.Runtime.Tests.Hosting;
 
 public class RuntimeHostTests
 {
-    private static readonly RuntimeHostOptions Quiet = new(ShippedSettingsDirectory: null, ConsoleLogging: false);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -20,7 +19,7 @@ public class RuntimeHostTests
     public async Task Starting_publishes_a_descriptor_that_matches_the_listening_api()
     {
         using var dir = new TempDataDir();
-        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct);
+        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
 
         Assert.True(File.Exists(dir.Paths.DescriptorFile));
         Assert.StartsWith("http://127.0.0.1:", runtime.Descriptor.BaseUrl, StringComparison.Ordinal);
@@ -44,7 +43,7 @@ public class RuntimeHostTests
     public async Task System_info_accepts_an_empty_body()
     {
         using var dir = new TempDataDir();
-        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct);
+        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
         using var http = Client(runtime);
 
         using var response = await http.PostAsync(Operations.Route(Operations.SystemInfo), content: null, Ct);
@@ -56,7 +55,7 @@ public class RuntimeHostTests
     public async Task Missing_or_wrong_token_is_401_with_the_error_envelope()
     {
         using var dir = new TempDataDir();
-        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct);
+        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
         using var http = new HttpClient { BaseAddress = runtime.BaseUrl };
 
         using var missing = await http.PostAsync(Operations.Route(Operations.SystemInfo), Json("{}"), Ct);
@@ -74,7 +73,7 @@ public class RuntimeHostTests
     public async Task Foreign_host_header_is_rejected_before_authentication()
     {
         using var dir = new TempDataDir();
-        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct);
+        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
         using var http = Client(runtime);
         using var request = new HttpRequestMessage(HttpMethod.Post, Operations.Route(Operations.SystemInfo)) { Content = Json("{}") };
         request.Headers.Host = "evil.example";
@@ -90,7 +89,7 @@ public class RuntimeHostTests
     public async Task Unknown_operations_and_wrong_methods_are_404_with_the_error_envelope()
     {
         using var dir = new TempDataDir();
-        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct);
+        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
         using var http = Client(runtime);
 
         using var unknown = await http.PostAsync("/v1/nothing.here", Json("{}"), Ct);
@@ -105,9 +104,9 @@ public class RuntimeHostTests
     public async Task A_second_runtime_on_the_same_data_directory_refuses_to_start()
     {
         using var dir = new TempDataDir();
-        await using var first = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct);
+        await using var first = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
 
-        await Assert.ThrowsAsync<RuntimeAlreadyRunningException>(() => RuntimeHost.StartAsync(dir.Paths, Quiet, Ct));
+        await Assert.ThrowsAsync<RuntimeAlreadyRunningException>(() => RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct));
 
         Assert.True(File.Exists(dir.Paths.DescriptorFile)); // the first runtime's descriptor is untouched
     }
@@ -116,7 +115,7 @@ public class RuntimeHostTests
     public async Task Stopping_removes_the_descriptor_and_closes_the_port()
     {
         using var dir = new TempDataDir();
-        var runtime = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct);
+        var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
         var baseUrl = runtime.BaseUrl;
 
         await runtime.StopAsync();
@@ -125,7 +124,7 @@ public class RuntimeHostTests
         using var http = new HttpClient { BaseAddress = baseUrl, Timeout = TimeSpan.FromSeconds(5) };
         await Assert.ThrowsAsync<HttpRequestException>(() => http.PostAsync(Operations.Route(Operations.SystemInfo), Json("{}"), Ct));
 
-        await using var again = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct); // lock released, restart is an ordinary start
+        await using var again = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct); // lock released, restart is an ordinary start
         Assert.NotEqual(runtime.Descriptor.InstanceId, again.Descriptor.InstanceId);
     }
 
@@ -134,7 +133,7 @@ public class RuntimeHostTests
     {
         using var dir = new TempDataDir();
         string token;
-        await using (var runtime = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct))
+        await using (var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct))
         {
             token = runtime.Token;
             using var http = Client(runtime);
@@ -154,7 +153,7 @@ public class RuntimeHostTests
     public async Task The_real_cli_reads_the_descriptor_and_reports_status()
     {
         using var dir = new TempDataDir();
-        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct);
+        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
         var output = new StringWriter();
         var error = new StringWriter();
 

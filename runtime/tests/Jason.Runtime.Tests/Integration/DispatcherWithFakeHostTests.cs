@@ -371,7 +371,7 @@ public class DispatcherWithFakeHostTests
 
         await using var successor = await RuntimeHost.StartAsync(
             host.Paths,
-            new RuntimeHostOptions(ShippedSettingsDirectory: null, ConsoleLogging: false, Clock: host.Clock),
+            TestRuntimeOptions.Quiet with { Clock = host.Clock },
             Ct);
         using var http = new HttpClient { BaseAddress = successor.BaseUrl };
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", successor.Token);

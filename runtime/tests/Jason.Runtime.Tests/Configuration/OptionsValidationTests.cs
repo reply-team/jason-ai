@@ -7,7 +7,6 @@ namespace Jason.Runtime.Tests.Configuration;
 
 public class OptionsValidationTests
 {
-    private static readonly RuntimeHostOptions Quiet = new(ShippedSettingsDirectory: null, ConsoleLogging: false);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -201,7 +200,7 @@ public class OptionsValidationTests
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
         File.WriteAllText(dir.Paths.UserSettingsFile, """{"Roles":{"DefaultExecutionProfile":"Not A Name"}}""");
 
-        var failure = await Assert.ThrowsAsync<OptionsValidationException>(() => RuntimeHost.StartAsync(dir.Paths, Quiet, Ct));
+        var failure = await Assert.ThrowsAsync<OptionsValidationException>(() => RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct));
 
         Assert.Contains("Roles:DefaultExecutionProfile", failure.Message, StringComparison.Ordinal);
     }
@@ -310,7 +309,7 @@ public class OptionsValidationTests
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
         File.WriteAllText(dir.Paths.UserSettingsFile, """{"Update":{"FeedUrl":"http://example.com/manifest.json"}}""");
 
-        var failure = await Assert.ThrowsAsync<OptionsValidationException>(() => RuntimeHost.StartAsync(dir.Paths, Quiet, Ct));
+        var failure = await Assert.ThrowsAsync<OptionsValidationException>(() => RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct));
 
         Assert.Contains("Update:FeedUrl", failure.Message, StringComparison.Ordinal);
     }
