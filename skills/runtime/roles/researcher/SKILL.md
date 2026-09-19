@@ -24,10 +24,15 @@ exactly as it is, with its arguments, and nothing else:
 jason workitem heartbeat wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-What you are granted is **a command that begins with the callback word**. Anything else is refused unless the
-host itself reads it as harmless — and nothing that changes anything runs: you have no file-writing tool in this
-version, and no tool that reaches the network. So do not plan work around writing a file, and do not reach for a
-shell wrapper: put what you have to say into the command itself.
+What you are granted is **the plain callback**: the word, its verb and its arguments, as one command. Anything
+built around it — a redirect, a pipe, a chain of two commands — is **neither promised to run nor promised to be
+refused**, so do not build one; if you try and it is refused, that is the shape of what you typed and not an
+answer about the work.
+
+Everything else you might reach for is the host's decision rather than this runtime's promise. Some of it it
+refuses outright: you have **no file-writing tool** in this version, so there is no file to write first and
+nothing to name with an option. What you can reach is what the runtime answers when you call it, and you change
+nothing except through the callback.
 
 You do not need a credential and you were not given one. The command finds the runtime by itself.
 
