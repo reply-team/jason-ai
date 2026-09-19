@@ -490,6 +490,12 @@ public class SummonerTests
         attempt.Provenance = new AttemptProvenanceDto(
             null, null, null, null, null, null, null, null, null, null, null,
             Agent: new AgentProvenanceDto(ProfileResolutionSource.CampaignPolicy, ProfileName: "local-claude", ProfileRevision: 4));
+
+            // A running agent attempt has a child: raising is fenced by the live attempt, and the live attempt
+            // is the one the executor is holding open while its process runs. Lineage now reads that record —
+            // a claim refused before any child existed hands nothing down — so a fixture that stands for a
+            // running role has to say so.
+        attempt.Launch = new AttemptLaunchDto(["claude", "-p"], WorkDir: "/work", Pid: 4242, ExitCode: null);
         db.Attempts.Add(attempt);
         checkIn.Status = WorkItemStatus.Processing;
         await db.SaveChangesAsync(Ct);
@@ -539,6 +545,12 @@ public class SummonerTests
             Provenance = new AttemptProvenanceDto(
                 null, null, null, null, null, null, null, null, null, null, null,
                 Agent: new AgentProvenanceDto(ProfileResolutionSource.CampaignPolicy, ProfileName: "local-claude", ProfileRevision: 4)),
+
+            // A running agent attempt has a child: raising is fenced by the live attempt, and the live attempt
+            // is the one the executor is holding open while its process runs. Lineage now reads that record —
+            // a claim refused before any child existed hands nothing down — so a fixture that stands for a
+            // running role has to say so.
+            Launch = new AttemptLaunchDto(["claude", "-p"], WorkDir: "/work", Pid: 4242, ExitCode: null),
         };
         db.WorkItems.Add(item);
         db.Attempts.Add(attempt);

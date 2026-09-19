@@ -63,10 +63,16 @@ public static class Lineage
             return LineageRecord.Unresolved;
         }
 
-        // The profile that attempt actually ran under. An agent record without a name resolved no profile at all
-        // — the role's own entry command ran it — so there is nothing to pin and nothing being changed behind
-        // anybody's back; its item's record carries on instead.
-        if (ancestor.Provenance?.Agent is { ProfileName: { } profile } agent)
+        // The profile that attempt actually ran under, and the launch record is what "actually" means. An agent
+        // record without a name resolved no profile at all — the role's own entry command ran it — so there is
+        // nothing to pin; its item's record carries on instead.
+        //
+        // A claim refused before any child existed keeps its provenance too, deliberately, so that an operator
+        // can read which profile was chosen. That is a fact about a choice and not a chain: inheriting it handed
+        // work created because of the refusal the very profile that could not start — and the manager loop's
+        // review of such a failure was then refused for the same reason, which is the one review that had to
+        // run. Nothing launched, so nothing is handed down.
+        if (ancestor.Launch is not null && ancestor.Provenance?.Agent is { ProfileName: { } profile } agent)
         {
             return new LineageRecord(LineageState.Inherited, profile, agent.ProfileRevision, ancestor.PublicId);
         }
