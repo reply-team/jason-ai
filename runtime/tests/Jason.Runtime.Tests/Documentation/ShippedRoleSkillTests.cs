@@ -82,10 +82,21 @@ public partial class ShippedRoleSkillTests
         var skill = Whitespace().Replace(
             await File.ReadAllTextAsync(Path.Combine(RoleSkillsPack(), "researcher", WorkDirectory.SkillFile), Ct), " ");
 
-        // The callback, in the form the allow rule grants — and the two shapes it does not.
+        // The callback, in the form the allow rule grants.
         Assert.Contains("rolenote set", skill, StringComparison.Ordinal);
         Assert.Contains("workitem complete", skill, StringComparison.Ordinal);
-        Assert.Contains("redirect", skill, StringComparison.OrdinalIgnoreCase);
+
+        // What the rule actually decides, in the form a real launch showed: the grant is for commands that begin
+        // with the callback word. Anything else is refused unless the host itself reads it as harmless, and a
+        // skill that promised a chained command would be denied promised something the host does not guarantee.
+        Assert.Contains("begins with the callback word", skill, StringComparison.Ordinal);
+
+        // A launched role has no file-writing tool in this version, so a skill that tells it to write a file
+        // first sends it to a denial in the middle of a paid attempt. The note and the result go inline.
+        Assert.Contains("no file-writing tool", skill, StringComparison.Ordinal);
+        Assert.Contains("--note '", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("--note-file", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("--result-file", skill, StringComparison.Ordinal);
 
         // INV-MEM-001, in the skill the role actually reads rather than only in a document nobody hands it.
         Assert.Contains("not authoritative", skill, StringComparison.OrdinalIgnoreCase);

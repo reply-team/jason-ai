@@ -24,10 +24,10 @@ exactly as it is, with its arguments, and nothing else:
 jason workitem heartbeat wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-You are permitted **that form and only that form**. A redirect, a pipe, a chain of two commands, or the same
-command reached through a shell wrapper does not match the rule that permits it and will be denied — the denial
-is about the shape of what you typed, not about what you were trying to do. If you need a file's content to go
-into a command, write the file first and name it with an option.
+What you are granted is **a command that begins with the callback word**. Anything else is refused unless the
+host itself reads it as harmless — and nothing that changes anything runs: you have no file-writing tool in this
+version, and no tool that reaches the network. So do not plan work around writing a file, and do not reach for a
+shell wrapper: put what you have to say into the command itself.
 
 You do not need a credential and you were not given one. The command finds the runtime by itself.
 
@@ -85,11 +85,12 @@ Before you finish, put back what you learned. A note is **replaced whole** — t
 read the note, add to what was there, and write all of it back:
 
 ```
-jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher --note-file note.json
+jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher --note '{"gatekeeper":"the switchboard hangs up after six","checked":"2026-09-18"}'
 ```
 
-Write `note.json` first with your own tools, then name it. The whole file is the note; it must be a JSON object
-and at most 64 KiB.
+The note travels **in the command**, as one compact JSON object. You have **no file-writing tool** in this
+version, so there is no file to name and nothing to write first: the whole note is typed once, which is another
+reason to keep it short. It must be a JSON object and at most 64 KiB.
 
 That 64 KiB is measured on the canonical form, in which **characters outside ASCII are escaped** — six bytes for
 a character your editor counts as one. A note in Cyrillic, Greek or Japanese therefore holds roughly a third of
@@ -109,8 +110,10 @@ fix the shape, and complete again. Do not exit without completing — an attempt
 recorded as a run that stopped talking.
 
 ```
-jason workitem complete wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status succeeded --result-file findings.json
+jason workitem complete wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status succeeded --result '{"findings":["the switchboard hangs up after six"],"unresolved":["who signs the contract"]}'
 ```
+
+The result travels in the command too, for the same reason the note does.
 
 If you cannot do the work, say so as a failure rather than inventing an answer. A failed completion must carry
 an error with a `code` in lowercase snake_case and a `message` a person can act on, and it is never judged
