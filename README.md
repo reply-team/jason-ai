@@ -188,6 +188,15 @@ jason approval get <approval-id> --human
 jason approval approve <approval-id> --actor human:you@example.com --reason "checked the list"
 ```
 
+A launched role that cannot decide something for itself asks a person instead, and the answer wakes the
+review that carries the work on:
+
+```sh
+jason decision list --human
+jason decision get <decision-id> --human
+jason decision answer <decision-id> --answer "pause it" --actor human:you@example.com
+```
+
 Effects that never went through Jason at all — something a person or an agent did with its own CLI, an
 MCP tool or by hand — are told to Jason afterwards and kept as the reporter's assertion, never as work
 Jason performed. What admitting one establishes, what it deliberately does not, and how reports are
