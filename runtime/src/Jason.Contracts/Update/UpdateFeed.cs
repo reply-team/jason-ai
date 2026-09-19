@@ -30,6 +30,18 @@ public sealed class UpdateFeed(HttpClient client)
     public static Uri Default { get; } = new("https://github.com/reply-team/jason-ai/releases/latest/download/manifest.json");
 
     /// <summary>
+    /// How long either caller waits for a feed. A manifest is a few hundred bytes: a page that has not answered
+    /// in ten seconds is not going to, and both callers can afford to be told so — the runtime's check runs
+    /// again in a day, and a person at a prompt would rather have the answer than the wait.
+    /// </summary>
+    /// <remarks>
+    /// Declared here, with the type that performs the request, because two callers wait on it — the unattended
+    /// check and <c>jason update check</c> — and a wait declared twice is a wait that will be two different
+    /// numbers before long. It already was.
+    /// </remarks>
+    public static TimeSpan DefaultTimeout { get; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
     /// Where one artifact is fetched from: the feed's own directory and the name the manifest carried, which
     /// has already been held to being a file name.
     /// </summary>

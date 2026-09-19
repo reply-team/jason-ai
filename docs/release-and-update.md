@@ -93,7 +93,9 @@ nothing else.** No body, no query, no identifier, no machine facts, nothing abou
 or your data directory. The answer is kept in memory and shown by `system.info`; it is never written to disk.
 
 A check that fails — offline, a page that answers 500, something that is not a manifest — is a log line at
-warning and never an error to any caller. An offline machine is a normal machine.
+warning and never an error to any caller. An offline machine is a normal machine. A feed that has not answered
+within **10 seconds** is one of those failures: a manifest is a few hundred bytes, so waiting longer only makes
+an offline machine slower to admit it. `jason update check` waits exactly as long, for the same reason.
 
 ### The settings
 

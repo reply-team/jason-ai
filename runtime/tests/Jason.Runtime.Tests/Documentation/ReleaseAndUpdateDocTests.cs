@@ -75,6 +75,35 @@ public class ReleaseAndUpdateDocTests
     /// The two sentences this page exists to make checkable: what a check sends, and that nothing is signed.
     /// Both are promises to a person who is deciding whether to let a runtime talk to the internet at all.
     /// </summary>
+    /// <summary>
+    /// Both callers of the feed wait exactly as long as this build says they do, and the page prints that
+    /// number from the constant rather than from somebody's memory of it.
+    /// </summary>
+    /// <remarks>
+    /// There were two waits, declared separately, and they had already drifted from the one the design chose:
+    /// the runtime's unattended check and <c>jason update check</c> each said thirty seconds where ten was
+    /// decided. A person reading the page cannot see which of the two they are waiting for, so there is one.
+    /// </remarks>
+    [Fact]
+    public void The_page_prints_the_one_wait_both_callers_of_the_feed_use()
+    {
+        var page = Read();
+        var seconds = (int)UpdateFeed.DefaultTimeout.TotalSeconds;
+
+        Assert.Contains($"{seconds} seconds", page, StringComparison.Ordinal);
+
+        // And it is one wait: neither caller declares its own.
+        foreach (var caller in new[]
+                 {
+                     Source("runtime/src/Jason.Runtime/Hosting/Modules/UpdateModule.cs"),
+                     Source("runtime/src/Jason.Cli/Commands/UpdateCommands.cs"),
+                 })
+        {
+            Assert.Contains("UpdateFeed.DefaultTimeout", caller, StringComparison.Ordinal);
+            Assert.DoesNotContain("TimeSpan.FromSeconds(30)", caller, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public void The_page_says_what_is_sent_and_what_is_not_signed()
     {
@@ -100,6 +129,10 @@ public class ReleaseAndUpdateDocTests
 
     private static string Read() =>
         File.ReadAllText(Path.Combine(DocumentsDirectory(), "release-and-update.md"));
+
+    /// <summary>One of this repository's own files, read as text: a rule kept in two places is read in two places.</summary>
+    private static string Source(string relativePath) =>
+        File.ReadAllText(Path.Combine(Path.GetDirectoryName(DocumentsDirectory())!, relativePath.Replace('/', Path.DirectorySeparatorChar)));
 
     private static string DocumentsDirectory()
     {

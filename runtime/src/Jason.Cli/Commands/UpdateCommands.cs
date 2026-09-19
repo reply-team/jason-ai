@@ -15,9 +15,6 @@ namespace Jason.Cli.Commands;
 /// </summary>
 public static class UpdateCommands
 {
-    /// <summary>A manifest is a few hundred bytes; a feed that has not answered in this long is not going to.</summary>
-    private static readonly TimeSpan FeedTimeout = TimeSpan.FromSeconds(30);
-
     public static Command Build(CliEnvironment env, Option<string?> actor)
     {
         ArgumentNullException.ThrowIfNull(env);
@@ -61,7 +58,7 @@ public static class UpdateCommands
         // The handler the rest of the CLI sends through, so a test that substitutes it sees this request too —
         // and sees that no other is made.
         using var client = env.HttpHandler is null ? new HttpClient() : new HttpClient(env.HttpHandler, disposeHandler: false);
-        client.Timeout = FeedTimeout;
+        client.Timeout = UpdateFeed.DefaultTimeout;
 
         UpdateManifest manifest;
         try
