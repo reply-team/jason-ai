@@ -133,17 +133,28 @@ The runtime writes the brief, and the brief is identifiers and constants:
     "journal_entry_id": "jrn_…",
     "work_item_id": "wi_…",
     "attempt_id": "att_…",
+    "decision_id": "dec_…",
     "qualifying_count": 3
   },
   "allowed_operations": ["workitem.create", "workitem.update", "workitem.cancel",
                          "campaign.update_context", "journal.append", "rolenote.set",
-                         "approval.list", "report.list"]
+                         "approval.list", "report.list", "decision.raise", "decision.list"],
+  "escalation": "decision.raise"
 }
 ```
 
 A scheduled review carries `review_intent: "scheduled"` and names no trigger and no cause. Everything
 else a review needs, it reads for itself through the CLI — the campaign, its work, its chronicle, its
 contacts, and the role note that is the manager's own memory of this campaign.
+
+**`cause.decision_id` is there when the answer to a question is what woke this review**, and absent
+otherwise. One read is one review: a question answered behind a failure in the same pass is consumed
+by the review the failure summoned, whose cause names the failure. So a manager reads the questions
+answered since the last review for itself — `jason decision list --campaign <id> --status answered` —
+rather than trusting the brief to name one.
+
+**`escalation` is the verb to raise a question with**, in a key of its own beside a list that also
+holds it. A role should not have to pick the one verb that changes what happens next out of eight.
 
 **`allowed_operations` is guidance and not a permission.** Nothing in the runtime consults it. The
 answer to a call outside that list is the answer anybody gets: deterministic guardrails still apply,
@@ -158,9 +169,14 @@ can be counted rather than prose:
   "outcome": "acted | escalated | nothing",
   "summary": "at most 500 characters",
   "created_work_items": ["wi_…"],
-  "cancelled_work_items": ["wi_…"]
+  "cancelled_work_items": ["wi_…"],
+  "decisions_raised": ["dec_…"]
 }
 ```
+
+`decisions_raised` is there so a person reading the review sees what is now waiting on them. Nothing
+cross-checks that those are questions this attempt really raised: that would be validation reading
+what a result means, and the shape is all a runtime can honestly hold a review to.
 
 `outcome: "nothing"` is a good outcome. A manager that reads a campaign, sees a standing instruction
 to leave it alone, and says so in a line of the chronicle has done its job.

@@ -20,10 +20,13 @@ public static class ManagerCheckIn
 
     /// <summary>
     /// What a review's answer has to look like. A check-in that reported prose would be a review nobody could
-    /// count, and the three outcomes are the three things a review can honestly have done. <c>escalated</c> is
-    /// here before anything can escalate on purpose: the vocabulary is fixed once, so the version that adds
-    /// escalation adds no shape.
+    /// count, and the three outcomes are the three things a review can honestly have done.
     /// </summary>
+    /// <remarks>
+    /// <c>decisions_raised</c> is there so a person reading the review sees what is now waiting on them.
+    /// Nothing cross-checks that those are questions this attempt really raised: that would be validation
+    /// reading what a result means, and the shape is all a runtime can honestly hold a review to.
+    /// </remarks>
     public static JsonNode ResultFormat { get; } = JsonNode.Parse(
         """
         {
@@ -33,7 +36,8 @@ public static class ManagerCheckIn
             "outcome": { "type": "string", "enum": ["acted", "escalated", "nothing"] },
             "summary": { "type": "string", "maxLength": 500 },
             "created_work_items": { "type": "array", "items": { "type": "string" } },
-            "cancelled_work_items": { "type": "array", "items": { "type": "string" } }
+            "cancelled_work_items": { "type": "array", "items": { "type": "string" } },
+            "decisions_raised": { "type": "array", "items": { "type": "string" } }
           },
           "required": ["outcome", "summary"]
         }
@@ -55,6 +59,8 @@ public static class ManagerCheckIn
         "rolenote.set",
         "approval.list",
         "report.list",
+        Operations.DecisionRaise,
+        Operations.DecisionList,
     ];
 
     /// <summary>
@@ -114,6 +120,11 @@ public static class ManagerCheckIn
         {
             ["review_intent"] = cause is null ? "scheduled" : "triggered",
             ["allowed_operations"] = new JsonArray([.. AllowedOperations.Select(operation => (JsonNode?)JsonValue.Create(operation))]),
+
+            // The one verb that changes what happens next, in a key of its own beside a list that also holds
+            // it: a role should not have to pick it out of eight. A scheduled review may find something worth
+            // asking about just as a triggered one may, so it is on every brief.
+            ["escalation"] = Operations.DecisionRaise,
         };
 
         if (cause is { } because)
