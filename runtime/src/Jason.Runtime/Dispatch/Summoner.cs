@@ -1,4 +1,3 @@
-using System.Globalization;
 using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Persistence;
@@ -67,21 +66,24 @@ public sealed class Summoner(
         var now = clock.GetUtcNow().UtcDateTime;
         var summoned = 0;
 
-        foreach (var id in await WaitingAsync(db, ct).ConfigureAwait(false))
+        foreach (var campaign in await WaitingAsync(db, ct).ConfigureAwait(false))
         {
             // Per campaign, because the step that hands out work comes after this one. A campaign whose write
             // will not land must cost that campaign and not every campaign behind it — and not the claim, which
             // would be a dispatcher quietly ceasing to dispatch while still logging a tick.
             try
             {
-                if (await SummonOneAsync(db, id, triggers, options, now, ct).ConfigureAwait(false))
+                if (await SummonOneAsync(db, campaign.Id, triggers, options, now, ct).ConfigureAwait(false))
                 {
                     summoned++;
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                Failed(logger, id.ToString(CultureInfo.InvariantCulture), ex);
+                // A summon that failed leaves nothing else behind — the row is untouched, by design — so this
+                // line is the whole of what somebody gets. It names the campaign the way every other line here
+                // does, because the row number is the one identifier that cannot be typed into any command.
+                Failed(logger, campaign.PublicId, ex);
                 db.ChangeTracker.Clear();
             }
         }
@@ -94,7 +96,7 @@ public sealed class Summoner(
     /// it consumes no chronicle either, so an event that arrives while a review is open is still above the
     /// watermark when that review ends and summons the next one.
     /// </summary>
-    private static async Task<IReadOnlyList<int>> WaitingAsync(JasonDbContext db, CancellationToken ct) =>
+    private static async Task<IReadOnlyList<Waiting>> WaitingAsync(JasonDbContext db, CancellationToken ct) =>
         await db.Campaigns
             .AsNoTracking()
             .Where(campaign => campaign.Status == CampaignStatus.Active
@@ -103,9 +105,12 @@ public sealed class Summoner(
                     && item.CreatedByType == ActorType.System
                     && Open.Contains(item.Status)))
             .OrderBy(campaign => campaign.Id)
-            .Select(campaign => campaign.Id)
+            .Select(campaign => new Waiting(campaign.Id, campaign.PublicId))
             .ToListAsync(ct)
             .ConfigureAwait(false);
+
+    /// <summary>A campaign this scan will consider: the key the queries take, and the name a person reads.</summary>
+    private sealed record Waiting(int Id, string PublicId);
 
     private async Task<bool> SummonOneAsync(
         JasonDbContext db,

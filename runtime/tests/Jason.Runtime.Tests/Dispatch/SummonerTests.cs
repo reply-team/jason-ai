@@ -292,8 +292,31 @@ public class SummonerTests
         Assert.Single(reviewed);
         Assert.Single(missed);
 
+        // And the one that was missed is named, so the campaign that cost somebody a tick can be looked at.
+        Assert.Contains($"campaign {missed[0]} failed", Assert.Single(harness.Logs.Warnings), StringComparison.Ordinal);
+
         // And the one that was missed is summoned on the very next scan, with nothing to repair by hand.
         Assert.Equal(1, await harness.SummonAsync(Ct));
+    }
+
+    /// <summary>
+    /// And the warning it survives on names the campaign the way every other line in the summon does. A
+    /// failed summon leaves no other trace anywhere — the row is untouched by design — so this line is the
+    /// whole of what an operator gets, and the internal row number is the one identifier that cannot be typed
+    /// into any command.
+    /// </summary>
+    [Fact]
+    public async Task A_failed_summon_names_the_campaign_by_its_public_id()
+    {
+        using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { ReviewSeconds = 3_600 });
+        var campaign = await SeedAsync(harness, live: true);
+        harness.Clock.Advance(TimeSpan.FromSeconds(3_600));
+        harness.InterfereOnceBeforeSaving(() => throw new InvalidOperationException("the writer was busy"));
+
+        Assert.Equal(0, await harness.SummonAsync(Ct));
+
+        var warning = Assert.Single(harness.Logs.Warnings);
+        Assert.Contains($"campaign {campaign} failed", warning, StringComparison.Ordinal);
     }
 
     /// <summary>

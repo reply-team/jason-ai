@@ -14,6 +14,7 @@ using Jason.Runtime.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Tests.Dispatch;
@@ -61,7 +62,7 @@ internal sealed class DispatchHarness : IDisposable
         Status = new DispatcherStatus { State = DispatcherState.Running };
 
         var services = new ServiceCollection();
-        services.AddLogging();
+        services.AddLogging(builder => builder.AddProvider(Logs));
         services.AddSingleton<TimeProvider>(Clock);
         services.AddSingleton<IOptionsMonitor<DispatcherOptions>>(Options);
         services.AddSingleton<IOptions<DispatcherOptions>>(new OptionsWrapper<DispatcherOptions>(Options.CurrentValue));
@@ -99,6 +100,9 @@ internal sealed class DispatchHarness : IDisposable
     }
 
     public FixedClock Clock { get; }
+
+    /// <summary>What these services logged, for the decisions whose only trace is a diagnostic.</summary>
+    public RecordingLogs Logs { get; } = new();
 
     public TestOptionsMonitor<DispatcherOptions> Options { get; }
 
