@@ -5,6 +5,7 @@ using Jason.Cli;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests;
 
@@ -131,7 +132,7 @@ public class EndToEndTests
             start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "jason.dll"));
             start.ArgumentList.Add("runtime");
             start.ArgumentList.Add("run");
-            start.Environment[JasonPaths.DataDirectoryVariable] = dataDirectory;
+            TestRuntimeEnvironment.Offline(start.Environment, dataDirectory);
 
             _process = Process.Start(start) ?? throw new InvalidOperationException("Could not start the runtime process.");
             _process.OutputDataReceived += Collect;

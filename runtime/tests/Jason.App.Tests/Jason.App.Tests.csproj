@@ -16,5 +16,7 @@
     <None Include="../../../plugins/reply/**" LinkBase="Fixtures/plugins/reply" CopyToOutputDirectory="PreserveNewest" />
     <!-- One definition of what a Reply account is, shared with the runtime tests rather than copied: the file holds the store's shape, the call log and the instructions the stand-in reads. -->
     <Compile Include="../Jason.Runtime.Tests/Plugins/Reply/ReplyAccount.cs" Link="EndToEnd/ReplyAccount.cs" />
+    <!-- One definition of the environment a spawned test runtime gets — its own data directory, and no update check — shared for the same reason: eight sites spawn one, and a variable spelled by hand in each is one a ninth forgets. -->
+    <Compile Include="../Jason.Runtime.Tests/TestRuntimeEnvironment.cs" Link="EndToEnd/TestRuntimeEnvironment.cs" />
   </ItemGroup>
 </Project>

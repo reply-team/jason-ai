@@ -147,6 +147,7 @@ public static class RuntimeHost
         builder.Services.AddSystemModule().AddCampaignModule().AddContactModule();
         builder.Services.AddWorkItemModule().AddExecutorModule().AddRoleModule().AddPluginModule().AddRoutingModule().AddDispatcherModule().AddCommandModule();
         builder.Services.AddApprovalModule().AddDecisionModule().AddReportModule().AddProfileModule().AddRoleNoteModule();
+        builder.Services.AddUpdateModule(options.FeedHandler);
 
         // Last, so a test's registration wins over the runtime's own for the services that resolve by "the last one".
         options.ConfigureServices?.Invoke(builder.Services);

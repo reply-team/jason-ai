@@ -48,6 +48,21 @@ public sealed class FixedClock(DateTimeOffset now) : TimeProvider
 
     public override DateTimeOffset GetUtcNow() => _now;
 
+    /// <summary>
+    /// How many timers are waiting for a moment this clock has not reached. A service between two waits holds
+    /// none, which is how a test knows the next wait is armed before it moves time into it.
+    /// </summary>
+    public int Armed
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _timers.Count(timer => timer.Due is not null);
+            }
+        }
+    }
+
     public void Advance(TimeSpan by) => MoveTo(_now.Add(by));
 
     public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)

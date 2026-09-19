@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using Jason.Cli;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.EndToEnd;
 
@@ -449,7 +450,7 @@ public class ProviderOperationE2ETests
             start.ArgumentList.Add(argument);
         }
 
-        start.Environment[JasonPaths.DataDirectoryVariable] = root;
+        TestRuntimeEnvironment.Offline(start.Environment, root);
 
         // The package declares the stand-in vendor CLI by its own name, and that program is installed beside
         // these tests rather than onto the machine, so the runtime this starts has to be told where to look.

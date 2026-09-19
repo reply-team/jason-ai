@@ -5,6 +5,7 @@ using System.Text.Json;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -58,7 +59,19 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
             prepare(fixture._dir.Paths);
         }
 
-        var options = Quiet with { Clock = clock, ConfigureServices = configureServices };
+        var options = Quiet with
+        {
+            Clock = clock,
+            ConfigureServices = services =>
+            {
+                // Whatever settings the test wrote, a fixture's runtime never asks the release feed: the check
+                // is the one thing a runtime does that reaches past the machine without being asked, and a
+                // test suite is no place to be asking from. An override after binding rather than a line in
+                // the settings file, because the file is the test's to write.
+                services.PostConfigure<UpdateOptions>(update => update.CheckEnabled = false);
+                configureServices?.Invoke(services);
+            },
+        };
         fixture._runtime = await RuntimeHost.StartAsync(fixture._dir.Paths, options, cancellationToken);
         fixture._http = new HttpClient { BaseAddress = fixture._runtime.BaseUrl };
         fixture._http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", fixture._runtime.Token);

@@ -15,6 +15,13 @@ public sealed record SystemInfoResponse(
 
 public sealed record DatabaseInfo(IReadOnlyList<string> AppliedMigrations);
 
+/// <summary>
+/// What the last successful update check learned: whether the version it found is newer than the one running,
+/// which version that was, when it looked, and where the notes are. Absent until a check has succeeded, so a
+/// runtime that has not looked says so rather than saying "up to date".
+/// </summary>
+public sealed record UpdateInfo(bool Available, string Version, DateTimeOffset CheckedAt, string? ReleaseNotesUrl);
+
 /// <summary>What the dispatcher is doing right now: the cheapest way for an operator or a test to see the loop is alive.</summary>
 public sealed record DispatcherInfo(
     DispatcherState State,

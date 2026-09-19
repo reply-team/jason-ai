@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Cli;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests;
 
@@ -256,7 +257,7 @@ public class WorkFlowEndToEndTests
             start.ArgumentList.Add(argument);
         }
 
-        start.Environment[JasonPaths.DataDirectoryVariable] = root;
+        TestRuntimeEnvironment.Offline(start.Environment, root);
 
         using var process = Process.Start(start) ?? throw new InvalidOperationException("The jason executable could not be started.");
         process.StandardInput.Close();
