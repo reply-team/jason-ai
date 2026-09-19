@@ -177,6 +177,31 @@ internal sealed class DispatchHarness : IDisposable
         return EventuallyAsync(() => status.Scans >= 1, ct);
     }
 
+    /// <summary>
+    /// A started fixture handed back only once the loop's own first scan is behind it, so that everything a test
+    /// seeds afterwards is there for the scan the test drives and for no other.
+    /// </summary>
+    /// <remarks>
+    /// The window is short — the loop scans the moment it starts and then sleeps a tick — but on a loaded machine
+    /// a test's two or three seeding calls fit inside it, and then the loop claims what the test seeded, the
+    /// test's own scan finds nothing left to claim, and a count that is right on every developer's machine fails
+    /// on somebody else's CPU. Waiting here, before a test has seeded anything, closes the window. Waiting inside
+    /// a scan helper cannot: it runs after the seeding it would have to protect.
+    /// </remarks>
+    public static async Task<RuntimeApiFixture> ScannedOnceAsync(RuntimeApiFixture fixture, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(fixture);
+        var scanned = await FirstScanDoneAsync(fixture.Resolve<DispatcherStatus>(), ct);
+        if (!scanned)
+        {
+            // This runtime is no use to the test now, and leaving it up would leave its database open with it.
+            await fixture.DisposeAsync();
+        }
+
+        Assert.True(scanned, "The dispatcher never ran its first scan, so nothing here can tell a test's scan from the loop's.");
+        return fixture;
+    }
+
     /// <summary>Polls until the condition holds or the deadline passes; never sleeps the thread.</summary>
     public static async Task<bool> EventuallyAsync(Func<bool> condition, CancellationToken ct, int timeoutMilliseconds = 5000)
     {
