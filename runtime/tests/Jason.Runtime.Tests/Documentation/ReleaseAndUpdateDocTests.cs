@@ -127,6 +127,43 @@ public class ReleaseAndUpdateDocTests
         Assert.Contains("404", page, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The sentence that explains why the data directory and the install directory are two things sits in the
+    /// paragraph that names them both, and not after the one about a cache neither of them contains.
+    /// </summary>
+    /// <remarks>
+    /// It ended up there when the extraction cache was added between them, and the result reads as if the cache
+    /// were one of the two — the kind of defect that only a reader notices and no test had a way to.
+    /// </remarks>
+    [Fact]
+    public void The_page_explains_the_two_directories_in_the_paragraph_that_names_them()
+    {
+        var page = Read();
+        var paragraphs = page.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+
+        var both = Assert.Single(
+            paragraphs,
+            p => p.Contains("**data directory**", StringComparison.Ordinal)
+                && p.Contains("**install directory**", StringComparison.Ordinal));
+        Assert.Contains("separate on purpose", both, StringComparison.Ordinal);
+
+        var cache = Assert.Single(paragraphs, p => p.Contains("DOTNET_BUNDLE_EXTRACT_BASE_DIR", StringComparison.Ordinal));
+        Assert.DoesNotContain("separate on purpose", cache, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And the page says why a dry run of the release workflow cannot happen before a merge, because the first
+    /// question a reader asks of a pipeline nobody has run is "then how do you know it works?".
+    /// </summary>
+    [Fact]
+    public void The_page_says_why_a_dry_run_can_only_happen_after_a_merge()
+    {
+        var page = Read();
+
+        Assert.Contains("workflow_dispatch", page, StringComparison.Ordinal);
+        Assert.Contains("default branch", page, StringComparison.Ordinal);
+    }
+
     private static string Read() =>
         File.ReadAllText(Path.Combine(DocumentsDirectory(), "release-and-update.md"));
 
