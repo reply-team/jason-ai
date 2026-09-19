@@ -25,6 +25,7 @@ public static class UpdateCommands
         update.Subcommands.Add(Check(env, actor));
         update.Subcommands.Add(Apply(env, actor));
         update.Subcommands.Add(RollBack(env, actor));
+        update.Subcommands.Add(Status(env, actor));
         return update;
     }
 
@@ -146,6 +147,23 @@ public static class UpdateCommands
         return command;
     }
 
+    private static Command Status(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "status",
+            "Say where this installation's update stands: what is in flight and which step it reached, or the record the last one left.");
+        var human = VerbOptions.Human();
+        command.Options.Add(human);
+
+        command.SetAction(parseResult =>
+        {
+            ActorOption.Parse(parseResult.GetValue(actor));
+            return StatusAsync(env, parseResult.GetValue(human));
+        });
+
+        return command;
+    }
+
     public static async Task<int> RollBackAsync(CliEnvironment env, bool human, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(env);
@@ -182,6 +200,61 @@ public static class UpdateCommands
         env.Out.WriteLine(human
             ? string.Join(Environment.NewLine, steps.Select(step => "- " + step))
             : JsonSerializer.Serialize(answer, JasonJson.Options));
+    }
+
+    /// <summary>
+    /// Reads the ledger, and asks no runtime anything. The moment a person most wants this answer is the moment
+    /// an update has gone wrong, which is also the likeliest moment for there to be no runtime to ask — so
+    /// nothing here can fail for the want of one, and the exit code is 0 whether one is listening or not.
+    /// </summary>
+    public static int StatusAsync(CliEnvironment env, bool human)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+
+        UpdateLedger? ledger;
+        try
+        {
+            ledger = UpdateLedger.ReadFile(new UpdatePaths(env.Paths).Ledger);
+        }
+        catch (UpdateLedgerException error)
+        {
+            // There is a file and it is not a ledger. Saying so is the whole answer: acting on half a document
+            // is how a person is told an update reached a step it never began.
+            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
+            return ExitCodes.ApiError;
+        }
+
+        var answer = new UpdateStatusResponse(
+            InFlight: ledger is { Step: not UpdateStep.Complete },
+            Step: ledger is null ? null : SnakeCase(ledger.Step),
+            From: ledger?.FromVersion.ToString(),
+            To: ledger?.ToVersion.ToString(),
+            StartedAt: ledger?.StartedAt,
+            BackupFile: ledger?.BackupFile,
+            NewlyApplied: ledger?.NewlyApplied ?? []);
+
+        env.Out.WriteLine(human ? Sentence(answer) : JsonSerializer.Serialize(answer, JasonJson.Options));
+        return ExitCodes.Success;
+    }
+
+    private static string Sentence(UpdateStatusResponse answer)
+    {
+        if (answer.Step is null)
+        {
+            return "No update has been applied on this installation, and none is under way.";
+        }
+
+        if (answer.InFlight)
+        {
+            return $"An update from {answer.From} to {answer.To} is under way and has reached '{answer.Step}'. "
+                + "Carry it on with `jason update apply`, or go back with `jason update rollback`.";
+        }
+
+        var migrations = answer.NewlyApplied.Count == 0
+            ? " It applied no migrations."
+            : $" Its first start applied {string.Join(", ", answer.NewlyApplied)}, backed up to {answer.BackupFile}.";
+
+        return $"The last update went from {answer.From} to {answer.To} and is complete.{migrations}";
     }
 
     /// <summary>Q7's answer: two minutes, and a person may say 0 to wait for none of it.</summary>
