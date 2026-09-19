@@ -51,6 +51,7 @@ public static class DispatcherModule
         // scan rather than the setting.
         services.AddSingleton(Seam<DispatcherOptions>(DispatcherOptions.Section));
         services.AddSingleton(Seam<RolesOptions>(RolesOptions.Section));
+        services.AddSingleton(Seam<ManagerOptions>(ManagerOptions.Section));
 
         // The pool is sized once and the counters are one per process, so both outlive any request scope.
         services.AddSingleton<HandlerPool>();

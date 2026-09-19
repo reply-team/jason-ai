@@ -68,6 +68,7 @@ public static class JasonConfiguration
         // between two sections rather than a range one of them owns.
         services.AddSingleton<IValidateOptions<DispatcherOptions>, ProviderOpBudgetValidator>();
         services.AddSingleton<IValidateOptions<RolesOptions>, RolesOptionsValidator>();
+        services.AddSingleton<IValidateOptions<ManagerOptions>, ManagerOptionsValidator>();
         services.AddSingleton<IValidateOptions<PluginsOptions>, PluginsOptionsValidator>();
         services.AddSingleton<IValidateOptions<RoutesOptions>, RoutesOptionsValidator>();
 
@@ -75,6 +76,13 @@ public static class JasonConfiguration
         services.AddOptions<LoggingOptions>().Bind(configuration.GetSection(LoggingOptions.Section)).ValidateOnStart();
         services.AddOptions<DispatcherOptions>().Bind(configuration.GetSection(DispatcherOptions.Section)).ValidateOnStart();
         services.AddOptions<RolesOptions>().Bind(configuration.GetSection(RolesOptions.Section)).ValidateOnStart();
+
+        // Bound by hand for the reason ManagerOptions.Fill gives: a list the binder appends to would turn a
+        // narrowed set of triggers into a widened one.
+        var manager = configuration.GetSection(ManagerOptions.Section);
+        services.AddSingleton<IOptionsChangeTokenSource<ManagerOptions>>(new ConfigurationChangeTokenSource<ManagerOptions>(manager));
+        services.AddSingleton<IConfigureOptions<ManagerOptions>>(new ConfigureOptions<ManagerOptions>(options => ManagerOptions.Fill(manager, options)));
+        services.AddOptions<ManagerOptions>().ValidateOnStart();
         services.AddOptions<PluginsOptions>().Bind(configuration.GetSection(PluginsOptions.Section)).ValidateOnStart();
 
         // Routes are read rather than bound: a route carries a JSON binding, and the standard binder cannot make

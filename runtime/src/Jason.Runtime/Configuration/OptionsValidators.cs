@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Journal;
 using Jason.Runtime.Plugins.Manifest;
 using Microsoft.Extensions.Options;
 
@@ -276,4 +277,48 @@ public sealed partial class RolesOptionsValidator : IValidateOptions<RolesOption
     /// <summary>The shape of a role's name, which is the shape a profile's name is written under.</summary>
     [GeneratedRegex("^[a-z][a-z0-9-]{0,63}$")]
     private static partial Regex ProfileName();
+}
+
+/// <summary>
+/// The manager loop. The list of triggers is the part worth refusing a start over: a kind that is not one the
+/// runtime writes itself is a rule that can never fire, or — worse — one anybody could fire by appending a line
+/// of that name to the chronicle. An installation whose review rules quietly do nothing is one that believes it
+/// is being managed and is not.
+/// </summary>
+public sealed class ManagerOptionsValidator : IValidateOptions<ManagerOptions>
+{
+    public ValidateOptionsResult Validate(string? name, ManagerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var failures = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        for (var index = 0; index < options.Triggers.Count; index++)
+        {
+            var kind = options.Triggers[index];
+            if (!JournalKinds.Reserved.Contains(kind))
+            {
+                failures.Add(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Manager:Triggers[{index}] must be a chronicle kind the runtime writes itself; got '{kind}'."));
+            }
+            else if (!seen.Add(kind))
+            {
+                failures.Add(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Manager:Triggers[{index}] repeats '{kind}'; a kind summons one review however many times it is listed."));
+            }
+        }
+
+        OptionRules.Range(failures, "Manager:ReviewSeconds", options.ReviewSeconds, 300, 604_800);
+        OptionRules.Range(failures, "Manager:TimeoutSeconds", options.TimeoutSeconds, 30, 86_400);
+        OptionRules.Range(failures, "Manager:MaxAttempts", options.MaxAttempts, 1, 10);
+
+        // A work item takes any priority, so this bound is the loop's own: a mistyped number that put every
+        // review permanently ahead of the work it is reviewing would be a hard thing to notice from the outside.
+        OptionRules.Range(failures, "Manager:Priority", options.Priority, -1_000, 1_000);
+        OptionRules.Range(failures, "Manager:MaxEntriesPerScan", options.MaxEntriesPerScan, 50, 10_000);
+
+        return OptionRules.Result(failures);
+    }
 }
