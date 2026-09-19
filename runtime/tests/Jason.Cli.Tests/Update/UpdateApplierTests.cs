@@ -147,6 +147,29 @@ public class UpdateApplierTests
         Assert.Null(ledger.BackupFile);
     }
 
+    /// <summary>
+    /// Before the install path is emptied, a copy of the executable performing the update is put where a person
+    /// can still reach it — because between that step and the swap there is no `jason` on the PATH to type.
+    /// </summary>
+    /// <remarks>
+    /// The copy is the build that is running the update, not the one being installed: whatever goes wrong next,
+    /// the thing that decides how to get out of it is the version that was reviewed. It is an ordinary Jason, so
+    /// the way out is the ordinary command — `jason update apply`, run from the copy, reads the ledger and
+    /// finishes the update, because a resumed update takes its paths from the ledger and not from where it is
+    /// running.
+    /// </remarks>
+    [Fact]
+    public async Task A_copy_of_the_running_build_is_left_where_a_person_can_reach_it()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+
+        await installation.Applier().ApplyAsync(Request(installation), Ct);
+
+        var copy = Path.Combine(installation.Update.Applier, Jason.Contracts.Update.ReleaseAssets.ExecutableName);
+        Assert.True(File.Exists(copy), "there is no applier to run if the install path is emptied and the process dies");
+        Assert.Equal($"jason {installation.From}", File.ReadAllText(copy));
+    }
+
     private static UpdateRequest Request(FakeInstallation installation) =>
         new(installation.Feed, null, TimeSpan.FromSeconds(5));
 }

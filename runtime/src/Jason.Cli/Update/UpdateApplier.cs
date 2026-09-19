@@ -252,11 +252,23 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     }
 
     /// <summary>Moves the installed executable aside. Doing it twice is doing it once: the second finds it gone.</summary>
+    /// <remarks>
+    /// A copy of the same executable is left under <c>&lt;data&gt;/update/applier/</c> first, and it is the way
+    /// out of the only window this design cannot avoid. Between this step and the swap the install path is
+    /// <b>empty</b>: if the process performing the update dies there, the person is left with no <c>jason</c> on
+    /// the PATH to type, and "run it again" is not advice they can follow. The copy is an ordinary Jason — run
+    /// <c>jason update apply</c> from it and it reads the ledger and finishes the update it finds, because a
+    /// resumed update takes its paths from the ledger rather than from wherever it happens to be running. The
+    /// other way out needs no Jason at all: put <c>previous/</c> back by hand.
+    /// </remarks>
     private UpdateLedger Keep(UpdateLedger ledger)
     {
         Directory.CreateDirectory(update.Previous);
         if (File.Exists(ledger.InstallPath))
         {
+            Directory.CreateDirectory(update.Applier);
+            File.Copy(ledger.InstallPath, Path.Combine(update.Applier, ReleaseAssets.ExecutableName), overwrite: true);
+
             SameVolume(ledger.InstallPath, ledger.PreviousPath);
             File.Move(ledger.InstallPath, ledger.PreviousPath, overwrite: true);
             Say("kept the installed executable");
