@@ -122,11 +122,17 @@ public sealed record UpdateManifest(
             throw Invalid($"the artifact for '{rid}' names '{asset}', which is not a file name.");
         }
 
+        // Either case in, one case out. A digest is a number written in hexadecimal and the case of its letters
+        // carries nothing, so a feed this project did not write is read rather than refused — and refusing one
+        // would report a correct file as a corrupt one, which is the worst thing an updater can say. Everything
+        // that compares a digest compares this lower-cased text, so no caller has to remember the rule.
         var digest = Text(element, "sha256");
-        if (digest.Length != DigestLength || !digest.All(char.IsAsciiHexDigitLower))
+        if (digest.Length != DigestLength || !digest.All(char.IsAsciiHexDigit))
         {
-            throw Invalid($"the artifact for '{rid}' carries a digest that is not {DigestLength} lowercase hexadecimal characters.");
+            throw Invalid($"the artifact for '{rid}' carries a digest that is not {DigestLength} hexadecimal characters.");
         }
+
+        digest = digest.ToLowerInvariant();
 
         if (!element.TryGetProperty("size", out var size)
             || size.ValueKind != JsonValueKind.Number
@@ -161,12 +167,35 @@ public sealed record UpdateManifest(
             : throw Invalid($"the feed's '{name}' is not a version.");
     }
 
+    /// <summary>
+    /// The shapes a moment may arrive in: a date and a time to the second, optionally with a fraction, and
+    /// <b>always</b> with a zone — <c>Z</c> or an offset.
+    /// </summary>
+    /// <remarks>
+    /// An ordinary parse of <c>2026-09-19T08:00:00</c> takes the *reading* machine's offset, so one manifest
+    /// would mean two instants three hours apart depending on who read it. A release is published at one moment;
+    /// a document that cannot say which is not a manifest. The writer of this project's own manifests emits
+    /// <c>Z</c>, so nothing this build publishes is refused by the rule.
+    /// </remarks>
+    private static readonly string[] MomentFormats =
+    [
+        "yyyy-MM-dd'T'HH:mm:ss'Z'",
+        "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'",
+        "yyyy-MM-dd'T'HH:mm:sszzz",
+        "yyyy-MM-dd'T'HH:mm:ss.FFFFFFFzzz",
+    ];
+
     private static DateTimeOffset Moment(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value)
         && value.ValueKind == JsonValueKind.String
-        && DateTimeOffset.TryParse(value.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var moment)
-            ? moment.ToUniversalTime()
-            : throw Invalid($"the feed's '{name}' is not a moment.");
+        && DateTimeOffset.TryParseExact(
+            value.GetString(),
+            MomentFormats,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out var moment)
+            ? moment
+            : throw Invalid($"the feed's '{name}' is not a moment with a time zone.");
 
     /// <summary>
     /// A link a person may be shown, so it is held to the two schemes a link can safely be. Absent is fine; a
