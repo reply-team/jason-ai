@@ -1,3 +1,4 @@
+using Jason.Contracts.Update;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Hosting;
 using Microsoft.Extensions.Options;
@@ -19,6 +20,7 @@ public class OptionsValidationTests
         Assert.True(new RolesOptionsValidator().Validate(null, new RolesOptions()).Succeeded);
         Assert.True(new PluginsOptionsValidator().Validate(null, new PluginsOptions()).Succeeded);
         Assert.True(new RoutesOptionsValidator().Validate(null, new RoutesOptions()).Succeeded);
+        Assert.True(new UpdateOptionsValidator().Validate(null, new UpdateOptions()).Succeeded);
     }
 
     [Fact]
@@ -248,5 +250,68 @@ public class OptionsValidationTests
         var error = Assert.Throws<InvalidOperationException>(() => JasonConfiguration.Load(JasonConfiguration.Build(dir.Paths, null)));
 
         Assert.Contains("Runtime:Port must be between 0 and 65535; got 70000.", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_update_defaults_are_the_ones_the_wave_decided()
+    {
+        var options = new UpdateOptions();
+
+        Assert.True(options.CheckEnabled);
+        Assert.Equal(UpdateFeed.Default.ToString(), options.FeedUrl);
+        Assert.Equal(5, options.InitialDelayMinutes);
+        Assert.Equal(24, options.IntervalHours);
+        Assert.True(new UpdateOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    [Theory]
+    [InlineData(0, 24, "Update:InitialDelayMinutes must be between 1 and 1440; got 0.")]
+    [InlineData(1441, 24, "Update:InitialDelayMinutes must be between 1 and 1440; got 1441.")]
+    [InlineData(5, 0, "Update:IntervalHours must be between 1 and 168; got 0.")]
+    [InlineData(5, 169, "Update:IntervalHours must be between 1 and 168; got 169.")]
+    public void An_update_schedule_outside_its_bounds_is_reported_with_its_rule(int delay, int interval, string failure)
+    {
+        var result = new UpdateOptionsValidator().Validate(null, new UpdateOptions { InitialDelayMinutes = delay, IntervalHours = interval });
+
+        Assert.True(result.Failed);
+        Assert.Contains(failure, result.Failures!);
+    }
+
+    /// <summary>
+    /// The feed is held to the reader's own rule — https, or http on loopback — by the validator as well, so a
+    /// settings file naming a feed the reader would refuse is refused before the runtime listens, while the
+    /// person who wrote it is still at the keyboard, rather than at the first check in a log line nobody reads.
+    /// </summary>
+    [Theory]
+    [InlineData("manifest.json")]
+    [InlineData("http://example.com/manifest.json")]
+    [InlineData("file:///c:/manifest.json")]
+    [InlineData("")]
+    public void A_feed_the_reader_would_refuse_is_refused_by_the_validator(string feed)
+    {
+        var result = new UpdateOptionsValidator().Validate(null, new UpdateOptions { FeedUrl = feed });
+
+        Assert.True(result.Failed);
+        Assert.Contains(result.Failures!, f => f.StartsWith("Update:FeedUrl must ", StringComparison.Ordinal) && f.EndsWith($"got '{feed}'.", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("https://example.com/manifest.json")]
+    [InlineData("http://127.0.0.1:5000/manifest.json")]
+    [InlineData("http://localhost:5000/manifest.json")]
+    public void A_feed_the_reader_would_read_is_accepted_by_the_validator(string feed) =>
+        Assert.True(new UpdateOptionsValidator().Validate(null, new UpdateOptions { FeedUrl = feed }).Succeeded);
+
+    /// <summary>The validator is only a rule until the host runs it: this is the registration, seen from the outside.</summary>
+    [Fact]
+    public async Task A_feed_that_is_plain_http_on_a_network_refuses_to_start()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(dir.Paths.UserSettingsFile, """{"Update":{"FeedUrl":"http://example.com/manifest.json"}}""");
+
+        var failure = await Assert.ThrowsAsync<OptionsValidationException>(() => RuntimeHost.StartAsync(dir.Paths, Quiet, Ct));
+
+        Assert.Contains("Update:FeedUrl", failure.Message, StringComparison.Ordinal);
     }
 }

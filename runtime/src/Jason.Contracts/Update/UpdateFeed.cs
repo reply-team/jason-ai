@@ -125,14 +125,22 @@ public sealed class UpdateFeed(HttpClient client)
     /// </summary>
     private static void Allowed(Uri feed)
     {
-        var allowed = feed.Scheme == Uri.UriSchemeHttps
-            || (feed.Scheme == Uri.UriSchemeHttp && feed.IsLoopback);
-
-        if (!allowed)
+        if (!IsAllowed(feed))
         {
             throw new UpdateFeedException(
                 UpdateFeedException.Insecure,
                 $"The update feed must be an https address; '{feed}' is not one.");
         }
+    }
+
+    /// <summary>
+    /// The rule above as a question, for the settings validator: a feed the reader would refuse at the first
+    /// check is refused when the file is read instead, and the two cannot disagree about which feeds those are.
+    /// </summary>
+    public static bool IsAllowed(Uri feed)
+    {
+        ArgumentNullException.ThrowIfNull(feed);
+        return feed.IsAbsoluteUri
+            && (feed.Scheme == Uri.UriSchemeHttps || (feed.Scheme == Uri.UriSchemeHttp && feed.IsLoopback));
     }
 }

@@ -71,11 +71,13 @@ public static class JasonConfiguration
         services.AddSingleton<IValidateOptions<ManagerOptions>, ManagerOptionsValidator>();
         services.AddSingleton<IValidateOptions<PluginsOptions>, PluginsOptionsValidator>();
         services.AddSingleton<IValidateOptions<RoutesOptions>, RoutesOptionsValidator>();
+        services.AddSingleton<IValidateOptions<UpdateOptions>, UpdateOptionsValidator>();
 
         services.AddOptions<RuntimeOptions>().Bind(configuration.GetSection(RuntimeOptions.Section)).ValidateOnStart();
         services.AddOptions<LoggingOptions>().Bind(configuration.GetSection(LoggingOptions.Section)).ValidateOnStart();
         services.AddOptions<DispatcherOptions>().Bind(configuration.GetSection(DispatcherOptions.Section)).ValidateOnStart();
         services.AddOptions<RolesOptions>().Bind(configuration.GetSection(RolesOptions.Section)).ValidateOnStart();
+        services.AddOptions<UpdateOptions>().Bind(configuration.GetSection(UpdateOptions.Section)).ValidateOnStart();
 
         // Bound by hand for the reason ManagerOptions.Fill gives: a list the binder appends to would turn a
         // narrowed set of triggers into a widened one.

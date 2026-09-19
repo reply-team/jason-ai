@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Operations;
+using Jason.Contracts.Update;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Plugins.Manifest;
 using Microsoft.Extensions.Options;
@@ -323,6 +324,30 @@ public sealed class ManagerOptionsValidator : IValidateOptions<ManagerOptions>
         // review permanently ahead of the work it is reviewing would be a hard thing to notice from the outside.
         OptionRules.Range(failures, "Manager:Priority", options.Priority, -1_000, 1_000);
         OptionRules.Range(failures, "Manager:MaxEntriesPerScan", options.MaxEntriesPerScan, 50, 10_000);
+
+        return OptionRules.Result(failures);
+    }
+}
+
+/// <summary>
+/// The update check. The feed is held to the reader's own rule — https, or http on loopback — at start rather
+/// than at the first check: a feed the reader would refuse is a fact about the settings file, and the person
+/// who wrote it is at the keyboard now, not five minutes later when the first check logs a warning nobody reads.
+/// </summary>
+public sealed class UpdateOptionsValidator : IValidateOptions<UpdateOptions>
+{
+    public ValidateOptionsResult Validate(string? name, UpdateOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var failures = new List<string>();
+
+        if (!Uri.TryCreate(options.FeedUrl, UriKind.Absolute, out var feed) || !UpdateFeed.IsAllowed(feed))
+        {
+            failures.Add($"Update:FeedUrl must be an absolute https address, or http on loopback; got '{options.FeedUrl}'.");
+        }
+
+        OptionRules.Range(failures, "Update:InitialDelayMinutes", options.InitialDelayMinutes, 1, 1440);
+        OptionRules.Range(failures, "Update:IntervalHours", options.IntervalHours, 1, 168);
 
         return OptionRules.Result(failures);
     }
