@@ -267,15 +267,22 @@ public class ManagerLoopTests
             Ct);
 
         Assert.Equal(1, (await host.ScanAsync(Ct)).Claimed);
-        await host.WaitForStatusAsync(asked.Id, WorkItemStatus.Succeeded, Ct);
-        var escalating = (await host.GetAsync(asked.Id, Ct)).Attempts!.Single();
+        var ended = await host.WaitForStatusAsync(asked.Id, WorkItemStatus.Succeeded, Ct);
+        var escalating = ended.Attempts!.Single();
         Assert.Equal("stand-in", escalating.Provenance!.Agent!.ProfileName);
+
+        // What the run says about itself: it escalated, and it named what it asked. Nothing cross-checks that
+        // against the questions really raised — that would be validation reading a result's meaning — so this
+        // is where the two are seen to agree.
+        Assert.Equal("escalated", (string?)ended.Result!["outcome"]);
+        var named = Assert.Single(ended.Result["decisions_raised"]!.AsArray());
 
         // The question outlived the attempt that asked it, which is the whole reason it is a row.
         var waiting = await host.Fixture.PostOkAsync<Page<DecisionSummaryDto>>(Operations.DecisionList, new { }, Ct);
         var question = Assert.Single(waiting.Items!);
         Assert.Equal(DecisionStatus.Pending, question.Status);
         Assert.Equal(asked.Id, question.WorkItemId);
+        Assert.Equal(question.Id, (string?)named);
 
         // And its causal references still resolve — they are identifiers, so what they name is read now.
         var detail = await host.Fixture.PostOkAsync<DecisionDto>(Operations.DecisionGet, new { decision_id = question.Id }, Ct);
@@ -313,6 +320,72 @@ public class ManagerLoopTests
         Assert.Equal("stand-in", checkIn.Lineage.ProfileName);
         Assert.Equal(escalating.Provenance.Agent.ProfileRevision, checkIn.Lineage.ProfileRevision);
         Assert.Equal(escalating.Id, checkIn.Lineage.FromAttemptId);
+    }
+
+    /// <summary>
+    /// The review that asks, end to end and through real child processes — and the one case where the loop's
+    /// exclusion would otherwise swallow the answer. A failure summons the first review; that review escalates
+    /// and ends; a person answers; and the next scan summons the review that carries on, belonging to the
+    /// chain of the review that asked.
+    /// </summary>
+    /// <remarks>
+    /// Every line about a check-in, about its attempt, or written by its attempt is passed over, because a
+    /// review that could summon a review would summon one for ever. A person's line is exempt, and this is the
+    /// case that needs the exemption: the attempt that asked is a check-in's own.
+    /// <para>
+    /// What the chain can be asserted as here is the cause naming the escalating attempt. The review that
+    /// asks has to be launched by the role's own entry command — that is the only way a stand-in host is told
+    /// to escalate — so it pins no profile, and a record handed on from an attempt that pinned none carries
+    /// no attempt of its own. The case where it does is proved against a database in
+    /// <c>SummonerTests.A_person_answering_a_reviews_own_question_summons_the_next_review</c>, where the
+    /// check-in's attempt pins one: same mechanism, same record, one layer down.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task A_review_that_asks_is_continued_by_the_review_a_persons_answer_wakes()
+    {
+        await using var host = await FakeHostRuntime.StartAsync(Ct, Settings(reviewSeconds: 86_400, "--escalate"));
+        var campaign = await host.CampaignAsync(Ct);
+        await host.RoleAsync("fake-crash", Ct, "crash");
+        var doomed = await host.CreateAsync(
+            new { campaign_id = campaign, kind = "ai_role", role = "fake-crash", max_attempts = 1 },
+            Ct);
+
+        Assert.Equal(1, (await host.ScanAsync(Ct)).Claimed);
+        await host.WaitForStatusAsync(doomed.Id, WorkItemStatus.Failed, Ct);
+        Assert.Equal(1, (await host.ScanAsync(Ct)).Summoned);
+
+        var first = Assert.Single(await CheckInsAsync(host, campaign));
+        host.Track(first.Id);
+        var reviewed = await host.WaitForStatusAsync(first.Id, WorkItemStatus.Succeeded, Ct);
+        var escalating = reviewed.Attempts!.Single();
+
+        // What the review says it did, and what it says it asked.
+        Assert.Equal("escalated", (string?)reviewed.Result!["outcome"]);
+        var named = Assert.Single(reviewed.Result["decisions_raised"]!.AsArray());
+
+        var question = Assert.Single((await host.Fixture.PostOkAsync<Page<DecisionSummaryDto>>(
+            Operations.DecisionList, new { }, Ct)).Items!);
+        Assert.Equal(question.Id, (string?)named);
+        Assert.Equal(first.Id, question.WorkItemId);
+
+        await host.Fixture.PostOkAsync<DecisionDto>(
+            Operations.DecisionAnswer,
+            new { decision_id = question.Id, answer = "stop after this one", actor = new { type = "human", id = "ada" } },
+            Ct);
+
+        Assert.Equal(1, (await host.ScanAsync(Ct)).Summoned);
+
+        var second = Assert.Single(await CheckInsAsync(host, campaign, except: first.Id));
+        host.Track(second.Id);
+        Assert.Equal(JournalKinds.DecisionAnswered, (string?)second.Context["trigger"]);
+        Assert.Equal(question.Id, (string?)second.Context["cause"]!["decision_id"]);
+        Assert.Equal(escalating.Id, (string?)second.Context["cause"]!["attempt_id"]);
+
+        // Handed on one hop exactly as it stands, which for a review nothing launched under a profile is the
+        // record the review that asked was carrying.
+        Assert.Equal(first.Lineage!.State, second.Lineage!.State);
+        Assert.Equal(first.Lineage.ProfileName, second.Lineage.ProfileName);
     }
 
     /// <summary>
@@ -364,14 +437,27 @@ public class ManagerLoopTests
         Assert.Contains("believed=paused state=active", said, StringComparison.Ordinal);
     }
 
-    private static async Task<WorkItemDto> CheckInAsync(FakeHostRuntime host, string campaignId)
+    private static async Task<WorkItemDto> CheckInAsync(FakeHostRuntime host, string campaignId) =>
+        Assert.Single(await CheckInsAsync(host, campaignId));
+
+    /// <summary>
+    /// The campaign's check-ins, read back one at a time: a listing leaves lineage out, and lineage is half of
+    /// what these tests are about. <paramref name="except"/> is how a test names the one it already has.
+    /// </summary>
+    private static async Task<IReadOnlyList<WorkItemDto>> CheckInsAsync(FakeHostRuntime host, string campaignId, string? except = null)
     {
         var page = await host.Fixture.PostOkAsync<Page<WorkItemDto>>(
             Operations.WorkItemList,
             new { campaign_id = campaignId, role = ManagerCheckIn.Role },
             Ct);
 
-        // Read back one by one: a listing leaves lineage out, and lineage is half of what these tests are about.
-        return await host.GetAsync(Assert.Single(page.Items!).Id, Ct);
+        var wanted = page.Items!.Where(item => item.Id != except).ToList();
+        var read = new List<WorkItemDto>();
+        foreach (var item in wanted)
+        {
+            read.Add(await host.GetAsync(item.Id, Ct));
+        }
+
+        return read;
     }
 }
