@@ -100,3 +100,96 @@ jobs:
           # The last command of this step is expected to exit 3, and pwsh would hand that on as the step's
           # own exit code. Everything asserted above passed, so the step succeeded.
           exit 0
+
+  # The install scripts, run against the archives this run packaged, served from a local directory that holds
+  # what a release would — assembled by the same script that assembles a release — with no network. Each job
+  # installs three times: once told to leave the PATH alone, then twice more, so that the idempotent PATH edit
+  # and the "already installed" no-op are exercised and not only described.
+  install-sh:
+    name: install.sh on ubuntu
+    needs: [version, build-test-publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: jason-*
+          merge-multiple: true
+          path: feed
+
+      - name: Assemble the feed the way a release is assembled
+        shell: pwsh
+        run: ./.github/scripts/Write-Manifest.ps1 -Version ${{ needs.version.outputs.version }} -Directory feed -Require win-x64,linux-x64,osx-arm64
+
+      - name: Install, twice over, and once more without touching the PATH
+        shell: bash
+        env:
+          JASON_INSTALL_FEED: ${{ github.workspace }}/feed
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # A home of this job's own, so that the profile the script edits is one this job made — and so that
+          # ~/.local/bin in it is not on the PATH, which is the case the profile line exists for.
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME"
+
+          sh install/install.sh --no-modify-path
+          installed="$("$HOME/.local/bin/jason" --version)"
+          [ "${installed%%+*}" = "$VERSION" ] || { echo "installed '$installed', expected $VERSION"; exit 1; }
+          if [ -f "$HOME/.profile" ] && grep -q '# added by jason install' "$HOME/.profile"; then echo "--no-modify-path edited the profile"; exit 1; fi
+
+          # The same version again: nothing is downloaded, the script says so, and this time the PATH line is written.
+          sh install/install.sh | tee again.txt
+          grep -q "already installed" again.txt
+          [ "$(grep -c '# added by jason install' "$HOME/.profile")" = "1" ]
+
+          # A third run adds no second line.
+          sh install/install.sh
+          [ "$(grep -c '# added by jason install' "$HOME/.profile")" = "1" ]
+
+          # A login shell reads the line the script wrote and finds jason by name.
+          sh -l -c 'jason --version'
+
+  install-ps1:
+    name: install.ps1 on windows
+    needs: [version, build-test-publish]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: jason-*
+          merge-multiple: true
+          path: feed
+
+      - name: Assemble the feed the way a release is assembled
+        shell: pwsh
+        run: ./.github/scripts/Write-Manifest.ps1 -Version ${{ needs.version.outputs.version }} -Directory feed -Require win-x64,linux-x64,osx-arm64
+
+      # Windows PowerShell 5.1 rather than pwsh: it is what a fresh Windows has, and what the one-liner is typed into.
+      - name: Install, twice over, and once more without touching the PATH
+        shell: powershell
+        env:
+          JASON_INSTALL_FEED: ${{ github.workspace }}\feed
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\jason'
+          $exe = Join-Path $dir 'jason.exe'
+          function UserPathEntries { @([Environment]::GetEnvironmentVariable('Path', 'User') -split ';' | Where-Object { $_.TrimEnd('\') -ieq $dir }) }
+
+          ./install/install.ps1 -NoModifyPath
+          $installed = & $exe --version
+          if (($installed -split '\+')[0] -ne $env:VERSION) { throw "installed '$installed', expected $env:VERSION" }
+          if ((UserPathEntries).Count -ne 0) { throw "-NoModifyPath edited the user PATH" }
+
+          # The same version again: nothing is downloaded, the script says so, and this time the PATH gains the directory.
+          $again = ./install/install.ps1 | Out-String
+          Write-Host $again
+          if ($again -notmatch 'already installed') { throw "the second run did not say the version was already installed" }
+          if ((UserPathEntries).Count -ne 1) { throw "the user PATH does not hold the directory exactly once" }
+
+          # A third run adds no second entry.
+          ./install/install.ps1
+          if ((UserPathEntries).Count -ne 1) { throw "the user PATH does not hold the directory exactly once after a third run" }

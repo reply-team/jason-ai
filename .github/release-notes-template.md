@@ -21,7 +21,9 @@ from the tag `v{{version}}` by the tests that passed at it.
 | `checksums.txt` | the SHA-256 of each archive, in `sha256sum` format |
 
 Each archive holds the executable and `LICENSE`, nothing else. Plugins are installed from the repository as
-before: a package is copied into `~/.jason/plugins/`.
+before: a package is copied into `~/.jason/plugins/`. On Linux the executable needs the ICU library
+(`libicu`), which desktop distributions carry and minimal images may not; the install script stops, with the
+runtime's own message, rather than install a program that does not start.
 
 ## Installing
 
