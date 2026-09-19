@@ -22,7 +22,7 @@ public class UpdateLedgerTests
             StoppedAt = Noon.AddMinutes(1),
             BackupFile = @"C:\data\state\backups\jason-20260919T120100Z-before-X.db",
             NewlyApplied = ["20260919T000000_Something"],
-            ChronicleId = 4711,
+            ChronicleId = "jrn_01M2XVJ84TFRG54VKC291A53F2",
         };
 
         var read = UpdateLedger.Read(written.ToJson());

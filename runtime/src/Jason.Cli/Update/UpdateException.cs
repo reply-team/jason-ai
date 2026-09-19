@@ -36,6 +36,15 @@ public static class UpdateCodes
     /// <summary>The new version is in place but the runtime it starts is not the one this update installed.</summary>
     public const string NotHealthy = "update_not_healthy";
 
+    /// <summary>There is no record of an update, or the executable it replaced is not where it was kept.</summary>
+    public const string NothingToRollBack = "update_nothing_to_roll_back";
+
+    /// <summary>
+    /// The binary was put back, and the database was not: work has been recorded since the update, and restoring
+    /// the backup would erase it.
+    /// </summary>
+    public const string RollbackUnsafe = "update_rollback_unsafe";
+
     /// <summary>Every code above, for the page's guard to read rather than for anything to iterate at runtime.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -49,6 +58,8 @@ public static class UpdateCodes
         CrossVolume,
         RuntimeUnreachable,
         NotHealthy,
+        NothingToRollBack,
+        RollbackUnsafe,
     ];
 }
 

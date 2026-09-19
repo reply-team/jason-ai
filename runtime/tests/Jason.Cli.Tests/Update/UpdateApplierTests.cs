@@ -23,10 +23,11 @@ public class UpdateApplierTests
         Assert.Equal(installation.To.ToString(), installation.Installed());
         Assert.True(installation.Running, "the update left no runtime running");
 
-        // What it asked the runtime to do, in order, ignoring the reads it made along the way.
+        // What it asked the runtime to *do*, in order, ignoring what it read along the way: the state of the
+        // dispatcher, and where the chronicle stood when the new version was healthy.
         Assert.Equal(
             ["system.drain", "system.shutdown"],
-            installation.Operations.Where(operation => operation is not "system.info"));
+            installation.Operations.Where(operation => operation is not ("system.info" or "journal.list")));
 
         // The old executable is kept, and the staged copy is gone: it is the installed one now.
         Assert.Equal(installation.From.ToString(), File.ReadAllText(installation.Update.PreviousExecutable).Replace("jason ", string.Empty, StringComparison.Ordinal).Trim());

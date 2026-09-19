@@ -73,7 +73,7 @@ public sealed record UpdateLedger(
     DateTimeOffset? StoppedAt = null,
     string? BackupFile = null,
     IReadOnlyList<string>? NewlyApplied = null,
-    long? ChronicleId = null)
+    string? ChronicleId = null)
 {
     /// <summary>The file's name under the update directory, so nothing composes it from a string twice.</summary>
     public const string FileName = "ledger.json";
@@ -143,7 +143,7 @@ public sealed record UpdateLedger(
             StoppedAt: Moment(document, "stopped_at", required: false),
             BackupFile: OptionalText(document, "backup_file"),
             NewlyApplied: Migrations(document),
-            ChronicleId: document["chronicle_id"]?.GetValue<long>());
+            ChronicleId: OptionalText(document, "chronicle_id"));
     }
 
     /// <summary>The ledger at this path, or null where there is none: nothing in flight is not a failure.</summary>

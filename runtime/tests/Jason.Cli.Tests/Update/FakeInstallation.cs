@@ -45,8 +45,22 @@ public sealed class FakeInstallation : HttpMessageHandler
                 // What a launch does here is what it does on a machine: a runtime comes up and publishes a
                 // descriptor. Which version it is, is whatever file is at the install path.
                 OnStart?.Invoke();
-                Running = true;
-                Publish();
+
+                // What a first start of a new version does before it listens: it backs the database up and
+                // migrates it. The file is real here, because a rollback is going to copy it back.
+                if (Migrates && Installed() == To.ToString())
+                {
+                    WriteBackup(BackupStamp);
+                }
+
+                // A version that migrates and then never listens publishes no descriptor: from outside, the
+                // start happened and nothing answers.
+                if (!StartsButNeverServes)
+                {
+                    Running = true;
+                    Publish();
+                }
+
                 return new FakeProcessHandle(4242);
             },
         };
@@ -97,6 +111,41 @@ public sealed class FakeInstallation : HttpMessageHandler
 
     /// <summary>Something to do when the applier starts a runtime, for a test about a start going wrong.</summary>
     public Action? OnStart { get; set; }
+
+    /// <summary>
+    /// A new version that migrates the database and then never answers: the case a rollback exists for, and the
+    /// one where nothing can be asked of the runtime because it never listened.
+    /// </summary>
+    public bool StartsButNeverServes { get; set; }
+
+    /// <summary>The newest line in the chronicle, as this runtime would report it.</summary>
+    public string Chronicle { get; set; } = "jrn_01M2XVJ84TFRG54VKC291A53F2";
+
+    /// <summary>What a restored backup contains, so a test can see that the file really came back.</summary>
+    public const string BackupContent = "the database as it was before the update";
+
+    /// <summary>A rollback over this installation.</summary>
+    public UpdateRollback Rollback() => new(Env, Update, TimeProvider.System);
+
+    /// <summary>Whatever the database is supposed to contain at this point in a test.</summary>
+    public void WriteDatabase(string content)
+    {
+        Directory.CreateDirectory(Paths.StateDirectory);
+        File.WriteAllText(Paths.DatabaseFile, content);
+    }
+
+    /// <summary>
+    /// A backup as the migrator writes one: the name carries whole seconds, which is the point of the test that
+    /// uses this — a backup written inside the same second as the stop still belongs to this update.
+    /// </summary>
+    public string WriteBackup(DateTimeOffset stamp)
+    {
+        Directory.CreateDirectory(Paths.BackupsDirectory);
+        var name = $"jason-{stamp.UtcDateTime:yyyyMMdd'T'HHmmss'Z'}-before-20260920000000_Next.db";
+        var path = Path.Combine(Paths.BackupsDirectory, name);
+        File.WriteAllText(path, BackupContent);
+        return path;
+    }
 
     /// <summary>Every address the applier fetched from the feed, in order.</summary>
     public List<string> Fetched => _release.Requested;
@@ -169,6 +218,11 @@ public sealed class FakeInstallation : HttpMessageHandler
             case "system.info":
                 return Json(Info());
 
+            case "journal.list":
+                return Json(new Page<JournalEntryDto>(
+                    [new JournalEntryDto(Chronicle, DateTimeOffset.UnixEpoch, new ActorRef(ActorType.System), "work_item_created", null, null, null, null, null, null, null)],
+                    null));
+
             default:
                 return new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("{}") };
         }
@@ -190,7 +244,12 @@ public sealed class FakeInstallation : HttpMessageHandler
     /// <summary>What the new version's first start applied, when this installation is set up to have migrated.</summary>
     public IReadOnlyList<string> MigratedOnStart() => Migrates && Installed() == To.ToString() ? ["20260920000000_Next"] : [];
 
-    private string? BackupOnStart() => MigratedOnStart().Count == 0 ? null : Path.Combine(Paths.BackupsDirectory, "jason-20260919T120000Z-before-20260920000000_Next.db");
+    /// <summary>The moment in the backup's name, fixed so a test can name the file it expects.</summary>
+    public static DateTimeOffset BackupStamp { get; } = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
+
+    private string? BackupOnStart() => MigratedOnStart().Count == 0
+        ? null
+        : Path.Combine(Paths.BackupsDirectory, $"jason-{BackupStamp.UtcDateTime:yyyyMMdd'T'HHmmss'Z'}-before-20260920000000_Next.db");
 
     /// <summary>Whether the new version's first start migrates the database, as a real new version may.</summary>
     public bool Migrates { get; set; }

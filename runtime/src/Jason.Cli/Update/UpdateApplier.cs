@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Jason.Cli.Commands;
 using Jason.Cli.Discovery;
 using Jason.Cli.Process;
@@ -362,6 +363,11 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         {
             BackupFile = info.Database.BackupFile,
             NewlyApplied = info.Database.NewlyApplied,
+
+            // Where the chronicle stood the moment this version was declared healthy. A rollback compares it:
+            // the journal is append-only and every state change writes a line, so an id that has moved means
+            // work has been done that restoring a database would erase.
+            ChronicleId = await NewestChronicleIdAsync(cancellationToken).ConfigureAwait(false),
         };
     }
 
@@ -387,6 +393,22 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
     private async Task<int?> RunningAttemptsAsync(CancellationToken cancellationToken) =>
         (await InfoAsync(cancellationToken).ConfigureAwait(false))?.Dispatcher.RunningAttempts;
+
+    /// <summary>The newest line in the runtime's chronicle, or null where it cannot be asked.</summary>
+    private async Task<string?> NewestChronicleIdAsync(CancellationToken cancellationToken)
+    {
+        var (_, answer) = await OperationRunner
+            .SendAsync(env, Operations.JournalList, new JsonObject { ["limit"] = 1 }, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (answer is not { IsSuccess: true })
+        {
+            return null;
+        }
+
+        var page = JsonSerializer.Deserialize<Page<JournalEntryDto>>(answer.Body, JasonJson.Options);
+        return page?.Items.Count > 0 ? page.Items[0].Id : null;
+    }
 
     private async Task<SystemInfoResponse?> InfoAsync(CancellationToken cancellationToken)
     {

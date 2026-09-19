@@ -24,6 +24,7 @@ public static class UpdateCommands
         var update = new Command("update", "Find out whether a newer version of Jason has been released, and install it.");
         update.Subcommands.Add(Check(env, actor));
         update.Subcommands.Add(Apply(env, actor));
+        update.Subcommands.Add(RollBack(env, actor));
         return update;
     }
 
@@ -112,15 +113,7 @@ public static class UpdateCommands
         {
             applier = new UpdateApplier(env, new UpdatePaths(env.Paths), TimeProvider.System, UpdateApplier.ResolveInstallPath());
             var ledger = await applier.ApplyAsync(request, cancellationToken).ConfigureAwait(false);
-            var answer = new UpdateApplyResponse(
-                ledger.FromVersion.ToString(),
-                ledger.ToVersion.ToString(),
-                SnakeCase(ledger.Step),
-                [.. applier.Steps]);
-
-            env.Out.WriteLine(human
-                ? string.Join(Environment.NewLine, applier.Steps.Select(step => "- " + step))
-                : JsonSerializer.Serialize(answer, JasonJson.Options));
+            Print(env, human, applier.Steps, ledger);
             return ExitCodes.Success;
         }
         catch (UpdateException error)
@@ -134,6 +127,61 @@ public static class UpdateCommands
             env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: error.Code == UpdateFeedException.Unreachable));
             return ExitCodes.ApiError;
         }
+    }
+
+    private static Command RollBack(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "rollback",
+            "Put the version this machine updated from back: the executable it replaced, and - if that update migrated the database - the backup it wrote.");
+        var human = VerbOptions.Human();
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            ActorOption.Parse(parseResult.GetValue(actor));
+            return RollBackAsync(env, parseResult.GetValue(human), cancellationToken);
+        });
+
+        return command;
+    }
+
+    public static async Task<int> RollBackAsync(CliEnvironment env, bool human, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+
+        var rollback = new UpdateRollback(env, new UpdatePaths(env.Paths), TimeProvider.System);
+        try
+        {
+            var ledger = await rollback.RollBackAsync(cancellationToken).ConfigureAwait(false);
+            Print(env, human, rollback.Steps, ledger);
+            return ExitCodes.Success;
+        }
+        catch (UpdateException error)
+        {
+            // A rollback that could not restore the database still put the executable back, and the steps say
+            // so: the refusal and the account of what was done are printed together.
+            foreach (var step in rollback.Steps)
+            {
+                env.Error.WriteLine(step);
+            }
+
+            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, error.Retryable));
+            return ExitCodes.ApiError;
+        }
+    }
+
+    private static void Print(CliEnvironment env, bool human, IReadOnlyList<string> steps, UpdateLedger ledger)
+    {
+        var answer = new UpdateApplyResponse(
+            ledger.FromVersion.ToString(),
+            ledger.ToVersion.ToString(),
+            SnakeCase(ledger.Step),
+            [.. steps]);
+
+        env.Out.WriteLine(human
+            ? string.Join(Environment.NewLine, steps.Select(step => "- " + step))
+            : JsonSerializer.Serialize(answer, JasonJson.Options));
     }
 
     /// <summary>Q7's answer: two minutes, and a person may say 0 to wait for none of it.</summary>
