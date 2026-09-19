@@ -1,0 +1,135 @@
+# One packaging step for every place that packages: ci.yml runs it on each pull request, release.yml on a tag.
+# It publishes one platform as a self-contained single-file executable, puts LICENSE beside it, archives the
+# two under the platform's stable asset name, and writes the checksum and the manifest fragment a release is
+# assembled from. The version is an input. The caller decides it — ci.yml asks the tree, release.yml asks the
+# tag — and this action never reads a ref, so both call it the same way.
+name: Package
+description: Publish one platform of Jason and archive it under its release name, with a checksum and a manifest fragment.
+
+inputs:
+  rid:
+    description: 'The platform to publish for: one of win-x64, linux-x64, osx-arm64.'
+    required: true
+  version:
+    description: 'The version to stamp, without a leading v (0.2.0, 1.0.0-rc.1). It reaches the build as -p:Version=.'
+    required: true
+
+outputs:
+  executable:
+    description: The published executable, for the caller's smoke test.
+    value: ${{ steps.publish.outputs.executable }}
+  archive:
+    description: The archive, under its stable asset name.
+    value: ${{ steps.name.outputs.archive }}
+  asset:
+    description: The archive's file name, which is the name the manifest and the feed use.
+    value: ${{ steps.name.outputs.asset }}
+
+runs:
+  using: composite
+  steps:
+    - name: Name the asset
+      id: name
+      shell: pwsh
+      env:
+        RID: ${{ inputs.rid }}
+      run: |
+        # The names carry no version, which is what makes the latest-download URL resolve for every release
+        # there will ever be. The same table is ReleaseAssets.cs, and a test reads it from there to hold this
+        # file to it; a platform that is not in the table is refused rather than given a made-up name.
+        $asset = switch ($env:RID) {
+          'win-x64'   { 'jason-win-x64.zip' }
+          'linux-x64' { 'jason-linux-x64.tar.gz' }
+          'osx-arm64' { 'jason-osx-arm64.tar.gz' }
+          default     { throw "No release is built for '$env:RID'." }
+        }
+        $executable = if ($env:RID -like 'win-*') { 'jason.exe' } else { 'jason' }
+
+        "asset=$asset" >> $env:GITHUB_OUTPUT
+        "archive=artifacts/release/$asset" >> $env:GITHUB_OUTPUT
+        "executable=$executable" >> $env:GITHUB_OUTPUT
+
+    - name: Publish self-contained single-file executable
+      id: publish
+      shell: pwsh
+      env:
+        RID: ${{ inputs.rid }}
+        VERSION: ${{ inputs.version }}
+        EXECUTABLE: ${{ steps.name.outputs.executable }}
+      run: |
+        $publish = "artifacts/publish/$env:RID"
+        dotnet publish runtime/src/Jason.App --configuration Release --runtime $env:RID --self-contained -p:PublishSingleFile=true "-p:Version=$env:VERSION" --output $publish
+        if ($LASTEXITCODE -ne 0) { throw "dotnet publish exited with $LASTEXITCODE" }
+
+        # One executable and its symbols, and nothing else. A native library left beside the executable —
+        # SQLite's, should the project ever stop bundling it — is a file the archive would not carry and the
+        # installed program could not run without, so it stops the packaging here rather than somebody's first
+        # `jason campaign create`.
+        $stray = Get-ChildItem $publish -File | Where-Object { $_.Name -ne $env:EXECUTABLE -and $_.Extension -ne '.pdb' }
+        if ($stray) { throw "The publish directory holds more than the executable: $($stray.Name -join ', ')" }
+
+        "executable=$publish/$env:EXECUTABLE" >> $env:GITHUB_OUTPUT
+
+    - name: Put LICENSE beside the executable
+      shell: pwsh
+      env:
+        RID: ${{ inputs.rid }}
+        EXECUTABLE: ${{ steps.publish.outputs.executable }}
+      run: |
+        # MIT's own condition is that the notice accompanies every copy of the software.
+        $staging = "artifacts/package/$env:RID"
+        New-Item -ItemType Directory -Force $staging | Out-Null
+        New-Item -ItemType Directory -Force artifacts/release | Out-Null
+        Copy-Item $env:EXECUTABLE $staging
+        Copy-Item LICENSE $staging
+
+    - name: Archive as zip
+      if: startsWith(inputs.rid, 'win-')
+      shell: pwsh
+      env:
+        RID: ${{ inputs.rid }}
+        ARCHIVE: ${{ steps.name.outputs.archive }}
+      run: |
+        Compress-Archive -Path "artifacts/package/$env:RID/*" -DestinationPath $env:ARCHIVE
+
+    - name: Archive as tar.gz
+      if: ${{ !startsWith(inputs.rid, 'win-') }}
+      shell: bash
+      env:
+        RID: ${{ inputs.rid }}
+        ARCHIVE: ${{ steps.name.outputs.archive }}
+      run: |
+        # tar keeps the mode, which is what makes the unpacked file runnable without a chmod from whoever
+        # unpacks it; the bit is set here rather than trusted from the publish. COPYFILE_DISABLE keeps macOS's
+        # tar from adding the ._ resource-fork entries nobody else can use.
+        chmod 755 "artifacts/package/$RID/jason"
+        COPYFILE_DISABLE=1 tar -czf "$ARCHIVE" -C "artifacts/package/$RID" jason LICENSE
+
+    - name: Write the checksum and the manifest fragment
+      shell: pwsh
+      env:
+        RID: ${{ inputs.rid }}
+        ASSET: ${{ steps.name.outputs.asset }}
+        ARCHIVE: ${{ steps.name.outputs.archive }}
+      run: |
+        $hash = (Get-FileHash $env:ARCHIVE -Algorithm SHA256).Hash.ToLowerInvariant()
+        $size = (Get-Item $env:ARCHIVE).Length
+
+        # sha256sum's own line — the digest, two spaces, the name — with a Unix newline whatever the runner, so
+        # that `sha256sum -c` reads it on a machine that is not this one.
+        Set-Content -Path "$env:ARCHIVE.sha256" -Value "$hash  $env:ASSET`n" -NoNewline
+
+        # This platform's entry of the release manifest. Write-Manifest.ps1 merges the three into manifest.json.
+        $fragment = [ordered]@{ $env:RID = [ordered]@{ asset = $env:ASSET; sha256 = $hash; size = $size } }
+        Set-Content -Path "artifacts/release/jason-$env:RID.fragment.json" -Value (($fragment | ConvertTo-Json -Compress) + "`n") -NoNewline
+
+        Get-ChildItem artifacts/release | Format-Table Name, Length
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: jason-${{ inputs.rid }}
+        path: |
+          ${{ steps.name.outputs.archive }}
+          ${{ steps.name.outputs.archive }}.sha256
+          artifacts/release/jason-${{ inputs.rid }}.fragment.json
+        if-no-files-found: error

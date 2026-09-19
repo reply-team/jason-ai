@@ -3,6 +3,8 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>jason</AssemblyName>
     <RootNamespace>Jason.App</RootNamespace>
+    <!-- A single-file publish leaves native libraries (SQLite's, the IIS module's) beside the executable unless it is told to bundle them. A release ships one executable and nothing else, so it is; they are extracted to the user's own cache on first run. -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Jason.Cli/Jason.Cli.csproj" />
