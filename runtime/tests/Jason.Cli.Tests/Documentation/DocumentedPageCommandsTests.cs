@@ -23,26 +23,29 @@ public class DocumentedPageCommandsTests
     /// list honest is that a noun added to the pages and not to this list is simply unguarded, which is how the
     /// profile pages came to document an option the CLI did not have.
     /// </summary>
-    private static readonly string[] Nouns = ["jason profile ", "jason rolenote ", "jason campaign "];
+    private static readonly string[] Nouns = ["jason profile ", "jason rolenote ", "jason campaign ", "jason workitem "];
+
+    /// <summary>The pages whose printed commands are guarded.</summary>
+    private static readonly string[] Pages =
+    [
+        "README.md",
+        Path.Combine("docs", "execution-profiles.md"),
+        Path.Combine("docs", "campaign-manager.md"),
+    ];
 
     public static TheoryData<string, string> DocumentedCommands()
     {
         var data = new TheoryData<string, string>();
-        foreach (var page in new[]
+        foreach (var (page, line) in Printed())
         {
-            "README.md",
-            Path.Combine("docs", "execution-profiles.md"),
-            Path.Combine("docs", "campaign-manager.md"),
-        })
-        {
-            foreach (var line in Commands(page))
-            {
-                data.Add(page, line);
-            }
+            data.Add(page, line);
         }
 
         return data;
     }
+
+    private static IEnumerable<(string Page, string Command)> Printed() =>
+        Pages.SelectMany(page => Commands(page).Select(line => (page, line)));
 
     [Theory]
     [MemberData(nameof(DocumentedCommands))]
@@ -62,6 +65,18 @@ public class DocumentedPageCommandsTests
     /// <summary>At least one line, or the theory above asserts nothing at all.</summary>
     [Fact]
     public void The_pages_carry_commands_to_check() => Assert.NotEmpty(DocumentedCommands());
+
+    /// <summary>
+    /// And every noun in that list is really printed by one of these pages. A noun nobody prints is a guard
+    /// over nothing, which looks exactly like a guard: the list above is only honest if adding to it is what
+    /// brings lines under the theory, and removing a documented command is what takes them out.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(GuardedNouns))]
+    public void Every_guarded_noun_is_printed_by_a_page(string noun) =>
+        Assert.Contains(Printed(), printed => printed.Command.StartsWith(noun, StringComparison.Ordinal));
+
+    public static TheoryData<string> GuardedNouns() => [.. Nouns];
 
     /// <summary>
     /// The documents a printed command names, made to exist. The CLI reads such a file while it parses, so
