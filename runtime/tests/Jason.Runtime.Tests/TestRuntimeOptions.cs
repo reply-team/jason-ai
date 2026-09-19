@@ -26,6 +26,18 @@ namespace Jason.Runtime.Tests;
 /// </remarks>
 public static class TestRuntimeOptions
 {
+    private static int refusals;
+
+    /// <summary>What the transport says when it is reached, so a test can name it rather than guess at it.</summary>
+    public const string Refusal = "No test in this repository reaches the network";
+
+    /// <summary>
+    /// How many times the transport has refused a request. A test runtime that reaches for the feed leaves a
+    /// mark here — which is what lets one test assert that the transport is doing its job, rather than that it
+    /// is merely declared.
+    /// </summary>
+    public static int Refusals => Volatile.Read(ref refusals);
+
     /// <summary>What every test's runtime is started with. Add to it with <c>with</c>; do not build another.</summary>
     public static RuntimeHostOptions Quiet { get; } = new(
         ShippedSettingsDirectory: null,
@@ -52,11 +64,14 @@ public static class TestRuntimeOptions
     /// </summary>
     private sealed class NoNetworkInTests : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref refusals);
             throw new HttpRequestException(
-                $"A test runtime tried to read {request?.RequestUri}. No test in this repository reaches the network: "
+                $"A test runtime tried to read {request?.RequestUri}. {Refusal}: "
                 + "the update check is off in TestRuntimeOptions.Quiet, and a test that means to exercise it passes its own FeedHandler.",
                 null,
                 HttpStatusCode.ServiceUnavailable);
+        }
     }
 }

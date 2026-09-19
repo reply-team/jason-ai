@@ -1,3 +1,10 @@
+using Jason.Runtime.Configuration;
+using Jason.Runtime.Hosting;
+using Jason.Runtime.Tests.Dispatch;
+using Jason.Runtime.Update;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+
 namespace Jason.Runtime.Tests.Hosting;
 
 /// <summary>
@@ -12,6 +19,8 @@ namespace Jason.Runtime.Tests.Hosting;
 /// </remarks>
 public class OfflineRuntimeTests
 {
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
     /// <summary>
     /// There is one declaration of the options a test runtime is started with. Ten identical ones were ten
     /// places to forget, which is how nineteen runtimes came to be composed with a live transport pointed at a
@@ -60,6 +69,72 @@ public class OfflineRuntimeTests
             .ToList();
 
         Assert.True(replaced.Count == 0, $"the feed transport is replaced at: {string.Join(", ", replaced)}");
+    }
+
+    /// <summary>
+    /// The shared options carry two layers, and this is the second one doing its job: a runtime started from
+    /// them with the check deliberately left on reaches for the feed, and the transport refuses it.
+    /// </summary>
+    /// <remarks>
+    /// The three guards above prove the value is declared once and used everywhere. They say nothing about what
+    /// it carries — deleting the transport from it leaves every one of them green, which is a guard over a name
+    /// rather than over a guarantee. This asserts the guarantee: the request is counted where it is refused, so
+    /// no reading of a log line and no absence of one stands in for it.
+    /// </remarks>
+    [Fact]
+    public async Task A_runtime_that_reaches_for_the_feed_is_refused_by_the_shared_transport()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(dir.Paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+        var clock = new FixedClock(new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.Zero));
+        var before = TestRuntimeOptions.Refusals;
+
+        // The hook is what turns the check off, so this test drops it — and keeps the transport, which is the
+        // whole point: one `with` cannot take away the other layer.
+        await using var runtime = await RuntimeHost.StartAsync(
+            dir.Paths,
+            TestRuntimeOptions.Quiet with { Clock = clock, ConfigureServices = null },
+            Ct);
+
+        Assert.True(
+            runtime.Services.GetRequiredService<IOptionsMonitor<UpdateOptions>>().CurrentValue.CheckEnabled,
+            "this test needs the check on; with it off there is nothing for the transport to refuse");
+
+        Assert.True(await DispatchHarness.EventuallyAsync(() => clock.Armed >= 1, Ct), "the checker never armed its wait");
+        clock.Advance(TimeSpan.FromMinutes(new UpdateOptions().InitialDelayMinutes));
+
+        Assert.True(
+            await DispatchHarness.EventuallyAsync(() => TestRuntimeOptions.Refusals > before, Ct),
+            "the runtime's update check did not reach the transport, so nothing here proves it would have been refused");
+
+        // And the check that was refused left nothing behind: no version was advertised on the strength of a
+        // failure.
+        Assert.Null(runtime.Services.GetRequiredService<UpdateAdvertisement>().Current);
+    }
+
+    /// <summary>
+    /// And the first layer: a runtime started from the shared options as they stand has the check off, whatever
+    /// its settings file says.
+    /// </summary>
+    /// <remarks>
+    /// <c>RuntimeApiFixture</c> has its own test for this, which proves it for the fixture — most of the suite's
+    /// runtimes are not started through the fixture.
+    /// </remarks>
+    [Fact]
+    public async Task The_shared_options_turn_the_check_off_whatever_the_settings_say()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+
+        // A settings file that asks for the check, and asks for it soon.
+        File.WriteAllText(
+            dir.Paths.UserSettingsFile,
+            """{"Dispatcher":{"Enabled":false},"Update":{"CheckEnabled":true,"InitialDelayMinutes":1}}""");
+
+        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
+
+        Assert.False(runtime.Services.GetRequiredService<IOptionsMonitor<UpdateOptions>>().CurrentValue.CheckEnabled);
     }
 
     /// <summary>Every line of every test source but this one, with where it is.</summary>

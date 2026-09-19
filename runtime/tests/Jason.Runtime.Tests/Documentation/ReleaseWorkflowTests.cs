@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using Jason.Contracts.Update;
 using YamlDotNet.RepresentationModel;
@@ -410,11 +411,31 @@ public class ReleaseWorkflowTests
         Assert.NotEmpty(steps);
         foreach (var step in steps)
         {
-            Assert.Contains("runtime start", step, StringComparison.Ordinal);
+            Assert.True(Runs(step, "runtime start"), $"{workflow} checks an executable without starting a runtime with it:\n{step}");
+            Assert.True(Runs(step, "runtime status"), $"{workflow} starts a runtime and never asks it anything:\n{step}");
             Assert.Contains("applied_migrations", step, StringComparison.Ordinal);
-            Assert.Contains("runtime stop", step, StringComparison.Ordinal);
+            Assert.True(Runs(step, "runtime stop"), $"{workflow} leaves the runtime it started running:\n{step}");
         }
     }
+
+    /// <summary>
+    /// Whether the step really runs the command, rather than merely mentioning it.
+    /// </summary>
+    /// <remarks>
+    /// A plain substring search passes on a step whose command has been deleted, because two other lines still
+    /// carry the words: the throw below it (<c>throw "jason runtime start exited with ..."</c>) and the line
+    /// that reports success (<c>"the runtime started, migrated and answered"</c> — "started" contains "start").
+    /// So the mention must end on a word boundary, and must not be a throw, a condition or a comment: what is
+    /// left is the invocation.
+    /// </remarks>
+    private static bool Runs(string step, string command) =>
+        step.Split('\n')
+            .Select(line => line.Trim())
+            .Any(line => Regex.IsMatch(line, @"\b" + Regex.Escape(command) + @"\b(\s|\||$)")
+                && !line.Contains("throw", StringComparison.Ordinal)
+                && !line.StartsWith('#')
+                && !line.StartsWith("if", StringComparison.Ordinal)
+                && !line.StartsWith("Write-Host", StringComparison.Ordinal));
 
     /// <summary>
     /// A release candidate is published as a pre-release, so that it does not become the latest release.
