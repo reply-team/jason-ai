@@ -91,17 +91,13 @@ public class RuntimeStatusCommandTests
     public void A_descriptor_refused_for_the_whole_window_is_survived_rather_than_thrown()
     {
         using var dir = new TempPaths();
-        dir.WriteDescriptor(Held);
-
-        // Held exactly as a reader holds it, for longer than the publisher will keep trying: others may read,
-        // nobody may write.
-        using var reader = File.Open(dir.Paths.DescriptorFile, FileMode.Open, FileAccess.Read, FileShare.Read);
+        Blocked(dir);
 
         RuntimeVerbs.Publish(dir, Descriptor);
 
         // It gave up rather than throwing, which is what keeps three hundred unrelated tests alive, and wrote
         // nothing; the test that was waiting for a descriptor is left to fail in its own words.
-        Assert.Equal("rt_HELD", Instance(dir));
+        Assert.False(File.Exists(dir.Paths.DescriptorFile));
     }
 
     /// <summary>
@@ -113,29 +109,36 @@ public class RuntimeStatusCommandTests
     public async Task A_descriptor_refused_and_then_released_lands_inside_the_retry_window()
     {
         using var dir = new TempPaths();
-        dir.WriteDescriptor(Held);
+        Blocked(dir);
 
         var ct = TestContext.Current.CancellationToken;
-        var reader = File.Open(dir.Paths.DescriptorFile, FileMode.Open, FileAccess.Read, FileShare.Read);
-        var released = Task.Run(
+        var freed = Task.Run(
             async () =>
             {
                 await Task.Delay(200, ct);
-                reader.Dispose();
+                Directory.Delete(dir.Paths.DescriptorFile);
             },
             ct);
 
         RuntimeVerbs.Publish(dir, Descriptor);
-        await released;
+        await freed;
 
-        // The publish that landed is the one made after the lock went, which only a retry can have made: a
-        // single attempt would have been refused and given up while the file was still held.
+        // The publish that landed was made after the way was clear, which only a retry can have made: a single
+        // attempt would have been refused and given up while the path was still taken.
         Assert.Equal("rt_LIVE", Instance(dir));
     }
 
-    /// <summary>A descriptor whose only job is to be the value a publish has to replace.</summary>
-    private static readonly RuntimeDescriptor Held =
-        new("v1", "0.1.0-dev", "rt_HELD", 77, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch);
+    /// <summary>
+    /// The descriptor's path, taken by something that is not a file, which is a refusal every operating system
+    /// agrees on. The race that really happened is a reader holding the file against a writer — but that is a
+    /// rule only Windows enforces, so staging it that way tested the publisher on one platform and the
+    /// filesystem on the others.
+    /// </summary>
+    private static void Blocked(TempPaths dir)
+    {
+        Directory.CreateDirectory(dir.Paths.RunDirectory);
+        Directory.CreateDirectory(dir.Paths.DescriptorFile);
+    }
 
     private static string? Instance(TempPaths dir) =>
         JsonSerializer.Deserialize<RuntimeDescriptor>(File.ReadAllText(dir.Paths.DescriptorFile), JasonJson.Options)?.InstanceId;
