@@ -167,6 +167,79 @@ public sealed class FakeInstallation : HttpMessageHandler
     /// <summary>An applier over this installation, on the system clock: the waits here are milliseconds.</summary>
     public UpdateApplier Applier() => new(Env, Update, TimeProvider.System, InstallPath);
 
+    /// <summary>
+    /// When a killed update began. A fixed moment in the past, so that a run which carries that update on can
+    /// be told from a run which quietly started a new one: the second would stamp its own clock.
+    /// </summary>
+    public static DateTimeOffset Interrupted { get; } = new(2026, 9, 19, 7, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
+    /// Puts this installation in the state a process dying at <paramref name="step"/> leaves behind: every step
+    /// up to and including that one performed, and the ledger that names it on disk.
+    /// </summary>
+    /// <remarks>
+    /// The ledger is written <em>before</em> the step it names, so "the ledger says <c>kept</c>" is what a
+    /// process arriving after the kill sees whether or not the keeping finished. The effects below are the
+    /// applier's own, performed here rather than mocked: what a test calls a kill point has to be a state a
+    /// machine really reaches.
+    /// </remarks>
+    public UpdateLedger Killed(UpdateStep step)
+    {
+        var ledger = new UpdateLedger(
+            SemanticVersion.Current,
+            To,
+            step,
+            Interrupted,
+            InstallPath,
+            Update.StagedExecutable(To),
+            Update.PreviousExecutable);
+
+        if (step >= UpdateStep.Staged)
+        {
+            Directory.CreateDirectory(Update.StagedFor(To));
+            File.WriteAllText(Update.StagedExecutable(To), $"jason {To}");
+        }
+
+        if (step >= UpdateStep.Drained && Running)
+        {
+            State = DispatcherState.Draining;
+            RunningAttempts = 0;
+        }
+
+        if (step >= UpdateStep.Stopped)
+        {
+            if (Running)
+            {
+                Running = false;
+                File.Delete(Paths.DescriptorFile);
+            }
+
+            ledger = ledger with { StoppedAt = Interrupted };
+        }
+
+        if (step >= UpdateStep.Kept)
+        {
+            Directory.CreateDirectory(Update.Previous);
+            Directory.CreateDirectory(Update.Applier);
+            File.Copy(InstallPath, Path.Combine(Update.Applier, ReleaseAssets.ExecutableName), overwrite: true);
+            File.Move(InstallPath, Update.PreviousExecutable, overwrite: true);
+        }
+
+        if (step >= UpdateStep.Swapped)
+        {
+            File.Move(Update.StagedExecutable(To), InstallPath);
+        }
+
+        if (step >= UpdateStep.Started)
+        {
+            Running = true;
+            Publish();
+        }
+
+        ledger.Write(Update.Ledger);
+        return ledger;
+    }
+
     /// <summary>The version the file at the install path claims to be, which is what a runtime here reports.</summary>
     public string Installed() => File.Exists(InstallPath)
         ? File.ReadAllText(InstallPath).Replace("jason ", string.Empty, StringComparison.Ordinal).Trim()

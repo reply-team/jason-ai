@@ -1,0 +1,236 @@
+using Jason.Cli.Update;
+using Jason.Contracts.Discovery;
+using Jason.Contracts.Update;
+
+namespace Jason.Cli.Tests.Update;
+
+/// <summary>
+/// Everything an update refuses to do, one test per code. A code alone tells a person nothing they can act on,
+/// so each test also reads the message: the version, the path, or the thing to type next.
+/// </summary>
+public class UpdateRefusalTests
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>
+    /// An update renames files rather than copying them, because a rename is atomic and a half-copied
+    /// executable is the one state worth avoiding at any price. Two volumes make a rename impossible, and the
+    /// refusal names both paths, because which of the two to move is the person's decision and not this
+    /// program's.
+    /// </summary>
+    /// <remarks>
+    /// Driven through the check rather than through a second disk: the check compares the two paths' roots, so
+    /// an install path on another volume is one this test can name. It is named on Windows only — on Unix every
+    /// absolute path has the root <c>/</c>, so there is no pair of paths this check can be given that differs.
+    /// </remarks>
+    [Fact]
+    public async Task An_install_path_on_another_volume_is_refused_with_both_paths_named()
+    {
+        var volume = OtherVolume();
+        Assert.SkipWhen(volume is null, "This platform has no second volume a path can name.");
+
+        using var installation = new FakeInstallation();
+        var elsewhere = Path.Combine(volume!, "Program Files", "Jason", ReleaseAssets.ExecutableName);
+        var applier = new UpdateApplier(installation.Env, installation.Update, TimeProvider.System, elsewhere);
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(
+            () => applier.ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.Zero), Ct));
+
+        Assert.Equal(UpdateCodes.CrossVolume, refused.Code);
+        Assert.False(refused.Retryable, "the two paths will be on the same two volumes next time as well");
+
+        var staged = installation.Update.StagedExecutable(installation.To);
+        Assert.Contains(staged, refused.Message, StringComparison.Ordinal);
+        Assert.Contains(elsewhere, refused.Message, StringComparison.Ordinal);
+        Assert.Contains("JASON_DATA_DIR", refused.Message, StringComparison.Ordinal);
+
+        // And nothing crossed: what was proved is still where it was proved, and nothing was written over there.
+        Assert.True(File.Exists(staged), "the staged executable was moved across volumes instead of being refused");
+        Assert.False(File.Exists(elsewhere), "something was written to the other volume");
+    }
+
+    /// <summary>
+    /// An installation started as <c>dotnet jason.dll</c> is not one file, so there is nothing to replace and
+    /// the refusal says how to move that build forward instead of guessing which file was meant.
+    /// </summary>
+    /// <remarks>
+    /// The shape of such a command is asked of <see cref="SelfExecutable"/> rather than spelled here: what a
+    /// muxed installation looks like is that type's answer, and a test that wrote <c>["dotnet", "jason.dll"]</c>
+    /// by hand would keep passing after that answer changed.
+    /// </remarks>
+    [Fact]
+    public void An_installation_run_through_the_muxer_says_so_rather_than_guessing_a_file()
+    {
+        var muxer = SelfExecutable.Resolve(
+            OperatingSystem.IsWindows() ? @"C:\Program Files\dotnet\dotnet.exe" : "/usr/share/dotnet/dotnet",
+            Path.Combine("opt", "jason", "jason.dll"));
+
+        var refused = Assert.Throws<UpdateException>(() => UpdateApplier.ResolveInstallPath(muxer));
+
+        Assert.Equal(UpdateCodes.NotUpdatable, refused.Code);
+        Assert.False(refused.Retryable, "the same installation will be the same installation next time");
+        Assert.Contains("dotnet", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("one-liner", refused.Message, StringComparison.Ordinal);
+
+        // And a published installation is exactly the file it is running, which is the file an update replaces.
+        var published = Path.Combine("opt", "jason", ReleaseAssets.ExecutableName);
+        Assert.Equal(published, UpdateApplier.ResolveInstallPath(SelfExecutable.Resolve(published, "jason.dll")));
+    }
+
+    /// <summary>
+    /// A release may say it cannot be reached from any version, and the refusal names the one to install
+    /// first — the whole purpose of the field, which until now was parsed and read by nothing.
+    /// </summary>
+    [Fact]
+    public async Task A_release_that_cannot_be_applied_directly_names_the_version_to_pass_through()
+    {
+        using var installation = new FakeInstallation();
+        installation.Release.Says(installation.Release.Manifest().Replace(
+            "\"min_upgrade_from\": null",
+            "\"min_upgrade_from\": \"9.0.0\"",
+            StringComparison.Ordinal));
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(
+            () => installation.Applier().ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.Zero), Ct));
+
+        Assert.Equal(UpdateCodes.NotDirectlyApplicable, refused.Code);
+        Assert.False(refused.Retryable, "the release will say the same thing next time");
+        Assert.Contains(installation.To.ToString(), refused.Message, StringComparison.Ordinal);
+        Assert.Contains(SemanticVersion.Current.ToString(), refused.Message, StringComparison.Ordinal);
+        Assert.Contains("9.0.0", refused.Message, StringComparison.Ordinal);
+
+        // Refused before anything was downloaded, and before an update existed to finish.
+        Assert.Equal(["/releases/latest/download/" + ReleaseAssets.Manifest], installation.Fetched);
+        Assert.Null(installation.Ledger());
+    }
+
+    /// <summary>
+    /// Nothing newer is nothing to do — unless a person asked for a particular version by name, which is how
+    /// an installation is put back onto a release it has already passed.
+    /// </summary>
+    [Fact]
+    public async Task A_feed_with_nothing_newer_refuses_only_when_no_version_was_asked_for()
+    {
+        var old = SemanticVersion.Parse("0.0.0");
+        using var installation = new FakeInstallation(to: old);
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(
+            () => installation.Applier().ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.Zero), Ct));
+
+        Assert.Equal(UpdateCodes.UpToDate, refused.Code);
+        Assert.False(refused.Retryable, "the feed will offer the same release next time");
+        Assert.Contains(SemanticVersion.Current.ToString(), refused.Message, StringComparison.Ordinal);
+        Assert.Contains(old.ToString(), refused.Message, StringComparison.Ordinal);
+        Assert.Null(installation.Ledger());
+
+        // The same feed, the same release, and a person who named it: that is an instruction rather than an
+        // advertisement, and it is carried out.
+        var ledger = await installation.Applier()
+            .ApplyAsync(new UpdateRequest(installation.Feed, old, TimeSpan.Zero), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(old.ToString(), installation.Installed());
+    }
+
+    /// <summary>
+    /// A ledger in flight is finished rather than abandoned, so asking for a different version while one is
+    /// under way is refused — and the message says what is in flight, where it stands and what to type.
+    /// </summary>
+    [Fact]
+    public async Task An_update_to_another_version_while_one_is_in_flight_is_refused()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+        var inFlight = installation.Killed(UpdateStep.Stopped);
+        var other = SemanticVersion.Parse("1.2.3");
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(
+            () => installation.Applier().ApplyAsync(new UpdateRequest(installation.Feed, other, TimeSpan.Zero), Ct));
+
+        Assert.Equal(UpdateCodes.InProgress, refused.Code);
+        Assert.False(refused.Retryable, "the update in flight will still be in flight next time");
+        Assert.Contains(installation.To.ToString(), refused.Message, StringComparison.Ordinal);
+        Assert.Contains("1.2.3", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("stopped", refused.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("jason update apply", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("jason update status", refused.Message, StringComparison.Ordinal);
+
+        // A refusal changes nothing: the update in flight is exactly where it was, and no feed was asked.
+        Assert.Equal(inFlight.ToJson(), installation.Ledger()!.ToJson());
+        Assert.Empty(installation.Fetched);
+    }
+
+    /// <summary>
+    /// The same version is the same update, so a second <c>apply</c> carries it on from where the ledger stands
+    /// rather than beginning again — which is what writing the ledger before each step is for.
+    /// </summary>
+    [Fact]
+    public async Task A_second_apply_for_the_same_version_carries_on_from_the_step_it_reached()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+        var killed = installation.Killed(UpdateStep.Kept);
+        var applier = installation.Applier();
+
+        var ledger = await applier.ApplyAsync(new UpdateRequest(installation.Feed, installation.To, TimeSpan.Zero), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(installation.To.ToString(), installation.Installed());
+
+        // The same update and not a new one: the moment it began is the moment the killed run wrote down.
+        Assert.Equal(killed.StartedAt, ledger.StartedAt);
+
+        // And it began at the step the ledger named: nothing was fetched again, no runtime was drained again,
+        // and what it says it did starts at the swap.
+        Assert.Empty(installation.Fetched);
+        Assert.DoesNotContain("system.drain", installation.Operations);
+        Assert.Equal(["swapped", "started", "healthy"], applier.Steps.Select(Word).Take(3));
+    }
+
+    /// <summary>
+    /// A pinned version is read from the release's own directory — the address both install scripts compose by
+    /// hand for <c>--version</c> — and so is the archive that manifest names.
+    /// </summary>
+    /// <remarks>
+    /// <c>…/releases/latest/download/</c> is a moving address: what arrives from it describes whatever is
+    /// newest. Asking it for a particular version's manifest and then taking the archive from the moving
+    /// address would compare one release's digest against another release's bytes.
+    /// </remarks>
+    [Fact]
+    public async Task A_pinned_version_is_read_from_the_address_the_install_scripts_use()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+
+        await installation.Applier()
+            .ApplyAsync(new UpdateRequest(installation.Feed, installation.To, TimeSpan.Zero), Ct);
+
+        var release = $"/releases/download/v{installation.To}/";
+        Assert.Contains(release + ReleaseAssets.Manifest, installation.Fetched);
+        Assert.Contains(release + installation.Release.Asset, installation.Fetched);
+        Assert.All(installation.Fetched, address => Assert.StartsWith(release, address, StringComparison.Ordinal));
+    }
+
+    /// <summary>The first word of a step the applier reported, which is that step's own name.</summary>
+    private static string Word(string step) => step.Split(' ', ':')[0];
+
+    /// <summary>
+    /// A path on a volume this machine's data directory is not on, or null where there is no such thing. On
+    /// Windows a drive letter nothing is mounted on is one; on Unix there is no second root to name.
+    /// </summary>
+    private static string? OtherVolume()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        var mounted = DriveInfo.GetDrives().Select(drive => char.ToUpperInvariant(drive.Name[0])).ToHashSet();
+        foreach (var letter in "ZYXWVUT")
+        {
+            if (!mounted.Contains(letter))
+            {
+                return letter + @":\";
+            }
+        }
+
+        return null;
+    }
+}

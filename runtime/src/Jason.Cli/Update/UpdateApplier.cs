@@ -134,9 +134,15 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// was changed for: the applier runs from a copy of itself under the data directory, so "where am I?" is
     /// exactly the question it must not ask about the file it is replacing.
     /// </remarks>
-    public static string ResolveInstallPath()
+    public static string ResolveInstallPath() => ResolveInstallPath(SelfExecutable.Command);
+
+    /// <summary>
+    /// The same decision over the command it depends on, so that what a muxed installation refuses can be
+    /// asked without being one: the answer is about the shape of the command, and nothing else.
+    /// </summary>
+    public static string ResolveInstallPath(IReadOnlyList<string> self)
     {
-        var self = SelfExecutable.Command;
+        ArgumentNullException.ThrowIfNull(self);
         if (self.Count != 1)
         {
             throw new UpdateException(
@@ -152,9 +158,15 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     {
         using var client = env.HttpHandler is null ? new HttpClient() : new HttpClient(env.HttpHandler, disposeHandler: false);
         client.Timeout = UpdateFeed.DefaultTimeout;
-        var address = request.Version is { } pinned ? UpdateFeed.PinnedFor(request.Feed, pinned) : request.Feed;
-        return await new UpdateFeed(client).ReadAsync(address, cancellationToken).ConfigureAwait(false);
+        return await new UpdateFeed(client).ReadAsync(Address(request), cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Where a request's manifest is read from: the release's own directory when a version was named, and the
+    /// moving <c>latest</c> address when the question is "what is newest?".
+    /// </summary>
+    private static Uri Address(UpdateRequest request) =>
+        request.Version is { } pinned ? UpdateFeed.PinnedFor(request.Feed, pinned) : request.Feed;
 
     private async Task<UpdateLedger> TakeAsync(
         UpdateStep step,
@@ -175,7 +187,12 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
     private async Task<UpdateLedger> StageAsync(UpdateLedger ledger, UpdateRequest request, CancellationToken cancellationToken)
     {
-        var manifest = await ReadFeedAsync(request with { Version = ledger.ToVersion }, cancellationToken).ConfigureAwait(false);
+        // This update's own release, for the manifest and for the archive that manifest names. `latest` is an
+        // address that answers with whatever is newest at the moment it is asked, so taking the document from
+        // one release's directory and the bytes from a moving address would be comparing one release's digest
+        // against another release's file — and after a kill, hours later, they may really be two releases.
+        var release = request with { Version = ledger.ToVersion };
+        var manifest = await ReadFeedAsync(release, cancellationToken).ConfigureAwait(false);
         if (manifest.Version != ledger.ToVersion)
         {
             throw new UpdateException(
@@ -185,7 +202,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
         using var client = env.HttpHandler is null ? new HttpClient() : new HttpClient(env.HttpHandler, disposeHandler: false);
         var staged = await new UpdateStager(client)
-            .StageAsync(manifest, ReleaseAssets.CurrentRid!, request.Feed, update, cancellationToken)
+            .StageAsync(manifest, ReleaseAssets.CurrentRid!, Address(release), update, cancellationToken)
             .ConfigureAwait(false);
 
         Say($"staged {ledger.ToVersion}");
