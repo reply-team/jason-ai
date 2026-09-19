@@ -90,7 +90,9 @@ runs:
         RID: ${{ inputs.rid }}
         ARCHIVE: ${{ steps.name.outputs.archive }}
       run: |
-        Compress-Archive -Path "artifacts/package/$env:RID/*" -DestinationPath $env:ARCHIVE
+        # -Force because a re-run on a warm runner finds the archive from the last attempt still there, and
+        # Compress-Archive refuses to write over one. The tar step below has never needed saying: tar truncates.
+        Compress-Archive -Path "artifacts/package/$env:RID/*" -DestinationPath $env:ARCHIVE -Force
 
     - name: Archive as tar.gz
       if: ${{ !startsWith(inputs.rid, 'win-') }}

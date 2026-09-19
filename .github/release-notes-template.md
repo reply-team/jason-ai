@@ -61,6 +61,10 @@ On Windows, compare `Get-FileHash` of the archive with its line in `checksums.tx
 
 ## What is not here
 
-Nothing in this release is signed or notarized. An archive a browser downloaded carries the mark that makes
-Windows SmartScreen or macOS Gatekeeper stop the executable the first time it runs; the install scripts clear
-that mark and check the checksum before unpacking, and that check is the only provenance there is.
+Nothing in this release is signed or notarized. On Windows, an archive a browser downloaded carries the mark of
+the web, and the executable unpacked from it is stopped by SmartScreen the first time it runs: `install.ps1`
+clears that mark from what it unpacks. On macOS the quarantine flag is put there by the browser that downloaded
+the file, not by `curl`, so the one-liner's download has none and `install.sh` clears nothing; an archive
+fetched with a browser and unpacked by hand keeps the flag, and Gatekeeper asks about it the first time. Both
+scripts check the archive against `checksums.txt` before unpacking, and that check is the only provenance there
+is.
