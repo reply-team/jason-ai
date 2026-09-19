@@ -336,7 +336,7 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         {
             await canceller.CancelOpenAsync(db, campaign.Id, null, actor, "campaign archived", cancellationToken).ConfigureAwait(false);
             await DecisionGate
-                .CancelPendingAsync(db, journal, campaign, actor, "campaign archived", campaign.UpdatedAt, cancellationToken)
+                .CancelPendingAsync(db, journal, campaign, actor, "campaign archived", cancellationToken)
                 .ConfigureAwait(false);
         }
 

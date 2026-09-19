@@ -19,8 +19,13 @@ public static class DecisionGate
     /// campaign's queued work is cancelled with it.
     /// </summary>
     /// <remarks>
+    /// No clock is taken. A cancelled question records no time of its own — the row keeps <c>raised_at</c> and
+    /// <c>answered_at</c> and nothing else — and the chronicle line the cancellation writes is stamped by the
+    /// writer that appends it. A parameter nothing can use is a parameter every caller has to guess about.
+    /// <para>
     /// Nothing is saved here. The rows and their chronicle lines join the caller's change set, so archiving a
     /// campaign and retiring its questions is one commit.
+    /// </para>
     /// </remarks>
     public static async Task<int> CancelPendingAsync(
         JasonDbContext db,
@@ -28,7 +33,6 @@ public static class DecisionGate
         Campaign campaign,
         ActorRef actor,
         string? reason,
-        DateTime now,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(db);
