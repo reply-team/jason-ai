@@ -17,6 +17,8 @@ public class ManagerTriggersTests
 
     private static readonly IReadOnlySet<string> Nothing = new HashSet<string>(StringComparer.Ordinal);
 
+    private static readonly IReadOnlySet<string> OnAnswer = new HashSet<string>(StringComparer.Ordinal) { JournalKinds.DecisionAnswered };
+
     private static bool Nobody(ChronicleLine line) => false;
 
     /// <summary>
@@ -39,6 +41,44 @@ public class ManagerTriggersTests
 
         Assert.Null(read.Cause);
         Assert.Equal(12, read.Watermark);
+    }
+
+    /// <summary>
+    /// A person's line about a check-in's own attempt is read, because the exclusion is about a review
+    /// summoning itself and a person acting on a review's work is not that. This is the case the whole
+    /// continuation rests on: an answer to a review's own question names that review's attempt.
+    /// </summary>
+    [Fact]
+    public void A_line_a_person_wrote_about_a_check_ins_attempt_is_a_cause()
+    {
+        var entries = new[]
+        {
+            Entry(11, JournalKinds.DecisionAnswered, workItemId: "wi_check_in", attemptId: "att_1", actor: ActorType.Human, actorId: "ada"),
+        };
+
+        var read = ManagerTriggers.Read(entries, OnAnswer, Ours("wi_check_in", "att_1"), watermark: 10);
+
+        var cause = Assert.NotNull(read.Cause);
+        Assert.Equal(JournalKinds.DecisionAnswered, cause.Kind);
+        Assert.Equal("att_1", cause.AttemptId);
+    }
+
+    /// <summary>
+    /// And the same kind written by the review's own attempt is not, so the exemption really is about who
+    /// acted rather than about which kind of line it was.
+    /// </summary>
+    [Fact]
+    public void The_same_kind_written_by_the_check_ins_own_attempt_is_not()
+    {
+        var entries = new[]
+        {
+            Entry(11, JournalKinds.DecisionAnswered, actor: ActorType.Attempt, actorId: "att_1"),
+        };
+
+        var read = ManagerTriggers.Read(entries, OnAnswer, Ours("wi_check_in", "att_1"), watermark: 10);
+
+        Assert.Null(read.Cause);
+        Assert.Equal(11, read.Watermark);
     }
 
     /// <summary>The exclusion is per line, not per read: a check-in's failure beside a real one hides only itself.</summary>
@@ -180,13 +220,21 @@ public class ManagerTriggersTests
     /// <summary>
     /// The predicate the summon really computes, in the shape it really computes it: a line about a check-in,
     /// a line about one's attempt, or a line <em>written by</em> one's attempt — that last read from the actor,
-    /// because the chronicle leaves the attempt column empty for a report and names the reporter instead. A
-    /// stand-in looser or stricter than production would prove something production does not do.
+    /// because the chronicle leaves the attempt column empty for a report and names the reporter instead. And
+    /// none of it applied to a line a <em>person</em> wrote, because a person acting on a review's work is not
+    /// the loop feeding itself.
     /// </summary>
+    /// <remarks>
+    /// A stand-in looser or stricter than production proves something production does not do, and this file
+    /// has already been wrong that way once: it matched an actor where production did not, so the rule it
+    /// proved was not the rule that shipped. It is a mirror of the shape in <c>Summoner.OursAsync</c>, and the
+    /// two tests below are the cases that catch it drifting either way.
+    /// </remarks>
     private static Func<ChronicleLine, bool> Ours(string checkInId, string attemptId) =>
-        entry => entry.WorkItemId == checkInId
-            || entry.AttemptId == attemptId
-            || (entry.ActorType == ActorType.Attempt && entry.ActorId == attemptId);
+        entry => entry.ActorType != ActorType.Human
+            && (entry.WorkItemId == checkInId
+                || entry.AttemptId == attemptId
+                || (entry.ActorType == ActorType.Attempt && entry.ActorId == attemptId));
 
     /// <summary>
     /// A line as the summon is given one. There is nowhere in it to put a key, a reason or a document, which is
