@@ -1,5 +1,6 @@
 using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
@@ -161,6 +162,7 @@ public sealed class Summoner(
 
         var ours = await OursAsync(db, lines, ct).ConfigureAwait(false);
         var decision = ManagerTriggers.Read(lines, triggers, ours, before);
+        decision = decision with { Cause = await NameDecisionAsync(db, decision.Cause, ct).ConfigureAwait(false) };
         var due = decision.Cause is null
             && ReviewSchedule.IsDue(read.ManagerReviewAnchor, read.ManagerReviewSeconds, options.ReviewSeconds, now);
 
@@ -217,6 +219,33 @@ public sealed class Summoner(
     }
 
     /// <summary>
+    /// Which decision a <c>decision_answered</c> cause is about. One lookup by an identifier the summon
+    /// already holds: the decision remembers the chronicle line its answer wrote, so nothing here reads what a
+    /// line says — the projection it reads has nowhere to put that anyway.
+    /// </summary>
+    /// <remarks>
+    /// A line whose decision cannot be found still summons a review. The answer happened; a review that
+    /// cannot name the question is worse than none only if you believe the brief is the manager's only source,
+    /// and it is not — the manager reads the chronicle and the decisions itself.
+    /// </remarks>
+    private static async Task<ManagerCause?> NameDecisionAsync(JasonDbContext db, ManagerCause? cause, CancellationToken ct)
+    {
+        if (cause is not { } because || !string.Equals(because.Kind, JournalKinds.DecisionAnswered, StringComparison.Ordinal))
+        {
+            return cause;
+        }
+
+        var decision = await db.Decisions
+            .AsNoTracking()
+            .Where(row => row.AnswerJournalEntryId == because.JournalEntryId)
+            .Select(row => row.PublicId)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+        return decision is null ? because : because with { DecisionId = decision };
+    }
+
+    /// <summary>
     /// Moves a campaign's watermark, and only from the value this summon read. A watermark another writer has
     /// moved on is refused rather than overwritten: that writer's read may already have become a review of
     /// exactly these lines, and putting an older number back would have them reviewed twice.
@@ -251,6 +280,11 @@ public sealed class Summoner(
     /// because a manager that could summon a manager would summon one for ever.
     /// </summary>
     /// <remarks>
+    /// The actor comes first. What this exclusion is for is a manager summoning a manager for ever, and a
+    /// person acting on a review's work is not that — it is somebody doing something about it, which is the
+    /// one thing a review is supposed to lead to. The limit is the one approvals already have: the runtime
+    /// cannot tell a person from a process holding that person's own command line.
+    /// <para>
     /// Three columns, not two, and the third is the one that bites. A failed check-in names itself in
     /// <c>work_item_id</c> and its run in <c>attempt_id</c>, which is easy to see. But a line a check-in's
     /// attempt <em>wrote</em> may name neither: the chronicle fills <c>attempt_id</c> only when an attempt
@@ -258,6 +292,7 @@ public sealed class Summoner(
     /// reporter as the actor instead. So a manager that reported an effect it produced would summon the next
     /// manager, which would read the same chronicle, and the loop would run once a tick for ever on a line it
     /// wrote about itself.
+    /// </para>
     /// </remarks>
     private static async Task<Func<ChronicleLine, bool>> OursAsync(
         JasonDbContext db,
@@ -302,8 +337,14 @@ public sealed class Summoner(
 
         var byItem = new HashSet<string>(checkIns, StringComparer.Ordinal);
         var byAttempt = new HashSet<string>(theirAttempts, StringComparer.Ordinal);
-        return line => (line.WorkItemId is { } item && byItem.Contains(item))
-            || (line.AttemptId is { } about && byAttempt.Contains(about))
-            || (line.ActorType == ActorType.Attempt && line.ActorId is { } wrote && byAttempt.Contains(wrote));
+
+        // A person's act is never the loop feeding itself, which is the only thing this exclusion is for — and
+        // it has to be exempt, because a person answering a review's own question writes a line about that
+        // review's attempt, and that answer is exactly what should release the next review. Without the
+        // exemption the continuation would be dead on arrival.
+        return line => line.ActorType != ActorType.Human
+            && ((line.WorkItemId is { } item && byItem.Contains(item))
+                || (line.AttemptId is { } about && byAttempt.Contains(about))
+                || (line.ActorType == ActorType.Attempt && line.ActorId is { } wrote && byAttempt.Contains(wrote)));
     }
 }

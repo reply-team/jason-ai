@@ -3,6 +3,7 @@ using Jason.Contracts.Api;
 using Jason.Runtime.Reports;
 using Jason.Runtime.Tests.Reports;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Decisions;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
@@ -300,6 +301,70 @@ public class SummonerTests
     }
 
     /// <summary>
+    /// The continuation. A question a review raised is answered by a person, and the next scan creates the
+    /// review that carries on — with the chain of the attempt that asked, which is the whole reason the
+    /// decision row remembers that attempt.
+    /// </summary>
+    /// <remarks>
+    /// The chain is what discriminates here, and only with the revision: the escalating attempt pinned a
+    /// profile, and root work would have resolved to a profile too. Only <c>Inherited</c> carrying that exact
+    /// revision is lineage taken from the cause rather than from the dispatcher that created the row.
+    /// </remarks>
+    [Fact]
+    public async Task An_answered_decision_summons_a_review_that_inherits_the_escalating_attempts_chain()
+    {
+        using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { ReviewSeconds = 86_400 });
+        var campaign = await SeedAsync(harness, live: true);
+        var (decision, attemptId) = await EscalateAsync(harness, campaign);
+        await AnswerAsync(harness, decision, "stop after this one");
+
+        Assert.Equal(1, await SummonAsync(harness));
+
+        var checkIn = await SingleCheckInAsync(harness);
+        Assert.Equal("triggered", (string?)checkIn.Context["review_intent"]);
+        Assert.Equal(JournalKinds.DecisionAnswered, (string?)checkIn.Context["trigger"]);
+        Assert.Equal(decision, (string?)checkIn.Context["cause"]!["decision_id"]);
+        Assert.Equal(attemptId, (string?)checkIn.Context["cause"]!["attempt_id"]);
+
+        Assert.Equal(LineageState.Inherited, checkIn.LineageState);
+        Assert.Equal("local-claude", checkIn.LineageProfileName);
+        Assert.Equal(4, checkIn.LineageProfileRevision);
+        Assert.Equal(attemptId, checkIn.LineageFromAttemptId);
+    }
+
+    /// <summary>
+    /// And the exemption really is about the actor, not about the kind. A <c>decision_answered</c> line
+    /// written by an attempt — which no verb in this runtime produces, and which is what forging one would
+    /// look like — is passed over exactly as any other line a check-in's attempt wrote.
+    /// </summary>
+    [Fact]
+    public async Task The_exemption_is_the_actor_and_not_the_kind()
+    {
+        using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { ReviewSeconds = 3_600 });
+        var campaign = await SeedAsync(harness, live: true);
+        harness.Clock.Advance(TimeSpan.FromSeconds(3_600));
+        Assert.Equal(1, await SummonAsync(harness));
+
+        var attempt = await AttemptForCheckInAsync(harness);
+        await using (var db = harness.Open())
+        {
+            var checkIn = await db.WorkItems.Include(w => w.Attempts).SingleAsync(w => w.Role == ManagerCheckIn.Role, Ct);
+            new JournalWriter(harness.Clock).Append(
+                db,
+                new ActorRef(ActorType.Attempt, attempt),
+                JournalKinds.DecisionAnswered,
+                campaign: null,
+                key: "decision",
+                workItem: checkIn);
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await FinishCheckInAsync(harness);
+
+        Assert.Equal(0, await SummonAsync(harness));
+    }
+
+    /// <summary>
     /// And the warning it survives on names the campaign the way every other line in the summon does. A
     /// failed summon leaves no other trace anywhere — the row is untouched by design — so this line is the
     /// whole of what an operator gets, and the internal row number is the one identifier that cannot be typed
@@ -377,6 +442,63 @@ public class SummonerTests
     }
 
     /// <summary>An attempt of the campaign's open check-in, as the claim would have made one.</summary>
+    /// <summary>
+    /// A role that ran on somebody's profile, raised a question it could not answer, and ended. The profile is
+    /// pinned on the attempt, which is what makes the chain assertion discriminate later.
+    /// </summary>
+    private static async Task<(string Decision, string Attempt)> EscalateAsync(DispatchHarness harness, string campaignPublicId)
+    {
+        await using var db = harness.Open();
+        var campaign = await db.Campaigns.SingleAsync(c => c.PublicId == campaignPublicId, Ct);
+        var item = new WorkItem
+        {
+            PublicId = "wi_asking",
+            Campaign = campaign,
+            Kind = WorkItemKind.AiRole,
+            Role = "researcher",
+            Status = WorkItemStatus.Processing,
+            CreatedByType = ActorType.Human,
+            LineageState = LineageState.Root,
+            CreatedAt = Noon,
+            UpdatedAt = Noon,
+        };
+        var attempt = new Attempt
+        {
+            PublicId = "att_asking",
+            WorkItem = item,
+            Number = 1,
+            Command = WorkItemKind.AiRole,
+            Status = AttemptStatus.Running,
+            ClaimedAt = Noon,
+            StartedAt = Noon,
+            LockUntil = Noon.AddHours(1),
+            Provenance = new AttemptProvenanceDto(
+                null, null, null, null, null, null, null, null, null, null, null,
+                Agent: new AgentProvenanceDto(ProfileResolutionSource.CampaignPolicy, ProfileName: "local-claude", ProfileRevision: 4)),
+        };
+        db.WorkItems.Add(item);
+        db.Attempts.Add(attempt);
+        await db.SaveChangesAsync(Ct);
+
+        var decision = await new DecisionService(db, new JournalWriter(harness.Clock), harness.Clock).RaiseAsync(
+            new DecisionRaiseRequest(item.PublicId, attempt.PublicId, "do we keep calling this account?", null, null, null),
+            Ct);
+
+        // The attempt ends, as it must: the question outliving it is the point.
+        attempt.Status = AttemptStatus.Succeeded;
+        item.Status = WorkItemStatus.Succeeded;
+        item.FinishedAt = Noon;
+        await db.SaveChangesAsync(Ct);
+        return (decision.Id, attempt.PublicId);
+    }
+
+    private static async Task AnswerAsync(DispatchHarness harness, string decisionId, string answer)
+    {
+        await using var db = harness.Open();
+        await new DecisionService(db, new JournalWriter(harness.Clock), harness.Clock).AnswerAsync(
+            new DecisionAnswerRequest(decisionId, answer, null, new ActorRef(ActorType.Human, "ada"), null), Ct);
+    }
+
     private static async Task<string> AttemptForCheckInAsync(DispatchHarness harness)
     {
         await using var db = harness.Open();

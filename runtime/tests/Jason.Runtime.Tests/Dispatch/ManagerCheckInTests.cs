@@ -39,7 +39,7 @@ public class ManagerCheckInTests
             Service(db),
             db,
             campaign,
-            new ManagerCause(JournalKinds.WorkItemFailed, "jrn_1", failed.WorkItem!.PublicId, failed.PublicId, 1),
+            new ManagerCause(JournalKinds.WorkItemFailed, "jrn_1", failed.WorkItem!.PublicId, failed.PublicId, DecisionId: null, 1),
             new ManagerOptions(),
             Ct);
 
@@ -87,7 +87,7 @@ public class ManagerCheckInTests
             Service(db),
             db,
             campaign,
-            new ManagerCause(JournalKinds.ApprovalRejected, "jrn_2", "wi_parked", null, 1),
+            new ManagerCause(JournalKinds.ApprovalRejected, "jrn_2", "wi_parked", null, DecisionId: null, 1),
             new ManagerOptions(),
             Ct);
 
@@ -125,7 +125,7 @@ public class ManagerCheckInTests
             Service(db),
             db,
             campaign,
-            new ManagerCause(JournalKinds.WorkItemFailed, "jrn_7", failed.WorkItem!.PublicId, failed.PublicId, 4),
+            new ManagerCause(JournalKinds.WorkItemFailed, "jrn_7", failed.WorkItem!.PublicId, failed.PublicId, DecisionId: null, 4),
             new ManagerOptions(),
             Ct);
 

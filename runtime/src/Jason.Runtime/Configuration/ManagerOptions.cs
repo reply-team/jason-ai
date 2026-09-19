@@ -40,6 +40,11 @@ public sealed class ManagerOptions
         JournalKinds.WorkItemFailed,
         JournalKinds.ApprovalRejected,
         JournalKinds.ExternalEffectReported,
+
+        // The one kind whose absence breaks something rather than merely narrowing the loop: a question a
+        // person has answered releases nothing unless this is in force, and the role that asked has already
+        // ended. An installation that narrows this list has to keep it.
+        JournalKinds.DecisionAnswered,
     ];
 
     /// <summary>

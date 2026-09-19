@@ -41,6 +41,7 @@ line. These kinds summon a review:
 | `workitem_failed` | Failed work is the manager's inbox. A failure nobody interprets is the campaign quietly stopping. |
 | `approval_rejected` | A person said no to a proposed effect. The decision is made; what is missing is the strategy that follows it. |
 | `external_effect_reported` | Something happened to this campaign that the runtime did not do. |
+| `decision_answered` | A person answered a question a role could not answer for itself. The role that asked has already ended, so this is what releases the work that follows. |
 
 **And what is deliberately not in the list.** `workitem_succeeded` is out: a review after every
 successful step is cost without judgment, and the work that needs looking at is the work that did not
@@ -62,6 +63,17 @@ manager's.
 other item, and that failure is a line of exactly the kind that summons a review. So lines about a
 check-in, and lines written by a check-in's attempt, are passed over. A failed review is caught by
 the cadence and by nothing else, on purpose.
+
+**Except a person's.** A line whose actor is a **person** is never passed over, whatever it is about.
+The rule above exists for one thing — a review summoning its own successor for ever — and somebody
+acting on a review's work is not that; it is the one outcome a review is meant to lead to. It is also
+what makes escalation work at all: a person answering a review's own question writes a line about that
+review's attempt, and that answer is exactly what should release the next review.
+
+What the runtime cannot do here is tell a person from a process holding that person's own command
+line. That is the limit an approval already has, and it is the operator's trust to give; the guarantee
+is that nothing inside the runtime can give it. The verb that writes `decision_answered` refuses every
+caller that does not claim to be a person, and `journal.append` refuses the kind outright.
 
 ## 3. The watermark, and what a review accounts for
 
@@ -177,7 +189,7 @@ of an attempt that ran on somebody's profile could have run on another without a
 
 | Setting | Default | Range | What it does |
 |---|---|---|---|
-| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported` | each must be a kind the runtime writes | which chronicle kinds summon a review |
+| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered` | each must be a kind the runtime writes | which chronicle kinds summon a review |
 | `Manager:ReviewSeconds` | `18000` | 300..604800 | the cadence, unless a campaign names its own |
 | `Manager:TimeoutSeconds` | `900` | 30..86400 | one check-in's budget |
 | `Manager:MaxAttempts` | `1` | 1..10 | how many failures a check-in is worth |
@@ -189,6 +201,11 @@ at all, and a runtime with no dispatcher summons nothing.
 
 **A narrowed list replaces the default rather than adding to it.** An empty array in the file cannot
 be told from an absent key, so it reads as "unset" and the defaults apply.
+
+**A narrowed list has to keep `decision_answered`.** Dropping any other kind narrows what a manager is
+woken for; dropping this one breaks something, because a question a person has answered is what
+releases the work that follows and the role that asked has already ended. Nothing refuses the
+configuration — it is a legitimate thing to write — so it is said here instead.
 
 ## 8. Not here yet
 

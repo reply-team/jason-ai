@@ -124,6 +124,11 @@ public static class ManagerCheckIn
                 ["journal_entry_id"] = because.JournalEntryId,
                 ["work_item_id"] = because.WorkItemId,
                 ["attempt_id"] = because.AttemptId,
+
+                // Present when the answer to a question is what woke this review, and absent otherwise — a
+                // scan's read is one review, so a decision answered behind a failure is read by the manager
+                // rather than named in its brief.
+                ["decision_id"] = because.DecisionId,
                 ["qualifying_count"] = because.QualifyingCount,
             };
         }

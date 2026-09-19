@@ -174,7 +174,7 @@ public class ManagerTriggersTests
 
         var read = ManagerTriggers.Read(entries, OnFailure, Nobody, watermark: 8);
 
-        Assert.Equal(new ManagerCause(JournalKinds.WorkItemFailed, "jrn_00009", "wi_a", "att_a", 1), read.Cause);
+        Assert.Equal(new ManagerCause(JournalKinds.WorkItemFailed, "jrn_00009", "wi_a", "att_a", DecisionId: null, 1), read.Cause);
     }
 
     /// <summary>
