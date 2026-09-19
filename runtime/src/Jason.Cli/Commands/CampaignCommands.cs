@@ -12,7 +12,7 @@ namespace Jason.Cli.Commands;
 public static class CampaignCommands
 {
     /// <summary>The fields <c>--clear</c> can set back to nothing. A campaign always has a name, so that is not one.</summary>
-    private static readonly string[] Clearable = ["execution_profile"];
+    private static readonly string[] Clearable = ["execution_profile", "review_seconds"];
 
     public static Command Build(CliEnvironment env, Option<string?> actor)
     {
@@ -117,15 +117,20 @@ public static class CampaignCommands
         {
             Description = "The execution profile this campaign's agent work uses, unless a work item names its own.",
         };
+        var reviewSeconds = new Option<int?>("--review-seconds")
+        {
+            Description = "How often this campaign is reviewed, in seconds. Absent leaves it alone; --clear review_seconds puts it back on the installation's cadence.",
+        };
         var clear = VerbOptions.Repeatable(
             "--clear",
             $"A field to set back to nothing: {string.Join(", ", Clearable)}. Repeat the option for more than one.");
-        var file = VerbOptions.File("The object holds the fields to patch (name, execution_profile).");
+        var file = VerbOptions.File("The object holds the fields to patch (name, execution_profile, review_seconds).");
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
         command.Options.Add(name);
         command.Options.Add(executionProfile);
+        command.Options.Add(reviewSeconds);
         command.Options.Add(clear);
         command.Options.Add(file);
         command.Options.Add(reason);
@@ -136,7 +141,8 @@ public static class CampaignCommands
             var body = await VerbOptions.BodyAsync(env, parseResult.GetValue(file), null, cancellationToken).ConfigureAwait(false);
             body.Set("campaign_id", parseResult.GetValue(id))
                 .Set("name", parseResult.GetValue(name))
-                .Set("execution_profile", parseResult.GetValue(executionProfile));
+                .Set("execution_profile", parseResult.GetValue(executionProfile))
+                .Set("review_seconds", parseResult.GetValue(reviewSeconds));
 
             // An explicit null is what tells the runtime "take this away" from "say nothing about it", and it
             // is written after the value options so that clearing wins over a value given for the same field.

@@ -87,6 +87,11 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         return Paging.ToPage(fetched, limit, c => c.PublicId, CampaignMapper.ToSummary);
     }
 
+    /// <summary>The bounds <c>Manager:ReviewSeconds</c> is held to, because one campaign is not a special case.</summary>
+    private const int MinimumReviewSeconds = 300;
+
+    private const int MaximumReviewSeconds = 604_800;
+
     public async Task<CampaignDto> UpdateAsync(CampaignUpdateRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -97,6 +102,17 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         if (request.Name.IsSet)
         {
             ValidateName(request.Name.Value, errors);
+        }
+
+        // The campaign may set its own pace within the bounds the installation is held to. A campaign cannot
+        // buy itself a tighter loop than the runtime allows: every review is a launch on somebody's plan.
+        if (request.ReviewSeconds is { IsSet: true, Value: { } seconds }
+            && (seconds < MinimumReviewSeconds || seconds > MaximumReviewSeconds))
+        {
+            errors.Add(
+                "review_seconds",
+                "out_of_range",
+                $"review_seconds must be between {MinimumReviewSeconds} and {MaximumReviewSeconds}; got {seconds}.");
         }
 
         errors.ThrowIfAny();
@@ -132,6 +148,15 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         {
             changes.Add(new FieldChange("execution_profile", JsonValue.Create(campaign.ExecutionProfile), JsonValue.Create(profile)));
             campaign.ExecutionProfile = profile;
+        }
+
+        if (request.ReviewSeconds.IsSet && campaign.ManagerReviewSeconds != request.ReviewSeconds.Value)
+        {
+            changes.Add(new FieldChange(
+                "review_seconds",
+                JsonValue.Create(campaign.ManagerReviewSeconds),
+                JsonValue.Create(request.ReviewSeconds.Value)));
+            campaign.ManagerReviewSeconds = request.ReviewSeconds.Value;
         }
 
         if (changes.Count == 0)

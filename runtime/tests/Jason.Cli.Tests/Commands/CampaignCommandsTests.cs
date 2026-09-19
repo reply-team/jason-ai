@@ -120,6 +120,29 @@ public class CampaignCommandsTests
         clearing.AssertPosted(Operations.CampaignUpdate, "{\"campaign_id\":\"cmp_A\",\"execution_profile\":null}");
     }
 
+    /// <summary>
+    /// The campaign's own review cadence, sent and taken away the same way the profile is — including the
+    /// difference that makes the whole patch shape worth having: saying nothing leaves it alone, and saying
+    /// null puts the campaign back on the installation's cadence.
+    /// </summary>
+    [Fact]
+    public async Task Update_sends_the_review_cadence_and_clears_it_with_an_explicit_null()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("campaign", "update", "cmp_A", "--review-seconds", "600");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(Operations.CampaignUpdate, "{\"campaign_id\":\"cmp_A\",\"review_seconds\":600}");
+
+        using var clearing = new CliRun();
+
+        var cleared = await clearing.RunAsync("campaign", "update", "cmp_A", "--clear", "review_seconds");
+
+        Assert.Equal(ExitCodes.Success, cleared);
+        clearing.AssertPosted(Operations.CampaignUpdate, "{\"campaign_id\":\"cmp_A\",\"review_seconds\":null}");
+    }
+
     [Fact]
     public async Task Update_refuses_to_clear_a_field_that_is_not_one()
     {
@@ -257,7 +280,7 @@ public class CampaignCommandsTests
     public async Task Human_mode_renders_one_campaign()
     {
         var campaign = JsonSerializer.Serialize(
-            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, [], "local-claude", Moment, Moment, null),
+            new CampaignDto("cmp_A", "LatAm", CampaignStatus.Active, new JsonObject { ["icp"] = "founders", ["tone"] = "plain" }, [], "local-claude", null, Moment, Moment, null),
             JasonJson.Options);
         using var cli = new CliRun(campaign);
 

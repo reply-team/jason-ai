@@ -1,3 +1,4 @@
+using System.Globalization;
 using Jason.Contracts.Api;
 
 namespace Jason.Cli.Human;
@@ -35,6 +36,13 @@ public static class CampaignRenderers
 
         // "none" rather than a blank, the same word this renderer uses for a campaign that carries no context.
         lines.Add(Line("Profile:", campaign.ExecutionProfile ?? "none"));
+
+        // Only when this campaign has asked for its own pace. "Every 18000 s" printed under every campaign
+        // would be the installation's setting wearing the campaign's clothes.
+        if (campaign.ReviewSeconds is { } seconds)
+        {
+            lines.Add(Line("Review:", string.Create(CultureInfo.InvariantCulture, $"every {seconds} s")));
+        }
         lines.Add(Line("Context keys:", RenderText.Keys(campaign.Context)));
         lines.AddRange(RenderText.ExternalIds(campaign.ExternalIds));
         return RenderText.Lines(lines);

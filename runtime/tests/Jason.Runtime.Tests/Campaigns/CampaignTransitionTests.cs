@@ -119,7 +119,7 @@ public class CampaignTransitionTests
         var id = await SeedAsync(service, CampaignStatus.Archived);
 
         var renamed = await Assert.ThrowsAsync<ConflictException>(
-            () => service.UpdateAsync(new CampaignUpdateRequest(id, Optional<string?>.Of("EMEA"), Optional<string?>.Absent, null, null), Ct));
+            () => service.UpdateAsync(new CampaignUpdateRequest(id, Optional<string?>.Of("EMEA"), Optional<string?>.Absent, Optional<int?>.Absent, null, null), Ct));
         var edited = await Assert.ThrowsAsync<ConflictException>(
             () => service.UpdateContextAsync(new CampaignUpdateContextRequest(id, new JsonObject { ["icp"] = "founders" }, null, null, null), Ct));
 
