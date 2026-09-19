@@ -103,11 +103,13 @@ public sealed class FakeInstallation : HttpMessageHandler
     public List<string> Operations { get; } = [];
 
     /// <summary>
-    /// What the ledger on disk said at the moment each operation arrived. The ledger is written before the step
-    /// it names is taken, so this is how a test sees that promise kept: the runtime is asked to drain only after
-    /// the file says "drained".
+    /// What the ledger on disk said at the moment each operation arrived, and whether the install path held an
+    /// executable then. The ledger is written before the step it names is taken, so this is how a test sees that
+    /// promise kept: the runtime is asked to drain only after the file says "drained". The install path is
+    /// recorded beside it because the window where that path is empty is the one window a person cannot get out
+    /// of by typing <c>jason update</c>, and it must be nowhere but between the keeping and the swap.
     /// </summary>
-    public List<(string Operation, UpdateStep? Step)> Witnessed { get; } = [];
+    public List<(string Operation, UpdateStep? Step, bool Installed)> Witnessed { get; } = [];
 
     /// <summary>Something to do when the applier starts a runtime, for a test about a start going wrong.</summary>
     public Action? OnStart { get; set; }
@@ -263,7 +265,7 @@ public sealed class FakeInstallation : HttpMessageHandler
     {
         var operation = path[(path.LastIndexOf('/') + 1)..];
         Operations.Add(operation);
-        Witnessed.Add((operation, Ledger()?.Step));
+        Witnessed.Add((operation, Ledger()?.Step, File.Exists(InstallPath)));
 
         if (!Running)
         {
