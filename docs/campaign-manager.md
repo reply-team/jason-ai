@@ -186,7 +186,108 @@ to leave it alone, and says so in a line of the chronicle has done its job.
 review either says something now or says nothing a second run would change, and the cadence comes
 round anyway.
 
-## 6. Lineage
+## 6. Escalation
+
+A review may find something it cannot decide. It raises a **decision** — a question for a person, with a
+`dec_` identifier of its own — and then ends its attempt, because an attempt has to end and the question
+outliving it is the entire point.
+
+**A decision is not an approval.** An approval is about one operation on one work item: it carries the
+composed input, a canonical subject hash and a preview built from the operation's own contract, and the
+work it parks is run again once somebody decides. A question has no operation, no input to hash, no
+preview to build, and nothing waiting to be re-run — the attempt that asked is over. Bending approvals
+around it would have broken the subject rule that makes them safe and put rows in `approval.list` that no
+operation could describe.
+
+### What it holds
+
+The campaign, the asking work item and the **asking attempt**; the question in the role's own words;
+optional named options; the causal references — what to read before deciding, as identifiers and never
+copies, so a person opening it an hour later reads the rows as they stand; its status; and, once decided,
+the answer, the chosen option, who decided and when.
+
+A reference is `kind:id`, and the kinds are `work_item`, `attempt`, `journal_entry`, `report` and
+`approval` — the entities that have a public identifier and a campaign. A role note is deliberately not
+one of them: a note is addressed by a campaign and a role rather than by an id, and both are in hand
+wherever a question is read.
+
+### The verbs
+
+```
+jason decision list --campaign <campaign-id> --human
+jason decision get <decision-id> --human
+jason decision raise <work-item-id> --attempt <attempt-id> --question "pause the sequence or continue at half volume?" --option pause --option "continue at half volume" --reference work_item:<work-item-id> --reason "three bounces in a day"
+jason decision answer <decision-id> --answer "pause it" --option pause --actor human:you@example.com
+```
+
+**Raising is fenced by the attempt**, by the same guarded statement `workitem.set_result` stands behind:
+the asker must be the run that owns the work item, or a role whose lease was lost could leave questions in
+somebody's queue. That also means **raising a question counts as a heartbeat** — it is a fenced call like
+any other, so a lease moves when one is asked.
+
+**Answering is a person's.** A role, an attempt or the runtime's own actor is refused. What the runtime
+cannot do is tell a person from a process holding that person's own command line; that is the limit an
+approval already has, and it is the operator's trust to give.
+
+Any launched role may raise a question, and the review released by the answer is always a **manager**
+check-in. One live attempt may raise more than one question — nothing forbids it — but one question at a
+time is what the manager's skill teaches, because a person who opens ten questions from one review answers
+none of them.
+
+### What retires one
+
+A question is answered once. **Archiving a campaign cancels its open questions** in the same transaction,
+because a live question about work that can never proceed is the row that would make `decision list`
+untrue. **Cancelling a work item does not**: the attempt that asked was always going to end before the
+answer arrived, so a question retired with its work item would be one nobody could ever answer.
+
+### The bounds
+
+| What | Limit |
+|---|---|
+| the question, in characters | 2000 |
+| the answer, in characters | 2000 |
+| named options | 10 |
+| an option's label, in characters | 200 |
+| an option's detail, in characters | 1000 |
+| causal references | 50 |
+
+The question and the answer are held to the 2000 characters every other free-text field in this runtime
+is, and a listing carries the question whole — "what am I being asked?" is the only reason to open one.
+
+### The codes
+
+| Code | When |
+|---|---|
+| `stale_attempt` | the attempt raising the question is not the live one for that work item |
+| `decision_not_found` | no question has that identifier; nothing deletes one, so this is a wrong id |
+| `decision_not_pending` | it has been answered already, or its campaign was archived; the message says which |
+| `decision_not_human` | a role or an attempt tried to answer, and an answer is a person's |
+| `decision_option_unknown` | the chosen label is not one the question offered, or it offered none |
+| `decision_reference_unresolved` | a reference names nothing in this campaign, so nobody could read it later |
+
+An answer that names no person at all is `actor_required`, the same answer an unattributed approval gets.
+
+### What the chronicle says, and what the summon reads
+
+Answering writes `decision_answered`, naming the campaign, the asking work item and the asking attempt,
+with the person as its actor — and carrying the decision's identifier where a **person** reads it.
+
+The summon cannot read that identifier: what it is given is a projection with nowhere to put a line's
+`old`, `new`, `key` or `reason`. So the decision row **remembers the chronicle line its answer wrote**, and
+the cause resolves by that one indexed lookup. The alternative — a subject column on the append-only
+chronicle, for one consumer — was refused.
+
+Because the answered line names the escalating attempt, the review it summons inherits that attempt's
+chain, and the work that follows belongs to the run that asked.
+
+### What is not checked
+
+A review's `decisions_raised` is not cross-checked against the questions that attempt really raised. That
+would be validation reading what a result means, and the shape is all a runtime can honestly hold a review
+to.
+
+## 7. Lineage
 
 A check-in belongs to the chain of the thing it is about, not to the dispatcher that created it.
 
@@ -201,7 +302,7 @@ A check-in belongs to the chain of the thing it is about, not to the dispatcher 
 Reading lineage from the creating actor instead would have made every review root work, and a review
 of an attempt that ran on somebody's profile could have run on another without anybody saying so.
 
-## 7. Settings
+## 8. Settings
 
 | Setting | Default | Range | What it does |
 |---|---|---|---|
@@ -223,14 +324,8 @@ woken for; dropping this one breaks something, because a question a person has a
 releases the work that follows and the role that asked has already ended. Nothing refuses the
 configuration — it is a legitimate thing to write — so it is said here instead.
 
-## 8. Not here yet
+## 9. Not here yet
 
-- **Escalation.** A manager cannot yet raise a question for a person and have the answer release the
-  next step. The `escalated` outcome is in the shape above because the vocabulary is fixed once, and
-  nothing sets it in this version.
-- **A manager skill.** The role is launchable and the brief is written, but the skill that teaches a
-  manager how to review — decision boundaries, what belongs in campaign context rather than in a
-  note, escalation etiquette — ships with escalation.
 - **Notifications.** Nothing tells anybody a review happened. A person finds out by reading the
   chronicle or listing work.
 - **Anomaly rules and reconciliation.** Neither exists; a review is the only thing that notices

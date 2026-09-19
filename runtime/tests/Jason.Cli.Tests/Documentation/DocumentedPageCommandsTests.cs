@@ -23,7 +23,7 @@ public class DocumentedPageCommandsTests
     /// list honest is that a noun added to the pages and not to this list is simply unguarded, which is how the
     /// profile pages came to document an option the CLI did not have.
     /// </summary>
-    private static readonly string[] Nouns = ["jason profile ", "jason rolenote ", "jason campaign ", "jason workitem "];
+    private static readonly string[] Nouns = ["jason profile ", "jason rolenote ", "jason campaign ", "jason workitem ", "jason decision "];
 
     /// <summary>The pages whose printed commands are guarded.</summary>
     private static readonly string[] Pages =
