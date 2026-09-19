@@ -277,7 +277,11 @@ answers as the wrong version, or with no migrations applied, is `update_not_heal
 
 ### Going back
 
-`jason update rollback` puts the executable from `~/.jason/update/previous/` back and starts the runtime on it.
+```sh
+jason update rollback
+```
+
+It puts the executable from `~/.jason/update/previous/` back and starts the runtime on it.
 Where the update's new build migrated the database, it also restores the backup that migration took and deletes
 the WAL sidecars beside it — a database file from before a migration, opened with the write-ahead log of after
 it, is corruption. Where the chronicle has moved on since the new build came up, the binary still goes back but
@@ -325,6 +329,8 @@ a code on its own tells nobody what to do next.
 | `update_cross_volume` | the staged file and the install path are on different volumes. An update renames rather than copies, because a half-copied executable is the one state nothing can recover from. Point `JASON_DATA_DIR` at the executable's volume, or install Jason on the data directory's |
 | `update_runtime_unreachable` | the runtime would not drain or would not stop, so nothing was replaced |
 | `update_not_healthy` | the new version is in place, but the runtime it starts is not the one this update installed. The executable can be put back |
+| `update_nothing_to_roll_back` | there is no record of an update, or the executable it replaced is no longer under `~/.jason/update/previous/` |
+| `update_rollback_unsafe` | the executable was put back and the database was not: the runtime has recorded work since the update, and restoring the backup would erase it. "Restoring a database by hand" below is how to go the rest of the way, having decided you want to |
 | `update_ledger_invalid` | there is a file at `~/.jason/update/ledger.json` and it is not a ledger this build can act on |
 
 ## 8. Where things live

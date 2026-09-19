@@ -44,9 +44,16 @@ public class UpdateRefusalTests
         Assert.Contains(elsewhere, refused.Message, StringComparison.Ordinal);
         Assert.Contains("JASON_DATA_DIR", refused.Message, StringComparison.Ordinal);
 
-        // And nothing crossed: what was proved is still where it was proved, and nothing was written over there.
-        Assert.True(File.Exists(staged), "the staged executable was moved across volumes instead of being refused");
+        // Nothing crossed, and nothing was done on the way to finding out. Which two volumes are in play is
+        // known from the paths alone, before a byte is fetched — so this refusal costs no download, no drained
+        // runtime and no stopped one.
+        Assert.False(File.Exists(staged), "something was staged for an update that cannot be applied");
         Assert.False(File.Exists(elsewhere), "something was written to the other volume");
+        Assert.DoesNotContain(
+            installation.Fetched,
+            address => address.EndsWith(".zip", StringComparison.Ordinal) || address.EndsWith(".tar.gz", StringComparison.Ordinal));
+        Assert.DoesNotContain("system.shutdown", installation.Operations);
+        Assert.DoesNotContain("system.drain", installation.Operations);
     }
 
     /// <summary>

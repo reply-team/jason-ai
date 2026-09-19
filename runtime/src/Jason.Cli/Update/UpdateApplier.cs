@@ -79,7 +79,8 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         {
             throw new UpdateException(
                 UpdateCodes.InProgress,
-                $"An update to {ledger.ToVersion} is in flight at '{ledger.Step}'. Finish it with `jason update apply`, "
+                $"An update to {ledger.ToVersion} is in flight at '{ledger.Step.ToString().ToLowerInvariant()}'. "
+                + "Finish it with `jason update apply`, "
                 + $"or see where it stands with `jason update status`; {wanted} cannot be started until it is done.");
         }
 
@@ -114,6 +115,12 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
                 UpdateCodes.ArtifactUnexpected,
                 $"The release of {manifest.Version} publishes nothing for {rid}.");
         }
+
+        // Before anything is downloaded, drained or stopped: an update that renames between two volumes cannot
+        // work, and finding that out at the swap would mean a machine drained and stopped for nothing. The same
+        // check runs again where the renames happen, because by then the paths are the ledger's rather than
+        // this plan's.
+        SameVolume(update.StagedExecutable(manifest.Version), installPath);
 
         return new UpdateLedger(
             SemanticVersion.Current,
