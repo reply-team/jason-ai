@@ -3,6 +3,7 @@ using System.Text.Json;
 using Jason.Contracts.Api;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Journal;
 
 namespace Jason.Runtime.Tests.Integration;
 
@@ -21,11 +22,11 @@ public class ManagerLoopTests
     /// without anybody registering a role called "manager" that already exists. A role with a command of its
     /// own — the ones the tests add — still wins over this.
     /// </summary>
-    private static string Settings(int reviewSeconds)
+    private static string Settings(int reviewSeconds, params string[] managerOptions)
     {
         var command = string.Join(
             ",",
-            new[] { "dotnet", Execution.FakeAgentHost.Dll, "manager" }.Select(part => JsonSerializer.Serialize(part)));
+            new[] { "dotnet", Execution.FakeAgentHost.Dll, "manager" }.Concat(managerOptions).Select(part => JsonSerializer.Serialize(part)));
 
         return string.Create(
             CultureInfo.InvariantCulture,
@@ -220,6 +221,97 @@ public class ManagerLoopTests
         var checkIn = await CheckInAsync(host, campaign);
         host.Track(checkIn.Id);
         Assert.Equal(WorkItemStatus.Created, checkIn.Status);
+    }
+
+    /// <summary>
+    /// The round trip, end to end and against real child processes. A role runs, finds a question it cannot
+    /// answer, leaves it behind and ends; a person answers it; and the next scan creates the review that
+    /// carries on — belonging to the chain of the attempt that asked.
+    /// </summary>
+    /// <remarks>
+    /// The chain is what discriminates, and only together with the revision. The escalating attempt ran under
+    /// a profile and pinned it, and root work here would have resolved to a profile too — so only
+    /// <c>Inherited</c> carrying that exact profile and revision is lineage taken from the cause.
+    /// <c>Root</c> carrying the same profile is lineage taken from the actor, which is the mistake the whole
+    /// rule exists to prevent.
+    /// </remarks>
+    [Fact]
+    public async Task An_answered_decision_releases_the_next_review_with_the_chain_intact()
+    {
+        await using var host = await FakeHostRuntime.StartAsync(Ct, Settings(reviewSeconds: 86_400));
+        await host.Fixture.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new
+            {
+                name = "stand-in",
+                host = "claude_code",
+                program = ProfileFixture.Program,
+                deny = new[] { "Write" },
+                host_version_verified = "stand-in",
+            },
+            Ct);
+
+        var campaign = await host.CampaignAsync(Ct);
+        await host.RoleAsync("asking", Ct, "silent");
+        var asked = await host.CreateAsync(
+            new
+            {
+                campaign_id = campaign,
+                kind = "ai_role",
+                role = "asking",
+                execution_profile = "stand-in",
+                max_attempts = 1,
+                context = new { behaviour = "manager --escalate" },
+            },
+            Ct);
+
+        Assert.Equal(1, (await host.ScanAsync(Ct)).Claimed);
+        await host.WaitForStatusAsync(asked.Id, WorkItemStatus.Succeeded, Ct);
+        var escalating = (await host.GetAsync(asked.Id, Ct)).Attempts!.Single();
+        Assert.Equal("stand-in", escalating.Provenance!.Agent!.ProfileName);
+
+        // The question outlived the attempt that asked it, which is the whole reason it is a row.
+        var waiting = await host.Fixture.PostOkAsync<Page<DecisionSummaryDto>>(Operations.DecisionList, new { }, Ct);
+        var question = Assert.Single(waiting.Items!);
+        Assert.Equal(DecisionStatus.Pending, question.Status);
+        Assert.Equal(asked.Id, question.WorkItemId);
+
+        // And its causal references still resolve — they are identifiers, so what they name is read now.
+        var detail = await host.Fixture.PostOkAsync<DecisionDto>(Operations.DecisionGet, new { decision_id = question.Id }, Ct);
+        Assert.NotEmpty(detail.References!);
+        foreach (var reference in detail.References!)
+        {
+            Assert.True(
+                reference.Kind switch
+                {
+                    DecisionReferenceKind.WorkItem => reference.Id == asked.Id,
+                    DecisionReferenceKind.Attempt => reference.Id == escalating.Id,
+                    _ => false,
+                },
+                $"the {reference.Kind} reference '{reference.Id}' names nothing this campaign has.");
+        }
+
+        // Nothing has been summoned by the asking: raising a question is not an event the loop reacts to.
+        Assert.Equal(0, (await host.ScanAsync(Ct)).Summoned);
+
+        await host.Fixture.PostOkAsync<DecisionDto>(
+            Operations.DecisionAnswer,
+            new { decision_id = question.Id, answer = "stop after this one", option = "stop", actor = new { type = "human", id = "ada" } },
+            Ct);
+
+        Assert.Equal(1, (await host.ScanAsync(Ct)).Summoned);
+
+        var checkIn = await CheckInAsync(host, campaign);
+        host.Track(checkIn.Id);
+        Assert.Equal("triggered", (string?)checkIn.Context["review_intent"]);
+        Assert.Equal(JournalKinds.DecisionAnswered, (string?)checkIn.Context["trigger"]);
+        Assert.Equal(question.Id, (string?)checkIn.Context["cause"]!["decision_id"]);
+        Assert.Equal(escalating.Id, (string?)checkIn.Context["cause"]!["attempt_id"]);
+
+        Assert.Equal(LineageState.Inherited, checkIn.Lineage!.State);
+        Assert.Equal("stand-in", checkIn.Lineage.ProfileName);
+        Assert.Equal(escalating.Provenance.Agent.ProfileRevision, checkIn.Lineage.ProfileRevision);
+        Assert.Equal(escalating.Id, checkIn.Lineage.FromAttemptId);
     }
 
     private static async Task<WorkItemDto> CheckInAsync(FakeHostRuntime host, string campaignId)

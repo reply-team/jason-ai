@@ -419,24 +419,28 @@ internal static class Behaviours
     }
 
     /// <summary>
-    /// What the review was woken by, handed on as the question's causal references. Identifiers only, and only
-    /// the ones the brief actually named — a reference that resolves to nothing is refused at the point of
-    /// asking, which is the rule this is here to exercise.
+    /// What to read before answering, as identifiers. The work the question was woken by where a brief names
+    /// one, and otherwise the run's own — a question is always about something, and a role asking one with
+    /// nothing to read beside it is asking somebody to guess.
     /// </summary>
+    /// <remarks>
+    /// Every reference here is a row this campaign really has, which is the point: one that resolves to
+    /// nothing is refused at the moment of asking, so a stand-in that made them up would be exercising the
+    /// refusal rather than the round trip.
+    /// </remarks>
     private static List<DecisionReference> Referenced(LaunchEnvelope envelope)
     {
-        var references = new List<DecisionReference>();
-        if (envelope.Context["cause"] is not JsonObject cause)
-        {
-            return references;
-        }
+        var cause = envelope.Context["cause"] as JsonObject;
+        var item = (string?)cause?["work_item_id"] ?? envelope.WorkItemId;
+        var attempt = (string?)cause?["attempt_id"] ?? envelope.AttemptId;
 
-        if ((string?)cause["work_item_id"] is { Length: > 0 } item)
+        var references = new List<DecisionReference>();
+        if (item is { Length: > 0 })
         {
             references.Add(new DecisionReference(DecisionReferenceKind.WorkItem, item));
         }
 
-        if ((string?)cause["attempt_id"] is { Length: > 0 } attempt)
+        if (attempt is { Length: > 0 })
         {
             references.Add(new DecisionReference(DecisionReferenceKind.Attempt, attempt));
         }
