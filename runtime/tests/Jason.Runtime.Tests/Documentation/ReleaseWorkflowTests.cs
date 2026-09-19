@@ -638,7 +638,10 @@ public class ReleaseWorkflowTests
     public void Every_executable_check_opens_the_database(string workflow)
     {
         var text = Read(workflow == "ci.yml" ? Ci : Release);
-        var steps = text.Split("- name:").Where(step => step.Contains("--version", StringComparison.Ordinal)).ToList();
+        // Steps that *ask* an executable its version, not steps that mention the question. A comment explaining
+        // why something cannot be proved by --version is not an executable check, and reading it as one would
+        // have this guard demand a runtime start inside a step that starts nothing.
+        var steps = text.Split("- name:").Where(Checks).ToList();
 
         Assert.NotEmpty(steps);
         foreach (var step in steps)
@@ -660,6 +663,12 @@ public class ReleaseWorkflowTests
     /// So the mention must end on a word boundary, and must not be a throw, a condition or a comment: what is
     /// left is the invocation.
     /// </remarks>
+    /// <summary>Whether a step really asks an executable what version it is, rather than talking about it.</summary>
+    private static bool Checks(string step) =>
+        step.Split('\n')
+            .Select(line => line.Trim())
+            .Any(line => line.Contains("--version", StringComparison.Ordinal) && !line.StartsWith('#'));
+
     private static bool Runs(string step, string command) =>
         step.Split('\n')
             .Select(line => line.Trim())
@@ -723,8 +732,17 @@ public class ReleaseWorkflowTests
         var (exit, _, stderr) = Pwsh(NoEnvironment, "-Command", line);
 
         Assert.True(exit == 0, $"{workflow} runs `{invocation}`, and pwsh answered: {stderr}");
+        // What it must carry is what the line asked it to carry. A release assembles all three platforms; the
+        // end-to-end job assembles the one it is updating, which is a feed of one release for one machine.
         var manifest = UpdateManifest.Read(File.ReadAllText(Path.Combine(directory, ReleaseAssets.Manifest)));
-        Assert.Equal(ReleaseAssets.Rids.Count, manifest.Artifacts.Count);
+        var required = System.Text.RegularExpressions.Regex.Match(line, @"-Require (\S+)").Groups[1].Value
+            .Trim('\'', '"')
+            .Split(',', StringSplitOptions.RemoveEmptyEntries);
+        Assert.NotEmpty(required);
+        foreach (var rid in required)
+        {
+            Assert.True(manifest.Artifacts.ContainsKey(rid), $"the manifest {invocation} wrote carries nothing for {rid}");
+        }
     }
 
     public static TheoryData<string, string> ManifestInvocations()
@@ -757,6 +775,8 @@ public class ReleaseWorkflowTests
             .Replace("./.github/scripts/Write-Manifest.ps1", $"& '{script}'", StringComparison.Ordinal)
             .Replace("${{ needs.version.outputs.version }}", "0.2.0", StringComparison.Ordinal)
             .Replace("$env:VERSION", "0.2.0", StringComparison.Ordinal)
+            .Replace("$env:NEXT", "0.2.1", StringComparison.Ordinal)
+            .Replace("$env:RID", ReleaseAssets.Rids[0], StringComparison.Ordinal)
             .Replace("$env:REPOSITORY", "reply-team/jason-ai", StringComparison.Ordinal);
 
         // -Directory names where a runner downloaded the artifacts to; here it is the staged tree this test made.
@@ -809,6 +829,24 @@ public class ReleaseWorkflowTests
 
     private static string Read(string[] relative) => File.ReadAllText(Path.Combine([RepositoryRoot(), .. relative]));
 
+    /// <summary>
+    /// One job of a workflow, as the text between its name and the next job at the same indentation. Read as
+    /// text rather than through the parser because what these guards are about is what the job's script says.
+    /// </summary>
+    private static string Job(string workflow, string name)
+    {
+        var start = workflow.IndexOf($"\n  {name}:", StringComparison.Ordinal);
+        Assert.True(start >= 0, $"There is no '{name}' job in this workflow.");
+
+        var next = workflow.IndexOf("\n  ", start + 3, StringComparison.Ordinal);
+        while (next >= 0 && workflow.Length > next + 3 && char.IsWhiteSpace(workflow[next + 3]))
+        {
+            next = workflow.IndexOf("\n  ", next + 3, StringComparison.Ordinal);
+        }
+
+        return next < 0 ? workflow[start..] : workflow[start..next];
+    }
+
     private static YamlMappingNode Parse(string yaml)
     {
         var stream = new YamlStream();
@@ -839,5 +877,78 @@ public class ReleaseWorkflowTests
 
         Assert.NotNull(directory);
         return directory.FullName;
+    }
+    /// <summary>
+    /// The end-to-end job updates a real installation between two real versions, and asserts the one that came
+    /// up. Everything about it that could quietly stop proving anything is read here.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// With one version on both sides, <c>--version</c> cannot tell a completed swap from an applier that did
+    /// nothing: the health check passes either way, which makes the whole job theatre. So the job publishes the
+    /// <em>next</em> patch version and updates to that — and the version it takes for the installed side is the
+    /// artifact the platform job already published, so only one extra publish is paid for.
+    /// </para>
+    /// <para>
+    /// The other three things that would make it theatre: a database prepared by copying a file instead of
+    /// migrating one (the triggers live in the migrations, so a copied file is not an older database), a feed
+    /// served from anywhere but this machine, and a runtime started before the update — which would migrate the
+    /// prepared database itself and leave the new version nothing to back up, so the acceptance criterion this
+    /// job exists for would never be exercised.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void The_end_to_end_job_updates_between_two_versions_and_asserts_the_one_that_ran()
+    {
+        var job = Job(Read(Ci), "update-end-to-end");
+
+        // Two versions, and the installed one is the artifact the platform job already made: one extra
+        // publish, through the same action a release packages with.
+        Assert.Contains("download-artifact", job, StringComparison.Ordinal);
+        Assert.Contains("./.github/actions/package", job, StringComparison.Ordinal);
+        Assert.Contains("steps.next.outputs.next", job, StringComparison.Ordinal);
+
+        // A real older database, made by EF's own migrator, with the connection given so that nothing is
+        // written into the working directory instead.
+        Assert.Contains("dotnet ef database update", job, StringComparison.Ordinal);
+        Assert.Contains("--connection", job, StringComparison.Ordinal);
+
+        // A feed that is this machine and nothing else.
+        Assert.Contains("127.0.0.1", job, StringComparison.Ordinal);
+        Assert.DoesNotContain("github.com", job, StringComparison.Ordinal);
+
+        // The update is applied by the installed executable, and every stage is asserted by name.
+        Assert.Contains("update apply", job, StringComparison.Ordinal);
+        foreach (var step in new[] { "staged", "drained", "stopped", "kept", "swapped", "started", "healthy" })
+        {
+            Assert.Contains($"'{step}'", job, StringComparison.Ordinal);
+        }
+
+        // And the assertions a no-op cannot produce: the old file kept, the new file installed by identity, and
+        // the staged copy gone.
+        Assert.Contains("previous", job, StringComparison.Ordinal);
+        Assert.Contains("Get-FileHash", job, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The runtime is not started before the update. This is the one thing about the job that would pass every
+    /// other assertion here and still prove nothing: a runtime started first migrates the prepared database
+    /// itself, so the new version's first start has nothing to back up and nothing to migrate.
+    /// </summary>
+    [Fact]
+    public void The_end_to_end_job_leaves_the_installed_runtime_stopped_until_the_update()
+    {
+        var job = Job(Read(Ci), "update-end-to-end");
+        var apply = job.IndexOf("update apply", StringComparison.Ordinal);
+        Assert.True(apply > 0, "the end-to-end job does not apply an update");
+
+        var before = job[..apply];
+        Assert.DoesNotContain("runtime start", before, StringComparison.Ordinal);
+        Assert.DoesNotContain("runtime run", before, StringComparison.Ordinal);
+
+        // And what it asserts afterwards is that this update's own start migrated: newly_applied and a backup.
+        var after = job[apply..];
+        Assert.Contains("newly_applied", after, StringComparison.Ordinal);
+        Assert.Contains("backup_file", after, StringComparison.Ordinal);
     }
 }
