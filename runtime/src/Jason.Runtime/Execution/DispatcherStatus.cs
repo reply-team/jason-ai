@@ -15,6 +15,12 @@ public sealed class DispatcherStatus
 
     public long Scans { get; set; }
 
+    /// <summary>
+    /// How many check-ins this runtime has put on the queue since it started. A loop that is running and never
+    /// summoning is a loop somebody should look at, and this is the number that says so.
+    /// </summary>
+    public long Summons { get; set; }
+
     /// <summary>The pool's size, fixed when the runtime starts; 0 until a pool exists.</summary>
     public int MaxParallel { get; set; }
 
@@ -30,6 +36,7 @@ public sealed class DispatcherStatus
             MaxParallel > 0 ? MaxParallel : current.MaxParallel,
             runningAttempts,
             LastScanAt,
-            Scans);
+            Scans,
+            Summons);
     }
 }

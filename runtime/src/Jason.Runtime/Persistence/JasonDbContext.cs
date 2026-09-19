@@ -100,6 +100,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             campaign.Property(c => c.ExecutionProfile).HasMaxLength(64);
             campaign.Property(c => c.Context).HasColumnName("context_json").IsRequired().HasDefaultValueSql("'{}'");
             campaign.ToTable(t => t.HasCheckConstraint("ck_campaigns_context_json", "json_valid(context_json)"));
+            campaign.Property(c => c.ManagerEventWatermark).HasDefaultValue(0);
             campaign.HasMany(c => c.Members).WithOne(m => m.Campaign).HasForeignKey(m => m.CampaignId).OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -177,6 +178,14 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
                 t.HasCheckConstraint("ck_work_items_last_error_json", "last_error_json IS NULL OR json_valid(last_error_json)");
             });
             item.HasIndex(w => new { w.CampaignId, w.Status });
+
+            // One open check-in per campaign, enforced where two scans cannot argue about it. A user back after
+            // days offline finds one review waiting, not a pile — and the summon can be written as the ordinary
+            // "look, then insert" because the database, not the look, is what decides.
+            item.HasIndex(w => w.CampaignId)
+                .IsUnique()
+                .HasFilter("role = 'manager' AND created_by_type = 'system' AND status IN ('created','scheduled','processing','awaiting_approval')")
+                .HasDatabaseName("ix_work_items_one_open_check_in_per_campaign");
             item.HasIndex(w => new { w.Status, w.NotBefore });
             item.HasIndex(w => new { w.Status, w.DueAt });
             item.HasIndex(w => w.ContactId);
@@ -410,6 +419,9 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             entry.Property(e => e.Kind).HasMaxLength(64);
             entry.Property(e => e.Key).HasMaxLength(200);
             entry.Property(e => e.Old).HasColumnName("old_json");
+
+            // The summon reads one campaign's chronicle above an id, on every scan of every campaign.
+            entry.HasIndex(e => new { e.CampaignId, e.Id }).HasDatabaseName("ix_journal_campaign_id_id");
             entry.Property(e => e.New).HasColumnName("new_json");
             entry.Property(e => e.Reason).HasMaxLength(2000);
 

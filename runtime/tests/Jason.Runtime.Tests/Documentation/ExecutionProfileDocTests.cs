@@ -61,8 +61,13 @@ public partial class ExecutionProfileDocTests
         Assert.Contains("no file-writing tool", contract, StringComparison.Ordinal);
 
         // And the thing these flags do not take away, said plainly rather than left for somebody to discover in
-        // their own home directory.
+        // their own home directory — and said at its true size. It is not a directory of notes: it is the whole
+        // session, the launch envelope included, in the operator's own configuration. What is *not* in it
+        // matters just as much, because that is the redaction the runtime does enforce.
         Assert.Contains("auto-memory", contract, StringComparison.Ordinal);
+        Assert.Contains("the whole session", contract, StringComparison.Ordinal);
+        Assert.Contains("the launch envelope", contract, StringComparison.Ordinal);
+        Assert.Contains("no capability token", contract, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -99,6 +100,17 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
             ValidateName(request.Name.Value, errors);
         }
 
+        // The campaign may set its own pace within the bounds the installation is held to. A campaign cannot
+        // buy itself a tighter loop than the runtime allows: every review is a launch on somebody's plan.
+        if (request.ReviewSeconds is { IsSet: true, Value: { } seconds }
+            && (seconds < ManagerOptions.MinimumReviewSeconds || seconds > ManagerOptions.MaximumReviewSeconds))
+        {
+            errors.Add(
+                "review_seconds",
+                "out_of_range",
+                $"review_seconds must be between {ManagerOptions.MinimumReviewSeconds} and {ManagerOptions.MaximumReviewSeconds}; got {seconds}.");
+        }
+
         errors.ThrowIfAny();
 
         var campaign = await LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
@@ -132,6 +144,15 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         {
             changes.Add(new FieldChange("execution_profile", JsonValue.Create(campaign.ExecutionProfile), JsonValue.Create(profile)));
             campaign.ExecutionProfile = profile;
+        }
+
+        if (request.ReviewSeconds.IsSet && campaign.ManagerReviewSeconds != request.ReviewSeconds.Value)
+        {
+            changes.Add(new FieldChange(
+                "review_seconds",
+                JsonValue.Create(campaign.ManagerReviewSeconds),
+                JsonValue.Create(request.ReviewSeconds.Value)));
+            campaign.ManagerReviewSeconds = request.ReviewSeconds.Value;
         }
 
         if (changes.Count == 0)
@@ -287,6 +308,14 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         if (target == CampaignStatus.Archived)
         {
             campaign.ArchivedAt = campaign.UpdatedAt;
+        }
+
+        // Going live is what the review cadence is measured from — the first time and every time. A campaign
+        // paused for a week and started again is reviewed a full interval after it wakes, rather than the
+        // instant it does: the week it spent stopped is not a week nobody looked at it.
+        if (target == CampaignStatus.Active)
+        {
+            campaign.ManagerReviewAnchor = campaign.UpdatedAt;
         }
 
         journal.Append(

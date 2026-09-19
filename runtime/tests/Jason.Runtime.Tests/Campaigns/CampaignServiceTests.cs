@@ -145,7 +145,7 @@ public class CampaignServiceTests
         var created = await service.CreateAsync(new CampaignCreateRequest("LatAm", null, null, null), Ct);
         clock.Advance(TimeSpan.FromMinutes(5));
 
-        var renamed = await service.UpdateAsync(new CampaignUpdateRequest(created.Id, Optional<string?>.Of("EMEA"), Optional<string?>.Absent, null, "narrowed the region"), Ct);
+        var renamed = await service.UpdateAsync(new CampaignUpdateRequest(created.Id, Optional<string?>.Of("EMEA"), Optional<string?>.Absent, Optional<int?>.Absent, null, "narrowed the region"), Ct);
 
         Assert.Equal("EMEA", renamed.Name);
         Assert.Equal(Noon, renamed.CreatedAt);
@@ -168,8 +168,8 @@ public class CampaignServiceTests
         var created = await service.CreateAsync(new CampaignCreateRequest("LatAm", null, null, null), Ct);
         clock.Advance(TimeSpan.FromMinutes(5));
 
-        var absent = await service.UpdateAsync(new CampaignUpdateRequest(created.Id, Optional<string?>.Absent, Optional<string?>.Absent, null, null), Ct);
-        var same = await service.UpdateAsync(new CampaignUpdateRequest(created.Id, Optional<string?>.Of("LatAm"), Optional<string?>.Absent, null, null), Ct);
+        var absent = await service.UpdateAsync(new CampaignUpdateRequest(created.Id, Optional<string?>.Absent, Optional<string?>.Absent, Optional<int?>.Absent, null, null), Ct);
+        var same = await service.UpdateAsync(new CampaignUpdateRequest(created.Id, Optional<string?>.Of("LatAm"), Optional<string?>.Absent, Optional<int?>.Absent, null, null), Ct);
 
         Assert.Equal("LatAm", absent.Name);
         Assert.Equal(Noon, absent.UpdatedAt);
@@ -186,7 +186,7 @@ public class CampaignServiceTests
         var created = await service.CreateAsync(new CampaignCreateRequest("LatAm", null, null, null), Ct);
 
         var error = await Assert.ThrowsAsync<ValidationException>(
-            () => service.UpdateAsync(new CampaignUpdateRequest(created.Id, Optional<string?>.Of(null), Optional<string?>.Absent, null, null), Ct));
+            () => service.UpdateAsync(new CampaignUpdateRequest(created.Id, Optional<string?>.Of(null), Optional<string?>.Absent, Optional<int?>.Absent, null, null), Ct));
 
         Assert.Equal("required", Assert.Single(error.Details!).Code);
     }

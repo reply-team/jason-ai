@@ -89,7 +89,7 @@ internal static class Diagnostics
     public static Task WriteStartLineAsync(string behaviour, LaunchEnvelope envelope, string? token) =>
         WriteAsync(string.Create(
             CultureInfo.InvariantCulture,
-            $"behaviour={behaviour} attempt={envelope.AttemptId} number={envelope.AttemptNumber} data-dir={DataDirectory()} cwd={Environment.CurrentDirectory} token-in-env={TokenInEnvironment(token)} attempt-in-env={Variable(ExecutionEnvironment.AttemptIdVariable)} work-item-in-env={Variable(ExecutionEnvironment.WorkItemIdVariable)} path-head={PathHead()}"));
+            $"behaviour={behaviour} pid={Environment.ProcessId} attempt={envelope.AttemptId} number={envelope.AttemptNumber} data-dir={DataDirectory()} cwd={Environment.CurrentDirectory} token-in-env={TokenInEnvironment(token)} attempt-in-env={Variable(ExecutionEnvironment.AttemptIdVariable)} work-item-in-env={Variable(ExecutionEnvironment.WorkItemIdVariable)} path-head={PathHead()}"));
 
     private static string Variable(string name) =>
         Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : "unset";

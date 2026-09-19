@@ -69,6 +69,7 @@ public class ExternalIdRenderingTests
                 new JsonObject { ["icp"] = "founders" },
                 [new ExternalIdDto("fake-provider", "campaign", "seq-42", Moment, "att_A")],
                 null,
+                null,
                 Moment,
                 Moment,
                 null),

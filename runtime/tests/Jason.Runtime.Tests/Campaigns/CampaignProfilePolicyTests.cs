@@ -63,7 +63,7 @@ public class CampaignProfilePolicyTests
         await service.UpdateAsync(Patch(campaign.Id, "local-claude"), Ct);
 
         var renamed = await service.UpdateAsync(
-            new CampaignUpdateRequest(campaign.Id, Optional<string?>.Of("LatAm founders"), Optional<string?>.Absent, null, null),
+            new CampaignUpdateRequest(campaign.Id, Optional<string?>.Of("LatAm founders"), Optional<string?>.Absent, Optional<int?>.Absent, null, null),
             Ct);
 
         Assert.Equal("LatAm founders", renamed.Name);
@@ -141,7 +141,7 @@ public class CampaignProfilePolicyTests
     }
 
     private static CampaignUpdateRequest Patch(string campaignId, string? profile, string? reason = null) =>
-        new(campaignId, Optional<string?>.Absent, Optional<string?>.Of(profile), null, reason);
+        new(campaignId, Optional<string?>.Absent, Optional<string?>.Of(profile), Optional<int?>.Absent, null, reason);
 
     private static CampaignService NewService(JasonDbContext db, TimeProvider clock) =>
         new(db, new JournalWriter(clock), clock, TestCanceller.New(clock));

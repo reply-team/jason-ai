@@ -46,6 +46,12 @@ if (!Behaviours.Known(behaviour))
 }
 
 using var api = new RuntimeApi(envelope.Runtime?.DescriptorFile ?? string.Empty);
-await Diagnostics.WriteStartLineAsync(behaviour, envelope, api.ReadDescriptor()?.Token);
+var descriptor = api.ReadDescriptor();
+await Diagnostics.WriteStartLineAsync(behaviour, envelope, descriptor?.Token);
+
+// From here on the host has one obligation of its own: to stop if the runtime that launched it goes away.
+// Whether there was one to begin with is read here rather than a second later, so that a runtime stopped
+// within the first beat is still a runtime this host saw.
+Watchdog.Start(envelope, api, sawRuntime: descriptor is not null);
 
 return await Behaviours.RunAsync(behaviour, options, envelope, raw, api);

@@ -136,9 +136,15 @@ public static class RuntimeStatusCommand
             ? "never"
             : dispatcher.LastScanAt.Value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
 
+        // The reviews this runtime has put on the queue since it started, beside the rest of the scan's
+        // counters: a loop that is running and has summoned nothing is the thing somebody would want to see.
+        var summons = dispatcher.Summons == 0
+            ? string.Empty
+            : string.Create(CultureInfo.InvariantCulture, $" · {dispatcher.Summons} summoned");
+
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"{state} · tick {dispatcher.TickSeconds} s · {dispatcher.RunningAttempts}/{dispatcher.MaxParallel} attempts · last scan {lastScan}");
+            $"{state} · tick {dispatcher.TickSeconds} s · {dispatcher.RunningAttempts}/{dispatcher.MaxParallel} attempts · last scan {lastScan}{summons}");
     }
 
     /// <summary>

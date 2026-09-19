@@ -206,11 +206,17 @@ great deal for very little: a nine-turn errand measured 129 KB and a twelve-turn
 `Roles:MaxStdoutBytes` allows. Nothing is read from that stream — a result arrives through the API — but an
 installation running longer roles should know the bound is nearer than it sounds.
 
-**One thing is not confined.** The host still writes its own per-session **auto-memory** directory under the
-operator's user configuration, whatever the setting sources say. Jason neither reads nor writes it, the
-capability token is not in it, and nothing in the work directory points at it — but a machine that launches
-background roles accumulates those directories in the operator's home. None of the flags composed here prevents
-that, and no other flag was tried.
+**One thing is not confined, and it is larger than it sounds.** The host writes its own per-session
+**auto-memory** directory under the operator's user configuration, whatever the setting sources say — and what
+lands there is not a directory of notes. It is **the whole session**: one transcript file, about 222 KB for a
+thirteen-turn errand, holding **the launch envelope** — the runtime's descriptor path among it — the brief, the
+campaign context and anything the role read or wrote, including its note. There is **no capability token** in
+it and no key; that much of the redaction holds wherever the session is written. Jason neither reads nor writes
+the file and nothing in the work directory points at it, but the runtime's own record of the same attempt keeps
+a byte count and a hash where this keeps the words. So an installation whose reason for running work through
+Jason is that its logs hold no prompts should know that a launched session's conversation is kept in full, in
+the operator's home, by the host — and that a machine launching background roles accumulates one of these per
+attempt. None of the flags composed here prevents it, and no other flag was tried.
 
 ## 8. Role notes
 

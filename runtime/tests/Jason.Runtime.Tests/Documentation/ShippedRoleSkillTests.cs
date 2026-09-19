@@ -105,6 +105,11 @@ public partial class ShippedRoleSkillTests
         // And the answer's shape, which is the other thing a refused completion is usually about.
         Assert.Contains("result_format", skill, StringComparison.Ordinal);
 
+        // The verb that lists who is on a campaign. A launched role cannot ask what a command should have
+        // been, so a verb it is likely to want and not told about is a turn spent on a usage error: the one
+        // gated run against a real host spent one guessing at `contact list --campaign`, which does not exist.
+        Assert.Contains("campaign list-contacts", skill, StringComparison.Ordinal);
+
         // Why the note is in the runtime's store at all, in the role's own terms: it is the scratch file it
         // would keep beside the job, and it has nowhere else to keep one. Half of that sentence without the
         // other half reads as "the runtime keeps notes for you", which is the belief this whole thing is

@@ -23,12 +23,17 @@ public class DocumentedPageCommandsTests
     /// list honest is that a noun added to the pages and not to this list is simply unguarded, which is how the
     /// profile pages came to document an option the CLI did not have.
     /// </summary>
-    private static readonly string[] Nouns = ["jason profile ", "jason rolenote "];
+    private static readonly string[] Nouns = ["jason profile ", "jason rolenote ", "jason campaign "];
 
     public static TheoryData<string, string> DocumentedCommands()
     {
         var data = new TheoryData<string, string>();
-        foreach (var page in new[] { "README.md", Path.Combine("docs", "execution-profiles.md") })
+        foreach (var page in new[]
+        {
+            "README.md",
+            Path.Combine("docs", "execution-profiles.md"),
+            Path.Combine("docs", "campaign-manager.md"),
+        })
         {
             foreach (var line in Commands(page))
             {

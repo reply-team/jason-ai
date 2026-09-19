@@ -25,6 +25,7 @@ public sealed record CampaignDto(
     JsonObject Context,
     IReadOnlyList<ExternalIdDto> ExternalIds,
     string? ExecutionProfile,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? ReviewSeconds,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     DateTimeOffset? ArchivedAt);
@@ -38,12 +39,14 @@ public sealed record CampaignListRequest(CampaignStatus? Status, int? Limit, str
 /// <summary>
 /// A partial patch: an absent <c>name</c> leaves the campaign's name alone, and an absent
 /// <c>execution_profile</c> leaves its policy alone. An explicit null clears the policy; a value has to name a
-/// profile this runtime knows.
+/// profile this runtime knows. <c>review_seconds</c> behaves the same way, and null there means "however often
+/// the installation reviews everything else".
 /// </summary>
 public sealed record CampaignUpdateRequest(
     string? CampaignId,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> Name,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<string?> ExecutionProfile,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Optional<int?> ReviewSeconds,
     ActorRef? Actor,
     string? Reason);
 

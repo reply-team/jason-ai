@@ -20,7 +20,8 @@ public class SchemaTests
         Assert.Contains("journal", tables);
 
         Assert.Equal(
-            ["id", "archived_at", "context_json", "created_at", "name", "public_id", "status", "updated_at", "execution_profile"],
+            ["id", "archived_at", "context_json", "created_at", "name", "public_id", "status", "updated_at", "execution_profile",
+             "manager_event_watermark", "manager_review_anchor", "manager_review_seconds"],
             Names(connection, "SELECT name FROM pragma_table_info('campaigns')"));
         Assert.Equal(
             ["id", "public_id", "ts", "actor_type", "actor_id", "kind", "campaign_id", "key", "old_json", "new_json", "reason", "attempt_id", "work_item_id"],

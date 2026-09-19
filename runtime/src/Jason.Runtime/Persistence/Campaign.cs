@@ -29,6 +29,25 @@ public sealed class Campaign
     /// </summary>
     public string? ExecutionProfile { get; set; }
 
+    /// <summary>
+    /// How often this campaign is reviewed, in seconds, when the installation's cadence is not what it wants.
+    /// Null means <c>Manager:ReviewSeconds</c>. It lives here rather than in the context because the dispatcher
+    /// reads it, and the dispatcher must never read the context for meaning.
+    /// </summary>
+    public int? ManagerReviewSeconds { get; set; }
+
+    /// <summary>
+    /// The highest journal entry this campaign has been reviewed against. The summon reads the chronicle above
+    /// it, so an entry that has been accounted for is never accounted for twice.
+    /// </summary>
+    public int ManagerEventWatermark { get; set; }
+
+    /// <summary>
+    /// What the cadence is measured from: the campaign going live, and every check-in since. Null while a
+    /// campaign has never been live, which is also why such a campaign is never due.
+    /// </summary>
+    public DateTime? ManagerReviewAnchor { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }

@@ -41,7 +41,9 @@ public class ScanRunnerTests
 
         var report = await harness.Runner.ScanOnceAsync(Ct);
 
-        Assert.Equal(new ScanReport(1, 1, 1), report);
+        // One expired, one lease taken back, nothing summoned — these campaigns have never been live through
+        // the service, so none of them has an anchor to be due from — and one claimed.
+        Assert.Equal(new ScanReport(1, 1, 0, 1), report);
         Assert.Equal(WorkItemStatus.Expired, (await harness.ReadItemAsync(overdue, Ct)).Status);
         Assert.Equal(AttemptErrors.LeaseExpired, Assert.Single((await harness.ReadItemAsync(lost, Ct)).Attempts).Error!.Code);
         Assert.Equal(1, harness.Status.Scans);
@@ -61,7 +63,7 @@ public class ScanRunnerTests
         harness.Status.State = DispatcherState.Draining;
         var item = await harness.SeedClaimableAsync(Ct);
 
-        Assert.Equal(new ScanReport(0, 0, 0), await harness.Runner.ScanOnceAsync(Ct));
+        Assert.Equal(new ScanReport(0, 0, 0, 0), await harness.Runner.ScanOnceAsync(Ct));
 
         Assert.Equal(0, harness.Status.Scans);
         Assert.Null(harness.Status.LastScanAt);

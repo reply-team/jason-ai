@@ -19,7 +19,7 @@ public class RuntimeStatusCommandTests
         + "\"database\":{\"applied_migrations\":[\"20260913225419_InitialCreate\"]}}";
 
     private static string InfoJson(string instanceId) =>
-        InfoJson(instanceId, new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0));
+        InfoJson(instanceId, new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0, 0));
 
     private static string InfoJson(string instanceId, DispatcherInfo dispatcher) =>
         InfoJson(instanceId, dispatcher, new PluginsInfo(2, "snp_01J4", new DateTimeOffset(2026, 9, 14, 12, 0, 0, TimeSpan.Zero), true));
@@ -40,6 +40,25 @@ public class RuntimeStatusCommandTests
             plugins,
             routes),
         JasonJson.Options);
+
+    /// <summary>
+    /// The reviews this runtime has summoned, beside the counters they belong with. A loop that is running and
+    /// has summoned nothing is exactly what somebody checking on it wants to see, and the number is no use in a
+    /// field nothing reads.
+    /// </summary>
+    [Fact]
+    public async Task Human_status_shows_how_many_reviews_have_been_summoned()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var dispatcher = new DispatcherInfo(DispatcherState.Running, 10, 4, 1, new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.Zero), 41, 7);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE", dispatcher))));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("· 7 summoned", output.ToString(), StringComparison.Ordinal);
+    }
 
     [Fact]
     public async Task No_descriptor_exits_3_with_no_descriptor_error()
@@ -149,7 +168,7 @@ public class RuntimeStatusCommandTests
     {
         using var dir = new TempPaths();
         dir.WriteDescriptor(Descriptor);
-        var dispatcher = new DispatcherInfo(DispatcherState.Running, 10, 4, 2, new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.Zero), 41);
+        var dispatcher = new DispatcherInfo(DispatcherState.Running, 10, 4, 2, new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.Zero), 41, 3);
         var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE", dispatcher))));
 
         var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
@@ -228,7 +247,7 @@ public class RuntimeStatusCommandTests
     {
         using var dir = new TempPaths();
         dir.WriteDescriptor(Descriptor);
-        var dispatcher = new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0);
+        var dispatcher = new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0, 0);
         var plugins = new PluginsInfo(2, "snp_01J4", DateTimeOffset.UnixEpoch, true);
         var routes = new RoutesInfo("rts_EMPTY", DateTimeOffset.UnixEpoch, null, 0, 0);
         var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE", dispatcher, plugins, routes))));
@@ -245,7 +264,7 @@ public class RuntimeStatusCommandTests
         using var dir = new TempPaths();
         dir.WriteDescriptor(Descriptor);
         var plugins = new PluginsInfo(0, "snp_EMPTY", DateTimeOffset.UnixEpoch, false);
-        var dispatcher = new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0);
+        var dispatcher = new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0, 0);
         var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE", dispatcher, plugins))));
 
         var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
