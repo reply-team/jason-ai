@@ -5,6 +5,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Decisions;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -329,10 +330,14 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
             reason: NormalizeReason(request.Reason));
 
         // An archived campaign can never run again, so work still queued for it is dead weight that would
-        // otherwise sit in the inbox for good.
+        // otherwise sit in the inbox for good — and so is a question somebody is still being asked about it.
+        // Both join this change set, so the campaign and everything retired with it commit together.
         if (target == CampaignStatus.Archived)
         {
             await canceller.CancelOpenAsync(db, campaign.Id, null, actor, "campaign archived", cancellationToken).ConfigureAwait(false);
+            await DecisionGate
+                .CancelPendingAsync(db, journal, campaign, actor, "campaign archived", campaign.UpdatedAt, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
