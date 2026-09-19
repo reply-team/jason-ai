@@ -97,9 +97,14 @@ a running runtime finds out that a newer one exists:
 
 ```sh
 jason update check
+jason update apply
+jason update status
 ```
 
-Nothing is downloaded or installed by that command, and nothing in this version replaces a binary.
+`check` downloads and installs nothing; it asks the feed and prints the answer. `apply` performs the update —
+download, drain, stop, swap, start, health check — driven by a ledger written before each step, so a machine
+that dies half-way is finished or put back by the next run. `status` says where one stands, and reads the
+ledger without needing a runtime.
 
 ## Building from source
 
