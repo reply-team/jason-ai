@@ -84,6 +84,75 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
         return DecisionMapper.ToDto(decision, item.Campaign!.PublicId, item.PublicId, attempt.PublicId);
     }
 
+    /// <summary>
+    /// A person's answer. Nothing inside the runtime reaches this: the dispatcher reads that a decision was
+    /// answered and creates the review that continues the work, and the only way one is answered is a request
+    /// that arrives here naming the person who answered it.
+    /// </summary>
+    /// <remarks>
+    /// What this cannot do is tell a person from a process holding that person's own command line — the same
+    /// limit an approval has, and the operator's trust to give. The guarantee is that nothing inside the
+    /// runtime can give it.
+    /// </remarks>
+    public async Task<DecisionDto> AnswerAsync(DecisionAnswerRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var actor = Person(request.Actor);
+        var answer = Answer(request.Answer);
+        var reason = Reason(request.Reason);
+        var decision = await LoadAsync(request.DecisionId, tracking: true, cancellationToken).ConfigureAwait(false);
+
+        if (decision.Status != DecisionStatus.Pending)
+        {
+            throw DomainErrors.DecisionNotPending(decision.PublicId, decision.Status);
+        }
+
+        var chosen = Chosen(decision, request.Option);
+        await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
+        var now = clock.GetUtcNow().UtcDateTime;
+
+        decision.Status = DecisionStatus.Answered;
+        decision.Answer = answer;
+        decision.ChosenOption = chosen;
+        decision.AnsweredAt = now;
+        decision.AnsweredByType = actor.Type;
+        decision.AnsweredById = actor.Id;
+
+        // The line the continuation is read from. It names the campaign, the work and the attempt that asked —
+        // so the review this summons inherits that attempt's chain — and carries the person as its actor, which
+        // is what tells the summon that this is somebody acting on a question rather than the loop feeding
+        // itself. What it carries for a reader is the identifier; what was answered is in the row.
+        var entry = journal.Append(
+            db,
+            actor,
+            JournalKinds.DecisionAnswered,
+            campaign: null,
+            key: "decision",
+            updated: new JsonObject { ["decision_id"] = decision.PublicId, ["chosen_option"] = chosen },
+            reason: reason,
+            workItem: decision.WorkItem,
+            attempt: decision.Attempt);
+
+        // And the row remembers the line, which is how the summon names this decision without reading one.
+        decision.AnswerJournalEntryId = entry.PublicId;
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // The row in front of us says what this caller wanted rather than what happened, so the decision
+            // that stands is only readable by asking the database again.
+            db.ChangeTracker.Clear();
+            throw DomainErrors.DecisionNotPending(
+                decision.PublicId,
+                await StandsAsync(decision.PublicId, cancellationToken).ConfigureAwait(false));
+        }
+
+        return Detail(decision);
+    }
+
     public async Task<DecisionDto> GetAsync(DecisionGetRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -137,6 +206,71 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
 
     private static string Required(string? value, string field) =>
         string.IsNullOrWhiteSpace(value) ? throw DomainErrors.Required(field) : value.Trim();
+
+    /// <summary>
+    /// Who answered, which is always a person. An absent actor is an anonymous human, which is right for
+    /// creating work and wrong for deciding it: what is recorded has to name somebody.
+    /// </summary>
+    private static ActorRef Person(ActorRef? claimed)
+    {
+        var actor = Actors.Resolve(claimed);
+        if (actor.Type != ActorType.Human)
+        {
+            throw DomainErrors.DecisionNotHuman(actor.Type);
+        }
+
+        return string.IsNullOrWhiteSpace(actor.Id) ? throw DomainErrors.ActorRequired() : actor;
+    }
+
+    private static string Answer(string? answer)
+    {
+        var errors = new ValidationErrors();
+        var trimmed = answer?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            errors.Add("answer", "required", "answer is required: what is recorded is what the role reads next time.");
+        }
+        else if (trimmed.Length > DecisionLimits.MaxAnswerLength)
+        {
+            errors.Add(
+                "answer",
+                "too_long",
+                string.Create(CultureInfo.InvariantCulture, $"answer must be at most {DecisionLimits.MaxAnswerLength} characters."));
+        }
+
+        errors.ThrowIfAny();
+        return trimmed!;
+    }
+
+    /// <summary>
+    /// The named option somebody picked, where the asker named any. An option is optional — a question with
+    /// choices can still be answered in words — but a label nobody offered is not an answer to this question.
+    /// </summary>
+    private static string? Chosen(Decision decision, string? option)
+    {
+        var chosen = option?.Trim();
+        if (string.IsNullOrEmpty(chosen))
+        {
+            return null;
+        }
+
+        var offered = DecisionMapper.FromJson<DecisionOption>(decision.Options) ?? [];
+        return offered.Any(named => string.Equals(named.Label, chosen, StringComparison.Ordinal))
+            ? chosen
+            : throw DomainErrors.DecisionOptionUnknown(chosen);
+    }
+
+    /// <summary>
+    /// The decision as it stands now, read afresh. Nothing deletes a decision, so the only way this finds
+    /// nothing is a database that lost it, and <c>pending</c> is then the honest answer: whatever refused the
+    /// write, it was not an answer somebody had already given.
+    /// </summary>
+    private async Task<DecisionStatus> StandsAsync(string publicId, CancellationToken cancellationToken) =>
+        await db.Decisions.AsNoTracking()
+            .Where(d => d.PublicId == publicId)
+            .Select(d => (DecisionStatus?)d.Status)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false) ?? DecisionStatus.Pending;
 
     private static string Question(string? question)
     {
