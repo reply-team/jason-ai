@@ -185,7 +185,10 @@ jobs:
           if ((UserPathEntries).Count -ne 0) { throw "-NoModifyPath edited the user PATH" }
 
           # The same version again: nothing is downloaded, the script says so, and this time the PATH gains the directory.
-          $again = ./install/install.ps1 | Out-String
+          # 6>&1 because the script talks to the person in front of it with Write-Host, which goes to the
+          # information stream: an assignment on its own captures nothing, and the check below would be reading
+          # an empty string while the words it is looking for scrolled past in the log.
+          $again = ./install/install.ps1 6>&1 | Out-String
           Write-Host $again
           if ($again -notmatch 'already installed') { throw "the second run did not say the version was already installed" }
           if ((UserPathEntries).Count -ne 1) { throw "the user PATH does not hold the directory exactly once" }
