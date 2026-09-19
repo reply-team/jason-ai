@@ -79,7 +79,8 @@ Those are the verbs. `contact list` answers with everyone this runtime knows and
 campaign's own people are `campaign list-contacts`; guessing at the other spelling costs you a turn and
 answers `Unrecognized command or argument`.
 
-Check in while you work so the runtime knows you are alive:
+Send a heartbeat while you work so the runtime knows you are alive. Recording progress does it too, and
+leaves something behind if the run is cut short:
 
 ```
 jason workitem set-result wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --result '{"progress":"read the brief"}'

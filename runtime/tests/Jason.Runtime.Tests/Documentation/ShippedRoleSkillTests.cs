@@ -124,6 +124,28 @@ public partial class ShippedRoleSkillTests
     }
 
     /// <summary>
+    /// One word, one meaning. A check-in is the work item the runtime creates to have a campaign reviewed;
+    /// what a role does to say it is still alive is a heartbeat. A skill that spends the noun on the verb
+    /// teaches a second meaning to the one reader who has no way to ask which was meant.
+    /// </summary>
+    [Fact]
+    public async Task Only_the_manager_is_taught_the_word_check_in()
+    {
+        foreach (var pack in Directory.GetDirectories(RoleSkillsPack()))
+        {
+            var role = Path.GetFileName(pack);
+            if (role == "manager")
+            {
+                continue;
+            }
+
+            var skill = await File.ReadAllTextAsync(Path.Combine(pack, WorkDirectory.SkillFile), Ct);
+            Assert.DoesNotContain("check in", skill, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("check-in", skill, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
     /// An honest status, the way the other shipped skill carries one. A first draft that called itself
     /// finished would be the one claim in it a reader could not check.
     /// </summary>
