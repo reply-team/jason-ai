@@ -27,6 +27,14 @@ internal sealed class FakeHostRuntime : IAsyncDisposable
 
     private readonly List<string> _items = [];
 
+    /// <summary>
+    /// Every child this runtime is known to have started, by pid, learned from the start line the host writes
+    /// before it does anything. Disposal kills what is in here whether or not the runtime is still answering:
+    /// a test that stopped its own runtime — or a test process that died — cannot ask the API for a pid, and
+    /// that is exactly the case where a child is left behind holding the runner's pipes open.
+    /// </summary>
+    private readonly HashSet<int> _children = [];
+
     private FakeHostRuntime(RuntimeApiFixture fixture, FixedClock clock)
     {
         Fixture = fixture;
@@ -135,6 +143,46 @@ internal sealed class FakeHostRuntime : IAsyncDisposable
             ct,
             $"a recorded launch for attempt {number}");
         return item.Attempts!.Single(a => a.Number == number).Launch!.Pid!.Value;
+    }
+
+    /// <summary>
+    /// The pid of the child that is running an attempt right now, read from the start line it writes before it
+    /// behaves at all. <see cref="LaunchedPidAsync"/> answers the same question from the attempt's launch
+    /// record, but that is written when the run is over — which a host told to hang never is.
+    /// </summary>
+    public async Task<int> RunningPidAsync(string workItemId, CancellationToken ct)
+    {
+        var item = await WaitAsync(workItemId, w => w.Attempts!.Count > 0, ct, "an attempt");
+        var attempt = item.Attempts![^1];
+        var stderr = Path.Combine(Paths.AttemptWorkDirectory(workItemId, attempt.Id), "stderr.log");
+
+        var pid = 0;
+        Assert.True(
+            await DispatchHarness.EventuallyAsync(
+                () => File.Exists(stderr) && PidIn(ReadShared(stderr)) is { } found && (pid = found) > 0,
+                ct,
+                timeoutMilliseconds: 20_000),
+            $"The child of {attempt.Id} never said which process it was.");
+
+        _children.Add(pid);
+        return pid;
+    }
+
+    /// <summary>Stops the runtime and takes its data directory with it, leaving any child of it orphaned.</summary>
+    public ValueTask StopRuntimeAsync() => Fixture.DisposeAsync();
+
+    private static int? PidIn(string startLine)
+    {
+        const string marker = "pid=";
+        var at = startLine.IndexOf(marker, StringComparison.Ordinal);
+        if (at < 0)
+        {
+            return null;
+        }
+
+        var rest = startLine[(at + marker.Length)..];
+        var end = rest.IndexOf(' ', StringComparison.Ordinal);
+        return int.TryParse(end < 0 ? rest : rest[..end], CultureInfo.InvariantCulture, out var pid) ? pid : null;
     }
 
     /// <summary>Polls an asynchronous condition without ever blocking a thread on it.</summary>
@@ -261,13 +309,20 @@ internal sealed class FakeHostRuntime : IAsyncDisposable
                 {
                     if (attempt.Launch?.Pid is { } pid)
                     {
-                        Kill(pid);
+                        _children.Add(pid);
                     }
                 }
             }
             catch (Exception ex) when (ex is HttpRequestException or ObjectDisposedException)
             {
+                // The runtime is already gone, so the pids it would have reported are the ones collected as
+                // the children announced themselves. That is why they are collected at all.
             }
+        }
+
+        foreach (var pid in _children)
+        {
+            Kill(pid);
         }
 
         await Fixture.DisposeAsync();

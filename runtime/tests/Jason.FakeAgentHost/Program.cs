@@ -48,4 +48,7 @@ if (!Behaviours.Known(behaviour))
 using var api = new RuntimeApi(envelope.Runtime?.DescriptorFile ?? string.Empty);
 await Diagnostics.WriteStartLineAsync(behaviour, envelope, api.ReadDescriptor()?.Token);
 
+// From here on the host has one obligation of its own: to stop if the runtime that launched it goes away.
+Watchdog.Start(envelope, api);
+
 return await Behaviours.RunAsync(behaviour, options, envelope, raw, api);
