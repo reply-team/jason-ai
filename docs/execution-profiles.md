@@ -159,15 +159,60 @@ verified, and a path inside an allow pattern has not been. The runtime therefore
 front of the child's `PATH` and tells the agent the word in the launch envelope, so the skill can teach exactly
 what the rule permits. In a published installation that directory holds the one executable; in a development
 layout it holds everything built beside it, which is worth knowing before concluding that a child reached
-something by accident. Allow rules match the command the agent actually issues, so a
-skill that teaches it to redirect or chain its callback would break the rule silently.
+something by accident. An allow rule matches the command the agent actually issues, so a skill teaches the
+plain form and nothing built around it. What the rule does **not** do is bound the session: the host decides
+some commands on its own, and §7 says what a launched session really can and cannot reach.
 
 A role with no skill directory launches normally: nothing was configured, so nothing is missing. A
 skill that *was* configured and could not be given to the role — misnamed, or past
 `Roles:MaxSkillBytes` — refuses the attempt instead, because a role doing the job untaught costs a
 real launch and leaves only a log line behind.
 
-## 7. Role notes
+## 7. What a launched session is, and is not, given
+
+An agent host is installed and configured by a person, for their own work. Starting one for a background work
+item borrows that installation, and unless the launch says otherwise it borrows the whole of it. The launch says
+otherwise, and this section is what that comes to. What follows was **measured** by running the composed command
+against Claude Code 2.1.275; where a sentence states the mode's own rule rather than something measured, it says
+so, because the two are not equally strong.
+
+**Settings come from the work directory and nowhere else.** The command carries `--setting-sources project`, so
+the only settings the session reads are the ones the launcher wrote into `.claude/`. The operator's own
+settings, plugins and hooks do not arrive — a hook is somebody's standing instruction to their own sessions, and
+it has no business running inside a work item's attempt. `--strict-mcp-config` does the same for MCP servers: a
+launched session has none. Measured on one machine, the same brief ran with 79 tools, 87 skills, 123 slash
+commands and three MCP servers when those flags were absent, and with 27 built-in tools, 19 skills — the
+built-ins plus the role's own, which still loads — 54 commands and no MCP server when they were present.
+
+**The tools are all still listed; the mode and the allow rule decide what runs.** Every built-in tool the host
+has appears to the session, and the allow rule names one thing: the callback. Of the tools a role reached for,
+the host let `Read` through on its own, while `Glob`, `Write`, `Edit` and its PowerShell tool were **refused by
+the mode**. One chained read-only shell command ran and one piped one was refused, so the host's own reading of
+what is harmless is a floor under the rule, and how far that floor extends was not isolated.
+
+The mode's rule — as the mode states it, not as a measurement here — is that anything needing permission is
+refused. What was seen is narrower: nothing outside the callback was seen to change anything, and nothing
+state-changing outside it was tried. So this is not a sandbox, the allow rule is not a ceiling, and an
+installation that needs one should not read this section as providing it.
+
+**The role has no file-writing tool.** A rule naming the file-editing tools, in the host's own documented form,
+was tried and granted neither writing nor editing; no form that grants them is known. Under the composed shape,
+then, a role cannot create a file even in its own work directory. Anything it wants to keep travels inside a
+command: `rolenote.set` with `--note`, `workitem.set_result`, and `workitem.complete` with `--result`. A role
+skill that says "write the file first" is teaching a role to fail in the middle of a real attempt.
+
+**The transcript is larger than the work.** A session that streams partial messages and runs verbose writes a
+great deal for very little: a nine-turn errand measured 129 KB and a twelve-turn one 203 KB, against the 1 MiB
+`Roles:MaxStdoutBytes` allows. Nothing is read from that stream — a result arrives through the API — but an
+installation running longer roles should know the bound is nearer than it sounds.
+
+**One thing is not confined.** The host still writes its own per-session **auto-memory** directory under the
+operator's user configuration, whatever the setting sources say. Jason neither reads nor writes it, the
+capability token is not in it, and nothing in the work directory points at it — but a machine that launches
+background roles accumulates those directories in the operator's home. None of the flags composed here prevents
+that, and no other flag was tried.
+
+## 8. Role notes
 
 A launched role has no harness that survives its attempt. On somebody's own machine, a role's notes are
 ordinary working files — a scratch document it keeps beside the work and reads again next time. A role
@@ -188,10 +233,12 @@ One document per campaign and role:
 
 ```sh
 jason rolenote get <campaign-id> researcher
-jason rolenote set <campaign-id> researcher --note-file note.json
+jason rolenote set <campaign-id> researcher --note '{"gatekeeper":"the switchboard hangs up after six"}'
 jason rolenote list <campaign-id> --human
 ```
 
+- **Written in one command.** A launched role has no file-writing tool (§7), so its note travels inside the
+  call as one compact JSON object; a person at a keyboard may use `--note-file` instead.
 - **Replaced whole.** There is no patch verb: a role merging into its own memory would have to reason
   about what an earlier session of itself meant by a key, and the rule that needs no reasoning is that
   the last writer owns the document. Clearing a note is writing `{}`.
@@ -216,7 +263,7 @@ copied in at launch would be what the role believed then, arriving beside the br
 current; read through the API at the moment it is wanted, it is plainly a document with an age — and
 current runtime state is read the same way, through the same CLI, so the two are never confused.
 
-## 8. When AI work cannot run
+## 9. When AI work cannot run
 
 Every one of these is decided before a child process exists, keeps its attempt so the refusal can be read, and
 is **not retried** — nothing about the work changes between two scans. The first four name the level that chose
@@ -244,7 +291,7 @@ Deterministic work is untouched by any of it. A machine with no agent host insta
 provider operations and everything else; only the AI work blocks, and it says which program it went
 looking for.
 
-## 9. Settings
+## 10. Settings
 
 | Setting | Default | What it does |
 |---|---|---|
@@ -253,7 +300,7 @@ looking for.
 | `Roles:MaxStdoutBytes` | 1 MiB | how much of a child's transcript is kept before it is cut |
 | `Roles:MaxSkillBytes` | 1 MiB | how large a role's skill may be |
 
-## 10. What this version does not do
+## 11. What this version does not do
 
 **Session resume.** A session id is minted per attempt and recorded, which is what a later nudge
 needs, but nothing resumes one: a host that is interrupted is retried from the start.

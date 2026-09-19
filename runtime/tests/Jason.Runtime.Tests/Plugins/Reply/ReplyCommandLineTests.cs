@@ -355,16 +355,45 @@ internal static class ReplyOperations
     }
 
     /// <summary>The result the plugin answered with, having first been held to the operation's own document.</summary>
+    /// <remarks>
+    /// An outcome that is not a success is reported with everything it carried. Every test in this area drives
+    /// its operations through <see cref="RunEachAsync"/>, so this is the last place the outcome exists: asserting
+    /// only its type would answer an intermittent failure with "expected Succeeded, found Failed" and throw away
+    /// the code, the message, the class and the child's stderr — the one sighting that could explain it.
+    /// </remarks>
     public static JsonObject Succeeded(string operation, PluginInvocationResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
-        var outcome = Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
+        if (result.Outcome is not InvocationOutcome.Succeeded)
+        {
+            Assert.Fail($"{operation} did not succeed. {Describe(result.Outcome)}");
+        }
+
+        var outcome = (InvocationOutcome.Succeeded)result.Outcome;
         var contract = OperationCatalog.Find(operation)!;
 
         Assert.Empty(OutcomeContract.CheckResult(contract, outcome.Result));
         Assert.Empty(OutcomeContract.CheckExternalIds(contract, outcome.ExternalIds));
         return outcome.Result!.AsObject();
     }
+
+    /// <summary>
+    /// Everything an outcome that is not a success carried, in one line a failure message can hold: what the
+    /// plugin declared, or how far the protocol got before it stopped.
+    /// </summary>
+    private static string Describe(InvocationOutcome outcome) => outcome switch
+    {
+        InvocationOutcome.Failed failed => string.Create(
+            CultureInfo.InvariantCulture,
+            $"The plugin declared a failure: {failed.Error.Class} '{failed.Error.Code}' — {failed.Error.Message}"
+            + $"{(failed.Error.Details is { } details ? $" Details: {details.ToJsonString()}" : string.Empty)}"),
+        InvocationOutcome.ProtocolFailure protocol => string.Create(
+            CultureInfo.InvariantCulture,
+            $"The protocol did not complete: '{protocol.Code}' — {protocol.Message} Exit code: "
+            + $"{(protocol.ExitCode is { } code ? code.ToString(CultureInfo.InvariantCulture) : "none")}. Stderr tail: "
+            + $"{(string.IsNullOrWhiteSpace(protocol.StderrTail) ? "(empty)" : protocol.StderrTail)}"),
+        _ => $"Unrecognised outcome {outcome.GetType().Name}.",
+    };
 
     /// <summary>
     /// The failure the plugin declared, held to the codes the operation's own document publishes. A protocol

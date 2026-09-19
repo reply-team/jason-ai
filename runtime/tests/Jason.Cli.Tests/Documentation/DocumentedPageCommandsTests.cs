@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Jason.Cli;
 
 namespace Jason.Cli.Tests.Documentation;
@@ -15,7 +14,7 @@ namespace Jason.Cli.Tests.Documentation;
 /// passing line gives.
 /// </para>
 /// </summary>
-public partial class DocumentedPageCommandsTests
+public class DocumentedPageCommandsTests
 {
     private const int UsageError = 2;
 
@@ -106,12 +105,8 @@ public partial class DocumentedPageCommandsTests
         }
     }
 
-    /// <summary>The tokens a shell would hand the program: quoted runs held together, the program name dropped.</summary>
-    private static string[] Tokens(string command) =>
-        [.. Quoted().Matches(command).Select(match => match.Value.Trim('"')).Skip(1)];
-
-    [GeneratedRegex("\"[^\"]*\"|\\S+")]
-    private static partial Regex Quoted();
+    /// <summary>The tokens a shell would hand the program, by the one splitter every such guard here uses.</summary>
+    private static string[] Tokens(string command) => [.. ShellWords.Split(command)];
 
     private static string RepositoryRoot()
     {

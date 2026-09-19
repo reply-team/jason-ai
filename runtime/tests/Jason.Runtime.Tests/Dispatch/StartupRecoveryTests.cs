@@ -44,6 +44,17 @@ public class StartupRecoveryTests
             Assert.Equal(AttemptStatus.Running, Assert.Single(survivor.Attempts).Status);
         }
 
+        // This fixture leaves the dispatcher running, because startup recovery is part of starting it, and the
+        // loop scans once the moment it starts. That scan is on a thread of its own: under load it can arrive
+        // after the line below moves time, find the lease expired and report it — leaving this test's own scan
+        // nothing to find and an assertion reading "expected 1, actual 0". A lost attempt is reported by
+        // whichever scan reaches it first, so the startup one is waited for while time still stands still.
+        var status = fixture.Resolve<DispatcherStatus>();
+        while (status.Scans == 0)
+        {
+            await Task.Delay(10, Ct);
+        }
+
         clock.Advance(TimeSpan.FromHours(2));
         var report = await fixture.Resolve<ScanRunner>().ScanOnceAsync(Ct);
 

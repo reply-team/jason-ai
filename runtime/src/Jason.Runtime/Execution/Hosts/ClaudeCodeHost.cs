@@ -29,6 +29,7 @@ public sealed class ClaudeCodeHost : IAgentHost
         "-p", "--print",
         "--output-format",
         "--include-partial-messages",
+        "--verbose",
         "--allowed-tools", "--allowedTools",
         "--permission-mode",
         "--session-id",
@@ -41,6 +42,18 @@ public sealed class ClaudeCodeHost : IAgentHost
         "--fork-session",
         "--bare",
         "--safe-mode",
+
+        // The confinement below is only as good as what cannot be added after it: a profile that could name a
+        // settings file, a plugin directory or source, another MCP configuration, a second working directory, or
+        // turn the slash commands off, could hand a launched session the reach these flags exist to take away.
+        "--setting-sources",
+        "--strict-mcp-config",
+        "--mcp-config",
+        "--plugin-dir",
+        "--plugin-url",
+        "--settings",
+        "--add-dir",
+        "--disable-slash-commands",
     };
 
     public HostLaunch Compose(ExecutionProfileRevision revision, IReadOnlyList<string> launch)
@@ -72,13 +85,31 @@ public sealed class ClaudeCodeHost : IAgentHost
                 "-p",
                 "--output-format",
                 "stream-json",
+
+                // A session that says what it is doing while it does it, which this version refuses to do in
+                // print mode unless it is also told to be verbose: without the second flag the first is an
+                // argument error and the session never starts.
                 "--include-partial-messages",
+                "--verbose",
+
+                // One rule, and it is the callback. A rule for the file-editing tools was tried against 2.1.275
+                // and granted neither writing nor editing, so it is not composed: an unproven rule on the
+                // command line reads afterwards as a permission the role had.
                 "--allowed-tools",
                 allow,
                 "--permission-mode",
                 "dontAsk",
                 "--session-id",
                 session,
+
+                // The settings of the person who installed the host are not this role's settings. Without these
+                // two the session inherits that person's whole configuration — their plugins, their hooks and
+                // their MCP servers — none of which the work directory's deny rules reach, and none of which
+                // anybody chose for this work item. With them the session keeps the built-in tools and the work
+                // directory's own skill, which is exactly what the runtime put there.
+                "--setting-sources",
+                "project",
+                "--strict-mcp-config",
 
                 // Last, and nothing after them: a profile adds to the shape above and never rewrites it.
                 .. revision.Args,

@@ -82,10 +82,21 @@ public partial class ShippedRoleSkillTests
         var skill = Whitespace().Replace(
             await File.ReadAllTextAsync(Path.Combine(RoleSkillsPack(), "researcher", WorkDirectory.SkillFile), Ct), " ");
 
-        // The callback, in the form the allow rule grants — and the two shapes it does not.
+        // The callback, in the form the allow rule grants.
         Assert.Contains("rolenote set", skill, StringComparison.Ordinal);
         Assert.Contains("workitem complete", skill, StringComparison.Ordinal);
-        Assert.Contains("redirect", skill, StringComparison.OrdinalIgnoreCase);
+
+        // What the rule was actually seen to decide: the plain callback ran. A chain, a pipe and a redirect were
+        // neither shown to run nor shown to be refused, so the skill promises neither — and says so, because a
+        // role told only "anything else is refused" would read a refusal as the runtime's rule and stop.
+        Assert.Contains("neither promised to run nor promised to be refused", skill, StringComparison.Ordinal);
+
+        // A launched role has no file-writing tool in this version, so a skill that tells it to write a file
+        // first sends it to a denial in the middle of a paid attempt. The note and the result go inline.
+        Assert.Contains("no file-writing tool", skill, StringComparison.Ordinal);
+        Assert.Contains("--note '", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("--note-file", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("--result-file", skill, StringComparison.Ordinal);
 
         // INV-MEM-001, in the skill the role actually reads rather than only in a document nobody hands it.
         Assert.Contains("not authoritative", skill, StringComparison.OrdinalIgnoreCase);
