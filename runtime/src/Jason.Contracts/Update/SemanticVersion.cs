@@ -149,11 +149,16 @@ public readonly record struct SemanticVersion(int Major, int Minor, int Patch, s
                 return 1;
             }
 
-            var mineIsNumber = Number(mine[index], out var a);
-            var theirsIsNumber = Number(theirs[index], out var b);
+            var mineIsNumber = IsNumber(mine[index]);
+            var theirsIsNumber = IsNumber(theirs[index]);
             var order = (mineIsNumber, theirsIsNumber) switch
             {
-                (true, true) => a.CompareTo(b),
+                // Digits with no leading zero, so the longer string is the larger number and two of the same
+                // length compare digit by digit. No parse, so no width at which this stops being true: a build
+                // stamp or a millisecond timestamp is an ordinary identifier rather than a special case.
+                (true, true) => mine[index].Length != theirs[index].Length
+                    ? mine[index].Length.CompareTo(theirs[index].Length)
+                    : string.CompareOrdinal(mine[index], theirs[index]),
 
                 // A numeric identifier is always older than one that is not, which is how SemVer keeps
                 // 1.0.0-1 before 1.0.0-alpha.
@@ -172,18 +177,29 @@ public readonly record struct SemanticVersion(int Major, int Minor, int Patch, s
     }
 
     /// <summary>
-    /// A numeric identifier: digits, no leading zero, and small enough to be a version number. The width limit
-    /// is what stops a feed from overflowing this on purpose.
+    /// A version number: digits, no leading zero, and small enough to be one. Major, minor and patch are
+    /// numbers this build does arithmetic and comparisons on, so the width limit is what stops a feed from
+    /// overflowing them on purpose. A pre-release identifier is a different thing and has its own rule below.
     /// </summary>
     private static bool Number(ReadOnlySpan<char> text, out int value)
     {
         value = 0;
-        if (text.Length is 0 or > 9)
+        if (text.Length is 0 or > 9 || !IsNumber(text))
         {
             return false;
         }
 
-        if (text.Length > 1 && text[0] == '0')
+        return int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out value);
+    }
+
+    /// <summary>
+    /// A numeric identifier: digits, and no leading zero. Any width, because nothing here converts one to a
+    /// number — two of these are compared by length and then by text, which is the same order and cannot
+    /// overflow, so a feed cannot make this fail by writing a long enough identifier.
+    /// </summary>
+    private static bool IsNumber(ReadOnlySpan<char> text)
+    {
+        if (text.Length == 0 || (text.Length > 1 && text[0] == '0'))
         {
             return false;
         }
@@ -196,10 +212,10 @@ public readonly record struct SemanticVersion(int Major, int Minor, int Patch, s
             }
         }
 
-        return int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out value);
+        return true;
     }
 
-    private static bool Number(string text, out int value) => Number(text.AsSpan(), out value);
+    private static bool IsNumber(string text) => IsNumber(text.AsSpan());
 
     /// <summary>
     /// Dot-separated identifiers of ASCII letters, digits and hyphens; none of them empty, and a numeric one
