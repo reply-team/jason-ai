@@ -29,6 +29,16 @@ public sealed class JsonObjectComparer() : ValueComparer<JsonObject>(
     node => node.ToJsonString(null).GetHashCode(StringComparison.Ordinal),
     node => node.DeepClone().AsObject());
 
+/// <summary>A list of small objects stored as one JSON column: a decision's options, its references.</summary>
+public sealed class JsonArrayConverter() : ValueConverter<JsonArray, string>(
+    node => node.ToJsonString(null),
+    text => JsonNode.Parse(text, null, default(JsonDocumentOptions))!.AsArray());
+
+public sealed class JsonArrayComparer() : ValueComparer<JsonArray>(
+    (left, right) => JsonNode.DeepEquals(left, right),
+    node => node.ToJsonString(null).GetHashCode(StringComparison.Ordinal),
+    node => node.DeepClone().AsArray());
+
 /// <summary>Journal values are any JSON at all — an object, an array, a scalar — so they map through JsonNode.</summary>
 public sealed class JsonNodeConverter() : ValueConverter<JsonNode, string>(
     node => node.ToJsonString(null),

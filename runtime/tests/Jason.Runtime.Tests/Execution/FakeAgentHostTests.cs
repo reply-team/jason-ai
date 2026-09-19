@@ -129,6 +129,31 @@ public class FakeAgentHostTests
         Assert.Contains("workitem.complete", run.StandardError, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Every behaviour has to survive an API it cannot reach — that is the whole contract of this host — and
+    /// each of the manager's says on the way through what it was trying to do. A review that escalates reaches
+    /// for two verbs rather than one, so a host that gave up at the first would leave a child that said
+    /// nothing about the half of its job that matters.
+    /// </summary>
+    [Theory]
+    [InlineData("--escalate", "decision.raise")]
+    [InlineData("--note-check", "believed=")]
+    [InlineData("--prose", "answering=prose")]
+    public async Task A_manager_says_what_it_tried_even_with_no_runtime_behind_it(string option, string said)
+    {
+        using var dir = new TempDataDir();
+        WriteDescriptor(dir.Paths, "tok-4f3a-canary");
+
+        var run = await RunAsync(Envelope(dir.Paths.DescriptorFile), "manager", option);
+
+        Assert.Contains("behaviour=manager", run.StandardError, StringComparison.Ordinal);
+        Assert.DoesNotContain("unknown behaviour", run.StandardError, StringComparison.Ordinal);
+        Assert.Contains(said, run.StandardError, StringComparison.Ordinal);
+
+        // And it goes all the way to the end rather than stopping at the first refusal.
+        Assert.Contains("workitem.complete", run.StandardError, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Script_runs_the_behaviour_named_in_its_file()
     {

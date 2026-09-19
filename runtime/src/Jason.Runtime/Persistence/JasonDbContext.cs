@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Runtime.Decisions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Persistence;
@@ -27,6 +28,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
     public DbSet<CampaignRoute> CampaignRoutes => Set<CampaignRoute>();
 
     public DbSet<Approval> Approvals => Set<Approval>();
+
+    public DbSet<Decision> Decisions => Set<Decision>();
 
     public DbSet<Report> Reports => Set<Report>();
 
@@ -76,10 +79,12 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         configurationBuilder.Properties<WorkItemStatus>().HaveConversion<SnakeCaseEnumConverter<WorkItemStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<AttemptStatus>().HaveConversion<SnakeCaseEnumConverter<AttemptStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<ApprovalStatus>().HaveConversion<SnakeCaseEnumConverter<ApprovalStatus>>().HaveMaxLength(32);
+        configurationBuilder.Properties<DecisionStatus>().HaveConversion<SnakeCaseEnumConverter<DecisionStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<RouteScope>().HaveConversion<SnakeCaseEnumConverter<RouteScope>>().HaveMaxLength(32);
         configurationBuilder.Properties<AgentHostKind>().HaveConversion<SnakeCaseEnumConverter<AgentHostKind>>().HaveMaxLength(32);
         configurationBuilder.Properties<LineageState>().HaveConversion<SnakeCaseEnumConverter<LineageState>>().HaveMaxLength(32);
         configurationBuilder.Properties<JsonObject>().HaveConversion<JsonObjectConverter, JsonObjectComparer>();
+        configurationBuilder.Properties<JsonArray>().HaveConversion<JsonArrayConverter, JsonArrayComparer>();
         configurationBuilder.Properties<JsonNode>().HaveConversion<JsonNodeConverter, JsonNodeComparer>();
         configurationBuilder.Properties<AttemptErrorDto>().HaveConversion<JsonTextConverter<AttemptErrorDto>, JsonTextComparer<AttemptErrorDto>>();
         configurationBuilder.Properties<AttemptLaunchDto>().HaveConversion<JsonTextConverter<AttemptLaunchDto>, JsonTextComparer<AttemptLaunchDto>>();
@@ -228,6 +233,37 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             approval.HasIndex(a => new { a.Status, a.RequestedAt });
             approval.HasIndex(a => a.CampaignId);
             approval.HasOne(a => a.WorkItem).WithMany().HasForeignKey(a => a.WorkItemId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Decision>(decision =>
+        {
+            decision.HasKey(d => d.Id);
+            decision.Property(d => d.PublicId).HasMaxLength(40);
+            decision.HasIndex(d => d.PublicId).IsUnique();
+            decision.Property(d => d.Question).HasMaxLength(DecisionLimits.MaxQuestionLength);
+            decision.Property(d => d.Answer).HasMaxLength(DecisionLimits.MaxAnswerLength);
+            decision.Property(d => d.ChosenOption).HasMaxLength(DecisionLimits.MaxOptionLabelLength);
+            decision.Property(d => d.AnsweredById).HasMaxLength(100);
+            decision.Property(d => d.AnswerJournalEntryId).HasMaxLength(40);
+            decision.Property(d => d.Options).HasColumnName("options_json");
+            decision.Property(d => d.References).HasColumnName("references_json");
+            decision.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_decisions_options_json", "options_json IS NULL OR json_valid(options_json)");
+                t.HasCheckConstraint("ck_decisions_references_json", "references_json IS NULL OR json_valid(references_json)");
+            });
+
+            // Two people answering the same question must not both win, and the status is what they both
+            // change — the guard an approval's status already carries, for the same reason.
+            decision.Property(d => d.Status).IsConcurrencyToken();
+
+            // How the summon names the decision that woke it: one lookup by the line the answer wrote.
+            decision.HasIndex(d => d.AnswerJournalEntryId);
+            decision.HasIndex(d => new { d.Status, d.RaisedAt });
+            decision.HasIndex(d => d.CampaignId);
+            decision.HasOne(d => d.Campaign).WithMany().HasForeignKey(d => d.CampaignId).OnDelete(DeleteBehavior.Restrict);
+            decision.HasOne(d => d.WorkItem).WithMany().HasForeignKey(d => d.WorkItemId).OnDelete(DeleteBehavior.Restrict);
+            decision.HasOne(d => d.Attempt).WithMany().HasForeignKey(d => d.AttemptId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<ExecutionProfile>(profile =>

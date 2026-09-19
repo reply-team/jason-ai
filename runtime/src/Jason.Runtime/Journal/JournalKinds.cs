@@ -97,6 +97,18 @@ public static partial class JournalKinds
     /// holds what they said.</summary>
     public const string ExternalEffectReported = "external_effect_reported";
 
+    /// <summary>A role asked a question it could not answer, and ended its attempt carrying the reference.</summary>
+    public const string DecisionRaised = "decision_raised";
+
+    /// <summary>
+    /// A person answered one. This is a trigger kind: the answer is what releases the review that continues
+    /// the work, which is why nothing but a person's own verb may write it.
+    /// </summary>
+    public const string DecisionAnswered = "decision_answered";
+
+    /// <summary>The campaign the question was about is archived, so there is nothing left to decide.</summary>
+    public const string DecisionCancelled = "decision_cancelled";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -141,6 +153,9 @@ public static partial class JournalKinds
         ExternalIdPinned,
         ExternalIdDiverged,
         ExternalEffectReported,
+        DecisionRaised,
+        DecisionAnswered,
+        DecisionCancelled,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);

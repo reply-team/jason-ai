@@ -59,12 +59,17 @@ public class ManagerOptionsTests
     }
 
     [Fact]
-    public void The_defaults_are_the_three_kinds_this_version_reacts_to()
+    public void The_defaults_are_the_four_kinds_this_version_reacts_to()
     {
         var options = new ManagerOptions();
 
         Assert.Equal(
-            [JournalKinds.WorkItemFailed, JournalKinds.ApprovalRejected, JournalKinds.ExternalEffectReported],
+            [
+                JournalKinds.WorkItemFailed,
+                JournalKinds.ApprovalRejected,
+                JournalKinds.ExternalEffectReported,
+                JournalKinds.DecisionAnswered,
+            ],
             options.Triggers);
         Assert.Equal(18_000, options.ReviewSeconds);
         Assert.Equal(900, options.TimeoutSeconds);
@@ -72,9 +77,29 @@ public class ManagerOptionsTests
         Assert.Equal(0, options.Priority);
         Assert.Equal(500, options.MaxEntriesPerScan);
 
-        // The default list is three kinds and not four: the fourth, a decision being answered, is not a kind
-        // this version writes, and the validator above is what makes that a fact rather than an intention.
-        Assert.DoesNotContain("decision_answered", options.Triggers);
+        // And every one of them is still a kind the runtime writes itself, which is what the validator is for.
+        Assert.All(options.Triggers, kind => Assert.Contains(kind, JournalKinds.Reserved));
+    }
+
+    /// <summary>
+    /// The one kind whose absence breaks something rather than narrowing the loop. A question a person has
+    /// answered releases the review that continues the work, and the role that asked has already ended — so an
+    /// installation that narrows this list and drops this kind has questions answered into silence.
+    /// </summary>
+    [Fact]
+    public void A_narrowed_list_that_drops_an_answered_decision_is_a_loop_that_never_continues()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(dir.Paths.UserSettingsFile, """{"Manager":{"Triggers":["workitem_failed"]}}""");
+
+        var options = new ManagerOptions();
+        ManagerOptions.Fill(JasonConfiguration.Build(dir.Paths, shippedSettingsDirectory: null).GetSection(ManagerOptions.Section), options);
+
+        // Nothing refuses it — it is a legitimate configuration — so this is the test that records the cost,
+        // and the contract page is where somebody is told before they type it.
+        Assert.Equal([JournalKinds.WorkItemFailed], options.Triggers);
+        Assert.DoesNotContain(JournalKinds.DecisionAnswered, options.Triggers);
     }
 
     [Theory]

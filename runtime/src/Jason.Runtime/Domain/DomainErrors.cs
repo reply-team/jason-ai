@@ -128,6 +128,42 @@ public static class DomainErrors
             "approval_not_human",
             $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot approve or reject; a decision is a person's to make.");
 
+    /// <summary>The question is gone, or was never there. Nothing deletes a decision, so this is a wrong id.</summary>
+    public static NotFoundException DecisionNotFound(string id) =>
+        new("decision_not_found", $"Decision '{id}' does not exist.");
+
+    /// <summary>
+    /// It has been answered already, or the campaign it was about is archived. Either way there is nothing
+    /// here to decide, and the row says which of the two happened.
+    /// </summary>
+    public static ConflictException DecisionNotPending(string id, DecisionStatus status) =>
+        new(
+            "decision_not_pending",
+            $"Decision '{id}' is {SnakeCaseEnumConverter<DecisionStatus>.Format(status)}; only a pending question can be answered.");
+
+    /// <summary>
+    /// A role or an attempt tried to answer. The point of escalation is that the answer comes from outside the
+    /// run that asked; a role answering its own question is the run deciding after all.
+    /// </summary>
+    public static InvalidRequestException DecisionNotHuman(ActorType type) =>
+        new(
+            "decision_not_human",
+            $"An actor of type '{SnakeCaseEnumConverter<ActorType>.Format(type)}' cannot answer a decision; a question raised for a person is a person's to answer.");
+
+    /// <summary>
+    /// The chosen answer is not one of the ones offered. What is recorded is the label, so a label nobody
+    /// offered would be an answer that reads like a quotation and is not one.
+    /// </summary>
+    public static InvalidRequestException DecisionOptionUnknown(string option) =>
+        new("decision_option_unknown", $"'{option}' is not one of the options this decision named.");
+
+    /// <summary>
+    /// A causal reference has to point at something in this campaign. References are identifiers rather than
+    /// copies precisely so they can be read later — one that resolves to nothing never could be.
+    /// </summary>
+    public static InvalidRequestException DecisionReferenceUnresolved(string kind, string id) =>
+        new("decision_reference_unresolved", $"The {kind} reference '{id}' is not one of this campaign's own rows.");
+
     /// <summary>
     /// An absent actor is an anonymous human, which is right for creating work and wrong for deciding it: an
     /// accountable decision names the person who made it.

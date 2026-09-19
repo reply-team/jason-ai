@@ -86,6 +86,32 @@ public class ContractsShapeTests
         Assert.Equal("/v1/workitem.set_result", Operations.Route(Operations.WorkItemSetResult));
     }
 
+    /// <summary>
+    /// The escalation verbs, named once. The vocabulary is one thing at three levels — the canonical name, the
+    /// route and the command — so a rename that reached only two of them would be a skill printing a command
+    /// nobody can type.
+    /// </summary>
+    [Fact]
+    public void The_decision_operations_are_named_once()
+    {
+        Assert.Equal("decision.raise", Operations.DecisionRaise);
+        Assert.Equal("decision.answer", Operations.DecisionAnswer);
+        Assert.Equal("decision.get", Operations.DecisionGet);
+        Assert.Equal("decision.list", Operations.DecisionList);
+        Assert.Equal("/v1/decision.answer", Operations.Route(Operations.DecisionAnswer));
+    }
+
+    /// <summary>A decision's own enums travel as snake_case strings like every other enum on the wire.</summary>
+    [Fact]
+    public void The_decision_enums_are_snake_case_strings_in_both_directions()
+    {
+        Assert.Equal("\"pending\"", JsonSerializer.Serialize(DecisionStatus.Pending, JasonJson.Options));
+        Assert.Equal("\"cancelled\"", JsonSerializer.Serialize(DecisionStatus.Cancelled, JasonJson.Options));
+        Assert.Equal("\"work_item\"", JsonSerializer.Serialize(DecisionReferenceKind.WorkItem, JasonJson.Options));
+        Assert.Equal("\"journal_entry\"", JsonSerializer.Serialize(DecisionReferenceKind.JournalEntry, JasonJson.Options));
+        Assert.Equal(DecisionReferenceKind.Attempt, JsonSerializer.Deserialize<DecisionReferenceKind>("\"attempt\"", JasonJson.Options));
+    }
+
     [Fact]
     public void The_work_enums_are_snake_case_strings_in_both_directions()
     {

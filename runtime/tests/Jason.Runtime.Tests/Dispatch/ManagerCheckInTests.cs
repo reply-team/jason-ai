@@ -39,7 +39,7 @@ public class ManagerCheckInTests
             Service(db),
             db,
             campaign,
-            new ManagerCause(JournalKinds.WorkItemFailed, "jrn_1", failed.WorkItem!.PublicId, failed.PublicId, 1),
+            new ManagerCause(JournalKinds.WorkItemFailed, "jrn_1", failed.WorkItem!.PublicId, failed.PublicId, DecisionId: null, 1),
             new ManagerOptions(),
             Ct);
 
@@ -87,7 +87,7 @@ public class ManagerCheckInTests
             Service(db),
             db,
             campaign,
-            new ManagerCause(JournalKinds.ApprovalRejected, "jrn_2", "wi_parked", null, 1),
+            new ManagerCause(JournalKinds.ApprovalRejected, "jrn_2", "wi_parked", null, DecisionId: null, 1),
             new ManagerOptions(),
             Ct);
 
@@ -125,7 +125,7 @@ public class ManagerCheckInTests
             Service(db),
             db,
             campaign,
-            new ManagerCause(JournalKinds.WorkItemFailed, "jrn_7", failed.WorkItem!.PublicId, failed.PublicId, 4),
+            new ManagerCause(JournalKinds.WorkItemFailed, "jrn_7", failed.WorkItem!.PublicId, failed.PublicId, DecisionId: null, 4),
             new ManagerOptions(),
             Ct);
 
@@ -136,14 +136,107 @@ public class ManagerCheckInTests
         Assert.Equal(failed.PublicId, (string?)cause["attempt_id"]);
         Assert.Equal(4, (int?)cause["qualifying_count"]);
 
-        // Four keys and no fifth: whatever else a review needs, it reads for itself through the CLI.
-        Assert.Equal(["review_intent", "allowed_operations", "trigger", "cause"], triggered.Context.Select(pair => pair.Key));
+        // Five keys and no sixth: whatever else a review needs, it reads for itself through the CLI.
+        Assert.Equal(
+            ["review_intent", "allowed_operations", "escalation", "trigger", "cause"],
+            triggered.Context.Select(pair => pair.Key));
 
         // The operations are guidance, in the brief where the role reads it — not a permission, which is why
         // nothing else in this wave consults the list.
         var allowed = Assert.IsType<JsonArray>(triggered.Context["allowed_operations"]);
         Assert.Contains("workitem.create", allowed.Select(node => (string?)node));
         Assert.DoesNotContain("campaign.enroll", allowed.Select(node => (string?)node));
+    }
+
+    /// <summary>
+    /// The verb a review escalates with, in a key of its own beside a list that also holds it. A role should
+    /// not have to pick the one verb that changes what happens next out of a list of eight; and a scheduled
+    /// review may find something worth asking about just as a triggered one may, so it is on both briefs.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Every_brief_names_the_verb_a_review_escalates_with(bool triggered)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = Seed(db);
+        var failed = FailedRoleAttempt(db, campaign, "local-claude", revision: 3);
+        await db.SaveChangesAsync(Ct);
+
+        var cause = triggered
+            ? new ManagerCause(JournalKinds.WorkItemFailed, "jrn_9", failed.WorkItem!.PublicId, failed.PublicId, DecisionId: null, 1)
+            : (ManagerCause?)null;
+        var item = await ManagerCheckIn.CreateAsync(Service(db), db, campaign, cause, new ManagerOptions(), Ct);
+
+        Assert.Equal(Operations.DecisionRaise, (string?)item.Context!["escalation"]);
+
+        // And a review may read the questions it has already asked, but never answer one: that is a person's.
+        var allowed = Assert.IsType<JsonArray>(item.Context["allowed_operations"]).Select(node => (string?)node).ToList();
+        Assert.Contains(Operations.DecisionRaise, allowed);
+        Assert.Contains(Operations.DecisionList, allowed);
+        Assert.DoesNotContain(Operations.DecisionAnswer, allowed);
+    }
+
+    /// <summary>
+    /// Where the answer to a question is what woke a review, the brief names the question. Where something
+    /// else woke it, the key is there and null — the brief writes every key it knows about and leaves the ones
+    /// it cannot fill empty, exactly as it already does for a work item and an attempt, so a role reading it
+    /// meets the same shape either way. One read is one review, so a question answered behind a failure is one
+    /// the manager finds by reading rather than one the dispatcher hands it.
+    /// </summary>
+    [Fact]
+    public async Task A_triggered_brief_names_the_decision_only_when_the_answer_is_the_cause()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = Seed(db);
+        var failed = FailedRoleAttempt(db, campaign, "local-claude", revision: 3);
+        await db.SaveChangesAsync(Ct);
+
+        var answered = await ManagerCheckIn.CreateAsync(
+            Service(db),
+            db,
+            campaign,
+            new ManagerCause(JournalKinds.DecisionAnswered, "jrn_10", failed.WorkItem!.PublicId, failed.PublicId, "dec_one", 1),
+            new ManagerOptions(),
+            Ct);
+
+        Assert.Equal("dec_one", (string?)answered.Context!["cause"]!["decision_id"]);
+
+        await FinishAsync(db, answered);
+        var elsewhere = await ManagerCheckIn.CreateAsync(
+            Service(db),
+            db,
+            campaign,
+            new ManagerCause(JournalKinds.WorkItemFailed, "jrn_11", failed.WorkItem.PublicId, failed.PublicId, DecisionId: null, 1),
+            new ManagerOptions(),
+            Ct);
+
+        var cause = Assert.IsType<JsonObject>(elsewhere.Context!["cause"]);
+        Assert.True(cause.ContainsKey("decision_id"), "the brief leaves the key there and null, as it does for the others");
+        Assert.Null(cause["decision_id"]);
+    }
+
+    /// <summary>
+    /// What a review may say it asked. The ids go in the answer because a person reading the review wants to
+    /// know what is now waiting on them — and nothing cross-checks that these are questions this attempt
+    /// really raised, because that would be validation reading what a result means.
+    /// </summary>
+    [Fact]
+    public void An_answer_may_name_the_questions_the_review_raised()
+    {
+        var shape = Assert.IsType<JsonObject>(ManagerCheckIn.ResultFormat);
+
+        var ok = SchemaValidator.Validate(
+            JsonNode.Parse("""{"outcome":"escalated","summary":"asked about the fourth touch","decisions_raised":["dec_one"]}"""),
+            shape);
+        var wrong = SchemaValidator.Validate(
+            JsonNode.Parse("""{"outcome":"escalated","summary":"asked","decisions_raised":[7]}"""),
+            shape);
+
+        Assert.Empty(ok);
+        Assert.NotEmpty(wrong);
     }
 
     [Fact]
@@ -241,6 +334,14 @@ public class ManagerCheckInTests
         // The manager is one of the nine roles the schema seeds, so nothing here has to invent it — which is
         // itself part of what this wave leans on.
         return campaign;
+    }
+
+    /// <summary>Ends a check-in, so the campaign may have another: one is open at a time by database rule.</summary>
+    private static async Task FinishAsync(JasonDbContext db, WorkItem item)
+    {
+        item.Status = WorkItemStatus.Succeeded;
+        item.FinishedAt = Noon;
+        await db.SaveChangesAsync(Ct);
     }
 
     private static Attempt FailedRoleAttempt(JasonDbContext db, Campaign campaign, string? profile, int? revision)

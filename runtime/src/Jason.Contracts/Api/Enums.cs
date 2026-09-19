@@ -31,6 +31,31 @@ public enum ActorType
 }
 
 /// <summary>
+/// Where a question a person has to answer has got to. A cancelled one was about a campaign that can never
+/// run again; nothing else retires a question, because it is meant to outlive the attempt that asked.
+/// </summary>
+public enum DecisionStatus
+{
+    Pending,
+    Answered,
+    Cancelled,
+}
+
+/// <summary>
+/// What a decision's causal reference points at. A closed vocabulary of the entities that have a public
+/// identifier and a campaign: a role note is deliberately not one of them, because a note is addressed by
+/// campaign and role rather than by an id, and both are already in hand wherever a decision is read.
+/// </summary>
+public enum DecisionReferenceKind
+{
+    WorkItem,
+    Attempt,
+    JournalEntry,
+    Report,
+    Approval,
+}
+
+/// <summary>
 /// Which launchable agent host an execution profile describes. A closed vocabulary on purpose: an unknown host
 /// is refused when a profile is written, rather than discovered when an attempt is already running.
 /// </summary>

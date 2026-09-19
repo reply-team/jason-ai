@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Jason.Cli;
 using Jason.Cli.Commands;
+using Jason.Cli.Tests.Commands;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
@@ -59,6 +60,88 @@ public class RuntimeStatusCommandTests
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains("· 7 summoned", output.ToString(), StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// And zero is the number somebody actually checks for. "The loop is running and has summoned nothing"
+    /// is a state worth seeing; a field that disappears at zero answers that question by saying nothing at
+    /// all, which reads as a runtime too old to have the counter.
+    /// </summary>
+    [Fact]
+    public async Task Human_status_shows_a_summons_count_of_none()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var dispatcher = new DispatcherInfo(DispatcherState.Running, 10, 4, 1, new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.Zero), 41, 0);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE", dispatcher))));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("· 0 summoned", output.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The descriptor publisher some of these tests launch runs on a thread of its own, and an exception
+    /// escaping a bare thread does not fail a test — it terminates the test host, taking every unrelated test
+    /// in the process with it and naming none of them. This is the way it really fails: the CLI it serves
+    /// polls the same file, and a reader holds it in a way that denies a writer while it reads, so a publish
+    /// landing mid-poll is refused.
+    /// </summary>
+    [Fact]
+    public void A_descriptor_refused_for_the_whole_window_is_survived_rather_than_thrown()
+    {
+        using var dir = new TempPaths();
+        Blocked(dir);
+
+        RuntimeVerbs.Publish(dir, Descriptor);
+
+        // It gave up rather than throwing, which is what keeps three hundred unrelated tests alive, and wrote
+        // nothing; the test that was waiting for a descriptor is left to fail in its own words.
+        Assert.False(File.Exists(dir.Paths.DescriptorFile));
+    }
+
+    /// <summary>
+    /// And a refusal that ends inside the window is waited out rather than given up on. The publisher exists
+    /// to answer a CLI that is polling the same file, so being refused once is the ordinary case and not the
+    /// failure — what would be a failure is a descriptor that never arrives because the first try lost a race.
+    /// </summary>
+    [Fact]
+    public async Task A_descriptor_refused_and_then_released_lands_inside_the_retry_window()
+    {
+        using var dir = new TempPaths();
+        Blocked(dir);
+
+        var ct = TestContext.Current.CancellationToken;
+        var freed = Task.Run(
+            async () =>
+            {
+                await Task.Delay(200, ct);
+                Directory.Delete(dir.Paths.DescriptorFile);
+            },
+            ct);
+
+        RuntimeVerbs.Publish(dir, Descriptor);
+        await freed;
+
+        // The publish that landed was made after the way was clear, which only a retry can have made: a single
+        // attempt would have been refused and given up while the path was still taken.
+        Assert.Equal("rt_LIVE", Instance(dir));
+    }
+
+    /// <summary>
+    /// The descriptor's path, taken by something that is not a file, which is a refusal every operating system
+    /// agrees on. The race that really happened is a reader holding the file against a writer — but that is a
+    /// rule only Windows enforces, so staging it that way tested the publisher on one platform and the
+    /// filesystem on the others.
+    /// </summary>
+    private static void Blocked(TempPaths dir)
+    {
+        Directory.CreateDirectory(dir.Paths.RunDirectory);
+        Directory.CreateDirectory(dir.Paths.DescriptorFile);
+    }
+
+    private static string? Instance(TempPaths dir) =>
+        JsonSerializer.Deserialize<RuntimeDescriptor>(File.ReadAllText(dir.Paths.DescriptorFile), JasonJson.Options)?.InstanceId;
 
     [Fact]
     public async Task No_descriptor_exits_3_with_no_descriptor_error()

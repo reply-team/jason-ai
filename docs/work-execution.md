@@ -178,6 +178,11 @@ with a name; a role or an attempt is refused with `approval_not_human`, and an a
 command line — that is the operator's trust to give. What it guarantees is that nothing inside it can
 approve anything, and that every decision names who made it.
 
+An approval is about one operation on one work item, and it is not the only thing a person is asked. A
+role that cannot decide *what to do next* raises a question instead — a decision, which outlives the
+attempt that asked it and whose answer wakes the review that carries the work on.
+[docs/campaign-manager.md](campaign-manager.md) §6 is the contract for that.
+
 - **approve** releases the item to the next scan with its due date, priority and place untouched.
 - **reject** ends the item as `failed`, with `approval_rejected` and the person's reason as its last
   error, and no attempt invented to carry it.
@@ -563,7 +568,7 @@ Work the runtime creates itself is no longer on this list. The dispatcher create
 and it names its cause explicitly: lineage comes from the attempt the causing line names, or from the
 item where it names one and no attempt. Root work is what is left — a review the cadence asked for, and
 a review caused by a line that names neither, which a report about a campaign rather than about a work
-item is. [docs/campaign-manager.md](campaign-manager.md) §6 has the three cases.
+item is. [docs/campaign-manager.md](campaign-manager.md) §7 has the three cases.
 
 - **Approvals beyond one decision about one item.** There are no standing approvals, no bulk
   decisions, no expiry windows and no anomaly rules; nothing notifies anybody, so a person finds out
@@ -571,9 +576,6 @@ item is. [docs/campaign-manager.md](campaign-manager.md) §6 has the three cases
 - **Session resume.** A host that is interrupted is retried from the start, not nudged to continue.
   The session id is minted per attempt and recorded, which is what a nudge would need, but nothing
   uses it yet.
-- **Human escalation.** A role cannot yet raise a question for a person and have the answer release the
-  next step. Approvals park a specific operation on a specific item; a question about what to do next
-  has nowhere to live.
 - **Anything above one hop.** Lineage is materialized once, from the run that created the item. There
   is no resolver walking a graph, and no branch selection.
 - **Backoff.** The retry delay is linear in the failure count; the tick and the one-item-per-campaign

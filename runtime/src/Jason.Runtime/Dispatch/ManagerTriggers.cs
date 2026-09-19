@@ -25,8 +25,13 @@ public readonly record struct ChronicleLine(
 /// many lines qualified in the same read. Identifiers and a number only. What happened is in the chronicle, and
 /// the manager reads the chronicle; nothing of it is copied here, where the dispatcher would have had to read it.
 /// </summary>
+/// <remarks>
+/// <see cref="DecisionId"/> is filled by the caller and never by the rule below, because it is not on the line:
+/// a decision remembers the chronicle line its answer wrote, so the summon resolves it with one lookup by an
+/// identifier it already holds rather than by reading what any line says.
+/// </remarks>
 public readonly record struct ManagerCause(
-    string Kind, string JournalEntryId, string? WorkItemId, string? AttemptId, int QualifyingCount);
+    string Kind, string JournalEntryId, string? WorkItemId, string? AttemptId, string? DecisionId, int QualifyingCount);
 
 /// <summary>What one read of a campaign's chronicle decided: a cause, or none, and where the watermark stands now.</summary>
 public readonly record struct TriggerRead(ManagerCause? Cause, int Watermark);
@@ -86,6 +91,6 @@ public static class ManagerTriggers
 
         return first is not { } cause
             ? new TriggerRead(null, advanced)
-            : new TriggerRead(new ManagerCause(cause.Kind, cause.PublicId, cause.WorkItemId, cause.AttemptId, qualifying), advanced);
+            : new TriggerRead(new ManagerCause(cause.Kind, cause.PublicId, cause.WorkItemId, cause.AttemptId, DecisionId: null, qualifying), advanced);
     }
 }

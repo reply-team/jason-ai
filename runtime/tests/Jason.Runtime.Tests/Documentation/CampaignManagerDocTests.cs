@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Decisions;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Journal;
 
@@ -20,10 +21,11 @@ public partial class CampaignManagerDocTests
         // One word for the work the runtime creates, defined where somebody meets it first.
         Assert.Contains("A check-in is the work item the runtime creates to have a campaign reviewed", page, StringComparison.Ordinal);
 
-        // The three kinds this version reacts to, named on the page and not only in the code.
+        // The kinds this version reacts to, named on the page and not only in the code.
         Assert.Contains(JournalKinds.WorkItemFailed, page, StringComparison.Ordinal);
         Assert.Contains(JournalKinds.ApprovalRejected, page, StringComparison.Ordinal);
         Assert.Contains(JournalKinds.ExternalEffectReported, page, StringComparison.Ordinal);
+        Assert.Contains(JournalKinds.DecisionAnswered, page, StringComparison.Ordinal);
 
         // The boundary the whole design rests on.
         Assert.Contains("The dispatcher reads no meaning", page, StringComparison.Ordinal);
@@ -49,7 +51,7 @@ public partial class CampaignManagerDocTests
         Assert.Contains($"`Manager:Priority` | `{defaults.Priority}` | -1000..1000", page, StringComparison.Ordinal);
         Assert.Contains($"`Manager:MaxEntriesPerScan` | `{defaults.MaxEntriesPerScan}` | 50..10000", page, StringComparison.Ordinal);
 
-        // And the three kinds the page publishes are the three the defaults hold, in the order it prints them.
+        // And every kind the defaults hold is one the page publishes.
         foreach (var kind in ManagerOptions.Default)
         {
             Assert.Contains(kind, page, StringComparison.Ordinal);
@@ -64,26 +66,98 @@ public partial class CampaignManagerDocTests
     public void The_page_prints_the_shape_a_review_answers_in()
     {
         var page = Flattened(Read());
-        var shape = Flattened(ManagerCheckIn.ResultFormat.ToJsonString());
 
-        foreach (var field in new[] { "outcome", "summary", "created_work_items", "cancelled_work_items" })
+        // Read out of the shape itself rather than listed here, so a field added to what a review may answer
+        // is a field the page has to print. A list written twice is a list that drifts.
+        var fields = ManagerCheckIn.ResultFormat.AsObject()["properties"]!.AsObject().Select(property => property.Key).ToList();
+
+        Assert.NotEmpty(fields);
+        foreach (var field in fields)
         {
             Assert.Contains(field, page, StringComparison.Ordinal);
-            Assert.Contains(field, shape, StringComparison.Ordinal);
         }
 
         Assert.Contains("acted | escalated | nothing", page, StringComparison.Ordinal);
     }
 
-    /// <summary>What this version cannot do, said on the page rather than discovered in a launch.</summary>
+    /// <summary>
+    /// What a question and its answer may be, printed from the same constants the service refuses by. A bound
+    /// that moved in code and not on the page would be a refusal nobody was warned about.
+    /// </summary>
+    [Fact]
+    public void The_bounds_the_page_publishes_are_the_ones_a_question_is_held_to()
+    {
+        var page = Flattened(Read());
+
+        Assert.Contains($"| {DecisionLimits.MaxQuestionLength} |", page, StringComparison.Ordinal);
+        Assert.Contains($"| {DecisionLimits.MaxAnswerLength} |", page, StringComparison.Ordinal);
+        Assert.Contains($"| {DecisionLimits.MaxOptions} |", page, StringComparison.Ordinal);
+        Assert.Contains($"| {DecisionLimits.MaxOptionLabelLength} |", page, StringComparison.Ordinal);
+        Assert.Contains($"| {DecisionLimits.MaxOptionDetailLength} |", page, StringComparison.Ordinal);
+        Assert.Contains($"| {DecisionLimits.MaxReferences} |", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Every code escalation can answer with, one sentence each, the way the approvals section of the
+    /// work-execution contract carries its own. A code a caller meets and cannot look up is a dead end.
+    /// </summary>
+    [Fact]
+    public void The_page_names_every_code_a_question_can_be_refused_with()
+    {
+        var page = Flattened(Read());
+
+        foreach (var code in new[]
+        {
+            "decision_not_found",
+            "decision_not_pending",
+            "decision_not_human",
+            "decision_option_unknown",
+            "decision_reference_unresolved",
+        })
+        {
+            Assert.Contains($"`{code}`", page, StringComparison.Ordinal);
+        }
+
+        // And the fence, which is not escalation's own code but is the one a role meets most often.
+        Assert.Contains("`stale_attempt`", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The three claims about the loop that a reader would otherwise have to infer from code: why a person's
+    /// line is exempt and what that trust is worth, what a narrowed trigger list costs, and how the summon
+    /// names a decision without reading one.
+    /// </summary>
+    [Fact]
+    public void The_page_states_the_exemption_its_limit_and_what_a_narrowed_list_costs()
+    {
+        var page = Flattened(Read());
+
+        Assert.Contains("A line whose actor is a **person** is never passed over", page, StringComparison.Ordinal);
+        Assert.Contains("tell a person from a process holding that person's own command line", page, StringComparison.Ordinal);
+        Assert.Contains($"A narrowed list has to keep `{JournalKinds.DecisionAnswered}`", page, StringComparison.Ordinal);
+
+        // How the cause names a decision: an identifier lookup, never a line's meaning.
+        Assert.Contains("remembers the chronicle line its answer wrote", page, StringComparison.Ordinal);
+
+        // And that raising is a fenced call, so nobody wonders why a lease moved.
+        Assert.Contains("counts as a heartbeat", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What this version cannot do, said on the page rather than discovered in a launch — and no longer
+    /// claiming the two things that have since arrived. A "not here yet" list that outlives the work it
+    /// described is worse than none: a reader believes it.
+    /// </summary>
     [Fact]
     public void The_page_says_what_the_loop_does_not_do_yet()
     {
         var page = Flattened(Read());
 
-        Assert.Contains("Escalation", page, StringComparison.Ordinal);
-        Assert.Contains("nothing sets it in this version", page, StringComparison.Ordinal);
-        Assert.Contains("A manager skill", page, StringComparison.Ordinal);
+        Assert.Contains("Notifications", page, StringComparison.Ordinal);
+        Assert.Contains("Anomaly rules and reconciliation", page, StringComparison.Ordinal);
+
+        Assert.DoesNotContain("nothing sets it in this version", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("ships with escalation", page, StringComparison.Ordinal);
     }
 
     private static string Read() =>

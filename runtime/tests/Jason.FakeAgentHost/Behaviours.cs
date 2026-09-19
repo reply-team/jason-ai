@@ -264,6 +264,13 @@ internal static class Behaviours
     /// its own note, leave a line in the chronicle, and answer in the shape a check-in is held to. Whether it
     /// then acts is the test's choice — <c>manager --act</c> creates a work item, so that the difference between
     /// "looked and did something" and "looked and left it alone" is visible from outside.
+    /// <para>
+    /// Three more options, each for one thing a review can do that nothing else proves. <c>--escalate</c> asks
+    /// a question and ends, which is the case the whole escalation round trip rests on. <c>--note-check</c>
+    /// reads the note and the campaign and says which of the two it believed, because a note is what a role
+    /// remembered and the runtime is what is true. <c>--prose</c> answers with a sentence where an object was
+    /// asked for — the same role, taught the same way, refused only for the shape of its answer.
+    /// </para>
     /// </summary>
     /// <remarks>
     /// It reads the intent out of the brief rather than being told on argv, because a launched role is never
@@ -282,8 +289,42 @@ internal static class Behaviours
             $"intent={intent} trigger={trigger ?? "none"} recalled={(remembered?.Count ?? 0).ToString(CultureInfo.InvariantCulture)}")
             .ConfigureAwait(false);
 
-        var (campaignStatus, _) = await api.CallAsync(
+        var (campaignStatus, campaignBody) = await api.CallAsync(
             Operations.CampaignGet, new CampaignGetRequest(envelope.CampaignId)).ConfigureAwait(false);
+
+        // What the runtime says about this campaign, beside what the note claims about it. A note is what a
+        // role remembered and the runtime is what is true, so a manager that finds them disagreeing reports
+        // the state and says where the disagreement was.
+        if (options.Contains("--note-check"))
+        {
+            var state = Status(campaignBody);
+            var claimed = (string?)remembered?["campaign_status"];
+            await Diagnostics.WriteAsync($"believed={claimed ?? "nothing"} state={state ?? "unreadable"}").ConfigureAwait(false);
+        }
+
+        var raised = new JsonArray();
+        if (options.Contains("--escalate"))
+        {
+            var (status, body) = await api.CallAsync(
+                Operations.DecisionRaise,
+                new DecisionRaiseRequest(
+                    envelope.WorkItemId,
+                    envelope.AttemptId,
+                    "the brief says ask before a fourth touch — do we keep calling this account?",
+                    [new DecisionOption("keep going", null), new DecisionOption("stop", null)],
+                    Referenced(envelope),
+                    "the review could not decide this for itself"))
+                .ConfigureAwait(false);
+
+            if (status == 200 && JsonNode.Parse(body) is JsonObject asked && asked["id"] is { } id)
+            {
+                raised.Add(JsonValue.Create(id.GetValue<string>()));
+            }
+            else
+            {
+                await Diagnostics.WriteAsync($"{Operations.DecisionRaise} was refused: {status.ToString(CultureInfo.InvariantCulture)}").ConfigureAwait(false);
+            }
+        }
 
         var created = new JsonArray();
         if (options.Contains("--act"))
@@ -334,15 +375,77 @@ internal static class Behaviours
 
         await RememberAsync(envelope, api, remembered).ConfigureAwait(false);
 
-        var result = new JsonObject
+        var outcome = raised.Count > 0 ? "escalated" : created.Count > 0 ? "acted" : "nothing";
+        var summary = options.Contains("--note-check")
+            ? $"the note and the campaign disagreed; the campaign says {Status(campaignBody) ?? "nothing readable"}"
+            : $"woken {intent}; the campaign answered {campaignStatus.ToString(CultureInfo.InvariantCulture)}";
+
+        // A sentence where an object was asked for: the same role, taught the same way, refused only for the
+        // shape of its answer. The researcher has this sibling and a manager did not.
+        JsonNode result = options.Contains("--prose")
+            ? JsonValue.Create("I had a look at the campaign and formed a view about where it stands.")!
+            : new JsonObject
+            {
+                ["outcome"] = outcome,
+                ["summary"] = summary,
+                ["created_work_items"] = created,
+                ["decisions_raised"] = raised,
+            };
+
+        if (options.Contains("--prose"))
         {
-            ["outcome"] = created.Count > 0 ? "acted" : "nothing",
-            ["summary"] = $"woken {intent}; the campaign answered {campaignStatus.ToString(CultureInfo.InvariantCulture)}",
-            ["created_work_items"] = created,
-        };
+            await Diagnostics.WriteAsync("answering=prose").ConfigureAwait(false);
+        }
 
         var answer = await CompleteAsync(envelope, api, result).ConfigureAwait(false);
         return answer.Status == 200 ? Success : UnexpectedAnswer;
+    }
+
+    /// <summary>
+    /// The campaign's own status out of what <c>campaign.get</c> answered, or null where nothing readable came
+    /// back. Read rather than assumed: the point of the note-check behaviour is which of the two a manager
+    /// believed, so inventing either would prove nothing.
+    /// </summary>
+    private static string? Status(string body)
+    {
+        try
+        {
+            return (string?)JsonNode.Parse(body)?["status"];
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// What to read before answering, as identifiers. The work the question was woken by where a brief names
+    /// one, and otherwise the run's own — a question is always about something, and a role asking one with
+    /// nothing to read beside it is asking somebody to guess.
+    /// </summary>
+    /// <remarks>
+    /// Every reference here is a row this campaign really has, which is the point: one that resolves to
+    /// nothing is refused at the moment of asking, so a stand-in that made them up would be exercising the
+    /// refusal rather than the round trip.
+    /// </remarks>
+    private static List<DecisionReference> Referenced(LaunchEnvelope envelope)
+    {
+        var cause = envelope.Context["cause"] as JsonObject;
+        var item = (string?)cause?["work_item_id"] ?? envelope.WorkItemId;
+        var attempt = (string?)cause?["attempt_id"] ?? envelope.AttemptId;
+
+        var references = new List<DecisionReference>();
+        if (item is { Length: > 0 })
+        {
+            references.Add(new DecisionReference(DecisionReferenceKind.WorkItem, item));
+        }
+
+        if (attempt is { Length: > 0 })
+        {
+            references.Add(new DecisionReference(DecisionReferenceKind.Attempt, attempt));
+        }
+
+        return references;
     }
 
     /// <summary>
