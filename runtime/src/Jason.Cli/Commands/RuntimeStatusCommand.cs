@@ -137,10 +137,10 @@ public static class RuntimeStatusCommand
             : dispatcher.LastScanAt.Value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
 
         // The reviews this runtime has put on the queue since it started, beside the rest of the scan's
-        // counters: a loop that is running and has summoned nothing is the thing somebody would want to see.
-        var summons = dispatcher.Summons == 0
-            ? string.Empty
-            : string.Create(CultureInfo.InvariantCulture, $" · {dispatcher.Summons} summoned");
+        // counters — and printed at zero too, because a loop that is running and has summoned nothing is
+        // exactly the thing somebody runs this to see. A field that disappeared at zero would answer that
+        // question by saying nothing, which is what a runtime too old to have the counter looks like.
+        var summons = string.Create(CultureInfo.InvariantCulture, $" · {dispatcher.Summons} summoned");
 
         return string.Create(
             CultureInfo.InvariantCulture,

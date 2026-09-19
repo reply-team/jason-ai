@@ -60,6 +60,25 @@ public class RuntimeStatusCommandTests
         Assert.Contains("· 7 summoned", output.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// And zero is the number somebody actually checks for. "The loop is running and has summoned nothing"
+    /// is a state worth seeing; a field that disappears at zero answers that question by saying nothing at
+    /// all, which reads as a runtime too old to have the counter.
+    /// </summary>
+    [Fact]
+    public async Task Human_status_shows_a_summons_count_of_none()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var dispatcher = new DispatcherInfo(DispatcherState.Running, 10, 4, 1, new DateTimeOffset(2026, 9, 14, 10, 0, 0, TimeSpan.Zero), 41, 0);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE", dispatcher))));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("· 0 summoned", output.ToString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task No_descriptor_exits_3_with_no_descriptor_error()
     {
