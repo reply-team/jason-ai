@@ -624,7 +624,12 @@ internal static class Behaviours
         }
     }
 
-    private static string? Option(IReadOnlyList<string> options, string name)
+    /// <summary>
+    /// The value after <paramref name="name"/> in an option list, or null. Public because the watchdog reads
+    /// the same list: a host is configured by one set of arguments, whether the thing being configured is a
+    /// behaviour or the rule by which the host gives up on its runtime.
+    /// </summary>
+    public static string? Option(IReadOnlyList<string> options, string name)
     {
         for (var index = 0; index < options.Count - 1; index++)
         {

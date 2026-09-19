@@ -347,6 +347,68 @@ public class DispatcherWithFakeHostTests
         Assert.Empty(host.Registry.AttemptIds);
     }
 
+    /// <summary>
+    /// A child whose runtime is gone stops watching for it after two missed beats, which gives a successor about
+    /// two seconds to publish its descriptor. That is a policy, and a test that depends on outliving a slow
+    /// successor has to say so rather than hope: this one waits four beats with no runtime at all, and the child
+    /// is still there because it was told to be patient.
+    /// </summary>
+    /// <remarks>
+    /// The window is real and it has been paid for: the neighbouring test below failed on a loaded CI runner and
+    /// again in a reviewer's own full run, both times because the successor took longer than two seconds to come
+    /// up. The fix is the fake host's own patience, not a reordering of the test — the runtime and the child are
+    /// behaving correctly in both runs, and it is the stand-in's give-up rule that is too short for a machine
+    /// running four test assemblies at once.
+    /// </remarks>
+    [Fact]
+    public async Task A_child_waits_longer_than_two_beats_for_a_successor_when_it_is_told_to()
+    {
+        const string Settings = """
+            {"Dispatcher":{"TickSeconds":3600,"DrainSeconds":1,"RetryDelaySeconds":0,"AiRole":{"TimeoutSeconds":600,"HeartbeatSeconds":10,"MaxAttempts":2}}}
+            """;
+
+        await using var host = await FakeHostRuntime.StartAsync(Ct, Settings);
+        var campaign = await host.CampaignAsync(Ct);
+        await host.RoleAsync("fake-patient", Ct, "succeed", "--heartbeats", "60", "--patience", "12");
+        var created = await host.CreateAsync(new { campaign_id = campaign, kind = "ai_role", role = "fake-patient" }, Ct);
+
+        await host.ScanAsync(Ct);
+        var running = await host.WaitForStatusAsync(created.Id, WorkItemStatus.Processing, Ct);
+        var attemptId = running.CurrentAttemptId;
+
+        // The pid from the child's own start line, not from the attempt's launch record: that record is written
+        // when the run is over, and the whole question here is about a child that is still running.
+        var pid = await host.RunningPidAsync(created.Id, Ct);
+
+        await host.Fixture.Runtime.StopAsync();
+
+        // Four beats with no descriptor anywhere: twice what the watchdog tolerates by default, and the point of
+        // the option. Real time, because the watchdog is the one thing here that does not run on the test clock.
+        await Task.Delay(TimeSpan.FromSeconds(4), Ct);
+        Assert.True(
+            FakeHostRuntime.IsRunning(pid),
+            "the child gave up on its runtime before the successor arrived, so a patience it was given was not "
+            + "honoured. Its own diagnostics say why: "
+            + FakeHostRuntime.StderrOf(host.Paths, created.Id, running.Attempts![0]));
+
+        await using var successor = await RuntimeHost.StartAsync(
+            host.Paths,
+            TestRuntimeOptions.Quiet with { Clock = host.Clock },
+            Ct);
+        using var http = new HttpClient { BaseAddress = successor.BaseUrl };
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", successor.Token);
+
+        var recovered = await ReadAsync(http, created.Id, Ct);
+        Assert.Equal(attemptId, recovered.CurrentAttemptId);
+
+        // And it was worth waiting for: the work it was launched for is finished against the new runtime.
+        Assert.True(
+            await FakeHostRuntime.EventuallyAsync(
+                async () => (await ReadAsync(http, created.Id, Ct)).Status == WorkItemStatus.Succeeded,
+                Ct,
+                timeoutMilliseconds: 30_000));
+    }
+
     [Fact]
     public async Task A_child_that_outlives_its_runtime_finishes_its_work_against_the_next_one()
     {
@@ -358,7 +420,9 @@ public class DispatcherWithFakeHostTests
         var campaign = await host.CampaignAsync(Ct);
 
         // Long enough at the work that the runtime it was launched by is gone before it reports.
-        await host.RoleAsync("fake-slow", Ct, "succeed", "--heartbeats", "60");
+        // Patience, for the reason the test above proves: the successor below is started by this test
+        // process, and on a loaded machine that takes longer than the two beats a host waits by default.
+        await host.RoleAsync("fake-slow", Ct, "succeed", "--heartbeats", "60", "--patience", "12");
         var created = await host.CreateAsync(new { campaign_id = campaign, kind = "ai_role", role = "fake-slow" }, Ct);
 
         await host.ScanAsync(Ct);
