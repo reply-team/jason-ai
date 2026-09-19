@@ -27,4 +27,11 @@ public static class DecisionLimits
 
     /// <summary>A public id is at most this long anywhere in this runtime, so a reference that is longer is not one.</summary>
     public const int MaxReferenceIdLength = 40;
+
+    /// <summary>
+    /// Why a question was asked or an answer given, as every other mutating call in this runtime bounds it.
+    /// It lives here rather than on the service for the reason the rest do: the page prints these numbers and a
+    /// bound nobody can print is a bound that drifts.
+    /// </summary>
+    public const int MaxReasonLength = 2000;
 }

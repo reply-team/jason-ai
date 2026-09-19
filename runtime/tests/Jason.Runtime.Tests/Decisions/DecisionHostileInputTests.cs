@@ -141,7 +141,7 @@ public class DecisionHostileInputTests
                 "which?",
                 null,
                 null,
-                new string('r', DecisionService.MaxReasonLength + 1)),
+                new string('r', DecisionLimits.MaxReasonLength + 1)),
             Ct));
 
         Assert.Equal("reason", refused.Details![0].Field);

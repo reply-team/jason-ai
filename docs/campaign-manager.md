@@ -252,6 +252,7 @@ answer arrived, so a question retired with its work item would be one nobody cou
 | an option's label, in characters | 200 |
 | an option's detail, in characters | 1000 |
 | causal references | 50 |
+| the reason on either call, in characters | 2000 |
 
 The question and the answer are held to the 2000 characters every other free-text field in this runtime
 is, and a listing carries the question whole — "what am I being asked?" is the only reason to open one.
