@@ -69,6 +69,7 @@ public static class CliApp
         root.Subcommands.Add(RoleNoteCommands.Build(env, actor));
         root.Subcommands.Add(ProfileCommands.Build(env, actor));
         root.Subcommands.Add(ApprovalCommands.Build(env, actor));
+        root.Subcommands.Add(DecisionCommands.Build(env, actor));
         root.Subcommands.Add(ReportCommands.Build(env, actor));
         root.Subcommands.Add(JournalCommands.Build(env, actor));
         root.Subcommands.Add(SuppressionCommands.Build(env, actor));
