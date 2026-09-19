@@ -3,6 +3,7 @@ using Jason.Contracts.Discovery;
 using Jason.Runtime.Api;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
+using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
@@ -23,6 +24,7 @@ public static class SystemModule
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddSingleton<ShutdownCoordinator>();
+        services.AddSingleton<DrainCoordinator>();
         return services;
     }
 
@@ -70,5 +72,15 @@ public static class SystemModule
         app.MapOperation<ShutdownCoordinator, ShutdownRequest, ShutdownResponse>(
             Operations.SystemShutdown,
             (coordinator, _, _) => Task.FromResult(coordinator.RequestShutdown()));
+
+        // Stop claiming, and claim again. Both are answers rather than errors when there is nothing to do,
+        // because the caller that repeats one is an applier resuming an update it was interrupted in.
+        app.MapOperation<DrainCoordinator, DrainRequest, DrainResponse>(
+            Operations.SystemDrain,
+            (coordinator, _, _) => Task.FromResult(coordinator.Drain()));
+
+        app.MapOperation<DrainCoordinator, DrainRequest, DrainResponse>(
+            Operations.SystemResume,
+            (coordinator, _, _) => Task.FromResult(coordinator.Resume()));
     }
 }

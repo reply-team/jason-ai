@@ -8,6 +8,8 @@ public static class Operations
 {
     public const string SystemInfo = "system.info";
     public const string SystemShutdown = "system.shutdown";
+    public const string SystemDrain = "system.drain";
+    public const string SystemResume = "system.resume";
 
     public const string CampaignCreate = "campaign.create";
     public const string CampaignGet = "campaign.get";

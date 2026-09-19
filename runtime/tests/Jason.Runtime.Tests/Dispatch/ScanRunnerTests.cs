@@ -56,17 +56,47 @@ public class ScanRunnerTests
         Assert.True(await harness.Pool.DrainAsync(TimeSpan.FromSeconds(5)));
     }
 
-    [Fact]
-    public async Task A_dispatcher_that_is_not_running_reads_nothing_and_counts_nothing()
+    /// <summary>
+    /// A dispatcher with no loop — stopped, or disabled by its settings — reads nothing at all. There is no
+    /// runtime behind it to do the work a scan hands out.
+    /// </summary>
+    [Theory]
+    [InlineData(DispatcherState.Stopped)]
+    [InlineData(DispatcherState.Disabled)]
+    public async Task A_dispatcher_with_no_loop_reads_nothing_and_counts_nothing(DispatcherState state)
     {
         using var harness = new DispatchHarness(Noon);
-        harness.Status.State = DispatcherState.Draining;
+        harness.Status.State = state;
         var item = await harness.SeedClaimableAsync(Ct);
 
         Assert.Equal(new ScanReport(0, 0, 0, 0), await harness.Runner.ScanOnceAsync(Ct));
 
         Assert.Equal(0, harness.Status.Scans);
         Assert.Null(harness.Status.LastScanAt);
+        Assert.Equal(WorkItemStatus.Created, (await harness.ReadItemAsync(item.PublicId, Ct)).Status);
+    }
+
+    /// <summary>
+    /// A draining dispatcher is a different thing: it still has a loop and still has work in flight, so it reads
+    /// everything and claims nothing. The claim is the only step a drain stops.
+    /// </summary>
+    /// <remarks>
+    /// It used to stop all four, because <c>Draining</c> only ever meant "this process is stopping". A drain is
+    /// now reversible and belongs to an update, so a scan during one must still expire what has expired and end
+    /// what has lost its lease — otherwise the update waits its whole bound for an attempt that is already dead.
+    /// </remarks>
+    [Fact]
+    public async Task A_draining_dispatcher_reads_everything_and_claims_nothing()
+    {
+        using var harness = new DispatchHarness(Noon);
+        harness.Status.State = DispatcherState.Draining;
+        var item = await harness.SeedClaimableAsync(Ct);
+
+        var report = await harness.Runner.ScanOnceAsync(Ct);
+
+        Assert.Equal(0, report.Claimed);
+        Assert.Equal(1, harness.Status.Scans);
+        Assert.Equal(Noon, harness.Status.LastScanAt!.Value.UtcDateTime);
         Assert.Equal(WorkItemStatus.Created, (await harness.ReadItemAsync(item.PublicId, Ct)).Status);
     }
 
