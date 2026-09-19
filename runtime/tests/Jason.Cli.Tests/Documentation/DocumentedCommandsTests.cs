@@ -35,6 +35,14 @@ public class DocumentedCommandsTests
     public async Task Every_command_the_role_skill_prints_is_a_command_this_cli_parses() =>
         await AssertEveryCommandParsesAsync(Page("Skills", "runtime", "roles", "researcher", "SKILL.md"));
 
+    /// <summary>
+    /// The manager's skill prints more verbs than any other page here, and the manager reads it in the middle
+    /// of a review it was launched for — where a wrong spelling is a refused callback on a paid attempt.
+    /// </summary>
+    [Fact]
+    public async Task Every_command_the_manager_skill_prints_is_a_command_this_cli_parses() =>
+        await AssertEveryCommandParsesAsync(Page("Skills", "runtime", "roles", "manager", "SKILL.md"));
+
     [Fact]
     public void The_skill_says_what_it_is_and_does_not_oversell_it()
     {

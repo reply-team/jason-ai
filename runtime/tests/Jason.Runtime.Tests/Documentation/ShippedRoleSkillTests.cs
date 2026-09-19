@@ -124,6 +124,117 @@ public partial class ShippedRoleSkillTests
     }
 
     /// <summary>
+    /// What the manager cannot work out for itself in the middle of a review, and cannot be told twice: why it
+    /// was woken, what it reads and in which order, what it may decide alone, how it asks, where a directive
+    /// goes, and the one line it always leaves. Every assertion here is a sentence a real review would go wrong
+    /// without.
+    /// </summary>
+    [Fact]
+    public async Task The_managers_skill_teaches_the_review_the_boundary_and_the_line_it_always_leaves()
+    {
+        // Flattened, so a fragment may span a line break: what is guarded is what the skill says, not where
+        // its paragraphs happen to wrap.
+        var skill = Whitespace().Replace(
+            await File.ReadAllTextAsync(Path.Combine(RoleSkillsPack(), "manager", WorkDirectory.SkillFile), Ct), " ");
+
+        // 1. The brief says why the review exists and nothing else; a manager that reads the campaign before it
+        // reads the brief treats a triggered review as a scheduled one and misses the thing it was woken for.
+        Assert.Contains("why you were woken", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("`review_intent`", skill, StringComparison.Ordinal);
+        Assert.Contains("`cause`", skill, StringComparison.Ordinal);
+
+        // 2. INV-MEM-001, in the order that makes it bite: the runtime first, the note afterwards, and the
+        // runtime wins where they disagree. A manager is the role most tempted to believe its own last note.
+        Assert.Contains("Read runtime state before memory", skill, StringComparison.Ordinal);
+        Assert.Contains("not authoritative", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("runtime state wins", skill, StringComparison.OrdinalIgnoreCase);
+
+        // 3. The method, step by step, because a review that reads only what the cause points at is a review
+        // of one line. Failed work is where the campaign is quietly stopping; blocked and stale work is where
+        // it stalled; what waits on a person is not to be duplicated; the chronicle is what happened; the
+        // context is what everybody is bound by.
+        Assert.Contains("Failed items are your inbox", skill, StringComparison.Ordinal);
+        Assert.Contains("Stale and blocked work", skill, StringComparison.Ordinal);
+        Assert.Contains("Pending approvals and pending decisions", skill, StringComparison.Ordinal);
+        Assert.Contains("The chronicle since the last review", skill, StringComparison.Ordinal);
+        Assert.Contains("The campaign context is the shared knowledge", skill, StringComparison.Ordinal);
+
+        // 4. The boundary, named verb by verb, and the sentence that closes it. A manager told only what it
+        // may do would infer the rest; a manager told "everything else is escalated" does not have to.
+        Assert.Contains("reprioritize", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("create work", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("cancel work", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ask for a specialist", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("update campaign context", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("write the chronicle", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Everything else is escalated", skill, StringComparison.Ordinal);
+
+        // 5. How to ask: one question, with the reading already done and a recommendation on it. A person who
+        // opens ten questions from one review answers none of them, and one that carries no recommendation
+        // sends the person to do the review over.
+        Assert.Contains("one question", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("what is already known and what you recommend", skill, StringComparison.Ordinal);
+        Assert.Contains("decision raise", skill, StringComparison.Ordinal);
+
+        // 6. Where a directive goes. The context is authoritative, journalled and read by every role; the note
+        // is one role's private memory. A directive written into the note binds nobody and is read by nobody
+        // else, which is the failure the two concepts are kept apart to prevent.
+        Assert.Contains("campaign context", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("authoritative, journalled, visible to every role", skill, StringComparison.Ordinal);
+        Assert.Contains("private pacing heuristics", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("may stay in the note", skill, StringComparison.Ordinal);
+
+        // 7. The line every run leaves, under a kind of the role's own: the runtime refuses its reserved kinds
+        // from anybody but itself, so a manager that reached for one would fail its one unconditional duty.
+        // And an empty tact is that line, not silence — the next run and the person both need to know the
+        // campaign was looked at and why nothing changed.
+        Assert.Contains("its own kind", skill, StringComparison.Ordinal);
+        Assert.Contains("never one of the runtime's reserved kinds", skill, StringComparison.Ordinal);
+        Assert.Contains("empty tact", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("exactly that line", skill, StringComparison.Ordinal);
+        Assert.Contains("journal append", skill, StringComparison.Ordinal);
+
+        // 8. No outbound effect, and the way a decision still becomes one: through a work item that parks on
+        // approval like everybody else's. A manager that reached a provider itself would be an effect nobody
+        // approved, performed by the role whose job is to notice such things.
+        Assert.Contains("no outbound effect", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("parks on approval like anybody else's", skill, StringComparison.Ordinal);
+
+        // 9. The plain callback, with what the rule was actually seen to decide and nothing more; no file to
+        // write first; the note whole and the result inline. The same three facts the researcher is taught,
+        // because the same launch grants them.
+        Assert.Contains("runtime.cli_command", skill, StringComparison.Ordinal);
+        Assert.Contains("neither promised to run nor promised to be refused", skill, StringComparison.Ordinal);
+        Assert.Contains("no file-writing tool", skill, StringComparison.Ordinal);
+        Assert.Contains("replaced whole", skill, StringComparison.Ordinal);
+        Assert.Contains("--note '", skill, StringComparison.Ordinal);
+        Assert.Contains("--result '", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("--note-file", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("--result-file", skill, StringComparison.Ordinal);
+
+        // 10. The outcome a review is allowed to have. A manager that believes it must act to have reviewed
+        // will act, and the campaign will be managed by a role looking for something to report.
+        Assert.Contains("`outcome: \"nothing\"` is a good outcome", skill, StringComparison.Ordinal);
+
+        // 11. The one verb it never types. A review that answered its own question would be the loop talking
+        // to itself, and the brief's own list says so.
+        Assert.Contains("never answer a decision", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("`decision.answer` is not in your `allowed_operations`", skill, StringComparison.Ordinal);
+
+        // 12. The read a manager does for itself. One scan's read is one review, so a question answered behind
+        // a failure in the same pass is consumed by the review the failure summoned, whose brief names the
+        // failure. A manager that trusted the brief to name every answered question would leave that answer
+        // unacted on until the cadence came round.
+        Assert.Contains("jason decision list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status answered", skill, StringComparison.Ordinal);
+        Assert.Contains("one read is one review", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("rather than trusting the brief to name one", skill, StringComparison.Ordinal);
+
+        // And no actor on any of it: the environment attributes a launched role's calls to its attempt, and a
+        // manager that typed one would break the chain the work it creates inherits.
+        Assert.DoesNotContain("--actor", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// One word, one meaning. A check-in is the work item the runtime creates to have a campaign reviewed;
     /// what a role does to say it is still alive is a heartbeat. A skill that spends the noun on the verb
     /// teaches a second meaning to the one reader who has no way to ask which was meant.
