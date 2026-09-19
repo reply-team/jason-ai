@@ -1,6 +1,24 @@
-using Jason.Runtime.Persistence;
+using Jason.Contracts.Api;
 
 namespace Jason.Runtime.Dispatch;
+
+/// <summary>
+/// One line of the chronicle as the summon is allowed to see it: a kind, some identifiers, and who wrote it.
+/// </summary>
+/// <remarks>
+/// A type rather than a discipline. The dispatcher must not read meaning, and the surest way to keep that rule
+/// is a shape that cannot carry any: there is nowhere here to put <c>old</c>, <c>new</c>, <c>key</c> or
+/// <c>reason</c>. It is also what the query projects, so those columns — one of them a JSON document — are
+/// never read from the database at all.
+/// </remarks>
+public readonly record struct ChronicleLine(
+    int Id,
+    string PublicId,
+    string Kind,
+    string? WorkItemId,
+    string? AttemptId,
+    ActorType ActorType,
+    string? ActorId);
 
 /// <summary>
 /// Why a manager is being summoned, for the record: which kind of line, which line, about which work — and how
@@ -33,9 +51,9 @@ public static class ManagerTriggers
     /// </param>
     /// <param name="watermark">How far the chronicle had been accounted for before this read.</param>
     public static TriggerRead Read(
-        IReadOnlyList<JournalEntry> entries,
+        IReadOnlyList<ChronicleLine> entries,
         IReadOnlySet<string> triggers,
-        Func<JournalEntry, bool> fromCheckIn,
+        Func<ChronicleLine, bool> fromCheckIn,
         int watermark)
     {
         ArgumentNullException.ThrowIfNull(entries);
@@ -47,7 +65,7 @@ public static class ManagerTriggers
             return new TriggerRead(null, watermark);
         }
 
-        JournalEntry? first = null;
+        ChronicleLine? first = null;
         var qualifying = 0;
         foreach (var entry in entries)
         {
@@ -66,8 +84,8 @@ public static class ManagerTriggers
         // It also passes over what was excluded, or the same check-in lines would be read again on every scan.
         var advanced = Math.Max(watermark, entries[^1].Id);
 
-        return first is null
+        return first is not { } cause
             ? new TriggerRead(null, advanced)
-            : new TriggerRead(new ManagerCause(first.Kind, first.PublicId, first.WorkItemId, first.AttemptId, qualifying), advanced);
+            : new TriggerRead(new ManagerCause(cause.Kind, cause.PublicId, cause.WorkItemId, cause.AttemptId, qualifying), advanced);
     }
 }

@@ -20,12 +20,15 @@ public static class ReviewSchedule
     {
         ArgumentNullException.ThrowIfNull(campaign);
 
-        if (campaign.Status != CampaignStatus.Active || campaign.ManagerReviewAnchor is not { } anchor)
-        {
-            return false;
-        }
-
-        var interval = campaign.ManagerReviewSeconds ?? defaultReviewSeconds;
-        return anchor.AddSeconds(interval) <= now;
+        return campaign.Status == CampaignStatus.Active
+            && IsDue(campaign.ManagerReviewAnchor, campaign.ManagerReviewSeconds, defaultReviewSeconds, now);
     }
+
+    /// <summary>
+    /// The same rule from the three values it actually needs, for a caller that has projected them rather than
+    /// loaded a campaign — the summon reads columns, not rows, and whether the campaign is active is a question
+    /// it has already asked.
+    /// </summary>
+    public static bool IsDue(DateTime? anchor, int? campaignReviewSeconds, int defaultReviewSeconds, DateTime now) =>
+        anchor is { } from && from.AddSeconds(campaignReviewSeconds ?? defaultReviewSeconds) <= now;
 }

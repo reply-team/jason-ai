@@ -260,6 +260,99 @@ public class SummonerTests
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(Ct));
     }
 
+    /// <summary>
+    /// One campaign's summon failing must cost that campaign and nothing else. The scan is four steps and the
+    /// fourth hands out work: a summon that threw through the whole scan would skip every campaign after the
+    /// one that failed <em>and</em> the claim, and if the cause persisted — a write lock that keeps timing out,
+    /// a constraint nobody has noticed — the dispatcher would stop handing out work at all, quietly, while
+    /// still logging a tick.
+    /// </summary>
+    [Fact]
+    public async Task One_campaigns_summon_failing_costs_that_campaign_and_nothing_else()
+    {
+        using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { ReviewSeconds = 3_600 });
+        var first = await SeedAsync(harness, live: true, name: "First");
+        var second = await SeedAsync(harness, live: true, name: "Second");
+        harness.Clock.Advance(TimeSpan.FromSeconds(3_600));
+
+        // The next save inside the summon throws, whichever campaign reaches it first.
+        harness.InterfereOnceBeforeSaving(() => throw new InvalidOperationException("the writer was busy"));
+
+        var summoned = await harness.SummonAsync(Ct);
+
+        Assert.Equal(1, summoned);
+
+        await using var db = harness.Open();
+        var reviewed = await db.WorkItems
+            .Where(w => w.Role == ManagerCheckIn.Role)
+            .Select(w => w.Campaign!.PublicId)
+            .ToListAsync(Ct);
+
+        var missed = new[] { first, second }.Except(reviewed).ToList();
+        Assert.Single(reviewed);
+        Assert.Single(missed);
+
+        // And the one that was missed is summoned on the very next scan, with nothing to repair by hand.
+        Assert.Equal(1, await harness.SummonAsync(Ct));
+    }
+
+    /// <summary>
+    /// The watermark is written guarded, and this is the statement that writes it: it moves a campaign's
+    /// watermark only from the value the summon read. Another writer who has moved it on may already have
+    /// turned those lines into a review, so putting an older number back would have them reviewed twice.
+    /// </summary>
+    /// <remarks>
+    /// Two writers cannot be staged inside one process — this database takes one writer at a time, and the scan
+    /// gate serializes scans, so a competing write from inside a summon simply waits for it. The guard is
+    /// proved where it lives, as the statement, with a stale value in hand; what it protects against is two
+    /// runtimes, which is also the only thing that can really race here.
+    /// </remarks>
+    [Fact]
+    public async Task A_watermark_another_writer_moved_is_refused_rather_than_overwritten()
+    {
+        using var harness = new DispatchHarness(Noon);
+        await SeedAsync(harness, live: true);
+
+        await using var db = harness.Open();
+        var campaign = await db.Campaigns.SingleAsync(Ct);
+        var before = campaign.ManagerEventWatermark;
+
+        campaign.ManagerEventWatermark = 999;
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(0, await Summoner.AccountForAsync(db, campaign.Id, before, 40, Ct));
+        Assert.Equal(999, (await db.Campaigns.AsNoTracking().SingleAsync(Ct)).ManagerEventWatermark);
+
+        // And the same statement moves it when the value read is still the value stored.
+        Assert.Equal(1, await Summoner.AccountForAsync(db, campaign.Id, 999, 1_200, Ct));
+        Assert.Equal(1_200, (await db.Campaigns.AsNoTracking().SingleAsync(Ct)).ManagerEventWatermark);
+    }
+
+    /// <summary>
+    /// How a refused insert is told from a failed one. The database is what decides that one check-in is open,
+    /// so an insert refused while one exists is the race being lost — ordinary, and the review somebody else
+    /// created is the review — while an insert refused when none exists is something else, which must not be
+    /// filed under a race that did not happen.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_insert_is_told_from_a_failed_one_by_what_is_open()
+    {
+        using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { ReviewSeconds = 3_600 });
+        await SeedAsync(harness, live: true);
+        await using var db = harness.Open();
+        var stored = await db.Campaigns.SingleAsync(Ct);
+
+        Assert.False(await Summoner.OpenCheckInAsync(db, stored.Id, Ct));
+
+        harness.Clock.Advance(TimeSpan.FromSeconds(3_600));
+        Assert.Equal(1, await harness.SummonAsync(Ct));
+        Assert.True(await Summoner.OpenCheckInAsync(db, stored.Id, Ct));
+
+        // A finished review is not an open one, so a refusal after this would be a failure and not a race.
+        await FinishCheckInAsync(harness);
+        Assert.False(await Summoner.OpenCheckInAsync(db, stored.Id, Ct));
+    }
+
     /// <summary>An attempt of the campaign's open check-in, as the claim would have made one.</summary>
     private static async Task<string> AttemptForCheckInAsync(DispatchHarness harness)
     {

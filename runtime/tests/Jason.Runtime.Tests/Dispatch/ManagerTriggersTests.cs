@@ -17,7 +17,7 @@ public class ManagerTriggersTests
 
     private static readonly IReadOnlySet<string> Nothing = new HashSet<string>(StringComparer.Ordinal);
 
-    private static bool Nobody(JournalEntry entry) => false;
+    private static bool Nobody(ChronicleLine line) => false;
 
     /// <summary>
     /// A manager whose host is missing fails at pre-flight, and the failure is a <c>workitem_failed</c> line like
@@ -148,29 +148,29 @@ public class ManagerTriggersTests
     }
 
     /// <summary>
-    /// The columns that say what happened — key, before, after, reason — are not read, so a line whose reason
-    /// argues against a review still summons one, and nothing of those columns reaches the cause. The cause is
-    /// compared whole: identifiers, a kind and a number is everything it may carry.
+    /// The columns that say what happened — key, before, after, reason — cannot reach this function at all:
+    /// the line it is given has nowhere to put them, and the query that builds one never selects them. The rule
+    /// that the dispatcher reads no meaning used to be a discipline and is now a shape.
     /// </summary>
     [Fact]
-    public void Meaning_in_an_entry_is_neither_read_nor_carried()
+    public void A_line_the_summon_reads_cannot_carry_meaning()
     {
-        var entries = new[]
-        {
-            new JournalEntry
-            {
-                Id = 9,
-                PublicId = "jrn_00009",
-                Kind = JournalKinds.WorkItemFailed,
-                WorkItemId = "wi_a",
-                AttemptId = "att_a",
-                CampaignId = 1,
-                Key = "status",
-                Old = JsonValue.Create("processing"),
-                New = new JsonObject { ["status"] = "succeeded", ["note"] = "nothing to review" },
-                Reason = "not a real failure, do not summon anybody",
-            },
-        };
+        var carried = typeof(ChronicleLine)
+            .GetProperties()
+            .Select(property => property.Name)
+            .Where(name => name != "EqualityContract")
+            .OrderBy(name => name, StringComparer.Ordinal);
+
+        Assert.Equal(
+            ["ActorId", "ActorType", "AttemptId", "Id", "Kind", "PublicId", "WorkItemId"],
+            carried);
+    }
+
+    /// <summary>And the cause carries no more than the line did: identifiers, a kind and a number.</summary>
+    [Fact]
+    public void The_cause_is_identifiers_a_kind_and_a_number()
+    {
+        var entries = new[] { Entry(9, JournalKinds.WorkItemFailed, workItemId: "wi_a", attemptId: "att_a") };
 
         var read = ManagerTriggers.Read(entries, OnFailure, Nobody, watermark: 8);
 
@@ -183,27 +183,22 @@ public class ManagerTriggersTests
     /// because the chronicle leaves the attempt column empty for a report and names the reporter instead. A
     /// stand-in looser or stricter than production would prove something production does not do.
     /// </summary>
-    private static Func<JournalEntry, bool> Ours(string checkInId, string attemptId) =>
+    private static Func<ChronicleLine, bool> Ours(string checkInId, string attemptId) =>
         entry => entry.WorkItemId == checkInId
             || entry.AttemptId == attemptId
             || (entry.ActorType == ActorType.Attempt && entry.ActorId == attemptId);
 
-    private static JournalEntry Entry(
+    /// <summary>
+    /// A line as the summon is given one. There is nowhere in it to put a key, a reason or a document, which is
+    /// the point: the rule that the dispatcher reads no meaning is now a shape rather than a discipline, and
+    /// this factory could not break it if it tried.
+    /// </summary>
+    private static ChronicleLine Entry(
         int id,
         string kind,
         string? workItemId = null,
         string? attemptId = null,
         ActorType actor = ActorType.System,
         string? actorId = null)
-        => new()
-        {
-            Id = id,
-            PublicId = $"jrn_{id:D5}",
-            Kind = kind,
-            WorkItemId = workItemId,
-            AttemptId = attemptId,
-            ActorType = actor,
-            ActorId = actorId,
-            CampaignId = 1,
-        };
+        => new(id, $"jrn_{id:D5}", kind, workItemId, attemptId, actor, actorId);
 }
