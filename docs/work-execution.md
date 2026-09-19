@@ -120,7 +120,11 @@ consider.
 
 ## The claim rule
 
-Each tick, the dispatcher runs one scan in three short steps: **expire**, **enforce**, **claim**.
+Each tick, the dispatcher runs one scan in four short steps: **expire**, **enforce**, **summon**,
+**claim**. The third is the campaign-manager loop — where a campaign that something happened to, or that
+has not been looked at for long enough, gets a check-in put on the queue
+([docs/campaign-manager.md](campaign-manager.md) is the contract). It runs before the claim so that a
+check-in created this tick can be claimed this tick.
 
 Claiming happens inside an immediate transaction, so two scans — or two runtimes — cannot both take
 the same item; the second waits, finds it taken and moves on. Within one scan the dispatcher takes:
@@ -555,16 +559,19 @@ waits for a person rather than being handed out again.
 
 ## Not here yet
 
+Work the runtime creates itself is no longer on this list. The dispatcher creates a manager's check-in,
+and it names its cause explicitly: lineage comes from the attempt or the item the review is about, and
+only a review nothing caused — one the cadence asked for — is root work.
+
 - **Approvals beyond one decision about one item.** There are no standing approvals, no bulk
   decisions, no expiry windows and no anomaly rules; nothing notifies anybody, so a person finds out
   what is waiting by asking (`jason approval list`). What exists is the gate itself, below.
 - **Session resume.** A host that is interrupted is retried from the start, not nudged to continue.
   The session id is minted per attempt and recorded, which is what a nudge would need, but nothing
   uses it yet.
-- **Lineage from work the runtime creates itself.** Lineage is read from the actor that created a work
-  item, and only an attempt carries a profile to hand down. Dispatcher-created and event-triggered
-  work — neither of which exists yet — must name the attempt that caused it explicitly when it
-  arrives, or the chain it belongs to is erased at that step.
+- **Human escalation.** A role cannot yet raise a question for a person and have the answer release the
+  next step. Approvals park a specific operation on a specific item; a question about what to do next
+  has nowhere to live.
 - **Anything above one hop.** Lineage is materialized once, from the run that created the item. There
   is no resolver walking a graph, and no branch selection.
 - **Backoff.** The retry delay is linear in the failure count; the tick and the one-item-per-campaign
