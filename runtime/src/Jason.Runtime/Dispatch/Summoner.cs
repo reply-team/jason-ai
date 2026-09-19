@@ -141,18 +141,38 @@ public sealed class Summoner(
     }
 
     /// <summary>
-    /// Which of these lines are a check-in's own — about a check-in, or written by one's attempt. Asked once
-    /// per campaign for the whole read rather than once per line, and asked at all because a manager that could
-    /// summon a manager would summon one for ever: a review whose host is missing fails at pre-flight like any
-    /// other item, and that failure is a line of exactly the kind that summons a review.
+    /// Which of these lines are a check-in's own: about a check-in, written <em>by</em> one's attempt, or
+    /// simply performed by one. Asked once per campaign for the whole read rather than once per line, and asked
+    /// at all because a manager that could summon a manager would summon one for ever.
     /// </summary>
+    /// <remarks>
+    /// Three columns, not two, and the third is the one that bites. A failed check-in names itself in
+    /// <c>work_item_id</c> and its run in <c>attempt_id</c>, which is easy to see. But a line a check-in's
+    /// attempt <em>wrote</em> may name neither: the chronicle fills <c>attempt_id</c> only when an attempt
+    /// object is handed to it, and a report — one of the default trigger kinds — passes none. It carries its
+    /// reporter as the actor instead. So a manager that reported an effect it produced would summon the next
+    /// manager, which would read the same chronicle, and the loop would run once a tick for ever on a line it
+    /// wrote about itself.
+    /// </remarks>
     private static async Task<Func<JournalEntry, bool>> OursAsync(
         JasonDbContext db,
         IReadOnlyList<JournalEntry> entries,
         CancellationToken ct)
     {
         var workItems = entries.Select(entry => entry.WorkItemId).OfType<string>().Distinct().ToList();
-        var attempts = entries.Select(entry => entry.AttemptId).OfType<string>().Distinct().ToList();
+
+        // The attempt a line is about and the attempt that wrote it are different columns and either can name a
+        // check-in's run, so both are asked about together.
+        var attempts = entries
+            .SelectMany(entry => new[]
+            {
+                entry.AttemptId,
+                entry.ActorType == ActorType.Attempt ? entry.ActorId : null,
+            })
+            .OfType<string>()
+            .Distinct()
+            .ToList();
+
         if (workItems.Count == 0 && attempts.Count == 0)
         {
             return _ => false;
@@ -178,6 +198,7 @@ public sealed class Summoner(
         var byItem = new HashSet<string>(checkIns, StringComparer.Ordinal);
         var byAttempt = new HashSet<string>(theirAttempts, StringComparer.Ordinal);
         return entry => (entry.WorkItemId is { } item && byItem.Contains(item))
+            || (entry.ActorType == ActorType.Attempt && entry.ActorId is { } wrote && byAttempt.Contains(wrote))
             || (entry.AttemptId is { } attempt && byAttempt.Contains(attempt));
     }
 }

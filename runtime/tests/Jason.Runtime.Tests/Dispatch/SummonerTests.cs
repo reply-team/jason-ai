@@ -1,4 +1,7 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Runtime.Reports;
+using Jason.Runtime.Tests.Reports;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
@@ -202,6 +205,31 @@ public class SummonerTests
     }
 
     /// <summary>
+    /// The other half of "a manager never summons a manager", and the half that reaches further: a line a
+    /// check-in's own attempt <em>wrote</em>. A report carries its reporter as the actor and names no attempt
+    /// at all — the chronicle's attempt column is filled only when an attempt object is passed, and the report
+    /// path passes none — so a manager that reports an effect it produced would summon the next manager, which
+    /// reads the same chronicle and reports again.
+    /// </summary>
+    [Fact]
+    public async Task A_report_written_by_a_check_ins_attempt_summons_nobody()
+    {
+        using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { ReviewSeconds = 3_600 });
+        await SeedAsync(harness, live: true);
+        harness.Clock.Advance(TimeSpan.FromSeconds(3_600));
+        Assert.Equal(1, await SummonAsync(harness));
+
+        var attempt = await AttemptForCheckInAsync(harness);
+        await ReportAsync(harness, attempt);
+        await FinishCheckInAsync(harness);
+
+        Assert.Equal(0, await SummonAsync(harness));
+
+        await using var db = harness.Open();
+        Assert.Single(await db.WorkItems.Where(w => w.Role == ManagerCheckIn.Role).ToListAsync(Ct));
+    }
+
+    /// <summary>
     /// Two writers both looking for an open check-in would both see none and both insert, so the rule is the
     /// database's: a unique index over the open ones. Proved at the row, because two scans cannot overlap in
     /// one runtime — the scan gate serializes them — and the guarantee has to hold for two runtimes anyway.
@@ -232,10 +260,47 @@ public class SummonerTests
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(Ct));
     }
 
-    private static async Task<string> SeedAsync(DispatchHarness harness, bool live, CampaignStatus status = CampaignStatus.Active)
+    /// <summary>An attempt of the campaign's open check-in, as the claim would have made one.</summary>
+    private static async Task<string> AttemptForCheckInAsync(DispatchHarness harness)
     {
         await using var db = harness.Open();
-        var campaign = WorkItemFactory.NewCampaign("Work", live ? CampaignStatus.Active : status, now: Noon);
+        var checkIn = await db.WorkItems.SingleAsync(w => w.Role == ManagerCheckIn.Role, Ct);
+        var attempt = WorkItemFactory.NewAttempt(checkIn, 1, AttemptStatus.Running, Noon);
+        db.Attempts.Add(attempt);
+        checkIn.Status = WorkItemStatus.Processing;
+        await db.SaveChangesAsync(Ct);
+        return attempt.PublicId;
+    }
+
+    /// <summary>What a manager reporting an effect it produced outside Jason really writes.</summary>
+    private static async Task ReportAsync(DispatchHarness harness, string attemptPublicId)
+    {
+        await using var db = harness.Open();
+        var campaign = await db.Campaigns.SingleAsync(Ct);
+        var submission = ReportedWorld.Submission();
+        submission["campaign_id"] = campaign.PublicId;
+        submission["actor"] = new JsonObject { ["type"] = "attempt", ["id"] = attemptPublicId };
+
+        await new ReportService(db, new JournalWriter(harness.Clock), harness.Clock).SubmitAsync(submission, Ct);
+    }
+
+    private static async Task FinishCheckInAsync(DispatchHarness harness)
+    {
+        await using var db = harness.Open();
+        var checkIn = await db.WorkItems.SingleAsync(w => w.Role == ManagerCheckIn.Role, Ct);
+        checkIn.Status = WorkItemStatus.Succeeded;
+        checkIn.FinishedAt = harness.Clock.GetUtcNow().UtcDateTime;
+        await db.SaveChangesAsync(Ct);
+    }
+
+    private static async Task<string> SeedAsync(
+        DispatchHarness harness,
+        bool live,
+        CampaignStatus status = CampaignStatus.Active,
+        string name = "Work")
+    {
+        await using var db = harness.Open();
+        var campaign = WorkItemFactory.NewCampaign(name, live ? CampaignStatus.Active : status, now: Noon);
         if (live)
         {
             campaign.ManagerReviewAnchor = Noon;

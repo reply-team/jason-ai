@@ -35,7 +35,7 @@ public class ManagerTriggersTests
             Entry(12, JournalKinds.WorkItemFailed, actor: ActorType.Attempt, actorId: "att_1"),
         };
 
-        var read = ManagerTriggers.Read(entries, OnFailure, e => e.WorkItemId == "wi_check_in" || e.ActorId == "att_1", watermark: 10);
+        var read = ManagerTriggers.Read(entries, OnFailure, Ours("wi_check_in", "att_1"), watermark: 10);
 
         Assert.Null(read.Cause);
         Assert.Equal(12, read.Watermark);
@@ -51,7 +51,7 @@ public class ManagerTriggersTests
             Entry(12, JournalKinds.WorkItemFailed, workItemId: "wi_real", attemptId: "att_real"),
         };
 
-        var read = ManagerTriggers.Read(entries, OnFailure, e => e.WorkItemId == "wi_check_in", watermark: 10);
+        var read = ManagerTriggers.Read(entries, OnFailure, Ours("wi_check_in", "att_1"), watermark: 10);
 
         var cause = Assert.NotNull(read.Cause);
         Assert.Equal("jrn_00012", cause.JournalEntryId);
@@ -121,7 +121,7 @@ public class ManagerTriggersTests
             Entry(5, JournalKinds.WorkItemFailed),
         };
 
-        var read = ManagerTriggers.Read(entries, OnFailure, e => e.WorkItemId == "wi_check_in", watermark: 0);
+        var read = ManagerTriggers.Read(entries, OnFailure, Ours("wi_check_in", "att_1"), watermark: 0);
 
         Assert.Equal(3, Assert.NotNull(read.Cause).QualifyingCount);
     }
@@ -176,6 +176,17 @@ public class ManagerTriggersTests
 
         Assert.Equal(new ManagerCause(JournalKinds.WorkItemFailed, "jrn_00009", "wi_a", "att_a", 1), read.Cause);
     }
+
+    /// <summary>
+    /// The predicate the summon really computes, in the shape it really computes it: a line about a check-in,
+    /// a line about one's attempt, or a line <em>written by</em> one's attempt — that last read from the actor,
+    /// because the chronicle leaves the attempt column empty for a report and names the reporter instead. A
+    /// stand-in looser or stricter than production would prove something production does not do.
+    /// </summary>
+    private static Func<JournalEntry, bool> Ours(string checkInId, string attemptId) =>
+        entry => entry.WorkItemId == checkInId
+            || entry.AttemptId == attemptId
+            || (entry.ActorType == ActorType.Attempt && entry.ActorId == attemptId);
 
     private static JournalEntry Entry(
         int id,
