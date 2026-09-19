@@ -328,8 +328,19 @@ public partial class InstallScriptTests
     /// <c>install.ps1</c>, run to completion by <c>pwsh</c> with a feed of the test's own and an install
     /// directory inside the test's tree. Nothing here ever writes to the real install directory or to the PATH.
     /// </summary>
+    /// <summary>
+    /// Runs the real <c>install.ps1</c>, and only where it is meant to run: the script refuses a PowerShell that
+    /// is not on Windows before it does anything else, so off Windows every test through here would be asserting
+    /// the text of that refusal rather than the rule it came to check.
+    /// </summary>
+    /// <remarks>
+    /// The skip is here rather than in each test, because a test that forgets it does not fail on the machine
+    /// its author is using — it fails on two of the three CI runners, which is the worst place to find out.
+    /// </remarks>
     private static (int Exit, string Stdout, string Stderr) RunInstallPs1(TempTree tree, string feed, params string[] arguments)
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "install.ps1 refuses a PowerShell that is not on Windows, so its rules can only be run on Windows.");
+
         string[] fixedArguments =
         [
             "-File", Path.Combine(RepositoryRoot(), "install", "install.ps1"),
