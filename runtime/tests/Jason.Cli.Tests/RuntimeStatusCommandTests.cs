@@ -88,22 +88,57 @@ public class RuntimeStatusCommandTests
     /// landing mid-poll is refused.
     /// </summary>
     [Fact]
-    public void A_descriptor_refused_while_somebody_is_reading_it_is_survived_and_retried()
+    public void A_descriptor_refused_for_the_whole_window_is_survived_rather_than_thrown()
     {
         using var dir = new TempPaths();
-        dir.WriteDescriptor(Descriptor);
+        dir.WriteDescriptor(Held);
 
-        // Held exactly as a reader holds it: others may read, nobody may write.
-        using (File.Open(dir.Paths.DescriptorFile, FileMode.Open, FileAccess.Read, FileShare.Read))
-        {
-            RuntimeVerbs.Publish(dir, Descriptor);
-        }
+        // Held exactly as a reader holds it, for longer than the publisher will keep trying: others may read,
+        // nobody may write.
+        using var reader = File.Open(dir.Paths.DescriptorFile, FileMode.Open, FileAccess.Read, FileShare.Read);
 
-        // It gave up rather than throwing, which is what keeps three hundred unrelated tests alive; and the
-        // test that was waiting for a descriptor is left to fail in its own words.
         RuntimeVerbs.Publish(dir, Descriptor);
-        Assert.True(File.Exists(dir.Paths.DescriptorFile));
+
+        // It gave up rather than throwing, which is what keeps three hundred unrelated tests alive, and wrote
+        // nothing; the test that was waiting for a descriptor is left to fail in its own words.
+        Assert.Equal("rt_HELD", Instance(dir));
     }
+
+    /// <summary>
+    /// And a refusal that ends inside the window is waited out rather than given up on. The publisher exists
+    /// to answer a CLI that is polling the same file, so being refused once is the ordinary case and not the
+    /// failure — what would be a failure is a descriptor that never arrives because the first try lost a race.
+    /// </summary>
+    [Fact]
+    public async Task A_descriptor_refused_and_then_released_lands_inside_the_retry_window()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Held);
+
+        var ct = TestContext.Current.CancellationToken;
+        var reader = File.Open(dir.Paths.DescriptorFile, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var released = Task.Run(
+            async () =>
+            {
+                await Task.Delay(200, ct);
+                reader.Dispose();
+            },
+            ct);
+
+        RuntimeVerbs.Publish(dir, Descriptor);
+        await released;
+
+        // The publish that landed is the one made after the lock went, which only a retry can have made: a
+        // single attempt would have been refused and given up while the file was still held.
+        Assert.Equal("rt_LIVE", Instance(dir));
+    }
+
+    /// <summary>A descriptor whose only job is to be the value a publish has to replace.</summary>
+    private static readonly RuntimeDescriptor Held =
+        new("v1", "0.1.0-dev", "rt_HELD", 77, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch);
+
+    private static string? Instance(TempPaths dir) =>
+        JsonSerializer.Deserialize<RuntimeDescriptor>(File.ReadAllText(dir.Paths.DescriptorFile), JasonJson.Options)?.InstanceId;
 
     [Fact]
     public async Task No_descriptor_exits_3_with_no_descriptor_error()
