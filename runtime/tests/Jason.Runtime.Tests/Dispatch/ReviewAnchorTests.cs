@@ -110,7 +110,10 @@ public class ReviewAnchorTests
 
         await items.CancelAsync(new WorkItemCancelRequest(checkIn.PublicId, null, "not this one"), Ct);
 
-        Assert.Equal(anchor, (await db.Campaigns.SingleAsync(Ct)).ManagerReviewAnchor);
+        // Read through a context of its own: comparing the tracked instance with itself would pass however the
+        // anchor had been changed, because it is the same object.
+        await using var fresh = database.Open();
+        Assert.Equal(anchor, (await fresh.Campaigns.SingleAsync(Ct)).ManagerReviewAnchor);
     }
 
     private static CampaignService Campaigns(JasonDbContext db, TimeProvider clock) =>

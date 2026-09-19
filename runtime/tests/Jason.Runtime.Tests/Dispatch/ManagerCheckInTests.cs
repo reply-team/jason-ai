@@ -178,11 +178,13 @@ public class ManagerCheckInTests
             db,
             campaign,
             cause: null,
-            new ManagerOptions { TimeoutSeconds = 900, MaxAttempts = 1, Priority = 5 },
+            // Values the defaults are not, so that a check-in built from the kind's defaults would fail here
+            // rather than agree by coincidence.
+            new ManagerOptions { TimeoutSeconds = 450, MaxAttempts = 2, Priority = 5 },
             Ct);
 
-        Assert.Equal(900, item.TimeoutSeconds);
-        Assert.Equal(1, item.MaxAttempts);
+        Assert.Equal(450, item.TimeoutSeconds);
+        Assert.Equal(2, item.MaxAttempts);
         Assert.Equal(5, item.Priority);
         Assert.Equal(ManagerCheckIn.Role, item.Role);
         Assert.Equal(WorkItemKind.AiRole, item.Kind);

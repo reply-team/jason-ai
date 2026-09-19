@@ -88,11 +88,13 @@ public class ManagerHostileInputTests
     }
 
     /// <summary>
-    /// A campaign archived while the scan was deciding about it. The summon re-reads the campaign inside its own
-    /// transaction and stops there, so a review is never created for a campaign nobody can act on.
+    /// A campaign archived before the scan reaches it. It is excluded where campaigns are chosen, so nothing is
+    /// created and nothing is consumed — a campaign that is over is not one whose chronicle anybody has to
+    /// account for. (That a campaign archived <em>between</em> the choice and the write is also caught is the
+    /// re-read in the summon; staging that needs two writers, which one process does not have.)
     /// </summary>
     [Fact]
-    public async Task A_campaign_that_ends_before_the_check_in_is_written_gets_none()
+    public async Task A_campaign_that_has_ended_gets_no_review_and_consumes_nothing()
     {
         using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { ReviewSeconds = 86_400 });
         var campaign = await SeedAsync(harness);

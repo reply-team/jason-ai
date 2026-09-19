@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Jason.Contracts.Api;
+using Jason.Runtime.Dispatch;
 using Jason.Runtime.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -108,10 +110,56 @@ public class CampaignManagerSchemaTests
             Assert.Equal(3, live.ManagerEventWatermark);
             Assert.Equal(3, idle.ManagerEventWatermark);
 
-            // The live one is reviewable from now; the draft one has never been live and so has no anchor.
-            Assert.NotNull(live.ManagerReviewAnchor);
+            // The live one is reviewable from now — really from now, and really in UTC: a local-time or epoch
+            // value would pass a null check and then be due immediately or never.
+            var anchor = Assert.IsType<DateTime>(live.ManagerReviewAnchor);
+            Assert.InRange(anchor, DateTime.UtcNow.AddMinutes(-5), DateTime.UtcNow.AddMinutes(5));
             Assert.Null(idle.ManagerReviewAnchor);
         }
+    }
+
+    /// <summary>
+    /// The four statuses in which a check-in counts as open live in three places: the array the summon reads,
+    /// the model's index filter and the migration that created it. Nothing ties them together, so this is what
+    /// notices when one of them moves.
+    /// </summary>
+    [Fact]
+    public void The_open_statuses_the_summon_reads_are_the_ones_the_index_filters_on()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+
+        var filter = db.Model
+            .FindEntityType(typeof(WorkItem))!
+            .GetIndexes()
+            .Single(index => index.GetDatabaseName() == "ix_work_items_one_open_check_in_per_campaign")
+            .GetFilter()!;
+
+        foreach (var status in Summoner.Open)
+        {
+            Assert.Contains($"'{JsonNamingPolicy.SnakeCaseLower.ConvertName(status.ToString())}'", filter, StringComparison.Ordinal);
+        }
+
+        // And nothing else: a status in the filter that the summon does not treat as open would let the
+        // database refuse an insert the summon believed was free.
+        var quoted = filter[(filter.IndexOf("IN (", StringComparison.Ordinal) + 4)..].TrimEnd(')');
+        Assert.Equal(Summoner.Open.Length, quoted.Split(',').Length);
+
+        // The migration that built it says the same thing, or a fresh database and an upgraded one differ.
+        var migration = File.ReadAllText(Path.Combine(MigrationsDirectory(), "20260919040652_CampaignManagerLoop.cs"));
+        Assert.Contains(filter, migration, StringComparison.Ordinal);
+    }
+
+    private static string MigrationsDirectory()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "global.json")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(directory);
+        return Path.Combine(directory.FullName, "runtime", "src", "Jason.Runtime", "Persistence", "Migrations");
     }
 
     private static Campaign Campaign(JasonDbContext db)

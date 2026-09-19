@@ -15,11 +15,19 @@ namespace Jason.FakeAgentHost;
 /// </para>
 /// </summary>
 /// <remarks>
+/// <para>
 /// The lease is deliberately not the signal. While the runtime is alive the lease enforcer ends an overdue
 /// attempt and kills its child, and a host told to hang keeps its own lease healthy by heartbeating — so a
 /// child giving up on its lease would be answering a question the runtime answers better, and would quietly
 /// change what the lease and timeout tests assert. What is being watched for is the runtime itself: the
-/// descriptor it publishes is gone, and it no longer answers.
+/// descriptor it published is gone, or it has stopped answering.
+/// </para>
+/// <para>
+/// The contract says a survivor may finish its work against the <em>next</em> runtime, by re-reading the
+/// descriptor. This stand-in deliberately does not wait for one: in a test the next runtime belongs to another
+/// test, and a child that waited for it is the orphan this exists to prevent. A real host is not affected —
+/// nothing here ships.
+/// </para>
 /// </remarks>
 internal static class Watchdog
 {
@@ -37,11 +45,17 @@ internal static class Watchdog
     /// <summary>Two in a row, so a runtime restarting between the write of a descriptor and its read is not a death.</summary>
     private const int Strikes = 2;
 
-    public static void Start(LaunchEnvelope envelope, RuntimeApi api) => _ = Task.Run(() => WatchAsync(envelope, api));
+    /// <param name="sawRuntime">
+    /// Whether a descriptor could be read when this host started. It is the difference between the two cases:
+    /// a host that never had a runtime cannot be abandoned by one, and is bounded by the ceiling instead.
+    /// </param>
+    public static void Start(LaunchEnvelope envelope, RuntimeApi api, bool sawRuntime) =>
+        _ = Task.Run(() => WatchAsync(envelope, api, sawRuntime));
 
-    private static async Task WatchAsync(LaunchEnvelope envelope, RuntimeApi api)
+    private static async Task WatchAsync(LaunchEnvelope envelope, RuntimeApi api, bool sawRuntime)
     {
         var started = Stopwatch.StartNew();
+        var seen = sawRuntime;
         var answered = false;
         var missed = 0;
 
@@ -49,19 +63,17 @@ internal static class Watchdog
         {
             await Task.Delay(Beat).ConfigureAwait(false);
 
-            // A descriptor that has stopped being readable is the whole answer: a runtime takes its descriptor
-            // with it, and nothing else removes one.
-            var gone = api.ReadDescriptor() is null;
+            var readable = api.ReadDescriptor() is not null;
+            seen |= readable;
 
-            if (!gone)
+            // Gone, in the two ways a runtime can go: the descriptor it published has been taken away — a
+            // runtime takes its descriptor with it, and nothing else removes one — or it published one, was
+            // answering, and has stopped.
+            var gone = seen && !readable;
+            if (!gone && readable)
             {
                 var answers = await AnswersAsync(envelope, api).ConfigureAwait(false);
                 answered |= answers;
-
-                // A descriptor that outlived its runtime — a directory that could not be removed — is caught
-                // here instead. Only after an answer, though: a host pointed at a descriptor nothing is
-                // listening behind is not an orphan, it is the case where an unreachable API is reported and
-                // survived, which is a behaviour of its own.
                 gone = answered && !answers;
             }
 
@@ -69,10 +81,12 @@ internal static class Watchdog
             {
                 missed = 0;
 
-                // The one case nothing can ever tell to stop.
-                if (!answered && started.Elapsed >= NoRuntimeCeiling)
+                // Never had a runtime at all: nothing can ever tell this host to stop, so the clock does. A
+                // host pointed at a descriptor that was never there is not an orphan — it is the case where an
+                // unreachable API is reported and survived, which is a behaviour with a test of its own.
+                if (!seen && started.Elapsed >= NoRuntimeCeiling)
                 {
-                    await Diagnostics.WriteAsync("no runtime ever answered and the ceiling passed; stopping").ConfigureAwait(false);
+                    await Diagnostics.WriteAsync("no runtime was ever there and the ceiling passed; stopping").ConfigureAwait(false);
                     Environment.Exit(Abandoned);
                 }
 

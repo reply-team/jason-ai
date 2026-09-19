@@ -310,7 +310,12 @@ public sealed class ManagerOptionsValidator : IValidateOptions<ManagerOptions>
             }
         }
 
-        OptionRules.Range(failures, "Manager:ReviewSeconds", options.ReviewSeconds, 300, 604_800);
+        OptionRules.Range(
+            failures,
+            "Manager:ReviewSeconds",
+            options.ReviewSeconds,
+            ManagerOptions.MinimumReviewSeconds,
+            ManagerOptions.MaximumReviewSeconds);
         OptionRules.Range(failures, "Manager:TimeoutSeconds", options.TimeoutSeconds, 30, 86_400);
         OptionRules.Range(failures, "Manager:MaxAttempts", options.MaxAttempts, 1, 10);
 

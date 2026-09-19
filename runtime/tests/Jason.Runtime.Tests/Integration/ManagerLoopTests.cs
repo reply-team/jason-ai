@@ -78,6 +78,65 @@ public class ManagerLoopTests
     }
 
     /// <summary>
+    /// The chain, where there is one to keep. The failed item ran under a profile, so its attempt pinned one,
+    /// and the review of that failure inherits it — the profile, the revision and the attempt it came from.
+    /// </summary>
+    /// <remarks>
+    /// Asserting <c>Root</c> for a triggered review, as the sibling test above does, cannot tell lineage read
+    /// from the cause from lineage read from the creating actor: both answer root when nothing in the chain
+    /// ever had a profile. This one can only pass if the record came from the cause.
+    /// <para>
+    /// What the check-in then does with that inherited profile is not this test's business: it resolves to a
+    /// stand-in host launched with a composed command line that names no behaviour, so it ends as a failed
+    /// attempt. The chain is what is being proved, and the chain is written when the item is created.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task A_review_of_work_that_ran_under_a_profile_inherits_it()
+    {
+        await using var host = await FakeHostRuntime.StartAsync(Ct, Settings(reviewSeconds: 86_400));
+        await host.Fixture.PostOkAsync<ExecutionProfileDto>(
+            Operations.ProfileCreate,
+            new
+            {
+                name = "stand-in",
+                host = "claude_code",
+                program = ProfileFixture.Program,
+                deny = new[] { "Write" },
+                host_version_verified = "stand-in",
+            },
+            Ct);
+
+        var campaign = await host.CampaignAsync(Ct);
+        await host.RoleAsync("profiled", Ct, "silent");
+        var doomed = await host.CreateAsync(
+            new
+            {
+                campaign_id = campaign,
+                kind = "ai_role",
+                role = "profiled",
+                execution_profile = "stand-in",
+                max_attempts = 1,
+                context = new { behaviour = "crash" },
+            },
+            Ct);
+
+        Assert.Equal(1, (await host.ScanAsync(Ct)).Claimed);
+        await host.WaitForStatusAsync(doomed.Id, WorkItemStatus.Failed, Ct);
+        var attempt = (await host.GetAsync(doomed.Id, Ct)).Attempts!.Single();
+        Assert.Equal("stand-in", attempt.Provenance!.Agent!.ProfileName);
+
+        Assert.Equal(1, (await host.ScanAsync(Ct)).Summoned);
+
+        var checkIn = await CheckInAsync(host, campaign);
+        host.Track(checkIn.Id);
+        Assert.Equal(LineageState.Inherited, checkIn.Lineage!.State);
+        Assert.Equal("stand-in", checkIn.Lineage.ProfileName);
+        Assert.Equal(attempt.Provenance.Agent.ProfileRevision, checkIn.Lineage.ProfileRevision);
+        Assert.Equal(attempt.Id, checkIn.Lineage.FromAttemptId);
+    }
+
+    /// <summary>
     /// And the other half of the same rule: work that went well is not something to wake anybody for. Reviewing
     /// every successful step was rejected as cost without value, and this is where that decision lives.
     /// </summary>

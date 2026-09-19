@@ -1,4 +1,6 @@
+using System.Globalization;
 using Jason.Contracts.Api;
+using Jason.Runtime.Configuration;
 using Jason.Contracts.Json;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Domain;
@@ -59,8 +61,14 @@ public class CampaignReviewCadenceTests
         var detail = Assert.Single(error.Details!);
         Assert.Equal("review_seconds", detail.Field);
         Assert.Equal("out_of_range", detail.Code);
-        Assert.Contains("300", detail.Message, StringComparison.Ordinal);
-        Assert.Contains("604800", detail.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            ManagerOptions.MinimumReviewSeconds.ToString(CultureInfo.InvariantCulture),
+            detail.Message,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            ManagerOptions.MaximumReviewSeconds.ToString(CultureInfo.InvariantCulture),
+            detail.Message,
+            StringComparison.Ordinal);
     }
 
     [Theory]

@@ -22,7 +22,8 @@ public sealed record DispatcherInfo(
     int MaxParallel,
     int RunningAttempts,
     DateTimeOffset? LastScanAt,
-    long Scans);
+    long Scans,
+    long Summons);
 
 /// <summary>
 /// Whether the plugin registry is alive and what it holds, in four values: the cheapest way to see the active

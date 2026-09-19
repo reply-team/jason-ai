@@ -17,6 +17,16 @@ public sealed class ManagerOptions
     public const string Section = "Manager";
 
     /// <summary>
+    /// The narrowest and widest cadence an installation may ask for, and the same two numbers a campaign's own
+    /// pace is held to. One pair, named once: a campaign that could be reviewed more often than the runtime
+    /// allows would be buying launches the operator did not agree to, and two copies of a bound are two numbers
+    /// that can drift.
+    /// </summary>
+    public const int MinimumReviewSeconds = 300;
+
+    public const int MaximumReviewSeconds = 604_800;
+
+    /// <summary>
     /// The chronicle kinds that summon a review. Each must be one the runtime writes itself: a kind a caller
     /// can append is a kind anything could forge, and a rule keyed on one would be a rule anybody could fire.
     /// An empty list is a deliberate configuration in code — review on the cadence and on nothing else —

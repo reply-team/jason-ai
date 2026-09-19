@@ -260,17 +260,6 @@ internal static class Behaviours
     }
 
     /// <summary>
-    /// The one behaviour that does the job rather than a failure mode: a role that reads its skill out of the
-    /// directory it was started in, reads its own note through the API, answers in the shape it was asked for
-    /// and writes down what it learned before it finishes.
-    /// <para>
-    /// It is the smallest honest researcher. What it "finds" is what it can see — whether it was taught, and
-    /// what it remembered — because everything else in this run is real: the process, the work directory, the
-    /// callbacks, the note. <c>--prose</c> makes it answer with a sentence instead of the structure, which is
-    /// the sibling case: the same role, taught the same way, refused only for the shape of its answer.
-    /// </para>
-    /// </summary>
-    /// <summary>
     /// A campaign manager doing the least a review can honestly do: read why it was woken, read the campaign and
     /// its own note, leave a line in the chronicle, and answer in the shape a check-in is held to. Whether it
     /// then acts is the test's choice — <c>manager --act</c> creates a work item, so that the difference between
@@ -356,6 +345,17 @@ internal static class Behaviours
         return answer.Status == 200 ? Success : UnexpectedAnswer;
     }
 
+    /// <summary>
+    /// The one behaviour that does the job rather than a failure mode: a role that reads its skill out of the
+    /// directory it was started in, reads its own note through the API, answers in the shape it was asked for
+    /// and writes down what it learned before it finishes.
+    /// <para>
+    /// It is the smallest honest researcher. What it "finds" is what it can see — whether it was taught, and
+    /// what it remembered — because everything else in this run is real: the process, the work directory, the
+    /// callbacks, the note. <c>--prose</c> makes it answer with a sentence instead of the structure, which is
+    /// the sibling case: the same role, taught the same way, refused only for the shape of its answer.
+    /// </para>
+    /// </summary>
     private static async Task<int> ResearcherAsync(IReadOnlyList<string> options, LaunchEnvelope envelope, RuntimeApi api)
     {
         var taught = SkillName(envelope);

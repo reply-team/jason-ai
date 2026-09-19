@@ -156,6 +156,11 @@ public class FakeAgentHostTests
             // The one line it writes proves it started; nothing else ever arrives.
             var line = await process.StandardError.ReadLineAsync(Ct);
             Assert.Contains("behaviour=mute", line!, StringComparison.Ordinal);
+
+            // And it keeps running well past the point where a host that had lost a runtime would have stopped.
+            // This one never had one — the descriptor was never written — so it is bounded by the ceiling and
+            // not by the two beats that mean abandonment.
+            await Task.Delay(TimeSpan.FromSeconds(5), Ct);
             Assert.False(process.HasExited);
 
             process.Kill(entireProcessTree: true);

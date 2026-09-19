@@ -1,6 +1,9 @@
 using Jason.Runtime.Configuration;
 using Microsoft.Extensions.Configuration;
+using Jason.Runtime.Hosting;
 using Jason.Runtime.Journal;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Tests.Configuration;
 
@@ -9,6 +12,8 @@ namespace Jason.Runtime.Tests.Configuration;
 /// </summary>
 public class ManagerOptionsTests
 {
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
     /// <summary>
     /// The guard that matters most, because what it prevents is silence. A kind the runtime never writes can
     /// never fire, so an installation configured that way believes it is being managed and is not — and a kind
@@ -157,6 +162,62 @@ public class ManagerOptionsTests
         // was filled by hand — an operator's narrowing turned into the opposite, silently.
         Assert.Equal([JournalKinds.WorkItemFailed], options.Triggers);
         Assert.Equal(2, options.MaxAttempts);
+    }
+
+    /// <summary>
+    /// The narrowing, through the container that really composes it rather than through the helper alone: the
+    /// binder appends to a list that already has values, so an installation asking for one trigger kind has to
+    /// end up with one and not with four.
+    /// </summary>
+    [Fact]
+    public async Task A_narrowed_list_narrows_in_a_running_runtime()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Manager":{"Triggers":["workitem_failed"]}}"""));
+
+        var monitor = fixture.Runtime.Services.GetRequiredService<IOptionsMonitor<ManagerOptions>>();
+
+        Assert.Equal([JournalKinds.WorkItemFailed], monitor.CurrentValue.Triggers);
+    }
+
+    /// <summary>And a kind the runtime never writes stops the runtime from starting at all.</summary>
+    [Fact]
+    public async Task A_trigger_the_runtime_never_writes_refuses_the_start_for_real()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(dir.Paths.UserSettingsFile, """{"Manager":{"Triggers":["inbound_reply"]}}""");
+
+        var failure = await Assert.ThrowsAsync<OptionsValidationException>(
+            () => RuntimeHost.StartAsync(dir.Paths, new RuntimeHostOptions(ShippedSettingsDirectory: null, ConsoleLogging: false), Ct));
+
+        Assert.Contains("Manager:Triggers[0]", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A live edit that is invalid keeps the last value that was good. The loop re-reads its settings every
+    /// tick, so a half-typed file must not become a runtime that summons on nothing or on everything.
+    /// </summary>
+    [Fact]
+    public async Task A_live_edit_that_is_invalid_keeps_the_last_good_value()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Manager":{"ReviewSeconds":600}}"""));
+
+        var settings = fixture.Runtime.Services.GetRequiredService<LiveSettings<ManagerOptions>>();
+        Assert.Equal(600, settings.Current.ReviewSeconds);
+
+        File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Manager":{"ReviewSeconds":1}}""");
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline && settings.Current.ReviewSeconds == 600)
+        {
+            await Task.Delay(25, Ct);
+        }
+
+        Assert.Equal(600, settings.Current.ReviewSeconds);
     }
 
     private static string Validate(Action<ManagerOptions> configure)

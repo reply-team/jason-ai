@@ -42,10 +42,18 @@ public partial class CampaignManagerDocTests
         var page = Flattened(Read());
         var defaults = new ManagerOptions();
 
-        Assert.Contains($"`Manager:ReviewSeconds` | `{defaults.ReviewSeconds}` | 300..604800", page, StringComparison.Ordinal);
+        var cadence = $"{ManagerOptions.MinimumReviewSeconds}..{ManagerOptions.MaximumReviewSeconds}";
+        Assert.Contains($"`Manager:ReviewSeconds` | `{defaults.ReviewSeconds}` | {cadence}", page, StringComparison.Ordinal);
         Assert.Contains($"`Manager:TimeoutSeconds` | `{defaults.TimeoutSeconds}` | 30..86400", page, StringComparison.Ordinal);
         Assert.Contains($"`Manager:MaxAttempts` | `{defaults.MaxAttempts}` | 1..10", page, StringComparison.Ordinal);
+        Assert.Contains($"`Manager:Priority` | `{defaults.Priority}` | -1000..1000", page, StringComparison.Ordinal);
         Assert.Contains($"`Manager:MaxEntriesPerScan` | `{defaults.MaxEntriesPerScan}` | 50..10000", page, StringComparison.Ordinal);
+
+        // And the three kinds the page publishes are the three the defaults hold, in the order it prints them.
+        foreach (var kind in ManagerOptions.Default)
+        {
+            Assert.Contains(kind, page, StringComparison.Ordinal);
+        }
         Assert.Contains("There is no `Manager:Enabled`", page, StringComparison.Ordinal);
     }
 

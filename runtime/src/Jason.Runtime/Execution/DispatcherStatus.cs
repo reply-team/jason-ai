@@ -36,6 +36,7 @@ public sealed class DispatcherStatus
             MaxParallel > 0 ? MaxParallel : current.MaxParallel,
             runningAttempts,
             LastScanAt,
-            Scans);
+            Scans,
+            Summons);
     }
 }

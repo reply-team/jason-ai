@@ -560,8 +560,10 @@ waits for a person rather than being handed out again.
 ## Not here yet
 
 Work the runtime creates itself is no longer on this list. The dispatcher creates a manager's check-in,
-and it names its cause explicitly: lineage comes from the attempt or the item the review is about, and
-only a review nothing caused — one the cadence asked for — is root work.
+and it names its cause explicitly: lineage comes from the attempt the causing line names, or from the
+item where it names one and no attempt. Root work is what is left — a review the cadence asked for, and
+a review caused by a line that names neither, which a report about a campaign rather than about a work
+item is. [docs/campaign-manager.md](campaign-manager.md) §6 has the three cases.
 
 - **Approvals beyond one decision about one item.** There are no standing approvals, no bulk
   decisions, no expiry windows and no anomaly rules; nothing notifies anybody, so a person finds out
