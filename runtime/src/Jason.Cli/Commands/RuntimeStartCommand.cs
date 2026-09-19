@@ -35,7 +35,9 @@ public static class RuntimeStartCommand
         // runtime must not be confused with.
         var staleInstance = descriptor?.InstanceId;
         var processes = env.Processes ?? RuntimeProcessControl.Instance;
-        using var child = processes.Launch(env.Paths);
+        // Another copy of this program: what a person typing `jason runtime start` means by "the runtime".
+        // Said here rather than inside the seam, because the applier starts something else entirely.
+        using var child = processes.Launch(env.Paths, SelfExecutable.Command);
 
         var waited = timeout ?? DefaultTimeout;
         var elapsed = Stopwatch.StartNew();

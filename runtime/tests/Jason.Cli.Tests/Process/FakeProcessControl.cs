@@ -31,10 +31,19 @@ public sealed class FakeProcessControl : IRuntimeProcessControl
     /// <summary>The data directory of every launch, in order, so a test can assert both that and how many.</summary>
     public List<string> Launches { get; } = [];
 
-    public IProcessHandle Launch(JasonPaths paths)
+    /// <summary>
+    /// The executable of every launch, in order. Which program was started is the thing an applier gets wrong
+    /// invisibly — the old build from the wrong path answers every health check the new one would — so it is
+    /// recorded rather than assumed.
+    /// </summary>
+    public List<IReadOnlyList<string>> Executables { get; } = [];
+
+    public IProcessHandle Launch(JasonPaths paths, IReadOnlyList<string> executable)
     {
         ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(executable);
         Launches.Add(paths.Root);
+        Executables.Add(executable);
         return OnLaunch?.Invoke(paths) ?? new FakeProcessHandle(4242);
     }
 

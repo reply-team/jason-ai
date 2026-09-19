@@ -23,11 +23,19 @@ public interface IProcessHandle : IDisposable
 public interface IRuntimeProcessControl
 {
     /// <summary>
-    /// Starts this same executable as <c>runtime run --detached</c> against the given data directory. All three
+    /// Starts an executable as <c>runtime run --detached</c> against the given data directory. All three
     /// standard streams are redirected, so the child inherits no console handle; the child then puts its own
     /// descriptors on the null device and the pipes below are never written to again.
     /// </summary>
-    IProcessHandle Launch(JasonPaths paths);
+    /// <param name="executable">
+    /// What to run, as a command: the program and whatever has to come before the mode word. The caller names
+    /// it rather than the seam composing it, because the two callers do not want the same program — an ordinary
+    /// <c>jason runtime start</c> wants another copy of itself, and an applier running from a copy of itself
+    /// under the data directory wants the executable it has just installed. A seam that resolved this on its own
+    /// would have the applier start the old build from the wrong path, whereupon the health check would read the
+    /// old version and roll back an update that had in fact succeeded.
+    /// </param>
+    IProcessHandle Launch(JasonPaths paths, IReadOnlyList<string> executable);
 
     bool IsRunning(int pid);
 }
@@ -49,17 +57,25 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
     /// the published executable, or the muxer with this build's entry assembly named again — is
     /// <see cref="SelfExecutable"/>'s question, and the plugin host is started from the same answer.
     /// </summary>
-    public static (string FileName, IReadOnlyList<string> Arguments) ResolveSelf()
+    public static (string FileName, IReadOnlyList<string> Arguments) ResolveSelf() => Resolve(SelfExecutable.Command);
+
+    /// <summary>The same composition for any executable: the program, then what it needs, then the mode word.</summary>
+    public static (string FileName, IReadOnlyList<string> Arguments) Resolve(IReadOnlyList<string> executable)
     {
-        var self = SelfExecutable.Command;
-        return (self[0], [.. self.Skip(1), "runtime", "run", "--detached"]);
+        ArgumentNullException.ThrowIfNull(executable);
+        if (executable.Count == 0)
+        {
+            throw new ArgumentException("A runtime cannot be started from an empty command.", nameof(executable));
+        }
+
+        return (executable[0], [.. executable.Skip(1), "runtime", "run", "--detached"]);
     }
 
-    public IProcessHandle Launch(JasonPaths paths)
+    public IProcessHandle Launch(JasonPaths paths, IReadOnlyList<string> executable)
     {
         ArgumentNullException.ThrowIfNull(paths);
 
-        var (fileName, arguments) = ResolveSelf();
+        var (fileName, arguments) = Resolve(executable);
         var startInfo = new ProcessStartInfo(fileName)
         {
             UseShellExecute = false,
