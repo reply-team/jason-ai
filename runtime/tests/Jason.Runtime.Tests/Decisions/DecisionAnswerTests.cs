@@ -37,6 +37,10 @@ public class DecisionAnswerTests
             new DecisionAnswerRequest(decision.Id, "stop", null, new ActorRef(type, id), null), Ct));
 
         Assert.Equal("decision_not_human", refused.Code);
+
+        // Read untracked on purpose: a tracked read would hand back the entity this context is holding, which a
+        // refusal that had already moved the row in memory would satisfy. The refusal comes before any mutation
+        // today, so this passes either way now — what it guards is the day somebody reorders the checks.
         Assert.Equal(DecisionStatus.Pending, (await db.Decisions.AsNoTracking().SingleAsync(Ct)).Status);
     }
 
