@@ -38,14 +38,57 @@ public class ClaudeCodeHostTests
                 "--output-format",
                 "stream-json",
                 "--include-partial-messages",
+                "--verbose",
                 "--allowed-tools",
                 $"Bash({ProgramResolver.DefaultCliCommand} *)",
                 "--permission-mode",
                 "dontAsk",
                 "--session-id",
                 launch.SessionId,
+                "--setting-sources",
+                "project",
+                "--strict-mcp-config",
             ];
         Assert.Equal(expected, launch.Command);
+    }
+
+    /// <summary>
+    /// Why each of the three flags that are not about the session itself is there. Verified against Claude Code
+    /// 2.1.275; a version that behaves differently is a version this was not checked against.
+    /// </summary>
+    [Fact]
+    public void The_command_says_what_this_version_of_the_host_needs_and_what_it_must_not_inherit()
+    {
+        var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"]);
+
+        // A print-mode session that reports as it goes is refused outright without this: the host answers
+        // "--output-format=stream-json requires --verbose" and exits before a session exists.
+        Assert.Contains("--verbose", launch.Command);
+
+        // A launched role is not the person who installed the host. Without these two, the session inherits that
+        // person's settings whole — their plugins, their hooks and their MCP servers — none of which the work
+        // directory's deny rules reach. With them, the session keeps the built-in tools and the work directory's
+        // own skill, which is what the role was given, and nothing else arrives from outside.
+        var sources = launch.Command.ToList().IndexOf("--setting-sources");
+        Assert.True(sources >= 0, "the command does not say where settings come from");
+        Assert.Equal("project", launch.Command[sources + 1]);
+        Assert.Contains("--strict-mcp-config", launch.Command);
+    }
+
+    /// <summary>
+    /// The allow list is one rule, and it is the callback. A rule for the file-editing tools was tried against
+    /// 2.1.275 and granted neither writing nor editing, so it is not composed here: an unproven rule on the
+    /// command line reads afterwards as a permission the role had.
+    /// </summary>
+    [Fact]
+    public void The_allow_list_is_the_callback_and_nothing_else()
+    {
+        var launch = new ClaudeCodeHost().Compose(Revision(), ["claude"]);
+
+        var allow = launch.Command.ToList().IndexOf("--allowed-tools");
+        Assert.True(allow >= 0, "the command grants nothing");
+        Assert.Equal($"Bash({ProgramResolver.DefaultCliCommand} *)", launch.Command[allow + 1]);
+        Assert.StartsWith("--", launch.Command[allow + 2], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -150,6 +193,27 @@ public class ClaudeCodeHostTests
 
         Assert.NotEmpty(composed);
         Assert.DoesNotContain(composed, flag => !host.ReservedFlags.Contains(flag));
+    }
+
+    /// <summary>
+    /// The confinement is only as good as the flags a profile cannot undo. Composing project-only settings and a
+    /// strict MCP configuration means nothing if a profile may add a settings file, a plugin directory, another
+    /// MCP configuration or a second working directory after them, so each of those is refused as well —
+    /// verified against Claude Code 2.1.275, where every one of them widens what a session can reach.
+    /// </summary>
+    [Theory]
+    [InlineData("--verbose")]
+    [InlineData("--setting-sources")]
+    [InlineData("--strict-mcp-config")]
+    [InlineData("--mcp-config")]
+    [InlineData("--plugin-dir")]
+    [InlineData("--plugin-url")]
+    [InlineData("--settings")]
+    [InlineData("--add-dir")]
+    [InlineData("--disable-slash-commands")]
+    public void A_profile_may_not_widen_what_a_launched_session_can_reach(string flag)
+    {
+        Assert.Contains(flag, new ClaudeCodeHost().ReservedFlags);
     }
 
     private static ExecutionProfileRevision Revision(params string[] args) => new()
