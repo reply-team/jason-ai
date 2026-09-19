@@ -174,9 +174,11 @@ public class ManagerLoopTests
         // Not yet: the campaign went live a moment ago.
         Assert.Equal(0, (await host.ScanAsync(Ct)).Summoned);
 
+        // The loop's own tick is on this clock, so the hour below wakes it for a scan of its own beside the one
+        // asked for here. Scans run one at a time and either may be the one that summons, so the proof is the
+        // check-in itself, read back once this scan has had its turn.
         host.Clock.Advance(TimeSpan.FromSeconds(3_600));
-        var report = await host.ScanAsync(Ct);
-        Assert.Equal(1, report.Summoned);
+        await host.ScanAsync(Ct);
 
         var checkIn = await CheckInAsync(host, campaign);
         host.Track(checkIn.Id);
@@ -190,8 +192,12 @@ public class ManagerLoopTests
         // And the loop keeps going: that review is over, the next one falls due, and the campaign is looked at
         // again without anybody asking. That a second one is never created while the first is still open is
         // asserted where no child process can finish it first — in the summoner's own tests.
-        host.Clock.Advance(TimeSpan.FromDays(7));
-        Assert.Equal(1, (await host.ScanAsync(Ct)).Summoned);
+        // One cadence, not a week. The loop's tick is live on this clock, and a week of hourly ticks would be a
+        // week of hourly reviews, each summoned as the one before it ended — the loop doing its job, and not
+        // what this line is about, which is that the next one falls due at all.
+        host.Clock.Advance(TimeSpan.FromSeconds(3_600));
+        await host.ScanAsync(Ct);
+        Assert.Single(await CheckInsAsync(host, campaign, except: checkIn.Id));
     }
 
     /// <summary>
@@ -213,11 +219,11 @@ public class ManagerLoopTests
         Assert.Equal(1, (await host.ScanAsync(Ct)).Claimed);
         await host.WaitAsync(busy.Id, item => item.Status == WorkItemStatus.Processing, Ct, "processing");
 
+        // The loop's own tick is on this clock, so the hour below wakes it for a scan of its own beside the one
+        // asked for here; either may be the one that summons. What neither may do is claim, because the
+        // campaign is busy — and the check-in read back below, created and no further, is the proof of both.
         host.Clock.Advance(TimeSpan.FromSeconds(3_600));
-        var report = await host.ScanAsync(Ct);
-
-        Assert.Equal(1, report.Summoned);
-        Assert.Equal(0, report.Claimed);
+        await host.ScanAsync(Ct);
 
         var checkIn = await CheckInAsync(host, campaign);
         host.Track(checkIn.Id);
@@ -421,8 +427,10 @@ public class ManagerLoopTests
             },
             Ct);
 
+        // The hour wakes the loop's own scan as well; whichever of the two summons, the check-in read back next
+        // is the proof.
         host.Clock.Advance(TimeSpan.FromSeconds(3_600));
-        Assert.Equal(1, (await host.ScanAsync(Ct)).Summoned);
+        await host.ScanAsync(Ct);
 
         var checkIn = await CheckInAsync(host, campaign);
         host.Track(checkIn.Id);
