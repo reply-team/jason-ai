@@ -96,6 +96,25 @@ public static class RuntimeStatusCommand
         output.WriteLine($"Dispatcher: {Dispatcher(info.Dispatcher)}");
         output.WriteLine($"Plugins:    {Plugins(info.Plugins)}");
         output.WriteLine($"Routes:     {Routes(info.Routes)}");
+        output.WriteLine($"Update:     {Update(info.Update)}");
+    }
+
+    /// <summary>
+    /// What the runtime learned about newer versions. Three states, told apart: a runtime that has not looked
+    /// yet — younger than its own initial delay, or with the check turned off — is not "up to date" and says
+    /// so, and a runtime from before the section existed reports none at all, which reads the same way.
+    /// </summary>
+    private static string Update(UpdateInfo? update)
+    {
+        if (update is null)
+        {
+            return "not checked yet";
+        }
+
+        var checkedAt = update.CheckedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
+        return update.Available
+            ? $"{update.Version} available (checked {checkedAt})"
+            : $"up to date (checked {checkedAt})";
     }
 
     /// <summary>

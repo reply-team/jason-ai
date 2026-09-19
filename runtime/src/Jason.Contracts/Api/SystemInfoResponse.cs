@@ -1,6 +1,7 @@
 namespace Jason.Contracts.Api;
 
 /// <summary>Response of <c>system.info</c>: what the runtime says about itself. Non-business by design.</summary>
+/// <param name="Update">What the last successful update check learned; null until there has been one.</param>
 public sealed record SystemInfoResponse(
     string RuntimeVersion,
     string ApiVersion,
@@ -11,7 +12,8 @@ public sealed record SystemInfoResponse(
     DatabaseInfo Database,
     DispatcherInfo Dispatcher,
     PluginsInfo Plugins,
-    RoutesInfo Routes);
+    RoutesInfo Routes,
+    UpdateInfo? Update = null);
 
 public sealed record DatabaseInfo(IReadOnlyList<string> AppliedMigrations);
 

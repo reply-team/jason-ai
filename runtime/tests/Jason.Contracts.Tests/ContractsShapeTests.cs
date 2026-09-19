@@ -112,6 +112,29 @@ public class ContractsShapeTests
         Assert.Equal(DecisionReferenceKind.Attempt, JsonSerializer.Deserialize<DecisionReferenceKind>("\"attempt\"", JasonJson.Options));
     }
 
+    /// <summary>
+    /// What the last update check learned rides on <c>system.info</c> as a section of its own, null until a
+    /// check has succeeded — so a runtime that has not looked yet is told apart from one that looked and found
+    /// nothing newer, and never dressed up as "up to date".
+    /// </summary>
+    [Fact]
+    public void System_info_says_what_the_last_update_check_learned_and_null_until_it_has_looked()
+    {
+        var info = new SystemInfoResponse(
+            "0.1.0", "v1", "rt_01J", 1234, DateTimeOffset.UnixEpoch, "/data",
+            new DatabaseInfo([]),
+            new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0, 0),
+            new PluginsInfo(1, "snp_01J", DateTimeOffset.UnixEpoch, true),
+            new RoutesInfo("rts_01J", DateTimeOffset.UnixEpoch, null, 0, 0),
+            new UpdateInfo(true, "0.2.0", new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero), "https://example.test/notes"));
+
+        Assert.EndsWith(
+            "\"update\":{\"available\":true,\"version\":\"0.2.0\",\"checked_at\":\"2026-09-19T08:00:00.000Z\",\"release_notes_url\":\"https://example.test/notes\"}}",
+            JsonSerializer.Serialize(info, JasonJson.Options),
+            StringComparison.Ordinal);
+        Assert.EndsWith("\"update\":null}", JsonSerializer.Serialize(info with { Update = null }, JasonJson.Options), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_work_enums_are_snake_case_strings_in_both_directions()
     {

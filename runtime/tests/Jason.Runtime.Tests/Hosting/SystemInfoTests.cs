@@ -1,9 +1,11 @@
 using Jason.Contracts.Api;
+using Jason.Contracts.Update;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.Tests.Routing;
+using Jason.Runtime.Update;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Hosting;
@@ -116,5 +118,31 @@ public class SystemInfoTests
         Assert.Contains("\"max_parallel\":7", body, StringComparison.Ordinal);
         Assert.Contains("\"running_attempts\":1", body, StringComparison.Ordinal);
         Assert.Contains("\"scans\":11", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What the last update check learned, and null until there has been one: a runtime that has not looked
+    /// says so, rather than "up to date", and a status line has to be able to tell the two apart.
+    /// </summary>
+    [Fact]
+    public async Task System_info_says_what_the_last_update_check_learned_and_null_before_one()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
+
+        var (_, before) = await fixture.PostAsync(Operations.SystemInfo, null, Ct);
+        Assert.Contains("\"update\":null", before, StringComparison.Ordinal);
+
+        // Recorded the way the checker records it, so what system.info answers is what the checker learned.
+        var manifest = UpdateManifest.Read(
+            """{"schema":1,"version":"0.2.0","published_at":"2026-09-19T08:00:00Z","artifacts":{"win-x64":{"asset":"jason-win-x64.zip","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":1}},"release_notes_url":"https://example.test/notes"}""");
+        fixture.Resolve<UpdateAdvertisement>().Record(manifest, SemanticVersion.Parse("0.1.0"), new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero));
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        Assert.NotNull(info.Update);
+        Assert.True(info.Update.Available);
+        Assert.Equal("0.2.0", info.Update.Version);
+        Assert.Equal(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero), info.Update.CheckedAt);
+        Assert.Equal("https://example.test/notes", info.Update.ReleaseNotesUrl);
     }
 }
