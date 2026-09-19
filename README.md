@@ -127,6 +127,16 @@ jason workitem create <campaign-id> --kind ai_role --role researcher --execution
 jason rolenote get <campaign-id> researcher
 ```
 
+When a campaign is looked at, and by whom, is its own loop: a failure, a rejected approval or an
+effect somebody reported puts a **check-in** on the queue, and a cadence does it anyway when nothing
+has happened at all. What wakes a manager, how often one is woken, what it is told and what that
+costs are documented in **[docs/campaign-manager.md](docs/campaign-manager.md)**:
+
+```sh
+jason campaign update <campaign-id> --review-seconds 3600
+jason workitem list --campaign <campaign-id> --role manager
+```
+
 Jason ships no AI client and holds no model credentials: a profile names a host the user already
 installed and authenticated, and has nowhere to put a secret.
 

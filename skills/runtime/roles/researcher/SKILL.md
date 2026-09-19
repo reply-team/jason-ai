@@ -70,9 +70,14 @@ You may read what the runtime knows, the same way you read your note:
 
 ```
 jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason contact get cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
+
+Those are the verbs. `contact list` answers with everyone this runtime knows and takes no campaign, so the
+campaign's own people are `campaign list-contacts`; guessing at the other spelling costs you a turn and
+answers `Unrecognized command or argument`.
 
 Check in while you work so the runtime knows you are alive:
 
