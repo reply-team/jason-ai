@@ -156,8 +156,20 @@ public sealed partial class ExecutorService(
     /// One UPDATE decides ownership. A read followed by a write would leave a window in which the lease could
     /// change hands, so the guard lives in the WHERE clause and the row count is the answer.
     /// </summary>
-    private async Task FenceAsync(string workItemId, string attemptId, DateTime now, CancellationToken cancellationToken)
+    /// <summary>
+    /// The fence as one statement, for every caller a launched role reaches through: the attempt is the named
+    /// one, it is running, it owns the named item, and the item is processing — proved and recorded in a
+    /// single guarded UPDATE, never read-then-write. Raising a question is fenced by this too, which is also
+    /// why raising one says the role is still alive.
+    /// </summary>
+    public static async Task RequireAttemptAsync(
+        JasonDbContext db,
+        string workItemId,
+        string attemptId,
+        DateTime now,
+        CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(db);
         var touched = await FenceQuery(db, workItemId, attemptId)
             .ExecuteUpdateAsync(setters => setters.SetProperty(a => a.LastHeartbeatAt, now), cancellationToken)
             .ConfigureAwait(false);
@@ -166,6 +178,9 @@ public sealed partial class ExecutorService(
             throw DomainErrors.StaleAttempt(attemptId);
         }
     }
+
+    private Task FenceAsync(string workItemId, string attemptId, DateTime now, CancellationToken cancellationToken) =>
+        RequireAttemptAsync(db, workItemId, attemptId, now, cancellationToken);
 
     private async Task<WorkItem> LoadAsync(string workItemId, CancellationToken cancellationToken) =>
         await db.WorkItems.WithNavigation().Include(w => w.Attempts)
