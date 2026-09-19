@@ -40,6 +40,32 @@ public partial class ExecutionProfileDocTests
     }
 
     /// <summary>
+    /// What a launched session is given, and the one thing about it that is not confined. An operator deciding
+    /// whether to let this runtime start an agent on their machine is deciding exactly this, and every line of
+    /// it was established by running the shape rather than by reading the host's documentation.
+    /// </summary>
+    [Fact]
+    public void The_profile_contract_says_what_a_launched_session_inherits_and_what_it_does_not()
+    {
+        var contract = Flattened(File.ReadAllText(Path.Combine(DocumentsDirectory(), "execution-profiles.md")));
+
+        // Where its settings come from, and what therefore does not arrive with them.
+        Assert.Contains("--setting-sources project", contract, StringComparison.Ordinal);
+        Assert.Contains("--strict-mcp-config", contract, StringComparison.Ordinal);
+
+        // The tools are all still there; what decides is the mode and the one allow rule. A page that said the
+        // session "has only the callback" would be describing a tool list that does not exist.
+        Assert.Contains("refused by the mode", contract, StringComparison.Ordinal);
+
+        // No file-writing tool: the single fact a role's skill has to be written around.
+        Assert.Contains("no file-writing tool", contract, StringComparison.Ordinal);
+
+        // And the thing these flags do not take away, said plainly rather than left for somebody to discover in
+        // their own home directory.
+        Assert.Contains("auto-memory", contract, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Why a launched role's memory is a table here at all, and what that does not make it. The claim is easy
     /// to lose in a later edit — a section about a feature drifts into describing what it does and stops saying
     /// what it is worth — and a reader who loses it will write code that believes a note.

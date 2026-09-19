@@ -291,7 +291,12 @@ The launcher puts two things in that directory before the child starts:
 - `.claude/settings.json`, carrying the **deny** rules of the execution profile that runs the attempt
   and nothing else. It never carries an allow list: a directory the runtime created is not a workspace
   the host trusts, and an allow entry there is ignored without being reported, so what the agent *may*
-  do travels on the command line instead.
+  do travels on the command line instead. That directory is also the **only** place the session's
+  settings come from: the composed command reads no user-scope settings and loads no MCP server, so a
+  launched role inherits neither the operator's plugins and hooks nor their providers
+  ([docs/execution-profiles.md](execution-profiles.md) §7 says what a session is and is not given,
+  including the two things that surprise people: every built-in tool is listed but refused by the mode
+  unless the allow rule names it, and the role has no file-writing tool at all).
 - `.claude/skills/<role>/`, a copy of `~/.jason/skills/roles/<role>/` when the role has one. Files
   only; a link is neither copied nor followed. A skill that cannot be given to the role fails the
   attempt with `role_skill_invalid` before the child starts — whether because its `SKILL.md` names
