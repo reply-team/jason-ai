@@ -180,8 +180,10 @@ public class ManagerCheckInTests
 
     /// <summary>
     /// Where the answer to a question is what woke a review, the brief names the question. Where something
-    /// else woke it, it does not — one read is one review, so a decision answered behind a failure is one the
-    /// manager finds by reading rather than one the dispatcher hands it.
+    /// else woke it, the key is there and null — the brief writes every key it knows about and leaves the ones
+    /// it cannot fill empty, exactly as it already does for a work item and an attempt, so a role reading it
+    /// meets the same shape either way. One read is one review, so a question answered behind a failure is one
+    /// the manager finds by reading rather than one the dispatcher hands it.
     /// </summary>
     [Fact]
     public async Task A_triggered_brief_names_the_decision_only_when_the_answer_is_the_cause()
@@ -211,7 +213,9 @@ public class ManagerCheckInTests
             new ManagerOptions(),
             Ct);
 
-        Assert.Null((string?)elsewhere.Context!["cause"]!["decision_id"]);
+        var cause = Assert.IsType<JsonObject>(elsewhere.Context!["cause"]);
+        Assert.True(cause.ContainsKey("decision_id"), "the brief leaves the key there and null, as it does for the others");
+        Assert.Null(cause["decision_id"]);
     }
 
     /// <summary>

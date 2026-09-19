@@ -21,10 +21,11 @@ public partial class CampaignManagerDocTests
         // One word for the work the runtime creates, defined where somebody meets it first.
         Assert.Contains("A check-in is the work item the runtime creates to have a campaign reviewed", page, StringComparison.Ordinal);
 
-        // The three kinds this version reacts to, named on the page and not only in the code.
+        // The kinds this version reacts to, named on the page and not only in the code.
         Assert.Contains(JournalKinds.WorkItemFailed, page, StringComparison.Ordinal);
         Assert.Contains(JournalKinds.ApprovalRejected, page, StringComparison.Ordinal);
         Assert.Contains(JournalKinds.ExternalEffectReported, page, StringComparison.Ordinal);
+        Assert.Contains(JournalKinds.DecisionAnswered, page, StringComparison.Ordinal);
 
         // The boundary the whole design rests on.
         Assert.Contains("The dispatcher reads no meaning", page, StringComparison.Ordinal);
@@ -50,7 +51,7 @@ public partial class CampaignManagerDocTests
         Assert.Contains($"`Manager:Priority` | `{defaults.Priority}` | -1000..1000", page, StringComparison.Ordinal);
         Assert.Contains($"`Manager:MaxEntriesPerScan` | `{defaults.MaxEntriesPerScan}` | 50..10000", page, StringComparison.Ordinal);
 
-        // And the three kinds the page publishes are the three the defaults hold, in the order it prints them.
+        // And every kind the defaults hold is one the page publishes.
         foreach (var kind in ManagerOptions.Default)
         {
             Assert.Contains(kind, page, StringComparison.Ordinal);

@@ -147,8 +147,9 @@ A scheduled review carries `review_intent: "scheduled"` and names no trigger and
 else a review needs, it reads for itself through the CLI — the campaign, its work, its chronicle, its
 contacts, and the role note that is the manager's own memory of this campaign.
 
-**`cause.decision_id` is there when the answer to a question is what woke this review**, and absent
-otherwise. One read is one review: a question answered behind a failure in the same pass is consumed
+**`cause.decision_id` names a question when the answer to one is what woke this review**, and is `null`
+otherwise — like `work_item_id` and `attempt_id`, the brief writes every key it knows about and leaves
+the ones it cannot fill as null. One read is one review: a question answered behind a failure in the same pass is consumed
 by the review the failure summoned, whose cause names the failure. So a manager reads the questions
 answered since the last review for itself — `jason decision list --campaign <id> --status answered` —
 rather than trusting the brief to name one.

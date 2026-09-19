@@ -97,7 +97,7 @@ you as it binds everyone.
 
 ## The questions a person has answered
 
-`cause.decision_id` names a question when its answer is what woke you, and is absent otherwise. Do not stop
+`cause.decision_id` names a question when its answer is what woke you, and is `null` otherwise. Do not stop
 there: one read is one review, and a question answered behind a failure in the same pass is consumed by the
 review the failure summoned, whose cause names the failure and not the question. So read the questions
 answered since your last review yourself, rather than trusting the brief to name one:

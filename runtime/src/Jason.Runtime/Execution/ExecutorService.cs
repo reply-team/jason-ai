@@ -153,15 +153,15 @@ public sealed partial class ExecutorService(
     }
 
     /// <summary>
-    /// One UPDATE decides ownership. A read followed by a write would leave a window in which the lease could
-    /// change hands, so the guard lives in the WHERE clause and the row count is the answer.
-    /// </summary>
-    /// <summary>
     /// The fence as one statement, for every caller a launched role reaches through: the attempt is the named
-    /// one, it is running, it owns the named item, and the item is processing — proved and recorded in a
-    /// single guarded UPDATE, never read-then-write. Raising a question is fenced by this too, which is also
-    /// why raising one says the role is still alive.
+    /// one, it is running, it owns the named item, and the item is processing. One UPDATE decides ownership —
+    /// a read followed by a write would leave a window in which the lease could change hands, so the guard
+    /// lives in the WHERE clause and the row count is the answer.
     /// </summary>
+    /// <remarks>
+    /// Raising a question goes through this too, which is why raising one says the role is still alive: the
+    /// same statement that proves the claim records the heartbeat.
+    /// </remarks>
     public static async Task RequireAttemptAsync(
         JasonDbContext db,
         string workItemId,
@@ -179,6 +179,7 @@ public sealed partial class ExecutorService(
         }
     }
 
+    /// <summary>The fence, for this service's own three operations: one implementation, named twice.</summary>
     private Task FenceAsync(string workItemId, string attemptId, DateTime now, CancellationToken cancellationToken) =>
         RequireAttemptAsync(db, workItemId, attemptId, now, cancellationToken);
 
