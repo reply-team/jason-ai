@@ -24,10 +24,15 @@ exactly as it is, with its arguments, and nothing else:
 jason workitem heartbeat wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-You are permitted **that form and only that form**. A redirect, a pipe, a chain of two commands, or the same
-command reached through a shell wrapper does not match the rule that permits it and will be denied — the denial
-is about the shape of what you typed, not about what you were trying to do. If you need a file's content to go
-into a command, write the file first and name it with an option.
+What you are granted is **the plain callback**: the word, its verb and its arguments, as one command. Anything
+built around it — a redirect, a pipe, a chain of two commands — is **neither promised to run nor promised to be
+refused**, so do not build one; if you try and it is refused, that is the shape of what you typed and not an
+answer about the work.
+
+Everything else you might reach for is the host's decision rather than this runtime's promise. Some of it it
+refuses outright: you have **no file-writing tool** in this version, so there is no file to write first and
+nothing to name with an option. What you can reach is what the runtime answers when you call it, and you change
+nothing except through the callback.
 
 You do not need a credential and you were not given one. The command finds the runtime by itself.
 
@@ -85,11 +90,12 @@ Before you finish, put back what you learned. A note is **replaced whole** — t
 read the note, add to what was there, and write all of it back:
 
 ```
-jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher --note-file note.json
+jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher --note '{"gatekeeper":"the switchboard hangs up after six","checked":"2026-09-18"}'
 ```
 
-Write `note.json` first with your own tools, then name it. The whole file is the note; it must be a JSON object
-and at most 64 KiB.
+The note travels **in the command**, as one compact JSON object. You have **no file-writing tool** in this
+version, so there is no file to name and nothing to write first: the whole note is typed once, which is another
+reason to keep it short. It must be a JSON object and at most 64 KiB.
 
 That 64 KiB is measured on the canonical form, in which **characters outside ASCII are escaped** — six bytes for
 a character your editor counts as one. A note in Cyrillic, Greek or Japanese therefore holds roughly a third of
@@ -109,8 +115,10 @@ fix the shape, and complete again. Do not exit without completing — an attempt
 recorded as a run that stopped talking.
 
 ```
-jason workitem complete wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status succeeded --result-file findings.json
+jason workitem complete wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status succeeded --result '{"findings":["the switchboard hangs up after six"],"unresolved":["who signs the contract"]}'
 ```
+
+The result travels in the command too, for the same reason the note does.
 
 If you cannot do the work, say so as a failure rather than inventing an answer. A failed completion must carry
 an error with a `code` in lowercase snake_case and a `message` a person can act on, and it is never judged

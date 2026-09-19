@@ -97,10 +97,11 @@ nothing was started and nothing was spent. The message names what to change. Fix
 work again — a failed item is finished, and finished items are not reopened.
 
 **If you are the launched role**, two rules travel with you. Call home with the plain command word the
-launch envelope names, exactly as it is: the runtime permits that form and only that form, so a
-redirect or a chained command is refused. And answer in the shape the item asked for — where a work
-item declares a `result_format`, a completion that does not satisfy it is refused, however well it
-reads.
+launch envelope names, exactly as it is — the word, its verb and its arguments, as one command.
+Anything built around it, such as a redirect or a chain, is neither promised to run nor promised to be
+refused, and you have no file-writing tool, so whatever you want to keep goes inside the command
+itself. And answer in the shape the item asked for — where a work item declares a `result_format`, a
+completion that does not satisfy it is refused, however well it reads.
 
 ### A role's notes are its memory, not the truth
 
@@ -110,7 +111,7 @@ is wanted:
 
 ```
 jason rolenote get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher
-jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher --note-file note.json
+jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher --note '{"gatekeeper":"the switchboard hangs up after six"}'
 ```
 
 A note is written **whole** — there is no patch, so read it, add to it and write all of it back — and
