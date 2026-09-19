@@ -62,7 +62,7 @@ internal static class Behaviours
     /// <summary>The names this host answers to, so a caller can tell whether argv named one of them.</summary>
     public static bool Known(string behaviour) =>
         behaviour is "succeed" or "hang" or "mute" or "crash" or "silent" or "stale" or "leak" or "echo-envelope"
-            or "abandon" or "flood" or "researcher";
+            or "abandon" or "flood" or "researcher" or "manager";
 
     /// <summary>
     /// The behaviour a launched host is told to perform through its brief rather than its arguments. A host
@@ -104,6 +104,8 @@ internal static class Behaviours
                 return await AbandonAsync(envelope, api).ConfigureAwait(false);
             case "flood":
                 return await FloodAsync(options).ConfigureAwait(false);
+            case "manager":
+                return await ManagerAsync(options, envelope, api).ConfigureAwait(false);
             case "researcher":
                 return await ResearcherAsync(options, envelope, api).ConfigureAwait(false);
             case "echo-envelope":
@@ -268,6 +270,92 @@ internal static class Behaviours
     /// the sibling case: the same role, taught the same way, refused only for the shape of its answer.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// A campaign manager doing the least a review can honestly do: read why it was woken, read the campaign and
+    /// its own note, leave a line in the chronicle, and answer in the shape a check-in is held to. Whether it
+    /// then acts is the test's choice — <c>manager --act</c> creates a work item, so that the difference between
+    /// "looked and did something" and "looked and left it alone" is visible from outside.
+    /// </summary>
+    /// <remarks>
+    /// It reads the intent out of the brief rather than being told on argv, because a launched role is never
+    /// told anything on argv: the runtime composes that, and what the review is for travels in the context like
+    /// everything else a role is given.
+    /// </remarks>
+    private static async Task<int> ManagerAsync(IReadOnlyList<string> options, LaunchEnvelope envelope, RuntimeApi api)
+    {
+        var intent = envelope.Context["review_intent"]?.GetValue<string>() ?? "unstated";
+        var trigger = envelope.Context["trigger"]?.GetValue<string>();
+        var remembered = await NoteAsync(envelope, api).ConfigureAwait(false);
+
+        // Identifiers and counts. What the campaign says is the campaign's business, and this line ends up in a
+        // work directory the next person to read is debugging something else.
+        await Diagnostics.WriteAsync(
+            $"intent={intent} trigger={trigger ?? "none"} recalled={(remembered?.Count ?? 0).ToString(CultureInfo.InvariantCulture)}")
+            .ConfigureAwait(false);
+
+        var (campaignStatus, _) = await api.CallAsync(
+            Operations.CampaignGet, new CampaignGetRequest(envelope.CampaignId)).ConfigureAwait(false);
+
+        var created = new JsonArray();
+        if (options.Contains("--act"))
+        {
+            var (status, body) = await api.CallAsync(
+                Operations.WorkItemCreate,
+                new WorkItemCreateRequest(
+                    envelope.CampaignId,
+                    WorkItemKind.AiRole,
+                    "researcher",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    new JsonObject { ["brief"] = "look again at what the review found" },
+                    null,
+                    null,
+                    "the review asked for it"))
+                .ConfigureAwait(false);
+
+            if (status == 200 && JsonNode.Parse(body) is JsonObject item && item["id"] is { } id)
+            {
+                created.Add(JsonValue.Create(id.GetValue<string>()));
+            }
+            else
+            {
+                await Diagnostics.WriteAsync($"the work item this review asked for was refused: {status.ToString(CultureInfo.InvariantCulture)}").ConfigureAwait(false);
+            }
+        }
+
+        // The chronicle line every review leaves, whether or not it did anything. An empty tact is a finding:
+        // somebody reading the campaign later should see that it was looked at and deliberately left alone.
+        await api.CallAsync(
+            Operations.JournalAppend,
+            new JournalAppendRequest(
+                envelope.CampaignId,
+                "review",
+                "review",
+                new JsonObject { ["intent"] = intent, ["trigger"] = trigger },
+                null,
+                null))
+            .ConfigureAwait(false);
+
+        await RememberAsync(envelope, api, remembered).ConfigureAwait(false);
+
+        var result = new JsonObject
+        {
+            ["outcome"] = created.Count > 0 ? "acted" : "nothing",
+            ["summary"] = $"woken {intent}; the campaign answered {campaignStatus.ToString(CultureInfo.InvariantCulture)}",
+            ["created_work_items"] = created,
+        };
+
+        var answer = await CompleteAsync(envelope, api, result).ConfigureAwait(false);
+        return answer.Status == 200 ? Success : UnexpectedAnswer;
+    }
+
     private static async Task<int> ResearcherAsync(IReadOnlyList<string> options, LaunchEnvelope envelope, RuntimeApi api)
     {
         var taught = SkillName(envelope);

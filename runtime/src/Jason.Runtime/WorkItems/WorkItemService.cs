@@ -63,7 +63,28 @@ public sealed class WorkItemService(
     public async Task<WorkItemDto> CreateAsync(WorkItemCreateRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var actor = Actors.Resolve(request.Actor);
+        var item = await CreateCoreAsync(request, Actors.Resolve(request.Actor), lineage: null, cancellationToken).ConfigureAwait(false);
+        return WorkItemMapper.ToDto(item, item.CreatedAt, [], includeSnapshots: false);
+    }
+
+    /// <summary>
+    /// How a work item comes into existence, for every caller there is. The runtime creates work of its own —
+    /// a manager's check-in — and it goes through this routine rather than beside it, so that validation, the
+    /// chronicle line, what the row is computed from and everything added here later reach that work without
+    /// anybody remembering to copy them.
+    /// </summary>
+    /// <param name="lineage">
+    /// Supplied when the causing run is not the creating actor. The dispatcher creates a check-in as itself,
+    /// but the chain that check-in belongs to is the chain of the thing it is about — so lineage is read from
+    /// the cause and handed in, and the actor stays the truth about who made the row.
+    /// </param>
+    internal async Task<WorkItem> CreateCoreAsync(
+        WorkItemCreateRequest request,
+        ActorRef actor,
+        LineageRecord? lineage,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
 
         var errors = new ValidationErrors();
         WorkItemValidation.ValidateCreate(
@@ -87,7 +108,7 @@ public sealed class WorkItemService(
 
         // Read once, here, for work of every kind: what the run that asked for this hands down. After this line
         // it is a fact about the row, and nothing recomputes it.
-        var lineage = await Lineage.ForCreationAsync(db, actor, cancellationToken).ConfigureAwait(false);
+        var record = lineage ?? await Lineage.ForCreationAsync(db, actor, cancellationToken).ConfigureAwait(false);
 
         var now = clock.GetUtcNow().UtcDateTime;
         var item = new WorkItem
@@ -99,10 +120,10 @@ public sealed class WorkItemService(
             Role = Trimmed(request.Role),
             Operation = Trimmed(request.Operation),
             ExecutionProfile = Trimmed(request.ExecutionProfile),
-            LineageState = lineage.State,
-            LineageProfileName = lineage.ProfileName,
-            LineageProfileRevision = lineage.ProfileRevision,
-            LineageFromAttemptId = lineage.FromAttemptId,
+            LineageState = record.State,
+            LineageProfileName = record.ProfileName,
+            LineageProfileRevision = record.ProfileRevision,
+            LineageFromAttemptId = record.FromAttemptId,
             Status = WorkItemStatus.Created,
             Priority = request.Priority ?? 0,
             NotBefore = request.NotBefore?.UtcDateTime,
@@ -129,7 +150,7 @@ public sealed class WorkItemService(
             reason: NormalizeReason(request.Reason),
             workItem: item);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return WorkItemMapper.ToDto(item, now, [], includeSnapshots: false);
+        return item;
     }
 
     public async Task<WorkItemDto> GetAsync(WorkItemGetRequest request, CancellationToken cancellationToken)
