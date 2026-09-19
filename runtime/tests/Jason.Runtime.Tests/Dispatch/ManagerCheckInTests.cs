@@ -55,6 +55,40 @@ public class ManagerCheckInTests
     }
 
     /// <summary>
+    /// The failure that never started a child is the one a review is most needed for — a profile naming a
+    /// program this machine does not have — and it must not hand that profile to the review.
+    /// </summary>
+    /// <remarks>
+    /// A refused claim still records which profile <em>would</em> have run the work, deliberately, so that an
+    /// operator reading the attempt can see what was chosen. Inheriting from that record gave the check-in the
+    /// profile that could not run, and the review of the failure was refused for the same reason the failure
+    /// was: the loop could not review exactly the class of failure the manager's own skill teaches a manager to
+    /// read the code of. A refusal is a fact about a choice, not a chain.
+    /// </remarks>
+    [Fact]
+    public async Task A_review_of_a_launch_that_was_refused_does_not_inherit_the_profile_that_could_not_run()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = Seed(db);
+        var refused = FailedRoleAttempt(db, campaign, "unstartable", revision: 1, launched: false);
+        await db.SaveChangesAsync(Ct);
+
+        var item = await ManagerCheckIn.CreateAsync(
+            Service(db),
+            db,
+            campaign,
+            new ManagerCause(JournalKinds.WorkItemFailed, "jrn_1", refused.WorkItem!.PublicId, refused.PublicId, DecisionId: null, 1),
+            new ManagerOptions(),
+            Ct);
+
+        // The refused item's own record — root work, which resolves through the campaign, the role or the
+        // house default like any other root work, and can therefore actually run.
+        Assert.Equal(LineageState.Root, item.LineageState);
+        Assert.Null(item.LineageProfileName);
+    }
+
+    /// <summary>
     /// A person rejecting an approval leaves a line with a work item and no attempt. The chain the review is
     /// about is that item's own, and handing on its record is what keeps it.
     /// </summary>
@@ -344,7 +378,11 @@ public class ManagerCheckInTests
         await db.SaveChangesAsync(Ct);
     }
 
-    private static Attempt FailedRoleAttempt(JasonDbContext db, Campaign campaign, string? profile, int? revision)
+    /// <param name="launched">
+    /// Whether a child was really started. A claim refused before any child exists still records the profile it
+    /// had chosen, and that is the case the launched:false attempts stand for.
+    /// </param>
+    private static Attempt FailedRoleAttempt(JasonDbContext db, Campaign campaign, string? profile, int? revision, bool launched = true)
     {
         var item = new WorkItem
         {
@@ -372,6 +410,9 @@ public class ManagerCheckInTests
                 : new AttemptProvenanceDto(
                     null, null, null, null, null, null, null, null, null, null, null,
                     Agent: new AgentProvenanceDto(ProfileResolutionSource.CampaignPolicy, ProfileName: profile, ProfileRevision: revision)),
+            Launch = launched
+                ? new AttemptLaunchDto(["claude", "-p"], WorkDir: "/work/wi_failed/att_failed", Pid: 4242, ExitCode: 1)
+                : null,
         };
         db.WorkItems.Add(item);
         db.Attempts.Add(attempt);

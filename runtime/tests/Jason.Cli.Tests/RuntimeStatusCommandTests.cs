@@ -28,7 +28,19 @@ public class RuntimeStatusCommandTests
     private static string InfoJson(string instanceId, DispatcherInfo dispatcher, PluginsInfo plugins) =>
         InfoJson(instanceId, dispatcher, plugins, new RoutesInfo("rts_01J4", new DateTimeOffset(2026, 9, 14, 12, 0, 0, TimeSpan.Zero), "fake-provider", 1, 3));
 
-    private static string InfoJson(string instanceId, DispatcherInfo dispatcher, PluginsInfo plugins, RoutesInfo routes) => JsonSerializer.Serialize(
+    private static string InfoJson(string instanceId, DispatcherInfo dispatcher, PluginsInfo plugins, RoutesInfo routes) =>
+        InfoJson(instanceId, dispatcher, plugins, routes, update: null);
+
+    /// <summary>The defaults of the chain above, with only the update section chosen by the test.</summary>
+    private static string InfoJson(string instanceId, UpdateInfo? update) =>
+        InfoJson(
+            instanceId,
+            new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0, 0),
+            new PluginsInfo(2, "snp_01J4", new DateTimeOffset(2026, 9, 14, 12, 0, 0, TimeSpan.Zero), true),
+            new RoutesInfo("rts_01J4", new DateTimeOffset(2026, 9, 14, 12, 0, 0, TimeSpan.Zero), "fake-provider", 1, 3),
+            update);
+
+    private static string InfoJson(string instanceId, DispatcherInfo dispatcher, PluginsInfo plugins, RoutesInfo routes, UpdateInfo? update) => JsonSerializer.Serialize(
         new SystemInfoResponse(
             "0.1.0-dev",
             "v1",
@@ -39,8 +51,11 @@ public class RuntimeStatusCommandTests
             new DatabaseInfo(["20260913225419_InitialCreate"]),
             dispatcher,
             plugins,
-            routes),
+            routes,
+            update),
         JasonJson.Options);
+
+    private static readonly UpdateInfo Newer = new(true, "0.2.0", new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero), "https://example.test/notes");
 
     /// <summary>
     /// The reviews this runtime has summoned, beside the counters they belong with. A loop that is running and
@@ -368,6 +383,53 @@ public class RuntimeStatusCommandTests
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains("Plugins:    unknown", output.ToString(), StringComparison.Ordinal);
         Assert.Contains("Routes:     unknown", output.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What the runtime learned about newer versions, on the page an operator reads first. Three states, told
+    /// apart: something newer, nothing newer, and never looked — the last being what a runtime younger than its
+    /// own initial delay says, and which must not be dressed up as "up to date".
+    /// </summary>
+    [Fact]
+    public async Task Human_mode_says_a_newer_version_is_available()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE", Newer))));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Update:     0.2.0 available (checked 2026-09-19 08:00:00 UTC)", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_says_the_runtime_is_up_to_date()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson("rt_LIVE", Newer with { Available = false, Version = "0.1.0-dev" }))));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Update:     up to date (checked 2026-09-19 08:00:00 UTC)", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("a runtime that has not looked yet")]
+    [InlineData("a runtime from before the section existed")]
+    public async Task Human_mode_says_when_no_check_has_happened(string which)
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var body = which.StartsWith("a runtime that", StringComparison.Ordinal) ? InfoJson("rt_LIVE", update: null) : InfoWithoutADispatcher;
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, body)));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Update:     not checked yet", output.ToString(), StringComparison.Ordinal);
     }
 
     private static (CliEnvironment Env, StringWriter Out, StringWriter Error) Environment(TempPaths dir, HttpMessageHandler handler)

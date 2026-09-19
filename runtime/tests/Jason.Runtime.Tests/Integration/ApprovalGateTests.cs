@@ -272,8 +272,15 @@ public class ApprovalGateTests
             .ToListAsync(Ct);
     }
 
-    private static Task<RuntimeApiFixture> StartAsync(TestWorkspace workspace) =>
-        RuntimeApiFixture.StartAsync(
+    /// <summary>A runtime with the fake provider installed and the workspace the test watches behind it.</summary>
+    /// <remarks>
+    /// Handed back with the loop's own first scan already behind it. The wait is here, before this test has
+    /// seeded anything, and not in <see cref="ScanAsync"/>: there it would run after the seeding it is meant to
+    /// protect, and the loop, not the test, would be the one that claimed the work.
+    /// </remarks>
+    private static async Task<RuntimeApiFixture> StartAsync(TestWorkspace workspace)
+    {
+        var fixture = await RuntimeApiFixture.StartAsync(
             Ct,
             prepare: paths =>
             {
@@ -290,11 +297,15 @@ public class ApprovalGateTests
                 services.AddSingleton(TestPlugins.SearchPath);
             });
 
-    private static async Task<ScanReport> ScanAsync(RuntimeApiFixture api)
-    {
-        Assert.True(await DispatchHarness.FirstScanDoneAsync(api.Resolve<DispatcherStatus>(), Ct));
-        return await api.Resolve<ScanRunner>().ScanOnceAsync(Ct);
+        return await DispatchHarness.ScannedOnceAsync(fixture, Ct);
     }
+
+    /// <summary>One scan the test asked for; every caller says how much of it the gate was supposed to let out.</summary>
+    /// <remarks>
+    /// No wait for the loop's startup scan here — that is in <see cref="StartAsync"/>, because by the time this
+    /// runs the test has already seeded its work and the scan to beat may already have taken it.
+    /// </remarks>
+    private static Task<ScanReport> ScanAsync(RuntimeApiFixture api) => api.Resolve<ScanRunner>().ScanOnceAsync(Ct);
 
     private static async Task<(string Campaign, string Contact)> WorkAsync(RuntimeApiFixture api)
     {

@@ -41,7 +41,14 @@ public class DispatcherLoggingTests
         var command = new CanaryCommand();
         var runtime = await RuntimeHost.StartAsync(
             dir.Paths,
-            new RuntimeHostOptions(ShippedSettingsDirectory: null, ConsoleLogging: false, Clock: new FixedClock(Noon), ConfigureServices: services => services.AddSingleton<ICommand>(command)),
+            TestRuntimeOptions.Quiet with
+            {
+                Clock = new FixedClock(Noon),
+
+                // Replacing the hook rather than adding to it, which is why the transport that refuses the
+                // release feed is a property of its own: this line cannot take it away.
+                ConfigureServices = services => services.AddSingleton<ICommand>(command),
+            },
             Ct);
 
         string itemId;

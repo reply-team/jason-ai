@@ -13,8 +13,32 @@ permissions:
   contents: read
 
 jobs:
+  version:
+    name: The version this tree carries
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - id: version
+        shell: pwsh
+        run: |
+          # MSBuild's own answer — VersionPrefix and VersionSuffix from Directory.Build.props, 0.1.0-dev today —
+          # so a pull request is stamped with the number the tree already carries rather than with a second copy
+          # kept here. Every job below is told this one value; release.yml decides the same input from the tag.
+          $version = (dotnet msbuild runtime/src/Jason.App/Jason.App.csproj -getProperty:Version).Trim()
+          if ($LASTEXITCODE -ne 0 -or -not $version) { throw "MSBuild did not answer with a version." }
+          Write-Host "version -> $version"
+          "version=$version" >> $env:GITHUB_OUTPUT
+
   build-test-publish:
     name: ${{ matrix.rid }}
+    needs: version
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -37,23 +61,35 @@ jobs:
         run: dotnet restore runtime/Jason.slnx
 
       - name: Build (warnings are errors)
-        run: dotnet build runtime/Jason.slnx --configuration Release --no-restore
+        run: dotnet build runtime/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.version }}
 
       - name: Test (offline)
-        run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build
+        run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }}
 
-      - name: Publish self-contained single-file executable
-        run: dotnet publish runtime/src/Jason.App --configuration Release --runtime ${{ matrix.rid }} --self-contained -p:PublishSingleFile=true --output artifacts/publish/${{ matrix.rid }}
+      # The publish, the archive, the checksum and the manifest fragment: the same action release.yml runs on
+      # a tag, so the packaging is exercised on every pull request long before a tag exists.
+      - name: Package
+        id: package
+        uses: ./.github/actions/package
+        with:
+          rid: ${{ matrix.rid }}
+          version: ${{ needs.version.outputs.version }}
 
       - name: Smoke-test the published executable
         shell: pwsh
+        env:
+          EXECUTABLE: ${{ steps.package.outputs.executable }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
-          $exe = Join-Path "artifacts/publish/${{ matrix.rid }}" ($IsWindows ? "jason.exe" : "jason")
+          $exe = $env:EXECUTABLE
           $env:JASON_DATA_DIR = Join-Path ([IO.Path]::GetTempPath()) "jason-ci-smoke"
 
           $elapsed = Measure-Command { & $exe --version | Tee-Object -Variable version }
           if ($LASTEXITCODE -ne 0) { throw "jason --version exited with $LASTEXITCODE" }
           Write-Host "jason --version -> $version ($([int]$elapsed.TotalMilliseconds) ms cold start)"
+
+          # What it prints is the stamped version plus build metadata (+<commit>), which SemVer says to ignore.
+          if (($version -split '\+')[0] -ne $env:VERSION) { throw "jason --version says '$version', and this build was stamped $env:VERSION" }
 
           $elapsed = Measure-Command { & $exe runtime status | Tee-Object -Variable status }
           $statusExit = $LASTEXITCODE
@@ -61,12 +97,135 @@ jobs:
           if ($statusExit -ne 3) { throw "expected exit code 3 without a running runtime, got $statusExit" }
           if ($status -notmatch '"code":"no_descriptor"') { throw "expected a no_descriptor error envelope" }
 
+          # And it opens the database. Everything above passes on a build that cannot: a single-file publish
+          # leaves SQLite's native library beside the executable unless it is told to bundle it, `--version`
+          # and a status with no runtime never touch it, and the archive carries the executable alone — so the
+          # one build this whole wave exists to deliver would have gone out green. Starting the runtime is what
+          # loads it.
+          & $exe runtime start | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "jason runtime start exited with $LASTEXITCODE; the published executable cannot open its database" }
+
+          & $exe runtime status | Tee-Object -Variable running | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "jason runtime status exited with $LASTEXITCODE while a runtime was running" }
+          if ($running -notmatch '"applied_migrations":\["') { throw "runtime status reported no applied migrations: $running" }
+          Write-Host "the runtime started, migrated and answered"
+
+          & $exe runtime stop | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "jason runtime stop exited with $LASTEXITCODE" }
+
           # The last command of this step is expected to exit 3, and pwsh would hand that on as the step's
           # own exit code. Everything asserted above passed, so the step succeeded.
           exit 0
 
-      - uses: actions/upload-artifact@v7
+  # The install scripts, run against the archives this run packaged, served from a local directory that holds
+  # what a release would — assembled by the same script that assembles a release — with no network. Each job
+  # installs three times: once told to leave the PATH alone, then twice more, so that the idempotent PATH edit
+  # and the "already installed" no-op are exercised and not only described.
+  install-sh:
+    name: install.sh on ubuntu
+    needs: [version, build-test-publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
         with:
-          name: jason-${{ matrix.rid }}
-          path: artifacts/publish/${{ matrix.rid }}
-          if-no-files-found: error
+          pattern: jason-*
+          merge-multiple: true
+          path: feed
+
+      - name: Assemble the feed the way a release is assembled
+        shell: pwsh
+        run: ./.github/scripts/Write-Manifest.ps1 -Version ${{ needs.version.outputs.version }} -Directory feed -Require win-x64,linux-x64,osx-arm64
+
+      - name: Install, twice over, and once more without touching the PATH
+        shell: bash
+        env:
+          JASON_INSTALL_FEED: ${{ github.workspace }}/feed
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # A home of this job's own, so that the profile the script edits is one this job made — and so that
+          # ~/.local/bin in it is not on the PATH, which is the case the profile line exists for.
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME"
+
+          sh install/install.sh --no-modify-path
+          installed="$("$HOME/.local/bin/jason" --version)"
+          [ "${installed%%+*}" = "$VERSION" ] || { echo "installed '$installed', expected $VERSION"; exit 1; }
+
+          # What was installed opens its database, which is the half of "it runs" that --version cannot see.
+          export JASON_DATA_DIR="$RUNNER_TEMP/installed-data"
+          "$HOME/.local/bin/jason" runtime start
+          "$HOME/.local/bin/jason" runtime status | grep -q '"applied_migrations":\["'
+          "$HOME/.local/bin/jason" runtime stop
+          unset JASON_DATA_DIR
+          if [ -f "$HOME/.profile" ] && grep -q '# added by jason install' "$HOME/.profile"; then echo "--no-modify-path edited the profile"; exit 1; fi
+
+          # The same version again: nothing is downloaded, the script says so, and this time the PATH line is written.
+          sh install/install.sh | tee again.txt
+          grep -q "already installed" again.txt
+          [ "$(grep -c '# added by jason install' "$HOME/.profile")" = "1" ]
+
+          # A third run adds no second line.
+          sh install/install.sh
+          [ "$(grep -c '# added by jason install' "$HOME/.profile")" = "1" ]
+
+          # A login shell reads the line the script wrote and finds jason by name.
+          sh -l -c 'jason --version'
+
+  install-ps1:
+    name: install.ps1 on windows
+    needs: [version, build-test-publish]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: jason-*
+          merge-multiple: true
+          path: feed
+
+      - name: Assemble the feed the way a release is assembled
+        shell: pwsh
+        run: ./.github/scripts/Write-Manifest.ps1 -Version ${{ needs.version.outputs.version }} -Directory feed -Require win-x64,linux-x64,osx-arm64
+
+      # Windows PowerShell 5.1 rather than pwsh: it is what a fresh Windows has, and what the one-liner is typed into.
+      - name: Install, twice over, and once more without touching the PATH
+        shell: powershell
+        env:
+          JASON_INSTALL_FEED: ${{ github.workspace }}\feed
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\jason'
+          $exe = Join-Path $dir 'jason.exe'
+          function UserPathEntries { @([Environment]::GetEnvironmentVariable('Path', 'User') -split ';' | Where-Object { $_.TrimEnd('\') -ieq $dir }) }
+
+          ./install/install.ps1 -NoModifyPath
+          $installed = & $exe --version
+          if (($installed -split '\+')[0] -ne $env:VERSION) { throw "installed '$installed', expected $env:VERSION" }
+
+          # What was installed opens its database, which is the half of "it runs" that --version cannot see.
+          $env:JASON_DATA_DIR = Join-Path $env:RUNNER_TEMP 'installed-data'
+          & $exe runtime start | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "the installed jason could not start a runtime ($LASTEXITCODE)" }
+          $running = & $exe runtime status
+          if ($LASTEXITCODE -ne 0 -or $running -notmatch '"applied_migrations":\["') { throw "the installed jason did not migrate: $running" }
+          & $exe runtime stop | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "the installed jason could not stop its runtime ($LASTEXITCODE)" }
+          Remove-Item Env:\JASON_DATA_DIR
+          if ((UserPathEntries).Count -ne 0) { throw "-NoModifyPath edited the user PATH" }
+
+          # The same version again: nothing is downloaded, the script says so, and this time the PATH gains the directory.
+          # 6>&1 because the script talks to the person in front of it with Write-Host, which goes to the
+          # information stream: an assignment on its own captures nothing, and the check below would be reading
+          # an empty string while the words it is looking for scrolled past in the log.
+          $again = ./install/install.ps1 6>&1 | Out-String
+          Write-Host $again
+          if ($again -notmatch 'already installed') { throw "the second run did not say the version was already installed" }
+          if ((UserPathEntries).Count -ne 1) { throw "the user PATH does not hold the directory exactly once" }
+
+          # A third run adds no second entry.
+          ./install/install.ps1
+          if ((UserPathEntries).Count -ne 1) { throw "the user PATH does not hold the directory exactly once after a third run" }

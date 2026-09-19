@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 
@@ -128,7 +129,35 @@ public static partial class DecisionRenderers
         }
 
         var folded = Whitespace().Replace(question, " ").Trim();
-        return folded.Length <= QuestionShown ? folded : folded[..QuestionShown].TrimEnd() + " …";
+        return folded.Length <= QuestionShown ? folded : Head(folded, QuestionShown).TrimEnd() + " …";
+    }
+
+    /// <summary>
+    /// The head of the text, at most <paramref name="units"/> UTF-16 units long and cut only where one text
+    /// element ends and the next begins.
+    /// </summary>
+    /// <remarks>
+    /// Cutting at an index would take half of anything that is not one unit wide: an astral character is two,
+    /// and the half left behind is a lone surrogate — not text, and drawn as a replacement box by whatever
+    /// prints it. Text elements rather than runes, because an emoji with a modifier is several runes and one
+    /// thing on a terminal row.
+    /// </remarks>
+    private static string Head(string text, int units)
+    {
+        var elements = StringInfo.GetTextElementEnumerator(text);
+        var taken = 0;
+        while (elements.MoveNext())
+        {
+            var element = (string)elements.Current;
+            if (taken + element.Length > units)
+            {
+                break;
+            }
+
+            taken += element.Length;
+        }
+
+        return text[..taken];
     }
 
     private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);

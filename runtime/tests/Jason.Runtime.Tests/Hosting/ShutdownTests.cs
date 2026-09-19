@@ -10,7 +10,6 @@ namespace Jason.Runtime.Tests.Hosting;
 
 public class ShutdownTests
 {
-    private static readonly RuntimeHostOptions Quiet = new(ShippedSettingsDirectory: null, ConsoleLogging: false);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -18,7 +17,7 @@ public class ShutdownTests
     public async Task Shutdown_names_the_instance_it_is_stopping()
     {
         using var dir = new TempDataDir();
-        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct);
+        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
         using var http = Client(runtime);
 
         using var response = await http.PostAsync(Operations.Route(Operations.SystemShutdown), Json("{}"), Ct);
@@ -37,7 +36,7 @@ public class ShutdownTests
     public async Task Shutdown_accepts_an_empty_body()
     {
         using var dir = new TempDataDir();
-        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct);
+        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
         using var http = Client(runtime);
 
         using var response = await http.PostAsync(Operations.Route(Operations.SystemShutdown), content: null, Ct);
@@ -49,7 +48,7 @@ public class ShutdownTests
     public async Task Shutdown_takes_the_same_path_as_a_console_interrupt()
     {
         using var dir = new TempDataDir();
-        var runtime = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct);
+        var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
         var baseUrl = runtime.BaseUrl;
         using (var http = Client(runtime))
         {
@@ -69,7 +68,7 @@ public class ShutdownTests
         Assert.Contains("Shutdown requested through the API", logs, StringComparison.Ordinal);
 
         // The lock went with the host: a fresh runtime takes the same data directory without a fight.
-        await using var again = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct);
+        await using var again = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
         Assert.NotEqual(runtime.Descriptor.InstanceId, again.Descriptor.InstanceId);
     }
 

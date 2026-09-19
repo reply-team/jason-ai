@@ -6,7 +6,6 @@ namespace Jason.Runtime.Tests.Hosting;
 
 public class RunningRuntimeTests
 {
-    private static readonly RuntimeHostOptions Quiet = new(ShippedSettingsDirectory: null, ConsoleLogging: false);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -16,7 +15,7 @@ public class RunningRuntimeTests
         using var dir = new TempDataDir();
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
         await File.WriteAllTextAsync(dir.Paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff, Ct);
-        var options = Quiet with { ConfigureServices = services => services.AddHostedService<RefusesToStop>() };
+        var options = TestRuntimeOptions.Quiet with { ConfigureServices = services => services.AddHostedService<RefusesToStop>() };
 
         var runtime = await RuntimeHost.StartAsync(dir.Paths, options, Ct);
         Assert.True(File.Exists(dir.Paths.DescriptorFile));
@@ -27,7 +26,7 @@ public class RunningRuntimeTests
         // ...and the teardown still happened: nothing advertises the dead instance, and the lock is free, so the
         // next runtime takes the same data directory without a fight.
         Assert.False(File.Exists(dir.Paths.DescriptorFile));
-        await using var next = await RuntimeHost.StartAsync(dir.Paths, Quiet, Ct);
+        await using var next = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
         Assert.NotEqual(runtime.Descriptor.InstanceId, next.Descriptor.InstanceId);
 
         // A second stop of the failed runtime is a no-op rather than a second failure.

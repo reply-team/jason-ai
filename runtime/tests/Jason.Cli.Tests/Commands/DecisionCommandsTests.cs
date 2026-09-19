@@ -342,4 +342,65 @@ public class DecisionCommandsTests
         Assert.Contains("next cursor: ZGVjXzI", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A question cut to fit is cut between characters. Cutting at a UTF-16 index puts half of an astral
+    /// character at the end of the row — a lone surrogate, which is not text at all and which a terminal draws
+    /// as a replacement box.
+    /// </summary>
+    /// <remarks>
+    /// The astral character is placed at three offsets around the cut, so the assertion cannot pass by accident
+    /// of where the width happens to fall: one of the three keeps it whole and two drop it, and none of them may
+    /// leave half of it behind.
+    /// </remarks>
+    [Theory]
+    [InlineData(58)]
+    [InlineData(59)]
+    [InlineData(60)]
+    public async Task A_question_cut_to_fit_is_never_cut_through_a_character(int before)
+    {
+        var question = new string('a', before) + "\U0001F600" + new string('b', 40);
+        var page = """
+            {
+              "items": [
+                {
+                  "id": "dec_1", "campaign_id": "cmp_1", "work_item_id": "wi_1", "status": "pending",
+                  "question": "QUESTION",
+                  "raised_at": "2026-09-19T09:00:00+00:00", "answered_at": null, "answered_by": null
+                }
+              ],
+              "next_cursor": null
+            }
+            """.Replace("QUESTION", question, StringComparison.Ordinal);
+        using var cli = new CliRun(page);
+
+        var exit = await cli.RunAsync("decision", "list", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Empty(LoneSurrogates(cli.Text));
+    }
+
+    /// <summary>
+    /// Every surrogate that is not one half of a well-formed pair. Not "no surrogates": an emoji kept whole
+    /// inside the excerpt is a pair, and keeping it is correct.
+    /// </summary>
+    private static IEnumerable<int> LoneSurrogates(string text)
+    {
+        for (var index = 0; index < text.Length; index++)
+        {
+            if (!char.IsSurrogate(text[index]))
+            {
+                continue;
+            }
+
+            var isHalfOfAPair = char.IsHighSurrogate(text[index])
+                ? index + 1 < text.Length && char.IsLowSurrogate(text[index + 1])
+                : index > 0 && char.IsHighSurrogate(text[index - 1]);
+
+            if (!isHalfOfAPair)
+            {
+                yield return index;
+            }
+        }
+    }
 }

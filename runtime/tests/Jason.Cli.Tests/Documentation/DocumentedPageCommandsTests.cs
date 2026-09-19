@@ -23,7 +23,10 @@ public class DocumentedPageCommandsTests
     /// list honest is that a noun added to the pages and not to this list is simply unguarded, which is how the
     /// profile pages came to document an option the CLI did not have.
     /// </summary>
-    private static readonly string[] Nouns = ["jason profile ", "jason rolenote ", "jason campaign ", "jason workitem ", "jason decision "];
+    private static readonly string[] Nouns =
+    [
+        "jason profile ", "jason rolenote ", "jason campaign ", "jason workitem ", "jason decision ", "jason update ",
+    ];
 
     /// <summary>The pages whose printed commands are guarded.</summary>
     private static readonly string[] Pages =
@@ -31,6 +34,7 @@ public class DocumentedPageCommandsTests
         "README.md",
         Path.Combine("docs", "execution-profiles.md"),
         Path.Combine("docs", "campaign-manager.md"),
+        Path.Combine("docs", "release-and-update.md"),
     ];
 
     public static TheoryData<string, string> DocumentedCommands()
@@ -56,7 +60,7 @@ public class DocumentedPageCommandsTests
 
         var exit = await CliApp.RunAsync(
             Named(Tokens(command), dir.Paths.Root),
-            new CliEnvironment(new StringWriter(), error, dir.Paths),
+            new CliEnvironment(new StringWriter(), error, dir.Paths, new Unreachable()),
             TestContext.Current.CancellationToken);
 
         Assert.True(exit != UsageError, $"{page} documents `{command}`, and the CLI answers: {error}");
@@ -77,6 +81,19 @@ public class DocumentedPageCommandsTests
         Assert.Contains(Printed(), printed => printed.Command.StartsWith(noun, StringComparison.Ordinal));
 
     public static TheoryData<string> GuardedNouns() => [.. Nouns];
+
+    /// <summary>
+    /// Every request refused before it leaves the process. Most of these commands never get this far — there is
+    /// no runtime behind the data directory, so they stop at the missing descriptor — but <c>jason update check</c>
+    /// reads the release feed rather than the runtime, and typing it for real would be the first test in this
+    /// repository to open a socket to the internet. Refusing the request leaves the verb doing exactly what it
+    /// does on a machine with no network: exit 1 with a code, which is not the usage error under test.
+    /// </summary>
+    private sealed class Unreachable : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new HttpRequestException("no network in tests");
+    }
 
     /// <summary>
     /// The documents a printed command names, made to exist. The CLI reads such a file while it parses, so

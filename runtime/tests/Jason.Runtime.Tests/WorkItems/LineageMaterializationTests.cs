@@ -36,6 +36,63 @@ public class LineageMaterializationTests
         Assert.Equal(attempt.PublicId, item.Lineage.FromAttemptId);
     }
 
+    /// <summary>
+    /// A claim refused before any child existed — a profile naming a program this machine does not have, a
+    /// profile that was disabled — still records which profile it had chosen, because an operator reading the
+    /// attempt needs to know what was picked. That record is a fact about a choice, not a chain: nothing ran,
+    /// so there is nothing for the next piece of work to inherit, and the causing item's own record carries on.
+    /// </summary>
+    /// <remarks>
+    /// Inheriting it was worse than untidy. Work created because of a refused launch — the manager loop's
+    /// review of a failure is the one that matters — would be given the very profile that could not start, and
+    /// refused for the same reason, for ever.
+    /// </remarks>
+    [Fact]
+    public async Task Work_created_by_a_claim_that_was_refused_inherits_nothing_from_the_refusal()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign();
+        var parent = WorkItemFactory.NewAiRole(campaign);
+        var attempt = Refused(parent, Pinned("unstartable", 1));
+        Save(db, parent);
+        var service = NewService(db);
+
+        var item = await service.CreateAsync(By(campaign.PublicId, attempt), Ct);
+
+        Assert.Equal(LineageState.Root, item.Lineage!.State);
+        Assert.Null(item.Lineage.ProfileName);
+        Assert.Null(item.Lineage.ProfileRevision);
+        Assert.Null(item.Lineage.FromAttemptId);
+    }
+
+    /// <summary>
+    /// And the same refusal under a parent that had itself inherited hands on what the parent holds, exactly as
+    /// an attempt that pinned nothing always has. One rule, read from both sides.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_claim_still_hands_on_the_chain_its_own_item_holds()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign();
+        var parent = WorkItemFactory.NewAiRole(campaign);
+        parent.LineageState = LineageState.Inherited;
+        parent.LineageProfileName = "fast-claude";
+        parent.LineageProfileRevision = 2;
+        parent.LineageFromAttemptId = "att_01JASONANCESTOR";
+        var attempt = Refused(parent, Pinned("unstartable", 1));
+        Save(db, parent);
+        var service = NewService(db);
+
+        var item = await service.CreateAsync(By(campaign.PublicId, attempt), Ct);
+
+        Assert.Equal(LineageState.Inherited, item.Lineage!.State);
+        Assert.Equal("fast-claude", item.Lineage.ProfileName);
+        Assert.Equal(2, item.Lineage.ProfileRevision);
+        Assert.Equal("att_01JASONANCESTOR", item.Lineage.FromAttemptId);
+    }
+
     [Fact]
     public async Task Work_a_person_asked_for_is_root()
     {
@@ -218,7 +275,21 @@ public class LineageMaterializationTests
     private static AttemptProvenanceDto Agent(AgentProvenanceDto agent) =>
         new(null, null, null, null, null, null, null, null, null, null, null, Agent: agent);
 
+    /// <summary>An attempt that really started a child, which is what a launch record means.</summary>
     private static Attempt Ran(WorkItem item, AttemptProvenanceDto? provenance)
+    {
+        var attempt = Claimed(item, provenance);
+        attempt.Launch = new AttemptLaunchDto(["claude", "-p"], WorkDir: "/work", Pid: 4242, ExitCode: null);
+        return attempt;
+    }
+
+    /// <summary>
+    /// An attempt the claim refused before any child existed: the provenance says which profile was chosen and
+    /// there is no launch record, because nothing was launched.
+    /// </summary>
+    private static Attempt Refused(WorkItem item, AttemptProvenanceDto? provenance) => Claimed(item, provenance);
+
+    private static Attempt Claimed(WorkItem item, AttemptProvenanceDto? provenance)
     {
         var attempt = WorkItemFactory.NewAttempt(item, item.Attempts.Count + 1, AttemptStatus.Running, Noon.UtcDateTime);
         attempt.Provenance = provenance;

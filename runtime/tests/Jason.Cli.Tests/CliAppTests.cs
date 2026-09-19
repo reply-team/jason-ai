@@ -45,6 +45,7 @@ public class CliAppTests
     [InlineData("journal")]
     [InlineData("suppression")]
     [InlineData("plugin")]
+    [InlineData("update")]
     public async Task Help_lists_every_command_group(string group)
     {
         using var dir = new TempPaths();

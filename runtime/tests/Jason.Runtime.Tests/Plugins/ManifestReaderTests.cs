@@ -9,8 +9,11 @@ namespace Jason.Runtime.Tests.Plugins;
 /// contract: it is what an author reads in <c>plugin.list</c> and what the documentation describes, so a rule
 /// without its own code would be a rule nobody can act on.
 /// </summary>
-public class ManifestReaderTests
+public class ManifestReaderTests : IDisposable
 {
+    /// <summary>One tree for this test, deleted with it: every package below is made inside it.</summary>
+    private readonly TempTree _tree = new();
+
     private static readonly ManifestBounds Bounds = new(3_600_000, 512);
 
     [Fact]
@@ -608,17 +611,23 @@ public class ManifestReaderTests
         return string.Join('\n', lines).TrimEnd('\n') + "\n" + fragment;
     }
 
-    private static ManifestReadResult Read(string manifest, string directoryName = "fake") =>
+    private ManifestReadResult Read(string manifest, string directoryName = "fake") =>
         ManifestReader.Read(manifest, directoryName, NewPackage(manifest, directoryName), Bounds);
 
-    private static string NewPackage(string manifest, string directoryName)
+    private string NewPackage(string manifest, string directoryName)
     {
         // The package outlives the read only as long as the test needs it; the reader touches the entry module
-        // and nothing else, so a directory under the test's own temporary root is enough.
-        var root = Path.Combine(Path.GetTempPath(), "jason-tests", Guid.NewGuid().ToString("N"), directoryName);
-        Directory.CreateDirectory(root);
+        // and nothing else, so a directory in this test's own tree is enough — and the tree is deleted when the
+        // test ends, which is why this is an instance and not a static.
+        var root = _tree.NewDirectory(directoryName);
         File.WriteAllText(Path.Combine(root, "plugin.yaml"), manifest);
         File.WriteAllText(Path.Combine(root, "main.js"), "export function invoke() { return { result: {} }; }");
         return root;
+    }
+
+    public void Dispose()
+    {
+        _tree.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

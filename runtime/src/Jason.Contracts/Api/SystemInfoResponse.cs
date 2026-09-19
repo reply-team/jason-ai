@@ -1,6 +1,7 @@
 namespace Jason.Contracts.Api;
 
 /// <summary>Response of <c>system.info</c>: what the runtime says about itself. Non-business by design.</summary>
+/// <param name="Update">What the last successful update check learned; null until there has been one.</param>
 public sealed record SystemInfoResponse(
     string RuntimeVersion,
     string ApiVersion,
@@ -11,9 +12,17 @@ public sealed record SystemInfoResponse(
     DatabaseInfo Database,
     DispatcherInfo Dispatcher,
     PluginsInfo Plugins,
-    RoutesInfo Routes);
+    RoutesInfo Routes,
+    UpdateInfo? Update = null);
 
 public sealed record DatabaseInfo(IReadOnlyList<string> AppliedMigrations);
+
+/// <summary>
+/// What the last successful update check learned: whether the version it found is newer than the one running,
+/// which version that was, when it looked, and where the notes are. Absent until a check has succeeded, so a
+/// runtime that has not looked says so rather than saying "up to date".
+/// </summary>
+public sealed record UpdateInfo(bool Available, string Version, DateTimeOffset CheckedAt, string? ReleaseNotesUrl);
 
 /// <summary>What the dispatcher is doing right now: the cheapest way for an operator or a test to see the loop is alive.</summary>
 public sealed record DispatcherInfo(

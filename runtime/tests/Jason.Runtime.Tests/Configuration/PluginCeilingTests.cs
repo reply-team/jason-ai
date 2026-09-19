@@ -13,7 +13,6 @@ namespace Jason.Runtime.Tests.Configuration;
 /// </summary>
 public class PluginCeilingTests
 {
-    private static readonly RuntimeHostOptions Quiet = new(ShippedSettingsDirectory: null, ConsoleLogging: false);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -27,7 +26,7 @@ public class PluginCeilingTests
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
         File.WriteAllText(dir.Paths.UserSettingsFile, """{"Plugins":{"Limits":{"TimeoutMs":60000}}}""");
 
-        var failure = await Assert.ThrowsAsync<OptionsValidationException>(() => RuntimeHost.StartAsync(dir.Paths, Quiet, Ct));
+        var failure = await Assert.ThrowsAsync<OptionsValidationException>(() => RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct));
 
         // An operator who lowered a ceiling has to be told which contract forces the number, not only the number.
         Assert.Contains("Plugins:Limits:TimeoutMs", failure.Message, StringComparison.Ordinal);

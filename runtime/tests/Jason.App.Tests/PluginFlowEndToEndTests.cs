@@ -9,6 +9,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Tests;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -251,7 +252,7 @@ public class PluginFlowEndToEndTests
             start.ArgumentList.Add(argument);
         }
 
-        start.Environment[JasonPaths.DataDirectoryVariable] = root;
+        TestRuntimeEnvironment.Offline(start.Environment, root);
 
         // The package declares the stand-in vendor CLI by its own name, and that program is installed beside
         // these tests rather than onto the machine, so the runtime this starts has to be told where to look.

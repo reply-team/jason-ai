@@ -23,9 +23,6 @@ namespace Jason.Runtime.Decisions;
 /// </remarks>
 public sealed class DecisionService(JasonDbContext db, JournalWriter journal, TimeProvider clock)
 {
-    /// <summary>What a person's words about their own decision may be. The same bound a reason carries.</summary>
-    public const int MaxReasonLength = 2000;
-
     public async Task<DecisionDto> RaiseAsync(DecisionRaiseRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -414,9 +411,9 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
 
     private static string? Reason(string? reason)
     {
-        if (reason is not null && reason.Trim().Length > MaxReasonLength)
+        if (reason is not null && reason.Trim().Length > DecisionLimits.MaxReasonLength)
         {
-            throw new ValidationException([new ErrorDetail("reason", "too_long", $"reason must be at most {MaxReasonLength} characters.")]);
+            throw new ValidationException([new ErrorDetail("reason", "too_long", $"reason must be at most {DecisionLimits.MaxReasonLength} characters.")]);
         }
 
         return string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();

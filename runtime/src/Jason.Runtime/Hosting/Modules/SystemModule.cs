@@ -7,6 +7,7 @@ using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
+using Jason.Runtime.Update;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -38,7 +39,8 @@ public static class SystemModule
              LiveSettings<DispatcherOptions> dispatcherSettings,
              RunningAttemptRegistry running,
              PluginRegistry plugins,
-             RouteRegistry routes) =>
+             RouteRegistry routes,
+             UpdateAdvertisement update) =>
                 TypedResults.Ok(new SystemInfoResponse(
                     runtimeInfo.RuntimeVersion,
                     ApiVersion.Current,
@@ -60,7 +62,10 @@ public static class SystemModule
                         routes.Snapshot.ActivatedAt,
                         routes.Snapshot.Global.Default?.PluginId,
                         routes.Snapshot.Global.Operations.Count,
-                        routes.Snapshot.Campaigns.Values.Sum(set => set.Operations.Count + (set.Default is null ? 0 : 1))))));
+                        routes.Snapshot.Campaigns.Values.Sum(set => set.Operations.Count + (set.Default is null ? 0 : 1))),
+                    // Null until a check has succeeded: "has not looked" and "looked and found nothing newer"
+                    // are different answers, and a status line has to be able to give either.
+                    update.Current)));
 
         app.MapOperation<ShutdownCoordinator, ShutdownRequest, ShutdownResponse>(
             Operations.SystemShutdown,

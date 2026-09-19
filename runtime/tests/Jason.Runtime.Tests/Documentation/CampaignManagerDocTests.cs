@@ -95,6 +95,14 @@ public partial class CampaignManagerDocTests
         Assert.Contains($"| {DecisionLimits.MaxOptionLabelLength} |", page, StringComparison.Ordinal);
         Assert.Contains($"| {DecisionLimits.MaxOptionDetailLength} |", page, StringComparison.Ordinal);
         Assert.Contains($"| {DecisionLimits.MaxReferences} |", page, StringComparison.Ordinal);
+
+        // By its row and not by its number: 2000 is already on this page twice, so a bare bound would have
+        // passed while the reason was undocumented — which is how a bound comes to live outside the type that
+        // exists to hold them all.
+        Assert.Contains(
+            $"| the reason on either call, in characters | {DecisionLimits.MaxReasonLength} |",
+            page,
+            StringComparison.Ordinal);
     }
 
     /// <summary>

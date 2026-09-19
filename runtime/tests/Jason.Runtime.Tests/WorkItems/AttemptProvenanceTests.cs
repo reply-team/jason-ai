@@ -169,7 +169,6 @@ public class AttemptProvenanceTests
         await using var api = await StartAsync(command, ToTheReferenceProvider);
         var campaign = await CampaignAsync(api);
         var item = await ProviderItemAsync(api, campaign, "campaign.get", Named("c-7714"));
-        Assert.True(await DispatchHarness.FirstScanDoneAsync(api.Resolve<DispatcherStatus>(), Ct));
         Assert.Equal(1, (await api.Resolve<ScanRunner>().ScanOnceAsync(Ct)).Claimed);
         Assert.True(await DispatchHarness.EventuallyAsync(() => command.Contexts.Count == 1, Ct));
         var running = command.Contexts.Single();
@@ -321,8 +320,14 @@ public class AttemptProvenanceTests
     /// A runtime holding the two checked-in packages, sending work where the test says, and running whatever
     /// command the test hands it in place of the one this wave has not built yet.
     /// </summary>
-    private static Task<RuntimeApiFixture> StartAsync(ICommand command, string routes, Action<JasonPaths>? install = null) =>
-        RuntimeApiFixture.StartAsync(
+    /// <remarks>
+    /// Handed back with the loop's own first scan already behind it. The wait is here, before this test has
+    /// seeded anything, and not in <see cref="ScanAsync"/>: there it would run after the seeding it is meant to
+    /// protect, and the loop, not the test, would be the one that claimed the work.
+    /// </remarks>
+    private static async Task<RuntimeApiFixture> StartAsync(ICommand command, string routes, Action<JasonPaths>? install = null)
+    {
+        var fixture = await RuntimeApiFixture.StartAsync(
             Ct,
             prepare: paths =>
             {
@@ -343,6 +348,9 @@ public class AttemptProvenanceTests
                 services.AddSingleton(TestPlugins.SearchPath);
             });
 
+        return await DispatchHarness.ScannedOnceAsync(fixture, Ct);
+    }
+
     /// <summary>A package that asks for a program this machine does not have, which is what holds it back.</summary>
     private static void HoldOneBack(JasonPaths paths) => TestPlugins.Write(
         paths,
@@ -351,9 +359,12 @@ public class AttemptProvenanceTests
         "export function invoke() { return { result: {} }; }");
 
     /// <summary>One scan the test asked for, with the handler pool emptied before anything is read back.</summary>
+    /// <remarks>
+    /// No wait for the loop's startup scan here — that is in <see cref="StartAsync"/>, because by the time this
+    /// runs the test has already seeded its work and the scan to beat may already have taken it.
+    /// </remarks>
     private static async Task ScanAsync(RuntimeApiFixture api, int claimed)
     {
-        Assert.True(await DispatchHarness.FirstScanDoneAsync(api.Resolve<DispatcherStatus>(), Ct));
         Assert.Equal(claimed, (await api.Resolve<ScanRunner>().ScanOnceAsync(Ct)).Claimed);
         Assert.True(await api.Resolve<HandlerPool>().DrainAsync(TimeSpan.FromSeconds(10)));
     }

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Execution;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.EndToEnd;
 
@@ -171,7 +172,7 @@ public class LaunchedActorTests
             start.ArgumentList.Add(argument);
         }
 
-        start.Environment[JasonPaths.DataDirectoryVariable] = root;
+        TestRuntimeEnvironment.Offline(start.Environment, root);
         if (attemptId is not null)
         {
             start.Environment[ExecutionEnvironment.AttemptIdVariable] = attemptId;

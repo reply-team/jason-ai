@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Discovery;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests.EndToEnd;
 
@@ -264,7 +265,7 @@ public class ResearcherRoleTests
             start.ArgumentList.Add(argument);
         }
 
-        start.Environment[JasonPaths.DataDirectoryVariable] = root;
+        TestRuntimeEnvironment.Offline(start.Environment, root);
 
         using var process = Process.Start(start) ?? throw new InvalidOperationException("The jason executable could not be started.");
         process.StandardInput.Close();

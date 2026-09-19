@@ -55,10 +55,13 @@ public class StartupRecoveryTests
             await Task.Delay(10, Ct);
         }
 
+        // The loop's tick is on this clock as well, so moving time two hours wakes it for a scan of its own
+        // beside the one asked for here. Scans run one at a time, and which of the two takes the lease back
+        // is not the question: that it was taken back is, and the database answers that once this scan has
+        // had its turn — whichever of them found the lease, the other found it already gone.
         clock.Advance(TimeSpan.FromHours(2));
-        var report = await fixture.Resolve<ScanRunner>().ScanOnceAsync(Ct);
+        await fixture.Resolve<ScanRunner>().ScanOnceAsync(Ct);
 
-        Assert.Equal(1, report.Lost);
         await using (var db = Open(fixture.Paths))
         {
             var survivor = await db.WorkItems.AsNoTracking().Include(w => w.Attempts).SingleAsync(w => w.Role == "responder", Ct);
