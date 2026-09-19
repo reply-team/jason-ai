@@ -19,8 +19,9 @@ The release's version, without a leading v. The workflow decided it from the tag
 Where the archives and the fragments were downloaded to, and where manifest.json and checksums.txt are written.
 
 .PARAMETER Require
-The platforms the release must carry, comma-separated (win-x64,linux-x64,osx-arm64). They lead the manifest in
-this order; a fragment for any other platform is kept after them.
+The platforms the release must carry, as a list or comma-separated (-Require win-x64,linux-x64,osx-arm64 reads
+the same either way a caller writes it). They lead the manifest in this order; a fragment for any other platform
+is kept after them.
 
 .PARAMETER ReleaseNotesUrl
 The page the release notes are on, or nothing: a release with no notes is a release.
@@ -29,14 +30,17 @@ The page the release notes are on, or nothing: a release with no notes is a rele
 param(
     [Parameter(Mandatory)] [string] $Version,
     [Parameter(Mandatory)] [string] $Directory,
-    [Parameter(Mandatory)] [string] $Require,
+    [Parameter(Mandatory)] [string[]] $Require,
     [string] $ReleaseNotesUrl
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$required = @($Require -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+# A list either way it is written. A workflow writes its invocation inline, where PowerShell parses
+# `-Require win-x64,linux-x64,osx-arm64` as three arguments; a caller handing the same text over as one argv
+# element means one string holding commas. Both are the same list, and this is the line that says so.
+$required = @($Require | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
 $found = @{}
 foreach ($file in Get-ChildItem -Path $Directory -Filter '*.fragment.json' -File) {

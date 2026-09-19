@@ -388,6 +388,75 @@ public class ReleaseWorkflowTests
     /// <c>pwsh</c>, found on this machine's PATH, run to completion. A machine without it skips the test rather
     /// than failing it: the workflows run on runners that have it, and this suite has nothing to install.
     /// </summary>
+    /// <summary>
+    /// Every line a workflow really types to run the manifest script, typed — through the PowerShell parser it
+    /// will meet there, and not as a list of argv strings.
+    /// </summary>
+    /// <remarks>
+    /// The difference is the whole of it. A workflow writes its invocation inline, so PowerShell parses the
+    /// line: <c>-Require win-x64,linux-x64,osx-arm64</c> is an <em>array</em> there, while the identical text
+    /// handed over as one argv element is a string. A test that only ever passes argv proves the script and
+    /// says nothing about the line — which is how a run reached CI with both install jobs failing at
+    /// "Cannot convert value to type System.String" while every test here was green.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(ManifestInvocations))]
+    public void Every_line_a_workflow_runs_the_manifest_script_with_is_one_powershell_accepts(string workflow, string invocation)
+    {
+        using var tree = new TempTree();
+        var directory = Staged(tree);
+
+        // The workflow's own line, with the two things only a runner can supply put in: the version it would
+        // have computed, and the directory the artifacts would have been downloaded to. Everything else — above
+        // all how -Require is written — is left exactly as the workflow writes it.
+        var line = ExpandForThisMachine(invocation, directory);
+
+        var (exit, _, stderr) = Pwsh(NoEnvironment, "-Command", line);
+
+        Assert.True(exit == 0, $"{workflow} runs `{invocation}`, and pwsh answered: {stderr}");
+        var manifest = UpdateManifest.Read(File.ReadAllText(Path.Combine(directory, ReleaseAssets.Manifest)));
+        Assert.Equal(ReleaseAssets.Rids.Count, manifest.Artifacts.Count);
+    }
+
+    public static TheoryData<string, string> ManifestInvocations()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (var workflow in (string[][])[Ci, Release])
+        {
+            foreach (var line in Read(workflow).Split('\n'))
+            {
+                var trimmed = line.Trim();
+                var start = trimmed.IndexOf("./.github/scripts/Write-Manifest.ps1", StringComparison.Ordinal);
+                if (start >= 0)
+                {
+                    data.Add(workflow[^1], trimmed[start..]);
+                }
+            }
+        }
+
+        return data;
+    }
+
+    /// <summary>
+    /// The runner's own substitutions, and nothing else: the workflow expression that carries the version, the
+    /// environment variables the release job exports, and the directory the artifacts arrive in.
+    /// </summary>
+    private static string ExpandForThisMachine(string invocation, string directory)
+    {
+        var script = Path.Combine(RepositoryRoot(), Path.Combine(Script));
+        var expanded = invocation
+            .Replace("./.github/scripts/Write-Manifest.ps1", $"& '{script}'", StringComparison.Ordinal)
+            .Replace("${{ needs.version.outputs.version }}", "0.2.0", StringComparison.Ordinal)
+            .Replace("$env:VERSION", "0.2.0", StringComparison.Ordinal)
+            .Replace("$env:REPOSITORY", "reply-team/jason-ai", StringComparison.Ordinal);
+
+        // -Directory names where a runner downloaded the artifacts to; here it is the staged tree this test made.
+        return System.Text.RegularExpressions.Regex.Replace(
+            expanded,
+            @"-Directory \S+",
+            $"-Directory '{directory}'");
+    }
+
     private static (int Exit, string Stdout, string Stderr) Pwsh(IReadOnlyDictionary<string, string> environment, params string[] args)
     {
         var pwsh = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
