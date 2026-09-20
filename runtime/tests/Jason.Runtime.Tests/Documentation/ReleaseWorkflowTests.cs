@@ -660,16 +660,6 @@ public class ReleaseWorkflowTests
             .Any(line => line.Contains("--version", StringComparison.Ordinal) && !line.StartsWith('#'));
 
     /// <summary>
-    /// Whether the step really runs the command, rather than merely mentioning it.
-    /// </summary>
-    /// <remarks>
-    /// A plain substring search passes on a step whose command has been deleted, because two other lines still
-    /// carry the words: the throw below it (<c>throw "jason runtime start exited with ..."</c>) and the line
-    /// that reports success (<c>"the runtime started, migrated and answered"</c> — "started" contains "start").
-    /// So the mention must end on a word boundary, and must not be a throw, a condition or a comment: what is
-    /// left is the invocation.
-    /// </remarks>
-    /// <summary>
     /// Where a step really runs a command, by the same rules <see cref="Runs"/> uses — which is not where it
     /// first mentions one. This job's rollback step opens with a comment naming <c>jason update rollback</c>,
     /// so a guard that split the step at the first mention was splitting it at the comment, and a
@@ -691,6 +681,16 @@ public class ReleaseWorkflowTests
         return -1;
     }
 
+    /// <summary>
+    /// Whether the step really runs the command, rather than merely mentioning it.
+    /// </summary>
+    /// <remarks>
+    /// A plain substring search passes on a step whose command has been deleted, because two other lines still
+    /// carry the words: the throw below it (<c>throw "jason runtime start exited with ..."</c>) and the line
+    /// that reports success (<c>"the runtime started, migrated and answered"</c> — "started" contains "start").
+    /// So the mention must end on a word boundary, and must not be a throw, a condition or a comment: what is
+    /// left is the invocation.
+    /// </remarks>
     private static bool Runs(string step, string command) =>
         step.Split('\n')
             .Select(line => line.Trim())
