@@ -173,7 +173,6 @@ public sealed record UpdateLedger(
 
         for (var attempt = 0; ; attempt++)
         {
-            var replacing = File.Exists(path + Writing) || File.Exists(path + Replaced);
             try
             {
                 if (File.Exists(path))
@@ -187,7 +186,10 @@ public sealed record UpdateLedger(
                 // writer's own temporary names are how those two are told apart, and telling them apart is the
                 // whole point — `jason update status` answering "nothing in flight" in the middle of an update
                 // would be a lie told at the worst possible moment.
-                if (!replacing || attempt >= Attempts)
+                //
+                // Asked here, after the name was found missing, and not before it: a write that begins in
+                // between would be invisible to an answer computed first, and the lie would be told anyway.
+                if (!Replacing(path) || attempt >= Attempts)
                 {
                     return null;
                 }
@@ -201,6 +203,9 @@ public sealed record UpdateLedger(
             Thread.Sleep(Wait);
         }
     }
+
+    /// <summary>Whether a write is part-way through, by the two names only a write in flight leaves behind.</summary>
+    private static bool Replacing(string path) => File.Exists(path + Writing) || File.Exists(path + Replaced);
 
     /// <summary>
     /// Writes the ledger whole, or not at all: to a temporary file beside it and then a rename over it.

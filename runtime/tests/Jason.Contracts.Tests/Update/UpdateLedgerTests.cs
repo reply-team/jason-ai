@@ -127,9 +127,18 @@ public class UpdateLedgerTests
     /// reader holding it with ordinary sharing forbids.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Both halves are asserted here because both are claimed: the writer's temporary-file-and-rename, and the
     /// reader's share mode. A hundred replacements against a reader in a tight loop is enough to catch it: the
     /// first attempt that lands mid-read throws.
+    /// </para>
+    /// <para>
+    /// And every read is kept and asserted, which is the part this test was missing: a reader that answered
+    /// <c>null</c> in the middle of a replacement would have satisfied it. Null from this file means "no update
+    /// is in flight", which during an update is the one answer that must never be given — the rename leaves an
+    /// instant with no file at the name, and telling that instant from an installation with no update at all is
+    /// the whole reason the writer's temporary is named the way it is.
+    /// </para>
     /// </remarks>
     [Fact]
     public void A_ledger_is_replaced_while_somebody_is_reading_it()
@@ -143,6 +152,7 @@ public class UpdateLedgerTests
         // wait longer than that for a pool thread — in which case the reader never reads, and a test about
         // reading during a write proves nothing. (This suite has now paid for that lesson three times.)
         var reads = 0;
+        var empty = 0;
         var reading = true;
         Exception? refused = null;
         var reader = new Thread(() =>
@@ -151,8 +161,14 @@ public class UpdateLedgerTests
             {
                 try
                 {
-                    // Not swallowed: a read that throws here is the other half of the same defect.
-                    _ = UpdateLedger.ReadFile(path);
+                    // Not swallowed, and not discarded: a read that throws is one half of this defect, and a
+                    // read that answers "nothing in flight" during an update is the other.
+                    if (UpdateLedger.ReadFile(path) is null)
+                    {
+                        Interlocked.Increment(ref empty);
+                        return;
+                    }
+
                     Interlocked.Increment(ref reads);
                 }
                 catch (Exception error)
@@ -176,6 +192,7 @@ public class UpdateLedgerTests
         Volatile.Write(ref reading, false);
         Assert.True(reader.Join(TimeSpan.FromSeconds(10)), "the reader never finished");
         Assert.Null(refused);
+        Assert.Equal(0, Volatile.Read(ref empty));
         Assert.True(Volatile.Read(ref reads) > 0, "the reader never managed a single read, so this proved nothing");
         Assert.NotNull(UpdateLedger.ReadFile(path));
     }
