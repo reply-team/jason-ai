@@ -80,7 +80,7 @@ public sealed class FixedClock(DateTimeOffset now) : TimeProvider
                 }
 
                 _now = next.Due!.Value;
-                next.Rearm();
+                next.Rearm(target);
             }
 
             next.Fire();
@@ -117,9 +117,14 @@ public sealed class FixedClock(DateTimeOffset now) : TimeProvider
             }
         }
 
-        /// <summary>Under the clock's lock, just before firing: the next due moment, or none for a one-shot.</summary>
-        public void Rearm() =>
-            Due = _period > TimeSpan.Zero ? Due + _period : null;
+        /// <summary>
+        /// Under the clock's lock, just before firing: the next due moment, or none for a one-shot. A periodic
+        /// timer is re-armed from where this move ends rather than from the tick it is firing for, so a move
+        /// that passes several of its periods fires it once — a real periodic timer does not hand a process
+        /// that was not looking a callback for every period it missed.
+        /// </summary>
+        public void Rearm(DateTimeOffset target) =>
+            Due = _period > TimeSpan.Zero ? target + _period : null;
 
         public void Fire() => callback(state);
 
