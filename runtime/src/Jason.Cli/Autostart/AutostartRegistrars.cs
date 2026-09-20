@@ -93,6 +93,17 @@ public static class AutostartRegistrars
     private static string FirstLine(string text) =>
         text.Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.Length > 0) ?? string.Empty;
 
+    /// <summary>
+    /// What a machine that registers nothing says, in one place: the registrar raises it when something is
+    /// applied to such a machine, and the verb raises it before composing anything, because there is nothing to
+    /// compose for a platform that registers nothing.
+    /// </summary>
+    public static AutostartException CannotRegister() =>
+        new(
+            AutostartCodes.Unsupported,
+            "This machine has no way to start the runtime at logon that Jason knows about: it registers a logon task on Windows, "
+            + "a LaunchAgent on macOS and a systemd user unit on Linux. Start the runtime with `jason runtime start` instead.");
+
     /// <summary>The account's own home directory, which is where two of the three keep their document.</summary>
     internal static string Home => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
@@ -195,15 +206,9 @@ internal sealed class NoRegistrar : IAutostartRegistrar
 
     public AutostartState Read() => new(false, [], null);
 
-    public void Apply(AutostartRegistration registration) => throw Refuse();
+    public void Apply(AutostartRegistration registration) => throw AutostartRegistrars.CannotRegister();
 
-    public void Remove(AutostartRegistration registration) => throw Refuse();
-
-    private static AutostartException Refuse() =>
-        new(
-            AutostartCodes.Unsupported,
-            "This machine has no way to start the runtime at logon that Jason knows about: it registers a logon task on Windows, "
-            + "a LaunchAgent on macOS and a systemd user unit on Linux. Start the runtime with `jason runtime start` instead.");
+    public void Remove(AutostartRegistration registration) => throw AutostartRegistrars.CannotRegister();
 }
 
 /// <summary>

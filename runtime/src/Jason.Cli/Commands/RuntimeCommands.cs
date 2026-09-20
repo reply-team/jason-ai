@@ -36,6 +36,8 @@ public static class RuntimeCommands
             actor,
             (human, cancellationToken) => RuntimeRestartCommand.RunAsync(env, human, cancellationToken)));
 
+        runtime.Subcommands.Add(RuntimeAutostartCommands.Build(env, actor));
+
         return runtime;
     }
 
