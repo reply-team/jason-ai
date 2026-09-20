@@ -117,6 +117,32 @@ public class ReleaseAndUpdateDocTests
     }
 
     /// <summary>
+    /// What <c>update_file_refused</c> covers, as the code now raises it: not only a file an update had to
+    /// move, but a rollback's renames, the ledger's own write and the database restore. A row that names one
+    /// of four sends a person reading it to the wrong place — and it is the row they read at the worst moment.
+    /// </summary>
+    [Fact]
+    public void The_page_says_which_files_the_refusal_about_a_file_covers()
+    {
+        var row = Row(UpdateCodes.FileRefused);
+
+        Assert.Contains("rollback", row, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("database", row, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ledger", row, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The one row of the codes table that begins with this code, for a test that is about its wording.</summary>
+    private static string Row(string code)
+    {
+        var row = Read()
+            .Split('\n')
+            .FirstOrDefault(line => line.TrimStart().StartsWith($"| `{code}` |", StringComparison.Ordinal));
+
+        Assert.NotNull(row);
+        return row;
+    }
+
+    /// <summary>
     /// The steps and the refusal codes on the page are the ones this build has, read out of the enum and out of
     /// <see cref="UpdateCodes"/> rather than typed twice. A code renamed in the code turns the page red, which
     /// is the only way a table of error codes stays true for longer than the week it was written in.

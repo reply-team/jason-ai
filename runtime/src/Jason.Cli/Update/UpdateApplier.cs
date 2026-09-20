@@ -88,9 +88,23 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         OnDisk(
             $"recording the {step.ToString().ToLowerInvariant()} step",
             update.Ledger,
-            $"Make sure {update.Root} is a directory this account can write to, then run `jason update apply` again.",
+            RemedyForRecording(step, update.Root, Path.Combine(update.Applier, ReleaseAssets.ExecutableName)),
             () => ledger.Write(update.Ledger));
     }
+
+    /// <summary>
+    /// What to tell somebody whose ledger write refused. Everywhere but one step the answer is "fix the
+    /// directory and run it again": the install path still holds an executable, so <c>jason</c> is still there
+    /// to type. The write before <c>swapped</c> is the exception — it happens inside the one-step window where
+    /// the install path is empty, and telling a person to type the program that is missing is telling them
+    /// nothing. The program that exists then is the applier's own copy, which is what the swap's own remedy
+    /// says and what this one did not.
+    /// </summary>
+    public static string RemedyForRecording(UpdateStep step, string root, string applierCopy) =>
+        step == UpdateStep.Swapped
+            ? $"There is nothing at the install path until this succeeds. Make sure {root} is a directory this account can write to, "
+              + $"then run `jason update apply` again from {applierCopy}, because `jason` itself is not there to run."
+            : $"Make sure {root} is a directory this account can write to, then run `jason update apply` again.";
 
     /// <summary>The steps still to take, beginning with the one the ledger names: it was begun, not finished.</summary>
     private static IEnumerable<UpdateStep> Remaining(UpdateStep from) =>
