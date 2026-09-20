@@ -241,6 +241,7 @@ public class UpdateRefusalTests
 
         return null;
     }
+
     /// <summary>
     /// Which volume a path is on, decided from the machine's mount points rather than from the first character
     /// of the path — which is what a check built on the path root amounts to on Linux and macOS.
