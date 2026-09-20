@@ -98,6 +98,59 @@ public partial class SkillPackTests
     private static partial Regex LinkTarget();
 
     /// <summary>
+    /// The build the pack ships with, named in the catalog. What is compared is the release prefix and not the
+    /// stamp: the stamp is <c>0.1.0-dev+&lt;sha&gt;</c> on every commit, so a catalog quoting it verbatim would
+    /// be red at every push or would have to carry a commit sha.
+    /// </summary>
+    [Fact]
+    public void The_catalog_names_the_version_this_tree_carries()
+    {
+        var version = Jason.Contracts.Update.SemanticVersion.Current;
+        var prefix = string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"{version.Major}.{version.Minor}.{version.Patch}");
+
+        Assert.Contains(
+            $"ships with Jason **{prefix}**",
+            File.ReadAllText(SkillPack.Catalog()),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And what "verified" is worth. It is a claim that a real host read this text, which the next edit would
+    /// quietly falsify — so the catalog records the digest of the text that was read, and this recomputes it.
+    /// An edit without a new reading is red, and the way out is <c>draft</c> again or a new digest after a new
+    /// reading, which a reviewer sees in the diff.
+    /// </summary>
+    [Fact]
+    public void Every_verified_skill_is_the_text_a_host_actually_read()
+    {
+        var catalog = File.ReadAllText(SkillPack.Catalog());
+
+        foreach (var skill in SkillPack.All())
+        {
+            var status = SkillFrontMatter.Read(skill.File).Metadata.GetValueOrDefault("status");
+            var row = Row(catalog, skill.Name);
+
+            if (status != "verified")
+            {
+                Assert.True(
+                    row is null,
+                    $"'{skill.Name}' is not verified and the catalog records a reading of it anyway.");
+                continue;
+            }
+
+            Assert.True(row is not null, $"'{skill.Name}' says it is verified and the catalog records no reading.");
+            Assert.Contains(SkillPack.BodyDigest(skill.File), row, StringComparison.Ordinal);
+            Assert.Contains("Claude Code 2.1.", row, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>The catalog's row for one skill, if it has one: a table line whose first cell names it.</summary>
+    private static string? Row(string catalog, string name) =>
+        catalog.Split('\n').FirstOrDefault(line => line.StartsWith($"| `{name}`", StringComparison.Ordinal));
+
+    /// <summary>
     /// The detector, before the pack. Every phrase on the list is absent from the pack today, so a guard with
     /// only the scan below would be green on the day it was written and would have shown nothing about
     /// itself. Each phrase is given to it here on its own, in a sentence of the kind that would really have
