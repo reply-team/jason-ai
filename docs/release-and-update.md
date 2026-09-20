@@ -362,7 +362,9 @@ jason runtime autostart status
 jason runtime autostart disable
 ```
 
-One registration per operating system and per account, in the account's own scope, and **nothing is elevated**:
+One registration per operating system and per account, in the account's own scope. **On Windows, `enable` and
+`disable` have to be run from an elevated prompt**, for the reason in the section below; on macOS and Linux the
+document is a file in the account's own home and no elevation is involved:
 
 | platform | what is registered | where the document lives |
 | --- | --- | --- |
@@ -390,20 +392,35 @@ plist path, same unit name — and `status` shows which directory the one that i
 rots: an update that moved the binary, or a directory somebody deleted, leaves something that fails at every
 logon without saying anything to anybody.
 
-### Windows: no window, and the logon right that costs
+### Windows: an elevated prompt, no window, and the logon right that costs
 
-The task runs with an **S4U logon** — the account, with no stored password, in a session that has no desktop —
-and at `LeastPrivilege`. That is what keeps a console window off your screen at every logon: `jason runtime run`
-is a console application, and a task in the interactive session would show one. `--detached` does not help with
-that; it redirects the runtime's standard streams and never frees a console.
+**`enable` and `disable` are elevated acts.** Being signed in as an administrator is not enough: an unelevated
+prompt on an administrator account is refused too. The Task Scheduler will not take this task from a process
+running at medium integrity, and it says so plainly — `ERROR: Access is denied.`, exit `0x80070005`, with
+nothing registered. Jason repeats the tool's own line and says what to do about it. It does **not** check your
+integrity level before asking: the Task Scheduler's answer is the only thing that really knows, and a guess
+made in advance would be wrong on exactly the machines where it mattered.
+
+What costs the elevation is the shape of the task, not the folder it goes in — the Task Scheduler's root folder
+is writable by ordinary accounts. The task runs with an **S4U logon**: the account, with no stored password, at
+`LeastPrivilege`, in a non-interactive session that has no desktop. That is what keeps a console window off
+your screen at every logon — `jason runtime run` is a console application, and a task in the interactive
+session would show one, while `--detached` does not help with that: it redirects the runtime's standard streams
+and never frees a console. Registering an S4U task is the part an ordinary prompt may not do.
 
 An S4U task logs on as a **batch** logon, so the account must hold the *Log on as a batch job* right
 (`SeBatchLogonRight`). On a workstation, Administrators, Backup Operators and Performance Log Users hold it by
-default. The Task Scheduler grants it when a task is registered with a password, which this does not do — so on
-a standard account `enable` may succeed and the task may then fail at every logon with *the user has not been
-granted the requested logon type at this computer*. If that happens, the right has to be granted to the account
-(`secpol.msc` → Local Policies → User Rights Assignment → Log on as a batch job, or `secedit`), which needs an
-administrator once.
+default; the Task Scheduler grants it only for a task registered with a password, which this is not. If it is
+missing, the task registers cleanly and then fails at every logon with *the user has not been granted the
+requested logon type at this computer*, and the right has to be granted to the account (`secpol.msc` → Local
+Policies → User Rights Assignment → Log on as a batch job, or `secedit`).
+
+**Standard accounts are unsupported in this version.** Elevating from one does not help, and is worse than
+refusing: the elevated prompt runs as the *administrator* whose credentials were given, and the registration
+names whoever is running it — so it would register a logon task for the administrator's account rather than for
+the person who asked. Such an account can still run the runtime with `jason runtime start`, which registers
+nothing; making it start at logon would need a task registered against that account's own SID by somebody who
+can elevate, which these verbs do not offer.
 
 ### The environment an autostarted runtime has
 

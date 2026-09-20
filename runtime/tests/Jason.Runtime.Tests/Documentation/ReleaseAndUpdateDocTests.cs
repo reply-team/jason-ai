@@ -525,6 +525,39 @@ public class ReleaseAndUpdateDocTests
     }
 
     /// <summary>
+    /// That registering on Windows is an elevated act. The page said the opposite — "nothing is elevated", in
+    /// the page and in the README — until a hand check typed `enable` at an ordinary prompt on a real machine
+    /// and the Task Scheduler answered <c>ERROR: Access is denied.</c> with <c>0x80070005</c>. The account was
+    /// an administrator; the prompt was not elevated, and that is the half that decides.
+    /// </summary>
+    /// <remarks>
+    /// The claim is cheap to make and expensive to leave wrong: it is the first thing a person does with these
+    /// verbs, and a page that promises no elevation sends them to read their own error message as a bug.
+    /// </remarks>
+    [Fact]
+    public void The_page_says_that_registering_on_windows_needs_an_elevated_prompt()
+    {
+        var page = Read();
+
+        Assert.Contains("elevated prompt", page, StringComparison.OrdinalIgnoreCase);
+
+        // And says what it costs the accounts that cannot get one, rather than leaving them to find out.
+        Assert.Contains("standard account", page, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("unsupported", page, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>And the sentence it replaced is gone from both places that carried it.</summary>
+    [Fact]
+    public void Nothing_promises_that_autostart_is_never_elevated()
+    {
+        foreach (var text in new[] { Read(), Source("README.md") })
+        {
+            Assert.DoesNotContain("nothing is elevated", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("and nothing is elevated", text, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
     /// The sentence that said nothing about autostart is ever registered lived in three places, and all three
     /// had to stop saying it on the day the verbs arrived. A guarantee kept in three copies is a guarantee that
     /// goes stale in two of them.

@@ -243,7 +243,7 @@ public static class AutostartRegistrars
     /// Every platform writes before it asks — the Task Scheduler is handed a file, and so is systemd — so a
     /// refusal that walked away left a document behind on a machine with nothing registered. A person reading
     /// the data directory finds a file named after a registration that does not exist; the hand check found it
-    /// after an `enable` an unelevated prompt was refused.
+    /// after an `enable` from an unelevated prompt was refused.
     /// </para>
     /// <para>
     /// A document that was already there is put back <b>byte for byte</b> rather than deleted. On two of the

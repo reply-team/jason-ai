@@ -123,9 +123,10 @@ agent, or a registration you made yourself did. `jason runtime run` keeps the ru
 foreground instead, and `jason runtime status` asks it for `system.info` through the Runtime API.
 
 To have the runtime start when you log on, register it once. It carries the data directory it was
-registered under, nothing is elevated, and nothing supervises it afterwards — a runtime that stops
-stays stopped until somebody starts it. `docs/release-and-update.md` §8 says what each platform
-registers and what only a hand check can prove.
+registered under, and nothing supervises it afterwards — a runtime that stops stays stopped until
+somebody starts it. On Windows `enable` and `disable` have to be run from an elevated prompt, and
+standard accounts are unsupported in this version. `docs/release-and-update.md` §8 says what each
+platform registers, what it costs, and what only a hand check can prove.
 
 ```sh
 jason runtime autostart enable
