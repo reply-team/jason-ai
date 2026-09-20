@@ -132,35 +132,51 @@ public class UpdateLedgerTests
     /// first attempt that lands mid-read throws.
     /// </remarks>
     [Fact]
-    public async Task A_ledger_is_replaced_while_somebody_is_reading_it()
+    public void A_ledger_is_replaced_while_somebody_is_reading_it()
     {
         using var dir = new TempTree();
         var path = Path.Combine(dir.Root, "ledger.json");
         Ledger().Write(path);
 
-        using var reading = new CancellationTokenSource();
-        var reader = Task.Run(
-            () =>
+        // A thread of its own, and not a pool work item: the writes below take a few hundred milliseconds and
+        // occupy this thread throughout, and on a machine running several test assemblies a queued work item can
+        // wait longer than that for a pool thread — in which case the reader never reads, and a test about
+        // reading during a write proves nothing. (This suite has now paid for that lesson three times.)
+        var reads = 0;
+        var reading = true;
+        Exception? refused = null;
+        var reader = new Thread(() =>
+        {
+            while (Volatile.Read(ref reading))
             {
-                var read = 0;
-                while (!reading.IsCancellationRequested)
+                try
                 {
                     // Not swallowed: a read that throws here is the other half of the same defect.
                     _ = UpdateLedger.ReadFile(path);
-                    read++;
+                    Interlocked.Increment(ref reads);
                 }
+                catch (Exception error)
+                {
+                    refused = error;
+                    return;
+                }
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "ledger-reader",
+        };
 
-                return read;
-            },
-            TestContext.Current.CancellationToken);
-
+        reader.Start();
         for (var write = 0; write < 100; write++)
         {
             (Ledger() with { Step = write % 2 == 0 ? UpdateStep.Swapped : UpdateStep.Started }).Write(path);
         }
 
-        await reading.CancelAsync();
-        Assert.True(await reader > 0, "the reader never managed a single read, so this proved nothing");
+        Volatile.Write(ref reading, false);
+        Assert.True(reader.Join(TimeSpan.FromSeconds(10)), "the reader never finished");
+        Assert.Null(refused);
+        Assert.True(Volatile.Read(ref reads) > 0, "the reader never managed a single read, so this proved nothing");
         Assert.NotNull(UpdateLedger.ReadFile(path));
     }
 
