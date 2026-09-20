@@ -13,6 +13,9 @@ gains the operations these skills describe.
 - [`roles/researcher`](roles/researcher/SKILL.md) — **draft.** The brief a role is given when the runtime
   launches it: how to call home in the one command form that is permitted, how to read and keep its campaign
   note, and how to answer in the shape the work item asked for.
+- [`roles/manager`](roles/manager/SKILL.md) — **draft.** The review a manager is launched for: why it was
+  woken, what it reads and in which order, what it may decide alone, how it asks a person the one question it
+  cannot answer, and the line it leaves in the chronicle every time.
 
 ## Role skills
 

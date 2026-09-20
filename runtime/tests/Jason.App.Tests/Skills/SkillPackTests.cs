@@ -54,4 +54,46 @@ public partial class SkillPackTests
             Assert.Contains(front.Metadata.GetValueOrDefault("status"), (string[])["draft", "verified"]);
         }
     }
+
+    /// <summary>
+    /// The catalog is how a person finds a skill to install, so a skill it does not list is a skill nobody
+    /// installs, and an entry with no directory behind it is a broken link in the first file anybody opens.
+    /// </summary>
+    [Fact]
+    public void Every_skill_is_in_the_catalog_and_every_catalog_entry_is_a_skill()
+    {
+        var catalog = File.ReadAllText(SkillPack.Catalog());
+
+        foreach (var skill in SkillPack.All())
+        {
+            var link = Path.GetRelativePath(SkillPack.Root(), skill.File).Replace('\\', '/');
+            Assert.True(
+                catalog.Contains(link, StringComparison.Ordinal),
+                $"'{skill.Name}' is a skill in this pack and the catalog does not link it as '{link}'.");
+        }
+
+        foreach (var link in Links(catalog))
+        {
+            Assert.True(
+                File.Exists(Path.Combine(SkillPack.Root(), link)),
+                $"The catalog links '{link}', and there is no skill there.");
+        }
+    }
+
+    /// <summary>
+    /// Every <c>SKILL.md</c> the catalog <em>links</em>. Markdown links only, and never any token that happens
+    /// to end in the file's name: the catalog also explains where a role's skill ends up — at
+    /// <c>.claude/skills/&lt;role&gt;/SKILL.md</c> inside the attempt's work directory — and a reader that took
+    /// prose for a link would report a missing skill for a sentence that is telling the truth.
+    /// </summary>
+    private static IEnumerable<string> Links(string catalog)
+    {
+        foreach (var match in LinkTarget().Matches(catalog).Cast<Match>())
+        {
+            yield return match.Groups[1].Value;
+        }
+    }
+
+    [GeneratedRegex(@"\]\(([^()\s]+/SKILL\.md)\)")]
+    private static partial Regex LinkTarget();
 }
