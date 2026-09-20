@@ -161,43 +161,57 @@ public sealed record UpdateLedger(
 
     /// <summary>The ledger at this path, or null where there is none: nothing in flight is not a failure.</summary>
     /// <remarks>
+    /// <para>
     /// Opened so that nothing else is blocked by the reading. An update replaces this file by renaming over it,
     /// and on Windows a reader holding it with ordinary sharing makes that rename fail — so
     /// <c>jason update status</c>, run at the wrong instant, would stop an update in its tracks. Readers give
     /// way to the writer here rather than the other way round.
+    /// </para>
+    /// <para>
+    /// The open is also the question. <see cref="File.Exists(string)"/> answers <c>false</c> for a file it could
+    /// not ask about as readily as for one that is not there, and that answer arrives here as "no update is in
+    /// flight" — the one thing this must never say while one is. It was measured saying it: one read in a
+    /// hundred replacements, in one run of three. Opening the file asks the operating system about this open,
+    /// now, and tells a real absence from a moment that will pass.
+    /// </para>
     /// </remarks>
     /// <exception cref="UpdateLedgerException">There is a file and it is not a ledger.</exception>
     public static UpdateLedger? ReadFile(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
 
+        var absent = 0;
         for (var attempt = 0; ; attempt++)
         {
             try
             {
-                if (File.Exists(path))
-                {
-                    using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                    using var reader = new StreamReader(file);
-                    return Read(reader.ReadToEnd());
-                }
-
-                // No file. Either there is no update, or one is replacing this very file as it is read: the
-                // writer's own temporary names are how those two are told apart, and telling them apart is the
-                // whole point — `jason update status` answering "nothing in flight" in the middle of an update
-                // would be a lie told at the worst possible moment.
+                using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(file);
+                return Read(reader.ReadToEnd());
+            }
+            catch (Exception missing) when (missing is FileNotFoundException or DirectoryNotFoundException)
+            {
+                // Not there for this open — which is either "there is no update" or "one is replacing this very
+                // file as it is read", and telling those apart is the whole point. `jason update status`
+                // answering "nothing in flight" in the middle of an update would be a lie told at the worst
+                // possible moment.
                 //
-                // Asked here, after the name was found missing, and not before it: a write that begins in
-                // between would be invisible to an answer computed first, and the lie would be told anyway.
-                if (!Replacing(path) || attempt >= Attempts)
+                // The writer's temporary names are the evidence, and one look at them is not enough: a write
+                // that began after the open failed and finished before the question was asked leaves nothing to
+                // find, and the lie gets told on the strength of a gap of microseconds. Measured, that is
+                // exactly how it happened. So absence has to be seen twice, with a pause in between, and any
+                // sign of a write at either look starts the count again — while a file that is really not there
+                // costs one pause and answers the same as it always did.
+                absent = Replacing(path) ? 0 : absent + 1;
+                if ((absent > 1 && !Replacing(path)) || attempt >= Attempts)
                 {
                     return null;
                 }
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException && attempt < Attempts)
             {
-                // The same instant, seen from the other side: the name existed when it was asked about and was
-                // gone, or momentarily unopenable, when it was opened.
+                // The same instant, seen from the other side: the name is there and momentarily unopenable,
+                // which is what the middle of a replacement looks like to somebody arriving at it.
             }
 
             Thread.Sleep(Wait);
