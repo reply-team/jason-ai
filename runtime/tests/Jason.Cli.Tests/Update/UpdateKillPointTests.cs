@@ -20,6 +20,76 @@ public class UpdateKillPointTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>
+    /// A kill between the applier copy and the rename, resumed from that copy. The copy is not made again,
+    /// because it is the program making it.
+    /// </summary>
+    /// <remarks>
+    /// The window this is about is one step wide and the way out of it is to run
+    /// <c>~/.jason/update/applier/jason</c> — which then reaches this same step and would copy the installed
+    /// executable over the file it is running from. On Windows that is refused outright and the update dies
+    /// where a person has the fewest options; everywhere else it succeeds and replaces a running image's file
+    /// for no reason. The guard against it was written with the rest and proved by nothing: both resume tests
+    /// reach this step with the install path already empty, so the copy is skipped for another reason entirely.
+    /// </remarks>
+    [Fact]
+    public async Task An_update_resumed_from_the_applier_copy_does_not_copy_over_it()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+
+        // The state a kill between the copy and the rename leaves behind: the ledger says `kept`, the copy is
+        // there, and the install path still holds the executable it was copied from.
+        var stopped = installation.Killed(UpdateStep.Stopped);
+        var copy = Path.Combine(installation.Update.Applier, ReleaseAssets.ExecutableName);
+        Directory.CreateDirectory(installation.Update.Applier);
+        File.Copy(installation.InstallPath, copy);
+        (stopped with { Step = UpdateStep.Kept }).Write(installation.Update.Ledger);
+
+        // Marked, so that a copy made over it can be told from the copy that was already there.
+        const string Marker = "the applier that is running this resume";
+        File.WriteAllText(copy, Marker);
+
+        var resumed = new UpdateApplier(installation.Env, installation.Update, TimeProvider.System, installation.InstallPath, runningAs: copy);
+        var ledger = await resumed.ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.Zero), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(installation.To.ToString(), installation.Installed());
+        Assert.Equal(Marker, File.ReadAllText(copy));
+    }
+
+
+    /// <summary>
+    /// The ledger names the <c>swapped</c> step before the rename that performs it, and this is the witness
+    /// that it does. The rename is the one that opens and closes the window where the install path holds no
+    /// executable at all: a process that died inside it must find a ledger saying <c>swapped</c>, or the empty
+    /// path is unexplained and the two ways out of it cannot be printed.
+    /// </summary>
+    /// <remarks>
+    /// The generic loop that writes before every step is witnessed by the tests that watch what the runtime is
+    /// asked and when — but nothing is asked of a runtime between the keeping and the swap, so this one step,
+    /// the only one whose window matters, was covered by none of them. Moving its write after its rename left
+    /// the whole suite green.
+    /// </remarks>
+    [Fact]
+    public async Task The_ledger_says_swapped_before_the_rename_that_swaps()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+
+        // While this update runs, the install path stops being somewhere a file can be moved to.
+        installation.OnStop = () =>
+        {
+            File.Delete(installation.InstallPath);
+            Directory.CreateDirectory(installation.InstallPath);
+        };
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(
+            () => installation.Applier().ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.Zero), Ct));
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+        Assert.Equal(UpdateStep.Swapped, installation.Ledger()!.Step);
+    }
+
+
+    /// <summary>
     /// Nothing downloaded is trusted across a kill: whatever is in the staging directory was left there by a run
     /// that did not finish, so the next one empties it and fetches the release again.
     /// </summary>

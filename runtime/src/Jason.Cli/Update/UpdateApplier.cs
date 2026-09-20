@@ -34,7 +34,13 @@ public sealed record UpdateRequest(Uri Feed, SemanticVersion? Version, TimeSpan 
 /// performed.
 /// </para>
 /// </remarks>
-public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimeProvider clock, string installPath)
+/// <param name="runningAs">
+/// The file this applier is itself running as. It matters in one place: an update resumed after a kill between
+/// the applier copy and the rename is run <em>from that copy</em>, and a copy cannot be written over while it is
+/// the program doing the copying. Null asks the operating system, which is the answer everywhere but a test —
+/// where nothing is really running and the overwrite would silently succeed.
+/// </param>
+public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimeProvider clock, string installPath, string? runningAs = null)
 {
     /// <summary>How often the drain and the stop are re-read while waiting for them.</summary>
     private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(200);
@@ -347,6 +353,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             // the way out is to run that copy — and an executable cannot be written over while it is running,
             // on Windows at all and on any platform to no purpose: it is already the file it would be copied to.
             var copy = Path.Combine(update.Applier, ReleaseAssets.ExecutableName);
+            var self = runningAs ?? Environment.ProcessPath;
             OnDisk(
                 "putting a copy of the applier where a resumed update can run it",
                 update.Applier,
@@ -354,7 +361,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
                 () =>
                 {
                     Directory.CreateDirectory(update.Applier);
-                    if (!Same(copy, Environment.ProcessPath))
+                    if (!Same(copy, self))
                     {
                         File.Copy(ledger.InstallPath, copy, overwrite: true);
                     }

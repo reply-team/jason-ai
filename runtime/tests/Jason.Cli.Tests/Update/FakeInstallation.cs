@@ -117,6 +117,12 @@ public sealed class FakeInstallation : HttpMessageHandler
     public Action? OnStart { get; set; }
 
     /// <summary>
+    /// Something to do when the applier stops the runtime — the last moment a test can reach into an update,
+    /// because nothing is asked of any runtime between there and the swap.
+    /// </summary>
+    public Action? OnStop { get; set; }
+
+    /// <summary>
     /// A new version that migrates the database and then never answers: the case a rollback exists for, and the
     /// one where nothing can be asked of the runtime because it never listened.
     /// </summary>
@@ -347,6 +353,7 @@ public sealed class FakeInstallation : HttpMessageHandler
 
                 Running = false;
                 File.Delete(Paths.DescriptorFile);
+                OnStop?.Invoke();
                 return Json(new ShutdownResponse("rt_FAKE", 77, Stopping: true));
 
             case "system.info":
