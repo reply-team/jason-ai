@@ -430,19 +430,27 @@ public class UpdateRollbackTests
     /// say so.
     /// </summary>
     /// <remarks>
-    /// The waiting side has to run between moves: it wakes on the thread pool and arms its next wait from
-    /// there, and until it has, another move passes no timer. <c>Task.Yield</c> was not enough — under a whole
-    /// suite running in parallel this span this loop out a hundred thousand times without the continuation ever
-    /// getting a turn, and the test failed saying the wait never ended. Waiting on the work itself, with a
-    /// millisecond as the other half of the race, gives it that turn and returns the moment it is done.
+    /// The clock moves only while something is waiting on it. The waiting side wakes on the thread pool and
+    /// arms its next delay from there, and until it has, moving time again passes no timer at all — so a loop
+    /// that moves regardless spends its whole allowance on empty seconds, which is what happened: a hundred
+    /// thousand moves while the continuation never got a turn, and a test that said the wait never ended while
+    /// two other suites had the machine. <see cref="FixedClock.Armed"/> is the question to ask instead, and the
+    /// bound is real time rather than a number of moves.
     /// </remarks>
     private static async Task DriveAsync(FixedClock clock, Task waiting)
     {
         var elapsed = Stopwatch.StartNew();
         while (!waiting.IsCompleted && elapsed.Elapsed < TimeSpan.FromSeconds(30))
         {
-            clock.Advance(TimeSpan.FromSeconds(1));
-            await Task.WhenAny(waiting, Task.Delay(1, Ct));
+            if (clock.Armed > 0)
+            {
+                clock.Advance(TimeSpan.FromSeconds(1));
+            }
+            else
+            {
+                // Nothing is waiting on this clock yet: the turn belongs to whoever is arming the next one.
+                await Task.WhenAny(waiting, Task.Delay(1, Ct));
+            }
         }
 
         Assert.True(waiting.IsCompleted, $"the wait for a runtime to answer never ended, after {elapsed.Elapsed} of moving its clock");
