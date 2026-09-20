@@ -145,6 +145,20 @@ public class DispatcherWithFakeHostTests
         var attempt = running.Attempts![0];
 
         host.Clock.Advance(TimeSpan.FromSeconds(15));
+
+        // A beat that arrived after the jump, waited for rather than assumed. The moment the clock moves, the
+        // beat on the item is fifteen seconds old, and it stays that old until the child sends the next one —
+        // which it does on its own time, in the real world, while this test runs among all the others. The jump
+        // also wakes the loop's own tick, and a tick that reaches the lease enforcer before that next beat
+        // strikes the attempt out: the item is no longer cancellable, and the cancel below answers Conflict.
+        // This test is about a host that keeps reporting, so waiting for it to report is the test's own subject.
+        var since = host.Clock.Now;
+        await host.WaitAsync(
+            created.Id,
+            item => item.Attempts![0].LastHeartbeatAt >= since,
+            Ct,
+            "a heartbeat sent after the clock moved");
+
         await host.ScanAsync(Ct);
         Assert.Equal(WorkItemStatus.Processing, (await host.GetAsync(created.Id, Ct)).Status);
 

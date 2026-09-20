@@ -429,15 +429,23 @@ public class UpdateRollbackTests
     /// update or a rollback waits for a runtime that never answers passes here in about as long as it takes to
     /// say so.
     /// </summary>
+    /// <remarks>
+    /// The waiting side has to run between moves: it wakes on the thread pool and arms its next wait from
+    /// there, and until it has, another move passes no timer. <c>Task.Yield</c> was not enough — under a whole
+    /// suite running in parallel this span this loop out a hundred thousand times without the continuation ever
+    /// getting a turn, and the test failed saying the wait never ended. Waiting on the work itself, with a
+    /// millisecond as the other half of the race, gives it that turn and returns the moment it is done.
+    /// </remarks>
     private static async Task DriveAsync(FixedClock clock, Task waiting)
     {
-        for (var tick = 0; !waiting.IsCompleted && tick < 100_000; tick++)
+        var elapsed = Stopwatch.StartNew();
+        while (!waiting.IsCompleted && elapsed.Elapsed < TimeSpan.FromSeconds(30))
         {
             clock.Advance(TimeSpan.FromSeconds(1));
-            await Task.Yield();
+            await Task.WhenAny(waiting, Task.Delay(1, Ct));
         }
 
-        Assert.True(waiting.IsCompleted, "the wait for a runtime to answer never ended");
+        Assert.True(waiting.IsCompleted, $"the wait for a runtime to answer never ended, after {elapsed.Elapsed} of moving its clock");
     }
 
     [Fact]
