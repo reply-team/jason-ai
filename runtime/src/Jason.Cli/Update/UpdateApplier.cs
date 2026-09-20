@@ -292,7 +292,15 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         if (File.Exists(ledger.InstallPath))
         {
             Directory.CreateDirectory(update.Applier);
-            File.Copy(ledger.InstallPath, Path.Combine(update.Applier, ReleaseAssets.ExecutableName), overwrite: true);
+
+            // Unless the copy is the program doing the copying. After a kill between this step and the rename,
+            // the way out is to run that copy — and an executable cannot be written over while it is running,
+            // on Windows at all and on any platform to no purpose: it is already the file it would be copied to.
+            var copy = Path.Combine(update.Applier, ReleaseAssets.ExecutableName);
+            if (!Same(copy, Environment.ProcessPath))
+            {
+                File.Copy(ledger.InstallPath, copy, overwrite: true);
+            }
 
             SameVolume(ledger.InstallPath, ledger.PreviousPath);
             File.Move(ledger.InstallPath, ledger.PreviousPath, overwrite: true);
@@ -400,6 +408,14 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         Say(UpdateStep.Complete, $"{ledger.FromVersion} → {ledger.ToVersion}");
         return ledger;
     }
+
+    /// <summary>Whether two paths name the same file, as this platform compares names.</summary>
+    private static bool Same(string path, string? other) =>
+        other is not null
+        && string.Equals(
+            Path.GetFullPath(path),
+            Path.GetFullPath(other),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     /// <summary>A rename is atomic; a copy across volumes is not, and a half-copied executable is the one state this avoids.</summary>
     private static void SameVolume(string from, string to)

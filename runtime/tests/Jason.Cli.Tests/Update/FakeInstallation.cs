@@ -164,6 +164,16 @@ public sealed class FakeInstallation : HttpMessageHandler
         return this;
     }
 
+    /// <summary>
+    /// The runtime goes away without being asked: stopped by hand, crashed, or a machine that was rebooted.
+    /// Everything an update left on disk stays exactly as it was.
+    /// </summary>
+    public void RuntimeGoesAway()
+    {
+        Running = false;
+        File.Delete(Paths.DescriptorFile);
+    }
+
     /// <summary>Starts with a runtime already up, which is what an update usually finds.</summary>
     public FakeInstallation WithRuntime(int runningAttempts = 0)
     {

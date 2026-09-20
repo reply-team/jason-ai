@@ -47,13 +47,13 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
                 $"The executable this update replaced is not at {ledger.PreviousPath}, so there is nothing to put back.");
         }
 
-        // Asked while the old version is still the one answering: after the swap below there is nothing to ask.
-        var moved = await ChronicleMovedAsync(ledger, cancellationToken).ConfigureAwait(false);
+        // Asked while the new version is still the one answering: after the swap below there is nothing to ask.
+        var chronicle = await ChronicleAsync(ledger, cancellationToken).ConfigureAwait(false);
 
         await StopAsync(cancellationToken).ConfigureAwait(false);
         Restore(ledger);
 
-        var (restored, unsafeToRestore) = RestoreDatabase(ledger, moved);
+        var (restored, unsafeToRestore) = RestoreDatabase(ledger, chronicle);
 
         // Whatever was decided about the database, the runtime comes back up on the version that is now
         // installed. A refusal below is about the database and never about leaving a machine with nothing running.
@@ -79,22 +79,48 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
         return back;
     }
 
+    /// <summary>What the chronicle says about whether this update's version has been used since it came up.</summary>
+    private enum Chronicle
+    {
+        /// <summary>The chronicle is where this update left it: nothing has been recorded since.</summary>
+        Unchanged,
+
+        /// <summary>Lines have been written since. Restoring a database from before them would erase work.</summary>
+        Moved,
+
+        /// <summary>It could not be read, so neither of the above is known.</summary>
+        Unknown,
+    }
+
     /// <summary>
     /// Whether the runtime has written anything since this update was declared healthy. The chronicle is
     /// append-only and every state change writes a line, so a newest id that is not the one recorded means work
     /// has happened — and restoring a database from before it would erase that work.
     /// </summary>
-    private async Task<bool> ChronicleMovedAsync(UpdateLedger ledger, CancellationToken cancellationToken)
+    /// <remarks>
+    /// <b>"Cannot tell" is not "no".</b> A rollback typed when the runtime is down — stopped by hand, crashed, a
+    /// machine that was rebooted — cannot read the chronicle at all, and this used to answer "nothing has
+    /// happened" and restore the backup over a database that may have been used all week. The answer is its own
+    /// state now, and it is treated as the dangerous one: the binary still goes back, the database is left as it
+    /// stands, and the message says which file to put back by hand for a person who decides they want it.
+    /// </remarks>
+    private async Task<Chronicle> ChronicleAsync(UpdateLedger ledger, CancellationToken cancellationToken)
     {
         if (ledger.ChronicleId is null)
         {
-            // Nothing was recorded, which happens when the update never got as far as a healthy runtime. There
-            // is then nothing this update did to the database that could need undoing either.
-            return false;
+            // Nothing was recorded, which happens when the update never got as far as a healthy runtime — and a
+            // runtime that never served wrote nothing through the new schema either, so there is nothing a
+            // restore could erase.
+            return Chronicle.Unchanged;
         }
 
         var newest = await NewestChronicleIdAsync(cancellationToken).ConfigureAwait(false);
-        return newest is not null && !string.Equals(newest, ledger.ChronicleId, StringComparison.Ordinal);
+        if (newest is null)
+        {
+            return Chronicle.Unknown;
+        }
+
+        return string.Equals(newest, ledger.ChronicleId, StringComparison.Ordinal) ? Chronicle.Unchanged : Chronicle.Moved;
     }
 
     private async Task<string?> NewestChronicleIdAsync(CancellationToken cancellationToken)
@@ -134,10 +160,40 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
         Say("stopped the runtime");
     }
 
-    /// <summary>The binary half, which always happens: one rename, back the way it came.</summary>
+    /// <summary>
+    /// The binary half, which always happens: the file at the install path is moved aside and the kept one is
+    /// moved in — two renames, and never a write over the file that is there.
+    /// </summary>
+    /// <remarks>
+    /// The file at the install path may be <b>this very program</b>. A person told "`jason update rollback` puts
+    /// 0.1.0 back" types it from the PATH, which runs the executable the update installed, and Windows will not
+    /// let a running image be overwritten or deleted — but it will let one be renamed. Moving over it with
+    /// <c>overwrite</c> therefore failed exactly where the message sends people, after the runtime had already
+    /// been stopped, leaving a machine with the new binary in place and nothing running. It is the same rule the
+    /// swap in an update follows, for the same reason, and the file moved aside is left under the update
+    /// directory when it cannot be deleted — which on Windows it cannot be, because it is still running.
+    /// </remarks>
     private void Restore(UpdateLedger ledger)
     {
-        File.Move(ledger.PreviousPath, ledger.InstallPath, overwrite: true);
+        if (File.Exists(ledger.InstallPath))
+        {
+            Directory.CreateDirectory(update.Replaced);
+            var aside = Path.Combine(update.Replaced, Path.GetFileName(ledger.InstallPath));
+            File.Delete(aside);
+            File.Move(ledger.InstallPath, aside);
+
+            try
+            {
+                File.Delete(aside);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                // It is the program that is running this rollback. It goes when the next update needs the name.
+                Say($"{ledger.ToVersion} is still running, so it waits under {update.Replaced} rather than being deleted");
+            }
+        }
+
+        File.Move(ledger.PreviousPath, ledger.InstallPath);
         Say($"put {ledger.FromVersion} back");
     }
 
@@ -145,7 +201,7 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
     /// The database half, which happens only where this update's own first start migrated and nothing has been
     /// done since.
     /// </summary>
-    private (bool Restored, UpdateException? Unsafe) RestoreDatabase(UpdateLedger ledger, bool chronicleMoved)
+    private (bool Restored, UpdateException? Unsafe) RestoreDatabase(UpdateLedger ledger, Chronicle chronicle)
     {
         var backup = ledger.BackupFile ?? BackupWrittenByThisUpdate(ledger);
         if (ledger.NewlyApplied.Count == 0 && backup is null)
@@ -160,15 +216,19 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             return (false, null);
         }
 
-        if (chronicleMoved)
+        if (chronicle is not Chronicle.Unchanged)
         {
-            Say("the database was left as it is: work has been recorded since this update was installed");
+            var why = chronicle == Chronicle.Moved
+                ? "the runtime has recorded work since this update was installed"
+                : "no runtime was answering, so whether work has been recorded since this update was installed could not be read";
+
+            Say($"the database was left as it is: {why}");
             return (false, new UpdateException(
                 UpdateCodes.RollbackUnsafe,
-                $"{ledger.FromVersion} is back in place, but the database was left as it is: the runtime has recorded work "
-                + $"since this update was installed, and restoring '{Path.GetFileName(backup)}' would erase it. "
+                $"{ledger.FromVersion} is back in place, but the database was left as it is: {why}, "
+                + $"and restoring '{Path.GetFileName(backup)}' would erase it. "
                 + $"{ledger.FromVersion} may refuse to open a database migrated by {ledger.ToVersion}; to go all the way back, "
-                + "stop the runtime, copy that backup over state/jason.db, delete the -wal and -shm files beside it, and start again."));
+                + $"stop the runtime, copy '{backup}' over state/jason.db, delete the -wal and -shm files beside it, and start again."));
         }
 
         File.Copy(backup, env.Paths.DatabaseFile, overwrite: true);

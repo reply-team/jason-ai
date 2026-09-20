@@ -931,6 +931,35 @@ public class ReleaseWorkflowTests
     }
 
     /// <summary>
+    /// And it puts the update back again, from the executable a person would type — which is the one thing about
+    /// a rollback no test in this repository can reach.
+    /// </summary>
+    /// <remarks>
+    /// `jason update rollback`, typed from the PATH the way every refusal message says to, runs the executable
+    /// the update installed: the file the rollback has to replace is the process doing the replacing. Windows
+    /// will not let a running image be written over — only renamed — and the unit tests cannot see that, because
+    /// a fake installation is a file and not a process. Here it is a process.
+    /// </remarks>
+    [Fact]
+    public void The_end_to_end_job_rolls_the_update_back_from_the_installed_executable()
+    {
+        var job = Job(Read(Ci), "update-end-to-end");
+
+        Assert.Contains("update rollback", job, StringComparison.Ordinal);
+
+        // Rolled back by the installed executable, not by anything built beside it.
+        var rollback = job.IndexOf("update rollback", StringComparison.Ordinal);
+        Assert.Contains("$env:install update rollback", job[(rollback - 30)..], StringComparison.Ordinal);
+
+        // And what it must leave behind: the old version serving, the kept executable consumed, and the
+        // database restored with no write-ahead log of the newer schema beside it.
+        var after = job[rollback..];
+        Assert.Contains("previous", after, StringComparison.Ordinal);
+        Assert.Contains("-wal", after, StringComparison.Ordinal);
+        Assert.Contains("runtime_version", after, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The runtime is not started before the update. This is the one thing about the job that would pass every
     /// other assertion here and still prove nothing: a runtime started first migrates the prepared database
     /// itself, so the new version's first start has nothing to back up and nothing to migrate.

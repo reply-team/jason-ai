@@ -27,6 +27,12 @@ public sealed class UpdatePaths(JasonPaths paths)
     /// <summary>The copy of this build that performs the swap, because the file being swapped is the one running.</summary>
     public string Applier => Path.Combine(Root, "applier");
 
+    /// <summary>
+    /// Where a rollback puts the executable it replaced, when that executable is the program running the
+    /// rollback and so cannot be deleted yet.
+    /// </summary>
+    public string Replaced => Path.Combine(Root, "replaced");
+
     /// <summary>Everything downloaded for updates, whichever version.</summary>
     public string Staging => Path.Combine(Root, "staged");
 

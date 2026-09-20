@@ -116,6 +116,37 @@ public class UpdateRollbackTests
         Assert.False(File.Exists(backup + "-wal"));
     }
 
+    /// <summary>
+    /// A rollback that cannot ask whether work has been done does not assume the answer it prefers. With the
+    /// runtime down — stopped by hand, crashed, rebooted — the chronicle cannot be read, so restoring a backup
+    /// over a database that has been used since would erase work with nothing to warn anybody.
+    /// </summary>
+    /// <remarks>
+    /// This is the shape of the defect: "has the chronicle moved?" answered *no* when the real answer was
+    /// "cannot tell". The binary still goes back, because that half is always safe; the database is left exactly
+    /// as it stands and the refusal names the backup, so a person who does want yesterday's database can put it
+    /// back by hand knowing what they are choosing.
+    /// </remarks>
+    [Fact]
+    public async Task A_rollback_that_cannot_ask_whether_work_was_done_leaves_the_database_alone()
+    {
+        using var installation = await UpdatedAsync(migrates: true);
+        installation.WriteDatabase("work done under the new version");
+        var before = File.ReadAllBytes(installation.Paths.DatabaseFile);
+
+        // And now nobody is there to ask.
+        installation.RuntimeGoesAway();
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
+
+        Assert.Equal(UpdateCodes.RollbackUnsafe, refused.Code);
+        Assert.Contains("before-20260920000000_Next.db", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(before, File.ReadAllBytes(installation.Paths.DatabaseFile));
+
+        // The half that is always safe still happened.
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+    }
+
     [Fact]
     public async Task A_rollback_with_no_record_of_an_update_says_there_is_nothing_to_put_back()
     {

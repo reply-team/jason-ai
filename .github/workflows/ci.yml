@@ -291,6 +291,38 @@ jobs:
 
           & $env:install runtime stop | Out-Null
 
+      - name: Roll it back, from the executable a person would type
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # The case no unit test in this repository can reach. `jason update rollback` typed from the PATH runs
+          # the executable the update installed, so the file the rollback has to replace is the process doing the
+          # replacing - and a running image can be renamed but not written over. A fake installation is a file
+          # and not a process, so only a machine can prove this one.
+          $out = & $env:install update rollback
+          if ($LASTEXITCODE -ne 0) { throw "jason update rollback exited with $LASTEXITCODE`n$out" }
+          Write-Host $out
+
+          $back = $out | ConvertFrom-Json
+          if (($back.to -split '\+')[0] -ne $env:VERSION) { throw "the rollback says it put $($back.to) back, and this job installed $env:VERSION" }
+
+          $status = & $env:install runtime status | ConvertFrom-Json
+          if (($status.runtime_version -split '\+')[0] -ne $env:VERSION) { throw "after the rollback the runtime serving says it is $($status.runtime_version)" }
+
+          # What was kept has been consumed, and the database this update migrated is back without the
+          # write-ahead log of the newer schema beside it.
+          $update = Join-Path $env:JASON_DATA_DIR 'update'
+          if (Get-ChildItem -Path (Join-Path $update 'previous') -File -ErrorAction SilentlyContinue) {
+            throw "previous/ still holds an executable, so the rollback copied rather than moved it"
+          }
+          if (Test-Path (Join-Path $env:JASON_DATA_DIR 'state/jason.db-wal')) {
+            throw "a write-ahead log written against the newer schema is still beside the restored database"
+          }
+          if (-not $status.database.applied_migrations) { throw "the restored database has no migrations applied" }
+
+          & $env:install runtime stop | Out-Null
+
       - name: Stop the feed
         if: always()
         shell: pwsh
