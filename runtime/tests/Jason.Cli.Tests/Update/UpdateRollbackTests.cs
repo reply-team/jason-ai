@@ -1,5 +1,6 @@
 using Jason.Cli.Update;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Update;
 
@@ -357,6 +358,36 @@ public class UpdateRollbackTests
         Assert.Contains(rollback.Steps, step => step.StartsWith("restored the database", StringComparison.Ordinal));
 
         File.SetAttributes(installation.Update.Ledger, FileAttributes.Normal);
+    }
+
+    /// <summary>
+    /// The image a rollback moves aside is named for the version and the moment, and that name may already be
+    /// taken: an earlier rollback of the same version, in the same moment, left one there and could not delete
+    /// it because that version was still running. A name it cannot have is not a reason to refuse — least of
+    /// all here, after the runtime has been stopped and before anything has been put back.
+    /// </summary>
+    /// <remarks>
+    /// Writing over the file instead would be the wrong repair twice over: it is exactly the image that may
+    /// still be running, and Windows refuses to write over a running one anyway, which is the fault this whole
+    /// rename exists to avoid.
+    /// </remarks>
+    [Fact]
+    public async Task A_rollback_whose_name_is_already_taken_takes_another_one()
+    {
+        using var installation = await UpdatedAsync();
+        var at = new DateTimeOffset(2026, 9, 20, 4, 30, 0, TimeSpan.Zero);
+
+        Directory.CreateDirectory(installation.Update.Replaced);
+        var earlier = Path.Combine(
+            installation.Update.Replaced,
+            UpdateRollback.AsideName(installation.To, at, ReleaseAssets.ExecutableName));
+        const string Image = "an image an earlier rollback moved aside and could not delete";
+        File.WriteAllText(earlier, Image);
+
+        await new UpdateRollback(installation.Env, installation.Update, new FixedClock(at)).RollBackAsync(Ct);
+
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+        Assert.Equal(Image, File.ReadAllText(earlier));
     }
 
     [Fact]

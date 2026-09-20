@@ -247,10 +247,13 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             // Named for the version being moved aside and the moment it was, so that nothing has to be deleted
             // first to make room. Deleting first is what this cannot afford: an image an earlier rollback left
             // here may still be running, and that delete would refuse — after the runtime had been stopped,
-            // with nothing put back.
-            var aside = Path.Combine(
+            // with nothing put back. Writing over it is the same fault wearing a different hat.
+            //
+            // And the name may be taken all the same, by an earlier rollback of the same version in the same
+            // moment, so the one that is free is taken instead.
+            var aside = Free(
                 update.Replaced,
-                $"{ledger.ToVersion}-{clock.GetUtcNow().UtcDateTime:yyyyMMdd'T'HHmmss'Z'}-{Path.GetFileName(ledger.InstallPath)}");
+                AsideName(ledger.ToVersion, clock.GetUtcNow(), Path.GetFileName(ledger.InstallPath)));
             OnDisk(
                 "moving the installed executable aside",
                 ledger.InstallPath,
@@ -380,6 +383,29 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
 
         Say($"restored the database from {Path.GetFileName(backup)} and took its write-ahead log away");
         return (true, null);
+    }
+
+    /// <summary>
+    /// What an image moved out of the install path is kept under: the version it is, the moment it was moved,
+    /// and the file's own name. Public because a test has to be able to take the name before the rollback does.
+    /// </summary>
+    public static string AsideName(SemanticVersion version, DateTimeOffset at, string fileName) =>
+        $"{version}-{at.UtcDateTime:yyyyMMdd'T'HHmmssfff'Z'}-{fileName}";
+
+    /// <summary>
+    /// The first of those names nobody has taken. Two rollbacks of one version inside a single tick of the
+    /// clock are rare on a machine and ordinary in a test, and what is already there may be an image that is
+    /// still running: it is not this rollback's to move or to write over.
+    /// </summary>
+    private static string Free(string directory, string name)
+    {
+        var path = Path.Combine(directory, name);
+        for (var next = 2; File.Exists(path) || Directory.Exists(path); next++)
+        {
+            path = Path.Combine(directory, $"{Path.GetFileNameWithoutExtension(name)}-{next}{Path.GetExtension(name)}");
+        }
+
+        return path;
     }
 
     /// <summary>The two files SQLite keeps beside a database, which a restore must not leave behind.</summary>
