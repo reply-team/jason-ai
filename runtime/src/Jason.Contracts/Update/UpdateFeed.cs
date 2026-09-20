@@ -46,11 +46,20 @@ public sealed class UpdateFeed(HttpClient client)
     /// already compose by hand when they are given <c>--version</c>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <c>…/releases/latest/download/manifest.json</c> is a moving address; <c>…/releases/download/vX.Y.Z/manifest.json</c>
     /// is a fixed one. The rule is the one <c>install.sh</c> and <c>install.ps1</c> use, written once here so that a
     /// person who pins a version with the applier and a person who pins one with a script ask the same page the
-    /// same question. A feed that is not the repository's own — a test's stub, a mirror — keeps its own directory
-    /// and takes the version in front of the file name, because that is all that can be said about it.
+    /// same question.
+    /// </para>
+    /// <para>
+    /// A feed of any other shape is handed back <b>unchanged</b>, because there is nothing true to say about
+    /// where that page keeps its older releases. Guessing — taking the directory and putting <c>vX.Y.Z</c> in
+    /// front of the file name — is what an earlier version of this method did, and it asked a feed served from
+    /// a plain directory for a path that was never going to exist. A caller that pins against such a feed reads
+    /// the address it was given and refuses if the document names another version, which is the check it makes
+    /// anyway.
+    /// </para>
     /// </remarks>
     public static Uri PinnedFor(Uri feed, SemanticVersion version)
     {
@@ -60,7 +69,7 @@ public sealed class UpdateFeed(HttpClient client)
         var address = feed.AbsoluteUri;
         var marker = address.IndexOf(Latest, StringComparison.Ordinal);
         return marker < 0
-            ? new Uri(feed, $"v{version}/{ReleaseAssets.Manifest}")
+            ? feed
             : new Uri($"{address[..marker]}/releases/download/v{version}/{ReleaseAssets.Manifest}");
     }
 

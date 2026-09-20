@@ -157,6 +157,13 @@ public sealed class FakeInstallation : HttpMessageHandler
     /// <summary>The release this installation can update to, for tests that need its bytes or its digest.</summary>
     public FakeRelease Release => _release;
 
+    /// <summary>Serves this installation's release from a plain directory, the way CI serves one.</summary>
+    public FakeInstallation ServedFromADirectory()
+    {
+        _release.ServedFromADirectory();
+        return this;
+    }
+
     /// <summary>Starts with a runtime already up, which is what an update usually finds.</summary>
     public FakeInstallation WithRuntime(int runningAttempts = 0)
     {

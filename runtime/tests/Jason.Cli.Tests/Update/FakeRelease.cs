@@ -40,7 +40,22 @@ public sealed class FakeRelease : HttpMessageHandler
     public long Size { get; }
 
     /// <summary>What the release's own feed address would be, if this were a release.</summary>
-    public Uri Feed { get; } = new("https://127.0.0.1/releases/latest/download/manifest.json");
+    public Uri Feed { get; private set; } = new("https://127.0.0.1/releases/latest/download/manifest.json");
+
+    /// <summary>
+    /// Serves this release from a plain directory instead — <c>http://127.0.0.1:8099/manifest.json</c> with the
+    /// archive beside it, which is how CI serves one and how a mirror or a file server would.
+    /// </summary>
+    /// <remarks>
+    /// A feed of this shape says nothing about where its older releases live, and a caller that invents an
+    /// address for them asks for a path that was never going to exist. That really happened, and it took a CI
+    /// runner to find it: every stub here was a GitHub-shaped address until now.
+    /// </remarks>
+    public FakeRelease ServedFromADirectory()
+    {
+        Feed = new Uri("http://127.0.0.1:8099/manifest.json");
+        return this;
+    }
 
     /// <summary>Every address this handler was asked for, so a test can assert what was fetched and from where.</summary>
     public List<string> Requested { get; } = [];
@@ -104,8 +119,21 @@ public sealed class FakeRelease : HttpMessageHandler
             return new HttpResponseMessage(failure) { Content = new ByteArrayContent([]) };
         }
 
+        // Only the two addresses a release really serves. Answering by file name whatever directory was asked
+        // for is what let a composed-from-nothing path pass every test here and then 404 on a runner: a stub
+        // that is more forgiving than the thing it stands in for proves the caller works against the stub.
+        var served = Feed.AbsolutePath.StartsWith("/releases/", StringComparison.Ordinal)
+            ? new[]
+            {
+                $"/releases/latest/download/{ReleaseAssets.Manifest}",
+                $"/releases/latest/download/{Asset}",
+                $"/releases/download/v{Version}/{ReleaseAssets.Manifest}",
+                $"/releases/download/v{Version}/{Asset}",
+            }
+            : new[] { $"/{ReleaseAssets.Manifest}", $"/{Asset}" };
+
         var name = path[(path.LastIndexOf('/') + 1)..];
-        return _files.TryGetValue(name, out var bytes)
+        return served.Contains(path, StringComparer.Ordinal) && _files.TryGetValue(name, out var bytes)
             ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) }
             : new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new ByteArrayContent([]) };
     }

@@ -171,6 +171,29 @@ public class UpdateApplierTests
         Assert.Equal($"jason {installation.From}", File.ReadAllText(copy));
     }
 
+    /// <summary>
+    /// A feed served from a plain directory — a manifest with the archive beside it — is read at the address it
+    /// was given, and nothing composes another one from it.
+    /// </summary>
+    /// <remarks>
+    /// This is the shape CI serves, and the shape that found the defect: staging pinned the update's own version
+    /// into the address before re-reading it, which turns `http://host/manifest.json` into
+    /// `http://host/v0.1.1/manifest.json` and asks for a path no such feed has. Every stub in this file was a
+    /// GitHub-shaped address until now, so nothing here could see it.
+    /// </remarks>
+    [Fact]
+    public async Task A_feed_served_from_a_directory_is_read_where_it_is_rather_than_where_one_might_be()
+    {
+        using var installation = new FakeInstallation().ServedFromADirectory();
+        installation.WithRuntime();
+
+        var ledger = await installation.Applier().ApplyAsync(Request(installation), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(installation.To.ToString(), installation.Installed());
+        Assert.All(installation.Fetched, address => Assert.DoesNotContain("/v", address, StringComparison.Ordinal));
+    }
+
     private static UpdateRequest Request(FakeInstallation installation) =>
         new(installation.Feed, null, TimeSpan.FromSeconds(5));
 }
