@@ -953,6 +953,24 @@ public class ReleaseWorkflowTests
     }
 
     /// <summary>
+    /// The install job runs the script the way the one-liner does — as text, in the caller's own session — and
+    /// checks that it leaves nothing of itself behind there.
+    /// </summary>
+    /// <remarks>
+    /// <c>irm … | iex</c> runs the file's text in the scope that typed it, so a function the script defines is
+    /// still defined in that shell afterwards. Running the script as a file, which is what every other check in
+    /// this job does, gives it a scope of its own and cannot see that at all.
+    /// </remarks>
+    [Fact]
+    public void The_install_job_runs_the_script_the_way_the_one_liner_does()
+    {
+        var job = Job(Read(Ci), "install-ps1");
+
+        Assert.True(Runs(job, "Invoke-Expression"), $"the install job never runs the script as text, so it cannot see what the one-liner leaves behind:\n{job}");
+        Assert.Contains("Get-Command Install-Jason", job, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The end-to-end job serves its own feed and waits for it, and a wait that runs out of tries says so.
     /// </summary>
     /// <remarks>

@@ -467,3 +467,9 @@ jobs:
           # A third run adds no second entry.
           ./install/install.ps1
           if ((UserPathEntries).Count -ne 1) { throw "the user PATH does not hold the directory exactly once after a third run" }
+
+          # And a fourth, in the shape the one-liner really uses: `irm ... | iex` runs the text in the session
+          # that typed it, so anything the script defines is still defined there when it is done. The three runs
+          # above cannot see that - a script run as a file gets a scope of its own.
+          Invoke-Expression (Get-Content ./install/install.ps1 -Raw)
+          if (Get-Command Install-Jason -ErrorAction SilentlyContinue) { throw "install.ps1 left Install-Jason defined in the session that ran it" }
