@@ -49,10 +49,12 @@ public class AutostartArtifactsTests
         Assert.Contains($"<Command>{Executable}</Command>", task.Artifact, StringComparison.Ordinal);
         Assert.Contains($"<Arguments>runtime run --detached --data-dir {Windows}</Arguments>", task.Artifact, StringComparison.Ordinal);
 
-        Assert.Equal([["schtasks", "/Create", "/XML", task.ArtifactPath, "/TN", "Jason", "/F"]], task.Apply);
-        Assert.Equal([["schtasks", "/Delete", "/TN", "Jason", "/F"]], task.Remove);
-        // With /HRESULT, because the answer has to be a code rather than a sentence in the language Windows
-        // happens to be installed in. AutostartInterpretationTests is where that decision is asserted.
+        // Every one of the three asks for /HRESULT, because the answer has to be a code rather than a
+        // sentence in the language Windows happens to be installed in. The query had it from the start; the two
+        // that act got it after a real machine refused one of them and the code could not say why.
+        // AutostartInterpretationTests is where what the codes mean is asserted.
+        Assert.Equal([["schtasks", "/Create", "/XML", task.ArtifactPath, "/TN", "Jason", "/F", "/HRESULT"]], task.Apply);
+        Assert.Equal([["schtasks", "/Delete", "/TN", "Jason", "/F", "/HRESULT"]], task.Remove);
         Assert.Equal(["schtasks", "/Query", "/TN", "Jason", "/XML", "ONE", "/HRESULT"], task.Query);
     }
 

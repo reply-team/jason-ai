@@ -80,6 +80,90 @@ public class AutostartInterpretationTests
     }
 
     /// <summary>
+    /// The two commands that <i>act</i> ask for a code as well. They did not, and the hand check is what found
+    /// it: a denied <c>/Create</c> exits 1 with an English sentence, so the one refusal a person is most likely
+    /// to meet was the one refusal this code could not recognise or advise about.
+    /// </summary>
+    [Fact]
+    public void The_windows_commands_that_act_ask_for_a_code_too()
+    {
+        var task = AutostartArtifacts.Compose(
+            AutostartPlatform.Windows, [@"C:\jason.exe"], @"C:\data", @"C:\Users\ada", "S-1-5-21-1-2-3-1001");
+
+        Assert.All(task.Apply, command => Assert.Contains("/HRESULT", command, StringComparer.Ordinal));
+        Assert.All(task.Remove, command => Assert.Contains("/HRESULT", command, StringComparer.Ordinal));
+    }
+
+    /// <summary>An act that worked is not a refusal, and nothing is read out of what it printed.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void An_act_that_worked_is_not_a_refusal(bool missingIsDone) =>
+        Assert.Null(AutostartRegistrars.Acted(0, "SUCCESS: The scheduled task \"Jason\" was successfully created.", string.Empty, missingIsDone));
+
+    /// <summary>
+    /// Access denied is the refusal a person actually meets, and the only one this code can do something about
+    /// telling them. Measured on a real machine: <c>schtasks /Create /XML … /HRESULT</c> from an unelevated
+    /// prompt exits <c>0x80070005</c> and prints <c>ERROR: Access is denied.</c> — the same code in every
+    /// language, which is what lets the advice below be attached to it at all.
+    /// </summary>
+    [Theory]
+    [InlineData("ERROR: Access is denied.\r\n")]
+    [InlineData("ОШИБКА: Отказано в доступе.\r\n")]
+    public void A_denied_act_says_what_to_do_about_it(string error)
+    {
+        var refusal = AutostartRegistrars.Acted(AccessDenied, string.Empty, error, missingIsDone: false);
+
+        Assert.NotNull(refusal);
+        Assert.Equal(AutostartCodes.Refused, refusal.Code);
+        Assert.Contains("elevated prompt", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("administrator", refusal.Message, StringComparison.Ordinal);
+
+        // Two halves, and the second one is why this is a fix rather than a nicer sentence: after a refusal a
+        // person's next question is whether half of it happened.
+        Assert.Contains("Nothing was registered or removed", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains(error.Trim(), refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Removing a task that is not there is done, not refused. `disable` twice is the ordinary case — a person
+    /// who is not sure whether it is registered runs it again — and the second one must not fail.
+    /// </summary>
+    [Fact]
+    public void Removing_a_task_that_is_not_there_is_done_rather_than_refused() =>
+        Assert.Null(AutostartRegistrars.Acted(TaskNotFound, string.Empty, "ERROR: The system cannot find the file specified.\r\n", missingIsDone: true));
+
+    /// <summary>
+    /// But the same code from a command that was registering something is a refusal: there is nothing for
+    /// <c>/Create</c> to find missing, so it means something else went wrong and saying "done" would be a lie.
+    /// </summary>
+    [Fact]
+    public void The_same_code_from_a_command_that_registers_is_still_a_refusal()
+    {
+        var refusal = AutostartRegistrars.Acted(TaskNotFound, string.Empty, "ERROR: The system cannot find the file specified.", missingIsDone: false);
+
+        Assert.NotNull(refusal);
+        Assert.Equal(AutostartCodes.Refused, refusal.Code);
+        Assert.Contains("cannot find the file", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("elevated prompt", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Anything else stays what it was: a refusal carrying the tool's own line, in any language.</summary>
+    [Theory]
+    [InlineData(1, "anything at all")]
+    [InlineData(1, "")]
+    [InlineData(unchecked((int)0x8007000E), "ОШИБКА: Недостаточно памяти.")]
+    public void Any_other_code_from_an_act_carries_the_tool_s_line(int exit, string error)
+    {
+        var refusal = AutostartRegistrars.Acted(exit, string.Empty, error, missingIsDone: true);
+
+        Assert.NotNull(refusal);
+        Assert.Equal(AutostartCodes.Refused, refusal.Code);
+        Assert.Contains("schtasks", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("elevated prompt", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// `systemctl --user is-enabled` is read by the word it prints. Its exit code cannot carry the answer: 1 is
     /// `disabled`, and 1 is also what it returns with nothing on standard output when it cannot reach a user
     /// manager at all.

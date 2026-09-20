@@ -80,7 +80,9 @@ public static class AutostartArtifacts
     /// <c>/HRESULT</c> is not decoration. Without it <c>schtasks</c> exits 1 for a task that is not there and 1
     /// for a task this account may not read, and the only thing telling those apart is the sentence it prints —
     /// in the language Windows is installed in. With it, a missing task exits <c>0x80070002</c> and access
-    /// denied exits <c>0x80070005</c>, in every language, and the words are never consulted again.
+    /// denied exits <c>0x80070005</c>, in every language, and the words are never consulted again. The two
+    /// commands that act ask for it too, for the same reason and one found the hard way: see
+    /// <see cref="AutostartRegistrars.Acted"/>.
     /// </remarks>
     public static IReadOnlyList<string> QueryFor(AutostartPlatform platform) => platform switch
     {
@@ -199,8 +201,8 @@ public static class AutostartArtifacts
             TaskName,
             document,
             xml,
-            [["schtasks", "/Create", "/XML", document, "/TN", TaskName, "/F"]],
-            [["schtasks", "/Delete", "/TN", TaskName, "/F"]],
+            [["schtasks", "/Create", "/XML", document, "/TN", TaskName, "/F", "/HRESULT"]],
+            [["schtasks", "/Delete", "/TN", TaskName, "/F", "/HRESULT"]],
             QueryFor(AutostartPlatform.Windows),
             line);
     }

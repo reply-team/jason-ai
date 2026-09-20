@@ -43,6 +43,9 @@ public static class AutostartRegistrars
     /// <summary>ERROR_FILE_NOT_FOUND as an HRESULT: the Task Scheduler's "there is no such task".</summary>
     private const int TaskNotFound = unchecked((int)0x80070002);
 
+    /// <summary>ERROR_ACCESS_DENIED as an HRESULT: the Task Scheduler's "not from this prompt".</summary>
+    private const int AccessDenied = unchecked((int)0x80070005);
+
     /// <summary>
     /// What a query said, read as an answer rather than as noise. This is where "nothing is registered" is told
     /// apart from "the tool would not say", and it is pure so that the first real run meets no shape this code
@@ -110,13 +113,61 @@ public static class AutostartRegistrars
             : throw Refused("systemctl --user", error, output);
     }
 
+    /// <summary>
+    /// What an acting <c>schtasks</c> command said, read by its exit code — <c>null</c> where there is nothing
+    /// to report, and the refusal to raise where there is. The commands that register and remove ask for
+    /// <c>/HRESULT</c> just as the query does, and this is the half that makes asking worth anything.
+    /// </summary>
+    /// <param name="exit">What the command exited with, as an HRESULT.</param>
+    /// <param name="output">What it put on standard output.</param>
+    /// <param name="error">What it put on standard error, which is where it says why it would not.</param>
+    /// <param name="missingIsDone">
+    /// Whether "there is no such task" is this command being finished rather than failing. It is, for the one
+    /// that removes: <c>disable</c> run twice is the ordinary case rather than a mistake, and so is a
+    /// <c>disable</c> racing somebody who removed the task in the Task Scheduler by hand.
+    /// </param>
+    /// <remarks>
+    /// <c>0x80070005</c> is the refusal a person actually meets, and the only one worth advising about:
+    /// registering a logon task needs an elevated prompt. That was measured on a real machine and is not
+    /// something this code can work around — the Task Scheduler will not take an S4U task from a medium
+    /// integrity process, and S4U is what keeps a console window off the desktop. Everything else stays what it
+    /// was: a refusal carrying the tool's own first line, in whatever language it is in. <b>Nothing is decided
+    /// by the sentence</b>, here or in <see cref="Interpret"/>; a sentence is only ever repeated.
+    /// </remarks>
+    public static AutostartException? Acted(int exit, string output, string error, bool missingIsDone)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        ArgumentNullException.ThrowIfNull(error);
+
+        if (exit == 0 || (exit == TaskNotFound && missingIsDone))
+        {
+            return null;
+        }
+
+        if (exit != AccessDenied)
+        {
+            return Refused("schtasks", error, output);
+        }
+
+        var denied = Said(error, output);
+        return new AutostartException(
+            AutostartCodes.Refused,
+            "registering or removing the logon task needs an elevated prompt: run the command as administrator. "
+            + "Nothing was registered or removed."
+            + (denied.Length == 0 ? string.Empty : $" schtasks said: {denied}"));
+    }
+
     private static AutostartException Refused(string tool, string error, string output)
     {
-        var said = FirstLine(error) is { Length: > 0 } line ? line : FirstLine(output);
+        var said = Said(error, output);
         return new AutostartException(
             AutostartCodes.Refused,
             said.Length == 0 ? $"{tool} refused, and said nothing about why." : $"{tool} refused: {said}");
     }
+
+    /// <summary>The one line of a tool's own words worth repeating: its first, wherever it put it.</summary>
+    private static string Said(string error, string output) =>
+        FirstLine(error) is { Length: > 0 } line ? line : FirstLine(output);
 
     private static string FirstLine(string text) =>
         text.Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.Length > 0) ?? string.Empty;
@@ -268,26 +319,33 @@ internal sealed class WindowsRegistrar : IAutostartRegistrar
         // UTF-16: what `schtasks /Create /XML` reads. Handed a UTF-8 file it answers that the XML contains a
         // value which is incorrectly formatted, which is a sentence nobody could act on.
         AutostartRegistrars.Write(registration.ArtifactPath, registration.Artifact, Encoding.Unicode);
-        foreach (var command in registration.Apply)
-        {
-            AutostartRegistrars.Must("schtasks", command);
-        }
+        Act(registration.Apply, missingIsDone: false);
     }
 
     public void Remove(AutostartRegistration registration)
     {
         ArgumentNullException.ThrowIfNull(registration);
 
-        // Removing what is not there is not an error, so the query decides whether anything is run at all.
+        // Removing what is not there is not an error, so the query decides whether anything is run at all —
+        // and the command says so a second time, for the task somebody removed by hand between the two.
         if (Read().Registered)
         {
-            foreach (var command in registration.Remove)
-            {
-                AutostartRegistrars.Must("schtasks", command);
-            }
+            Act(registration.Remove, missingIsDone: true);
         }
 
         AutostartRegistrars.Discard(registration.ArtifactPath);
+    }
+
+    private static void Act(IReadOnlyList<IReadOnlyList<string>> commands, bool missingIsDone)
+    {
+        foreach (var command in commands)
+        {
+            var (exit, output, error) = AutostartRegistrars.Run(command);
+            if (AutostartRegistrars.Acted(exit, output, error, missingIsDone) is { } refusal)
+            {
+                throw refusal;
+            }
+        }
     }
 }
 
