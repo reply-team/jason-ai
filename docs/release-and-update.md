@@ -284,10 +284,21 @@ jason update rollback
 It puts the executable from `~/.jason/update/previous/` back and starts the runtime on it.
 Where the update's new build migrated the database, it also restores the backup that migration took and deletes
 the WAL sidecars beside it — a database file from before a migration, opened with the write-ahead log of after
-it, is corruption. Where the chronicle has moved on since the new build came up, the binary still goes back but
-the database is left alone and the message says so: work has been recorded that the older schema has no place
-for, and silently discarding it would be the worse of the two answers. The section below is how you then put
-that database back yourself, having decided that you want to.
+it, is corruption.
+
+**The database is restored only while it is certain that nothing has happened since.** That is decided from the
+chronicle: the line it stood at when the new version was declared healthy, against the line it stands at now. If
+it has moved on, work has been recorded that the older schema has no place for, and silently discarding it would
+be the worse of the two answers. If **no runtime is answering** — you stopped it, it crashed, the machine was
+rebooted — then the question cannot be answered at all, and that counts the same way: a rollback does not
+assume the answer it would prefer. Either way the executable goes back, the database is left exactly as it
+stands, and the message names the backup file. The section below is how you then put that database back
+yourself, having decided that you want to.
+
+You will usually be typing `jason update rollback` from the PATH, which means the executable being replaced is
+the one running the command. That is expected and it works — the file is renamed out of the way rather than
+written over — but it is also why the replaced executable may still be sitting in `~/.jason/update/replaced/`
+afterwards: a running program cannot delete itself. It goes when the next update needs the name.
 
 ### Restoring a database by hand
 
@@ -329,6 +340,7 @@ a code on its own tells nobody what to do next.
 | `update_cross_volume` | the staged file and the install path are on different volumes. An update renames rather than copies, because a half-copied executable is the one state nothing can recover from. Point `JASON_DATA_DIR` at the executable's volume, or install Jason on the data directory's |
 | `update_runtime_unreachable` | the runtime would not drain or would not stop, so nothing was replaced |
 | `update_not_healthy` | the new version is in place, but the runtime it starts is not the one this update installed. The executable can be put back |
+| `update_file_refused` | a file an update had to move could not be moved: a directory that is not one, a permission, a lock. The message names the path and what to do — including which executable to run when `jason` is no longer on your PATH |
 | `update_nothing_to_roll_back` | there is no record of an update, or the executable it replaced is no longer under `~/.jason/update/previous/` |
 | `update_rollback_unsafe` | the executable was put back and the database was not: the runtime has recorded work since the update, and restoring the backup would erase it. "Restoring a database by hand" below is how to go the rest of the way, having decided you want to |
 | `update_ledger_invalid` | there is a file at `~/.jason/update/ledger.json` and it is not a ledger this build can act on |
