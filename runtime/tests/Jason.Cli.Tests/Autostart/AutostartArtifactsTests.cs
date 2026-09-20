@@ -159,6 +159,25 @@ public class AutostartArtifactsTests
             AutostartArtifacts.Read(AutostartPlatform.Linux, registration.Artifact));
     }
 
+    /// <summary>
+    /// The question a registrar asks is the one the registration carries. A registrar has to ask before it
+    /// knows what this installation would register — what is there may have been put there by another one — so
+    /// the question is composed from the platform alone, and this is what keeps the two from drifting apart.
+    /// </summary>
+    [Theory]
+    [InlineData(AutostartPlatform.Windows)]
+    [InlineData(AutostartPlatform.MacOs)]
+    [InlineData(AutostartPlatform.Linux)]
+    public void The_question_a_registrar_asks_is_the_one_the_registration_carries(AutostartPlatform platform) =>
+        Assert.Equal(
+            AutostartArtifacts.Compose(platform, [Executable], Windows, Home, Sid).Query,
+            AutostartArtifacts.QueryFor(platform));
+
+    /// <summary>And a machine that registers nothing is asked nothing.</summary>
+    [Fact]
+    public void A_platform_that_registers_nothing_is_asked_nothing() =>
+        Assert.Empty(AutostartArtifacts.QueryFor(AutostartPlatform.Unsupported));
+
     /// <summary>There is nothing to compose for a platform that cannot register anything; the verb says so first.</summary>
     [Fact]
     public void An_unsupported_platform_is_not_composed() =>

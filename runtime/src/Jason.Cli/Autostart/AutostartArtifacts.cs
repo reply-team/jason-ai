@@ -72,6 +72,19 @@ public static class AutostartArtifacts
     }
 
     /// <summary>
+    /// The command that asks a machine whether anything is registered. It depends on the platform and on
+    /// nothing else — not on the data directory, not on the account — which is what lets a registrar ask
+    /// before it knows either: what it is about to read may have been registered by another installation.
+    /// </summary>
+    public static IReadOnlyList<string> QueryFor(AutostartPlatform platform) => platform switch
+    {
+        AutostartPlatform.Windows => ["schtasks", "/Query", "/TN", TaskName, "/XML", "ONE"],
+        AutostartPlatform.MacOs => ["launchctl", "list", Label],
+        AutostartPlatform.Linux => ["systemctl", "--user", "is-enabled", UnitName],
+        _ => [],
+    };
+
+    /// <summary>
     /// Where a platform keeps the document that is its registration. One place, because a registrar has to find
     /// it without composing a whole registration first: what it is reading is what somebody else registered,
     /// possibly under a data directory this installation knows nothing about.
@@ -182,7 +195,7 @@ public static class AutostartArtifacts
             xml,
             [["schtasks", "/Create", "/XML", document, "/TN", TaskName, "/F"]],
             [["schtasks", "/Delete", "/TN", TaskName, "/F"]],
-            ["schtasks", "/Query", "/TN", TaskName, "/XML", "ONE"],
+            QueryFor(AutostartPlatform.Windows),
             line);
     }
 
@@ -218,7 +231,7 @@ public static class AutostartArtifacts
             plist,
             [["launchctl", "load", "-w", plistPath]],
             [["launchctl", "unload", "-w", plistPath]],
-            ["launchctl", "list", Label],
+            QueryFor(AutostartPlatform.MacOs),
             line);
     }
 
@@ -258,7 +271,7 @@ public static class AutostartArtifacts
                 ["systemctl", "--user", "disable", UnitName],
                 ["systemctl", "--user", "daemon-reload"],
             ],
-            ["systemctl", "--user", "is-enabled", UnitName],
+            QueryFor(AutostartPlatform.Linux),
             line);
     }
 

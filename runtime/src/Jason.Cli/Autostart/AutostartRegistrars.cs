@@ -128,10 +128,13 @@ public static class AutostartRegistrars
             using var process = OperatingSystemProcess.Start(start)
                 ?? throw new AutostartException(AutostartCodes.Refused, $"'{command[0]}' could not be started.");
 
-            var output = process.StandardOutput.ReadToEnd();
-            var error = process.StandardError.ReadToEnd();
+            // Both pipes are drained at once, and only then is the exit waited for. Reading one to its end
+            // first is the deadlock every program that shells out learns about eventually: a tool that fills
+            // the other pipe blocks writing to it, and never gets to the end of the one being read.
+            var output = process.StandardOutput.ReadToEndAsync();
+            var error = process.StandardError.ReadToEndAsync();
             process.WaitForExit();
-            return (process.ExitCode, output, error);
+            return (process.ExitCode, output.GetAwaiter().GetResult(), error.GetAwaiter().GetResult());
         }
         catch (Exception problem) when (problem is Win32Exception or FileNotFoundException)
         {
@@ -221,14 +224,9 @@ internal sealed class WindowsRegistrar : IAutostartRegistrar
 
     public AutostartState Read()
     {
-        var query = AutostartArtifacts.Compose(
-            AutostartPlatform.Windows,
-            ["jason"],
-            Path.Combine(AutostartRegistrars.Home, ".jason"),
-            AutostartRegistrars.Home,
-            "S-1-0-0").Query;
-
-        var (exit, output, error) = AutostartRegistrars.Run(query);
+        // Asked without composing anything: what is registered may have been registered by another
+        // installation, under a data directory this one knows nothing about, which is the answer worth having.
+        var (exit, output, error) = AutostartRegistrars.Run(AutostartArtifacts.QueryFor(AutostartPlatform.Windows));
         var answer = AutostartRegistrars.Interpret(AutostartPlatform.Windows, exit, output, error);
         return answer.Registered
             ? new AutostartState(true, AutostartArtifacts.Read(AutostartPlatform.Windows, answer.Document), null)
@@ -332,8 +330,7 @@ internal sealed class SystemdRegistrar : IAutostartRegistrar
 
         // The file is not the registration: a unit that is there and not enabled starts nothing at login. The
         // manager is asked, and a manager that will not answer is said out loud rather than read as "no".
-        var query = AutostartArtifacts.Compose(AutostartPlatform.Linux, ["jason"], "/", AutostartRegistrars.Home, "unused").Query;
-        var (exit, output, error) = AutostartRegistrars.Run(query);
+        var (exit, output, error) = AutostartRegistrars.Run(AutostartArtifacts.QueryFor(AutostartPlatform.Linux));
         var answer = AutostartRegistrars.Interpret(AutostartPlatform.Linux, exit, output, error);
 
         return new AutostartState(answer.Registered, AutostartArtifacts.Read(AutostartPlatform.Linux, held), path);
