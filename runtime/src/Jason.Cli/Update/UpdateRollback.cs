@@ -20,7 +20,10 @@ namespace Jason.Cli.Update;
 /// always go back: it is one rename of a file this update kept. The database cannot, once the new version has
 /// been used — restoring a backup then deletes whatever was done since, which is somebody's work. So the
 /// database is restored only while the evidence says nothing has happened, and the refusal is not a failure of
-/// the rollback: the binary goes back either way, and the message says exactly what was left as it was.
+/// the rollback: the binary goes back either way, and the message says exactly what was left as it was. Evidence
+/// means an update that reached <c>healthy</c>, recorded where the chronicle stood, and a chronicle that still
+/// stands there; everything else - a chronicle that moved, a runtime that cannot be asked, an update that never
+/// got that far - leaves the database alone.
 /// </para>
 /// <para>
 /// Nothing here opens the database. It renames one file, copies another over a third, and deletes two
@@ -106,6 +109,12 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
 
         /// <summary>It could not be read, so neither of the above is known.</summary>
         Unknown,
+
+        /// <summary>
+        /// It was never recorded: this update never reached a healthy runtime, so there is no line to compare
+        /// against and no way to tell whether the new version has been used.
+        /// </summary>
+        NeverRecorded,
     }
 
     /// <summary>
@@ -124,10 +133,13 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
     {
         if (ledger.ChronicleId is null)
         {
-            // Nothing was recorded, which happens when the update never got as far as a healthy runtime — and a
-            // runtime that never served wrote nothing through the new schema either, so there is nothing a
-            // restore could erase.
-            return Chronicle.Unchanged;
+            // Never recorded, because that line is written at `healthy` — and **never healthy is not never
+            // served**. The applier stops nothing when a start times out or when the runtime that came up
+            // answers as the wrong build: that runtime is still serving, through the new schema, for as long as
+            // it takes somebody to read the message and type this. The same missing id covers a rollback typed
+            // while the new version is still migrating, where there is no descriptor yet and so nothing to
+            // stop. Reading it as "nothing has happened" is how a backup gets copied over a day's work.
+            return Chronicle.NeverRecorded;
         }
 
         var newest = await NewestChronicleIdAsync(cancellationToken).ConfigureAwait(false);
@@ -250,9 +262,14 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
 
         if (chronicle is not Chronicle.Unchanged)
         {
-            var why = chronicle == Chronicle.Moved
-                ? "the runtime has recorded work since this update was installed"
-                : "no runtime was answering, so whether work has been recorded since this update was installed could not be read";
+            var why = chronicle switch
+            {
+                Chronicle.Moved => "the runtime has recorded work since this update was installed",
+                Chronicle.NeverRecorded =>
+                    "this update never reached a healthy runtime, so where the chronicle stood was never recorded - "
+                    + "and a version that came up and was refused goes on serving until somebody stops it",
+                _ => "no runtime was answering, so whether work has been recorded since this update was installed could not be read",
+            };
 
             Say($"the database was left as it is: {why}");
             return (false, new UpdateException(

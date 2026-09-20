@@ -89,12 +89,67 @@ public class UpdateRollbackTests
     }
 
     /// <summary>
+    /// "Never healthy" is not "never served". An update whose new version came up, migrated, and then failed
+    /// its health check leaves that runtime <b>running</b> — neither the start's timeout nor the version
+    /// refusal stops it — and it goes on recording work through the new schema for as long as it takes somebody
+    /// to read the message. Nothing recorded where the chronicle stood, because that is written at
+    /// <c>healthy</c>; a rollback that read the missing id as "nothing has happened" copied the backup over
+    /// that work and exited 0.
+    /// </summary>
+    /// <remarks>
+    /// The same missing id covers the narrower case of a rollback typed while the new version is still
+    /// migrating: no descriptor yet, so nothing is stopped, and the copy would land on a database mid-migration.
+    /// A missing id is now its own answer — "this was never recorded" — and it is treated as the dangerous one.
+    /// </remarks>
+    [Fact]
+    public async Task A_rollback_after_an_update_that_never_reached_healthy_leaves_the_database_alone()
+    {
+        using var installation = new FakeInstallation();
+        installation.WithRuntime();
+
+        // The new version comes up and answers as something else, which is what a health check is for. The
+        // applier refuses the update - and leaves that runtime serving.
+        installation.ServesVersion = installation.From.ToString();
+        var failed = await Assert.ThrowsAsync<UpdateException>(
+            () => installation.Applier().ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.FromSeconds(2)), Ct));
+
+        Assert.Equal(UpdateCodes.NotHealthy, failed.Code);
+        Assert.True(installation.Running, "the applier left nothing running, so this test is not the case it describes");
+
+        // Nothing recorded where the chronicle stood, because that happens at `healthy`. What the start did
+        // before it answered wrongly is on disk: it migrated the database and backed it up.
+        var ledger = installation.Ledger()!;
+        Assert.Null(ledger.ChronicleId);
+        var backup = installation.WriteBackup(ledger.StoppedAt!.Value);
+
+        // And it is used, because it is up: work recorded after the update failed.
+        installation.WriteDatabase("work recorded by a version that was never declared healthy");
+        var before = File.ReadAllBytes(installation.Paths.DatabaseFile);
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
+
+        Assert.Equal(UpdateCodes.RollbackUnsafe, refused.Code);
+        Assert.Contains(Path.GetFileName(backup), refused.Message, StringComparison.Ordinal);
+        Assert.Equal(before, File.ReadAllBytes(installation.Paths.DatabaseFile));
+
+        // The half that is always safe still happened.
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+    }
+
+    /// <summary>
     /// PA3's case: the new version migrated and then never served, so nothing can be asked of it. The backup is
     /// found on disk instead — and the comparison is at the stamps' own resolution, so a backup written in the
     /// same second as the stop still belongs to this update.
     /// </summary>
+    /// <remarks>
+    /// Finding it is not restoring it. This update never reached a healthy runtime, so nothing recorded where
+    /// the chronicle stood, and "never served" cannot be told from "served and was used" by anything on this
+    /// machine: the same state is reached by a new version that answered as the wrong build and kept running.
+    /// So the backups directory earns the backup its name in the refusal, and a person puts it back knowing
+    /// what they are choosing.
+    /// </remarks>
     [Fact]
-    public async Task A_new_binary_that_migrated_and_never_served_is_rolled_back_from_the_backups_directory()
+    public async Task A_new_binary_that_migrated_and_never_served_names_the_backup_it_found_and_restores_nothing()
     {
         using var installation = new FakeInstallation();
         installation.WithRuntime();
@@ -112,11 +167,13 @@ public class UpdateRollbackTests
         var backup = installation.WriteBackup(ledger.StoppedAt!.Value);
         installation.WriteDatabase("migrated by a version that never served");
 
-        await installation.Rollback().RollBackAsync(Ct);
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
 
+        // Found, named, and left where it is - and the executable went back, as it always does.
+        Assert.Equal(UpdateCodes.RollbackUnsafe, refused.Code);
+        Assert.Contains(Path.GetFileName(backup), refused.Message, StringComparison.Ordinal);
+        Assert.Equal("migrated by a version that never served", File.ReadAllText(installation.Paths.DatabaseFile));
         Assert.Equal(installation.From.ToString(), installation.Installed());
-        Assert.Equal(FakeInstallation.BackupContent, File.ReadAllText(installation.Paths.DatabaseFile));
-        Assert.False(File.Exists(backup + "-wal"));
     }
 
     /// <summary>

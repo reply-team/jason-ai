@@ -291,7 +291,11 @@ chronicle: the line it stood at when the new version was declared healthy, again
 it has moved on, work has been recorded that the older schema has no place for, and silently discarding it would
 be the worse of the two answers. If **no runtime is answering** — you stopped it, it crashed, the machine was
 rebooted — then the question cannot be answered at all, and that counts the same way: a rollback does not
-assume the answer it would prefer. Either way the executable goes back, the database is left exactly as it
+assume the answer it would prefer. Nor does it where the update **never reached a healthy runtime**: the line is
+recorded at `healthy`, so an update refused because the version that came up was the wrong one, or one still
+migrating as you type this, left nothing to compare against. Never healthy is not never served — that runtime is
+still up, because nothing here stops it, and it has been recording through the new schema ever since. All three
+answers are the same answer: the executable goes back, the database is left exactly as it
 stands, and the message names the backup file. The section below is how you then put that database back
 yourself, having decided that you want to.
 
@@ -342,7 +346,7 @@ a code on its own tells nobody what to do next.
 | `update_not_healthy` | the new version is in place, but the runtime it starts is not the one this update installed. The executable can be put back |
 | `update_file_refused` | a file an update had to move could not be moved: a directory that is not one, a permission, a lock. The message names the path and what to do — including which executable to run when `jason` is no longer on your PATH |
 | `update_nothing_to_roll_back` | there is no record of an update, or the executable it replaced is no longer under `~/.jason/update/previous/` |
-| `update_rollback_unsafe` | the executable was put back and the database was not: the runtime has recorded work since the update, and restoring the backup would erase it. "Restoring a database by hand" below is how to go the rest of the way, having decided you want to |
+| `update_rollback_unsafe` | the executable was put back and the database was not: work has been recorded since the update, or whether any has cannot be told — no runtime is answering, or the update never reached a healthy runtime and so never recorded where the chronicle stood — and restoring the backup would erase it. "Restoring a database by hand" below is how to go the rest of the way, having decided you want to |
 | `update_ledger_invalid` | there is a file at `~/.jason/update/ledger.json` and it is not a ledger this build can act on |
 
 ## 8. Where things live
