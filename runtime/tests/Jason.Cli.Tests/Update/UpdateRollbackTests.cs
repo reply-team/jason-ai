@@ -61,6 +61,12 @@ public class UpdateRollbackTests
         Assert.Equal(FakeInstallation.BackupContent, File.ReadAllText(installation.Paths.DatabaseFile));
         Assert.False(File.Exists(installation.Paths.DatabaseFile + "-wal"), "a WAL from the new schema would be replayed into the restored file");
         Assert.False(File.Exists(installation.Paths.DatabaseFile + "-shm"));
+
+        // And they are gone rather than merely out of the way. A restore that stopped deleting what it set
+        // aside would satisfy the two lines above — the rename alone does — and leave the files that make the
+        // next rollback refuse with a message about two others.
+        Assert.False(File.Exists(installation.Paths.DatabaseFile + "-wal.rolling"), "the log was set aside and never deleted");
+        Assert.False(File.Exists(installation.Paths.DatabaseFile + "-shm.rolling"));
     }
 
     /// <summary>
@@ -215,18 +221,18 @@ public class UpdateRollbackTests
     }
 
     /// <summary>
-    /// A write-ahead log that will not move stops the restore before the database moves, and the message is
-    /// true when it says the database was left as it is.
+    /// A rollback that can find nowhere to put a write-ahead log stops before the database moves, and says
+    /// which directory needs a person.
     /// </summary>
     /// <remarks>
-    /// The sidecars used to be deleted <em>after</em> the backup was already installed, inside the same try.
-    /// A delete that refused there left the file from before the update in place with a log written against the
-    /// new schema beside it - which this product's own page calls corruption - while the refusal said the
-    /// database was untouched, the ledger was written back claiming no restore, and a runtime was started on
-    /// the pair. They are dealt with first now, and a refusal here happens with nothing moved at all.
+    /// The sidecars are moved out of the way rather than deleted, and a name that is taken is passed over for
+    /// the next one - so the way this refuses is by running out of names, not by meeting one. A hundred
+    /// leftovers beginning with the same name is more than a machine makes by accident; what matters is that
+    /// the refusal happens with the database untouched, which is the whole reason the sidecars are dealt with
+    /// before anything else moves.
     /// </remarks>
     [Fact]
-    public async Task A_sidecar_that_will_not_move_stops_the_restore_before_the_database_does()
+    public async Task A_log_with_nowhere_left_to_go_stops_the_restore_before_the_database_does()
     {
         using var installation = await UpdatedAsync(migrates: true);
         installation.WriteDatabase("migrated by the new version");
@@ -234,19 +240,45 @@ public class UpdateRollbackTests
         File.WriteAllText(log, "a log written against the new schema");
         var before = File.ReadAllBytes(installation.Paths.DatabaseFile);
 
-        // Nothing is renamed onto a directory with a file in it, on any platform this ships to.
-        Directory.CreateDirectory(log + ".rolling");
-        File.WriteAllText(Path.Combine(log + ".rolling", "occupied"), "not empty");
+        File.WriteAllText(log + ".rolling", "one an earlier rollback left");
+        for (var ordinal = 2; ordinal <= 100; ordinal++)
+        {
+            File.WriteAllText($"{log}.rolling.{ordinal}", "and another");
+        }
 
         var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
 
         Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+        Assert.Contains(log + ".rolling", refused.Message, StringComparison.Ordinal);
         Assert.Equal(before, File.ReadAllBytes(installation.Paths.DatabaseFile));
         Assert.Equal("a log written against the new schema", File.ReadAllText(log));
 
         // The half that is always safe still happened, and the machine is not left dead.
         Assert.Equal(installation.From.ToString(), installation.Installed());
         Assert.True(installation.Running, "the refusal was about the database, not about leaving the machine dead");
+    }
+
+    /// <summary>
+    /// A sidecar set aside by an earlier rollback and never deleted does not stop this one. It is reachable
+    /// from this code's own paths — a process killed between the aside and the copy, or the best-effort delete
+    /// after a restore refusing — and it used to block every rollback that followed, with a refusal naming the
+    /// two files it was not about and no mention of the one that was.
+    /// </summary>
+    [Fact]
+    public async Task A_log_left_aside_by_an_earlier_rollback_does_not_stop_this_one()
+    {
+        using var installation = await UpdatedAsync(migrates: true);
+        installation.WriteDatabase("migrated by the new version");
+        var log = installation.Paths.DatabaseFile + "-wal";
+        File.WriteAllText(log, "a log written against the new schema");
+
+        // What a rollback that did not finish left behind, under the name the next one would want.
+        File.WriteAllText(log + ".rolling", "a log an earlier rollback set aside and never deleted");
+
+        await installation.Rollback().RollBackAsync(Ct);
+
+        Assert.Equal(FakeInstallation.BackupContent, File.ReadAllText(installation.Paths.DatabaseFile));
+        Assert.False(File.Exists(log), "the log from the new schema is still beside the restored database");
     }
 
     /// <summary>
@@ -393,10 +425,18 @@ public class UpdateRollbackTests
         const string Image = "an image an earlier rollback moved aside and could not delete";
         File.WriteAllText(earlier, Image);
 
-        await new UpdateRollback(installation.Env, installation.Update, new FixedClock(at)).RollBackAsync(Ct);
+        var rollback = new UpdateRollback(installation.Env, installation.Update, new FixedClock(at));
+        await rollback.RollBackAsync(Ct);
 
         Assert.Equal(installation.From.ToString(), installation.Installed());
         Assert.Equal(Image, File.ReadAllText(earlier));
+
+        // The name it took instead, said in the step a person reads to find the file. The number goes before
+        // the file's name: on the end it would land at the last dot of the whole name, which on Unix is a dot
+        // in the version - 0.1.1-<stamp>-jason becoming 0.1-2.1-<stamp>-jason, a version nobody released.
+        var taken = UpdateRollback.AsideName(installation.To, at, ReleaseAssets.ExecutableName, 2);
+        Assert.StartsWith($"{installation.To}-", taken, StringComparison.Ordinal);
+        Assert.Contains(rollback.Steps, step => step.Contains(taken, StringComparison.Ordinal));
     }
 
     /// <summary>

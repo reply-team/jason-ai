@@ -251,9 +251,7 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             //
             // And the name may be taken all the same, by an earlier rollback of the same version in the same
             // moment, so the one that is free is taken instead.
-            var aside = Free(
-                update.Replaced,
-                AsideName(ledger.ToVersion, clock.GetUtcNow(), Path.GetFileName(ledger.InstallPath)));
+            var aside = FreeAside(ledger);
             OnDisk(
                 "moving the installed executable aside",
                 ledger.InstallPath,
@@ -263,6 +261,8 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
                     Directory.CreateDirectory(update.Replaced);
                     File.Move(ledger.InstallPath, aside);
                 });
+
+            Say($"moved {ledger.ToVersion} aside to {aside}");
 
             try
             {
@@ -345,13 +345,27 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
                 var sidecar = env.Paths.DatabaseFile + suffix;
                 if (File.Exists(sidecar))
                 {
-                    File.Move(sidecar, sidecar + SetAside);
-                    aside.Add((sidecar, sidecar + SetAside));
+                    // The free name, not the obvious one: one left behind by an earlier rollback that was
+                    // killed, or whose tidying-up refused, would otherwise stop every rollback after it with a
+                    // message about the two files it is not about.
+                    var kept = Free(sidecar + SetAside);
+                    File.Move(sidecar, kept);
+                    aside.Add((sidecar, kept));
                 }
             }
 
             File.Copy(backup, arriving, overwrite: true);
             File.Move(arriving, env.Paths.DatabaseFile, overwrite: true);
+        }
+        catch (UpdateException refusal)
+        {
+            // The search for a free name gave up. It is a refusal about the database's own files, so it comes
+            // back rather than escaping: the caller starts the runtime before it raises anything, and a database
+            // that could not be put back is no reason to leave a machine with nothing running.
+            Discard(arriving);
+            PutBack(aside);
+            Say($"the database was left as it is: {refusal.Message}");
+            return (false, refusal);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
@@ -387,26 +401,84 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
 
     /// <summary>
     /// What an image moved out of the install path is kept under: the version it is, the moment it was moved,
-    /// and the file's own name. Public because a test has to be able to take the name before the rollback does.
+    /// and the file's own name — with a number in the middle when that name is taken. Public because a test has
+    /// to be able to take the name before the rollback does.
     /// </summary>
-    public static string AsideName(SemanticVersion version, DateTimeOffset at, string fileName) =>
-        $"{version}-{at.UtcDateTime:yyyyMMdd'T'HHmmssfff'Z'}-{fileName}";
+    /// <remarks>
+    /// The number goes before the file's name rather than inside it. Put on the end through
+    /// <c>GetFileNameWithoutExtension</c>, it lands at the last dot of the whole name, which on Unix — where
+    /// the executable is <c>jason</c> with no extension — is a dot in the version:
+    /// <c>0.1.1-20260920T043000000Z-jason</c> became <c>0.1-2.1-20260920T043000000Z-jason</c>. Unique, and a
+    /// version nobody ever released, printed in the line a person reads to find the file.
+    /// </remarks>
+    public static string AsideName(SemanticVersion version, DateTimeOffset at, string fileName, int ordinal = 1) =>
+        ordinal <= 1
+            ? $"{version}-{at.UtcDateTime:yyyyMMdd'T'HHmmssfff'Z'}-{fileName}"
+            : $"{version}-{at.UtcDateTime:yyyyMMdd'T'HHmmssfff'Z'}-{ordinal}-{fileName}";
 
     /// <summary>
-    /// The first of those names nobody has taken. Two rollbacks of one version inside a single tick of the
-    /// clock are rare on a machine and ordinary in a test, and what is already there may be an image that is
-    /// still running: it is not this rollback's to move or to write over.
+    /// The first name in the replaced directory nobody has taken. Two rollbacks of one version inside a single
+    /// tick of the clock are rare on a machine and ordinary in a test, and what is already there may be an image
+    /// that is still running: it is not this rollback's to move or to write over.
     /// </summary>
-    private static string Free(string directory, string name)
+    private string FreeAside(UpdateLedger ledger)
     {
-        var path = Path.Combine(directory, name);
-        for (var next = 2; File.Exists(path) || Directory.Exists(path); next++)
+        for (var ordinal = 1; ordinal <= Names; ordinal++)
         {
-            path = Path.Combine(directory, $"{Path.GetFileNameWithoutExtension(name)}-{next}{Path.GetExtension(name)}");
+            var path = Path.Combine(
+                update.Replaced,
+                AsideName(ledger.ToVersion, clock.GetUtcNow(), Path.GetFileName(ledger.InstallPath), ordinal));
+
+            if (!File.Exists(path) && !Directory.Exists(path))
+            {
+                return path;
+            }
         }
 
-        return path;
+        throw new UpdateException(
+            UpdateCodes.FileRefused,
+            $"there is nowhere free in {update.Replaced} to move {ledger.ToVersion} aside: {Names} names are taken. "
+            + "Nothing has been put back yet. Delete what is in that directory - every file in it is an executable "
+            + "an earlier rollback replaced - and run `jason update rollback` again.");
     }
+
+    /// <summary>
+    /// The same rule for anything else moved out of the way: the name, or the name with a number after it.
+    /// </summary>
+    /// <remarks>
+    /// A sidecar set aside and left behind — by a process killed between the aside and the copy, or by the
+    /// best-effort delete that follows a restore refusing — would otherwise block every rollback after it, with
+    /// a message naming the two files it is not about. Nothing reads these names, so a number on the end is
+    /// free.
+    /// </remarks>
+    private static string Free(string path)
+    {
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            return path;
+        }
+
+        for (var ordinal = 2; ordinal <= Names; ordinal++)
+        {
+            var numbered = $"{path}.{ordinal}";
+            if (!File.Exists(numbered) && !Directory.Exists(numbered))
+            {
+                return numbered;
+            }
+        }
+
+        throw new UpdateException(
+            UpdateCodes.FileRefused,
+            $"there is nowhere free to move '{path}' aside: {Names} names beginning with it are taken, which is "
+            + "more leftovers than a machine makes by accident. The database has not been touched. Delete them and "
+            + "run `jason update rollback` again.");
+    }
+
+    /// <summary>
+    /// How many names are tried before a rollback says the directory needs a person. Unbounded, this is a
+    /// search that never ends on a machine somebody has filled up.
+    /// </summary>
+    private const int Names = 100;
 
     /// <summary>The two files SQLite keeps beside a database, which a restore must not leave behind.</summary>
     private static readonly string[] Sidecars = ["-wal", "-shm"];
