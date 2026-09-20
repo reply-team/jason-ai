@@ -69,9 +69,62 @@ public class UpdateManifestTests
     {
         var refused = Assert.Throws<UpdateFeedException>(() => UpdateManifest.Read(json));
 
+        // `what` names the case for a person reading a failure; it is not evidence, so it is carried in the
+        // messages rather than asserted. A test that asserts its own label passes whatever the code does.
         Assert.Equal("update_feed_invalid", refused.Code);
-        Assert.NotEqual(string.Empty, refused.Message);
-        Assert.False(string.IsNullOrWhiteSpace(what));
+        Assert.False(string.IsNullOrWhiteSpace(refused.Message), $"{what} was refused without saying why");
+        Assert.DoesNotContain("Exception", refused.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The same instant, written two ways, is the same instant — and what comes out is in UTC whichever way it
+    /// went in, because everything else in this product reads a moment as UTC.
+    /// </summary>
+    [Fact]
+    public void A_publication_time_means_the_same_instant_in_every_time_zone()
+    {
+        var zulu = UpdateManifest.Read(Good().Replace("\"2026-09-19T08:00:00Z\"", "\"2026-09-19T08:00:00Z\"", StringComparison.Ordinal));
+        var offset = UpdateManifest.Read(Good().Replace("\"2026-09-19T08:00:00Z\"", "\"2026-09-19T13:00:00+05:00\"", StringComparison.Ordinal));
+
+        Assert.Equal(zulu.PublishedAt, offset.PublishedAt);
+        Assert.Equal(TimeSpan.Zero, offset.PublishedAt.Offset);
+    }
+
+    /// <summary>
+    /// And a time with no zone at all is refused rather than guessed at.
+    /// </summary>
+    /// <remarks>
+    /// Guessed at is what happens by default: a parse of "2026-09-19T08:00:00" takes the *reading* machine's
+    /// offset, so one manifest means 08:00 in London and 08:00 in Kyiv — two instants three hours apart, decided
+    /// by who happened to read it. A release is published at one moment, and a document that cannot say which is
+    /// not a manifest.
+    /// </remarks>
+    [Fact]
+    public void A_publication_time_with_no_zone_is_refused_rather_than_read_as_the_reading_machines_time()
+    {
+        var refused = Assert.Throws<UpdateFeedException>(
+            () => UpdateManifest.Read(Good().Replace("\"2026-09-19T08:00:00Z\"", "\"2026-09-19T08:00:00\"", StringComparison.Ordinal)));
+
+        Assert.Equal("update_feed_invalid", refused.Code);
+        Assert.Contains("published_at", refused.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A digest is a number written in hexadecimal, and the case of its letters carries nothing. It is read in
+    /// either case and kept in one, so everything that compares digests can compare them as text.
+    /// </summary>
+    /// <remarks>
+    /// This build writes lower case and so does the packaging action, so the rule exists for feeds this project
+    /// did not write — and refusing them would report a correct file as a corrupt one, which is the worst
+    /// message an updater can give.
+    /// </remarks>
+    [Fact]
+    public void A_digest_is_read_in_either_case_and_kept_in_one()
+    {
+        var digest = new string('a', 60) + "BEEF";
+        var manifest = UpdateManifest.Read(Good(artifacts: Artifact("linux-x64", sha256: digest)));
+
+        Assert.Equal(digest.ToLowerInvariant(), manifest.Artifacts["linux-x64"].Sha256);
     }
 
     public static TheoryData<string, string> Rubbish()

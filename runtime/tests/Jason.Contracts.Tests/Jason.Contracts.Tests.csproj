@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="../../src/Jason.Contracts/Jason.Contracts.csproj" />
+
+    <!-- One disposable temporary directory for the whole suite: a second copy is a second thing to forget to
+         delete, and this suite has paid for that once already. -->
+    <Compile Include="../Jason.Runtime.Tests/TempTree.cs" Link="TempTree.cs" />
   </ItemGroup>
 </Project>

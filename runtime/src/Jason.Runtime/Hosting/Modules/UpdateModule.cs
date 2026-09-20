@@ -19,9 +19,6 @@ public static class UpdateModule
     /// </summary>
     private static readonly TimeSpan ConnectionLifetime = TimeSpan.FromMinutes(5);
 
-    /// <summary>A manifest is a few hundred bytes; a feed that has not answered in this long is not going to.</summary>
-    private static readonly TimeSpan FeedTimeout = TimeSpan.FromSeconds(30);
-
     /// <param name="feedHandler">
     /// Where the feed's requests go when a test says; null is the network. The seam is the transport rather
     /// than the address, so the URL a test's runtime reads is exactly the one a real runtime would.
@@ -47,6 +44,6 @@ public static class UpdateModule
     private static HttpClient Client(HttpMessageHandler? handler) =>
         new(handler ?? new SocketsHttpHandler { PooledConnectionLifetime = ConnectionLifetime }, disposeHandler: handler is null)
         {
-            Timeout = FeedTimeout,
+            Timeout = UpdateFeed.DefaultTimeout,
         };
 }

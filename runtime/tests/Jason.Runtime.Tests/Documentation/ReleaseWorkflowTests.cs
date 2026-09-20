@@ -95,6 +95,48 @@ public class ReleaseWorkflowTests
         Assert.Contains(".pdb", Read(Action), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A runner that has packaged once already — a re-run of a failed job, which keeps the workspace — has the
+    /// archive sitting there, and <c>Compress-Archive</c> refuses to write over it. The tar half has never had
+    /// the problem, because <c>tar -czf</c> truncates; the zip half is the one that needs saying.
+    /// </summary>
+    /// <remarks>
+    /// The action's own line is run twice against a package directory of this test's own, with the error
+    /// preference the runner sets for a <c>pwsh</c> step. Nothing here is a copy of the line: it is read out of
+    /// the action and handed to <c>pwsh</c>.
+    /// </remarks>
+    [Fact]
+    public void Every_archive_is_written_even_when_one_is_already_there()
+    {
+        var zipping = Assert.IsType<YamlSequenceNode>(Node(Mapping(Parse(Read(Action)), "runs"), "steps")).Children.Cast<YamlMappingNode>()
+            .Single(step => Scalar(step, "name") == "Archive as zip");
+
+        using var tree = new TempTree();
+        var package = Path.Combine(tree.Root, "artifacts", "package", "win-x64");
+        Directory.CreateDirectory(package);
+        Directory.CreateDirectory(Path.Combine(tree.Root, "artifacts", "release"));
+        File.WriteAllText(Path.Combine(package, "jason.exe"), "not really an executable");
+        File.WriteAllText(Path.Combine(package, "LICENSE"), "not really the licence");
+
+        var step = Path.Combine(tree.Root, "archive.ps1");
+        File.WriteAllText(step, Scalar(zipping, "run"));
+        var environment = new Dictionary<string, string>
+        {
+            ["RID"] = "win-x64",
+            ["ARCHIVE"] = $"artifacts/release/{ReleaseAssets.For("win-x64")}",
+        };
+
+        // `shell: pwsh` on a runner is `pwsh -Command` with the error preference set to Stop, so a cmdlet that
+        // writes an error ends the step. That is what makes the second run a failed job rather than a warning.
+        var line = $"$ErrorActionPreference = 'Stop'; Set-Location -LiteralPath '{tree.Root}'; & '{step}'";
+
+        var first = Pwsh(environment, "-Command", line);
+        Assert.True(first.Exit == 0, first.Stderr);
+
+        var again = Pwsh(environment, "-Command", line);
+        Assert.True(again.Exit == 0, $"A warm runner packages a second time and: {again.Stderr}");
+    }
+
     // --- release.yml -------------------------------------------------------------------------------------
 
     [Fact]
@@ -136,6 +178,114 @@ public class ReleaseWorkflowTests
         Assert.Contains(building, Assert.IsType<YamlSequenceNode>(Node(assembling, "needs")).Children.Select(need => need.ToString()));
         Assert.Contains("gh release create", Read(Release), StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A draft's tag does not exist, but a draft holds the name: <c>gh release create v0.2.0</c> fails while a
+    /// draft of v0.2.0 is sitting there, and it fails complaining about a tag that does not exist. So the
+    /// second dry run of a version — the ordinary case, because a dry run is inspected and then pressed again —
+    /// died at the last step, with every runner's work already done.
+    /// </summary>
+    /// <remarks>
+    /// The step is run, not read: its own PowerShell, with <c>gh</c> replaced by a function that records what
+    /// it was asked to do (a function wins over an external command, so what runs is the workflow's own line).
+    /// What the rows assert is the safety of the repair as much as the repair: a <em>published</em> release of
+    /// that version is somebody's installed software, and nothing here may delete it — the workflow stops
+    /// instead, which is what <c>gh release create</c> failing on an existing release does.
+    /// </remarks>
+    [Theory]
+    [InlineData("workflow_dispatch", "draft", true)]
+    [InlineData("push", "draft", true)]
+    [InlineData("workflow_dispatch", "published", false)]
+    [InlineData("workflow_dispatch", "none", false)]
+    public void A_second_dry_run_of_the_same_version_replaces_its_draft_rather_than_failing(string eventName, string existing, bool deleted)
+    {
+        var calls = RunTheReleaseStep(eventName, existing);
+
+        Assert.Contains(calls, call => call.StartsWith("release view v0.2.0", StringComparison.Ordinal));
+        var created = calls.Index().Single(call => call.Item.StartsWith("release create", StringComparison.Ordinal));
+
+        // And every flag reaches gh whole. PowerShell unrolls a one-element array assigned from an `if` into a
+        // scalar string, `+=` on a string concatenates, and splatting a string spells it out one character per
+        // argument — which is what the tag path did: `gh release create v0.2.0 - - v e r i f y - t a g …`.
+        Assert.Contains(eventName == "push" ? "--verify-tag" : "--draft", created.Item, StringComparison.Ordinal);
+        Assert.Contains("--latest", created.Item, StringComparison.Ordinal);
+        Assert.DoesNotContain("- -", created.Item, StringComparison.Ordinal);
+        var deletions = calls.Index().Where(call => call.Item.StartsWith("release delete", StringComparison.Ordinal)).ToList();
+
+        if (!deleted)
+        {
+            Assert.Empty(deletions);
+            return;
+        }
+
+        var deletion = Assert.Single(deletions);
+        Assert.Contains("v0.2.0", deletion.Item, StringComparison.Ordinal);
+        Assert.True(deletion.Index < created.Index, $"The draft is deleted after the release is created:\n{string.Join('\n', calls)}");
+
+        // A draft has no tag to clean up, and asking for one is how a published tag gets deleted by accident.
+        Assert.DoesNotContain("--cleanup-tag", deletion.Item, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The assembling job's "Create the release" step, run with <c>gh</c> standing in, and what it asked
+    /// <c>gh</c> to do — one call per line, in the order they were made.
+    /// </summary>
+    private static IReadOnlyList<string> RunTheReleaseStep(string eventName, string existing)
+    {
+        var jobs = Mapping(Parse(Read(Release)), "jobs");
+        var assembling = (YamlMappingNode)jobs.Children
+            .Single(job => Node((YamlMappingNode)job.Value, "permissions") is YamlMappingNode permissions && Scalar(permissions, "contents") == "write")
+            .Value;
+        var creating = Assert.IsType<YamlSequenceNode>(Node(assembling, "steps")).Children.Cast<YamlMappingNode>()
+            .Single(step => Scalar(step, "name") == "Create the release");
+
+        using var tree = new TempTree();
+        var step = Path.Combine(tree.Root, "create-the-release.ps1");
+        File.WriteAllText(step, Scalar(creating, "run"));
+        var calls = Path.Combine(tree.Root, "gh-calls.txt");
+        File.WriteAllText(calls, string.Empty);
+        var harness = Path.Combine(tree.Root, "harness.ps1");
+        File.WriteAllText(harness, StandInForGh.Replace("@STEP@", step, StringComparison.Ordinal));
+
+        var (exit, _, stderr) = Pwsh(
+            new Dictionary<string, string>
+            {
+                ["EVENT"] = eventName,
+                ["SHA"] = "1111111111111111111111111111111111111111",
+                ["VERSION"] = "0.2.0",
+                ["GH_TOKEN"] = "not-a-token",
+                ["EXISTING"] = existing,
+                ["CALLS"] = calls,
+            },
+            "-File", harness);
+
+        Assert.True(exit == 0, $"The step exited {exit}: {stderr}");
+        return File.ReadAllLines(calls);
+    }
+
+    /// <summary>
+    /// <c>gh</c> for the length of one step: every call recorded, and <c>release view</c> answering the way
+    /// <c>--json isDraft --jq .isDraft</c> answers — <c>true</c>, <c>false</c>, or nothing and a non-zero exit
+    /// code when there is no release of that name at all.
+    /// </summary>
+    private const string StandInForGh = """
+        $ErrorActionPreference = 'Stop'
+
+        function gh {
+            Add-Content -LiteralPath $env:CALLS -Value ($args -join ' ')
+            if ($args[0] -eq 'release' -and $args[1] -eq 'view') {
+                switch ($env:EXISTING) {
+                    'draft'     { $global:LASTEXITCODE = 0; 'true'; return }
+                    'published' { $global:LASTEXITCODE = 0; 'false'; return }
+                    default     { [Console]::Error.WriteLine('release not found'); $global:LASTEXITCODE = 1; return }
+                }
+            }
+
+            $global:LASTEXITCODE = 0
+        }
+
+        & '@STEP@'
+        """;
 
     /// <summary>
     /// PB2 and PA7: the tests run at the tag before anything is packaged, and one <c>-p:Version=</c> reaches
@@ -260,13 +410,95 @@ public class ReleaseWorkflowTests
     public void The_notes_say_plainly_that_nothing_is_signed() =>
         Assert.Contains("Nothing in this release is signed or notarized.", Read(Notes), StringComparison.Ordinal);
 
-    /// <summary>PB7: the fact a dry run's reader needs, where they will read it.</summary>
+    /// <summary>
+    /// PB7: the fact a dry run's reader needs, where they will read it — the template, which is where whoever
+    /// presses the button is already looking. That it does not reach the release page is the next test.
+    /// </summary>
     [Fact]
     public void The_notes_say_that_a_drafts_tag_does_not_exist_until_it_is_published()
     {
         var notes = Read(Notes);
         Assert.StartsWith("<!--", notes, StringComparison.Ordinal);
         Assert.Contains("does not exist until the draft is published", notes, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The comment at the top of the template is addressed to whoever edits the template: edit this file rather
+    /// than the release page, here is what the button does with a draft. It was shipping inside the release
+    /// body. Markdown hides an HTML comment when a page is rendered, but the body is read raw as well — by the
+    /// API, by <c>gh release view</c>, in the notification mail — so the step that writes the notes strips every
+    /// comment, and what is asserted here is what the step wrote, not what the template says.
+    /// </summary>
+    [Fact]
+    public void The_notes_that_ship_carry_no_instructions_meant_for_their_author()
+    {
+        var shipped = WriteTheNotes(Read(Notes));
+
+        Assert.DoesNotContain("<!--", shipped, StringComparison.Ordinal);
+        Assert.DoesNotContain("-->", shipped, StringComparison.Ordinal);
+        Assert.DoesNotContain("edit this file rather than the release page", shipped, StringComparison.Ordinal);
+        Assert.DoesNotContain("does not exist until the draft is published", shipped, StringComparison.Ordinal);
+        Assert.StartsWith("Jason 0.2.0", shipped, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{version}}", shipped, StringComparison.Ordinal);
+
+        // Every comment, not only the one at the top: a note left further down is a note to the same author.
+        var later = WriteTheNotes("Jason {{version}} is here.\n\n<!-- remember to mention the migration -->\n\nEnjoy.\n");
+        Assert.DoesNotContain("remember to mention", later, StringComparison.Ordinal);
+        Assert.Contains("Jason 0.2.0 is here.", later, StringComparison.Ordinal);
+        Assert.Contains("Enjoy.", later, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The notes told every reader that "the install scripts clear that mark", and one of the two does not.
+    /// <c>install.ps1</c> clears the mark of the web with <c>Unblock-File</c>; <c>install.sh</c> clears nothing,
+    /// and needs to clear nothing, because macOS's quarantine attribute is set by the browser that downloaded a
+    /// file and not by <c>curl</c>. A sentence that is true of one script and not the other is worth guarding
+    /// against both scripts rather than against itself.
+    /// </summary>
+    [Fact]
+    public void The_notes_say_which_script_clears_the_mark_of_the_web()
+    {
+        var notes = Regex.Replace(Read(Notes), @"\s+", " ");
+
+        Assert.Contains("Unblock-File", Read(["install", "install.ps1"]), StringComparison.Ordinal);
+        Assert.Contains("`install.ps1` clears", notes, StringComparison.Ordinal);
+
+        // If install.sh ever does clear it, this goes red and the sentence gets rewritten rather than quietly
+        // becoming true again by accident.
+        var sh = Read(["install", "install.sh"]);
+        Assert.DoesNotContain("xattr", sh, StringComparison.Ordinal);
+        Assert.DoesNotContain("quarantine", sh, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("the install scripts clear", notes, StringComparison.Ordinal);
+        Assert.Contains("not by `curl`", notes, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The release's "Write the notes" step, run the way the assembling job runs it: this template, this
+    /// version, in a tree of the test's own — and what it wrote.
+    /// </summary>
+    private static string WriteTheNotes(string template)
+    {
+        var jobs = Mapping(Parse(Read(Release)), "jobs");
+        var assembling = (YamlMappingNode)jobs.Children
+            .Single(job => Node((YamlMappingNode)job.Value, "permissions") is YamlMappingNode permissions && Scalar(permissions, "contents") == "write")
+            .Value;
+        var writing = Assert.IsType<YamlSequenceNode>(Node(assembling, "steps")).Children.Cast<YamlMappingNode>()
+            .Single(step => Scalar(step, "name") == "Write the notes");
+
+        using var tree = new TempTree();
+        Directory.CreateDirectory(Path.Combine(tree.Root, ".github"));
+        Directory.CreateDirectory(Path.Combine(tree.Root, "artifacts", "release"));
+        File.WriteAllText(Path.Combine(tree.Root, ".github", "release-notes-template.md"), template);
+
+        var step = Path.Combine(tree.Root, "write-the-notes.ps1");
+        File.WriteAllText(step, Scalar(writing, "run"));
+
+        var (exit, _, stderr) = Pwsh(
+            new Dictionary<string, string> { ["VERSION"] = "0.2.0" },
+            "-Command", $"$ErrorActionPreference = 'Stop'; Set-Location -LiteralPath '{tree.Root}'; & '{step}'");
+
+        Assert.True(exit == 0, stderr);
+        return File.ReadAllText(Path.Combine(tree.Root, "artifacts", "release", "notes.md"));
     }
 
     [Fact]
@@ -406,7 +638,10 @@ public class ReleaseWorkflowTests
     public void Every_executable_check_opens_the_database(string workflow)
     {
         var text = Read(workflow == "ci.yml" ? Ci : Release);
-        var steps = text.Split("- name:").Where(step => step.Contains("--version", StringComparison.Ordinal)).ToList();
+        // Steps that *ask* an executable its version, not steps that mention the question. A comment explaining
+        // why something cannot be proved by --version is not an executable check, and reading it as one would
+        // have this guard demand a runtime start inside a step that starts nothing.
+        var steps = text.Split("- name:").Where(Checks).ToList();
 
         Assert.NotEmpty(steps);
         foreach (var step in steps)
@@ -418,6 +653,12 @@ public class ReleaseWorkflowTests
         }
     }
 
+    /// <summary>Whether a step really asks an executable what version it is, rather than talking about it.</summary>
+    private static bool Checks(string step) =>
+        step.Split('\n')
+            .Select(line => line.Trim())
+            .Any(line => line.Contains("--version", StringComparison.Ordinal) && !line.StartsWith('#'));
+
     /// <summary>
     /// Whether the step really runs the command, rather than merely mentioning it.
     /// </summary>
@@ -428,6 +669,28 @@ public class ReleaseWorkflowTests
     /// So the mention must end on a word boundary, and must not be a throw, a condition or a comment: what is
     /// left is the invocation.
     /// </remarks>
+    /// <summary>
+    /// Where a step really runs a command, by the same rules <see cref="Runs"/> uses — which is not where it
+    /// first mentions one. This job's rollback step opens with a comment naming <c>jason update rollback</c>,
+    /// so a guard that split the step at the first mention was splitting it at the comment, and a
+    /// <c>runtime stop</c> inserted between that comment and the invocation fell on the wrong side of it.
+    /// </summary>
+    private static int At(string text, string command)
+    {
+        var position = 0;
+        foreach (var line in text.Split('\n'))
+        {
+            if (Runs(line, command))
+            {
+                return position;
+            }
+
+            position += line.Length + 1;
+        }
+
+        return -1;
+    }
+
     private static bool Runs(string step, string command) =>
         step.Split('\n')
             .Select(line => line.Trim())
@@ -491,8 +754,17 @@ public class ReleaseWorkflowTests
         var (exit, _, stderr) = Pwsh(NoEnvironment, "-Command", line);
 
         Assert.True(exit == 0, $"{workflow} runs `{invocation}`, and pwsh answered: {stderr}");
+        // What it must carry is what the line asked it to carry. A release assembles all three platforms; the
+        // end-to-end job assembles the one it is updating, which is a feed of one release for one machine.
         var manifest = UpdateManifest.Read(File.ReadAllText(Path.Combine(directory, ReleaseAssets.Manifest)));
-        Assert.Equal(ReleaseAssets.Rids.Count, manifest.Artifacts.Count);
+        var required = System.Text.RegularExpressions.Regex.Match(line, @"-Require (\S+)").Groups[1].Value
+            .Trim('\'', '"')
+            .Split(',', StringSplitOptions.RemoveEmptyEntries);
+        Assert.NotEmpty(required);
+        foreach (var rid in required)
+        {
+            Assert.True(manifest.Artifacts.ContainsKey(rid), $"the manifest {invocation} wrote carries nothing for {rid}");
+        }
     }
 
     public static TheoryData<string, string> ManifestInvocations()
@@ -525,6 +797,8 @@ public class ReleaseWorkflowTests
             .Replace("./.github/scripts/Write-Manifest.ps1", $"& '{script}'", StringComparison.Ordinal)
             .Replace("${{ needs.version.outputs.version }}", "0.2.0", StringComparison.Ordinal)
             .Replace("$env:VERSION", "0.2.0", StringComparison.Ordinal)
+            .Replace("$env:NEXT", "0.2.1", StringComparison.Ordinal)
+            .Replace("$env:RID", ReleaseAssets.Rids[0], StringComparison.Ordinal)
             .Replace("$env:REPOSITORY", "reply-team/jason-ai", StringComparison.Ordinal);
 
         // -Directory names where a runner downloaded the artifacts to; here it is the staged tree this test made.
@@ -577,6 +851,24 @@ public class ReleaseWorkflowTests
 
     private static string Read(string[] relative) => File.ReadAllText(Path.Combine([RepositoryRoot(), .. relative]));
 
+    /// <summary>
+    /// One job of a workflow, as the text between its name and the next job at the same indentation. Read as
+    /// text rather than through the parser because what these guards are about is what the job's script says.
+    /// </summary>
+    private static string Job(string workflow, string name)
+    {
+        var start = workflow.IndexOf($"\n  {name}:", StringComparison.Ordinal);
+        Assert.True(start >= 0, $"There is no '{name}' job in this workflow.");
+
+        var next = workflow.IndexOf("\n  ", start + 3, StringComparison.Ordinal);
+        while (next >= 0 && workflow.Length > next + 3 && char.IsWhiteSpace(workflow[next + 3]))
+        {
+            next = workflow.IndexOf("\n  ", next + 3, StringComparison.Ordinal);
+        }
+
+        return next < 0 ? workflow[start..] : workflow[start..next];
+    }
+
     private static YamlMappingNode Parse(string yaml)
     {
         var stream = new YamlStream();
@@ -607,5 +899,133 @@ public class ReleaseWorkflowTests
 
         Assert.NotNull(directory);
         return directory.FullName;
+    }
+    /// <summary>
+    /// The end-to-end job updates a real installation between two real versions, and asserts the one that came
+    /// up. Everything about it that could quietly stop proving anything is read here.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// With one version on both sides, <c>--version</c> cannot tell a completed swap from an applier that did
+    /// nothing: the health check passes either way, which makes the whole job theatre. So the job publishes the
+    /// <em>next</em> patch version and updates to that — and the version it takes for the installed side is the
+    /// artifact the platform job already published, so only one extra publish is paid for.
+    /// </para>
+    /// <para>
+    /// The other three things that would make it theatre: a database prepared by copying a file instead of
+    /// migrating one (the triggers live in the migrations, so a copied file is not an older database), a feed
+    /// served from anywhere but this machine, and a runtime started before the update — which would migrate the
+    /// prepared database itself and leave the new version nothing to back up, so the acceptance criterion this
+    /// job exists for would never be exercised.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void The_end_to_end_job_updates_between_two_versions_and_asserts_the_one_that_ran()
+    {
+        var job = Job(Read(Ci), "update-end-to-end");
+
+        // Two versions, and the installed one is the artifact the platform job already made: one extra
+        // publish, through the same action a release packages with.
+        Assert.Contains("download-artifact", job, StringComparison.Ordinal);
+        Assert.Contains("./.github/actions/package", job, StringComparison.Ordinal);
+        Assert.Contains("steps.next.outputs.next", job, StringComparison.Ordinal);
+
+        // A real older database, made by EF's own migrator, with the connection given so that nothing is
+        // written into the working directory instead.
+        Assert.Contains("dotnet ef database update", job, StringComparison.Ordinal);
+        Assert.Contains("--connection", job, StringComparison.Ordinal);
+
+        // A feed that is this machine and nothing else.
+        Assert.Contains("127.0.0.1", job, StringComparison.Ordinal);
+        Assert.DoesNotContain("github.com", job, StringComparison.Ordinal);
+
+        // The update is applied by the installed executable, and every stage is asserted by name.
+        Assert.Contains("update apply", job, StringComparison.Ordinal);
+        foreach (var step in new[] { "staged", "drained", "stopped", "kept", "swapped", "started", "healthy" })
+        {
+            Assert.Contains($"'{step}'", job, StringComparison.Ordinal);
+        }
+
+        // And the assertions a no-op cannot produce: the old file kept, the new file installed by identity, and
+        // the staged copy gone.
+        Assert.Contains("previous", job, StringComparison.Ordinal);
+        Assert.Contains("Get-FileHash", job, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And it puts the update back again, from the executable a person would type — which is the one thing about
+    /// a rollback no test in this repository can reach.
+    /// </summary>
+    /// <remarks>
+    /// `jason update rollback`, typed from the PATH the way every refusal message says to, runs the executable
+    /// the update installed: the file the rollback has to replace is the process doing the replacing. Windows
+    /// will not let a running image be written over — only renamed — and the unit tests cannot see that, because
+    /// a fake installation is a file and not a process. Here it is a process.
+    /// </remarks>
+    [Fact]
+    public void The_end_to_end_job_rolls_the_update_back_from_the_installed_executable()
+    {
+        var job = Job(Read(Ci), "update-end-to-end");
+
+        // Where it is run, not where it is named: this step's own comment says `jason update rollback` four
+        // lines above the invocation.
+        var rollback = At(job, "update rollback");
+        Assert.True(rollback > 0, "the end-to-end job does not run `update rollback`");
+
+        // Rolled back by the installed executable, not by anything built beside it.
+        var invocation = job[rollback..job.IndexOf('\n', rollback)];
+        Assert.Contains("$env:install update rollback", invocation, StringComparison.Ordinal);
+
+        // Against the runtime the update left running. A rollback decides whether restoring a database is safe
+        // by asking that runtime what has been recorded since; a job that stopped it first would be asserting
+        // the refusal rather than the rollback — which is what happened the first time this step ran.
+        var before = job[..rollback];
+        Assert.False(
+            Runs(before, "runtime stop"),
+            "the end-to-end job stops the runtime before it rolls back, so it would assert the refusal rather than the rollback");
+
+        // And what it must leave behind: the old version serving, the kept executable consumed, and the
+        // database from before the update.
+        // Each of these is the expression the check is made of rather than a word the step also uses about
+        // itself: a guard that matched the prose beside a check would survive the check being deleted.
+        var after = job[rollback..];
+        Assert.Contains("Join-Path $update 'previous'", after, StringComparison.Ordinal);
+        Assert.Contains("runtime_version", after, StringComparison.Ordinal);
+
+        // That last one is asked of what the restored runtime had to do, because the file cannot be inspected
+        // - the rollback starts a runtime, which opens the database at once - and because nothing can be
+        // written into the migrated database first: work recorded after an update is exactly what makes a
+        // rollback refuse to restore one. So: the restored version found the database a migration behind and
+        // migrated it again, and the backup it took is not the backup the update took.
+        Assert.Contains("newly_applied", after, StringComparison.Ordinal);
+        Assert.Contains("$env:backup", after, StringComparison.Ordinal);
+
+        // And on Windows, that the image which ran the rollback was moved aside rather than written over.
+        Assert.Contains("Join-Path $update 'replaced'", after, StringComparison.Ordinal);
+        Assert.True(
+            job.IndexOf("\"backup=", StringComparison.Ordinal) is var kept && kept > 0 && kept < rollback,
+            "the end-to-end job never remembers the backup the update took, so it cannot tell it from the one the rollback's own start takes");
+    }
+
+    /// <summary>
+    /// The runtime is not started before the update. This is the one thing about the job that would pass every
+    /// other assertion here and still prove nothing: a runtime started first migrates the prepared database
+    /// itself, so the new version's first start has nothing to back up and nothing to migrate.
+    /// </summary>
+    [Fact]
+    public void The_end_to_end_job_leaves_the_installed_runtime_stopped_until_the_update()
+    {
+        var job = Job(Read(Ci), "update-end-to-end");
+        var apply = job.IndexOf("update apply", StringComparison.Ordinal);
+        Assert.True(apply > 0, "the end-to-end job does not apply an update");
+
+        var before = job[..apply];
+        Assert.DoesNotContain("runtime start", before, StringComparison.Ordinal);
+        Assert.DoesNotContain("runtime run", before, StringComparison.Ordinal);
+
+        // And what it asserts afterwards is that this update's own start migrated: newly_applied and a backup.
+        var after = job[apply..];
+        Assert.Contains("newly_applied", after, StringComparison.Ordinal);
+        Assert.Contains("backup_file", after, StringComparison.Ordinal);
     }
 }

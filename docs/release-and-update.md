@@ -1,12 +1,13 @@
 # Releases and updates
 
 .NET does not update a self-contained application, so Jason owns its update behaviour. This page is the
-contract for the half of that which exists today: what a release is, what it publishes, how a running runtime
-learns that a newer one exists, and how a person asks the same question by hand.
+contract for it: what a release is, what it publishes, how a running runtime learns that a newer one exists,
+how a person asks the same question by hand, and what `jason update apply` does to this machine when they say
+yes.
 
-**What is not here yet.** `jason update` applies nothing in this version: there is no `apply`, no `rollback` and
-no autostart registration. The runtime tells you that an update exists; replacing the binary is a person's
-decision and a later version's work. This page grows when they arrive.
+**What is not here yet.** Jason registers nothing with the machine to start itself — no service unit, no
+scheduled task, no login item — and an update therefore has none to keep working. Whatever you wrote yourself
+keeps working, for the reason §7 gives.
 
 **Nothing in a release is signed or notarized.** Integrity is a SHA-256 you can check yourself, published beside
 the files and inside the manifest. Signing and notarization are their own story, before 1.0.0.
@@ -93,7 +94,9 @@ nothing else.** No body, no query, no identifier, no machine facts, nothing abou
 or your data directory. The answer is kept in memory and shown by `system.info`; it is never written to disk.
 
 A check that fails — offline, a page that answers 500, something that is not a manifest — is a log line at
-warning and never an error to any caller. An offline machine is a normal machine.
+warning and never an error to any caller. An offline machine is a normal machine. A feed that has not answered
+within **10 seconds** is one of those failures: a manifest is a few hundred bytes, so waiting longer only makes
+an offline machine slower to admit it. `jason update check` waits exactly as long, for the same reason.
 
 ### The settings
 
@@ -157,24 +160,230 @@ rights, and nothing is installed for other people on the machine.
 **Until the first release exists, both one-liners answer 404.** They resolve to the latest release, and a
 repository with no releases has none.
 
-## 7. Where things live
+The workflow that builds a release has a button — a `workflow_dispatch` that produces a draft, for a dry run
+before any tag exists. GitHub offers that button only for a workflow that is already on the **default branch**,
+so the pipeline cannot be rehearsed from the branch that writes it: everything up to and including the three
+archives and the manifest is exercised on every pull request, and the last step, which creates the release, is
+proved by that dry run once the workflow has merged.
+
+## 7. Updating
+
+```sh
+jason update apply
+jason update apply --version 0.2.0
+jason update apply --drain-seconds 0
+jason update apply --feed http://127.0.0.1:8080/manifest.json
+```
+
+`jason update apply` takes this installation from the version it is running to the version the feed names: it
+downloads the release for your platform, proves its digest, drains and stops the runtime, puts the new
+executable where the old one was, starts it again and checks that what came up is what was installed. It is the
+same command whether a runtime is running or not.
+
+**There is nothing to apply until the first release exists** — the feed resolves to the latest release, and a
+repository with no releases has none, so until then `jason update apply` answers `update_feed_unreachable` and
+does nothing. A `0.1.0` installation has no `jason update apply` at all: the first tag is cut from a `main` that
+predates this work, so the executable that release publishes does not carry the applier. Such an installation
+moves forward by re-running the install one-liner in §6 until it is on a build that does carry it — after that,
+`jason update apply` is how it moves.
+
+### The steps, and the ledger that names them
+
+An update is eight steps, and every one of them is written to `~/.jason/update/ledger.json` **before** it is
+taken. That file is the update's **ledger**, and it is never called a journal: the journal is the runtime's own
+append-only chronicle inside the database, and this is a single file that one process writes, the next one
+reads, and the update after this one overwrites.
+
+| Step | What has been begun |
+|---|---|
+| `staged` | the archive for this platform is downloaded, its SHA-256 checked against the manifest, and the one file a release holds is unpacked under `~/.jason/update/staged/<version>/` |
+| `drained` | the runtime has been told to claim nothing new, and what it was already running has finished or the wait has run out |
+| `stopped` | the runtime has been asked to stop, and its process is gone |
+| `kept` | the installed executable has been moved to `~/.jason/update/previous/`, and the install path is empty |
+| `swapped` | the staged executable has been moved onto the install path |
+| `started` | a runtime has been started from the new executable |
+| `healthy` | that runtime answers, says it is the version this update installed, and has its migrations applied |
+| `complete` | the update is over, and the ledger stays behind as the record of it |
+
+Because each line is written before its step is taken, the last step a ledger names is the last step that was
+**begun** — never the last that finished. That is what makes a kill anywhere recoverable: every step is written
+so that beginning it twice is the same as beginning it once, so the next `jason update apply` reads the file,
+picks the sequence up at the step it names, and carries it through.
+
+`--drain-seconds` bounds the wait at `drained`; the default is 120 and `--drain-seconds 0` means do not wait at
+all. Either way the applier says what it left behind: work still running keeps its lease, and the runtime that
+comes up next finishes it or its enforcer takes it back.
+
+**An update leaves a runtime running.** It stops the old one itself and starts the new one from the install
+path, so a machine that had a runtime up before the update has one up after it. So does a machine that did
+not: on an installation with no runtime answering, `drained` and `stopped` are satisfied without asking anybody
+anything — the ledger says so and says why — and `started` starts the new build anyway. That is the ordinary
+way to update an installation nobody has started yet, and it is the only way the new build's *first* start is
+the one that migrates the database.
+
+### Where an update stands
+
+```sh
+jason update status
+jason update status --human
+```
+
+`jason update status` reads the ledger and asks no runtime anything, because the moment you most want this
+answer is the moment there may be no runtime to ask. It exits 0 either way: exit 3 is this CLI saying a step
+needed the runtime and could not have it, and reading a file is not such a step.
+
+It answers `in_flight` with the step reached, or `in_flight: false` with no step at all when this installation
+has never run an update. A ledger left at `complete` is the third answer: `in_flight` is false, the step is
+`complete`, and the record carries the version pair, the migrations the new build's first start applied and the
+backup it wrote. That record is what a rollback reads an hour later, so you can see what one would act on
+before you ask for it. A file that is there and is not a ledger is refused with `update_ledger_invalid` rather
+than half-read.
+
+### What an update does not touch
+
+An update replaces one file and writes under `~/.jason/update/`. It does not touch the rest of the data
+directory: not the database, not `~/.jason/config/settings.json`, not the plugins under `~/.jason/plugins/`, not
+the skills, not the logs, not the work directories. Nor does it touch anything you registered with the machine
+to start Jason — a systemd unit, a scheduled task, a login item — because the file at the install path is
+replaced in place rather than moved elsewhere, so whatever points at that path still points at Jason.
+
+The one thing an update does change beyond the executable is the database, and not by itself: the new build's
+first start migrates it, exactly as any start does, after taking the backup that every migration takes. `healthy`
+records which migrations that was and where the backup went, which is what makes the undo below possible.
+
+### When it stops halfway
+
+Kill the process anywhere and the ledger is still right, because it was written first. Run `jason update apply`
+again and it finishes from the step on disk, or says what it cannot finish. Two states are worth knowing about
+by name.
+
+**Between `kept` and `swapped` the install path is empty.** The old executable has been moved to
+`~/.jason/update/previous/` and the new one is not in place yet. The window is one rename wide, but it is the
+one window a person cannot type their way out of, because the `jason` on your PATH is the file that is not
+there. The process performing the swap is a copy of the applier under `~/.jason/update/applier/`, which is why
+the swap survives the file it is swapping — and it is also the first way out:
+
+```text
+~/.jason/update/applier/jason update apply
+```
+
+The second way out needs no Jason at all: copy `~/.jason/update/previous/jason` back over the install path by
+hand, and you have the version you started with, running as it was before. On Windows the file is `jason.exe`
+and the install path is `%LOCALAPPDATA%\Programs\jason\jason.exe`.
+
+**Between `started` and `healthy` a new runtime is up and has not been checked.** The next run asks it what
+version it is and whether its migrations are applied, and takes it no further until it answers. A runtime that
+answers as the wrong version, or with no migrations applied, is `update_not_healthy`.
+
+### Going back
+
+```sh
+jason update rollback
+```
+
+It puts the executable from `~/.jason/update/previous/` back and starts the runtime on it.
+Where the update's new build migrated the database, it also restores the backup that migration took and deletes
+the WAL sidecars beside it — a database file from before a migration, opened with the write-ahead log of after
+it, is corruption.
+
+**The database is restored only while it is certain that nothing has happened since.** That is decided from the
+chronicle: the line it stood at when the new version was declared healthy, against the line it stands at now. If
+it has moved on, work has been recorded that the older schema has no place for, and silently discarding it would
+be the worse of the two answers. If **no runtime is answering** — you stopped it, it crashed, the machine was
+rebooted — then the question cannot be answered at all, and that counts the same way: a rollback does not
+assume the answer it would prefer. Nor does it where the update **never reached a healthy runtime**: the line is
+recorded at `healthy`, so an update refused because the version that came up was the wrong one, or one still
+migrating as you type this, left nothing to compare against. Never healthy is not never served — that runtime is
+still up, because nothing here stops it, and it has been recording through the new schema ever since. All three
+answers are the same answer: the executable goes back, the database is left exactly as it
+stands, and the message names the backup file. The section below is how you then put that database back
+yourself, having decided that you want to.
+
+You will usually be typing `jason update rollback` from the PATH, which means the executable being replaced is
+the one running the command. That is expected and it works — the file is renamed out of the way rather than
+written over — but it is also why the replaced executable may still be sitting in `~/.jason/update/replaced/`
+afterwards: a running program cannot delete itself. Nothing removes it later either; each is named for the
+version and the moment it was set aside, and deleting them is safe as soon as that version is no longer
+running.
+
+### Restoring a database by hand
+
+Every start that migrates writes a backup under `~/.jason/state/backups/` first, named
+`jason-<stamp>-before-<migration>.db`. `jason runtime status` names the one this start wrote, and so does the
+ledger at `complete`. Putting one back is four steps, and it is a manual procedure on purpose — nothing here
+decides for you that yesterday's database is the one you want:
+
+```sh
+# 1. Stop the runtime, and make sure it is really gone.
+jason runtime stop
+
+# 2. Copy the backup over the database.
+cp ~/.jason/state/backups/jason-20260919T120000Z-before-20260920000000_Next.db ~/.jason/state/jason.db
+
+# 3. Delete the sidecars. A write-ahead log from after the migration against a main file from
+#    before it is corruption, and SQLite will happily replay it.
+rm -f ~/.jason/state/jason.db-wal ~/.jason/state/jason.db-shm
+
+# 4. Start the binary that matches that database — the one the backup's name was written by, which
+#    for a backup taken before a migration is the version you were on before the update.
+~/.jason/update/previous/jason runtime start
+```
+
+### What an update refuses, and why
+
+Every refusal exits 1 with an error envelope on stdout, and the message names the file or the version, because
+a code on its own tells nobody what to do next.
+
+| Code | What happened |
+|---|---|
+| `update_up_to_date` | the feed offers nothing newer than what is installed, and no `--version` asked for something else |
+| `update_artifact_corrupt` | what was downloaded is not the digest the manifest published. The bytes are deleted rather than kept for a retry |
+| `update_artifact_unreachable` | the download did not arrive, or the archive could not be read. Worth trying again |
+| `update_artifact_unexpected` | the archive does not hold the one file a release for this platform is supposed to hold, or the release publishes nothing for this platform |
+| `update_in_progress` | a *different* version is already in flight. The same version is resumed rather than refused, so re-running `jason update apply` after a kill is always the right move |
+| `update_not_directly_applicable` | the release's `min_upgrade_from` is above the version installed. The message names the version to pass through first |
+| `update_not_updatable` | this Jason runs through `dotnet`, so there is no single executable to replace. Install a published release with the one-liner in §6 |
+| `update_cross_volume` | the staged file and the install path are on different volumes. An update renames rather than copies, because a half-copied executable is the one state nothing can recover from. Point `JASON_DATA_DIR` at the executable's volume, or install Jason on the data directory's |
+| `update_runtime_unreachable` | the runtime would not drain or would not stop, so nothing was replaced |
+| `update_not_healthy` | the new version is in place, but the runtime it starts is not the one this update installed. The executable can be put back |
+| `update_file_refused` | a file an update had to move could not be moved: a directory that is not one, a permission, a lock. The message names the path and what to do — including which executable to run when `jason` is no longer on your PATH |
+| `update_nothing_to_roll_back` | there is no record of an update, or the executable it replaced is no longer under `~/.jason/update/previous/` |
+| `update_rollback_unsafe` | the executable was put back and the database was not: work has been recorded since the update, or whether any has cannot be told — no runtime is answering, or the update never reached a healthy runtime and so never recorded where the chronicle stood — and restoring the backup would erase it. "Restoring a database by hand" below is how to go the rest of the way, having decided you want to |
+| `update_ledger_invalid` | there is a file at `~/.jason/update/ledger.json` and it is not a ledger this build can act on |
+
+## 8. Where things live
 
 The **data directory** is `~/.jason`, or whatever `JASON_DATA_DIR` names: the database, the configuration, the
 plugins, the skills, the logs and the work directories. The **install directory** is wherever the executable
-happens to be, and Jason writes nothing into it.
+happens to be, and Jason writes nothing into it. They are separate on purpose — updating the program and keeping
+your work are different things, and a person who installed the binary somewhere unusual should never find Jason
+writing files beside it.
+
+That is also why an update writes under the data directory and not beside the executable. `~/.jason/update/`
+holds the ledger, the staged download, the executable that was replaced and the copy of the applier that
+replaced it; the install directory may be read-only, on another volume, or a directory somebody removes Jason
+by deleting.
+
+The Unix execute bit is not carried by a zip and is somebody else's idea of who may run this inside a tar, so it
+is restored by whoever unpacks the archive: `UpdateStager` for an update, and `install.sh` for an install. On
+Windows there is no such bit and neither does anything.
 
 There is a third place, which nothing here controls. The executable is a single file with the .NET runtime and
 its native libraries inside it, and the first run of each version unpacks those natives to a cache — 
 `%TEMP%\.net\jason\<hash>\` on Windows, `/tmp/.net/jason/<hash>/` elsewhere, or under
 `DOTNET_BUNDLE_EXTRACT_BASE_DIR` where that is set. It is per user and per build, it is why the first start of a
-new version is slower than the next, and it is safe to delete when nothing is running. They are separate on purpose — updating the program and keeping
-your work are different things, and a person who installed the binary somewhere unusual should never find Jason
-writing files beside it.
+new version is slower than the next, and it is safe to delete when nothing is running.
 
-## 8. The code behind this page
+## 9. The code behind this page
 
-`SemanticVersion`, `ReleaseAssets`, `UpdateManifest` and `UpdateFeed` live in `Jason.Contracts`, which is shared
-by the runtime and the CLI. `UpdateFeed` is the one type in that assembly that performs I/O, which is a
-deliberate exception: two callers ask this question — the runtime unattended, and `jason update check` when a
-person asks — and what a Jason installation sends to a web page must be one rule rather than two copies that can
-drift. It opens nothing by itself; its caller hands it the HTTP client.
+`SemanticVersion`, `ReleaseAssets`, `UpdateManifest`, `UpdateFeed` and `UpdateLedger` live in `Jason.Contracts`,
+which is shared by the runtime and the CLI. `UpdateFeed` is the one type in that assembly that performs I/O,
+which is a deliberate exception: two callers ask this question — the runtime unattended, and `jason update check`
+when a person asks — and what a Jason installation sends to a web page must be one rule rather than two copies
+that can drift. It opens nothing by itself; its caller hands it the HTTP client.
+
+The applier is the CLI's, under `Jason.Cli/Update/`: `UpdateStager` downloads and unpacks, `UpdateApplier` is
+the step machine and the only code that renames anything, `UpdatePaths` composes every path under
+`~/.jason/update/`, and `UpdateCodes` holds the refusals above — the table in §7 is read out of it by a test, so
+a code renamed in the code turns this page red rather than quietly disagreeing with it. None of the applier
+opens the database: it renames files, asks the runtime questions and reads the backups directory.

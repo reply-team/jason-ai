@@ -48,7 +48,7 @@ public class RuntimeStatusCommandTests
             77,
             DateTimeOffset.UnixEpoch,
             "/home/u/.jason",
-            new DatabaseInfo(["20260913225419_InitialCreate"]),
+            new DatabaseInfo(["20260913225419_InitialCreate"], [], null),
             dispatcher,
             plugins,
             routes,
@@ -120,23 +120,32 @@ public class RuntimeStatusCommandTests
     /// to answer a CLI that is polling the same file, so being refused once is the ordinary case and not the
     /// failure — what would be a failure is a descriptor that never arrives because the first try lost a race.
     /// </summary>
+    /// <remarks>
+    /// The thing that frees the path is a thread of its own and not a pool work item. The publisher retries for
+    /// about a second and blocks the test's own thread while it does, so the release has to happen inside that
+    /// second — and on a machine running several test assemblies at once, a queued work item can wait longer
+    /// than that for a pool thread. Then the publisher gives up, the descriptor never arrives, and a test about
+    /// retrying fails for want of a scheduler rather than for want of a retry.
+    /// </remarks>
     [Fact]
-    public async Task A_descriptor_refused_and_then_released_lands_inside_the_retry_window()
+    public void A_descriptor_refused_and_then_released_lands_inside_the_retry_window()
     {
         using var dir = new TempPaths();
         Blocked(dir);
 
-        var ct = TestContext.Current.CancellationToken;
-        var freed = Task.Run(
-            async () =>
-            {
-                await Task.Delay(200, ct);
-                Directory.Delete(dir.Paths.DescriptorFile);
-            },
-            ct);
+        var freed = new Thread(() =>
+        {
+            Thread.Sleep(200);
+            Directory.Delete(dir.Paths.DescriptorFile);
+        })
+        {
+            IsBackground = true,
+            Name = "descriptor-releaser",
+        };
 
+        freed.Start();
         RuntimeVerbs.Publish(dir, Descriptor);
-        await freed;
+        Assert.True(freed.Join(TimeSpan.FromSeconds(10)), "the thread that frees the descriptor's path never finished");
 
         // The publish that landed was made after the way was clear, which only a retry can have made: a single
         // attempt would have been refused and given up while the path was still taken.

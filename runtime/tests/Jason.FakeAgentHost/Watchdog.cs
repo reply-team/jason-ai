@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
 
@@ -45,14 +46,36 @@ internal static class Watchdog
     /// <summary>Two in a row, so a runtime restarting between the write of a descriptor and its read is not a death.</summary>
     private const int Strikes = 2;
 
+    /// <summary>
+    /// How many missed beats a host will tolerate, when the test that launched it knows it will be more than
+    /// the default. <c>--patience &lt;beats&gt;</c>, in the same argument list the behaviour is configured by.
+    /// </summary>
+    /// <remarks>
+    /// Two beats is about two seconds, which is the right answer for a host whose runtime has really gone and
+    /// the wrong one for a test that stops a runtime and starts its successor from the same process: on a
+    /// machine running several test assemblies at once, starting a runtime takes longer than that, and the
+    /// child gives up on a successor that was always coming. The window is this stand-in's policy, so the
+    /// test that depends on outliving it says how long it is prepared to wait rather than hoping.
+    /// </remarks>
+    private const string PatienceOption = "--patience";
+
     /// <param name="sawRuntime">
     /// Whether a descriptor could be read when this host started. It is the difference between the two cases:
     /// a host that never had a runtime cannot be abandoned by one, and is bounded by the ceiling instead.
     /// </param>
-    public static void Start(LaunchEnvelope envelope, RuntimeApi api, bool sawRuntime) =>
-        _ = Task.Run(() => WatchAsync(envelope, api, sawRuntime));
+    /// <param name="options">
+    /// The host's own arguments, read for <c>--patience</c>. Anything else in them belongs to the behaviour.
+    /// </param>
+    public static void Start(LaunchEnvelope envelope, RuntimeApi api, bool sawRuntime, IReadOnlyList<string> options) =>
+        _ = Task.Run(() => WatchAsync(envelope, api, sawRuntime, Patience(options)));
 
-    private static async Task WatchAsync(LaunchEnvelope envelope, RuntimeApi api, bool sawRuntime)
+    /// <summary>The strike count this host was told to use, or the default where it was told nothing sensible.</summary>
+    private static int Patience(IReadOnlyList<string> options) =>
+        int.TryParse(Behaviours.Option(options, PatienceOption), NumberStyles.Integer, CultureInfo.InvariantCulture, out var beats) && beats > 0
+            ? beats
+            : Strikes;
+
+    private static async Task WatchAsync(LaunchEnvelope envelope, RuntimeApi api, bool sawRuntime, int patience)
     {
         var started = Stopwatch.StartNew();
         var seen = sawRuntime;
@@ -93,9 +116,10 @@ internal static class Watchdog
                 continue;
             }
 
-            if (++missed >= Strikes)
+            if (++missed >= patience)
             {
-                await Diagnostics.WriteAsync("the runtime that launched this host is gone; stopping").ConfigureAwait(false);
+                await Diagnostics.WriteAsync(
+                    $"the runtime that launched this host is gone; stopping after {missed} missed beats").ConfigureAwait(false);
                 Environment.Exit(Abandoned);
             }
         }

@@ -15,7 +15,19 @@ public sealed record SystemInfoResponse(
     RoutesInfo Routes,
     UpdateInfo? Update = null);
 
-public sealed record DatabaseInfo(IReadOnlyList<string> AppliedMigrations);
+/// <summary>
+/// What the database is, and what this start did to it: every migration that has been applied, the ones this
+/// start applied itself, and the file it copied the database to before it did.
+/// </summary>
+/// <remarks>
+/// The last two are for one caller. An applier that has just started a new binary has to know whether that
+/// start migrated — because that is what decides whether rolling the binary back also means putting a database
+/// back — and which file to put back. It never opens the database to find out; it asks.
+/// </remarks>
+public sealed record DatabaseInfo(
+    IReadOnlyList<string> AppliedMigrations,
+    IReadOnlyList<string> NewlyApplied,
+    string? BackupFile);
 
 /// <summary>
 /// What the last successful update check learned: whether the version it found is newer than the one running,

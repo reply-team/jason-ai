@@ -65,16 +65,23 @@ public sealed class ScanRunner(
 
     private async Task<ScanReport> ScanAsync(CancellationToken ct)
     {
-        // Draining, stopped or disabled: a scan would claim work this process is not going to run.
-        if (status.State != DispatcherState.Running)
+        // Stopped or disabled: this process has no dispatch loop, so a scan would be doing the work of a
+        // runtime that is not there.
+        if (status.State is not (DispatcherState.Running or DispatcherState.Draining))
         {
             return new ScanReport(0, 0, 0, 0);
         }
 
+        // Draining means one thing precisely: nothing new is claimed. Everything else a scan does still
+        // happens, and it has to — a drain exists so that an update can wait for the work in flight to end,
+        // and an attempt whose child has died ends by being noticed here. A drain that stopped the enforcer
+        // would wait its whole bound for an attempt nothing was ever going to finish.
         var expired = await InScopeAsync<Expirer, int>((step, db) => step.ExpireAsync(db, ct)).ConfigureAwait(false);
         var lost = await InScopeAsync<LeaseEnforcer, int>((step, db) => step.EnforceAsync(db, ct)).ConfigureAwait(false);
         var summoned = await InScopeAsync<Summoner, int>((step, db) => step.SummonAsync(db, ct)).ConfigureAwait(false);
-        var claimed = await InScopeAsync<Claimer, IReadOnlyList<ClaimedWork>>((step, db) => step.ClaimAsync(db, pool.FreeSlots, ct)).ConfigureAwait(false);
+        var claimed = status.State == DispatcherState.Running
+            ? await InScopeAsync<Claimer, IReadOnlyList<ClaimedWork>>((step, db) => step.ClaimAsync(db, pool.FreeSlots, ct)).ConfigureAwait(false)
+            : [];
 
         foreach (var work in claimed)
         {

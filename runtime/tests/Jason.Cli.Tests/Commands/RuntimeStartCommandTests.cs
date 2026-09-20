@@ -1,5 +1,6 @@
 using Jason.Cli.Commands;
 using Jason.Cli.Tests.Process;
+using Jason.Contracts.Discovery;
 
 namespace Jason.Cli.Tests.Commands;
 
@@ -35,6 +36,28 @@ public class RuntimeStartCommandTests
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal(dir.Paths.Root, Assert.Single(processes.Launches));
         Assert.Contains("rt_NEW", output.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>And what it launches is another copy of this very program.</summary>
+    /// <remarks>
+    /// The seam takes the executable from its caller because not every caller wants the same one: an applier
+    /// starts the build it has just unpacked, at a path of its own. So <c>runtime start</c> has to name its own,
+    /// and naming the wrong one is the mistake that hides — a runtime started from the wrong binary answers
+    /// every check the right one would, in the same data directory, under the same descriptor.
+    /// </remarks>
+    [Fact]
+    public async Task What_runtime_start_launches_is_this_executable()
+    {
+        using var dir = new TempPaths();
+        var processes = new FakeProcessControl { OnLaunch = RuntimeVerbs.PublishesAfterAWhile(dir, RuntimeVerbs.Descriptor("rt_NEW")) };
+        var (env, _, _) = RuntimeVerbs.Environment(dir, RuntimeVerbs.EchoesTheDescriptor(dir), processes);
+
+        var exit = await RuntimeStartCommand.RunAsync(env, human: false, Ct, RuntimeVerbs.Timeout, RuntimeVerbs.Poll);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var launched = Assert.Single(processes.Executables);
+        Assert.Equal(SelfExecutable.Command, launched);
+        Assert.NotEmpty(launched);
     }
 
     [Fact]

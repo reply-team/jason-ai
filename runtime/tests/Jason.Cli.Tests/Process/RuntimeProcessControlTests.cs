@@ -1,4 +1,5 @@
 using Jason.Cli.Process;
+using Jason.Contracts.Discovery;
 
 namespace Jason.Cli.Tests.Process;
 
@@ -42,5 +43,28 @@ public class RuntimeProcessControlTests
 
     [Fact]
     public void Launching_without_a_data_directory_is_a_programming_error() =>
-        Assert.Throws<ArgumentNullException>(() => RuntimeProcessControl.Instance.Launch(null!));
+        Assert.Throws<ArgumentNullException>(() => RuntimeProcessControl.Instance.Launch(null!, SelfExecutable.Command));
+
+    /// <summary>And a launch has to name a program: an empty command is a caller's mistake, not a start.</summary>
+    [Fact]
+    public void Launching_nothing_at_all_is_a_programming_error() =>
+        Assert.Throws<ArgumentException>(() => RuntimeProcessControl.Resolve([]));
+
+    /// <summary>
+    /// The mode words are the seam's, and the program is the caller's: whatever it is handed comes back with
+    /// `runtime run --detached` after it.
+    /// </summary>
+    [Fact]
+    public void A_launch_runs_the_command_it_was_given_in_the_detached_runtime_mode()
+    {
+        var (fileName, arguments) = RuntimeProcessControl.Resolve(["/opt/jason/jason"]);
+
+        Assert.Equal("/opt/jason/jason", fileName);
+        Assert.Equal(["runtime", "run", "--detached"], arguments);
+
+        // And a command that needs its own words first keeps them, which is how a muxer build is started.
+        var (muxer, withDll) = RuntimeProcessControl.Resolve(["dotnet", "/opt/jason/jason.dll"]);
+        Assert.Equal("dotnet", muxer);
+        Assert.Equal(["/opt/jason/jason.dll", "runtime", "run", "--detached"], withDll);
+    }
 }

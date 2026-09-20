@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="../../src/Jason.Cli/Jason.Cli.csproj" />
+
+    <!-- The suite's one disposable temporary directory, rather than a second copy of the same idea. -->
+    <Compile Include="../Jason.Runtime.Tests/TempTree.cs" Link="TempTree.cs" />
   </ItemGroup>
   <ItemGroup>
     <!-- What the repository teaches somebody to type, linked beside the tests that hand every printed command to the real parser. -->

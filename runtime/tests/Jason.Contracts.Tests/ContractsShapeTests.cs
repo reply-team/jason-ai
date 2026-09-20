@@ -122,7 +122,7 @@ public class ContractsShapeTests
     {
         var info = new SystemInfoResponse(
             "0.1.0", "v1", "rt_01J", 1234, DateTimeOffset.UnixEpoch, "/data",
-            new DatabaseInfo([]),
+            new DatabaseInfo([], [], null),
             new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0, 0),
             new PluginsInfo(1, "snp_01J", DateTimeOffset.UnixEpoch, true),
             new RoutesInfo("rts_01J", DateTimeOffset.UnixEpoch, null, 0, 0),

@@ -89,4 +89,34 @@ public class SemanticVersionTests
         Assert.False(left > right);
         Assert.Equal(0, left.CompareTo(right));
     }
+    /// <summary>
+    /// A numeric identifier orders by its value however long it is, and a long one is still numeric — so it
+    /// still sorts before any identifier that is not.
+    /// </summary>
+    /// <remarks>
+    /// Identifiers wider than nine digits used to be read as text, which happens to give the right answer
+    /// against a short number and the wrong one against another long one: compared as text, 999999999999 sorts
+    /// after 1234567890123 because '9' comes after '1'. Build stamps and timestamps are exactly how a
+    /// thirteen-digit identifier turns up in a real feed.
+    /// </remarks>
+    [Fact]
+    public void A_numeric_pre_release_identifier_too_long_for_an_int_still_orders()
+    {
+        Assert.True(Version("1.0.0-999999999999") < Version("1.0.0-1234567890123"));
+        Assert.True(Version("1.0.0-1234567890123") < Version("1.0.0-1234567890124"));
+        Assert.True(Version("1.0.0-2") < Version("1.0.0-1234567890123"));
+
+        // And still a number, so it is older than anything that is not one.
+        Assert.True(Version("1.0.0-1234567890123") < Version("1.0.0-alpha"));
+
+        // And the leading-zero rule holds at any width: an all-digit identifier that starts with 0 is not a
+        // valid numeric identifier, so the version carrying it is not a version at all.
+        Assert.False(SemanticVersion.TryParse("1.0.0-0123456789012", out _));
+    }
+
+    private static SemanticVersion Version(string text)
+    {
+        Assert.True(SemanticVersion.TryParse(text, out var version), $"'{text}' did not parse");
+        return version;
+    }
 }

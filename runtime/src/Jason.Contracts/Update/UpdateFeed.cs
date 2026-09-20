@@ -30,6 +30,50 @@ public sealed class UpdateFeed(HttpClient client)
     public static Uri Default { get; } = new("https://github.com/reply-team/jason-ai/releases/latest/download/manifest.json");
 
     /// <summary>
+    /// How long either caller waits for a feed. A manifest is a few hundred bytes: a page that has not answered
+    /// in ten seconds is not going to, and both callers can afford to be told so — the runtime's check runs
+    /// again in a day, and a person at a prompt would rather have the answer than the wait.
+    /// </summary>
+    /// <remarks>
+    /// Declared here, with the type that performs the request, because two callers wait on it — the unattended
+    /// check and <c>jason update check</c> — and a wait declared twice is a wait that will be two different
+    /// numbers before long. It already was.
+    /// </remarks>
+    public static TimeSpan DefaultTimeout { get; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// The feed of one particular release rather than of the newest one: the address both install scripts
+    /// already compose by hand when they are given <c>--version</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>…/releases/latest/download/manifest.json</c> is a moving address; <c>…/releases/download/vX.Y.Z/manifest.json</c>
+    /// is a fixed one. The rule is the one <c>install.sh</c> and <c>install.ps1</c> use, written once here so that a
+    /// person who pins a version with the applier and a person who pins one with a script ask the same page the
+    /// same question.
+    /// </para>
+    /// <para>
+    /// A feed of any other shape is handed back <b>unchanged</b>, because there is nothing true to say about
+    /// where that page keeps its older releases. Guessing — taking the directory and putting <c>vX.Y.Z</c> in
+    /// front of the file name — is what an earlier version of this method did, and it asked a feed served from
+    /// a plain directory for a path that was never going to exist. A caller that pins against such a feed reads
+    /// the address it was given and refuses if the document names another version, which is the check it makes
+    /// anyway.
+    /// </para>
+    /// </remarks>
+    public static Uri PinnedFor(Uri feed, SemanticVersion version)
+    {
+        ArgumentNullException.ThrowIfNull(feed);
+
+        const string Latest = "/releases/latest/download/";
+        var address = feed.AbsoluteUri;
+        var marker = address.IndexOf(Latest, StringComparison.Ordinal);
+        return marker < 0
+            ? feed
+            : new Uri($"{address[..marker]}/releases/download/v{version}/{ReleaseAssets.Manifest}");
+    }
+
+    /// <summary>
     /// Where one artifact is fetched from: the feed's own directory and the name the manifest carried, which
     /// has already been held to being a file name.
     /// </summary>

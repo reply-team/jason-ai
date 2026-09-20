@@ -121,6 +121,239 @@ jobs:
   # what a release would — assembled by the same script that assembles a release — with no network. Each job
   # installs three times: once told to leave the PATH alone, then twice more, so that the idempotent PATH edit
   # and the "already installed" no-op are exercised and not only described.
+  update-end-to-end:
+    name: an update on ${{ matrix.rid }}
+    needs: [version, build-test-publish]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: windows-latest
+            rid: win-x64
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # The version this tree carries, as the platform job already published it. Taking the artifact rather
+      # than publishing it again is one whole publish saved per platform, and it is the same bytes a person
+      # would have installed.
+      - uses: actions/download-artifact@v7
+        with:
+          name: jason-${{ matrix.rid }}
+          path: installed
+
+      - name: Decide the version this update installs
+        id: next
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # Two versions, or this job proves nothing: with the same build on both sides a completed swap and an
+          # applier that did nothing look identical to --version, and the health check passes either way.
+          $numbers = (($env:VERSION -split '\+')[0] -split '-')[0] -split '\.'
+          "next=$($numbers[0]).$($numbers[1]).$([int]$numbers[2] + 1)" >> $env:GITHUB_OUTPUT
+
+      # Packaged by the action a release packages with, so what this job installs is an archive of the same
+      # shape, with the same licence in it and the same digest written beside it. Only the artifact's name
+      # differs: two uploads in one run cannot share one.
+      - name: Package the next version
+        id: package
+        uses: ./.github/actions/package
+        with:
+          rid: ${{ matrix.rid }}
+          version: ${{ steps.next.outputs.next }}
+          artifact: jason-${{ matrix.rid }}-next
+
+      - name: Serve that version from a feed on this machine
+        shell: pwsh
+        env:
+          RID: ${{ matrix.rid }}
+          NEXT: ${{ steps.next.outputs.next }}
+        run: |
+          New-Item -ItemType Directory -Force feed | Out-Null
+          Copy-Item artifacts/release/* feed -Force
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:NEXT -Directory feed -Require $env:RID
+          Get-Content feed/manifest.json
+
+          # Served from this machine and nowhere else: 127.0.0.1, for the length of this job. UpdateFeed takes
+          # https or loopback http and refuses a directory, so a feed has to be served rather than pointed at.
+          $python = if ($IsWindows) { 'python' } else { 'python3' }
+          $server = Start-Process $python -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1', '--directory', 'feed' -PassThru
+          "server=$($server.Id)" >> $env:GITHUB_ENV
+          for ($try = 0; $try -lt 50; $try++) {
+            try { Invoke-WebRequest -Uri http://127.0.0.1:8099/manifest.json -UseBasicParsing | Out-Null; break }
+            catch { Start-Sleep -Milliseconds 200 }
+          }
+
+      - name: Install the version this tree carries, and leave its runtime stopped
+        shell: pwsh
+        env:
+          RID: ${{ matrix.rid }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          $exe = if ($env:RID -like 'win-*') { 'jason.exe' } else { 'jason' }
+          $asset = if ($env:RID -like 'win-*') { "jason-$env:RID.zip" } else { "jason-$env:RID.tar.gz" }
+          New-Item -ItemType Directory -Force install | Out-Null
+          if ($env:RID -like 'win-*') {
+            Expand-Archive -Path "installed/$asset" -DestinationPath install -Force
+          } else {
+            tar -xzf "installed/$asset" -C install
+            chmod +x "install/$exe"
+          }
+
+          # Deliberately not asked what version it is: that would be an executable checked without opening a
+          # database, and this runtime must stay stopped until the update, or it migrates the prepared database
+          # itself and the new version has nothing to back up. What was installed is asserted from the update's
+          # own report below, which comes from the program rather than from a second invocation of it.
+          "install=$(Resolve-Path "install/$exe")" >> $env:GITHUB_ENV
+
+      - name: Prepare a database one migration behind
+        shell: pwsh
+        run: |
+          # EF's own migrator, not a checked-in file: the triggers and the indexes live in the migrations, so
+          # this is a real older database rather than something shaped like one. The connection is given, or
+          # the design-time factory writes design-time.db into the working directory and the runtime opens a
+          # database nobody prepared.
+          dotnet tool restore
+          if ($LASTEXITCODE -ne 0) { throw "dotnet tool restore exited with $LASTEXITCODE" }
+
+          $migrations = dotnet ef migrations list --project runtime/src/Jason.Runtime --startup-project runtime/src/Jason.Runtime --no-connect `
+            | Where-Object { $_ -match '^\d{14}_' }
+          $previous = ($migrations | Select-Object -Last 2 | Select-Object -First 1).Trim()
+          if (-not $previous) { throw "no migration to stop at; got: $migrations" }
+
+          $data = Join-Path $env:RUNNER_TEMP 'update-data'
+          New-Item -ItemType Directory -Force (Join-Path $data 'state') | Out-Null
+          $database = Join-Path $data 'state/jason.db'
+          dotnet ef database update $previous --project runtime/src/Jason.Runtime --startup-project runtime/src/Jason.Runtime --connection "Data Source=$database"
+          if ($LASTEXITCODE -ne 0) { throw "preparing the older database exited with $LASTEXITCODE" }
+
+          "JASON_DATA_DIR=$data" >> $env:GITHUB_ENV
+          "stopped_at=$previous" >> $env:GITHUB_ENV
+          Write-Host "prepared a database at $previous"
+
+      - name: Update it, and assert every stage
+        shell: pwsh
+        env:
+          NEXT: ${{ steps.next.outputs.next }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # What the swap has to move, measured before it happens: an update that copied instead of renaming,
+          # or did nothing at all, cannot produce these three afterwards.
+          $before = (Get-FileHash $env:install -Algorithm SHA256).Hash
+
+          $out = & $env:install update apply --feed http://127.0.0.1:8099/manifest.json --drain-seconds 0
+          if ($LASTEXITCODE -ne 0) { throw "jason update apply exited with $LASTEXITCODE`n$out" }
+          Write-Host $out
+
+          $applied = $out | ConvertFrom-Json
+          if (($applied.from -split '\+')[0] -ne $env:VERSION) { throw "the update ran against $($applied.from), and this job installed $env:VERSION" }
+          if ($applied.to -ne $env:NEXT) { throw "the update says it installed $($applied.to), and the feed offered $env:NEXT" }
+          foreach ($step in 'staged', 'drained', 'stopped', 'kept', 'swapped', 'started', 'healthy') {
+            if (-not ($applied.steps | Where-Object { $_ -like "$step*" })) { throw "the update never said '$step': $($applied.steps -join '; ')" }
+          }
+
+          # What version is installed is asked of the runtime that is now serving rather than of the file, for
+          # the reason the applier's own health check does it that way: a file that prints a version proves a
+          # file exists, and what matters is which build is running. That assertion is in the step below.
+          $update = Join-Path $env:JASON_DATA_DIR 'update'
+          $previous = Get-ChildItem -Path (Join-Path $update 'previous') -File
+          if ((Get-FileHash $previous[0].FullName -Algorithm SHA256).Hash -ne $before) {
+            throw "what was kept is not the executable that was installed before the update"
+          }
+          if (Get-ChildItem -Path (Join-Path $update 'staged') -File -Recurse -ErrorAction SilentlyContinue) {
+            throw "the staged executable is still staged, so what was installed is a copy of it rather than the file itself"
+          }
+
+      - name: The new version migrated the database it inherited
+        shell: pwsh
+        env:
+          NEXT: ${{ steps.next.outputs.next }}
+        run: |
+          # The half of the acceptance criterion the applier cannot fake: the database this update inherited was
+          # one migration behind, so the new version's first start had to back it up and migrate it.
+          $status = & $env:install runtime status | ConvertFrom-Json
+          if (($status.runtime_version -split '\+')[0] -ne $env:NEXT) { throw "the runtime serving after the update says it is $($status.runtime_version), and this job installed $env:NEXT" }
+          if (-not $status.database.newly_applied) { throw "the new version's first start applied no migrations: $($status | ConvertTo-Json -Depth 5)" }
+          if (-not $status.database.backup_file) { throw "the new version migrated and wrote no backup" }
+          if (-not (Test-Path $status.database.backup_file)) { throw "the backup it named is not there: $($status.database.backup_file)" }
+          Write-Host "migrated $($status.database.newly_applied -join ', ') and kept $($status.database.backup_file)"
+
+          $ledger = Get-Content (Join-Path $env:JASON_DATA_DIR 'update/ledger.json') | ConvertFrom-Json
+          if ($ledger.step -ne 'complete') { throw "the ledger says '$($ledger.step)'" }
+          if (-not $ledger.newly_applied) { throw "the ledger did not record what the first start applied" }
+
+          # The runtime is deliberately left running: an update leaves one running, and the rollback below has
+          # to be able to ask it whether any work has been recorded since. Stopping it here for tidiness would
+          # make the next step assert a refusal instead of a rollback.
+
+          # Remembered for the rollback below, which has to tell the backup this update took from the one the
+          # restored version will take when it finds the database a migration behind again.
+          "backup=$($status.database.backup_file)" >> $env:GITHUB_ENV
+
+      - name: Roll it back, from the executable a person would type
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # The case no unit test in this repository can reach. `jason update rollback` typed from the PATH runs
+          # the executable the update installed, so the file the rollback has to replace is the process doing the
+          # replacing - and a running image can be renamed but not written over. A fake installation is a file
+          # and not a process, so only a machine can prove this one.
+          $out = & $env:install update rollback
+          if ($LASTEXITCODE -ne 0) { throw "jason update rollback exited with $LASTEXITCODE`n$out" }
+          Write-Host $out
+
+          $back = $out | ConvertFrom-Json
+          if (($back.to -split '\+')[0] -ne $env:VERSION) { throw "the rollback says it put $($back.to) back, and this job installed $env:VERSION" }
+
+          $status = & $env:install runtime status | ConvertFrom-Json
+          if (($status.runtime_version -split '\+')[0] -ne $env:VERSION) { throw "after the rollback the runtime serving says it is $($status.runtime_version)" }
+
+          # What was kept has been consumed.
+          $update = Join-Path $env:JASON_DATA_DIR 'update'
+          if (Get-ChildItem -Path (Join-Path $update 'previous') -File -ErrorAction SilentlyContinue) {
+            throw "previous/ still holds an executable, so the rollback copied rather than moved it"
+          }
+
+          # And on Windows, the image this rollback replaced is still there: it is the process that ran the
+          # command, a running program cannot delete itself, and being renamed out of the way rather than
+          # written over is the whole of why this worked. On Linux the same delete succeeds, so there is
+          # nothing to find.
+          if ($IsWindows -and -not (Get-ChildItem -Path (Join-Path $update 'replaced') -File -ErrorAction SilentlyContinue)) {
+            throw "replaced/ is empty, so the executable that ran this rollback was never moved aside"
+          }
+          if (-not $status.database.applied_migrations) { throw "the restored database has no migrations applied" }
+
+          # And the database serving now is the one from before the update, which is asked of what the restored
+          # runtime had to do rather than of any file: the rollback ends by starting a runtime, and that runtime
+          # opens the database and writes its own write-ahead log at once, so there is no quiet moment to
+          # inspect. Nor can a mark be written into the migrated database first - a rollback that finds work
+          # recorded since the update refuses to restore a database at all, which is the whole of B1. What is
+          # left is evidence that costs no writes: the file put back is a migration behind, so this start had to
+          # migrate it again and take a backup of its own. A rollback that left the migrated database where it
+          # was would have started a runtime with nothing to do.
+          if (-not $status.database.newly_applied) {
+            throw "the runtime that came back applied no migrations, so the database it opened was already migrated and nothing was put back"
+          }
+          if (-not $status.database.backup_file -or $status.database.backup_file -eq $env:backup) {
+            throw "the runtime that came back took no backup of its own: $($status.database.backup_file)"
+          }
+
+          & $env:install runtime stop | Out-Null
+
+      - name: Stop the feed
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:server) { Stop-Process -Id $env:server -Force -ErrorAction SilentlyContinue }
+
   install-sh:
     name: install.sh on ubuntu
     needs: [version, build-test-publish]

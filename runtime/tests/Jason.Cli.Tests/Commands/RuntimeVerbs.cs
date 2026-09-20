@@ -41,7 +41,7 @@ internal static class RuntimeVerbs
             pid,
             DateTimeOffset.UnixEpoch,
             "/data",
-            new DatabaseInfo(["20260913225419_InitialCreate"]),
+            new DatabaseInfo(["20260913225419_InitialCreate"], [], null),
             new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0, 0),
             new PluginsInfo(0, "snp_EMPTY", DateTimeOffset.UnixEpoch, true),
             new RoutesInfo("rts_EMPTY", DateTimeOffset.UnixEpoch, null, 0, 0)),
