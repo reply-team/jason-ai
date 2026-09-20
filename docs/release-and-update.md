@@ -351,7 +351,78 @@ a code on its own tells nobody what to do next.
 | `update_rollback_unsafe` | the executable was put back and the database was not: work has been recorded since the update, or whether any has cannot be told — no runtime is answering, or the update never reached a healthy runtime and so never recorded where the chronicle stood — and restoring the backup would erase it. "Restoring a database by hand" below is how to go the rest of the way, having decided you want to |
 | `update_ledger_invalid` | there is a file at `~/.jason/update/ledger.json` and it is not a ledger this build can act on |
 
-## 8. Where things live
+## 8. Starting at logon
+
+Nothing is registered until you ask. `jason runtime autostart enable` registers **the runtime itself** to start
+when this account logs on; `disable` takes that registration away, and `status` says what is registered:
+
+```sh
+jason runtime autostart enable
+jason runtime autostart status
+jason runtime autostart disable
+```
+
+One registration per operating system and per account, in the account's own scope, and **nothing is elevated**:
+
+| platform | what is registered | where the document lives |
+| --- | --- | --- |
+| Windows | a logon task called `Jason`, registered from a task document with `schtasks /Create /XML` | `<data>/autostart/jason-task.xml`; the task itself is the Task Scheduler's |
+| macOS | a LaunchAgent labelled `ai.jason.runtime`, `RunAtLoad` and no `KeepAlive` | `~/Library/LaunchAgents/ai.jason.runtime.plist` |
+| Linux | a `systemd --user` unit, enabled into your default target | `~/.config/systemd/user/jason.service` |
+
+**It is registration, not supervision.** What starts at logon is `jason runtime run`, and nothing watches it
+afterwards: a runtime that stops stays stopped until somebody starts it. There is no restart policy, no
+`KeepAlive`, and no second process whose job is to keep the first one alive.
+
+**`enable` starts nothing now, and `disable` stops nothing.** They change what happens at the *next* logon.
+Starting and stopping a runtime today is still `jason runtime start` and `jason runtime stop`.
+
+**The registration carries the data directory it was made under**, as `--data-dir` on the registered command
+line, and `autostart status` prints it. This is the whole reason it is a verb rather than a documented
+`schtasks` line: an operator working under a `JASON_DATA_DIR` who registered without it would get a background
+runtime on `~/.jason` at every logon, and two runtimes disagreeing about which data is real. A second `enable`
+under a different data directory **replaces** the registration rather than adding one — same task name, same
+plist path, same unit name — and `status` shows which directory the one that is there names.
+
+`status` also says whether the executable the registration names is still on disk. That is how a registration
+rots: an update that moved the binary, or a directory somebody deleted, leaves something that fails at every
+logon without saying anything to anybody.
+
+### Windows: no window, and the logon right that costs
+
+The task runs with an **S4U logon** — the account, with no stored password, in a session that has no desktop —
+and at `LeastPrivilege`. That is what keeps a console window off your screen at every logon: `jason runtime run`
+is a console application, and a task in the interactive session would show one. `--detached` does not help with
+that; it redirects the runtime's standard streams and never frees a console.
+
+An S4U task logs on as a **batch** logon, so the account must hold the *Log on as a batch job* right
+(`SeBatchLogonRight`). On a workstation, Administrators, Backup Operators and Performance Log Users hold it by
+default. The Task Scheduler grants it when a task is registered with a password, which this does not do — so on
+a standard account `enable` may succeed and the task may then fail at every logon with *the user has not been
+granted the requested logon type at this computer*. If that happens, the right has to be granted to the account
+(`secpol.msc` → Local Policies → User Rights Assignment → Log on as a batch job, or `secedit`), which needs an
+administrator once.
+
+### The environment an autostarted runtime has
+
+It is the account's logon environment, not your shell's. Anything your shell's profile sets — a `PATH` a version
+manager edits, a `JASON_DATA_DIR` you export, a proxy variable — is not there. The data directory is why the
+registration carries it explicitly; a plugin whose executable is only on a `PATH` your profile builds is the
+other half, and it will be reported `unavailable` by a runtime that started at logon while working perfectly
+from a terminal. `jason plugin list` from the same account says which.
+
+### What tests prove here, and what they cannot
+
+Every document above is composed and asserted by tests, on whatever machine the tests run on, including the two
+platforms that machine cannot register anything for. What no test here does is register something for real: a
+test that did would leave a logon task behind on whoever ran it, and CI runners are whoever ran it three times
+over.
+
+So registering for real is checked **by hand**, once, on a real machine, for the platforms this project has one
+of: Windows and Linux. **macOS is composed and asserted only** — nobody working on this has a Mac, and this page
+would rather say so than imply a check nobody ran.
+
+## 9. Where things live
 
 The **data directory** is `~/.jason`, or whatever `JASON_DATA_DIR` names: the database, the configuration, the
 plugins, the skills, the logs and the work directories. The **install directory** is wherever the executable
@@ -374,7 +445,7 @@ its native libraries inside it, and the first run of each version unpacks those 
 `DOTNET_BUNDLE_EXTRACT_BASE_DIR` where that is set. It is per user and per build, it is why the first start of a
 new version is slower than the next, and it is safe to delete when nothing is running.
 
-## 9. The code behind this page
+## 10. The code behind this page
 
 `SemanticVersion`, `ReleaseAssets`, `UpdateManifest`, `UpdateFeed` and `UpdateLedger` live in `Jason.Contracts`,
 which is shared by the runtime and the CLI. `UpdateFeed` is the one type in that assembly that performs I/O,
@@ -387,3 +458,13 @@ the step machine and the only code that renames anything, `UpdatePaths` composes
 `~/.jason/update/`, and `UpdateCodes` holds the refusals above — the table in §7 is read out of it by a test, so
 a code renamed in the code turns this page red rather than quietly disagreeing with it. None of the applier
 opens the database: it renames files, asks the runtime questions and reads the backups directory.
+
+Autostart is the CLI's too, under `Jason.Cli/Autostart/`. `AutostartArtifacts` composes each platform's document
+and reads a command line back out of one, both as pure functions of what they are given; `IAutostartRegistrar`
+is the one place a process is started or a document written, and `AutostartCodes` holds the two refusals §8 can
+raise:
+
+| code | what it means |
+| --- | --- |
+| `autostart_unsupported` | this machine has no way to start something at logon that Jason knows about |
+| `autostart_refused` | the tool that registers it refused, and the message carries what the tool itself said |

@@ -22,7 +22,8 @@ covered here.
 - Test one project: `dotnet test --project runtime/tests/Jason.Runtime.Tests`
 - Test one method or class: append `-- --filter-method "*MethodName"` or `-- --filter-class "Namespace.ClassName"`
 - Run: `dotnet run --project runtime/src/Jason.App -- --version` · `-- runtime run` · `-- runtime status`
-  · `-- runtime start` (background, no autostart registered) · `-- runtime stop` · `-- campaign list`
+  · `-- runtime start` (background; nothing is registered until you ask) · `-- runtime stop`
+  · `-- runtime autostart enable | disable | status` · `-- campaign list`
   · `-- workitem list` · `-- role list` · `-- plugin list` · `-- plugin reload`
 - Add a migration: `dotnet tool restore` once, then
   `dotnet ef migrations add <Name> --project runtime/src/Jason.Runtime --startup-project runtime/src/Jason.Runtime --output-dir Persistence/Migrations`

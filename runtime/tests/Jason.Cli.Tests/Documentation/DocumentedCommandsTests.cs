@@ -58,6 +58,24 @@ public class DocumentedCommandsTests
         Assert.DoesNotContain("out of the box", skill, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// The machine these lines are typed against. Nothing here may act on it: the data directory is this
+    /// test's own and holds no descriptor, the one command that would start a runtime is handed a process
+    /// table that launches nothing, and the one that would register something at logon is handed a registrar
+    /// that records rather than registers — the day a skill prints <c>jason runtime autostart enable</c>, this
+    /// guard types it for real on a developer's machine and on three CI runners.
+    /// </summary>
+    internal static CliEnvironment Machine(TempPaths dir, StringWriter error) =>
+        new(
+            new StringWriter(),
+            error,
+            dir.Paths,
+            Processes: new FakeProcessControl
+            {
+                OnLaunch = _ => new FakeProcessHandle(0) { HasExited = true, ExitCode = 1 },
+            },
+            Autostart: new Autostart.RecordingRegistrar());
+
     /// <summary>The file as MSBuild copied it beside these tests, so nothing depends on the working directory.</summary>
     private static string Page(params string[] parts)
     {
@@ -80,16 +98,7 @@ public class DocumentedCommandsTests
             // Nothing here may act on the machine. The data directory is this test's own and holds no
             // descriptor, so every command that needs a runtime ends at "nothing is running" — and the one
             // command that would start one is handed a process table that launches nothing.
-            var environment = new CliEnvironment(
-                new StringWriter(),
-                error,
-                dir.Paths,
-                Processes: new FakeProcessControl
-                {
-                    OnLaunch = _ => new FakeProcessHandle(0) { HasExited = true, ExitCode = 1 },
-                });
-
-            var exit = await CliApp.RunAsync([.. Arguments(command)], environment, Ct);
+            var exit = await CliApp.RunAsync([.. Arguments(command)], Machine(dir, error), Ct);
 
             Assert.True(
                 exit != ExitCodes.Usage,
