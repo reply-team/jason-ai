@@ -1,6 +1,12 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Json;
 using Jason.Contracts.Update;
+using Jason.Runtime.Hosting;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Plugins.Registry;
@@ -48,18 +54,49 @@ public class SystemInfoTests
     }
 
     /// <summary>And a start that migrated nothing says so, rather than leaving a caller to guess from a null.</summary>
+    /// <remarks>
+    /// It takes two starts to be that start. A runtime over an empty data directory creates the database by
+    /// running every migration there is, so its own report is the longest one it will ever write — the second
+    /// start over the same directory is the first one that finds nothing to do. That is what the applier meets
+    /// after a swap whose new binary carries no new migration, and the answer is what tells it that a rollback
+    /// has no database to put back.
+    /// </remarks>
     [Fact]
     public async Task A_start_that_migrated_nothing_says_that_too()
     {
-        await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(dir.Paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
 
-        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+        IReadOnlyList<string> creating;
+        await using (var first = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct))
+        {
+            // Named rather than assumed: this is the run the assertions below must not be satisfied by.
+            creating = (await InfoAsync(first)).Database.NewlyApplied;
+            Assert.NotEmpty(creating);
+        }
 
-        // A database this runtime created is not a database this runtime migrated: there was nothing to back up
-        // and nothing was replaced, which is exactly what a second start of an up-to-date installation looks
-        // like to the applier.
-        Assert.NotEmpty(info.Database.AppliedMigrations);
+        await using var second = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
+
+        var info = await InfoAsync(second);
+
+        // The same schema the first start left, and nothing of it applied here: there was nothing to back up
+        // and nothing was replaced, which is exactly what a start of an up-to-date installation looks like.
+        Assert.Equal(creating, info.Database.AppliedMigrations);
+        Assert.Empty(info.Database.NewlyApplied);
         Assert.Null(info.Database.BackupFile);
+    }
+
+    /// <summary>What <c>system.info</c> answers a runtime that was started directly rather than through a fixture.</summary>
+    private static async Task<SystemInfoResponse> InfoAsync(RunningRuntime runtime)
+    {
+        using var http = new HttpClient { BaseAddress = runtime.BaseUrl };
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", runtime.Token);
+        using var body = new StringContent("{}", Encoding.UTF8, "application/json");
+        using var response = await http.PostAsync(Operations.Route(Operations.SystemInfo), body, Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return JsonSerializer.Deserialize<SystemInfoResponse>(await response.Content.ReadAsStringAsync(Ct), JasonJson.Options)!;
     }
 
     /// <summary>
