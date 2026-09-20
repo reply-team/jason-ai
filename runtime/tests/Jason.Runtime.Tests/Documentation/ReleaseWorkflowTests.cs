@@ -653,6 +653,12 @@ public class ReleaseWorkflowTests
         }
     }
 
+    /// <summary>Whether a step really asks an executable what version it is, rather than talking about it.</summary>
+    private static bool Checks(string step) =>
+        step.Split('\n')
+            .Select(line => line.Trim())
+            .Any(line => line.Contains("--version", StringComparison.Ordinal) && !line.StartsWith('#'));
+
     /// <summary>
     /// Whether the step really runs the command, rather than merely mentioning it.
     /// </summary>
@@ -663,12 +669,6 @@ public class ReleaseWorkflowTests
     /// So the mention must end on a word boundary, and must not be a throw, a condition or a comment: what is
     /// left is the invocation.
     /// </remarks>
-    /// <summary>Whether a step really asks an executable what version it is, rather than talking about it.</summary>
-    private static bool Checks(string step) =>
-        step.Split('\n')
-            .Select(line => line.Trim())
-            .Any(line => line.Contains("--version", StringComparison.Ordinal) && !line.StartsWith('#'));
-
     private static bool Runs(string step, string command) =>
         step.Split('\n')
             .Select(line => line.Trim())

@@ -19,8 +19,6 @@ public static class UpdateModule
     /// </summary>
     private static readonly TimeSpan ConnectionLifetime = TimeSpan.FromMinutes(5);
 
-    /// <summary>A manifest is a few hundred bytes; a feed that has not answered in this long is not going to.</summary>
-
     /// <param name="feedHandler">
     /// Where the feed's requests go when a test says; null is the network. The seam is the transport rather
     /// than the address, so the URL a test's runtime reads is exactly the one a real runtime would.
