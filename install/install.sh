@@ -104,6 +104,13 @@ fetch manifest.json "$TMP/manifest.json"
 LATEST="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$TMP/manifest.json" | head -n 1)"
 [ -n "$LATEST" ] || fail "$BASE/manifest.json does not name a version"
 
+# --version names a release, and the manifest that came back has to be that release's. A feed that answered with
+# another version — a stale mirror, a directory holding the wrong release, a download URL that resolved to
+# something else — would otherwise be installed anyway, under the version that was asked for.
+if [ -n "$VERSION" ] && [ "$LATEST" != "$VERSION" ]; then
+    fail "--version asked for $VERSION and $BASE/manifest.json names $LATEST; nothing was installed"
+fi
+
 TARGET="$INSTALL_DIR/jason"
 INSTALLED=""
 if [ -x "$TARGET" ]; then
@@ -164,11 +171,15 @@ case ":$PATH:" in
     *":$INSTALL_DIR:"*) exit 0 ;;
 esac
 
-# The line goes behind a marker, and the marker is looked for before the line is written, so a second run adds
+# The line goes behind a marker, and the profile is searched before the line is written, so a second run adds
 # nothing. ~/.profile is what sh and bash read at login; zsh reads ~/.zprofile instead, so a zsh user gets both.
 LINE="export PATH=\"$INSTALL_DIR:\$PATH\""
+# What is searched for is the whole line this script wrote, not the marker above it: the marker is an English
+# sentence a person's own profile could carry, and keying the decision on it also meant that a run with a
+# different --install-dir found "the mark", wrote nothing, and left the directory it had just installed into off
+# the PATH. The line names that directory, so the line is the thing to match — whole (-x) and fixed (-F).
 add_to_profile() {
-    if [ -f "$1" ] && grep -qF "$MARKER" "$1"; then
+    if [ -f "$1" ] && grep -qxF "$LINE" "$1"; then
         return 0
     fi
     printf '\n%s\n%s\n' "$MARKER" "$LINE" >> "$1"
