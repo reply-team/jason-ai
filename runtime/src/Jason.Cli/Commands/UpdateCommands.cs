@@ -112,7 +112,7 @@ public static class UpdateCommands
         UpdateApplier applier;
         try
         {
-            applier = new UpdateApplier(env, new UpdatePaths(env.Paths), TimeProvider.System, UpdateApplier.ResolveInstallPath());
+            applier = new UpdateApplier(env, new UpdatePaths(env.Paths), TimeProvider.System, env.InstallPath ?? UpdateApplier.ResolveInstallPath());
             var ledger = await applier.ApplyAsync(request, cancellationToken).ConfigureAwait(false);
             Print(env, human, applier.Steps, ledger);
             return ExitCodes.Success;

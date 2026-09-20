@@ -67,7 +67,9 @@ public sealed class FakeInstallation : HttpMessageHandler
 
         Out = new StringWriter();
         Error = new StringWriter();
-        Env = new CliEnvironment(Out, Error, Paths, this, null, Processes);
+        // Including which file this installation is installed as. A verb that worked that out for itself here
+        // would work out the test host, and replace it.
+        Env = new CliEnvironment(Out, Error, Paths, this, null, Processes, InstallPath);
     }
 
     public SemanticVersion From { get; }
@@ -129,6 +131,12 @@ public sealed class FakeInstallation : HttpMessageHandler
     /// separates the two, so the health check can be shown to ask.
     /// </remarks>
     public string? ServesVersion { get; set; }
+
+    /// <summary>
+    /// Whether the runtime refuses to stop. It is the one failure that leaves a runtime up and answering, which
+    /// is what makes it the case where an update's own stop has something to print.
+    /// </summary>
+    public bool RefusesToStop { get; set; }
 
     /// <summary>
     /// Whether a drain really ends the work in flight. A runtime whose children outlive the bound is the case
@@ -324,6 +332,19 @@ public sealed class FakeInstallation : HttpMessageHandler
                 return Json(new DrainResponse(State, RunningAttempts));
 
             case "system.shutdown":
+                if (RefusesToStop)
+                {
+                    // What a runtime answers when it will not go: an error envelope, which `jason runtime stop`
+                    // prints - and which an update has to keep off the stdout its own document goes to.
+                    return new HttpResponseMessage(HttpStatusCode.InternalServerError)
+                    {
+                        Content = new StringContent(
+                            "{\"error\":{\"code\":\"internal\",\"message\":\"the runtime would not stop\",\"retryable\":false}}",
+                            Encoding.UTF8,
+                            "application/json"),
+                    };
+                }
+
                 Running = false;
                 File.Delete(Paths.DescriptorFile);
                 return Json(new ShutdownResponse("rt_FAKE", 77, Stopping: true));
