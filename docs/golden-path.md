@@ -162,5 +162,8 @@ working keep working.
 - [`docs/routing.md`](routing.md) — routes, bindings, and the twelve checks a claim makes in one published order.
 - [`docs/work-execution.md`](work-execution.md) — the work item's lifecycle, its statuses and its attempts.
 - [`docs/plugins.md`](plugins.md) — writing a package for another provider.
-- [`skills/runtime/managed-campaign-work/SKILL.md`](../skills/runtime/managed-campaign-work/SKILL.md) — the same
-  path, written for an AI agent to drive.
+- [`skills/runtime/`](../skills/runtime) — the same ground, written for an AI agent to drive. Five skills,
+  one per moment somebody asks for something: `managed-campaign-work` turns an objective into durable work;
+  `approvals-and-questions` presents what is waiting on a person; `operating-the-installation` covers the
+  runtime, its plugins, its routes and its updates; `troubleshooting-jason` says why work stopped; and
+  `reporting-outside-effects` tells Jason about an effect produced somewhere else.

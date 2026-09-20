@@ -357,7 +357,10 @@ CLI; runtime skills (how an agent operates Jason: CLI usage, role entry points, 
 troubleshooting) live in this repository under `skills/runtime` and ship with the runtime;
 business skills (vendor-neutral SDR operations, workflows, approvals, guardrails) live under
 `skills/business` and are refreshed on their own cadence. Previously published runtime guidance
-describing a file-based state model is superseded by this architecture and is being revised.
+describing a file-based state model is superseded by this architecture. The runtime skills in
+`skills/runtime` are the revision: they teach the managed path, what waits on a person, operating an
+installation, why work stopped, and reporting effects produced outside Jason, in the runtime's own
+concepts. Retiring the earlier published pack where it still lives is separate work.
 
 ### 6.5 Jason Runtime
 
@@ -485,8 +488,9 @@ design is **explicitly superseded**. For Jason-managed work:
 - direct file edits cannot create, complete, retry, approve, or cancel Runtime work;
 - there is no parallel skills-only Markdown runtime mode.
 
-Published skills and documentation that still prescribe Markdown operational state are being
-revised; their existence does not constrain this architecture.
+Published skills and documentation that still prescribe Markdown operational state do not constrain
+this architecture. The guidance that ships with the runtime, under `skills/runtime`, no longer does;
+what is still published elsewhere is superseded whether or not it has been withdrawn yet.
 
 ### 7.3 Possible file usage
 

@@ -98,6 +98,34 @@ public partial class SkillPackTests
     private static partial Regex LinkTarget();
 
     /// <summary>
+    /// The sentences elsewhere that this pack makes true or false. Each was written while the runtime guidance
+    /// still lived somewhere else, and a page that says the revision is coming, after it has arrived, is the
+    /// kind of wrong nobody notices because nobody re-reads it.
+    /// </summary>
+    [Fact]
+    public void The_pages_that_pointed_at_a_revision_that_was_coming_point_at_it_now()
+    {
+        // 6.4 and 7.2 both said published runtime guidance "is being revised". It has been: this pack is it.
+        var architecture = File.ReadAllText(Path.Combine(SkillPack.RepositoryRoot(), "docs", "architecture.md"));
+        Assert.DoesNotContain("is being revised", architecture, StringComparison.Ordinal);
+        Assert.DoesNotContain("are being revised", architecture, StringComparison.Ordinal);
+        Assert.Contains("skills/runtime", architecture, StringComparison.Ordinal);
+
+        // The walkthrough hands a reader on to the skills, and there are five of them now. A person who
+        // finished the golden path and was pointed at one of five would never learn the other four existed.
+        var golden = File.ReadAllText(Path.Combine(SkillPack.RepositoryRoot(), "docs", "golden-path.md"));
+        foreach (var skill in SkillPack.All().Where(one => !one.IsRole))
+        {
+            Assert.Contains(skill.Name, golden, StringComparison.Ordinal);
+        }
+
+        // And the page that says what arrives in a work directory says who contributes what to it — written
+        // down before the second pack exists, because that is the only time the rule can still be set.
+        var profiles = File.ReadAllText(Path.Combine(SkillPack.RepositoryRoot(), "docs", "execution-profiles.md"));
+        Assert.Contains("METHOD.md", profiles, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The build the pack ships with, named in the catalog. What is compared is the release prefix and not the
     /// stamp: the stamp is <c>0.1.0-dev+&lt;sha&gt;</c> on every commit, so a catalog quoting it verbatim would
     /// be red at every push or would have to carry a commit sha.
