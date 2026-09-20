@@ -288,4 +288,73 @@ public class UpdateRefusalTests
             Assert.Contains(UpdateLedgerException.Invalid, installation.Out.ToString(), StringComparison.Ordinal);
         }
     }
+
+    /// <summary>
+    /// The ledger is written before every step, and it is a file like any other: a directory in its place, a
+    /// read-only update directory, and the write fails. Raw, that arrives as one line with no code — and the
+    /// write before <c>swapped</c> happens while the install path is empty.
+    /// </summary>
+    [Fact]
+    public async Task A_ledger_that_cannot_be_written_is_refused_with_a_code_that_names_it()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+
+        // Something at the ledger's path that is not a file it can replace.
+        Directory.CreateDirectory(installation.Update.Ledger);
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(
+            () => installation.Applier().ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.Zero), Ct));
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+        Assert.Contains("ledger.json", refused.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The copy of the applier is put where a resumed update can run it — and that, too, is a directory to
+    /// create and a file to copy, in the step before the install path is emptied.
+    /// </summary>
+    [Fact]
+    public async Task An_applier_copy_that_cannot_be_written_is_refused_with_a_code()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+
+        // A file where the directory has to be: creating it fails, and so would the copy into it.
+        Directory.CreateDirectory(installation.Update.Root);
+        File.WriteAllText(installation.Update.Applier, "not a directory");
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(
+            () => installation.Applier().ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.Zero), Ct));
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+
+        // And it failed before anything was replaced, which is what the message promises.
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+    }
+
+    /// <summary>
+    /// A database that cannot be put back is a refusal with a code, and the runtime still comes up. The copy
+    /// itself lands beside the database and is renamed onto it, so there is no state in which half a database
+    /// sits at that path — which no putting-back could undo.
+    /// </summary>
+    [Fact]
+    public async Task A_database_that_cannot_be_restored_is_refused_with_a_code_and_the_runtime_comes_back()
+    {
+        using var installation = new FakeInstallation { Migrates = true };
+        installation.WithRuntime();
+        await installation.Applier().ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.Zero), Ct);
+
+        // Something at the database's path that no copy can replace.
+        File.Delete(installation.Paths.DatabaseFile);
+        Directory.CreateDirectory(installation.Paths.DatabaseFile);
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+        Assert.Contains("state/jason.db", refused.Message.Replace('\\', '/'), StringComparison.Ordinal);
+
+        // The half that is always safe happened, and the machine is not left dead by a refusal about a file.
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+        Assert.True(installation.Running, "a refusal about the database left the machine with nothing running");
+        Assert.False(File.Exists(installation.Paths.DatabaseFile + ".restoring"), "half a database was left beside the real one");
+    }
 }

@@ -302,7 +302,9 @@ yourself, having decided that you want to.
 You will usually be typing `jason update rollback` from the PATH, which means the executable being replaced is
 the one running the command. That is expected and it works — the file is renamed out of the way rather than
 written over — but it is also why the replaced executable may still be sitting in `~/.jason/update/replaced/`
-afterwards: a running program cannot delete itself. It goes when the next update needs the name.
+afterwards: a running program cannot delete itself. Nothing removes it later either; each is named for the
+version and the moment it was set aside, and deleting them is safe as soon as that version is no longer
+running.
 
 ### Restoring a database by hand
 

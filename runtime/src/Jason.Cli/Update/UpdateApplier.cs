@@ -61,12 +61,29 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             // Written first, always: the ledger promises that a step was begun, never that it finished, and
             // every step below is written so that beginning it twice is the same as beginning it once.
             ledger = ledger.At(step);
-            ledger.Write(update.Ledger);
+            Record(ledger, step);
             ledger = await TakeAsync(step, ledger, request, cancellationToken).ConfigureAwait(false);
-            ledger.Write(update.Ledger);
+            Record(ledger, step);
         }
 
         return ledger;
+    }
+
+    /// <summary>
+    /// The ledger write, which is a filesystem call like the renames around it and fails for the same reasons.
+    /// </summary>
+    /// <remarks>
+    /// Raw, it arrives as one line with no code — and the write before <c>swapped</c> happens with the install
+    /// path empty, which is the one window a person cannot get out of by typing <c>jason update</c>. A code and
+    /// a way out is the least that window owes somebody.
+    /// </remarks>
+    private void Record(UpdateLedger ledger, UpdateStep step)
+    {
+        OnDisk(
+            $"recording the {step.ToString().ToLowerInvariant()} step",
+            update.Ledger,
+            $"Make sure {update.Root} is a directory this account can write to, then run `jason update apply` again.",
+            () => ledger.Write(update.Ledger));
     }
 
     /// <summary>The steps still to take, beginning with the one the ledger names: it was begun, not finished.</summary>
@@ -326,16 +343,22 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
         if (File.Exists(ledger.InstallPath))
         {
-            Directory.CreateDirectory(update.Applier);
-
             // Unless the copy is the program doing the copying. After a kill between this step and the rename,
             // the way out is to run that copy — and an executable cannot be written over while it is running,
             // on Windows at all and on any platform to no purpose: it is already the file it would be copied to.
             var copy = Path.Combine(update.Applier, ReleaseAssets.ExecutableName);
-            if (!Same(copy, Environment.ProcessPath))
-            {
-                File.Copy(ledger.InstallPath, copy, overwrite: true);
-            }
+            OnDisk(
+                "putting a copy of the applier where a resumed update can run it",
+                update.Applier,
+                $"Nothing has been replaced yet. Make sure {update.Root} is a directory this account can write to, then run `jason update apply` again.",
+                () =>
+                {
+                    Directory.CreateDirectory(update.Applier);
+                    if (!Same(copy, Environment.ProcessPath))
+                    {
+                        File.Copy(ledger.InstallPath, copy, overwrite: true);
+                    }
+                });
 
             SameVolume(ledger.InstallPath, ledger.PreviousPath);
             OnDisk(

@@ -209,15 +209,20 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
     {
         if (File.Exists(ledger.InstallPath))
         {
-            Directory.CreateDirectory(update.Replaced);
-            var aside = Path.Combine(update.Replaced, Path.GetFileName(ledger.InstallPath));
+            // Named for the version being moved aside and the moment it was, so that nothing has to be deleted
+            // first to make room. Deleting first is what this cannot afford: an image an earlier rollback left
+            // here may still be running, and that delete would refuse — after the runtime had been stopped,
+            // with nothing put back.
+            var aside = Path.Combine(
+                update.Replaced,
+                $"{ledger.ToVersion}-{clock.GetUtcNow().UtcDateTime:yyyyMMdd'T'HHmmss'Z'}-{Path.GetFileName(ledger.InstallPath)}");
             OnDisk(
                 "moving the installed executable aside",
                 ledger.InstallPath,
                 $"Nothing has been put back yet. {ledger.PreviousPath} is still the executable to restore by hand.",
                 () =>
                 {
-                    File.Delete(aside);
+                    Directory.CreateDirectory(update.Replaced);
                     File.Move(ledger.InstallPath, aside);
                 });
 
@@ -227,8 +232,10 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
-                // It is the program that is running this rollback. It goes when the next update needs the name.
-                Say($"{ledger.ToVersion} is still running, so it waits under {update.Replaced} rather than being deleted");
+                // It is the program running this rollback, and a running program cannot delete itself. Nothing
+                // deletes it afterwards either — no update touches this directory — so it waits there until
+                // somebody removes it, which is safe as soon as that version is no longer running.
+                Say($"{ledger.ToVersion} is still running, so it waits at {aside} until you delete it");
             }
         }
 
@@ -280,17 +287,55 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
                 + $"stop the runtime, copy '{backup}' over state/jason.db, delete the -wal and -shm files beside it, and start again."));
         }
 
-        File.Copy(backup, env.Paths.DatabaseFile, overwrite: true);
-
-        // A write-ahead log written against the new schema, replayed into a restored older file, is corruption.
-        // These two are the only part of a rollback that putting a file back cannot undo.
-        foreach (var sidecar in new[] { env.Paths.DatabaseFile + "-wal", env.Paths.DatabaseFile + "-shm" })
+        // Copied beside the database and renamed onto it, never copied onto it: a copy that stops halfway — a
+        // full disk, a lock, a machine that goes down — would leave a file that is neither the database from
+        // before this update nor the one from after it, and nothing can put that right.
+        var arriving = env.Paths.DatabaseFile + ".restoring";
+        try
         {
-            File.Delete(sidecar);
+            File.Copy(backup, arriving, overwrite: true);
+            File.Move(arriving, env.Paths.DatabaseFile, overwrite: true);
+
+            // A write-ahead log written against the new schema, replayed into a restored older file, is
+            // corruption. These two are the only part of a rollback that putting a file back cannot undo.
+            foreach (var sidecar in new[] { env.Paths.DatabaseFile + "-wal", env.Paths.DatabaseFile + "-shm" })
+            {
+                File.Delete(sidecar);
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // What was copied and not renamed goes with it: a file left beside the database, named like the
+            // database, is the next person's puzzle.
+            Discard(arriving);
+
+            // Returned rather than thrown, because the caller starts the runtime before it raises anything: a
+            // database that could not be put back is no reason to leave a machine with nothing running.
+            Say($"the database could not be restored from {Path.GetFileName(backup)}: {error.Message}");
+            return (false, new UpdateException(
+                UpdateCodes.FileRefused,
+                $"{ledger.FromVersion} is back in place, but the database could not be restored from '{backup}': {error.Message} "
+                + "The database is as the update left it. To go the rest of the way, stop the runtime, copy that file over "
+                + "state/jason.db, delete the -wal and -shm files beside it, and start again.",
+                error));
         }
 
         Say($"restored the database from {Path.GetFileName(backup)} and deleted its write-ahead log");
         return (true, null);
+    }
+
+    /// <summary>A leftover that nobody should have to reason about, gone as far as the filesystem allows.</summary>
+    private static void Discard(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // There is nothing useful to say about a temporary file that will not go: the refusal being
+            // raised is about the database, and it is the one a person has to read.
+        }
     }
 
     /// <summary>
