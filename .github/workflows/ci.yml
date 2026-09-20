@@ -293,6 +293,10 @@ jobs:
           # to be able to ask it whether any work has been recorded since. Stopping it here for tidiness would
           # make the next step assert a refusal instead of a rollback.
 
+          # Remembered for the rollback below, which has to tell the backup this update took from the one the
+          # restored version will take when it finds the database a migration behind again.
+          "backup=$($status.database.backup_file)" >> $env:GITHUB_ENV
+
       - name: Roll it back, from the executable a person would type
         shell: pwsh
         env:
@@ -312,16 +316,27 @@ jobs:
           $status = & $env:install runtime status | ConvertFrom-Json
           if (($status.runtime_version -split '\+')[0] -ne $env:VERSION) { throw "after the rollback the runtime serving says it is $($status.runtime_version)" }
 
-          # What was kept has been consumed, and the database this update migrated is back without the
-          # write-ahead log of the newer schema beside it.
+          # What was kept has been consumed.
           $update = Join-Path $env:JASON_DATA_DIR 'update'
           if (Get-ChildItem -Path (Join-Path $update 'previous') -File -ErrorAction SilentlyContinue) {
             throw "previous/ still holds an executable, so the rollback copied rather than moved it"
           }
-          if (Test-Path (Join-Path $env:JASON_DATA_DIR 'state/jason.db-wal')) {
-            throw "a write-ahead log written against the newer schema is still beside the restored database"
-          }
           if (-not $status.database.applied_migrations) { throw "the restored database has no migrations applied" }
+
+          # And the database serving now is the one from before the update, which is asked of what the restored
+          # runtime had to do rather than of any file: the rollback ends by starting a runtime, and that runtime
+          # opens the database and writes its own write-ahead log at once, so there is no quiet moment to
+          # inspect. Nor can a mark be written into the migrated database first - a rollback that finds work
+          # recorded since the update refuses to restore a database at all, which is the whole of B1. What is
+          # left is evidence that costs no writes: the file put back is a migration behind, so this start had to
+          # migrate it again and take a backup of its own. A rollback that left the migrated database where it
+          # was would have started a runtime with nothing to do.
+          if (-not $status.database.newly_applied) {
+            throw "the runtime that came back applied no migrations, so the database it opened was already migrated and nothing was put back"
+          }
+          if (-not $status.database.backup_file -or $status.database.backup_file -eq $env:backup) {
+            throw "the runtime that came back took no backup of its own: $($status.database.backup_file)"
+          }
 
           & $env:install runtime stop | Out-Null
 

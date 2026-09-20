@@ -960,11 +960,21 @@ public class ReleaseWorkflowTests
             "the end-to-end job stops the runtime before it rolls back, so it would assert the refusal rather than the rollback");
 
         // And what it must leave behind: the old version serving, the kept executable consumed, and the
-        // database restored with no write-ahead log of the newer schema beside it.
+        // database from before the update.
         var after = job[rollback..];
         Assert.Contains("previous", after, StringComparison.Ordinal);
-        Assert.Contains("-wal", after, StringComparison.Ordinal);
         Assert.Contains("runtime_version", after, StringComparison.Ordinal);
+
+        // That last one is asked of what the restored runtime had to do, because the file cannot be inspected
+        // - the rollback starts a runtime, which opens the database at once - and because nothing can be
+        // written into the migrated database first: work recorded after an update is exactly what makes a
+        // rollback refuse to restore one. So: the restored version found the database a migration behind and
+        // migrated it again, and the backup it took is not the backup the update took.
+        Assert.Contains("newly_applied", after, StringComparison.Ordinal);
+        Assert.Contains("$env:backup", after, StringComparison.Ordinal);
+        Assert.True(
+            job.IndexOf("\"backup=", StringComparison.Ordinal) is var kept && kept > 0 && kept < rollback,
+            "the end-to-end job never remembers the backup the update took, so it cannot tell it from the one the rollback's own start takes");
     }
 
     /// <summary>
