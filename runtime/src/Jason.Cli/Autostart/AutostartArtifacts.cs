@@ -71,6 +71,25 @@ public static class AutostartArtifacts
         };
     }
 
+    /// <summary>
+    /// Where a platform keeps the document that is its registration. One place, because a registrar has to find
+    /// it without composing a whole registration first: what it is reading is what somebody else registered,
+    /// possibly under a data directory this installation knows nothing about.
+    /// </summary>
+    public static string ArtifactPath(AutostartPlatform platform, string home, string dataDirectory)
+    {
+        ArgumentNullException.ThrowIfNull(home);
+        ArgumentNullException.ThrowIfNull(dataDirectory);
+
+        return platform switch
+        {
+            AutostartPlatform.Windows => Path.Combine(dataDirectory, "autostart", TaskDocument),
+            AutostartPlatform.MacOs => Path.Combine(home, "Library", "LaunchAgents", Label + ".plist"),
+            AutostartPlatform.Linux => Path.Combine(home, ".config", "systemd", "user", UnitName),
+            _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, "A platform that registers nothing keeps no document."),
+        };
+    }
+
     /// <summary>The command line a registration names, read back out of the document a machine holds.</summary>
     public static IReadOnlyList<string> Read(AutostartPlatform platform, string artifact)
     {
@@ -109,7 +128,7 @@ public static class AutostartArtifacts
     /// </remarks>
     private static AutostartRegistration Windows(IReadOnlyList<string> line, string dataDirectory, string account)
     {
-        var document = Path.Combine(dataDirectory, "autostart", TaskDocument);
+        var document = ArtifactPath(AutostartPlatform.Windows, string.Empty, dataDirectory);
         var xml = string.Create(
             CultureInfo.InvariantCulture,
             $"""
@@ -173,7 +192,7 @@ public static class AutostartArtifacts
     /// </summary>
     private static AutostartRegistration MacOs(IReadOnlyList<string> line, string home)
     {
-        var plistPath = Path.Combine(home, "Library", "LaunchAgents", Label + ".plist");
+        var plistPath = ArtifactPath(AutostartPlatform.MacOs, home, string.Empty);
         var arguments = string.Join("\n", line.Select(word => $"      <string>{Xml(word)}</string>"));
         var plist = $"""
             <?xml version="1.0" encoding="UTF-8"?>
@@ -209,7 +228,7 @@ public static class AutostartArtifacts
     /// </summary>
     private static AutostartRegistration Linux(IReadOnlyList<string> line, string home)
     {
-        var unitPath = Path.Combine(home, ".config", "systemd", "user", UnitName);
+        var unitPath = ArtifactPath(AutostartPlatform.Linux, home, string.Empty);
         var unit = $"""
             [Unit]
             Description=The Jason runtime
