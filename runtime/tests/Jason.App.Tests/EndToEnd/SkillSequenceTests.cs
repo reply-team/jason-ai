@@ -96,6 +96,121 @@ public class SkillSequenceTests
     }
 
     /// <summary>
+    /// The approvals skill's own sequence, against a work item that really parked: list what is waiting, read
+    /// what it would do, and record the person's decision. The item then moves — read back from the runtime
+    /// rather than from what the command printed, because a skill whose lines all succeed and whose work never
+    /// moves has taught nothing.
+    /// </summary>
+    [Fact]
+    public async Task The_approvals_skill_decides_a_parked_item_by_the_lines_it_prints()
+    {
+        using var it = GoldenPath.Create("skill-approvals");
+        var parked = await AnEnrolmentWaitingForAPersonAsync(it);
+
+        var printed = Prints("approvals-and-questions");
+        const string List = "jason approval list --human";
+        const string Read = $"jason approval get apr_{Placeholder}";
+        const string Approve =
+            $"jason approval approve apr_{Placeholder} --actor human:ada --reason \"checked the list\"";
+
+        foreach (var line in new[] { List, Read, Approve })
+        {
+            Assert.Contains(line, printed);
+        }
+
+        var ids = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["apr_"] = parked.ApprovalId,
+            ["cmp_"] = parked.CampaignId,
+            ["wi_"] = parked.WorkItemId,
+            ["cnt_"] = parked.ContactId,
+        };
+
+        foreach (var line in new[] { List, Read, Approve })
+        {
+            GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, [.. Substituted(line, ids)]));
+        }
+
+        // The item the person decided about really left the gate.
+        var released = await GoldenPath.PollAsync(
+            it, parked.WorkItemId, read => (string?)read["status"] != "awaiting_approval");
+        Assert.NotEqual("awaiting_approval", (string?)released["status"]);
+
+        // And the decision is the person's, by name. `decided_by` is an actor reference and not a string — a
+        // type and an id — so it is read the way the walkthrough's own test reads it.
+        var decided = GoldenPath.Json(await GoldenPath.Ok(
+            GoldenPath.JasonAsync(it, "approval", "get", parked.ApprovalId)));
+        Assert.Equal("approved", (string?)decided["status"]);
+        Assert.Equal("human", (string?)decided["decided_by"]!["type"]);
+        Assert.Equal("ada", (string?)decided["decided_by"]!["id"]);
+    }
+
+    /// <summary>
+    /// The golden path's own opening, up to the moment a person is asked: an installation with the official
+    /// package routed, a campaign, the person it is about, and one enrolment parked at the claim.
+    /// </summary>
+    private static async Task<(string CampaignId, string ContactId, string WorkItemId, string ApprovalId)>
+        AnEnrolmentWaitingForAPersonAsync(Installation it)
+    {
+        it.Account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
+            .WithContact(Person, Address, FirstName);
+
+        await GoldenPath.WriteSettingsAsync(it, new SettingsShape());
+        await GoldenPath.StartAsync(it);
+        GoldenPath.InstallReplyPackage(it);
+        await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: true);
+
+        var campaign = (string)GoldenPath.Json(await GoldenPath.Ok(
+            GoldenPath.JasonAsync(it, "campaign", "create", "--name", "Q3 LatAm founders")))["id"]!;
+
+        var contacts = Path.Combine(it.Root, "approval-contacts.json");
+        await File.WriteAllTextAsync(
+            contacts,
+            new JsonArray(new JsonObject
+            {
+                ["first_name"] = FirstName,
+                ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = Address }),
+            }).ToJsonString(JasonJson.Options),
+            Ct);
+        GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(
+            it, "campaign", "add-contacts", campaign, "--file", contacts, "--match-by", "email"));
+
+        var contact = (string)Assert.Single(GoldenPath.Json(await GoldenPath.Ok(
+            GoldenPath.JasonAsync(it, "campaign", "list-contacts", campaign)))["items"]!.AsArray())!["contact"]!["id"]!;
+
+        var enrolment = new JsonObject
+        {
+            ["campaign"] = new JsonObject { ["external_id"] = Sequence.ToString(System.Globalization.CultureInfo.InvariantCulture) },
+            ["channel"] = "email",
+            ["collision"] = "skip",
+            ["start"] = new JsonObject { ["position"] = "first_step" },
+            ["first_touch"] = "authored_delay",
+        };
+
+        var item = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
+            it,
+            "workitem",
+            "create",
+            campaign,
+            "--kind",
+            "provider_op",
+            "--operation",
+            "campaign.enroll",
+            "--contact",
+            contact,
+            "--input",
+            enrolment.ToJsonString(JasonJson.Options))))["id"]!;
+
+        GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, "campaign", "start", campaign));
+        await GoldenPath.PollAsync(it, item, read => (string?)read["status"] == "awaiting_approval");
+
+        var waiting = Assert.Single(GoldenPath.Json(await GoldenPath.Ok(
+            GoldenPath.JasonAsync(it, "approval", "list")))["items"]!.AsArray())!;
+
+        return (campaign, contact, item, (string)waiting["id"]!);
+    }
+
+    /// <summary>
     /// Every <c>jason …</c> line a skill prints, as whole lines. Whole lines rather than a substring search
     /// over the text, because a substring match would let a printed line grow an option — the skill would then
     /// be teaching a command this test never runs, which is exactly what it exists to prevent.
