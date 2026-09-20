@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Jason.Cli.Discovery;
+using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Process;
 using Jason.Cli.Tests.Process;
 using Jason.Contracts.Api;
@@ -63,7 +64,13 @@ internal static class RuntimeVerbs
     {
         var output = new StringWriter();
         var error = new StringWriter();
-        return (new CliEnvironment(output, error, dir.Paths, handler, null, processes), output, error);
+
+        // The machine is a recorder here, like the process table beside it: <c>runtime autostart</c> is one of
+        // the verbs these tests type, and the real registrar would put a logon task on whoever ran them.
+        return (
+            new CliEnvironment(output, error, dir.Paths, handler, null, processes, Autostart: new Autostart.RecordingRegistrar()),
+            output,
+            error);
     }
 
     /// <summary>A runtime that answers <c>system.info</c> as whichever instance the descriptor on disk names.</summary>

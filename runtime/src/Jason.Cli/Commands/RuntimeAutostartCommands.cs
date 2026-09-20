@@ -37,13 +37,13 @@ public static class RuntimeAutostartCommands
 
         autostart.Subcommands.Add(Verb(
             "enable",
-            "Register this runtime to start when this account logs on, carrying the data directory it is registered under. Nothing is started now.",
+            "Register this runtime to start at logon, carrying the data directory it is registered under. Nothing is started now.",
             actor,
             human => Enable(env, human)));
 
         autostart.Subcommands.Add(Verb(
             "disable",
-            "Take that registration away. A runtime that is running keeps running; removing a registration that is not there is not an error.",
+            "Take that registration away, so nothing starts at logon. A runtime that is running keeps running; removing a registration that is not there is not an error.",
             actor,
             human => Disable(env, human)));
 
