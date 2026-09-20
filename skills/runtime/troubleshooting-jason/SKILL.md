@@ -2,7 +2,7 @@
 name: troubleshooting-jason
 description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the nine states apart, and name the repair that is safe.
 metadata:
-  status: draft
+  status: verified
 ---
 
 # Troubleshooting Jason
@@ -124,10 +124,15 @@ there have been and what the last one said, and leave it to run.
 
 **How you recognise it.** `input_invalid`, or a failure the plugin classed `permanent` or `validation`.
 
+Two spellings to expect yourself to get wrong while you look: the campaign's own people are
+`campaign list-contacts`, because `contact list` takes no campaign; and these listings print JSON already, so
+there is no `--json` — `--human` is the one that changes the rendering.
+
 **What it means.** The arguments do not satisfy the operation's published contract, or the provider refused
 them outright. This is final by design, and it is final because asking again with the same arguments would
-fail in the same way. Read the operation's own document under `docs/contracts/operations/` — it is the
-document the runtime enforces — and correct what was asked for.
+fail in the same way. The operation's own document is what the runtime enforces, and it is published with the
+project's source under `docs/contracts/operations/`; **no verb prints one**, so on a machine with no copy of
+the source, ask the operator for it rather than guessing at the correction.
 
 ### 7. An attempt that was interrupted
 

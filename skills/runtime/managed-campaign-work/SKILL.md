@@ -2,7 +2,7 @@
 name: managed-campaign-work
 description: Use when an interactive agent session should turn an outbound objective into durable campaign work that Jason performs - creating a campaign, adding the people it is about, submitting managed provider operations and AI role work, and following what the runtime does with them.
 metadata:
-  status: draft
+  status: verified
 ---
 
 # Managed campaign work
@@ -59,6 +59,10 @@ jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
+**The campaign's own people are `campaign list-contacts`.** `contact list` answers with everyone this runtime
+knows and takes no campaign at all, so `contact list --campaign …` is the spelling to expect yourself to reach
+for and the one that costs you a turn on `Unrecognized command or argument`.
+
 `contacts.json` is a JSON array of people, each with their channels:
 
 ```json
@@ -78,8 +82,10 @@ jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operat
 ```
 
 The arguments are validated when the item is created, so a refusal here is about what you asked for, not about
-the provider. Read the operation's own document under `docs/contracts/operations/` before you invent a field:
-it is the same document the runtime enforces.
+the provider. Read the operation's own document before you invent a field: it is the same document the runtime
+enforces, and it is published with the project's source, under `docs/contracts/operations/`. **No verb prints
+one**, so on a machine with no copy of the source you cannot read it from here — ask the operator for it rather
+than guessing a field, because a guess is refused at `workitem.create` anyway.
 
 Work that needs a model rather than a provider is an `ai_role` item, named for the role that should do it:
 

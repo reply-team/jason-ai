@@ -13,19 +13,19 @@ so a skill cannot drift from the program it ships beside.
 One per moment somebody asks for something, because a host chooses a skill by its description and a
 description that promises everything matches nothing.
 
-- [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **draft.** Turning an objective into durable
+- [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **verified.** Turning an objective into durable
   campaign work and following it: the provider check, the campaign, the people it is about, provider
   operations and AI role work, and what the runtime does with them afterwards.
-- [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **draft.** What Jason is waiting for a
+- [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
   person to decide: the approvals parked at a claim and the questions a running role raised, presented in the
   person's own words and recorded as their decision.
-- [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft.** The installation itself:
+- [`operating-the-installation`](operating-the-installation/SKILL.md) — **verified.** The installation itself:
   whether the runtime is up, starting and stopping it, having it start at logon, the plugins and routes it
   has, the hosts it can launch, and whether a newer version exists.
-- [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **draft.** Why work stopped: the runtime, the
+- [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **verified.** Why work stopped: the runtime, the
   work item's error code and the chronicle; the states a person needs told apart, and the repairs that are
   safe.
-- [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **draft.** Telling Jason about an effect
+- [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
 
 ### Installing one by hand
@@ -69,3 +69,8 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
+| `managed-campaign-work` | Claude Code 2.1.278 | 0.1.0 | `sha256:e9d35c4e082ae4c888b13720c3c4c3c920b5080c44d5a92918eb4f5d892ba361` |
+| `approvals-and-questions` | Claude Code 2.1.278 | 0.1.0 | `sha256:cd0dcfd08197cc3acf48303ed7ed494325bd48ea9f4f52c09512dfc523ca47c1` |
+| `operating-the-installation` | Claude Code 2.1.278 | 0.1.0 | `sha256:b03c77a5fb226816852d2ad69ffecb8d12b5664dda8085e98b874b54aa39b7c8` |
+| `troubleshooting-jason` | Claude Code 2.1.278 | 0.1.0 | `sha256:d28bae9da5efa2bbdfe2e108a906c4b31f4c243182c36b66fd38d34e6868b97f` |
+| `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:e34a7e5179ccfe07e2e81fcb0bf1cde90c6446e3e841e327cd79e5f5a81f975f` |
