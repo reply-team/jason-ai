@@ -1,3 +1,4 @@
+using Jason.Cli;
 using Jason.Cli.Update;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Update;
@@ -239,5 +240,52 @@ public class UpdateRefusalTests
         }
 
         return null;
+    }
+    /// <summary>
+    /// Which volume a path is on, decided from the machine's mount points rather than from the first character
+    /// of the path — which is what a check built on the path root amounts to on Linux and macOS.
+    /// </summary>
+    /// <remarks>
+    /// The mount points are given here rather than read from the machine, because a test that needs two volumes
+    /// to prove a rule about two volumes can only run on a machine that happens to have them. The choosing is
+    /// the part that was wrong; it is a pure function and this is it.
+    /// </remarks>
+    [Fact]
+    public void Two_paths_under_different_mount_points_are_on_different_volumes()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Windows names its volumes in the path itself, and the drive letter is the answer.");
+
+        string[] mounts = ["/", "/mnt/data"];
+
+        Assert.NotEqual(
+            UpdateApplier.VolumeOf("/home/ada/.jason/update/staged/0.2.0/jason", mounts),
+            UpdateApplier.VolumeOf("/mnt/data/programs/jason", mounts));
+
+        // The longest mount point that really is a parent wins, and a name that merely begins with one does not.
+        Assert.Equal("/mnt/data", UpdateApplier.VolumeOf("/mnt/data/programs/jason", mounts));
+        Assert.Equal("/", UpdateApplier.VolumeOf("/mnt/database/programs/jason", mounts));
+        Assert.Equal("/", UpdateApplier.VolumeOf("/home/ada/jason", mounts));
+    }
+
+    /// <summary>A file that is not a ledger is refused with its own code by every verb that reads one.</summary>
+    /// <remarks>
+    /// <c>jason update status</c> already answered this way; <c>apply</c> and <c>rollback</c> let the exception
+    /// out, so the same broken file got an envelope from one verb and one bare line from the others.
+    /// </remarks>
+    [Fact]
+    public async Task A_file_that_is_not_a_ledger_is_refused_with_its_code_by_apply_and_rollback()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+        Directory.CreateDirectory(installation.Update.Root);
+        File.WriteAllText(installation.Update.Ledger, "half a fi");
+
+        foreach (var verb in (string[][])[["update", "apply", "--feed", installation.Feed.ToString()], ["update", "rollback"]])
+        {
+            installation.Out.GetStringBuilder().Clear();
+            var exit = await CliApp.RunAsync(verb, installation.Env, Ct);
+
+            Assert.Equal(ExitCodes.ApiError, exit);
+            Assert.Contains(UpdateLedgerException.Invalid, installation.Out.ToString(), StringComparison.Ordinal);
+        }
     }
 }

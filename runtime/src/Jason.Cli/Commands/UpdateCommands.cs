@@ -128,6 +128,13 @@ public static class UpdateCommands
             env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: error.Code == UpdateFeedException.Unreachable));
             return ExitCodes.ApiError;
         }
+        catch (UpdateLedgerException error)
+        {
+            // What is on disk is not a ledger. `status` already answers this way; a verb that acts on the same
+            // file should not answer differently, least of all with a bare line and no code.
+            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
+            return ExitCodes.ApiError;
+        }
     }
 
     private static Command RollBack(CliEnvironment env, Option<string?> actor)
@@ -185,6 +192,11 @@ public static class UpdateCommands
             }
 
             env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, error.Retryable));
+            return ExitCodes.ApiError;
+        }
+        catch (UpdateLedgerException error)
+        {
+            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
             return ExitCodes.ApiError;
         }
     }

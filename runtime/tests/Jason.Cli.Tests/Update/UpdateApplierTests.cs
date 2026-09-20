@@ -92,8 +92,35 @@ public class UpdateApplierTests
     }
 
     /// <summary>
-    /// The health check asks the runtime that is now serving, not the file: an applier that swapped nothing gets
-    /// the old version back and says so.
+    /// The health check asks the runtime that is now serving, and not the file that was installed. A file with
+    /// the right version in it proves a file exists; what an update has to know is which build came up.
+    /// </summary>
+    /// <remarks>
+    /// The two are separated here on purpose: the new version is at the install path, and the runtime answering
+    /// is still the old one — a start that silently kept serving the process that was already there, or a
+    /// launcher that started the wrong file. A health check that read the install path would call this healthy.
+    /// </remarks>
+    [Fact]
+    public async Task A_runtime_that_is_not_the_version_that_was_installed_fails_the_health_check()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+
+        // Swapped for real; serving the old build regardless.
+        installation.OnStart = () => installation.ServesVersion = installation.From.ToString();
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(
+            () => installation.Applier().ApplyAsync(Request(installation), Ct));
+
+        Assert.Equal(UpdateCodes.NotHealthy, refused.Code);
+        Assert.Contains(installation.From.ToString(), refused.Message, StringComparison.Ordinal);
+
+        // And the file really is the new one, so nothing but asking the runtime could have caught this.
+        Assert.Equal(installation.To.ToString(), installation.Installed());
+    }
+
+    /// <summary>
+    /// And a swap that did not happen at all is caught the same way, because the runtime that comes up is then
+    /// the old build for the ordinary reason.
     /// </summary>
     [Fact]
     public async Task An_update_that_did_not_really_swap_fails_its_health_check()
@@ -217,6 +244,77 @@ public class UpdateApplierTests
             ["staged", "drained", "stopped", "kept", "swapped", "started", "healthy", "complete"],
             applier.Steps.Select(step => step.Split(':')[0]));
         Assert.All(applier.Steps, step => Assert.Contains(": ", step, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// An attempt that outlives the drain does not stop the update: the bound runs out, the update goes on, and
+    /// what was left running is said out loud rather than passed over.
+    /// </summary>
+    /// <remarks>
+    /// The lease is what covers it — the next runtime finishes the work or the enforcer takes it back — but a
+    /// person whose update stopped a runtime with work in flight should be told, not left to find out. This
+    /// branch had never run: the drain in the harness ended the work every time.
+    /// </remarks>
+    [Fact]
+    public async Task An_attempt_that_outlives_the_drain_is_reported_and_left_to_its_lease()
+    {
+        using var installation = new FakeInstallation { DrainEndsTheWork = false };
+        installation.WithRuntime(runningAttempts: 2);
+
+        var applier = installation.Applier();
+        await applier.ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.FromMilliseconds(400)), Ct);
+
+        var drained = Assert.Single(applier.Steps, step => step.StartsWith("drained:", StringComparison.Ordinal));
+        Assert.Contains("2 attempt(s) still running", drained, StringComparison.Ordinal);
+        Assert.Contains("lease", drained, StringComparison.Ordinal);
+        Assert.Equal(installation.To.ToString(), installation.Installed());
+    }
+
+    /// <summary>And `--drain-seconds 0` waits for none of it, and says the same thing.</summary>
+    [Fact]
+    public async Task A_drain_of_no_seconds_waits_for_nothing_and_says_what_was_left()
+    {
+        using var installation = new FakeInstallation { DrainEndsTheWork = false };
+        installation.WithRuntime(runningAttempts: 1);
+
+        var applier = installation.Applier();
+        await applier.ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.Zero), Ct);
+
+        var drained = Assert.Single(applier.Steps, step => step.StartsWith("drained:", StringComparison.Ordinal));
+        Assert.Contains("1 attempt(s) still running", drained, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The steps that move files write their line before they move anything, which is what makes a kill in the
+    /// middle of one recoverable — and the only way to see it from outside is to make the move fail.
+    /// </summary>
+    /// <remarks>
+    /// The runtime witnesses `drained`, `stopped` and `healthy`, because it is asked something during each. The
+    /// filesystem steps ask nobody anything, so moving their ledger write to *after* the rename left every test
+    /// green. Here the rename cannot happen — a file sits where the kept executable's directory belongs — and
+    /// what is asserted is the file on disk at the moment it failed.
+    /// </remarks>
+    [Fact]
+    public async Task A_step_that_moves_files_has_written_its_line_before_it_fails()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+
+        // Where `previous/` has to be a directory, there is a file.
+        Directory.CreateDirectory(installation.Update.Root);
+        File.WriteAllText(installation.Update.Previous, "not a directory");
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(
+            () => installation.Applier().ApplyAsync(Request(installation), Ct));
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+        Assert.Contains(installation.Update.Previous, refused.Message, StringComparison.Ordinal);
+        Assert.Contains("jason update apply", refused.Message, StringComparison.Ordinal);
+
+        // The ledger on disk already says which step was being taken, which is what the next invocation reads.
+        Assert.Equal(UpdateStep.Kept, installation.Ledger()!.Step);
+
+        // And nothing was moved: the installed executable is where it was.
+        Assert.Equal(installation.From.ToString(), installation.Installed());
     }
 
     private static UpdateRequest Request(FakeInstallation installation) =>

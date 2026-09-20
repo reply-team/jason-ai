@@ -81,6 +81,19 @@ public sealed record UpdateLedger(
     /// <summary>Longer than any ledger this build writes, and short enough that a file that is not one is refused fast.</summary>
     private const int MaxBytes = 64 * 1024;
 
+    /// <summary>The two names a write goes through, which are also how a reader knows one is happening.</summary>
+    private const string Writing = ".writing";
+
+    private const string Replaced = ".replaced";
+
+    /// <summary>
+    /// How patient a reader is while a write is in flight. A replacement is two renames; this is longer than
+    /// any of them and short enough that a person who asked a question is still waiting for the answer.
+    /// </summary>
+    private const int Attempts = 25;
+
+    private static readonly TimeSpan Wait = TimeSpan.FromMilliseconds(20);
+
     /// <summary>What the new runtime's first start applied, empty where it applied nothing.</summary>
     public IReadOnlyList<string> NewlyApplied { get; init; } = NewlyApplied ?? [];
 
@@ -157,14 +170,36 @@ public sealed record UpdateLedger(
     public static UpdateLedger? ReadFile(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
-        if (!File.Exists(path))
-        {
-            return null;
-        }
 
-        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(file);
-        return Read(reader.ReadToEnd());
+        for (var attempt = 0; ; attempt++)
+        {
+            var replacing = File.Exists(path + Writing) || File.Exists(path + Replaced);
+            try
+            {
+                if (File.Exists(path))
+                {
+                    using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    using var reader = new StreamReader(file);
+                    return Read(reader.ReadToEnd());
+                }
+
+                // No file. Either there is no update, or one is replacing this very file as it is read: the
+                // writer's own temporary names are how those two are told apart, and telling them apart is the
+                // whole point — `jason update status` answering "nothing in flight" in the middle of an update
+                // would be a lie told at the worst possible moment.
+                if (!replacing || attempt >= Attempts)
+                {
+                    return null;
+                }
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException && attempt < Attempts)
+            {
+                // The same instant, seen from the other side: the name existed when it was asked about and was
+                // gone, or momentarily unopenable, when it was opened.
+            }
+
+            Thread.Sleep(Wait);
+        }
     }
 
     /// <summary>
@@ -184,9 +219,23 @@ public sealed record UpdateLedger(
             Directory.CreateDirectory(directory);
         }
 
-        var temporary = path + ".writing";
+        var temporary = path + Writing;
         File.WriteAllText(temporary, ToJson());
-        File.Move(temporary, path, overwrite: true);
+
+        if (!File.Exists(path))
+        {
+            File.Move(temporary, path);
+            return;
+        }
+
+        // Replace, not move-with-overwrite. Measured on Windows: a move over a file somebody has open is denied
+        // even when that reader allowed sharing every way it can, while Replace succeeds — it is the call the
+        // operating system provides for exactly this, swapping the names rather than deleting one of them. The
+        // reader's share mode is the other half and both are needed: Replace against a reader that did not allow
+        // sharing fails as well. The backup it insists on is deleted the moment it has served its purpose.
+        var replaced = path + Replaced;
+        File.Replace(temporary, path, replaced, ignoreMetadataErrors: true);
+        File.Delete(replaced);
     }
 
     private static string Name(UpdateStep step) => step switch

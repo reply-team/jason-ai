@@ -36,6 +36,13 @@ public static class UpdateCodes
     /// <summary>The new version is in place but the runtime it starts is not the one this update installed.</summary>
     public const string NotHealthy = "update_not_healthy";
 
+    /// <summary>
+    /// A file an update has to move could not be moved: a directory that is not one, a permission, a lock. The
+    /// message names the path and what to do, because this is the one family of failures that can happen inside
+    /// the window where there is no executable at the install path.
+    /// </summary>
+    public const string FileRefused = "update_file_refused";
+
     /// <summary>There is no record of an update, or the executable it replaced is not where it was kept.</summary>
     public const string NothingToRollBack = "update_nothing_to_roll_back";
 
@@ -58,6 +65,7 @@ public static class UpdateCodes
         CrossVolume,
         RuntimeUnreachable,
         NotHealthy,
+        FileRefused,
         NothingToRollBack,
         RollbackUnsafe,
     ];

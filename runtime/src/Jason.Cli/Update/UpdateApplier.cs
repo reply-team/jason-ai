@@ -276,6 +276,30 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         return ledger with { StoppedAt = clock.GetUtcNow() };
     }
 
+    /// <summary>
+    /// One step's worth of file moving, with whatever the filesystem refuses turned into this product's own
+    /// refusal.
+    /// </summary>
+    /// <remarks>
+    /// A read-only install directory, a permission, a path that is a directory where a file belongs: raw, these
+    /// arrive at a person as one line with no code, and they arrive during the steps that empty the install
+    /// path. A code and a remedy is the least an update owes somebody in that window.
+    /// </remarks>
+    private static void OnDisk(string what, string path, string remedy, Action move)
+    {
+        try
+        {
+            move();
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            throw new UpdateException(
+                UpdateCodes.FileRefused,
+                $"{what} failed at '{path}': {error.Message} {remedy}",
+                error);
+        }
+    }
+
     /// <summary>Moves the installed executable aside. Doing it twice is doing it once: the second finds it gone.</summary>
     /// <remarks>
     /// A copy of the same executable is left under <c>&lt;data&gt;/update/applier/</c> first, and it is the way
@@ -288,7 +312,12 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// </remarks>
     private UpdateLedger Keep(UpdateLedger ledger)
     {
-        Directory.CreateDirectory(update.Previous);
+        OnDisk(
+            "keeping the installed executable",
+            update.Previous,
+            $"Make sure {update.Root} is a directory this account can write to, then run `jason update apply` again.",
+            () => Directory.CreateDirectory(update.Previous));
+
         if (File.Exists(ledger.InstallPath))
         {
             Directory.CreateDirectory(update.Applier);
@@ -303,7 +332,11 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             }
 
             SameVolume(ledger.InstallPath, ledger.PreviousPath);
-            File.Move(ledger.InstallPath, ledger.PreviousPath, overwrite: true);
+            OnDisk(
+                "moving the installed executable aside",
+                ledger.InstallPath,
+                $"Nothing has been replaced yet. Make sure this account may write to {Path.GetDirectoryName(ledger.InstallPath)}, then run `jason update apply` again.",
+                () => File.Move(ledger.InstallPath, ledger.PreviousPath, overwrite: true));
             Say(UpdateStep.Kept, "the installed executable is put aside");
         }
 
@@ -324,7 +357,11 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             }
 
             SameVolume(ledger.StagedPath, ledger.InstallPath);
-            File.Move(ledger.StagedPath, ledger.InstallPath);
+            OnDisk(
+                "putting the new executable in place",
+                ledger.InstallPath,
+                $"There is nothing at the install path until this succeeds: run `jason update apply` again, from {Path.Combine(update.Applier, ReleaseAssets.ExecutableName)} if `jason` is no longer on your PATH, or put {ledger.PreviousPath} back by hand.",
+                () => File.Move(ledger.StagedPath, ledger.InstallPath));
             Say(UpdateStep.Swapped, $"{ledger.ToVersion} is at the install path");
         }
 
@@ -417,10 +454,54 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             Path.GetFullPath(other),
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
+    /// <summary>
+    /// Which volume a path is on: the drive on Windows, and on every other platform the mount point it falls
+    /// under — the longest one that really is a parent of it.
+    /// </summary>
+    /// <remarks>
+    /// <c>Path.GetPathRoot</c> answers <c>/</c> for every absolute path on Linux and macOS, so a check built on
+    /// it could not see two volumes there at all — and that is where it is needed most, because .NET's own
+    /// <c>File.Move</c> across a mount boundary falls back to copying and deleting, which is the very
+    /// not-quite-atomic swap this refusal exists to prevent. The mount points come from the operating system;
+    /// the choosing is a pure function so that it can be tested on a machine with one volume.
+    /// </remarks>
+    public static string VolumeOf(string path, IReadOnlyList<string> mountPoints)
+    {
+        ArgumentNullException.ThrowIfNull(mountPoints);
+        var full = Path.GetFullPath(path);
+        if (OperatingSystem.IsWindows())
+        {
+            return Path.GetPathRoot(full) ?? string.Empty;
+        }
+
+        var under = mountPoints
+            .Where(mount => Under(full, mount))
+            .OrderByDescending(mount => mount.Length)
+            .FirstOrDefault();
+
+        return under ?? Path.GetPathRoot(full) ?? "/";
+    }
+
+    /// <summary>Whether a path really falls under a directory, rather than merely starting with its letters.</summary>
+    private static bool Under(string path, string directory)
+    {
+        var mount = directory.TrimEnd(Path.DirectorySeparatorChar);
+        if (mount.Length == 0)
+        {
+            return path.StartsWith('/');
+        }
+
+        return path.Equals(mount, StringComparison.Ordinal)
+            || path.StartsWith(mount + Path.DirectorySeparatorChar, StringComparison.Ordinal);
+    }
+
+    private static string VolumeOf(string path) =>
+        VolumeOf(path, [.. DriveInfo.GetDrives().Select(drive => drive.RootDirectory.FullName)]);
+
     /// <summary>A rename is atomic; a copy across volumes is not, and a half-copied executable is the one state this avoids.</summary>
     private static void SameVolume(string from, string to)
     {
-        if (!string.Equals(Path.GetPathRoot(Path.GetFullPath(from)), Path.GetPathRoot(Path.GetFullPath(to)), StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(VolumeOf(from), VolumeOf(to), StringComparison.OrdinalIgnoreCase))
         {
             throw new UpdateException(
                 UpdateCodes.CrossVolume,

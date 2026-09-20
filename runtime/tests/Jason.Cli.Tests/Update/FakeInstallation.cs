@@ -120,6 +120,22 @@ public sealed class FakeInstallation : HttpMessageHandler
     /// </summary>
     public bool StartsButNeverServes { get; set; }
 
+    /// <summary>
+    /// What the runtime says it is, when that has to differ from whatever file is at the install path.
+    /// </summary>
+    /// <remarks>
+    /// By default the runtime here answers as the file, which is what makes the ordinary tests realistic — but
+    /// it also means a health check that read the file instead of asking the runtime would pass them all. This
+    /// separates the two, so the health check can be shown to ask.
+    /// </remarks>
+    public string? ServesVersion { get; set; }
+
+    /// <summary>
+    /// Whether a drain really ends the work in flight. A runtime whose children outlive the bound is the case
+    /// the drain's own give-up exists for, and it never ran while the drain here zeroed the count.
+    /// </summary>
+    public bool DrainEndsTheWork { get; set; } = true;
+
     /// <summary>The newest line in the chronicle, as this runtime would report it.</summary>
     public string Chronicle { get; set; } = "jrn_01M2XVJ84TFRG54VKC291A53F2";
 
@@ -294,8 +310,13 @@ public sealed class FakeInstallation : HttpMessageHandler
             case "system.drain":
                 State = DispatcherState.Draining;
 
-                // A drain is what ends the work in flight here, as the runtime's own enforcer would.
-                RunningAttempts = 0;
+                // A drain ends the work in flight the way the runtime's own enforcer would — unless the test is
+                // about an attempt that outlives it, which is what the drain's bound is for.
+                if (DrainEndsTheWork)
+                {
+                    RunningAttempts = 0;
+                }
+
                 return Json(new DrainResponse(State, RunningAttempts));
 
             case "system.resume":
@@ -321,7 +342,7 @@ public sealed class FakeInstallation : HttpMessageHandler
     }
 
     private SystemInfoResponse Info() => new(
-        Installed(),
+        ServesVersion ?? Installed(),
         "v1",
         "rt_FAKE",
         77,

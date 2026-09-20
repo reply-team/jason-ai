@@ -121,6 +121,72 @@ public class UpdateLedgerTests
         Assert.Equal(UpdateStep.Swapped, UpdateLedger.Read(File.ReadAllText(path)).Step);
     }
 
+    /// <summary>
+    /// A reader does not stop the update it is reading about. <c>jason update status</c> opens this file at
+    /// whatever moment a person types it, and an update replaces it by renaming over it — which on Windows a
+    /// reader holding it with ordinary sharing forbids.
+    /// </summary>
+    /// <remarks>
+    /// Both halves are asserted here because both are claimed: the writer's temporary-file-and-rename, and the
+    /// reader's share mode. A hundred replacements against a reader in a tight loop is enough to catch it: the
+    /// first attempt that lands mid-read throws.
+    /// </remarks>
+    [Fact]
+    public async Task A_ledger_is_replaced_while_somebody_is_reading_it()
+    {
+        using var dir = new TempTree();
+        var path = Path.Combine(dir.Root, "ledger.json");
+        Ledger().Write(path);
+
+        using var reading = new CancellationTokenSource();
+        var reader = Task.Run(
+            () =>
+            {
+                var read = 0;
+                while (!reading.IsCancellationRequested)
+                {
+                    // Not swallowed: a read that throws here is the other half of the same defect.
+                    _ = UpdateLedger.ReadFile(path);
+                    read++;
+                }
+
+                return read;
+            },
+            TestContext.Current.CancellationToken);
+
+        for (var write = 0; write < 100; write++)
+        {
+            (Ledger() with { Step = write % 2 == 0 ? UpdateStep.Swapped : UpdateStep.Started }).Write(path);
+        }
+
+        await reading.CancelAsync();
+        Assert.True(await reader > 0, "the reader never managed a single read, so this proved nothing");
+        Assert.NotNull(UpdateLedger.ReadFile(path));
+    }
+
+    /// <summary>
+    /// And a write that fails before its rename leaves the ledger that was there. The step a ledger names is
+    /// taken after the file is on disk, so a half-written one is the state nothing could recover from.
+    /// </summary>
+    [Fact]
+    public void A_write_that_fails_before_its_rename_leaves_the_last_ledger_readable()
+    {
+        using var dir = new TempTree();
+        var path = Path.Combine(dir.Root, "ledger.json");
+        Ledger().Write(path);
+
+        // The temporary file cannot be written, because a directory has its name.
+        Directory.CreateDirectory(path + ".writing");
+
+        // The kind of refusal differs by platform — a denied access here, a directory-in-the-way there — and what
+        // matters is only that the write did not happen.
+        Assert.ThrowsAny<SystemException>(() => (Ledger() with { Step = UpdateStep.Swapped }).Write(path));
+
+        var survived = UpdateLedger.ReadFile(path);
+        Assert.NotNull(survived);
+        Assert.Equal(UpdateStep.Staged, survived.Step);
+    }
+
     [Fact]
     public void A_missing_ledger_is_nothing_in_flight_rather_than_a_failure()
     {

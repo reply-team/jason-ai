@@ -79,6 +79,22 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
         return back;
     }
 
+    /// <summary>The same turning of a filesystem refusal into this product's own, as an update's steps use.</summary>
+    private static void OnDisk(string what, string path, string remedy, Action move)
+    {
+        try
+        {
+            move();
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            throw new UpdateException(
+                UpdateCodes.FileRefused,
+                $"{what} failed at '{path}': {error.Message} {remedy}",
+                error);
+        }
+    }
+
     /// <summary>What the chronicle says about whether this update's version has been used since it came up.</summary>
     private enum Chronicle
     {
@@ -179,8 +195,15 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
         {
             Directory.CreateDirectory(update.Replaced);
             var aside = Path.Combine(update.Replaced, Path.GetFileName(ledger.InstallPath));
-            File.Delete(aside);
-            File.Move(ledger.InstallPath, aside);
+            OnDisk(
+                "moving the installed executable aside",
+                ledger.InstallPath,
+                $"Nothing has been put back yet. {ledger.PreviousPath} is still the executable to restore by hand.",
+                () =>
+                {
+                    File.Delete(aside);
+                    File.Move(ledger.InstallPath, aside);
+                });
 
             try
             {
@@ -193,7 +216,12 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             }
         }
 
-        File.Move(ledger.PreviousPath, ledger.InstallPath);
+        OnDisk(
+            "putting the previous executable back",
+            ledger.InstallPath,
+            $"The install path is empty: copy {ledger.PreviousPath} there by hand.",
+            () => File.Move(ledger.PreviousPath, ledger.InstallPath));
+
         Say($"put {ledger.FromVersion} back");
     }
 
