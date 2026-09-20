@@ -492,6 +492,16 @@ public class ReleaseAndUpdateDocTests
 
         // The line that carries the outcome, whatever the outcome is.
         Assert.Contains("Checked by hand so far:", page, StringComparison.Ordinal);
+
+        // And it has an outcome now. The check ran on Windows and on Linux, on one machine each; the paragraph
+        // says what held there and stops. "nothing" was true for exactly as long as it was true.
+        Assert.DoesNotContain("Checked by hand so far:** nothing", page, StringComparison.Ordinal);
+        Assert.Contains("signed out and back in", page, StringComparison.Ordinal);
+        Assert.Contains("systemd --user", page, StringComparison.Ordinal);
+
+        // Including the part that did not: an ordinary prompt cannot register on Windows, which is the first
+        // thing a person meets and the last thing a page should leave them to discover.
+        Assert.Contains("refused", page, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -544,6 +554,19 @@ public class ReleaseAndUpdateDocTests
         // And says what it costs the accounts that cannot get one, rather than leaving them to find out.
         Assert.Contains("standard account", page, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("unsupported", page, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// And which half of the feature that costs. Reading is not an elevated act — measured on the machine the
+    /// hand check ran on, with the task registered — so a page that said "autostart needs administrator" flatly
+    /// would send people to elevate a prompt for `status`, which needs nothing.
+    /// </summary>
+    [Fact]
+    public void The_page_says_that_reading_the_registration_is_not_an_elevated_act()
+    {
+        var page = Read();
+
+        Assert.Contains("`status` needs no elevation", page, StringComparison.Ordinal);
     }
 
     /// <summary>And the sentence it replaced is gone from both places that carried it.</summary>

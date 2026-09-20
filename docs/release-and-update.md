@@ -401,6 +401,10 @@ nothing registered. Jason repeats the tool's own line and says what to do about 
 integrity level before asking: the Task Scheduler's answer is the only thing that really knows, and a guess
 made in advance would be wrong on exactly the machines where it mattered.
 
+**`status` needs no elevation.** Reading the registration works from an ordinary prompt — the Task
+Scheduler lets this account query its own task — so a script, an agent or a person can ask what is registered
+without asking for anything. Only the two verbs that change something need the elevated prompt.
+
 What costs the elevation is the shape of the task, not the folder it goes in — the Task Scheduler's root folder
 is writable by ordinary accounts. The task runs with an **S4U logon**: the account, with no stored password, at
 `LeastPrivilege`, in a non-interactive session that has no desktop. That is what keeps a console window off
@@ -441,9 +445,23 @@ So registering for real can only be checked **by hand**, on a real machine, and 
 project has one of: Windows and Linux. **macOS is composed and asserted only** — nobody working on this has a
 Mac, and this page would rather say so than imply a check nobody ran.
 
-> **Checked by hand so far:** nothing. These verbs ship with the check still to come; registering a real logon
-> task on somebody's real account is a deliberate act, and what it found belongs here rather than in a promise
-> made in advance.
+> **Checked by hand so far:** Windows and Linux, on 2026-09-20, on one machine each.
+>
+> **Windows**, on an administrator account. From an ordinary prompt `enable` is **refused** and registers
+> nothing — the Task Scheduler will not take this task from a medium-integrity process. From an elevated prompt
+> it registers; a second `enable` leaves one task rather than two; `status` answers from an ordinary prompt.
+> The account then **signed out and back in**, and a runtime was running because of it: session 0, no window on
+> the desktop, its endpoint descriptor three seconds after the logon, on the data directory the registration
+> carried. `disable` took it away, a second `disable` on the now-empty machine still succeeded, and nothing was
+> left behind — no task, no process, no document.
+>
+> **Linux**, unprivileged, under a `systemd --user` manager. The unit registered and enabled; the machine was
+> restarted; a runtime was running before anything asked for it. `disable` removed the unit and the link in the
+> default target.
+>
+> **Not checked:** macOS, which is composed and asserted only, and standard accounts on Windows, which this
+> version does not support. One thing that was checked and did *not* change: registering the task granted the
+> account no rights. The batch-logon rights on that machine were identical before and after.
 
 ## 9. Where things live
 
