@@ -56,7 +56,6 @@ public class UpdateKillPointTests
         Assert.Equal(Marker, File.ReadAllText(copy));
     }
 
-
     /// <summary>
     /// The ledger names the <c>swapped</c> step before the rename that performs it, and this is the witness
     /// that it does. The rename is the one that opens and closes the window where the install path holds no
@@ -87,7 +86,6 @@ public class UpdateKillPointTests
         Assert.Equal(UpdateCodes.FileRefused, refused.Code);
         Assert.Equal(UpdateStep.Swapped, installation.Ledger()!.Step);
     }
-
 
     /// <summary>
     /// Nothing downloaded is trusted across a kill: whatever is in the staging directory was left there by a run
