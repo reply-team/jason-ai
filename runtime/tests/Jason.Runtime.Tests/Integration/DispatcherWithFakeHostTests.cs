@@ -147,11 +147,13 @@ public class DispatcherWithFakeHostTests
         host.Clock.Advance(TimeSpan.FromSeconds(15));
 
         // A beat that arrived after the jump, waited for rather than assumed. The moment the clock moves, the
-        // beat on the item is fifteen seconds old, and it stays that old until the child sends the next one —
-        // which it does on its own time, in the real world, while this test runs among all the others. The jump
-        // also wakes the loop's own tick, and a tick that reaches the lease enforcer before that next beat
-        // strikes the attempt out: the item is no longer cancellable, and the cancel below answers Conflict.
-        // This test is about a host that keeps reporting, so waiting for it to report is the test's own subject.
+        // beat on the item is fifteen seconds old against a ten-second limit, and it stays that old until the
+        // child sends the next one — which it does on its own time, in the real world, while this test runs
+        // among all the others. The scan below is the only thing that reaches the lease enforcer here (the
+        // loop's own tick is an hour away on this clock), so a scan issued before that next beat strikes the
+        // attempt out: the item is no longer cancellable, and the cancel below answers Conflict. Which is what
+        // this test used to do. It is about a host that keeps reporting, so waiting for it to report is the
+        // test's own subject rather than an assumption about scheduling.
         var since = host.Clock.Now;
         await host.WaitAsync(
             created.Id,

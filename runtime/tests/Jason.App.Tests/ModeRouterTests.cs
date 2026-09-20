@@ -69,15 +69,30 @@ public class ModeRouterTests
     }
 
     /// <summary>A flag with no path after it stops the runtime before it starts, rather than defaulting.</summary>
+    /// <remarks>
+    /// Belt and braces, because of what this test does when the thing it guards is not there: it calls the
+    /// runtime mode for real. With the usage refusal removed it does not fail — it starts an in-process runtime
+    /// on <b>the default data directory</b> and waits there. Measured: <c>~/.jason</c> created in a home
+    /// directory, with a database, a descriptor, a log, and an update check on its way to the internet once the
+    /// first delay was up. So the variable points at this test's own tree, and the run is given a second before
+    /// it is cancelled: a regression fails in a temporary directory, quickly, and reaches nothing.
+    /// </remarks>
     [Fact]
     public async Task A_data_dir_with_no_path_after_it_starts_no_runtime()
     {
+        var root = Path.Combine(Path.GetTempPath(), "jason-app-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var previous = Environment.GetEnvironmentVariable(JasonPaths.DataDirectoryVariable);
         var original = Console.Error;
         var error = new StringWriter();
+
+        Environment.SetEnvironmentVariable(JasonPaths.DataDirectoryVariable, root);
         Console.SetError(error);
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        bounded.CancelAfter(TimeSpan.FromSeconds(1));
         try
         {
-            var exit = await ModeRouter.RunAsync(["runtime", "run", "--data-dir"], TestContext.Current.CancellationToken);
+            var exit = await ModeRouter.RunAsync(["runtime", "run", "--data-dir"], bounded.Token);
             Assert.Equal(2, exit);
             Assert.Contains("usage", error.ToString(), StringComparison.OrdinalIgnoreCase);
             Assert.Contains("--data-dir", error.ToString(), StringComparison.Ordinal);
@@ -85,6 +100,8 @@ public class ModeRouterTests
         finally
         {
             Console.SetError(original);
+            Environment.SetEnvironmentVariable(JasonPaths.DataDirectoryVariable, previous);
+            Directory.Delete(root, recursive: true);
         }
     }
 
