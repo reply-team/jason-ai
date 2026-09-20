@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using Jason.Cli.Update;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Update;
 
@@ -59,6 +61,12 @@ public class UpdateRollbackTests
         Assert.Equal(FakeInstallation.BackupContent, File.ReadAllText(installation.Paths.DatabaseFile));
         Assert.False(File.Exists(installation.Paths.DatabaseFile + "-wal"), "a WAL from the new schema would be replayed into the restored file");
         Assert.False(File.Exists(installation.Paths.DatabaseFile + "-shm"));
+
+        // And they are gone rather than merely out of the way. A restore that stopped deleting what it set
+        // aside would satisfy the two lines above — the rename alone does — and leave the files that make the
+        // next rollback refuse with a message about two others.
+        Assert.False(File.Exists(installation.Paths.DatabaseFile + "-wal.rolling"), "the log was set aside and never deleted");
+        Assert.False(File.Exists(installation.Paths.DatabaseFile + "-shm.rolling"));
     }
 
     /// <summary>
@@ -151,10 +159,13 @@ public class UpdateRollbackTests
         using var installation = new FakeInstallation();
         installation.WithRuntime();
 
-        // The update gets as far as starting the new version, which migrates and then does not answer.
+        // The update gets as far as starting the new version, which migrates and then does not answer. Both
+        // waits for it - the update's own and the rollback's below - are on a clock this test moves.
         installation.StartsButNeverServes = true;
-        await Assert.ThrowsAsync<UpdateException>(
-            () => installation.Applier().ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.FromSeconds(2)), Ct));
+        var clock = new FixedClock(new DateTimeOffset(2026, 9, 20, 4, 30, 0, TimeSpan.Zero));
+        var applying = installation.Applier(clock).ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.FromSeconds(2)), Ct);
+        await DriveAsync(clock, applying);
+        await Assert.ThrowsAsync<UpdateException>(() => applying);
 
         var ledger = installation.Ledger()!;
         Assert.Null(ledger.BackupFile);
@@ -164,7 +175,12 @@ public class UpdateRollbackTests
         var backup = installation.WriteBackup(ledger.StoppedAt!.Value);
         installation.WriteDatabase("migrated by a version that never served");
 
-        var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
+        // Nothing this rollback starts will answer either, so its wait for one is moved by this test rather
+        // than by a minute of somebody's afternoon.
+        var rolling = installation.Rollback(clock).RollBackAsync(Ct);
+        await DriveAsync(clock, rolling);
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => rolling);
 
         // Found, named, and left where it is - and the executable went back, as it always does.
         Assert.Equal(UpdateCodes.RollbackUnsafe, refused.Code);
@@ -202,6 +218,282 @@ public class UpdateRollbackTests
 
         // The half that is always safe still happened.
         Assert.Equal(installation.From.ToString(), installation.Installed());
+    }
+
+    /// <summary>
+    /// A rollback that can find nowhere to put a write-ahead log stops before the database moves, and says
+    /// which directory needs a person.
+    /// </summary>
+    /// <remarks>
+    /// The sidecars are moved out of the way rather than deleted, and a name that is taken is passed over for
+    /// the next one - so the way this refuses is by running out of names, not by meeting one. A hundred
+    /// leftovers beginning with the same name is more than a machine makes by accident; what matters is that
+    /// the refusal happens with the database untouched, which is the whole reason the sidecars are dealt with
+    /// before anything else moves.
+    /// </remarks>
+    [Fact]
+    public async Task A_log_with_nowhere_left_to_go_stops_the_restore_before_the_database_does()
+    {
+        using var installation = await UpdatedAsync(migrates: true);
+        installation.WriteDatabase("migrated by the new version");
+        var log = installation.Paths.DatabaseFile + "-wal";
+        File.WriteAllText(log, "a log written against the new schema");
+        var before = File.ReadAllBytes(installation.Paths.DatabaseFile);
+
+        File.WriteAllText(log + ".rolling", "one an earlier rollback left");
+        for (var ordinal = 2; ordinal <= 100; ordinal++)
+        {
+            File.WriteAllText($"{log}.rolling.{ordinal}", "and another");
+        }
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+        Assert.Contains(log + ".rolling", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(before, File.ReadAllBytes(installation.Paths.DatabaseFile));
+        Assert.Equal("a log written against the new schema", File.ReadAllText(log));
+
+        // The half that is always safe still happened, and the machine is not left dead.
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+        Assert.True(installation.Running, "the refusal was about the database, not about leaving the machine dead");
+    }
+
+    /// <summary>
+    /// A sidecar set aside by an earlier rollback and never deleted does not stop this one. It is reachable
+    /// from this code's own paths — a process killed between the aside and the copy, or the best-effort delete
+    /// after a restore refusing — and it used to block every rollback that followed, with a refusal naming the
+    /// two files it was not about and no mention of the one that was.
+    /// </summary>
+    [Fact]
+    public async Task A_log_left_aside_by_an_earlier_rollback_does_not_stop_this_one()
+    {
+        using var installation = await UpdatedAsync(migrates: true);
+        installation.WriteDatabase("migrated by the new version");
+        var log = installation.Paths.DatabaseFile + "-wal";
+        File.WriteAllText(log, "a log written against the new schema");
+
+        // What a rollback that did not finish left behind, under the name the next one would want.
+        File.WriteAllText(log + ".rolling", "a log an earlier rollback set aside and never deleted");
+
+        await installation.Rollback().RollBackAsync(Ct);
+
+        Assert.Equal(FakeInstallation.BackupContent, File.ReadAllText(installation.Paths.DatabaseFile));
+        Assert.False(File.Exists(log), "the log from the new schema is still beside the restored database");
+    }
+
+    /// <summary>
+    /// The defect itself, in the shape a machine really reaches it: a runtime is still holding the write-ahead
+    /// log open when the rollback gets to it. The backup was installed first and the delete then refused, so
+    /// the database from before the update sat there with a log written against the new schema beside it - and
+    /// the refusal a person read said the database had been left exactly as it was.
+    /// </summary>
+    /// <remarks>
+    /// Windows only, because this is a Windows fault: an open file cannot be renamed or deleted there, and on
+    /// Unix both succeed while the handle stays valid. The two tests beside this one carry the same rule on
+    /// every platform, built out of directories rather than handles.
+    /// </remarks>
+    [Fact]
+    public async Task A_log_still_held_open_stops_the_restore_before_the_database_moves()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to rename or delete a file that is open, which is what this is about.");
+
+        using var installation = await UpdatedAsync(migrates: true);
+        installation.WriteDatabase("migrated by the new version");
+        var log = installation.Paths.DatabaseFile + "-wal";
+        File.WriteAllText(log, "a log written against the new schema");
+        var before = File.ReadAllBytes(installation.Paths.DatabaseFile);
+
+        UpdateException refused;
+        using (var held = new FileStream(log, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
+        }
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+
+        // The sentence the refusal makes, made true: nothing moved.
+        Assert.Equal(before, File.ReadAllBytes(installation.Paths.DatabaseFile));
+        Assert.Equal("a log written against the new schema", File.ReadAllText(log));
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+    }
+
+    /// <summary>
+    /// And a copy that fails after the sidecars were set aside puts them back: the database beside them is
+    /// still the migrated one, and that log is still its own.
+    /// </summary>
+    /// <remarks>
+    /// This is a guard on the order the test above forces, not on anything the old code did: with no aside
+    /// there was nothing to put back. Removing the unwind makes it red, which is what it is for - a log left at
+    /// <c>jason.db-wal.rolling</c> is invisible to SQLite, so the committed transactions in it are gone from a
+    /// database that is still the one they belong to.
+    /// </remarks>
+    [Fact]
+    public async Task A_copy_that_fails_puts_the_write_ahead_log_back()
+    {
+        using var installation = await UpdatedAsync(migrates: true);
+        installation.WriteDatabase("migrated by the new version");
+        var log = installation.Paths.DatabaseFile + "-wal";
+        File.WriteAllText(log, "a log written against the new schema");
+        var before = File.ReadAllBytes(installation.Paths.DatabaseFile);
+
+        // The backup is copied beside the database before it is renamed onto it; a directory at that name
+        // refuses the copy, after the sidecars have been moved out of the way.
+        var arriving = installation.Paths.DatabaseFile + ".restoring";
+        Directory.CreateDirectory(arriving);
+        File.WriteAllText(Path.Combine(arriving, "occupied"), "not empty");
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+        Assert.Equal(before, File.ReadAllBytes(installation.Paths.DatabaseFile));
+        Assert.Equal("a log written against the new schema", File.ReadAllText(log));
+        Assert.False(File.Exists(log + ".rolling"), "the log was set aside and left there");
+    }
+
+    /// <summary>
+    /// The record this rollback leaves behind is written with a filesystem call like every other, and it
+    /// refuses for the same reasons — so it refuses the same way: with a code, and never in place of the
+    /// refusal about the database, which is the message somebody is actually waiting for.
+    /// </summary>
+    [Fact]
+    public async Task A_ledger_that_cannot_be_written_back_does_not_replace_the_refusal_about_the_database()
+    {
+        using var installation = await UpdatedAsync(migrates: true);
+        installation.WriteDatabase("work done under the new version");
+        installation.Chronicle = "jrn_01LATERLATERLATERLATERLATER";
+
+        // The name the ledger's own write renames from. A directory there refuses it on every platform.
+        Directory.CreateDirectory(installation.Update.Ledger + ".writing");
+        File.WriteAllText(Path.Combine(installation.Update.Ledger + ".writing", "occupied"), "not empty");
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
+
+        // The database's refusal, not the bookkeeping file's - and the bookkeeping file is named in it too.
+        Assert.Equal(UpdateCodes.RollbackUnsafe, refused.Code);
+        Assert.Contains("before-20260920000000_Next.db", refused.Message, StringComparison.Ordinal);
+        Assert.Contains(installation.Update.Ledger, refused.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And when there is no other refusal to make way for, the ledger's own is raised with a code of its own
+    /// rather than as a bare line from the filesystem.
+    /// </summary>
+    [Fact]
+    public async Task A_record_that_cannot_be_removed_is_refused_with_a_code()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "A read-only file in a writable directory deletes happily on Unix, so there is nothing to refuse there.");
+
+        using var installation = await UpdatedAsync(migrates: true);
+        installation.WriteDatabase("migrated by the new version");
+
+        // The update was undone whole, so its record is deleted - and this one will not be.
+        File.SetAttributes(installation.Update.Ledger, FileAttributes.ReadOnly);
+        var rollback = installation.Rollback();
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => rollback.RollBackAsync(Ct));
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+        Assert.Contains(installation.Update.Ledger, refused.Message, StringComparison.Ordinal);
+
+        // What the rollback did is still there to be printed beside the refusal.
+        Assert.Contains(rollback.Steps, step => step.StartsWith("restored the database", StringComparison.Ordinal));
+
+        File.SetAttributes(installation.Update.Ledger, FileAttributes.Normal);
+    }
+
+    /// <summary>
+    /// The image a rollback moves aside is named for the version and the moment, and that name may already be
+    /// taken: an earlier rollback of the same version, in the same moment, left one there and could not delete
+    /// it because that version was still running. A name it cannot have is not a reason to refuse — least of
+    /// all here, after the runtime has been stopped and before anything has been put back.
+    /// </summary>
+    /// <remarks>
+    /// Writing over the file instead would be the wrong repair twice over: it is exactly the image that may
+    /// still be running, and Windows refuses to write over a running one anyway, which is the fault this whole
+    /// rename exists to avoid.
+    /// </remarks>
+    [Fact]
+    public async Task A_rollback_whose_name_is_already_taken_takes_another_one()
+    {
+        using var installation = await UpdatedAsync();
+        var at = new DateTimeOffset(2026, 9, 20, 4, 30, 0, TimeSpan.Zero);
+
+        Directory.CreateDirectory(installation.Update.Replaced);
+        var earlier = Path.Combine(
+            installation.Update.Replaced,
+            UpdateRollback.AsideName(installation.To, at, ReleaseAssets.ExecutableName));
+        const string Image = "an image an earlier rollback moved aside and could not delete";
+        File.WriteAllText(earlier, Image);
+
+        var rollback = new UpdateRollback(installation.Env, installation.Update, new FixedClock(at));
+        await rollback.RollBackAsync(Ct);
+
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+        Assert.Equal(Image, File.ReadAllText(earlier));
+
+        // The name it took instead, said in the step a person reads to find the file. The number goes before
+        // the file's name: on the end it would land at the last dot of the whole name, which on Unix is a dot
+        // in the version - 0.1.1-<stamp>-jason becoming 0.1-2.1-<stamp>-jason, a version nobody released.
+        var taken = UpdateRollback.AsideName(installation.To, at, ReleaseAssets.ExecutableName, 2);
+        Assert.StartsWith($"{installation.To}-", taken, StringComparison.Ordinal);
+        Assert.Contains(rollback.Steps, step => step.Contains(taken, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A rollback starts the version it put back and waits a minute for it to answer. When nothing ever does,
+    /// it says so and leaves the machine to somebody — and the minute it waits is a minute on the clock it was
+    /// handed, which a test moves in microseconds.
+    /// </summary>
+    [Fact]
+    public async Task A_rollback_whose_runtime_never_answers_gives_up_on_the_clock_it_was_given()
+    {
+        using var installation = await UpdatedAsync();
+
+        // Whatever is started from here on comes up and never listens.
+        installation.StartsButNeverServes = true;
+
+        var clock = new FixedClock(new DateTimeOffset(2026, 9, 20, 4, 30, 0, TimeSpan.Zero));
+        var elapsed = Stopwatch.StartNew();
+        var rollback = installation.Rollback(clock);
+        var rolling = rollback.RollBackAsync(Ct);
+        await DriveAsync(clock, rolling);
+
+        await rolling;
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+        Assert.Contains(rollback.Steps, step => step.Contains("no runtime answered", StringComparison.Ordinal));
+        Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(10), $"the rollback waited on the real clock for {elapsed.Elapsed}");
+    }
+
+    /// <summary>
+    /// Moves the clock a verb is asleep on until it stops being asleep. Nothing else moves it, so the minute an
+    /// update or a rollback waits for a runtime that never answers passes here in about as long as it takes to
+    /// say so.
+    /// </summary>
+    /// <remarks>
+    /// The clock moves only while something is waiting on it. The waiting side wakes on the thread pool and
+    /// arms its next delay from there, and until it has, moving time again passes no timer at all — so a loop
+    /// that moves regardless spends its whole allowance on empty seconds, which is what happened: a hundred
+    /// thousand moves while the continuation never got a turn, and a test that said the wait never ended while
+    /// two other suites had the machine. <see cref="FixedClock.Armed"/> is the question to ask instead, and the
+    /// bound is real time rather than a number of moves.
+    /// </remarks>
+    private static async Task DriveAsync(FixedClock clock, Task waiting)
+    {
+        var elapsed = Stopwatch.StartNew();
+        while (!waiting.IsCompleted && elapsed.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            if (clock.Armed > 0)
+            {
+                clock.Advance(TimeSpan.FromSeconds(1));
+            }
+            else
+            {
+                // Nothing is waiting on this clock yet: the turn belongs to whoever is arming the next one.
+                await Task.WhenAny(waiting, Task.Delay(1, Ct));
+            }
+        }
+
+        Assert.True(waiting.IsCompleted, $"the wait for a runtime to answer never ended, after {elapsed.Elapsed} of moving its clock");
     }
 
     [Fact]

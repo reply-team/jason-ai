@@ -156,8 +156,18 @@ public sealed class FakeInstallation : HttpMessageHandler
     /// <summary>What a restored backup contains, so a test can see that the file really came back.</summary>
     public const string BackupContent = "the database as it was before the update";
 
-    /// <summary>A rollback over this installation.</summary>
+    /// <summary>
+    /// A rollback over this installation, on the system clock: every wait it takes is over in milliseconds,
+    /// because the runtime here publishes its descriptor the moment it is launched and the wait for it is read
+    /// before the first delay.
+    /// </summary>
     public UpdateRollback Rollback() => new(Env, Update, TimeProvider.System);
+
+    /// <summary>
+    /// A rollback whose waits are on a clock the test moves. The one wait that is not over in milliseconds is
+    /// the wait for a runtime that never answers — a minute of every suite run, spent proving a message.
+    /// </summary>
+    public UpdateRollback Rollback(TimeProvider clock) => new(Env, Update, clock);
 
     /// <summary>Whatever the database is supposed to contain at this point in a test.</summary>
     public void WriteDatabase(string content)
@@ -215,6 +225,12 @@ public sealed class FakeInstallation : HttpMessageHandler
 
     /// <summary>An applier over this installation, on the system clock: the waits here are milliseconds.</summary>
     public UpdateApplier Applier() => new(Env, Update, TimeProvider.System, InstallPath);
+
+    /// <summary>
+    /// An applier whose waits are on a clock the test moves, for the one case where a wait is not milliseconds:
+    /// a new version that starts and never listens, which the applier waits a full minute for.
+    /// </summary>
+    public UpdateApplier Applier(TimeProvider clock) => new(Env, Update, clock, InstallPath);
 
     /// <summary>
     /// When a killed update began. A fixed moment in the past, so that a run which carries that update on can

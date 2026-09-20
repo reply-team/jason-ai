@@ -1,4 +1,5 @@
 using Jason.App;
+using Jason.Contracts.Discovery;
 
 namespace Jason.App.Tests;
 
@@ -33,6 +34,74 @@ public class ModeRouterTests
         finally
         {
             Console.SetOut(original);
+        }
+    }
+
+    /// <summary>
+    /// Which data directory a run owns. The flag wins over the variable because the thing that starts a runtime
+    /// at logon has no environment to put a variable in: a Windows logon task carries none, so naming the
+    /// directory on the command line is the only way to say it, and a registration that says it must not be
+    /// overruled by whatever the session it happens to run in has set.
+    /// </summary>
+    [Fact]
+    public void The_data_directory_flag_wins_over_the_variable()
+    {
+        var original = Environment.GetEnvironmentVariable(JasonPaths.DataDirectoryVariable);
+        var elsewhere = Path.Combine(Path.GetTempPath(), "jason-from-the-environment");
+        var named = Path.Combine(Path.GetTempPath(), "jason-from-the-flag");
+        try
+        {
+            Environment.SetEnvironmentVariable(JasonPaths.DataDirectoryVariable, elsewhere);
+
+            Assert.Equal(
+                Path.GetFullPath(named),
+                ModeRouter.PathsFor(RuntimeRunArguments.Parse(["runtime", "run", "--data-dir", named])).Root);
+
+            // And with no flag it is still the variable's, which is how every runtime started by this CLI runs.
+            Assert.Equal(
+                Path.GetFullPath(elsewhere),
+                ModeRouter.PathsFor(RuntimeRunArguments.Parse(["runtime", "run"])).Root);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(JasonPaths.DataDirectoryVariable, original);
+        }
+    }
+
+    /// <summary>A flag with no path after it stops the runtime before it starts, rather than defaulting.</summary>
+    /// <remarks>
+    /// Belt and braces, because of what this test does when the thing it guards is not there: it calls the
+    /// runtime mode for real. With the usage refusal removed it does not fail — it starts an in-process runtime
+    /// on <b>the default data directory</b> and waits there. Measured: <c>~/.jason</c> created in a home
+    /// directory, with a database, a descriptor, a log, and an update check on its way to the internet once the
+    /// first delay was up. So the variable points at this test's own tree, and the run is given a second before
+    /// it is cancelled: a regression fails in a temporary directory, quickly, and reaches nothing.
+    /// </remarks>
+    [Fact]
+    public async Task A_data_dir_with_no_path_after_it_starts_no_runtime()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "jason-app-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var previous = Environment.GetEnvironmentVariable(JasonPaths.DataDirectoryVariable);
+        var original = Console.Error;
+        var error = new StringWriter();
+
+        Environment.SetEnvironmentVariable(JasonPaths.DataDirectoryVariable, root);
+        Console.SetError(error);
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        bounded.CancelAfter(TimeSpan.FromSeconds(1));
+        try
+        {
+            var exit = await ModeRouter.RunAsync(["runtime", "run", "--data-dir"], bounded.Token);
+            Assert.Equal(2, exit);
+            Assert.Contains("usage", error.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("--data-dir", error.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetError(original);
+            Environment.SetEnvironmentVariable(JasonPaths.DataDirectoryVariable, previous);
+            Directory.Delete(root, recursive: true);
         }
     }
 

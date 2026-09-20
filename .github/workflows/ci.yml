@@ -186,10 +186,15 @@ jobs:
           $python = if ($IsWindows) { 'python' } else { 'python3' }
           $server = Start-Process $python -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1', '--directory', 'feed' -PassThru
           "server=$($server.Id)" >> $env:GITHUB_ENV
+          $ready = $false
           for ($try = 0; $try -lt 50; $try++) {
-            try { Invoke-WebRequest -Uri http://127.0.0.1:8099/manifest.json -UseBasicParsing | Out-Null; break }
+            try { Invoke-WebRequest -Uri http://127.0.0.1:8099/manifest.json -UseBasicParsing | Out-Null; $ready = $true; break }
             catch { Start-Sleep -Milliseconds 200 }
           }
+
+          # Said here, where it is known, rather than three steps later as an update that could not reach its
+          # feed: that failure reads like the update's and it is not.
+          if (-not $ready) { throw "the feed on 127.0.0.1:8099 never answered within 10 s" }
 
       - name: Install the version this tree carries, and leave its runtime stopped
         shell: pwsh
@@ -462,3 +467,9 @@ jobs:
           # A third run adds no second entry.
           ./install/install.ps1
           if ((UserPathEntries).Count -ne 1) { throw "the user PATH does not hold the directory exactly once after a third run" }
+
+          # And a fourth, in the shape the one-liner really uses: `irm ... | iex` runs the text in the session
+          # that typed it, so anything the script defines is still defined there when it is done. The three runs
+          # above cannot see that - a script run as a file gets a scope of its own.
+          Invoke-Expression (Get-Content ./install/install.ps1 -Raw)
+          if (Get-Command Install-Jason -ErrorAction SilentlyContinue) { throw "install.ps1 left Install-Jason defined in the session that ran it" }

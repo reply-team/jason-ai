@@ -13,7 +13,8 @@ namespace Jason.Cli.Commands;
 /// <c>jason runtime start</c>: make sure a runtime is running and say which one. A runtime that already
 /// answers is reported as it stands — starting twice is not an error, and a second process on the same data
 /// directory would only lose a fight over the lock. Otherwise this launches the service in the background and
-/// waits for it to publish an endpoint of its own. Nothing about autostart is registered anywhere.
+/// waits for it to publish an endpoint of its own. Nothing is registered until you ask: starting a
+/// runtime here is this command's whole effect, and <c>jason runtime autostart enable</c> is a separate act.
 /// </summary>
 public static class RuntimeStartCommand
 {

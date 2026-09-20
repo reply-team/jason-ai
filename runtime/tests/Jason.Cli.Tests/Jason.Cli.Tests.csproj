@@ -4,6 +4,10 @@
 
     <!-- The suite's one disposable temporary directory, rather than a second copy of the same idea. -->
     <Compile Include="../Jason.Runtime.Tests/TempTree.cs" Link="TempTree.cs" />
+
+    <!-- And the suite's one controllable clock, for the same reason: a rollback's waits are on the clock it is
+         handed, and a test that let them run on the real one would spend a minute proving a message. -->
+    <Compile Include="../Jason.Runtime.Tests/FixedClock.cs" Link="FixedClock.cs" />
   </ItemGroup>
   <ItemGroup>
     <!-- What the repository teaches somebody to type, linked beside the tests that hand every printed command to the real parser. -->

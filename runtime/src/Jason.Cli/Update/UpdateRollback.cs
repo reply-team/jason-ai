@@ -26,9 +26,10 @@ namespace Jason.Cli.Update;
 /// got that far - leaves the database alone.
 /// </para>
 /// <para>
-/// Nothing here opens the database. It renames one file, copies another over a third, and deletes two
-/// sidecars — because a WAL written by the new schema against a restored older file is corruption, and the two
-/// sidecars are the only part of this that cannot be undone by putting a file back.
+/// Nothing here opens the database. It renames one file, copies another over a third, and takes two sidecars
+/// out of the way — because a WAL written by the new schema against a restored older file is corruption. Those
+/// two are the only part of this that cannot be undone by putting a file back, so they are moved aside before
+/// anything else moves and deleted only once the database they belonged to is gone.
 /// </para>
 /// </remarks>
 public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeProvider clock)
@@ -63,23 +64,57 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
         await StartAsync(ledger, cancellationToken).ConfigureAwait(false);
 
         var back = ledger with { Step = UpdateStep.Complete, ToVersion = ledger.FromVersion, FromVersion = ledger.ToVersion };
-        if (restored)
-        {
-            // The update's own record goes: what it did has been undone, and a second rollback would be putting
-            // back a backup that no longer matches anything.
-            File.Delete(update.Ledger);
-        }
-        else
-        {
-            back.Write(update.Ledger);
-        }
+        var record = Keep(back, restored);
 
         if (unsafeToRestore is { } refusal)
         {
-            throw refusal;
+            // The database's refusal is the one somebody is waiting for. A bookkeeping file that would not go
+            // is said in the same breath rather than instead of it.
+            throw record is null
+                ? refusal
+                : new UpdateException(refusal.Code, $"{refusal.Message} {record.Message}", refusal);
+        }
+
+        if (record is not null)
+        {
+            throw record;
         }
 
         return back;
+    }
+
+    /// <summary>
+    /// The record of the update, brought up to date: gone where the update was undone whole, kept where it was
+    /// not. It is a filesystem call like the renames above and fails for the same reasons, so it is coded like
+    /// them, and returned rather than thrown, because a refusal about the database has to reach the person
+    /// first and this one goes in beside it.
+    /// </summary>
+    private UpdateException? Keep(UpdateLedger back, bool restored) =>
+        restored
+            ? Refusal(
+                "removing the record of the update this rollback undid",
+                update.Ledger,
+                $"The rollback itself is done. Delete {update.Ledger} by hand, or the next `jason update rollback` will act on a record of an update that has already been put back.",
+                () => File.Delete(update.Ledger))
+            : Refusal(
+                "writing back the record of this rollback",
+                update.Ledger,
+                $"The executable was put back all the same. Until {update.Ledger} can be written, `jason update status` goes on reporting the update this rollback undid.",
+                () => back.Write(update.Ledger));
+
+    /// <summary>The same turning of a filesystem refusal into this product's own, for a step that must not pre-empt another.</summary>
+    private UpdateException? Refusal(string what, string path, string remedy, Action act)
+    {
+        try
+        {
+            OnDisk(what, path, remedy, act);
+            return null;
+        }
+        catch (UpdateException error)
+        {
+            Say($"{what} failed at '{path}'");
+            return error;
+        }
     }
 
     /// <summary>The same turning of a filesystem refusal into this product's own, as an update's steps use.</summary>
@@ -212,10 +247,11 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             // Named for the version being moved aside and the moment it was, so that nothing has to be deleted
             // first to make room. Deleting first is what this cannot afford: an image an earlier rollback left
             // here may still be running, and that delete would refuse — after the runtime had been stopped,
-            // with nothing put back.
-            var aside = Path.Combine(
-                update.Replaced,
-                $"{ledger.ToVersion}-{clock.GetUtcNow().UtcDateTime:yyyyMMdd'T'HHmmss'Z'}-{Path.GetFileName(ledger.InstallPath)}");
+            // with nothing put back. Writing over it is the same fault wearing a different hat.
+            //
+            // And the name may be taken all the same, by an earlier rollback of the same version in the same
+            // moment, so the one that is free is taken instead.
+            var aside = FreeAside(ledger);
             OnDisk(
                 "moving the installed executable aside",
                 ledger.InstallPath,
@@ -225,6 +261,8 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
                     Directory.CreateDirectory(update.Replaced);
                     File.Move(ledger.InstallPath, aside);
                 });
+
+            Say($"moved {ledger.ToVersion} aside to {aside}");
 
             try
             {
@@ -290,24 +328,52 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
         // Copied beside the database and renamed onto it, never copied onto it: a copy that stops halfway — a
         // full disk, a lock, a machine that goes down — would leave a file that is neither the database from
         // before this update nor the one from after it, and nothing can put that right.
-        var arriving = env.Paths.DatabaseFile + ".restoring";
+        //
+        // The sidecars come off before any of that, and they are moved rather than deleted. Both halves of that
+        // sentence are paid for. *Before*, because a delete that refused after the backup was already installed
+        // left the older file in place with a log written against the new schema beside it — which this
+        // product's own page calls corruption — under a refusal that said the database had been left alone.
+        // *Moved*, because a write-ahead log found beside a database after a stop is a crash's, and it holds
+        // committed transactions: deleting it and then failing the copy would lose them from the migrated
+        // database that stays in place.
+        var arriving = env.Paths.DatabaseFile + Arriving;
+        var aside = new List<(string Sidecar, string Kept)>();
         try
         {
+            foreach (var suffix in Sidecars)
+            {
+                var sidecar = env.Paths.DatabaseFile + suffix;
+                if (File.Exists(sidecar))
+                {
+                    // The free name, not the obvious one: one left behind by an earlier rollback that was
+                    // killed, or whose tidying-up refused, would otherwise stop every rollback after it with a
+                    // message about the two files it is not about.
+                    var kept = Free(sidecar + SetAside);
+                    File.Move(sidecar, kept);
+                    aside.Add((sidecar, kept));
+                }
+            }
+
             File.Copy(backup, arriving, overwrite: true);
             File.Move(arriving, env.Paths.DatabaseFile, overwrite: true);
-
-            // A write-ahead log written against the new schema, replayed into a restored older file, is
-            // corruption. These two are the only part of a rollback that putting a file back cannot undo.
-            foreach (var sidecar in new[] { env.Paths.DatabaseFile + "-wal", env.Paths.DatabaseFile + "-shm" })
-            {
-                File.Delete(sidecar);
-            }
+        }
+        catch (UpdateException refusal)
+        {
+            // The search for a free name gave up. It is a refusal about the database's own files, so it comes
+            // back rather than escaping: the caller starts the runtime before it raises anything, and a database
+            // that could not be put back is no reason to leave a machine with nothing running.
+            Discard(arriving);
+            PutBack(aside);
+            Say($"the database was left as it is: {refusal.Message}");
+            return (false, refusal);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             // What was copied and not renamed goes with it: a file left beside the database, named like the
-            // database, is the next person's puzzle.
+            // database, is the next person's puzzle. And whatever was set aside goes back, because the database
+            // beside it is still the one this update migrated and that log is still its own.
             Discard(arriving);
+            var stranded = PutBack(aside);
 
             // Returned rather than thrown, because the caller starts the runtime before it raises anything: a
             // database that could not be put back is no reason to leave a machine with nothing running.
@@ -316,12 +382,137 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
                 UpdateCodes.FileRefused,
                 $"{ledger.FromVersion} is back in place, but the database could not be restored from '{backup}': {error.Message} "
                 + "The database is as the update left it. To go the rest of the way, stop the runtime, copy that file over "
-                + "state/jason.db, delete the -wal and -shm files beside it, and start again.",
+                + "state/jason.db, delete the -wal and -shm files beside it, and start again."
+                + stranded,
                 error));
         }
 
-        Say($"restored the database from {Path.GetFileName(backup)} and deleted its write-ahead log");
+        // The database they belonged to is gone, so they are of no use to anybody and cannot be replayed into
+        // what took its place. A delete that refuses here is worth no refusal of its own: what is left beside
+        // the restored database is a file SQLite does not look for, under a name nothing else uses either.
+        foreach (var (_, kept) in aside)
+        {
+            Discard(kept);
+        }
+
+        Say($"restored the database from {Path.GetFileName(backup)} and took its write-ahead log away");
         return (true, null);
+    }
+
+    /// <summary>
+    /// What an image moved out of the install path is kept under: the version it is, the moment it was moved,
+    /// and the file's own name — with a number in the middle when that name is taken. Public because a test has
+    /// to be able to take the name before the rollback does.
+    /// </summary>
+    /// <remarks>
+    /// The number goes before the file's name rather than inside it. Put on the end through
+    /// <c>GetFileNameWithoutExtension</c>, it lands at the last dot of the whole name, which on Unix — where
+    /// the executable is <c>jason</c> with no extension — is a dot in the version:
+    /// <c>0.1.1-20260920T043000000Z-jason</c> became <c>0.1-2.1-20260920T043000000Z-jason</c>. Unique, and a
+    /// version nobody ever released, printed in the line a person reads to find the file.
+    /// </remarks>
+    public static string AsideName(SemanticVersion version, DateTimeOffset at, string fileName, int ordinal = 1) =>
+        ordinal <= 1
+            ? $"{version}-{at.UtcDateTime:yyyyMMdd'T'HHmmssfff'Z'}-{fileName}"
+            : $"{version}-{at.UtcDateTime:yyyyMMdd'T'HHmmssfff'Z'}-{ordinal}-{fileName}";
+
+    /// <summary>
+    /// The first name in the replaced directory nobody has taken. Two rollbacks of one version inside a single
+    /// tick of the clock are rare on a machine and ordinary in a test, and what is already there may be an image
+    /// that is still running: it is not this rollback's to move or to write over.
+    /// </summary>
+    private string FreeAside(UpdateLedger ledger)
+    {
+        for (var ordinal = 1; ordinal <= Names; ordinal++)
+        {
+            var path = Path.Combine(
+                update.Replaced,
+                AsideName(ledger.ToVersion, clock.GetUtcNow(), Path.GetFileName(ledger.InstallPath), ordinal));
+
+            if (!File.Exists(path) && !Directory.Exists(path))
+            {
+                return path;
+            }
+        }
+
+        throw new UpdateException(
+            UpdateCodes.FileRefused,
+            $"there is nowhere free in {update.Replaced} to move {ledger.ToVersion} aside: {Names} names are taken. "
+            + "Nothing has been put back yet. Delete what is in that directory - every file in it is an executable "
+            + "an earlier rollback replaced - and run `jason update rollback` again.");
+    }
+
+    /// <summary>
+    /// The same rule for anything else moved out of the way: the name, or the name with a number after it.
+    /// </summary>
+    /// <remarks>
+    /// A sidecar set aside and left behind — by a process killed between the aside and the copy, or by the
+    /// best-effort delete that follows a restore refusing — would otherwise block every rollback after it, with
+    /// a message naming the two files it is not about. Nothing reads these names, so a number on the end is
+    /// free.
+    /// </remarks>
+    private static string Free(string path)
+    {
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            return path;
+        }
+
+        for (var ordinal = 2; ordinal <= Names; ordinal++)
+        {
+            var numbered = $"{path}.{ordinal}";
+            if (!File.Exists(numbered) && !Directory.Exists(numbered))
+            {
+                return numbered;
+            }
+        }
+
+        throw new UpdateException(
+            UpdateCodes.FileRefused,
+            $"there is nowhere free to move '{path}' aside: {Names} names beginning with it are taken, which is "
+            + "more leftovers than a machine makes by accident. The database has not been touched. Delete them and "
+            + "run `jason update rollback` again.");
+    }
+
+    /// <summary>
+    /// How many names are tried before a rollback says the directory needs a person. Unbounded, this is a
+    /// search that never ends on a machine somebody has filled up.
+    /// </summary>
+    private const int Names = 100;
+
+    /// <summary>The two files SQLite keeps beside a database, which a restore must not leave behind.</summary>
+    private static readonly string[] Sidecars = ["-wal", "-shm"];
+
+    /// <summary>Where the backup is copied to before it is renamed onto the database.</summary>
+    private const string Arriving = ".restoring";
+
+    /// <summary>What a sidecar is called while the database beside it is being replaced.</summary>
+    private const string SetAside = ".rolling";
+
+    /// <summary>
+    /// Puts the sidecars back, for a restore that did not happen, and says which would not go. The database
+    /// beside them is still the one this update migrated, so its log is still its own — and a person told that
+    /// the database was left alone has to be told if its log was not.
+    /// </summary>
+    private static string PutBack(List<(string Sidecar, string Kept)> aside)
+    {
+        var stranded = new List<string>();
+        foreach (var (sidecar, kept) in aside)
+        {
+            try
+            {
+                File.Move(kept, sidecar);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                stranded.Add(kept);
+            }
+        }
+
+        return stranded.Count == 0
+            ? string.Empty
+            : $" Its write-ahead log was moved aside first and could not be moved back: {string.Join(", ", stranded)}. "
+              + $"Rename it back, without the '{SetAside}', before starting anything on that database.";
     }
 
     /// <summary>A leftover that nobody should have to reason about, gone as far as the filesystem allows.</summary>

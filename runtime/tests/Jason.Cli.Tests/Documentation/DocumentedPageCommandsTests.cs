@@ -26,6 +26,7 @@ public class DocumentedPageCommandsTests
     private static readonly string[] Nouns =
     [
         "jason profile ", "jason rolenote ", "jason campaign ", "jason workitem ", "jason decision ", "jason update ",
+        "jason runtime autostart ",
     ];
 
     /// <summary>The pages whose printed commands are guarded.</summary>
@@ -60,7 +61,7 @@ public class DocumentedPageCommandsTests
 
         var exit = await CliApp.RunAsync(
             Named(Tokens(command), dir.Paths.Root),
-            new CliEnvironment(new StringWriter(), error, dir.Paths, new Unreachable()),
+            Machine(dir, error),
             TestContext.Current.CancellationToken);
 
         Assert.True(exit != UsageError, $"{page} documents `{command}`, and the CLI answers: {error}");
@@ -81,6 +82,19 @@ public class DocumentedPageCommandsTests
         Assert.Contains(Printed(), printed => printed.Command.StartsWith(noun, StringComparison.Ordinal));
 
     public static TheoryData<string> GuardedNouns() => [.. Nouns];
+
+    /// <summary>
+    /// The machine every printed line is typed against: a data directory of this test's own, no network, and a
+    /// registrar that records rather than registers.
+    /// </summary>
+    /// <remarks>
+    /// The last one is not a nicety. These lines are typed <em>for real</em>, and one of the nouns above is
+    /// <c>jason runtime autostart </c>: with this machine's own registrar behind it, running this guard would
+    /// leave a logon task on the machine that ran it — a developer's, and three CI runners' — every time the
+    /// suite ran.
+    /// </remarks>
+    internal static CliEnvironment Machine(TempPaths dir, StringWriter error) =>
+        new(new StringWriter(), error, dir.Paths, new Unreachable(), Autostart: new Autostart.RecordingRegistrar());
 
     /// <summary>
     /// Every request refused before it leaves the process. Most of these commands never get this far — there is

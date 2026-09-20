@@ -660,16 +660,6 @@ public class ReleaseWorkflowTests
             .Any(line => line.Contains("--version", StringComparison.Ordinal) && !line.StartsWith('#'));
 
     /// <summary>
-    /// Whether the step really runs the command, rather than merely mentioning it.
-    /// </summary>
-    /// <remarks>
-    /// A plain substring search passes on a step whose command has been deleted, because two other lines still
-    /// carry the words: the throw below it (<c>throw "jason runtime start exited with ..."</c>) and the line
-    /// that reports success (<c>"the runtime started, migrated and answered"</c> — "started" contains "start").
-    /// So the mention must end on a word boundary, and must not be a throw, a condition or a comment: what is
-    /// left is the invocation.
-    /// </remarks>
-    /// <summary>
     /// Where a step really runs a command, by the same rules <see cref="Runs"/> uses — which is not where it
     /// first mentions one. This job's rollback step opens with a comment naming <c>jason update rollback</c>,
     /// so a guard that split the step at the first mention was splitting it at the comment, and a
@@ -691,6 +681,16 @@ public class ReleaseWorkflowTests
         return -1;
     }
 
+    /// <summary>
+    /// Whether the step really runs the command, rather than merely mentioning it.
+    /// </summary>
+    /// <remarks>
+    /// A plain substring search passes on a step whose command has been deleted, because two other lines still
+    /// carry the words: the throw below it (<c>throw "jason runtime start exited with ..."</c>) and the line
+    /// that reports success (<c>"the runtime started, migrated and answered"</c> — "started" contains "start").
+    /// So the mention must end on a word boundary, and must not be a throw, a condition or a comment: what is
+    /// left is the invocation.
+    /// </remarks>
     private static bool Runs(string step, string command) =>
         step.Split('\n')
             .Select(line => line.Trim())
@@ -950,6 +950,47 @@ public class ReleaseWorkflowTests
         // the staged copy gone.
         Assert.Contains("previous", job, StringComparison.Ordinal);
         Assert.Contains("Get-FileHash", job, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The install job runs the script the way the one-liner does — as text, in the caller's own session — and
+    /// checks that it leaves nothing of itself behind there.
+    /// </summary>
+    /// <remarks>
+    /// <c>irm … | iex</c> runs the file's text in the scope that typed it, so a function the script defines is
+    /// still defined in that shell afterwards. Running the script as a file, which is what every other check in
+    /// this job does, gives it a scope of its own and cannot see that at all.
+    /// </remarks>
+    [Fact]
+    public void The_install_job_runs_the_script_the_way_the_one_liner_does()
+    {
+        var job = Job(Read(Ci), "install-ps1");
+
+        Assert.True(Runs(job, "Invoke-Expression"), $"the install job never runs the script as text, so it cannot see what the one-liner leaves behind:\n{job}");
+        Assert.Contains("Get-Command Install-Jason", job, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The end-to-end job serves its own feed and waits for it, and a wait that runs out of tries says so.
+    /// </summary>
+    /// <remarks>
+    /// The wait fell through in silence: fifty tries, then on to the next step whatever the answer. A feed that
+    /// never came up then surfaced three steps later as an update that could not reach it, which is a failure
+    /// somebody has to diagnose twice — once to find out that the update was fine and once to find out that
+    /// nothing was listening.
+    /// </remarks>
+    [Fact]
+    public void The_feed_the_end_to_end_serves_is_waited_for_and_the_wait_can_run_out()
+    {
+        var job = Job(Read(Ci), "update-end-to-end");
+
+        var waiting = job.IndexOf("Invoke-WebRequest", StringComparison.Ordinal);
+        Assert.True(waiting > 0, $"the end-to-end job no longer waits for the feed it serves:\n{job}");
+
+        // The statement that gives up, not a word about giving up: what follows the wait has to be a throw that
+        // happens only when the wait ran out.
+        var after = job[waiting..];
+        Assert.Matches(@"if \(-not \$ready\) \{[^}\n]*throw", after);
     }
 
     /// <summary>

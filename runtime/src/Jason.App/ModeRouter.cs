@@ -48,10 +48,32 @@ public static class ModeRouter
         return Task.FromResult(0);
     }
 
+    /// <summary>
+    /// Which data directory a run owns: the one named on the command line, or the one the environment names, or
+    /// the default. The flag wins, because the one thing that names it has no environment to say it in — a
+    /// Windows logon task carries none — and a registration that carries its data directory must not be
+    /// overruled by whatever the session it happens to start in has set.
+    /// </summary>
+    public static JasonPaths PathsFor(RuntimeRunArguments arguments)
+    {
+        ArgumentNullException.ThrowIfNull(arguments);
+        return arguments.DataDirectory is { } named ? new JasonPaths(named) : JasonPaths.FromEnvironment();
+    }
+
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Task<int> RunRuntimeService(string[] args, CancellationToken cancellationToken)
     {
-        var arguments = RuntimeRunArguments.Parse(args);
+        RuntimeRunArguments arguments;
+        try
+        {
+            arguments = RuntimeRunArguments.Parse(args);
+        }
+        catch (RuntimeRunUsageException error)
+        {
+            Console.Error.WriteLine($"usage: jason runtime run [--detached] [--data-dir <path>] - {error.Message}");
+            return Task.FromResult(2);
+        }
+
         if (arguments.Detached)
         {
             // Before anything opens a log file or a socket: from here on the process owns no console.
@@ -59,7 +81,7 @@ public static class ModeRouter
         }
 
         return RuntimeHost.RunAsync(
-            JasonPaths.FromEnvironment(),
+            PathsFor(arguments),
             new RuntimeHostOptions(ShippedSettingsDirectory: AppContext.BaseDirectory, ConsoleLogging: !arguments.Detached),
             cancellationToken);
     }

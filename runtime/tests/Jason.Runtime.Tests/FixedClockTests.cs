@@ -29,16 +29,79 @@ public class FixedClockTests
         Assert.Single(fired);
     }
 
+    /// <summary>
+    /// A periodic timer fires <b>once</b> for a move, however many of its periods that move passes through, and
+    /// re-arms from where the move ended. That is what a real one does: a process that was not looking for an
+    /// hour does not get an hour's worth of callbacks when it looks again.
+    /// </summary>
+    /// <remarks>
+    /// The rule here used to be the other one, asserted by this test in that shape. It is not a model anything
+    /// in <c>runtime/src</c> reaches — every wait there is a <c>Task.Delay</c>, which is a one-shot — but it is
+    /// reachable by anything written next, and a move of an hour against a one-second period would have run
+    /// three thousand six hundred callbacks inside <c>Advance</c> before it returned.
+    /// </remarks>
     [Fact]
-    public void A_periodic_timer_fires_once_per_interval_the_clock_moves_through()
+    public void A_periodic_timer_fires_once_for_a_move_however_many_periods_it_passes()
     {
         var clock = new FixedClock(Noon);
         var fired = new List<DateTimeOffset>();
         using var timer = clock.CreateTimer(_ => fired.Add(clock.GetUtcNow()), null, TimeSpan.FromHours(1), TimeSpan.FromHours(1));
 
         clock.Advance(TimeSpan.FromHours(2));
+        Assert.Equal([Noon.AddHours(1)], fired);
 
-        Assert.Equal([Noon.AddHours(1), Noon.AddHours(2)], fired);
+        // Still armed, a period after the moment that move ended rather than a period after the tick it missed.
+        Assert.Equal(1, clock.Armed);
+
+        clock.Advance(TimeSpan.FromHours(1));
+        Assert.Equal([Noon.AddHours(1), Noon.AddHours(3)], fired);
+    }
+
+    /// <summary>And the ordinary case is unchanged: one move, one period, one callback, every time.</summary>
+    [Fact]
+    public void A_periodic_timer_fires_on_each_move_that_reaches_its_next_period()
+    {
+        var clock = new FixedClock(Noon);
+        var fired = new List<DateTimeOffset>();
+        using var timer = clock.CreateTimer(_ => fired.Add(clock.GetUtcNow()), null, TimeSpan.FromHours(1), TimeSpan.FromHours(1));
+
+        clock.Advance(TimeSpan.FromHours(1));
+        clock.Advance(TimeSpan.FromHours(1));
+        clock.Advance(TimeSpan.FromHours(1));
+
+        Assert.Equal([Noon.AddHours(1), Noon.AddHours(2), Noon.AddHours(3)], fired);
+    }
+
+    /// <summary>
+    /// The other half, which must keep working: a delay loop registers its next one-shot from inside the
+    /// callback of the last, and every tick of a move really does run. That is faithful too — a loop that
+    /// sleeps a second at a time between pieces of work does run each iteration when it wakes, which is why the
+    /// two are modelled differently.
+    /// </summary>
+    [Fact]
+    public void A_delay_loop_replays_every_tick_it_slept_through()
+    {
+        var clock = new FixedClock(Noon);
+        var woke = 0;
+
+        void Sleep() =>
+            clock.CreateTimer(
+                _ =>
+                {
+                    woke++;
+                    if (woke < 10)
+                    {
+                        Sleep();
+                    }
+                },
+                null,
+                TimeSpan.FromSeconds(1),
+                Timeout.InfiniteTimeSpan);
+
+        Sleep();
+        clock.Advance(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(10, woke);
     }
 
     [Fact]

@@ -1,7 +1,9 @@
+using Jason.Cli.Autostart;
 using Jason.Cli.Update;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Update;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Plugins.Registry;
 
 namespace Jason.Runtime.Tests.Documentation;
 
@@ -117,6 +119,32 @@ public class ReleaseAndUpdateDocTests
     }
 
     /// <summary>
+    /// What <c>update_file_refused</c> covers, as the code now raises it: not only a file an update had to
+    /// move, but a rollback's renames, the ledger's own write and the database restore. A row that names one
+    /// of four sends a person reading it to the wrong place — and it is the row they read at the worst moment.
+    /// </summary>
+    [Fact]
+    public void The_page_says_which_files_the_refusal_about_a_file_covers()
+    {
+        var row = Row(UpdateCodes.FileRefused);
+
+        Assert.Contains("rollback", row, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("database", row, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ledger", row, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The one row of the codes table that begins with this code, for a test that is about its wording.</summary>
+    private static string Row(string code)
+    {
+        var row = Read()
+            .Split('\n')
+            .FirstOrDefault(line => line.TrimStart().StartsWith($"| `{code}` |", StringComparison.Ordinal));
+
+        Assert.NotNull(row);
+        return row;
+    }
+
+    /// <summary>
     /// The steps and the refusal codes on the page are the ones this build has, read out of the enum and out of
     /// <see cref="UpdateCodes"/> rather than typed twice. A code renamed in the code turns the page red, which
     /// is the only way a table of error codes stays true for longer than the week it was written in.
@@ -146,6 +174,8 @@ public class ReleaseAndUpdateDocTests
             UpdateFeedException.Unreachable,
             UpdateFeedException.Insecure,
             UpdateLedgerException.Invalid,
+            AutostartCodes.Unsupported,
+            AutostartCodes.Refused,
         };
 
         foreach (var printed in Printed(page, "update_"))
@@ -341,6 +371,237 @@ public class ReleaseAndUpdateDocTests
 
         Assert.Contains("workflow_dispatch", page, StringComparison.Ordinal);
         Assert.Contains("default branch", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What each platform registers, named on the page, with the file each of them leaves behind. An operator
+    /// who wants to know what was done to their machine should not have to read this repository to find out.
+    /// </summary>
+    [Fact]
+    public void The_page_explains_what_autostart_registers_on_each_platform()
+    {
+        var page = Read();
+
+        Assert.Contains("schtasks", page, StringComparison.Ordinal);
+        Assert.Contains(AutostartArtifacts.TaskName, page, StringComparison.Ordinal);
+        Assert.Contains(AutostartArtifacts.Label, page, StringComparison.Ordinal);
+        Assert.Contains(AutostartArtifacts.UnitName, page, StringComparison.Ordinal);
+        Assert.Contains("Library/LaunchAgents", page, StringComparison.Ordinal);
+        Assert.Contains(".config/systemd/user", page, StringComparison.Ordinal);
+        Assert.Contains(AutostartArtifacts.TaskDocument, page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And that nothing watches it afterwards. "It starts at logon" and "it is kept running" are different
+    /// promises, and a person who assumed the second would not look at their runtime again for a week.
+    /// </summary>
+    [Fact]
+    public void The_page_says_what_is_not_supervised()
+    {
+        var page = Read();
+
+        Assert.Contains("registration, not supervision", page, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("KeepAlive", page, StringComparison.Ordinal);
+        Assert.Contains("stays stopped", page, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The registration carries the data directory it was made under, and `status` prints it: D33.</summary>
+    [Fact]
+    public void The_page_says_the_registration_carries_the_data_directory()
+    {
+        var page = Read();
+
+        Assert.Contains("--data-dir", page, StringComparison.Ordinal);
+        Assert.Contains(JasonPaths.DataDirectoryVariable, page, StringComparison.Ordinal);
+        Assert.Contains("autostart status", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The two verbs that do nothing to a runtime that is running now. Somebody who reads `enable` as "start
+    /// it" and `disable` as "stop it" will type one of them and watch nothing happen.
+    /// </summary>
+    [Fact]
+    public void The_page_says_enable_starts_nothing_now()
+    {
+        var page = Read();
+
+        Assert.Contains("`enable` starts nothing now", page, StringComparison.Ordinal);
+        Assert.Contains("jason runtime start", page, StringComparison.Ordinal);
+        Assert.Contains("jason runtime stop", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>One registration per account: a second `enable` replaces it rather than adding another.</summary>
+    [Fact]
+    public void The_page_says_a_registration_is_one_per_user()
+    {
+        var page = Read();
+
+        Assert.Contains("replaces", page, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("per account", page, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// An autostarted runtime has the account's logon environment, not a shell's — which is where a plugin that
+    /// works from a terminal and not after a logon comes from. <see cref="ISearchPath"/> makes the same remark
+    /// about the same fact from the other side.
+    /// </summary>
+    [Fact]
+    public void The_page_says_an_autostarted_runtime_has_the_logon_environment()
+    {
+        var page = Read();
+
+        Assert.Contains("logon environment", page, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("unavailable", page, StringComparison.Ordinal);
+        Assert.Contains("PATH", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Which accounts a logon task really works for. An S4U task logs on as a batch logon, and an account
+    /// without that right registers cleanly and then fails at every logon with nothing to show for it — the
+    /// kind of thing a page has to say because no `status` line can.
+    /// </summary>
+    [Fact]
+    public void The_page_says_which_accounts_a_logon_task_works_for()
+    {
+        var page = Read();
+
+        Assert.Contains("S4U", page, StringComparison.Ordinal);
+        Assert.Contains("SeBatchLogonRight", page, StringComparison.Ordinal);
+        Assert.Contains("Log on as a batch job", page, StringComparison.Ordinal);
+        Assert.Contains("Administrators", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And what nothing here proves. Registering for real is not something a test does — it would leave a logon
+    /// task on whoever ran the suite — so the page says which platforms can be checked by hand at all, which
+    /// one was only ever composed, and what such a check has found <b>so far</b>.
+    /// </summary>
+    /// <remarks>
+    /// That last part is why this test is shaped the way it is. The page said the check had been made before
+    /// anybody had made one: a sentence in the past tense, written in advance, about the one claim on the page
+    /// that no test can stand behind. It says what it has, and it is written again when there is more.
+    /// </remarks>
+    [Fact]
+    public void The_page_says_what_only_a_hand_check_can_prove_and_what_it_has_proved_so_far()
+    {
+        var page = Read();
+
+        Assert.Contains("by hand", page, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("composed and asserted only", page, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("macOS", page, StringComparison.Ordinal);
+
+        // The line that carries the outcome, whatever the outcome is.
+        Assert.Contains("Checked by hand so far:", page, StringComparison.Ordinal);
+
+        // And it has an outcome now. The check ran on Windows and on Linux, on one machine each; the paragraph
+        // says what held there and stops. "nothing" was true for exactly as long as it was true.
+        Assert.DoesNotContain("Checked by hand so far:** nothing", page, StringComparison.Ordinal);
+        Assert.Contains("signed out and back in", page, StringComparison.Ordinal);
+        Assert.Contains("systemd --user", page, StringComparison.Ordinal);
+
+        // Including the part that did not: an ordinary prompt cannot register on Windows, which is the first
+        // thing a person meets and the last thing a page should leave them to discover.
+        Assert.Contains("refused", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// "Where things live" lists what the data directory holds, and autostart puts a file in it. A page that
+    /// enumerates a directory and misses an entry is worse than one that does not enumerate it at all.
+    /// </summary>
+    [Fact]
+    public void The_page_says_where_the_autostart_document_lives_among_the_others()
+    {
+        var page = Read();
+        var directories = page[page.IndexOf("## 9. Where things live", StringComparison.Ordinal)..];
+
+        Assert.Contains("autostart", directories, StringComparison.Ordinal);
+        Assert.Contains("LaunchAgents", directories, StringComparison.Ordinal);
+        Assert.Contains("systemd", directories, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The autostart refusals, read out of the code like the update ones above: the page's two rows are the two
+    /// codes this build can raise, and no others.
+    /// </summary>
+    [Fact]
+    public void The_autostart_codes_on_the_page_are_the_ones_the_code_has()
+    {
+        var page = Read();
+
+        foreach (var code in AutostartCodes.All)
+        {
+            Assert.Contains($"| `{code}` |", page, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// That registering on Windows is an elevated act. The page said the opposite — "nothing is elevated", in
+    /// the page and in the README — until a hand check typed `enable` at an ordinary prompt on a real machine
+    /// and the Task Scheduler answered <c>ERROR: Access is denied.</c> with <c>0x80070005</c>. The account was
+    /// an administrator; the prompt was not elevated, and that is the half that decides.
+    /// </summary>
+    /// <remarks>
+    /// The claim is cheap to make and expensive to leave wrong: it is the first thing a person does with these
+    /// verbs, and a page that promises no elevation sends them to read their own error message as a bug.
+    /// </remarks>
+    [Fact]
+    public void The_page_says_that_registering_on_windows_needs_an_elevated_prompt()
+    {
+        var page = Read();
+
+        Assert.Contains("elevated prompt", page, StringComparison.OrdinalIgnoreCase);
+
+        // And says what it costs the accounts that cannot get one, rather than leaving them to find out.
+        Assert.Contains("standard account", page, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("unsupported", page, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// And which half of the feature that costs. Reading is not an elevated act — measured on the machine the
+    /// hand check ran on, with the task registered — so a page that said "autostart needs administrator" flatly
+    /// would send people to elevate a prompt for `status`, which needs nothing.
+    /// </summary>
+    [Fact]
+    public void The_page_says_that_reading_the_registration_is_not_an_elevated_act()
+    {
+        var page = Read();
+
+        Assert.Contains("`status` needs no elevation", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>And the sentence it replaced is gone from both places that carried it.</summary>
+    [Fact]
+    public void Nothing_promises_that_autostart_is_never_elevated()
+    {
+        foreach (var text in new[] { Read(), Source("README.md") })
+        {
+            Assert.DoesNotContain("nothing is elevated", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("and nothing is elevated", text, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
+    /// The sentence that said nothing about autostart is ever registered lived in three places, and all three
+    /// had to stop saying it on the day the verbs arrived. A guarantee kept in three copies is a guarantee that
+    /// goes stale in two of them.
+    /// </summary>
+    [Fact]
+    public void Nothing_claims_that_autostart_is_never_registered()
+    {
+        string[] places =
+        [
+            "README.md",
+            "CLAUDE.md",
+            "runtime/src/Jason.Cli/Commands/RuntimeStartCommand.cs",
+        ];
+
+        foreach (var place in places)
+        {
+            var text = Source(place);
+            Assert.DoesNotContain("Nothing about autostart is registered", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("no autostart registered", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("until you ask", text, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private static string Read() =>

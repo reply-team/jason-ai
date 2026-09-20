@@ -311,6 +311,33 @@ public class UpdateRefusalTests
     }
 
     /// <summary>
+    /// The window where the install path holds no executable is one step wide, and the write before
+    /// <c>swapped</c> is the one that happens inside it. "Run <c>jason update apply</c> again" is useless
+    /// advice there: <c>jason</c> is exactly what is missing. The applier's own copy is the program that
+    /// exists, which is what the swap's own remedy has always said and what this one did not.
+    /// </summary>
+    [Theory]
+    [InlineData(UpdateStep.Staged, false)]
+    [InlineData(UpdateStep.Drained, false)]
+    [InlineData(UpdateStep.Stopped, false)]
+    [InlineData(UpdateStep.Kept, false)]
+    [InlineData(UpdateStep.Swapped, true)]
+    [InlineData(UpdateStep.Started, false)]
+    [InlineData(UpdateStep.Healthy, false)]
+    [InlineData(UpdateStep.Complete, false)]
+    public void The_remedy_for_a_ledger_write_offers_the_applier_copy_only_inside_the_empty_window(UpdateStep step, bool offersTheCopy)
+    {
+        const string Root = "/home/ada/.jason/update";
+        const string Copy = "/home/ada/.jason/update/applier/jason";
+
+        var remedy = UpdateApplier.RemedyForRecording(step, Root, Copy);
+
+        Assert.Equal(offersTheCopy, remedy.Contains(Copy, StringComparison.Ordinal));
+        Assert.Contains(Root, remedy, StringComparison.Ordinal);
+        Assert.Contains("jason update apply", remedy, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The copy of the applier is put where a resumed update can run it — and that, too, is a directory to
     /// create and a file to copy, in the step before the install path is emptied.
     /// </summary>

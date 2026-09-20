@@ -310,6 +310,9 @@ public partial class InstallScriptTests
         Assert.True(exit == 0, stderr);
         Assert.Contains("ErrorActionPreference=Continue", stdout, StringComparison.Ordinal);
         Assert.Contains("strict mode=off", stdout, StringComparison.Ordinal);
+
+        // The function the script defines is checked by the same line as its variables. Without it, the only
+        // thing in this repository that noticed the function surviving was one job on one CI runner.
         Assert.DoesNotContain("left behind:", stdout, StringComparison.Ordinal);
     }
 
@@ -321,6 +324,7 @@ public partial class InstallScriptTests
         foreach ($name in 'rid', 'asset', 'base', 'repositoryUrl', 'fromWeb', 'tmp', 'latest', 'target', 'installed', 'archive', 'expected', 'actual', 'unpacked', 'started', 'previous', 'directory', 'userPath', 'entries') {
             if (Test-Path "Variable:$name") { "left behind: $name" }
         }
+        if (Test-Path Function:Install-Jason) { "left behind: Install-Jason" }
         try { $null = $aNameThisSessionNeverDefined; "strict mode=off" } catch { "strict mode=on" }
         """;
 

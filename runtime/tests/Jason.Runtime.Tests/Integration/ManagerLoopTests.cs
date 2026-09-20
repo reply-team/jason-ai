@@ -14,6 +14,14 @@ namespace Jason.Runtime.Tests.Integration;
 /// summon, the claim, the launcher and the API — so what is proved is that they fit together, not that each of
 /// them behaves as its own test says.
 /// </summary>
+/// <remarks>
+/// <b>What a scan summoned is read from the database, never from the report of the scan that asked for it.</b>
+/// This runtime hosts a loop of its own on the same clock, so a scan a test asks for is not the only scan there
+/// is: a report of 0 is satisfied both by "nothing was due" and by "the loop's own tick did it a moment ago",
+/// and a report of 1 fails whenever that tick got there first. Measured, with one extra scan standing in for
+/// the tick: <c>Assert.Equal(0, report.Summoned)</c> passed while a check-in sat in the database, and the first
+/// thing to notice was a read of the check-ins two lines further down.
+/// </remarks>
 public class ManagerLoopTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -56,9 +64,9 @@ public class ManagerLoopTests
         await host.WaitForStatusAsync(doomed.Id, WorkItemStatus.Failed, Ct);
         var failedAttempt = (await host.GetAsync(doomed.Id, Ct)).Attempts!.Single();
 
-        // The next scan reads that line, summons a review, and hands it out in the same pass.
+        // The next scan reads that line, summons a review, and hands it out in the same pass. That there is
+        // exactly one review is asserted by the read below, not by this scan's own report of itself.
         var report = await host.ScanAsync(Ct);
-        Assert.Equal(1, report.Summoned);
         Assert.Equal(1, report.Claimed);
 
         var checkIn = await CheckInAsync(host, campaign);
@@ -128,7 +136,7 @@ public class ManagerLoopTests
         var attempt = (await host.GetAsync(doomed.Id, Ct)).Attempts!.Single();
         Assert.Equal("stand-in", attempt.Provenance!.Agent!.ProfileName);
 
-        Assert.Equal(1, (await host.ScanAsync(Ct)).Summoned);
+        await host.ScanAsync(Ct);
 
         var checkIn = await CheckInAsync(host, campaign);
         host.Track(checkIn.Id);
@@ -157,7 +165,7 @@ public class ManagerLoopTests
 
         var report = await host.ScanAsync(Ct);
 
-        Assert.Equal(0, report.Summoned);
+        Assert.Empty(await CheckInsAsync(host, campaign));
         Assert.Equal(0, report.Claimed);
     }
 
@@ -172,7 +180,8 @@ public class ManagerLoopTests
         var campaign = await host.CampaignAsync(Ct);
 
         // Not yet: the campaign went live a moment ago.
-        Assert.Equal(0, (await host.ScanAsync(Ct)).Summoned);
+        await host.ScanAsync(Ct);
+        Assert.Empty(await CheckInsAsync(host, campaign));
 
         // The loop's own tick is on this clock, so the hour below wakes it for a scan of its own beside the one
         // asked for here. Scans run one at a time and either may be the one that summons, so the proof is the
@@ -306,14 +315,15 @@ public class ManagerLoopTests
         }
 
         // Nothing has been summoned by the asking: raising a question is not an event the loop reacts to.
-        Assert.Equal(0, (await host.ScanAsync(Ct)).Summoned);
+        await host.ScanAsync(Ct);
+        Assert.Empty(await CheckInsAsync(host, campaign));
 
         await host.Fixture.PostOkAsync<DecisionDto>(
             Operations.DecisionAnswer,
             new { decision_id = question.Id, answer = "stop after this one", option = "stop", actor = new { type = "human", id = "ada" } },
             Ct);
 
-        Assert.Equal(1, (await host.ScanAsync(Ct)).Summoned);
+        await host.ScanAsync(Ct);
 
         var checkIn = await CheckInAsync(host, campaign);
         host.Track(checkIn.Id);
@@ -359,7 +369,7 @@ public class ManagerLoopTests
 
         Assert.Equal(1, (await host.ScanAsync(Ct)).Claimed);
         await host.WaitForStatusAsync(doomed.Id, WorkItemStatus.Failed, Ct);
-        Assert.Equal(1, (await host.ScanAsync(Ct)).Summoned);
+        await host.ScanAsync(Ct);
 
         var first = Assert.Single(await CheckInsAsync(host, campaign));
         host.Track(first.Id);
@@ -380,7 +390,7 @@ public class ManagerLoopTests
             new { decision_id = question.Id, answer = "stop after this one", actor = new { type = "human", id = "ada" } },
             Ct);
 
-        Assert.Equal(1, (await host.ScanAsync(Ct)).Summoned);
+        await host.ScanAsync(Ct);
 
         var second = Assert.Single(await CheckInsAsync(host, campaign, except: first.Id));
         host.Track(second.Id);
