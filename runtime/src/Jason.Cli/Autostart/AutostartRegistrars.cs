@@ -234,6 +234,84 @@ public static class AutostartRegistrars
         }
     }
 
+    /// <summary>
+    /// Writes the document a tool is about to be handed, asks the tool, and puts the directory back the way it
+    /// was if the tool refuses.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every platform writes before it asks — the Task Scheduler is handed a file, and so is systemd — so a
+    /// refusal that walked away left a document behind on a machine with nothing registered. A person reading
+    /// the data directory finds a file named after a registration that does not exist; the hand check found it
+    /// after an `enable` an unelevated prompt was refused.
+    /// </para>
+    /// <para>
+    /// A document that was already there is put back <b>byte for byte</b> rather than deleted. On two of the
+    /// three platforms the document <i>is</i> the registration, at a fixed path in the account's own home, so
+    /// deleting it would take somebody's working registration away as the parting act of a command that
+    /// changed nothing, and leaving the new one would quietly swap one command line for another.
+    /// </para>
+    /// </remarks>
+    public static void WriteThen(string path, string artifact, Encoding encoding, Action ask)
+    {
+        ArgumentNullException.ThrowIfNull(ask);
+
+        var directory = Path.GetDirectoryName(path);
+        var hadDirectory = string.IsNullOrEmpty(directory) || Directory.Exists(directory);
+        var before = Existing(path);
+
+        Write(path, artifact, encoding);
+        try
+        {
+            ask();
+        }
+        catch
+        {
+            PutBack(path, before, directory, hadDirectory);
+            throw;
+        }
+    }
+
+    /// <summary>What is at the path already, or nothing where there is nothing.</summary>
+    private static byte[]? Existing(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? File.ReadAllBytes(path) : null;
+        }
+        catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
+        {
+            throw new AutostartException(AutostartCodes.Refused, $"'{path}' could not be read: {problem.Message}", problem);
+        }
+    }
+
+    /// <summary>The directory as it was: what was there back, what was not gone, and nothing else touched.</summary>
+    private static void PutBack(string path, byte[]? before, string? directory, bool hadDirectory)
+    {
+        try
+        {
+            if (before is not null)
+            {
+                File.WriteAllBytes(path, before);
+                return;
+            }
+
+            File.Delete(path);
+            if (!hadDirectory
+                && directory is { Length: > 0 }
+                && Directory.Exists(directory)
+                && !Directory.EnumerateFileSystemEntries(directory).Any())
+            {
+                Directory.Delete(directory);
+            }
+        }
+        catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
+        {
+            // The refusal on its way out is the thing worth reporting, and a document nothing registered is
+            // harmless where it lies: the next `enable` writes over it and `disable` deletes it.
+        }
+    }
+
     /// <summary>Writes the document, making the directory it belongs in.</summary>
     internal static void Write(string path, string artifact, Encoding encoding)
     {
@@ -318,8 +396,11 @@ internal sealed class WindowsRegistrar : IAutostartRegistrar
 
         // UTF-16: what `schtasks /Create /XML` reads. Handed a UTF-8 file it answers that the XML contains a
         // value which is incorrectly formatted, which is a sentence nobody could act on.
-        AutostartRegistrars.Write(registration.ArtifactPath, registration.Artifact, Encoding.Unicode);
-        Act(registration.Apply, missingIsDone: false);
+        AutostartRegistrars.WriteThen(
+            registration.ArtifactPath,
+            registration.Artifact,
+            Encoding.Unicode,
+            () => Act(registration.Apply, missingIsDone: false));
     }
 
     public void Remove(AutostartRegistration registration)
@@ -377,11 +458,17 @@ internal sealed class LaunchAgentRegistrar : IAutostartRegistrar
             }
         }
 
-        AutostartRegistrars.Write(registration.ArtifactPath, registration.Artifact, new UTF8Encoding(false));
-        foreach (var command in registration.Apply)
-        {
-            AutostartRegistrars.Must("launchctl", command);
-        }
+        AutostartRegistrars.WriteThen(
+            registration.ArtifactPath,
+            registration.Artifact,
+            new UTF8Encoding(false),
+            () =>
+            {
+                foreach (var command in registration.Apply)
+                {
+                    AutostartRegistrars.Must("launchctl", command);
+                }
+            });
     }
 
     public void Remove(AutostartRegistration registration)
@@ -426,11 +513,17 @@ internal sealed class SystemdRegistrar : IAutostartRegistrar
     {
         ArgumentNullException.ThrowIfNull(registration);
 
-        AutostartRegistrars.Write(registration.ArtifactPath, registration.Artifact, new UTF8Encoding(false));
-        foreach (var command in registration.Apply)
-        {
-            AutostartRegistrars.Must("systemctl --user", command);
-        }
+        AutostartRegistrars.WriteThen(
+            registration.ArtifactPath,
+            registration.Artifact,
+            new UTF8Encoding(false),
+            () =>
+            {
+                foreach (var command in registration.Apply)
+                {
+                    AutostartRegistrars.Must("systemctl --user", command);
+                }
+            });
     }
 
     public void Remove(AutostartRegistration registration)

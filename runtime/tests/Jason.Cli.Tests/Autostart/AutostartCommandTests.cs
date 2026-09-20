@@ -234,6 +234,28 @@ public class AutostartCommandTests
         Assert.Contains("Access is denied", refusal.Error.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// And `disable` after a refused `enable` still succeeds. It is what a person does next — the registration
+    /// was refused, so they check that nothing was left half-done — and a second failure would tell them the
+    /// opposite of what is true. Nothing here is red: it is the sentence on the page held in place.
+    /// </summary>
+    [Fact]
+    public async Task Disabling_after_a_refused_enable_still_succeeds()
+    {
+        using var machine = new Machine();
+        machine.Registrar.Refuses = new AutostartException(
+            AutostartCodes.Refused,
+            "registering or removing the logon task needs an elevated prompt: run the command as administrator.");
+
+        Assert.Equal(ExitCodes.ApiError, await machine.RunAsync(["runtime", "autostart", "enable"], Ct));
+
+        machine.Clear();
+        machine.Registrar.Refuses = null;
+
+        Assert.Equal(ExitCodes.Success, await machine.RunAsync(["runtime", "autostart", "disable"], Ct));
+        Assert.False(machine.Answer().Registered);
+    }
+
     /// <summary>Every verb prints one document, whatever happened: the CLI's whole contract with a script.</summary>
     [Theory]
     [InlineData("enable")]
