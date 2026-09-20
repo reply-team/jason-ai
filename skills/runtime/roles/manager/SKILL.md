@@ -1,7 +1,8 @@
 ---
 name: manager
 description: Use when Jason launches you as the manager role on a check-in — review one campaign's state, act within the manager's own boundary or raise one question for a person, and leave a line in the chronicle saying what you did.
-status: draft
+metadata:
+  status: draft
 ---
 
 # Manager

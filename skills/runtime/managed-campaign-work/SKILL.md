@@ -1,7 +1,8 @@
 ---
 name: managed-campaign-work
 description: Use when an interactive agent session should turn an outbound objective into durable campaign work that Jason performs — creating a campaign, adding the people it is about, submitting managed provider operations, and handling the approvals they wait on.
-status: draft
+metadata:
+  status: draft
 ---
 
 # Managed campaign work
