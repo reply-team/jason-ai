@@ -194,6 +194,31 @@ public class UpdateApplierTests
         Assert.All(installation.Fetched, address => Assert.DoesNotContain("/v", address, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Every line of the account names its step, whatever that step found. An installation whose runtime was not
+    /// running still drains and still stops — there is simply nothing to drain and nothing to stop — and a reader
+    /// looking for those steps must find them.
+    /// </summary>
+    /// <remarks>
+    /// This is PB3's path, and the CI job that updates a stopped installation is what found the lines missing:
+    /// "no runtime is running, so there is nothing to drain" is a true sentence that does not begin with the
+    /// word a reader is looking for. Ten minutes of CI to learn it; one test to keep it.
+    /// </remarks>
+    [Fact]
+    public async Task Every_step_is_named_even_where_it_found_nothing_to_do()
+    {
+        using var installation = new FakeInstallation();
+
+        var applier = installation.Applier();
+        await applier.ApplyAsync(Request(installation), Ct);
+
+        // No runtime was ever started here, so the drain and the stop are the sentences that used to hide.
+        Assert.Equal(
+            ["staged", "drained", "stopped", "kept", "swapped", "started", "healthy", "complete"],
+            applier.Steps.Select(step => step.Split(':')[0]));
+        Assert.All(applier.Steps, step => Assert.Contains(": ", step, StringComparison.Ordinal));
+    }
+
     private static UpdateRequest Request(FakeInstallation installation) =>
         new(installation.Feed, null, TimeSpan.FromSeconds(5));
 }

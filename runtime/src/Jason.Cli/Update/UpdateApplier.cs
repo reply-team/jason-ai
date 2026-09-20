@@ -212,7 +212,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             .StageAsync(manifest, ReleaseAssets.CurrentRid!, Address(release), update, cancellationToken)
             .ConfigureAwait(false);
 
-        Say($"staged {ledger.ToVersion}");
+        Say(UpdateStep.Staged, $"{ledger.ToVersion}");
         return ledger with { StagedPath = staged };
     }
 
@@ -224,7 +224,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     {
         if (Descriptor() is null)
         {
-            Say("no runtime is running, so there is nothing to drain");
+            Say(UpdateStep.Drained, "no runtime is running, so there is nothing to drain");
             return ledger;
         }
 
@@ -241,7 +241,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             var running = await RunningAttemptsAsync(cancellationToken).ConfigureAwait(false);
             if (running is null or 0)
             {
-                Say("drained");
+                Say(UpdateStep.Drained, "nothing is running any more");
                 return ledger;
             }
 
@@ -249,7 +249,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             {
                 // Said rather than hidden: what is still running keeps its lease, and the next runtime will
                 // finish it or the enforcer will take it back. Either way a person should know it happened.
-                Say($"drain gave up with {running} attempt(s) still running; they keep their leases");
+                Say(UpdateStep.Drained, $"gave up with {running} attempt(s) still running; they keep their leases");
                 return ledger;
             }
 
@@ -262,7 +262,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         var descriptor = Descriptor();
         if (descriptor is null)
         {
-            Say("no runtime is running, so there is nothing to stop");
+            Say(UpdateStep.Stopped, "no runtime is running, so there is nothing to stop");
             return ledger with { StoppedAt = ledger.StoppedAt ?? clock.GetUtcNow() };
         }
 
@@ -272,7 +272,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             throw new UpdateException(UpdateCodes.RuntimeUnreachable, "The runtime would not stop, so nothing was replaced.");
         }
 
-        Say("stopped");
+        Say(UpdateStep.Stopped, "the runtime is gone");
         return ledger with { StoppedAt = clock.GetUtcNow() };
     }
 
@@ -296,7 +296,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
             SameVolume(ledger.InstallPath, ledger.PreviousPath);
             File.Move(ledger.InstallPath, ledger.PreviousPath, overwrite: true);
-            Say("kept the installed executable");
+            Say(UpdateStep.Kept, "the installed executable is put aside");
         }
 
         return ledger;
@@ -317,7 +317,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
             SameVolume(ledger.StagedPath, ledger.InstallPath);
             File.Move(ledger.StagedPath, ledger.InstallPath);
-            Say($"swapped in {ledger.ToVersion}");
+            Say(UpdateStep.Swapped, $"{ledger.ToVersion} is at the install path");
         }
 
         return ledger;
@@ -327,7 +327,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     {
         if (Descriptor() is not null && await RunningAttemptsAsync(cancellationToken).ConfigureAwait(false) is not null)
         {
-            Say("a runtime is already answering");
+            Say(UpdateStep.Started, "a runtime is already answering");
             return ledger;
         }
 
@@ -342,7 +342,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         {
             if (await RunningAttemptsAsync(cancellationToken).ConfigureAwait(false) is not null)
             {
-                Say($"started {ledger.ToVersion}");
+                Say(UpdateStep.Started, $"{ledger.ToVersion}");
                 return ledger;
             }
 
@@ -382,7 +382,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
                 $"The runtime that came up as {ledger.ToVersion} has no migrations applied, so its database is not ready.");
         }
 
-        Say($"healthy: {info.RuntimeVersion}, {info.Database.AppliedMigrations.Count} migrations applied");
+        Say(UpdateStep.Healthy, $"{info.RuntimeVersion}, {info.Database.AppliedMigrations.Count} migrations applied");
         return ledger with
         {
             BackupFile = info.Database.BackupFile,
@@ -397,7 +397,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
     private UpdateLedger Done(UpdateLedger ledger)
     {
-        Say($"{ledger.FromVersion} → {ledger.ToVersion}");
+        Say(UpdateStep.Complete, $"{ledger.FromVersion} → {ledger.ToVersion}");
         return ledger;
     }
 
@@ -449,5 +449,12 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             : null;
     }
 
-    private void Say(string what) => Steps.Add(string.Create(CultureInfo.InvariantCulture, $"{what}"));
+    /// <summary>
+    /// One line of the account, under the name of the step it belongs to. Every line begins with that name,
+    /// because the same list is read by a person and by a script — and because what a step did depends on what
+    /// it found: "drained" on an installation whose runtime was not running reads "no runtime is running, so
+    /// there is nothing to drain", and a reader looking for the drain should still find it.
+    /// </summary>
+    private void Say(UpdateStep step, string what) =>
+        Steps.Add(string.Create(CultureInfo.InvariantCulture, $"{step.ToString().ToLowerInvariant()}: {what}"));
 }
