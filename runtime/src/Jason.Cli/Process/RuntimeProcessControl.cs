@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Jason.Contracts.Discovery;
@@ -112,6 +113,26 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         return new ProcessHandle(process);
     }
 
+    /// <summary>
+    /// Whether that pid is still in the process table. Three answers are possible from the operating system
+    /// and only two of them are a bool, which is what the last clause is about.
+    /// </summary>
+    /// <remarks>
+    /// A runtime registered to start at logon runs in <b>another logon session</b> — session 0, with an S4U
+    /// logon on Windows — and an ordinary prompt may not open such a process to ask it anything.
+    /// <c>GetProcessById</c> still returns, because finding a pid in the table needs no handle;
+    /// <c>HasExited</c> then throws <see cref="Win32Exception"/> rather than answering. Measured on a real
+    /// machine, and before it was caught it left `jason runtime stop` altogether: the runtime shut down, the
+    /// verb printed <c>Access is denied.</c> and exited 1, and the shutdown it had just completed looked like
+    /// a failure.
+    /// <para>
+    /// The answer in that case is <b>running</b>, and not because it is the safer-sounding one: the pid is in
+    /// the table, which is precisely what <c>GetProcessById</c> returning says. Saying "gone" would let `stop`
+    /// report success over a runtime that is still serving, and a script would start the next one on top of it.
+    /// When the process really does leave, <c>GetProcessById</c> says so by throwing, and the clause above
+    /// answers.
+    /// </para>
+    /// </remarks>
     public bool IsRunning(int pid)
     {
         try
@@ -127,6 +148,11 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         catch (InvalidOperationException)
         {
             return false;
+        }
+        catch (Win32Exception)
+        {
+            // It is there, and this prompt may not ask it anything. See the remarks above.
+            return true;
         }
     }
 
