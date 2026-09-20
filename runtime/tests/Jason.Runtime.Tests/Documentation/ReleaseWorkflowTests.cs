@@ -951,6 +951,14 @@ public class ReleaseWorkflowTests
         var rollback = job.IndexOf("update rollback", StringComparison.Ordinal);
         Assert.Contains("$env:install update rollback", job[(rollback - 30)..], StringComparison.Ordinal);
 
+        // Against the runtime the update left running. A rollback decides whether restoring a database is safe
+        // by asking that runtime what has been recorded since; a job that stopped it first would be asserting
+        // the refusal rather than the rollback — which is what happened the first time this step ran.
+        var before = job[..rollback];
+        Assert.False(
+            Runs(before, "runtime stop"),
+            "the end-to-end job stops the runtime before it rolls back, so it would assert the refusal rather than the rollback");
+
         // And what it must leave behind: the old version serving, the kept executable consumed, and the
         // database restored with no write-ahead log of the newer schema beside it.
         var after = job[rollback..];

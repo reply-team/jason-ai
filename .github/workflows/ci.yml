@@ -289,7 +289,9 @@ jobs:
           if ($ledger.step -ne 'complete') { throw "the ledger says '$($ledger.step)'" }
           if (-not $ledger.newly_applied) { throw "the ledger did not record what the first start applied" }
 
-          & $env:install runtime stop | Out-Null
+          # The runtime is deliberately left running: an update leaves one running, and the rollback below has
+          # to be able to ask it whether any work has been recorded since. Stopping it here for tidiness would
+          # make the next step assert a refusal instead of a rollback.
 
       - name: Roll it back, from the executable a person would type
         shell: pwsh
