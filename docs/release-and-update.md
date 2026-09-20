@@ -370,9 +370,11 @@ One registration per operating system and per account, in the account's own scop
 | macOS | a LaunchAgent labelled `ai.jason.runtime`, `RunAtLoad` and no `KeepAlive` | `~/Library/LaunchAgents/ai.jason.runtime.plist` |
 | Linux | a `systemd --user` unit, enabled into your default target | `~/.config/systemd/user/jason.service` |
 
-**It is registration, not supervision.** What starts at logon is `jason runtime run`, and nothing watches it
-afterwards: a runtime that stops stays stopped until somebody starts it. There is no restart policy, no
-`KeepAlive`, and no second process whose job is to keep the first one alive.
+**It is registration, not supervision.** What starts at logon is `jason runtime run --detached --data-dir
+<the directory you registered under>` — the runtime itself, in the background, on the data directory the
+registration carries — and nothing watches it afterwards: a runtime that stops stays stopped until somebody
+starts it. There is no restart policy, no `KeepAlive`, and no second process whose job is to keep the first one
+alive.
 
 **`enable` starts nothing now, and `disable` stops nothing.** They change what happens at the *next* logon.
 Starting and stopping a runtime today is still `jason runtime start` and `jason runtime stop`.
@@ -418,9 +420,13 @@ platforms that machine cannot register anything for. What no test here does is r
 test that did would leave a logon task behind on whoever ran it, and CI runners are whoever ran it three times
 over.
 
-So registering for real is checked **by hand**, once, on a real machine, for the platforms this project has one
-of: Windows and Linux. **macOS is composed and asserted only** — nobody working on this has a Mac, and this page
-would rather say so than imply a check nobody ran.
+So registering for real can only be checked **by hand**, on a real machine, and only for the platforms this
+project has one of: Windows and Linux. **macOS is composed and asserted only** — nobody working on this has a
+Mac, and this page would rather say so than imply a check nobody ran.
+
+> **Checked by hand so far:** nothing. These verbs ship with the check still to come; registering a real logon
+> task on somebody's real account is a deliberate act, and what it found belongs here rather than in a promise
+> made in advance.
 
 ## 9. Where things live
 
@@ -437,7 +443,8 @@ by deleting.
 
 `~/.jason/autostart/` holds one file, and only on Windows: the task document §8's `enable` hands to `schtasks`.
 The registration itself is the Task Scheduler's after that, so deleting the document unregisters nothing —
-`jason runtime autostart disable` does. macOS and Linux keep their document where the system reads it, under
+`jason runtime autostart disable` does. `autostart status` prints that path while the file is there, which is
+also how you can tell that the registration you are looking at was made from this data directory. macOS and Linux keep their document where the system reads it, under
 `~/Library/LaunchAgents/` and `~/.config/systemd/user/`, which are not this directory and are not Jason's to
 tidy up.
 

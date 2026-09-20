@@ -473,17 +473,25 @@ public class ReleaseAndUpdateDocTests
 
     /// <summary>
     /// And what nothing here proves. Registering for real is not something a test does — it would leave a logon
-    /// task on whoever ran the suite — so the page says which platforms were checked by hand and which one was
-    /// only ever composed.
+    /// task on whoever ran the suite — so the page says which platforms can be checked by hand at all, which
+    /// one was only ever composed, and what such a check has found <b>so far</b>.
     /// </summary>
+    /// <remarks>
+    /// That last part is why this test is shaped the way it is. The page said the check had been made before
+    /// anybody had made one: a sentence in the past tense, written in advance, about the one claim on the page
+    /// that no test can stand behind. It says what it has, and it is written again when there is more.
+    /// </remarks>
     [Fact]
-    public void The_page_says_which_platform_was_verified_by_hand()
+    public void The_page_says_what_only_a_hand_check_can_prove_and_what_it_has_proved_so_far()
     {
         var page = Read();
 
         Assert.Contains("by hand", page, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("composed and asserted only", page, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("macOS", page, StringComparison.Ordinal);
+
+        // The line that carries the outcome, whatever the outcome is.
+        Assert.Contains("Checked by hand so far:", page, StringComparison.Ordinal);
     }
 
     /// <summary>

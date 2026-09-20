@@ -150,7 +150,7 @@ public static class RuntimeAutostartCommands
             DataDirectoryIn(state.Run),
             state.Run.Count > 0 ? state.Run[0] : null,
             state.Run.Count > 0 ? File.Exists(state.Run[0]) : null,
-            state.ArtifactPath);
+            Document(env, registrar, state));
 
         env.Out.WriteLine(human ? Sentence(answer) : JsonSerializer.Serialize(answer, JasonJson.Options));
         return ExitCodes.Success;
@@ -160,6 +160,33 @@ public static class RuntimeAutostartCommands
     {
         env.Out.WriteLine(CliErrors.Serialize(refusal.Code, refusal.Message, retryable: false));
         return ExitCodes.ApiError;
+    }
+
+    /// <summary>
+    /// Where the document that was registered lives. Two of the three platforms read a file, and the registrar
+    /// names it. Windows does not: the Task Scheduler took a copy when the task was made, and what stays behind
+    /// under this data directory is the file that was handed over — which is worth printing when it is there,
+    /// because it is what a person looking at the task would want to read, and worth leaving out when it is
+    /// not, because a registration made under another data directory left its own file somewhere else.
+    /// </summary>
+    private static string? Document(CliEnvironment env, IAutostartRegistrar registrar, AutostartState state)
+    {
+        if (state.ArtifactPath is { } named)
+        {
+            return named;
+        }
+
+        if (!state.Registered || registrar.Platform is AutostartPlatform.Unsupported)
+        {
+            return null;
+        }
+
+        var handed = AutostartArtifacts.ArtifactPath(
+            registrar.Platform,
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            env.Paths.Root);
+
+        return File.Exists(handed) ? handed : null;
     }
 
     /// <summary>The data directory a registered command line names, which need not be this session's.</summary>

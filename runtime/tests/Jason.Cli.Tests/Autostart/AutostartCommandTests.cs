@@ -115,6 +115,33 @@ public class AutostartCommandTests
         Assert.True(machine.Answer().ExecutableExists);
     }
 
+    /// <summary>
+    /// Windows keeps no document once the task is made — the Task Scheduler took a copy — so the registrar
+    /// names none. The file that was handed over is still under this data directory, and that is worth printing
+    /// while it is there: the page names that path, and a person looking at a task wants to read what was
+    /// registered. A registration made from another data directory left its file somewhere else, and this says
+    /// nothing rather than pointing at a file that is not the one in force.
+    /// </summary>
+    [Fact]
+    public async Task Status_prints_the_document_that_was_handed_over_while_it_is_there()
+    {
+        using var machine = new Machine();
+        machine.Registrar.State = new AutostartState(true, [Installed, "runtime", "run"], null);
+
+        // Nothing under this data directory yet: another installation's registration, as far as this one knows.
+        Assert.Equal(ExitCodes.Success, await machine.RunAsync(["runtime", "autostart", "status"], Ct));
+        Assert.Null(machine.Answer().ArtifactPath);
+
+        // And now the file this data directory's own `enable` would have handed over.
+        var handed = AutostartArtifacts.ArtifactPath(AutostartPlatform.Windows, "/home/unused", machine.Paths.Root);
+        Directory.CreateDirectory(Path.GetDirectoryName(handed)!);
+        await File.WriteAllTextAsync(handed, "<Task />", Ct);
+
+        machine.Clear();
+        await machine.RunAsync(["runtime", "autostart", "status"], Ct);
+        Assert.Equal(handed, machine.Answer().ArtifactPath);
+    }
+
     [Fact]
     public async Task Status_on_a_machine_with_nothing_registered_says_so_and_is_not_an_error()
     {
