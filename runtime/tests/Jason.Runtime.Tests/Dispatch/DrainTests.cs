@@ -1,10 +1,13 @@
 using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Discovery;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Tests.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Jason.Runtime.Tests.Dispatch;
 
@@ -98,6 +101,55 @@ public class DrainTests
         Assert.Equal(DispatcherState.Running, resumed.State);
         Assert.Equal(1, (await api.Resolve<ScanRunner>().ScanOnceAsync(Ct)).Claimed);
         Assert.True(await api.Resolve<HandlerPool>().DrainAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    /// <summary>
+    /// A shutdown has been asked for and the token that eventually says so has not fired yet: the resume is
+    /// refused all the same, because that gap is the only place this can go wrong.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>system.shutdown</c> answers first and asks the host to stop a fifth of a second later, so for that
+    /// fifth of a second <see cref="IHostApplicationLifetime.ApplicationStopping"/> has not been cancelled. A
+    /// resume that consulted only the token would put the dispatcher back to Running inside the window, and the
+    /// next scan would claim work that nothing is going to run: the process is already leaving.
+    /// </para>
+    /// <para>
+    /// The lifetime here is a stand-in for exactly that reason. Racing the real grace period would prove this
+    /// only on the runs it won, and a runtime that lost the race would be stopping — its state Stopped, its
+    /// socket closing — with nothing left to assert.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void A_resume_is_refused_once_a_shutdown_has_been_asked_for_even_before_the_token_fires()
+    {
+        var lifetime = new StandingLifetime();
+        var status = new DispatcherStatus { State = DispatcherState.Running };
+        var coordinator = Coordinator(status, lifetime, out var shutdown);
+
+        Assert.Equal(DispatcherState.Draining, coordinator.Drain().State);
+        Assert.True(shutdown.RequestShutdown().Stopping);
+
+        Assert.False(
+            lifetime.ApplicationStopping.IsCancellationRequested,
+            "the shutdown fired the token straight away, so this test no longer stands in the window it is about");
+        Assert.Equal(DispatcherState.Draining, coordinator.Resume().State);
+        Assert.Equal(DispatcherState.Draining, status.State);
+    }
+
+    /// <summary>And the token still refuses on its own, for a process stopping without having been asked over the API.</summary>
+    [Fact]
+    public void A_resume_is_refused_while_the_application_is_stopping()
+    {
+        var lifetime = new StandingLifetime();
+        var status = new DispatcherStatus { State = DispatcherState.Running };
+        var coordinator = Coordinator(status, lifetime, out _);
+
+        Assert.Equal(DispatcherState.Draining, coordinator.Drain().State);
+        lifetime.Stopping();
+
+        Assert.Equal(DispatcherState.Draining, coordinator.Resume().State);
+        Assert.Equal(DispatcherState.Draining, status.State);
     }
 
     /// <summary>
@@ -215,4 +267,41 @@ public class DrainTests
 
     private static Task<WorkItemDto> ReadAsync(RuntimeApiFixture api, string item) =>
         api.PostOkAsync<WorkItemDto>(Operations.WorkItemGet, new { work_item_id = item }, Ct);
+
+    /// <summary>
+    /// The two coordinators as the runtime composes them — the real shutdown coordinator, not a flag a test set
+    /// by hand — over a lifetime the test owns.
+    /// </summary>
+    private static DrainCoordinator Coordinator(DispatcherStatus status, StandingLifetime lifetime, out ShutdownCoordinator shutdown)
+    {
+        shutdown = new ShutdownCoordinator(lifetime, RuntimeInfo.Create(), NullLogger<ShutdownCoordinator>.Instance);
+        return new DrainCoordinator(status, new RunningAttemptRegistry(), lifetime, shutdown);
+    }
+
+    /// <summary>
+    /// A host lifetime that does nothing until the test says so, so the window between the acknowledgement and
+    /// the stop can be stood in rather than raced.
+    /// </summary>
+    private sealed class StandingLifetime : IHostApplicationLifetime
+    {
+        private readonly CancellationTokenSource _stopping = new();
+        private readonly CancellationTokenSource _stopped = new();
+
+        public CancellationToken ApplicationStarted => CancellationToken.None;
+
+        public CancellationToken ApplicationStopping => _stopping.Token;
+
+        public CancellationToken ApplicationStopped => _stopped.Token;
+
+        /// <summary>What the host does a fifth of a second after the acknowledgement; here, when the test says.</summary>
+        public void Stopping() => _stopping.Cancel();
+
+        /// <summary>
+        /// Asked by the shutdown coordinator's delayed continuation. It is ignored on purpose: this lifetime
+        /// stops when the test stops it, which is what lets the window be examined.
+        /// </summary>
+        public void StopApplication()
+        {
+        }
+    }
 }

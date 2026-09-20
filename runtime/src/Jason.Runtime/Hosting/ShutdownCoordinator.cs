@@ -21,9 +21,19 @@ public sealed class ShutdownCoordinator(IHostApplicationLifetime lifetime, Runti
     private static readonly Action<ILogger, string, Exception?> ShutdownRequested =
         LoggerMessage.Define<string>(LogLevel.Information, new EventId(1, nameof(ShutdownRequested)), "Shutdown requested through the API; instance {InstanceId} is stopping");
 
+    private int requested;
+
+    /// <summary>
+    /// Whether this process has been asked to stop. True from the moment the request is answered rather than
+    /// from the moment the host is told, because the two are a fifth of a second apart and anything that must
+    /// not act on a process that is leaving has to know inside that gap.
+    /// </summary>
+    public bool Requested => Volatile.Read(ref requested) != 0;
+
     /// <summary>Acknowledges the request and stops the host just after the answer has gone out.</summary>
     public ShutdownResponse RequestShutdown()
     {
+        Volatile.Write(ref requested, 1);
         ShutdownRequested(logger, info.InstanceId, null);
 
         _ = Task.Run(async () =>
