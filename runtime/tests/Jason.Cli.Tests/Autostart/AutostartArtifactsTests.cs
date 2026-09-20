@@ -51,7 +51,9 @@ public class AutostartArtifactsTests
 
         Assert.Equal([["schtasks", "/Create", "/XML", task.ArtifactPath, "/TN", "Jason", "/F"]], task.Apply);
         Assert.Equal([["schtasks", "/Delete", "/TN", "Jason", "/F"]], task.Remove);
-        Assert.Equal(["schtasks", "/Query", "/TN", "Jason", "/XML", "ONE"], task.Query);
+        // With /HRESULT, because the answer has to be a code rather than a sentence in the language Windows
+        // happens to be installed in. AutostartInterpretationTests is where that decision is asserted.
+        Assert.Equal(["schtasks", "/Query", "/TN", "Jason", "/XML", "ONE", "/HRESULT"], task.Query);
     }
 
     /// <summary>
@@ -157,6 +159,49 @@ public class AutostartArtifactsTests
         Assert.Equal(
             ["/usr/bin/dotnet", "/src/jason/Jason.App.dll", "runtime", "run", "--detached", "--data-dir", Unix],
             AutostartArtifacts.Read(AutostartPlatform.Linux, registration.Artifact));
+    }
+
+    /// <summary>
+    /// A per-cent in a path is a specifier to systemd, which would substitute it for something else entirely.
+    /// It is doubled in the unit and undoubled on the way back, so what a unit says it runs is what it was
+    /// given — and the other two platforms, which have no such rule, are unaffected.
+    /// </summary>
+    [Theory]
+    [InlineData(AutostartPlatform.Windows)]
+    [InlineData(AutostartPlatform.MacOs)]
+    [InlineData(AutostartPlatform.Linux)]
+    public void A_per_cent_in_a_data_directory_survives_the_registration(AutostartPlatform platform)
+    {
+        const string Data = "/home/ada/100% of it";
+
+        var registration = AutostartArtifacts.Compose(platform, ["/usr/local/bin/jason"], Data, Home, Sid);
+
+        Assert.Equal(Data, AutostartArtifacts.Read(platform, registration.Artifact)[^1]);
+        if (platform is AutostartPlatform.Linux)
+        {
+            Assert.Contains("100%% of it", registration.Artifact, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// And a double quote, which a POSIX path may carry, has no spelling a unit file and its reader would both
+    /// agree on: it is refused by name rather than written into a unit that would split into other words than
+    /// it was given. Windows cannot reach this — a quote is not a legal character in a path there.
+    /// </summary>
+    [Fact]
+    public void A_double_quote_in_a_data_directory_is_refused_by_name()
+    {
+        var refused = Assert.Throws<AutostartException>(
+            () => AutostartArtifacts.Compose(
+                AutostartPlatform.Linux,
+                ["/usr/local/bin/jason"],
+                "/home/ada/Jason \"Q\" Co",
+                Home,
+                "ada"));
+
+        Assert.Equal(AutostartCodes.Refused, refused.Code);
+        Assert.Contains("double quote", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("Jason \"Q\" Co", refused.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

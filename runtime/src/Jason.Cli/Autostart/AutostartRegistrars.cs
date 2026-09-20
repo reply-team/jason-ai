@@ -40,18 +40,31 @@ public static class AutostartRegistrars
     /// </summary>
     public static IAutostartRegistrar Unsupported { get; } = new NoRegistrar();
 
+    /// <summary>ERROR_FILE_NOT_FOUND as an HRESULT: the Task Scheduler's "there is no such task".</summary>
+    private const int TaskNotFound = unchecked((int)0x80070002);
+
     /// <summary>
-    /// What a query said, read as an answer rather than as an exit code. This is where "nothing is registered"
-    /// is told apart from "the tool refused to say", and it is pure so that the first real run meets no shape
-    /// this code has never seen.
+    /// What a query said, read as an answer rather than as noise. This is where "nothing is registered" is told
+    /// apart from "the tool would not say", and it is pure so that the first real run meets no shape this code
+    /// has never seen.
     /// </summary>
     /// <remarks>
-    /// <para><c>schtasks /Query</c> on a task that does not exist exits 1 and says so on standard error. That
-    /// is an answer, not a failure — but so is "access is denied", with the same exit code, and the two must
-    /// not be confused: one means "register it", the other means "this account may not look".</para>
-    /// <para><c>systemctl --user is-enabled</c> exits 0 for enabled, 1 for disabled, and 4 when there is no
-    /// such unit. Anything else is the manager itself refusing — most often because there is no user manager
-    /// running at all, which is a thing to say out loud rather than to report as "not registered".</para>
+    /// <para>
+    /// <b>Neither platform is read by its prose.</b> <c>schtasks /Query</c> exits 1 both for a task that is not
+    /// there and for a task this account may not read, and the sentence that separates them is printed in the
+    /// language Windows was installed in — a Russian Windows says
+    /// <c>ОШИБКА: Не удается найти указанный файл.</c>, and an English matcher reads that as a refusal: a clean machine
+    /// would answer <c>status</c> with a failure, <c>disable</c> on nothing with a failure, and <c>enable</c>
+    /// would register the task and then fail reading it back. <c>/HRESULT</c> makes the exit code carry the
+    /// answer instead, in every language.
+    /// </para>
+    /// <para>
+    /// <c>systemctl --user is-enabled</c> exits 1 for <c>disabled</c> — and exits 1 with nothing on standard
+    /// output when it cannot reach a user manager at all (measured: <c>Failed to connect to user scope bus</c>).
+    /// Read by the exit code, a machine with no user bus reports every unit as disabled, which for a unit that
+    /// is registered is a lie in the safe-sounding direction. So the word it prints decides, and a word it does
+    /// not print — including none at all — is the manager refusing to answer.
+    /// </para>
     /// <para><c>launchctl list</c> exits non-zero when the label is unknown, and prints nothing useful.</para>
     /// </remarks>
     public static AutostartAnswer Interpret(AutostartPlatform platform, int exit, string output, string error)
@@ -61,26 +74,41 @@ public static class AutostartRegistrars
 
         return platform switch
         {
-            AutostartPlatform.Windows => exit == 0
-                ? new AutostartAnswer(true, output)
-                : Missing(error)
-                    ? new AutostartAnswer(false, string.Empty)
-                    : throw Refused("schtasks", error, output),
-            AutostartPlatform.Linux => exit switch
+            AutostartPlatform.Windows => exit switch
             {
-                0 => new AutostartAnswer(true, string.Empty),
-                1 or 4 => new AutostartAnswer(false, string.Empty),
-                _ => throw Refused("systemctl --user", error, output),
+                0 => new AutostartAnswer(true, output),
+                TaskNotFound => new AutostartAnswer(false, string.Empty),
+                _ => throw Refused("schtasks", error, output),
             },
+            AutostartPlatform.Linux => Enabled(output, error),
             AutostartPlatform.MacOs => new AutostartAnswer(exit == 0, string.Empty),
             _ => new AutostartAnswer(false, string.Empty),
         };
     }
 
-    /// <summary>The Task Scheduler's way of saying there is no such task, which is an answer and not a failure.</summary>
-    private static bool Missing(string error) =>
-        error.Contains("cannot find the file specified", StringComparison.OrdinalIgnoreCase)
-        || error.Contains("does not exist", StringComparison.OrdinalIgnoreCase);
+    /// <summary>The words <c>is-enabled</c> answers with that mean something will start at login.</summary>
+    private static readonly string[] WillStart =
+        ["enabled", "enabled-runtime", "static", "indirect", "generated", "transient", "alias", "linked", "linked-runtime"];
+
+    /// <summary>And the ones that mean nothing will.</summary>
+    private static readonly string[] WillNot = ["disabled", "masked", "masked-runtime", "not-found", "bad-setting"];
+
+    /// <summary>
+    /// What <c>is-enabled</c> said, by the word it said. A word this does not know is not guessed at from an
+    /// exit code: it is the one thing a registrar must never get wrong quietly.
+    /// </summary>
+    private static AutostartAnswer Enabled(string output, string error)
+    {
+        var said = FirstLine(output);
+        if (WillStart.Contains(said, StringComparer.Ordinal))
+        {
+            return new AutostartAnswer(true, string.Empty);
+        }
+
+        return WillNot.Contains(said, StringComparer.Ordinal)
+            ? new AutostartAnswer(false, string.Empty)
+            : throw Refused("systemctl --user", error, output);
+    }
 
     private static AutostartException Refused(string tool, string error, string output)
     {

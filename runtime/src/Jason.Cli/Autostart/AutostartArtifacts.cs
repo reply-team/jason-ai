@@ -76,9 +76,15 @@ public static class AutostartArtifacts
     /// nothing else — not on the data directory, not on the account — which is what lets a registrar ask
     /// before it knows either: what it is about to read may have been registered by another installation.
     /// </summary>
+    /// <remarks>
+    /// <c>/HRESULT</c> is not decoration. Without it <c>schtasks</c> exits 1 for a task that is not there and 1
+    /// for a task this account may not read, and the only thing telling those apart is the sentence it prints —
+    /// in the language Windows is installed in. With it, a missing task exits <c>0x80070002</c> and access
+    /// denied exits <c>0x80070005</c>, in every language, and the words are never consulted again.
+    /// </remarks>
     public static IReadOnlyList<string> QueryFor(AutostartPlatform platform) => platform switch
     {
-        AutostartPlatform.Windows => ["schtasks", "/Query", "/TN", TaskName, "/XML", "ONE"],
+        AutostartPlatform.Windows => ["schtasks", "/Query", "/TN", TaskName, "/XML", "ONE", "/HRESULT"],
         AutostartPlatform.MacOs => ["launchctl", "list", Label],
         AutostartPlatform.Linux => ["systemctl", "--user", "is-enabled", UnitName],
         _ => [],
@@ -250,7 +256,7 @@ public static class AutostartArtifacts
 
             [Service]
             Type=simple
-            ExecStart={Join(line)}
+            ExecStart={Systemd(line)}
             Restart=no
 
             [Install]
@@ -278,6 +284,34 @@ public static class AutostartArtifacts
     /// <summary>One command line out of its words: a word with a space in it keeps its own quotes.</summary>
     private static string Join(IEnumerable<string> words) =>
         string.Join(' ', words.Select(word => word.Contains(' ', StringComparison.Ordinal) ? $"\"{word}\"" : word));
+
+    /// <summary>
+    /// The same line as a systemd unit spells it. Two characters are not the same there as everywhere else: a
+    /// per-cent begins a specifier the manager substitutes, so it is doubled; and a double quote has no
+    /// spelling that <c>ExecStart</c> and the reader below would both agree on, so a path carrying one is
+    /// refused by name rather than written into a unit that would split into different words than it was given.
+    /// </summary>
+    /// <remarks>
+    /// Refused at composition, which is where the path is known, and therefore refused by <c>disable</c> as
+    /// well as by <c>enable</c> on such a path — there is nothing to disable, because nothing could have been
+    /// registered. Windows cannot reach this: a double quote is not allowed in a path there, and the task
+    /// document escapes what XML needs. The plist is one string per word and needs neither.
+    /// </remarks>
+    private static string Systemd(IReadOnlyList<string> line)
+    {
+        foreach (var word in line)
+        {
+            if (word.Contains('"', StringComparison.Ordinal))
+            {
+                throw new AutostartException(
+                    AutostartCodes.Refused,
+                    $"A systemd unit cannot carry a double quote in the command it runs, and there is one in '{word}'. "
+                    + "Register from a path without it, or start the runtime yourself with `jason runtime start`.");
+            }
+        }
+
+        return Join(line.Select(word => word.Replace("%", "%%", StringComparison.Ordinal)));
+    }
 
     /// <summary>The words of a command line composed by <see cref="Join"/>, back as they went in.</summary>
     private static IReadOnlyList<string> Words(string line)
@@ -355,7 +389,10 @@ public static class AutostartArtifacts
             .Select(text => text.Trim())
             .FirstOrDefault(text => text.StartsWith(Start, StringComparison.Ordinal));
 
-        return line is null ? [] : Words(line[Start.Length..]);
+        // The doubling `Systemd` applied, undone: what a unit says it runs is what it was given.
+        return line is null
+            ? []
+            : [.. Words(line[Start.Length..]).Select(word => word.Replace("%%", "%", StringComparison.Ordinal))];
     }
 
     /// <summary>The three characters a document cannot carry as themselves, in a path that may hold any of them.</summary>
