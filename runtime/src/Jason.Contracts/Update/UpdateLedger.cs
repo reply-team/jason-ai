@@ -189,7 +189,7 @@ public sealed record UpdateLedger(
                 using var reader = new StreamReader(file);
                 return Read(reader.ReadToEnd());
             }
-            catch (Exception missing) when (missing is FileNotFoundException or DirectoryNotFoundException)
+            catch (Exception missing) when (NoLedgerThere(missing, path))
             {
                 // Not there for this open — which is either "there is no update" or "one is replacing this very
                 // file as it is read", and telling those apart is the whole point. `jason update status`
@@ -220,6 +220,21 @@ public sealed record UpdateLedger(
 
     /// <summary>Whether a write is part-way through, by the two names only a write in flight leaves behind.</summary>
     private static bool Replacing(string path) => File.Exists(path + Writing) || File.Exists(path + Replaced);
+
+    /// <summary>
+    /// Whether a failed open means there is no ledger to read: the name is not there at all, or what is there
+    /// is a directory.
+    /// </summary>
+    /// <remarks>
+    /// A directory at this name is somebody's mistake, and the useful thing to say about it is said by the
+    /// write that comes next — with a code, the path and a remedy — rather than by a reader that can only
+    /// report that it could not open something. It reads as "no update in flight", which is what it was before
+    /// this asked the operating system by opening the file: <c>File.Exists</c> answers <c>false</c> for a
+    /// directory too. A file that is really there and cannot be read is a different thing and still escapes.
+    /// </remarks>
+    private static bool NoLedgerThere(Exception error, string path) =>
+        error is FileNotFoundException or DirectoryNotFoundException
+        || (error is UnauthorizedAccessException && Directory.Exists(path));
 
     /// <summary>
     /// Writes the ledger whole, or not at all: to a temporary file beside it and then a rename over it.

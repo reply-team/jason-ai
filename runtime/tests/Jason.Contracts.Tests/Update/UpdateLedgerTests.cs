@@ -122,6 +122,22 @@ public class UpdateLedgerTests
     }
 
     /// <summary>
+    /// A directory where the ledger should be reads as no ledger, which is what it did when this asked
+    /// <c>File.Exists</c> and has to go on doing now that it opens the file instead: opening a directory is
+    /// refused by the operating system, and a reader that let that escape would replace the message the write
+    /// after it gives -- a code, the path, and what to do about it -- with a bare line about an open.
+    /// </summary>
+    [Fact]
+    public void A_directory_where_the_ledger_should_be_reads_as_no_ledger()
+    {
+        using var dir = new TempTree();
+        var path = Path.Combine(dir.Root, "ledger.json");
+        Directory.CreateDirectory(path);
+
+        Assert.Null(UpdateLedger.ReadFile(path));
+    }
+
+    /// <summary>
     /// A reader does not stop the update it is reading about. <c>jason update status</c> opens this file at
     /// whatever moment a person types it, and an update replaces it by renaming over it — which on Windows a
     /// reader holding it with ordinary sharing forbids.
