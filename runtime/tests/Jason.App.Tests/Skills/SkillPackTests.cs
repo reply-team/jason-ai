@@ -96,4 +96,56 @@ public partial class SkillPackTests
 
     [GeneratedRegex(@"\]\(([^()\s]+/SKILL\.md)\)")]
     private static partial Regex LinkTarget();
+
+    /// <summary>
+    /// The detector, before the pack. Every phrase on the list is absent from the pack today, so a guard with
+    /// only the scan below would be green on the day it was written and would have shown nothing about
+    /// itself. Each phrase is given to it here on its own, in a sentence of the kind that would really have
+    /// been written.
+    /// </summary>
+    [Theory]
+    [InlineData("The orchestrator decides when the work runs.")]
+    [InlineData("Keep a markdown workspace beside the campaign.")]
+    [InlineData("Each task gets a work item file under the plan.")]
+    [InlineData("Each task gets a work-item file under the plan.")]
+    [InlineData("Write the plan file first and update it as you go.")]
+    [InlineData("The state file is the source of truth between sessions.")]
+    [InlineData("Standing preferences go in your user memory.")]
+    [InlineData("Standing preferences go in user-memory.")]
+    [InlineData("Keep TODO.md up to date.")]
+    [InlineData("Move the item to backlog.md when it is done.")]
+    public void The_detector_finds_the_model_this_pack_replaces(string sentence) =>
+        Assert.NotEmpty(SupersededVocabulary.Find(sentence));
+
+    /// <summary>
+    /// And leaves alone the words this pack really uses. The list is of phrases and not of words for exactly
+    /// this reason: an account may be a workspace, and a role's note is its own memory.
+    /// </summary>
+    [Fact]
+    public void The_detector_leaves_the_words_this_pack_really_uses_alone()
+    {
+        Assert.Empty(SupersededVocabulary.Find("--account names an identity - a mailbox, a workspace, a login."));
+        Assert.Empty(SupersededVocabulary.Find("Your note is your own working memory, and it is not authoritative."));
+        Assert.Empty(SupersededVocabulary.Find("Nothing else wakes the work - the runtime does."));
+    }
+
+    /// <summary>
+    /// And then the pack. The model this pack replaces kept operational state in files and had something
+    /// other than the runtime decide when work ran; a skill that reintroduced any of it would be teaching the
+    /// thing the architecture explicitly superseded.
+    /// </summary>
+    [Fact]
+    public void No_skill_teaches_the_model_this_pack_replaces()
+    {
+        foreach (var skill in SkillPack.All())
+        {
+            var found = SupersededVocabulary.Find(File.ReadAllText(skill.File));
+
+            Assert.True(
+                found.Count == 0,
+                $"'{skill.File}' uses the vocabulary of the superseded model: {string.Join(", ", found)}. Say "
+                + "what is true here instead - the runtime owns scheduling and resumption, and nothing else "
+                + "wakes the work.");
+        }
+    }
 }
