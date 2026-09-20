@@ -487,6 +487,21 @@ public class ReleaseAndUpdateDocTests
     }
 
     /// <summary>
+    /// "Where things live" lists what the data directory holds, and autostart puts a file in it. A page that
+    /// enumerates a directory and misses an entry is worse than one that does not enumerate it at all.
+    /// </summary>
+    [Fact]
+    public void The_page_says_where_the_autostart_document_lives_among_the_others()
+    {
+        var page = Read();
+        var directories = page[page.IndexOf("## 9. Where things live", StringComparison.Ordinal)..];
+
+        Assert.Contains("autostart", directories, StringComparison.Ordinal);
+        Assert.Contains("LaunchAgents", directories, StringComparison.Ordinal);
+        Assert.Contains("systemd", directories, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The autostart refusals, read out of the code like the update ones above: the page's two rows are the two
     /// codes this build can raise, and no others.
     /// </summary>

@@ -435,6 +435,12 @@ holds the ledger, the staged download, the executable that was replaced and the 
 replaced it; the install directory may be read-only, on another volume, or a directory somebody removes Jason
 by deleting.
 
+`~/.jason/autostart/` holds one file, and only on Windows: the task document §8's `enable` hands to `schtasks`.
+The registration itself is the Task Scheduler's after that, so deleting the document unregisters nothing —
+`jason runtime autostart disable` does. macOS and Linux keep their document where the system reads it, under
+`~/Library/LaunchAgents/` and `~/.config/systemd/user/`, which are not this directory and are not Jason's to
+tidy up.
+
 The Unix execute bit is not carried by a zip and is somebody else's idea of who may run this inside a tar, so it
 is restored by whoever unpacks the archive: `UpdateStager` for an update, and `install.sh` for an install. On
 Windows there is no such bit and neither does anything.
