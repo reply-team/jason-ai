@@ -118,9 +118,21 @@ dotnet run --project runtime/src/Jason.App -- --version
 
 `jason runtime start` launches the runtime in the background and prints the instance it ended up
 talking to; `jason runtime stop` asks that instance to shut down and returns only once it has
-really gone. Nothing about autostart is registered anywhere — starting the service is always
-something you or your agent did. `jason runtime run` keeps the runtime in the foreground
-instead, and `jason runtime status` asks it for `system.info` through the Runtime API.
+really gone. Nothing is registered until you ask — starting the service is something you, your
+agent, or a registration you made yourself did. `jason runtime run` keeps the runtime in the
+foreground instead, and `jason runtime status` asks it for `system.info` through the Runtime API.
+
+To have the runtime start when you log on, register it once. It carries the data directory it was
+registered under, and nothing supervises it afterwards — a runtime that stops stays stopped until
+somebody starts it. On Windows `enable` and `disable` have to be run from an elevated prompt, and
+standard accounts are unsupported in this version. `docs/release-and-update.md` §8 says what each
+platform registers, what it costs, and what only a hand check can prove.
+
+```sh
+jason runtime autostart enable
+jason runtime autostart status
+jason runtime autostart disable
+```
 
 Campaigns, the people in them, and the work to be done about them are managed with one verb per
 API operation:

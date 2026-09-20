@@ -189,4 +189,11 @@ function Install-Jason {
     Write-Host "Added $directory to your PATH; open a new terminal to run jason from anywhere."
 }
 
-Install-Jason -Version $Version -Feed $Feed -InstallDir $InstallDir -NoModifyPath:$NoModifyPath
+# Removed again whatever happens: the one-liner is `irm ... | iex`, which runs this text in the session that
+# typed it, and a function left behind there is this script still sitting in somebody's shell after it is done.
+try {
+    Install-Jason -Version $Version -Feed $Feed -InstallDir $InstallDir -NoModifyPath:$NoModifyPath
+}
+finally {
+    Remove-Item function:Install-Jason -ErrorAction SilentlyContinue
+}
