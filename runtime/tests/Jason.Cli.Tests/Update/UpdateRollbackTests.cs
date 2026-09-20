@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Jason.Cli.Update;
 using Jason.Contracts.Update;
 using Jason.Runtime.Tests;
@@ -152,10 +153,13 @@ public class UpdateRollbackTests
         using var installation = new FakeInstallation();
         installation.WithRuntime();
 
-        // The update gets as far as starting the new version, which migrates and then does not answer.
+        // The update gets as far as starting the new version, which migrates and then does not answer. Both
+        // waits for it - the update's own and the rollback's below - are on a clock this test moves.
         installation.StartsButNeverServes = true;
-        await Assert.ThrowsAsync<UpdateException>(
-            () => installation.Applier().ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.FromSeconds(2)), Ct));
+        var clock = new FixedClock(new DateTimeOffset(2026, 9, 20, 4, 30, 0, TimeSpan.Zero));
+        var applying = installation.Applier(clock).ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.FromSeconds(2)), Ct);
+        await DriveAsync(clock, applying);
+        await Assert.ThrowsAsync<UpdateException>(() => applying);
 
         var ledger = installation.Ledger()!;
         Assert.Null(ledger.BackupFile);
@@ -165,7 +169,12 @@ public class UpdateRollbackTests
         var backup = installation.WriteBackup(ledger.StoppedAt!.Value);
         installation.WriteDatabase("migrated by a version that never served");
 
-        var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
+        // Nothing this rollback starts will answer either, so its wait for one is moved by this test rather
+        // than by a minute of somebody's afternoon.
+        var rolling = installation.Rollback(clock).RollBackAsync(Ct);
+        await DriveAsync(clock, rolling);
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => rolling);
 
         // Found, named, and left where it is - and the executable went back, as it always does.
         Assert.Equal(UpdateCodes.RollbackUnsafe, refused.Code);
@@ -388,6 +397,47 @@ public class UpdateRollbackTests
 
         Assert.Equal(installation.From.ToString(), installation.Installed());
         Assert.Equal(Image, File.ReadAllText(earlier));
+    }
+
+    /// <summary>
+    /// A rollback starts the version it put back and waits a minute for it to answer. When nothing ever does,
+    /// it says so and leaves the machine to somebody — and the minute it waits is a minute on the clock it was
+    /// handed, which a test moves in microseconds.
+    /// </summary>
+    [Fact]
+    public async Task A_rollback_whose_runtime_never_answers_gives_up_on_the_clock_it_was_given()
+    {
+        using var installation = await UpdatedAsync();
+
+        // Whatever is started from here on comes up and never listens.
+        installation.StartsButNeverServes = true;
+
+        var clock = new FixedClock(new DateTimeOffset(2026, 9, 20, 4, 30, 0, TimeSpan.Zero));
+        var elapsed = Stopwatch.StartNew();
+        var rollback = installation.Rollback(clock);
+        var rolling = rollback.RollBackAsync(Ct);
+        await DriveAsync(clock, rolling);
+
+        await rolling;
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+        Assert.Contains(rollback.Steps, step => step.Contains("no runtime answered", StringComparison.Ordinal));
+        Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(10), $"the rollback waited on the real clock for {elapsed.Elapsed}");
+    }
+
+    /// <summary>
+    /// Moves the clock a verb is asleep on until it stops being asleep. Nothing else moves it, so the minute an
+    /// update or a rollback waits for a runtime that never answers passes here in about as long as it takes to
+    /// say so.
+    /// </summary>
+    private static async Task DriveAsync(FixedClock clock, Task waiting)
+    {
+        for (var tick = 0; !waiting.IsCompleted && tick < 100_000; tick++)
+        {
+            clock.Advance(TimeSpan.FromSeconds(1));
+            await Task.Yield();
+        }
+
+        Assert.True(waiting.IsCompleted, "the wait for a runtime to answer never ended");
     }
 
     [Fact]
