@@ -64,23 +64,57 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
         await StartAsync(ledger, cancellationToken).ConfigureAwait(false);
 
         var back = ledger with { Step = UpdateStep.Complete, ToVersion = ledger.FromVersion, FromVersion = ledger.ToVersion };
-        if (restored)
-        {
-            // The update's own record goes: what it did has been undone, and a second rollback would be putting
-            // back a backup that no longer matches anything.
-            File.Delete(update.Ledger);
-        }
-        else
-        {
-            back.Write(update.Ledger);
-        }
+        var record = Keep(back, restored);
 
         if (unsafeToRestore is { } refusal)
         {
-            throw refusal;
+            // The database's refusal is the one somebody is waiting for. A bookkeeping file that would not go
+            // is said in the same breath rather than instead of it.
+            throw record is null
+                ? refusal
+                : new UpdateException(refusal.Code, $"{refusal.Message} {record.Message}", refusal);
+        }
+
+        if (record is not null)
+        {
+            throw record;
         }
 
         return back;
+    }
+
+    /// <summary>
+    /// The record of the update, brought up to date: gone where the update was undone whole, kept where it was
+    /// not. It is a filesystem call like the renames above and fails for the same reasons, so it is coded like
+    /// them, and returned rather than thrown, because a refusal about the database has to reach the person
+    /// first and this one goes in beside it.
+    /// </summary>
+    private UpdateException? Keep(UpdateLedger back, bool restored) =>
+        restored
+            ? Refusal(
+                "removing the record of the update this rollback undid",
+                update.Ledger,
+                $"The rollback itself is done. Delete {update.Ledger} by hand, or the next `jason update rollback` will act on a record of an update that has already been put back.",
+                () => File.Delete(update.Ledger))
+            : Refusal(
+                "writing back the record of this rollback",
+                update.Ledger,
+                $"The executable was put back all the same. Until {update.Ledger} can be written, `jason update status` goes on reporting the update this rollback undid.",
+                () => back.Write(update.Ledger));
+
+    /// <summary>The same turning of a filesystem refusal into this product's own, for a step that must not pre-empt another.</summary>
+    private UpdateException? Refusal(string what, string path, string remedy, Action act)
+    {
+        try
+        {
+            OnDisk(what, path, remedy, act);
+            return null;
+        }
+        catch (UpdateException error)
+        {
+            Say($"{what} failed at '{path}'");
+            return error;
+        }
     }
 
     /// <summary>The same turning of a filesystem refusal into this product's own, as an update's steps use.</summary>

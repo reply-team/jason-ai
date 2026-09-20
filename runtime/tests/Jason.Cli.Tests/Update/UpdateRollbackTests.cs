@@ -308,6 +308,57 @@ public class UpdateRollbackTests
         Assert.False(File.Exists(log + ".rolling"), "the log was set aside and left there");
     }
 
+    /// <summary>
+    /// The record this rollback leaves behind is written with a filesystem call like every other, and it
+    /// refuses for the same reasons — so it refuses the same way: with a code, and never in place of the
+    /// refusal about the database, which is the message somebody is actually waiting for.
+    /// </summary>
+    [Fact]
+    public async Task A_ledger_that_cannot_be_written_back_does_not_replace_the_refusal_about_the_database()
+    {
+        using var installation = await UpdatedAsync(migrates: true);
+        installation.WriteDatabase("work done under the new version");
+        installation.Chronicle = "jrn_01LATERLATERLATERLATERLATER";
+
+        // The name the ledger's own write renames from. A directory there refuses it on every platform.
+        Directory.CreateDirectory(installation.Update.Ledger + ".writing");
+        File.WriteAllText(Path.Combine(installation.Update.Ledger + ".writing", "occupied"), "not empty");
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
+
+        // The database's refusal, not the bookkeeping file's - and the bookkeeping file is named in it too.
+        Assert.Equal(UpdateCodes.RollbackUnsafe, refused.Code);
+        Assert.Contains("before-20260920000000_Next.db", refused.Message, StringComparison.Ordinal);
+        Assert.Contains(installation.Update.Ledger, refused.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And when there is no other refusal to make way for, the ledger's own is raised with a code of its own
+    /// rather than as a bare line from the filesystem.
+    /// </summary>
+    [Fact]
+    public async Task A_record_that_cannot_be_removed_is_refused_with_a_code()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "A read-only file in a writable directory deletes happily on Unix, so there is nothing to refuse there.");
+
+        using var installation = await UpdatedAsync(migrates: true);
+        installation.WriteDatabase("migrated by the new version");
+
+        // The update was undone whole, so its record is deleted - and this one will not be.
+        File.SetAttributes(installation.Update.Ledger, FileAttributes.ReadOnly);
+        var rollback = installation.Rollback();
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => rollback.RollBackAsync(Ct));
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+        Assert.Contains(installation.Update.Ledger, refused.Message, StringComparison.Ordinal);
+
+        // What the rollback did is still there to be printed beside the refusal.
+        Assert.Contains(rollback.Steps, step => step.StartsWith("restored the database", StringComparison.Ordinal));
+
+        File.SetAttributes(installation.Update.Ledger, FileAttributes.Normal);
+    }
+
     [Fact]
     public async Task A_rollback_with_no_record_of_an_update_says_there_is_nothing_to_put_back()
     {
