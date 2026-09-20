@@ -186,10 +186,15 @@ jobs:
           $python = if ($IsWindows) { 'python' } else { 'python3' }
           $server = Start-Process $python -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1', '--directory', 'feed' -PassThru
           "server=$($server.Id)" >> $env:GITHUB_ENV
+          $ready = $false
           for ($try = 0; $try -lt 50; $try++) {
-            try { Invoke-WebRequest -Uri http://127.0.0.1:8099/manifest.json -UseBasicParsing | Out-Null; break }
+            try { Invoke-WebRequest -Uri http://127.0.0.1:8099/manifest.json -UseBasicParsing | Out-Null; $ready = $true; break }
             catch { Start-Sleep -Milliseconds 200 }
           }
+
+          # Said here, where it is known, rather than three steps later as an update that could not reach its
+          # feed: that failure reads like the update's and it is not.
+          if (-not $ready) { throw "the feed on 127.0.0.1:8099 never answered within 10 s" }
 
       - name: Install the version this tree carries, and leave its runtime stopped
         shell: pwsh

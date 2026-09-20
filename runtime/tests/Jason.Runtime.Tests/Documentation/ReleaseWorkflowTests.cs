@@ -953,6 +953,29 @@ public class ReleaseWorkflowTests
     }
 
     /// <summary>
+    /// The end-to-end job serves its own feed and waits for it, and a wait that runs out of tries says so.
+    /// </summary>
+    /// <remarks>
+    /// The wait fell through in silence: fifty tries, then on to the next step whatever the answer. A feed that
+    /// never came up then surfaced three steps later as an update that could not reach it, which is a failure
+    /// somebody has to diagnose twice — once to find out that the update was fine and once to find out that
+    /// nothing was listening.
+    /// </remarks>
+    [Fact]
+    public void The_feed_the_end_to_end_serves_is_waited_for_and_the_wait_can_run_out()
+    {
+        var job = Job(Read(Ci), "update-end-to-end");
+
+        var waiting = job.IndexOf("Invoke-WebRequest", StringComparison.Ordinal);
+        Assert.True(waiting > 0, $"the end-to-end job no longer waits for the feed it serves:\n{job}");
+
+        // The statement that gives up, not a word about giving up: what follows the wait has to be a throw that
+        // happens only when the wait ran out.
+        var after = job[waiting..];
+        Assert.Matches(@"if \(-not \$ready\) \{[^}\n]*throw", after);
+    }
+
+    /// <summary>
     /// And it puts the update back again, from the executable a person would type — which is the one thing about
     /// a rollback no test in this repository can reach.
     /// </summary>
