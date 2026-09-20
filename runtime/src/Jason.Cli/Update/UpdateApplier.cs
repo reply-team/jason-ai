@@ -266,9 +266,15 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             return ledger with { StoppedAt = ledger.StoppedAt ?? clock.GetUtcNow() };
         }
 
-        var exit = await RuntimeStopCommand.RunAsync(env, human: false, cancellationToken).ConfigureAwait(false);
+        // The stop is a step of this verb and not a verb of its own. `jason runtime stop` answers whoever typed
+        // it, on stdout — and here nobody typed it: the stdout an update writes to carries one JSON document,
+        // and a second one in front of it is not a longer answer but an unreadable one. What the stop had to
+        // say is kept, and printed on stderr if it went wrong, beside this update's own refusal.
+        using var stopping = new StringWriter();
+        var exit = await RuntimeStopCommand.RunAsync(env with { Out = stopping }, human: false, cancellationToken).ConfigureAwait(false);
         if (exit != ExitCodes.Success)
         {
+            env.Error.Write(stopping.ToString());
             throw new UpdateException(UpdateCodes.RuntimeUnreachable, "The runtime would not stop, so nothing was replaced.");
         }
 

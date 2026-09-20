@@ -166,8 +166,12 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             return;
         }
 
-        if (await RuntimeStopCommand.RunAsync(env, human: false, cancellationToken).ConfigureAwait(false) != ExitCodes.Success)
+        // As in an update, and for the same reason: the stop is a step of this verb, so its own answer stays
+        // off the stdout where this rollback's one document goes, and is printed on stderr if it failed.
+        using var stopping = new StringWriter();
+        if (await RuntimeStopCommand.RunAsync(env with { Out = stopping }, human: false, cancellationToken).ConfigureAwait(false) != ExitCodes.Success)
         {
+            env.Error.Write(stopping.ToString());
             throw new UpdateException(
                 UpdateCodes.RuntimeUnreachable,
                 "The runtime would not stop, so nothing was put back: an executable cannot be replaced under a runtime that is using it.");

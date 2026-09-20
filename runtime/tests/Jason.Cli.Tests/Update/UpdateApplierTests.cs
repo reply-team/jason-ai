@@ -12,6 +12,23 @@ public class UpdateApplierTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>
+    /// An update against a running runtime has to stop it, and the stopping is done by the same code
+    /// <c>jason runtime stop</c> runs — which answers a person, on stdout. Here there is no person: the caller
+    /// is whatever read the one JSON document this verb promises, and a second document in front of it is not a
+    /// smaller answer but an unparseable one. What the stop did is already said in the steps.
+    /// </summary>
+    [Fact]
+    public async Task An_update_that_stops_a_runtime_writes_nothing_to_the_callers_stdout()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+
+        var ledger = await installation.Applier().ApplyAsync(Request(installation), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(string.Empty, installation.Out.ToString());
+    }
+
     [Fact]
     public async Task The_whole_sequence_leaves_the_new_version_installed_and_running()
     {

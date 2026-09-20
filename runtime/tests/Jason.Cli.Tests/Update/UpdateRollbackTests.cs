@@ -1,4 +1,7 @@
+using System.Text.Json;
 using Jason.Cli.Update;
+using Jason.Contracts.Api;
+using Jason.Contracts.Json;
 using Jason.Contracts.Update;
 
 namespace Jason.Cli.Tests.Update;
@@ -155,6 +158,26 @@ public class UpdateRollbackTests
         var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
 
         Assert.Equal(UpdateCodes.NothingToRollBack, refused.Code);
+    }
+
+    /// <summary>
+    /// The shape a script reads, and the shape CI's rollback step reads: one JSON document on stdout. A
+    /// rollback stops the runtime before it replaces anything, and the acknowledgement of that stop went to the
+    /// caller's stdout ahead of the result — two documents where one was promised, which <c>ConvertFrom-Json</c>
+    /// turns into an array and <c>jq</c> refuses outright.
+    /// </summary>
+    [Fact]
+    public async Task The_verb_prints_one_json_document_although_it_stopped_a_runtime_on_the_way()
+    {
+        using var installation = await UpdatedAsync();
+        Assert.True(installation.Running, "this test is about the stop, so there has to be something to stop");
+
+        var exit = await CliApp.RunAsync(["update", "rollback"], installation.Env, Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var only = Assert.Single(installation.Out.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+        var answer = JsonSerializer.Deserialize<UpdateApplyResponse>(only, JasonJson.Options);
+        Assert.Equal(installation.From.ToString(), answer!.To);
     }
 
     private static async Task<FakeInstallation> UpdatedAsync(bool migrates = false)
