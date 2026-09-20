@@ -204,6 +204,110 @@ public class UpdateRollbackTests
         Assert.Equal(installation.From.ToString(), installation.Installed());
     }
 
+    /// <summary>
+    /// A write-ahead log that will not move stops the restore before the database moves, and the message is
+    /// true when it says the database was left as it is.
+    /// </summary>
+    /// <remarks>
+    /// The sidecars used to be deleted <em>after</em> the backup was already installed, inside the same try.
+    /// A delete that refused there left the file from before the update in place with a log written against the
+    /// new schema beside it - which this product's own page calls corruption - while the refusal said the
+    /// database was untouched, the ledger was written back claiming no restore, and a runtime was started on
+    /// the pair. They are dealt with first now, and a refusal here happens with nothing moved at all.
+    /// </remarks>
+    [Fact]
+    public async Task A_sidecar_that_will_not_move_stops_the_restore_before_the_database_does()
+    {
+        using var installation = await UpdatedAsync(migrates: true);
+        installation.WriteDatabase("migrated by the new version");
+        var log = installation.Paths.DatabaseFile + "-wal";
+        File.WriteAllText(log, "a log written against the new schema");
+        var before = File.ReadAllBytes(installation.Paths.DatabaseFile);
+
+        // Nothing is renamed onto a directory with a file in it, on any platform this ships to.
+        Directory.CreateDirectory(log + ".rolling");
+        File.WriteAllText(Path.Combine(log + ".rolling", "occupied"), "not empty");
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+        Assert.Equal(before, File.ReadAllBytes(installation.Paths.DatabaseFile));
+        Assert.Equal("a log written against the new schema", File.ReadAllText(log));
+
+        // The half that is always safe still happened, and the machine is not left dead.
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+        Assert.True(installation.Running, "the refusal was about the database, not about leaving the machine dead");
+    }
+
+    /// <summary>
+    /// The defect itself, in the shape a machine really reaches it: a runtime is still holding the write-ahead
+    /// log open when the rollback gets to it. The backup was installed first and the delete then refused, so
+    /// the database from before the update sat there with a log written against the new schema beside it - and
+    /// the refusal a person read said the database had been left exactly as it was.
+    /// </summary>
+    /// <remarks>
+    /// Windows only, because this is a Windows fault: an open file cannot be renamed or deleted there, and on
+    /// Unix both succeed while the handle stays valid. The two tests beside this one carry the same rule on
+    /// every platform, built out of directories rather than handles.
+    /// </remarks>
+    [Fact]
+    public async Task A_log_still_held_open_stops_the_restore_before_the_database_moves()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to rename or delete a file that is open, which is what this is about.");
+
+        using var installation = await UpdatedAsync(migrates: true);
+        installation.WriteDatabase("migrated by the new version");
+        var log = installation.Paths.DatabaseFile + "-wal";
+        File.WriteAllText(log, "a log written against the new schema");
+        var before = File.ReadAllBytes(installation.Paths.DatabaseFile);
+
+        UpdateException refused;
+        using (var held = new FileStream(log, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
+        }
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+
+        // The sentence the refusal makes, made true: nothing moved.
+        Assert.Equal(before, File.ReadAllBytes(installation.Paths.DatabaseFile));
+        Assert.Equal("a log written against the new schema", File.ReadAllText(log));
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+    }
+
+    /// <summary>
+    /// And a copy that fails after the sidecars were set aside puts them back: the database beside them is
+    /// still the migrated one, and that log is still its own.
+    /// </summary>
+    /// <remarks>
+    /// This is a guard on the order the test above forces, not on anything the old code did: with no aside
+    /// there was nothing to put back. Removing the unwind makes it red, which is what it is for - a log left at
+    /// <c>jason.db-wal.rolling</c> is invisible to SQLite, so the committed transactions in it are gone from a
+    /// database that is still the one they belong to.
+    /// </remarks>
+    [Fact]
+    public async Task A_copy_that_fails_puts_the_write_ahead_log_back()
+    {
+        using var installation = await UpdatedAsync(migrates: true);
+        installation.WriteDatabase("migrated by the new version");
+        var log = installation.Paths.DatabaseFile + "-wal";
+        File.WriteAllText(log, "a log written against the new schema");
+        var before = File.ReadAllBytes(installation.Paths.DatabaseFile);
+
+        // The backup is copied beside the database before it is renamed onto it; a directory at that name
+        // refuses the copy, after the sidecars have been moved out of the way.
+        var arriving = installation.Paths.DatabaseFile + ".restoring";
+        Directory.CreateDirectory(arriving);
+        File.WriteAllText(Path.Combine(arriving, "occupied"), "not empty");
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Rollback().RollBackAsync(Ct));
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+        Assert.Equal(before, File.ReadAllBytes(installation.Paths.DatabaseFile));
+        Assert.Equal("a log written against the new schema", File.ReadAllText(log));
+        Assert.False(File.Exists(log + ".rolling"), "the log was set aside and left there");
+    }
+
     [Fact]
     public async Task A_rollback_with_no_record_of_an_update_says_there_is_nothing_to_put_back()
     {

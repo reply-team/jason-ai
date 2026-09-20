@@ -26,9 +26,10 @@ namespace Jason.Cli.Update;
 /// got that far - leaves the database alone.
 /// </para>
 /// <para>
-/// Nothing here opens the database. It renames one file, copies another over a third, and deletes two
-/// sidecars — because a WAL written by the new schema against a restored older file is corruption, and the two
-/// sidecars are the only part of this that cannot be undone by putting a file back.
+/// Nothing here opens the database. It renames one file, copies another over a third, and takes two sidecars
+/// out of the way — because a WAL written by the new schema against a restored older file is corruption. Those
+/// two are the only part of this that cannot be undone by putting a file back, so they are moved aside before
+/// anything else moves and deleted only once the database they belonged to is gone.
 /// </para>
 /// </remarks>
 public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeProvider clock)
@@ -290,24 +291,38 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
         // Copied beside the database and renamed onto it, never copied onto it: a copy that stops halfway — a
         // full disk, a lock, a machine that goes down — would leave a file that is neither the database from
         // before this update nor the one from after it, and nothing can put that right.
-        var arriving = env.Paths.DatabaseFile + ".restoring";
+        //
+        // The sidecars come off before any of that, and they are moved rather than deleted. Both halves of that
+        // sentence are paid for. *Before*, because a delete that refused after the backup was already installed
+        // left the older file in place with a log written against the new schema beside it — which this
+        // product's own page calls corruption — under a refusal that said the database had been left alone.
+        // *Moved*, because a write-ahead log found beside a database after a stop is a crash's, and it holds
+        // committed transactions: deleting it and then failing the copy would lose them from the migrated
+        // database that stays in place.
+        var arriving = env.Paths.DatabaseFile + Arriving;
+        var aside = new List<(string Sidecar, string Kept)>();
         try
         {
+            foreach (var suffix in Sidecars)
+            {
+                var sidecar = env.Paths.DatabaseFile + suffix;
+                if (File.Exists(sidecar))
+                {
+                    File.Move(sidecar, sidecar + SetAside);
+                    aside.Add((sidecar, sidecar + SetAside));
+                }
+            }
+
             File.Copy(backup, arriving, overwrite: true);
             File.Move(arriving, env.Paths.DatabaseFile, overwrite: true);
-
-            // A write-ahead log written against the new schema, replayed into a restored older file, is
-            // corruption. These two are the only part of a rollback that putting a file back cannot undo.
-            foreach (var sidecar in new[] { env.Paths.DatabaseFile + "-wal", env.Paths.DatabaseFile + "-shm" })
-            {
-                File.Delete(sidecar);
-            }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             // What was copied and not renamed goes with it: a file left beside the database, named like the
-            // database, is the next person's puzzle.
+            // database, is the next person's puzzle. And whatever was set aside goes back, because the database
+            // beside it is still the one this update migrated and that log is still its own.
             Discard(arriving);
+            var stranded = PutBack(aside);
 
             // Returned rather than thrown, because the caller starts the runtime before it raises anything: a
             // database that could not be put back is no reason to leave a machine with nothing running.
@@ -316,12 +331,56 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
                 UpdateCodes.FileRefused,
                 $"{ledger.FromVersion} is back in place, but the database could not be restored from '{backup}': {error.Message} "
                 + "The database is as the update left it. To go the rest of the way, stop the runtime, copy that file over "
-                + "state/jason.db, delete the -wal and -shm files beside it, and start again.",
+                + "state/jason.db, delete the -wal and -shm files beside it, and start again."
+                + stranded,
                 error));
         }
 
-        Say($"restored the database from {Path.GetFileName(backup)} and deleted its write-ahead log");
+        // The database they belonged to is gone, so they are of no use to anybody and cannot be replayed into
+        // what took its place. A delete that refuses here is worth no refusal of its own: what is left beside
+        // the restored database is a file SQLite does not look for, under a name nothing else uses either.
+        foreach (var (_, kept) in aside)
+        {
+            Discard(kept);
+        }
+
+        Say($"restored the database from {Path.GetFileName(backup)} and took its write-ahead log away");
         return (true, null);
+    }
+
+    /// <summary>The two files SQLite keeps beside a database, which a restore must not leave behind.</summary>
+    private static readonly string[] Sidecars = ["-wal", "-shm"];
+
+    /// <summary>Where the backup is copied to before it is renamed onto the database.</summary>
+    private const string Arriving = ".restoring";
+
+    /// <summary>What a sidecar is called while the database beside it is being replaced.</summary>
+    private const string SetAside = ".rolling";
+
+    /// <summary>
+    /// Puts the sidecars back, for a restore that did not happen, and says which would not go. The database
+    /// beside them is still the one this update migrated, so its log is still its own — and a person told that
+    /// the database was left alone has to be told if its log was not.
+    /// </summary>
+    private static string PutBack(List<(string Sidecar, string Kept)> aside)
+    {
+        var stranded = new List<string>();
+        foreach (var (sidecar, kept) in aside)
+        {
+            try
+            {
+                File.Move(kept, sidecar);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                stranded.Add(kept);
+            }
+        }
+
+        return stranded.Count == 0
+            ? string.Empty
+            : $" Its write-ahead log was moved aside first and could not be moved back: {string.Join(", ", stranded)}. "
+              + $"Rename it back, without the '{SetAside}', before starting anything on that database.";
     }
 
     /// <summary>A leftover that nobody should have to reason about, gone as far as the filesystem allows.</summary>
