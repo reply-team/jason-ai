@@ -321,6 +321,14 @@ jobs:
           if (Get-ChildItem -Path (Join-Path $update 'previous') -File -ErrorAction SilentlyContinue) {
             throw "previous/ still holds an executable, so the rollback copied rather than moved it"
           }
+
+          # And on Windows, the image this rollback replaced is still there: it is the process that ran the
+          # command, a running program cannot delete itself, and being renamed out of the way rather than
+          # written over is the whole of why this worked. On Linux the same delete succeeds, so there is
+          # nothing to find.
+          if ($IsWindows -and -not (Get-ChildItem -Path (Join-Path $update 'replaced') -File -ErrorAction SilentlyContinue)) {
+            throw "replaced/ is empty, so the executable that ran this rollback was never moved aside"
+          }
           if (-not $status.database.applied_migrations) { throw "the restored database has no migrations applied" }
 
           # And the database serving now is the one from before the update, which is asked of what the restored

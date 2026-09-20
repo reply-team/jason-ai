@@ -669,6 +669,28 @@ public class ReleaseWorkflowTests
     /// So the mention must end on a word boundary, and must not be a throw, a condition or a comment: what is
     /// left is the invocation.
     /// </remarks>
+    /// <summary>
+    /// Where a step really runs a command, by the same rules <see cref="Runs"/> uses — which is not where it
+    /// first mentions one. This job's rollback step opens with a comment naming <c>jason update rollback</c>,
+    /// so a guard that split the step at the first mention was splitting it at the comment, and a
+    /// <c>runtime stop</c> inserted between that comment and the invocation fell on the wrong side of it.
+    /// </summary>
+    private static int At(string text, string command)
+    {
+        var position = 0;
+        foreach (var line in text.Split('\n'))
+        {
+            if (Runs(line, command))
+            {
+                return position;
+            }
+
+            position += line.Length + 1;
+        }
+
+        return -1;
+    }
+
     private static bool Runs(string step, string command) =>
         step.Split('\n')
             .Select(line => line.Trim())
@@ -945,11 +967,14 @@ public class ReleaseWorkflowTests
     {
         var job = Job(Read(Ci), "update-end-to-end");
 
-        Assert.Contains("update rollback", job, StringComparison.Ordinal);
+        // Where it is run, not where it is named: this step's own comment says `jason update rollback` four
+        // lines above the invocation.
+        var rollback = At(job, "update rollback");
+        Assert.True(rollback > 0, "the end-to-end job does not run `update rollback`");
 
         // Rolled back by the installed executable, not by anything built beside it.
-        var rollback = job.IndexOf("update rollback", StringComparison.Ordinal);
-        Assert.Contains("$env:install update rollback", job[(rollback - 30)..], StringComparison.Ordinal);
+        var invocation = job[rollback..job.IndexOf('\n', rollback)];
+        Assert.Contains("$env:install update rollback", invocation, StringComparison.Ordinal);
 
         // Against the runtime the update left running. A rollback decides whether restoring a database is safe
         // by asking that runtime what has been recorded since; a job that stopped it first would be asserting
@@ -961,8 +986,10 @@ public class ReleaseWorkflowTests
 
         // And what it must leave behind: the old version serving, the kept executable consumed, and the
         // database from before the update.
+        // Each of these is the expression the check is made of rather than a word the step also uses about
+        // itself: a guard that matched the prose beside a check would survive the check being deleted.
         var after = job[rollback..];
-        Assert.Contains("previous", after, StringComparison.Ordinal);
+        Assert.Contains("Join-Path $update 'previous'", after, StringComparison.Ordinal);
         Assert.Contains("runtime_version", after, StringComparison.Ordinal);
 
         // That last one is asked of what the restored runtime had to do, because the file cannot be inspected
@@ -972,6 +999,9 @@ public class ReleaseWorkflowTests
         // migrated it again, and the backup it took is not the backup the update took.
         Assert.Contains("newly_applied", after, StringComparison.Ordinal);
         Assert.Contains("$env:backup", after, StringComparison.Ordinal);
+
+        // And on Windows, that the image which ran the rollback was moved aside rather than written over.
+        Assert.Contains("Join-Path $update 'replaced'", after, StringComparison.Ordinal);
         Assert.True(
             job.IndexOf("\"backup=", StringComparison.Ordinal) is var kept && kept > 0 && kept < rollback,
             "the end-to-end job never remembers the backup the update took, so it cannot tell it from the one the rollback's own start takes");
