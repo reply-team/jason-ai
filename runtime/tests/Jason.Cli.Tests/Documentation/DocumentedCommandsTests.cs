@@ -4,11 +4,18 @@ using Jason.Cli.Tests.Process;
 namespace Jason.Cli.Tests.Documentation;
 
 /// <summary>
-/// Everything this repository teaches somebody to type, typed. The skill an agent reads and the walkthrough a
-/// person follows both print commands, and a command that stopped existing — renamed, moved under a different
-/// noun, given a required option — would leave both of them quietly wrong. So every printed command is handed
-/// to the real parser here: not executed against anything, only parsed, and a usage error is a failed test.
+/// The walkthrough a person follows, typed. A command that stopped existing — renamed, moved under a
+/// different noun, given a required option — would leave the page quietly wrong, so every printed command is
+/// handed to the real parser here: not executed against anything, only parsed, and a usage error is a failed
+/// test.
 /// </summary>
+/// <remarks>
+/// The skills pack used to be guarded here too, three files named one by one. It moved to
+/// <c>Jason.App.Tests</c> and is enumerated there instead: a skill may print a line the CLI never sees —
+/// <c>runtime run</c> is answered by the runtime service before the CLI is reached — and a guard that knew
+/// only this library would call such a line a usage error. What stays here is the page, which types nothing
+/// the CLI does not answer.
+/// </remarks>
 /// <remarks>
 /// The check is "does this CLI understand it", which is exactly what exit code 2 answers. A command that parses
 /// and then cannot reach a runtime answers 3 instead, and that is a pass: what is being guarded is the spelling
@@ -20,28 +27,8 @@ public class DocumentedCommandsTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task Every_command_the_skill_prints_is_a_command_this_cli_parses() =>
-        await AssertEveryCommandParsesAsync(Page("Skills", "runtime", "managed-campaign-work", "SKILL.md"));
-
-    [Fact]
     public async Task Every_command_the_walkthrough_prints_is_a_command_this_cli_parses() =>
         await AssertEveryCommandParsesAsync(Page("Documentation", "golden-path.md"));
-
-    /// <summary>
-    /// The role skill is read by a launched agent that has no way to ask what a command should have been: a
-    /// wrong spelling there is a refused callback in the middle of somebody's paid attempt.
-    /// </summary>
-    [Fact]
-    public async Task Every_command_the_role_skill_prints_is_a_command_this_cli_parses() =>
-        await AssertEveryCommandParsesAsync(Page("Skills", "runtime", "roles", "researcher", "SKILL.md"));
-
-    /// <summary>
-    /// The manager's skill prints more verbs than any other page here, and the manager reads it in the middle
-    /// of a review it was launched for — where a wrong spelling is a refused callback on a paid attempt.
-    /// </summary>
-    [Fact]
-    public async Task Every_command_the_manager_skill_prints_is_a_command_this_cli_parses() =>
-        await AssertEveryCommandParsesAsync(Page("Skills", "runtime", "roles", "manager", "SKILL.md"));
 
     [Fact]
     public void The_skill_says_what_it_is_and_does_not_oversell_it()
