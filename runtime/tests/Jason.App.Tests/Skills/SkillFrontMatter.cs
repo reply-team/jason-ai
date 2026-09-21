@@ -11,11 +11,17 @@ namespace Jason.App.Tests.Skills;
 /// correct, so the shape is guarded rather than accommodated: anything that is not a key at column zero or a
 /// metadata entry indented by exactly two spaces is reported as a problem.
 /// </remarks>
+/// <param name="Close">
+/// The line that closed the front matter, counted from zero, or -1 where nothing did. It is here because
+/// the body begins on the next line, and the body is what a <c>verified</c> row records the digest of:
+/// one reader answers where the front matter ends, rather than two agreeing by habit.
+/// </param>
 internal sealed record SkillFrontMatter(
     IReadOnlyList<string> Keys,
     IReadOnlyDictionary<string, string> Top,
     IReadOnlyDictionary<string, string> Metadata,
-    IReadOnlyList<string> Problems)
+    IReadOnlyList<string> Problems,
+    int Close)
 {
     public static SkillFrontMatter Read(string file)
     {
@@ -27,7 +33,7 @@ internal sealed record SkillFrontMatter(
 
         if (lines.Length == 0 || lines[0].TrimEnd() != "---")
         {
-            return new SkillFrontMatter([], top, metadata, ["it does not open with front matter"]);
+            return new SkillFrontMatter([], top, metadata, ["it does not open with front matter"], -1);
         }
 
         var inMetadata = false;
@@ -36,7 +42,7 @@ internal sealed record SkillFrontMatter(
             var line = lines[index];
             if (line.TrimEnd() == "---")
             {
-                return new SkillFrontMatter(keys, top, metadata, problems);
+                return new SkillFrontMatter(keys, top, metadata, problems, index);
             }
 
             if (line.Length == 0)
@@ -79,6 +85,6 @@ internal sealed record SkillFrontMatter(
         }
 
         problems.Add("the front matter is never closed");
-        return new SkillFrontMatter(keys, top, metadata, problems);
+        return new SkillFrontMatter(keys, top, metadata, problems, -1);
     }
 }

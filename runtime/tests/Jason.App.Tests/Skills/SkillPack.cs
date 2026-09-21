@@ -91,18 +91,23 @@ internal static class SkillPack
 
     /// <summary>
     /// The text a host reads: everything below the front matter, line endings normalised and trailing space
-    /// trimmed. The opening fence is the file's first line, so the close is the first <c>---</c> on a line of
-    /// its own after it.
+    /// trimmed. Where the front matter ends is asked of the reader that parses it, rather than worked out a
+    /// second time here — a file whose front matter is malformed has no body at all, and taking the first
+    /// <c>---</c> line instead would digest whatever happened to follow the next rule in the text.
     /// </summary>
     public static string Body(string file)
     {
-        var text = System.IO.File.ReadAllText(file).Replace("\r\n", "\n", StringComparison.Ordinal);
-        Assert.StartsWith("---\n", text, StringComparison.Ordinal);
+        var front = SkillFrontMatter.Read(file);
+        Assert.True(
+            front.Close >= 0 && front.Problems.Count == 0,
+            $"'{file}' does not read as front matter, so it has no body to digest: "
+            + (front.Problems.Count > 0 ? string.Join("; ", front.Problems) : "it never closes"));
 
-        var close = text.IndexOf("\n---\n", StringComparison.Ordinal);
-        Assert.True(close > 0, $"'{file}' does not close its front matter.");
+        var lines = System.IO.File.ReadAllText(file)
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Split('\n');
 
-        return text[(close + 5)..].TrimEnd();
+        return string.Join('\n', lines.Skip(front.Close + 1)).TrimEnd();
     }
 
     public static string RepositoryRoot()
