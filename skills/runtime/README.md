@@ -46,6 +46,9 @@ two must match: a skill whose front matter names anything else is loaded by nobo
 - [`roles/manager`](roles/manager/SKILL.md) — **draft.** The review a manager is launched for: why it was
   woken, what it reads and in which order, what it may decide alone, how it asks a person the one question it
   cannot answer, and the line it leaves in the chronicle every time.
+- [`roles/planner`](roles/planner/SKILL.md) — **draft.** The next short horizon of work: what a planner reads
+  before it plans, what this build stores of a plan and what it does not, and how a horizon becomes work items
+  a dispatcher will claim.
 
 These are not read from here at run time. An operator composes the directory the runtime hands out,
 `<data>/skills/roles/<role>/`, from this pack and — later — from the business pack, and the runtime copies it
