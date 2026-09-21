@@ -68,8 +68,18 @@ directory is not a silent act. These are the rules the verb keeps:
   a tree somebody is reading.
 - **There is nothing to reload.** The runtime reads the role skills directory at every launch, so a
   deployment is live the moment it lands.
-- **A file you have edited is reported and kept.** An installer that quietly reverts somebody's edit is
-  a data-loss bug wearing a convenience label. `--force` is the word that says otherwise.
+- **Installing twice costs nothing.** A skill already on disk exactly as the source has it is not written
+  and not renamed, and the second run says it wrote nothing — down to the record, whose timestamp does not
+  move either, because "it wrote nothing" has to mean the bytes are the bytes that were there.
+- **A file you deleted is put back**, which is what a deployment being current means.
+- **A file you edited is reported and kept, and nothing else is written either.** An installer that
+  quietly reverts somebody's edit is a data-loss bug wearing a convenience label, and one that reverts
+  half of them is worse: you would have to work out which half. `--force` is the word that says
+  otherwise. A file that merely differs from the source while still matching the record is out of date
+  rather than edited, and is simply written — which is what the digest per file is for.
+- **A deployment whose record never landed is completed rather than trusted**, and says so. The record is
+  written last, so a crash half-way through reads as incomplete next time; a root that silently repaired
+  itself would hide that something went wrong once.
 
 ### What a pack has to look like
 

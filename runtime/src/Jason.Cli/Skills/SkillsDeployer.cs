@@ -4,11 +4,16 @@ using Jason.Contracts.Discovery;
 namespace Jason.Cli.Skills;
 
 /// <summary>What a deployment did, so the verb can report it rather than claim it.</summary>
+/// <param name="Notes">
+/// Things worth telling the operator that are not failures — a root whose record never landed, which this run
+/// is completing. A root that silently repaired itself would hide that something went wrong once.
+/// </param>
 public sealed record DeploymentReport(
     int Written,
     int Unchanged,
     IReadOnlyList<string> Edited,
-    IReadOnlyList<string> Problems)
+    IReadOnlyList<string> Problems,
+    IReadOnlyList<string> Notes)
 {
     public bool Succeeded => Problems.Count == 0;
 }
@@ -34,18 +39,30 @@ public static class SkillsDeployer
         ArgumentNullException.ThrowIfNull(clock);
 
         var problems = new List<string>();
+        var notes = new List<string>();
         var records = new Dictionary<string, SkillsRecord>(StringComparer.Ordinal);
         foreach (var root in plan.Roots)
         {
-            if (Existing(root, problems) is { } record)
+            if (Existing(root, problems) is not { } record)
             {
-                records[root] = record;
+                continue;
+            }
+
+            records[root] = record;
+
+            // A root holding skills that no record accounts for is a deployment whose record never landed --
+            // it is written last, so a crash half-way through reads exactly like this. Such a root is
+            // completed rather than trusted, and said out loud: one that silently repaired itself would hide
+            // that something went wrong once.
+            if (record.Packs.Count == 0 && Directory.Exists(root) && Directory.GetDirectories(root).Length > 0)
+            {
+                notes.Add($"'{root}' holds skills and there is no record of what is there, so this deployment is being completed rather than trusted.");
             }
         }
 
         if (problems.Count > 0)
         {
-            return new DeploymentReport(0, 0, [], problems);
+            return new DeploymentReport(0, 0, [], problems, notes);
         }
 
         // Everything is judged before anything is written, for the same reason the plan itself is: a partly
@@ -59,7 +76,8 @@ public static class SkillsDeployer
                 edited,
                 [string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{edited.Count} file(s) you have edited would be overwritten and nothing was written: {string.Join(", ", edited)}. Re-run with --force to overwrite them.")]);
+                    $"{edited.Count} file(s) you have edited would be overwritten and nothing was written: {string.Join(", ", edited)}. Re-run with --force to overwrite them.")],
+                notes);
         }
 
         var written = 0;
@@ -71,6 +89,7 @@ public static class SkillsDeployer
             SkillsSwap.Collect(staging);
 
             var deployments = new List<SkillsDeployment>(records[root].Packs);
+            var rewrite = false;
 
             foreach (var pack in plan.Packs.Where(pack => string.Equals(pack.Root, root, StringComparison.Ordinal)))
             {
@@ -94,15 +113,32 @@ public static class SkillsDeployer
                     written += unit.Files.Count;
                 }
 
-                deployments.RemoveAll(deployment => string.Equals(deployment.Pack, pack.Pack, StringComparison.Ordinal));
-                deployments.Add(new SkillsDeployment(
+                var recorded = deployments.FirstOrDefault(deployment => string.Equals(deployment.Pack, pack.Pack, StringComparison.Ordinal));
+                var next = new SkillsDeployment(
                     pack.Pack,
                     plan.Source.Source,
                     plan.Source.Ref,
                     plan.Source.RefOverridden,
                     plan.Source.Commit,
                     clock.GetUtcNow(),
-                    mine));
+                    mine);
+
+                // A run that changed nothing rewrites nothing, not even the time it ran. "It wrote nothing"
+                // has to mean the bytes under this root are the bytes that were there, and a record whose
+                // timestamp moved is a byte that changed.
+                if (recorded is not null && Same(recorded, next))
+                {
+                    continue;
+                }
+
+                deployments.RemoveAll(deployment => string.Equals(deployment.Pack, pack.Pack, StringComparison.Ordinal));
+                deployments.Add(next);
+                rewrite = true;
+            }
+
+            if (!rewrite)
+            {
+                continue;
             }
 
             try
@@ -115,8 +151,16 @@ public static class SkillsDeployer
             }
         }
 
-        return new DeploymentReport(written, unchanged, edited, problems);
+        return new DeploymentReport(written, unchanged, edited, problems, notes);
     }
+
+    /// <summary>
+    /// Whether a recorded deployment says the same thing as the one about to replace it, the time it ran
+    /// aside. Every field but that one is about what is on disk; that one is about when somebody typed.
+    /// </summary>
+    private static bool Same(SkillsDeployment recorded, SkillsDeployment next) =>
+        (recorded with { InstalledAt = default, Files = [] }) == (next with { InstalledAt = default, Files = [] })
+        && recorded.Files.SequenceEqual(next.Files);
 
     /// <summary>
     /// Whether what is on disk is already exactly this skill: the same files, each with the same digest, and

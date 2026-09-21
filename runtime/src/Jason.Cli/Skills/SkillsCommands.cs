@@ -109,6 +109,11 @@ public static class SkillsCommands
         }
 
         var report = SkillsDeployer.Apply(plan, env.Paths, options.Force, TimeProvider.System);
+        foreach (var note in report.Notes)
+        {
+            env.Out.WriteLine(note);
+        }
+
         foreach (var problem in report.Problems)
         {
             env.Error.WriteLine(problem);
