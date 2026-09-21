@@ -61,6 +61,9 @@ two must match: a skill whose front matter names anything else is loaded by nobo
 - [`roles/responder`](roles/responder/SKILL.md) — **draft.** What a reply means and what should happen
   next: the reply is in the brief or it is nowhere, and the answer is a reading and a draft rather than
   anything sent.
+- [`roles/analyst`](roles/analyst/SKILL.md) — **draft.** What is working in a campaign, read off the three
+  things this runtime keeps — the work items, the chronicle and the reports — and honest about where the
+  record runs out.
 
 These are not read from here at run time. An operator composes the directory the runtime hands out,
 `<data>/skills/roles/<role>/`, from this pack and — later — from the business pack, and the runtime copies it
