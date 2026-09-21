@@ -196,9 +196,14 @@ answer.
 
 ## Where these come from
 
-The first group of fields is copied from a vendor-neutral contract of SDR business operations, published as an open
-skill pack in [`reply-team/reply-skills`](https://github.com/reply-team/reply-skills) and versioned independently
-of Jason; each document records which version it was copied from under
+The first group of fields is copied from a vendor-neutral contract of SDR business operations. That contract now
+lives in this repository, as the [`sdr-operations`](../../skills/business/sdr-operations/SKILL.md) skill of the
+business pack — it was published as an open skill pack in
+[`reply-team/reply-skills`](https://github.com/reply-team/reply-skills), **formerly** its home, and is versioned
+independently of Jason. The two documents are not the same kind of thing and a reader has to be told which is
+which: that catalogue names 325 operations and says what SDR work *is*, while the JSON documents here are what
+this runtime validates and executes. Where they disagree, these documents decide. Each one records which version
+of the catalogue it was copied from under
 `l1.contract_version`, together with the family and the operation's name there. Jason implements a small, strict
 subset of it, and [`divergence-from-l1.md`](divergence-from-l1.md) records every place the two differ, why, and
 whether the difference is something the upstream contract should take back. Feedback travels through that
