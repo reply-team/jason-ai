@@ -55,6 +55,9 @@ two must match: a skill whose front matter names anything else is loaded by nobo
 - [`roles/personalizer`](roles/personalizer/SKILL.md) — **draft.** The messaging adapted to one person: what
   this runtime knows about them and where to read it, where the wording goes afterwards, and why a contact
   record is not the place for it.
+- [`roles/critic`](roles/critic/SKILL.md) — **draft.** The review of a draft against the brief and the
+  guardrails: what to read before judging it, what a verdict is worth here, and why saying plainly what fails
+  is the whole of the job.
 
 These are not read from here at run time. An operator composes the directory the runtime hands out,
 `<data>/skills/roles/<role>/`, from this pack and — later — from the business pack, and the runtime copies it
