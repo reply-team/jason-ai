@@ -26,12 +26,16 @@ public sealed record DeployedFile(string Path, string Sha256);
 /// True when the ref came from a flag rather than from the pin this build carries, so that "is this current?"
 /// can be answered honestly about a deployment that deliberately is not.
 /// </param>
+/// <param name="Commit">
+/// The commit the files came from, or null when the source was a directory read where it stood. A working
+/// tree has no commit, and recording one would say the deployment came from a state nothing can go back to.
+/// </param>
 public sealed record SkillsDeployment(
     string Pack,
     string Source,
     string Ref,
     bool RefOverridden,
-    string Commit,
+    string? Commit,
     DateTimeOffset InstalledAt,
     IReadOnlyList<DeployedFile> Files);
 
