@@ -43,7 +43,7 @@ All **nine roles this runtime seeds** are taught here, and every one of them car
 — what it may type, what its note is worth, what shape its answer takes — held identical by a test. What
 differs between them is one paragraph of purpose and one of what this build can and cannot give that role.
 
-- [`roles/researcher`](roles/researcher/SKILL.md) — **draft.** The brief a role is given when the runtime
+- [`roles/researcher`](roles/researcher/SKILL.md) — **verified.** The brief a role is given when the runtime
   launches it: how to call home in the one command form that is permitted, how to read and keep its campaign
   note, and how to answer in the shape the work item asked for.
 - [`roles/manager`](roles/manager/SKILL.md) — **draft**, because it was re-authored onto the shared launch
@@ -81,7 +81,7 @@ SHA-256 of the text it read.
 |---|---|---|---|---|
 | `manager` | draft (re-authored onto the contract since its last reading) | — | — | — |
 | `planner` | draft | — | — | — |
-| `researcher` | draft (its launch contract was corrected after the reading) | — | — | — |
+| `researcher` | verified | Claude Code 2.1.278 | 0.1.0 | `sha256:f7415241899c4ab082f21e0a0bc03036c96fec94da388f9b1b492a6cb2dcc389` |
 | `copywriter` | draft | — | — | — |
 | `personalizer` | draft | — | — | — |
 | `critic` | draft | — | — | — |
