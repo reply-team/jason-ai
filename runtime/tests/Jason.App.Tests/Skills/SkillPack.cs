@@ -53,14 +53,23 @@ internal static class SkillPack
     /// Line endings are normalised although this repository is <c>eol=lf</c> in every working tree: that is
     /// belt and braces against an editor that writes CRLF, not a platform difference.
     /// </remarks>
-    public static string BodyDigest(string file)
+    public static string BodyDigest(string file) =>
+        "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Body(file))));
+
+    /// <summary>
+    /// The text a host reads: everything below the front matter, line endings normalised and trailing space
+    /// trimmed. The opening fence is the file's first line, so the close is the first <c>---</c> on a line of
+    /// its own after it.
+    /// </summary>
+    public static string Body(string file)
     {
         var text = System.IO.File.ReadAllText(file).Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.StartsWith("---\n", text, StringComparison.Ordinal);
+
         var close = text.IndexOf("\n---\n", StringComparison.Ordinal);
         Assert.True(close > 0, $"'{file}' does not close its front matter.");
 
-        var body = text[(close + 5)..].TrimEnd();
-        return "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(body)));
+        return text[(close + 5)..].TrimEnd();
     }
 
     public static string RepositoryRoot()

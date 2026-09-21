@@ -55,10 +55,14 @@ public class SkillSequenceTests
         const string Create = "jason campaign create --name \"Q3 LatAm founders\"";
         const string Add = $"jason campaign add-contacts cmp_{Placeholder} --file contacts.json --match-by email";
         const string List = $"jason campaign list-contacts cmp_{Placeholder}";
+        const string Work = $"jason workitem create cmp_{Placeholder} --kind provider_op --operation "
+            + $"campaign.enroll --contact cnt_{Placeholder} --input \"{{\\\"campaign\\\":{{\\\"external_id\\\":"
+            + "\\\"7\\\"},\\\"channel\\\":\\\"email\\\",\\\"collision\\\":\\\"skip\\\",\\\"start\\\":"
+            + "{\\\"position\\\":\\\"first_step\\\"},\\\"first_touch\\\":\\\"authored_delay\\\"}\"";
         const string Start = $"jason campaign start cmp_{Placeholder}";
         const string Follow = $"jason workitem list --campaign cmp_{Placeholder}";
 
-        foreach (var line in new[] { Create, Add, List, Start, Follow })
+        foreach (var line in new[] { Create, Add, List, Work, Start, Follow })
         {
             Assert.Contains(line, printed);
         }
@@ -88,11 +92,22 @@ public class SkillSequenceTests
         var people = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(List, ids)])));
         var listed = Assert.Single(people["items"]!.AsArray())!;
         Assert.Equal(Address, (string?)listed["contact"]!["channels"]!.AsArray()[0]!["value"]);
+        ids["cnt_"] = (string)listed["contact"]!["id"]!;
+
+        // The unit of work itself, by the line the skill prints for it — which is the half that makes this a
+        // managed path rather than an address book. It parks on a person at the claim, the way the walkthrough's
+        // own does, so what is asserted afterwards is that it exists and is followed, not that it ran.
+        var item = (string)GoldenPath.Json(await GoldenPath.Ok(
+            GoldenPath.JasonAsync(it, [.. Substituted(Work, ids)])))["id"]!;
+        Assert.StartsWith("wi_", item, StringComparison.Ordinal);
 
         GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, [.. Substituted(Start, ids)]));
 
         var work = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(Follow, ids)])));
-        Assert.NotNull(work["items"]);
+        Assert.Contains(work["items"]!.AsArray(), listing => (string?)listing!["id"] == item);
+
+        var parked = await GoldenPath.PollAsync(it, item, read => (string?)read["status"] == "awaiting_approval");
+        Assert.Empty(parked["attempts"]!.AsArray());
     }
 
     /// <summary>

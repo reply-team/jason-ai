@@ -2,7 +2,7 @@
 name: troubleshooting-jason
 description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the nine states apart, and name the repair that is safe.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Troubleshooting Jason
@@ -58,11 +58,15 @@ jason decision list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason report list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
 ```
 
-## The nine states
+## The ten states
 
-Nine things "it is stuck" turns out to mean. Decide which one you are looking at before you say anything to
-anybody: four of them are not failures at all, three of them nobody can fix from a session, and only two are
+Ten things "it is stuck" turns out to mean. Decide which one you are looking at before you say anything to
+anybody: four of them are not failures at all, four of them nobody can fix from a session, and only two are
 about the work you asked for.
+
+**The codes named below are the common ones, not all of them.** The runtime publishes more than two dozen
+attempt error codes, and one you do not find here is not a code that means nothing — read what it says, and
+if it names something to change, that is the answer.
 
 ### 1. Waiting for its time
 
@@ -111,7 +115,26 @@ write a route, enable a profile, make an agent host available, correct a role's 
 operator's deliberate act. Nothing was started and nothing was spent. Name what is missing and hand it over;
 setting it up is `operating-the-installation`.
 
-### 5. A transient provider failure
+### 5. The person is on the do-not-contact register
+
+**How you recognise it.** The error code is `suppressed`, on an operation that reaches somebody.
+
+```
+jason suppression list --human
+```
+
+**What it means.** That channel value is on the do-not-contact register, so this campaign does not reach them
+there. Nothing was sent and nothing was attempted at the provider — the register is consulted before any of
+that — and this is the register **working**. It is final by design: the item is finished, and a second item
+for the same person on the same value would stop in exactly the same place.
+
+**The repair is not yours.** Lifting a suppression is `jason suppression remove`, and it is a person's act on
+another person's behalf — somebody asked not to be contacted, and a session that lifted that to get its work
+moving would be the one failure in this whole document that reaches a real person. Say who is suppressed and
+on which value, and let the person decide. If the campaign should reach them somewhere else, that is new work
+on a channel they have.
+
+### 6. A transient provider failure
 
 **How you recognise it.** The failure was classed `transient`, and the item has been tried more than once.
 The attempt count on the item says how often; the chronicle says when.
@@ -120,7 +143,7 @@ The attempt count on the item says how often; the chronicle says when.
 try again and when to stop trying. There is nothing for you to do while attempts remain. Report how many
 there have been and what the last one said, and leave it to run.
 
-### 6. A permanent or validation problem
+### 7. A permanent or validation problem
 
 **How you recognise it.** `input_invalid`, or a failure the plugin classed `permanent` or `validation`.
 
@@ -134,7 +157,7 @@ fail in the same way. The operation's own document is what the runtime enforces,
 project's source under `docs/contracts/operations/`; **no verb prints one**, so on a machine with no copy of
 the source, ask the operator for it rather than guessing at the correction.
 
-### 7. An attempt that was interrupted
+### 8. An attempt that was interrupted
 
 **How you recognise it.** The failure was recorded as `ambiguous`.
 
@@ -144,7 +167,7 @@ or may never have started. Where the operation's contract declares a recovery re
 provider what actually happened before it writes anything. Where it does not, the work stops there and a
 person decides — because the alternative is sending the same message to the same human being twice.
 
-### 8. An effect reported from outside
+### 9. An effect reported from outside
 
 **How you recognise it.** A report against the campaign says something was already done — through a
 provider's own tools, or by hand, or because the managed path was not available.
@@ -154,7 +177,7 @@ routed, supervised or verified. It moves no work item, closes nothing, and expla
 for the person reading, and it may be the reason a second attempt would be a duplicate. Telling Jason about
 such an effect is `reporting-outside-effects`.
 
-### 9. An outdated or unavailable plugin
+### 10. An outdated or unavailable plugin
 
 **How you recognise it.** `plugin_unavailable`, or a plugin that lists problems of its own.
 
@@ -183,8 +206,13 @@ snapshot is swapped whole, or the old one is kept and the reason is printed.
 jason plugin reload --reason "the package was updated"
 ```
 
-**Restarting the runtime**, when the process itself is the problem rather than anything in it. Work that was
-in flight is picked up again afterwards.
+**Restarting the runtime**, when the process itself is the problem rather than anything in it. What that does
+to work in flight is narrower than it sounds: a shutdown stops claiming, waits briefly for handlers, and
+**does not kill children that are still running** — their leases are still good, and a survivor completes
+against the next runtime. An attempt that was only **scheduled** is released back to `created` and claimed
+again; an attempt already **processing** is left to the lease and the heartbeat to decide, and a `provider_op`
+whose answer was lost that way ends **`ambiguous`**, which is state 8 and waits for a person. So a restart
+recovers the queue; it does not un-lose an answer.
 
 ```
 jason runtime restart

@@ -2,7 +2,7 @@
 name: reporting-outside-effects
 description: Use when an effect on a person happened outside Jason and Jason does not know - you or somebody else sent, enrolled or replied by hand or through another tool - so that it is recorded as what was done, by whom, and when, before Jason acts on a view of the world that is wrong.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Reporting effects that happened outside Jason

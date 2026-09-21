@@ -63,16 +63,22 @@ public partial class SkillPackTests
     public void Every_skill_is_in_the_catalog_and_every_catalog_entry_is_a_skill()
     {
         var catalog = File.ReadAllText(SkillPack.Catalog());
+        var linked = Links(catalog).ToList();
 
+        // Both halves read markdown links, and neither reads prose. A forward half that searched the text for
+        // the path would count a skill merely *named* in a sentence as catalogued — and this catalog does name
+        // one in prose, where it explains that a role's skill ends up at .claude/skills/<role>/SKILL.md. What a
+        // person needs from a catalog is something to click.
         foreach (var skill in SkillPack.All())
         {
             var link = Path.GetRelativePath(SkillPack.Root(), skill.File).Replace('\\', '/');
             Assert.True(
-                catalog.Contains(link, StringComparison.Ordinal),
-                $"'{skill.Name}' is a skill in this pack and the catalog does not link it as '{link}'.");
+                linked.Contains(link, StringComparer.Ordinal),
+                $"'{skill.Name}' is a skill in this pack and the catalog does not link it as '{link}'. "
+                + $"The catalog links: {string.Join(", ", linked)}");
         }
 
-        foreach (var link in Links(catalog))
+        foreach (var link in linked)
         {
             Assert.True(
                 File.Exists(Path.Combine(SkillPack.Root(), link)),
@@ -96,6 +102,45 @@ public partial class SkillPackTests
 
     [GeneratedRegex(@"\]\(([^()\s]+/SKILL\.md)\)")]
     private static partial Regex LinkTarget();
+
+    /// <summary>
+    /// What a skill says about itself in its own body, held to what its front matter says. These are two
+    /// claims about one thing, made in two places, and only one of them is machine-readable — so the other is
+    /// the one that goes stale.
+    /// </summary>
+    /// <remarks>
+    /// It went stale once already, and expensively: five skills were promoted to <c>verified</c> with a host
+    /// reading and a digest, while every one of their bodies still opened with "Status: draft". The digest
+    /// covers the body, so each recorded reading was a reading of a text calling itself a draft. Nothing caught
+    /// it, because the one fact that used to hold the two together was deleted when the pack's guards were
+    /// rewritten and was replaced with nothing.
+    /// </remarks>
+    [Fact]
+    public void What_a_skill_says_about_itself_agrees_with_its_front_matter()
+    {
+        const string Draft = "**Status: draft.**";
+
+        foreach (var skill in SkillPack.All())
+        {
+            var status = SkillFrontMatter.Read(skill.File).Metadata.GetValueOrDefault("status");
+            var body = SkillPack.Body(skill.File);
+            var callsItselfADraft = body.Contains(Draft, StringComparison.Ordinal);
+
+            if (status == "draft")
+            {
+                Assert.True(
+                    callsItselfADraft,
+                    $"'{skill.File}' is a draft and its body does not say so. A reader is told what this is by "
+                    + $"the text, not by the front matter: it needs the line '{Draft}'.");
+                continue;
+            }
+
+            Assert.False(
+                callsItselfADraft,
+                $"'{skill.File}' says it is '{status}' and its body still opens by calling itself a draft. The "
+                + "reading recorded for it was therefore a reading of a text that says it is unfinished.");
+        }
+    }
 
     /// <summary>
     /// The sentences elsewhere that this pack makes true or false. Each was written while the runtime guidance

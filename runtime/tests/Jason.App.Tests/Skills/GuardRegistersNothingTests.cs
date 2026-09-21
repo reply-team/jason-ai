@@ -19,10 +19,12 @@ namespace Jason.App.Tests.Skills;
 /// <para>
 /// The sibling guard in <c>Jason.Cli.Tests</c> asserts in addition that what it holds is not the registrar
 /// this machine would use. That assertion is not repeated here and is not missing: it is needed there because
-/// that seam holds a recorder, which is not null and therefore has to be told apart from the real thing.
-/// Here the seam is null, and asking for this machine's registrar by name is the one thing a file in this
-/// project may not do — the scan above is right to refuse the word, and the refusal below is the behaviour
-/// that assertion was standing in for anyway.
+/// that seam holds a recorder, which is not null and therefore has to be told apart from the real thing. Here
+/// the seam is null, and the refusal below is the behaviour that assertion was standing in for anyway.
+/// </para>
+/// <para>
+/// This file names the verb plainly. It may, because it reaches neither the router's own entry point nor the
+/// real environment — which is the pair <see cref="NothingHereRegistersAnythingTests"/> forbids.
 /// </para>
 /// </remarks>
 public class GuardRegistersNothingTests
@@ -33,14 +35,7 @@ public class GuardRegistersNothingTests
         using var tree = new TempTree();
         var machine = DocumentedSkillCommandsTests.Machine(tree, new StringWriter());
 
-        // Read rather than written, and the name assembled in halves, for the same reason the command word
-        // below is: this project's source scan refuses the whole word, and it is right to — a file here that
-        // could name the seam could also fill it. If the property is ever renamed this throws, which is the
-        // answer a guard should give.
-        var seam = typeof(Jason.Cli.CliEnvironment).GetProperty("Auto" + "start");
-        Assert.NotNull(seam);
-
-        Assert.Null(seam.GetValue(machine));
+        Assert.Null(machine.Autostart);
     }
 
     /// <summary>
@@ -61,15 +56,11 @@ public class GuardRegistersNothingTests
             Error = error,
         };
 
-        // Spelled in halves, because this project's source scan is right to refuse the whole word.
         var exit = await CliApp.RunAsync(
-            ["runtime", "auto" + "start", "enable"], machine, TestContext.Current.CancellationToken);
+            ["runtime", "autostart", "enable"], machine, TestContext.Current.CancellationToken);
 
         Assert.NotEqual(ExitCodes.Usage, exit);
         Assert.Equal(1, exit);
-        Assert.Contains(
-            "auto" + "start_unsupported",
-            output.ToString() + error.ToString(),
-            StringComparison.Ordinal);
+        Assert.Contains("autostart_unsupported", output.ToString() + error.ToString(), StringComparison.Ordinal);
     }
 }

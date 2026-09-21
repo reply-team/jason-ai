@@ -2,7 +2,7 @@
 name: operating-the-installation
 description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which agent hosts are registered, and whether a newer version has been released.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Operating the installation
