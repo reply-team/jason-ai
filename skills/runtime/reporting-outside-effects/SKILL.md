@@ -49,7 +49,10 @@ existing: an id with nothing behind it is refused as the typo it is, and a conta
 of is admitted, because that is exactly the kind of fact a report exists to carry.
 
 Who you are is not optional. Name yourself with `--actor`, as `human:<id>` or `role:<id>`; a report with no
-author is not provenance, it is a rumour.
+author is not provenance, it is a rumour. **Ask whose name goes on it** and take the identifier from the person:
+it is theirs, and it is **never derived from the machine** — not from a path, a login or a git configuration.
+On a report the reporter is usually the person in front of you and a guess is often right, which is exactly why
+the habit matters: the same reasoning on an approval records somebody's decision against a name they never gave.
 
 ## The four things to get right
 
@@ -89,6 +92,17 @@ Every reading says out loud that it is unverified, and `--human` prints that sen
 rather than leaving a reader to assume more. A work item's own view carries what has been reported about it
 beside its attempts, and a filter naming a campaign that does not exist is refused rather than answered with an
 empty page.
+
+**"What has Jason done for this person?" is a different question, and one call:**
+
+```
+jason workitem list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+That is the work Jason itself did or tried. `jason report list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD` is the
+other half — what was done outside it and admitted afterwards — and the two together are the whole story of one
+person. There is no verb that merges them, and inventing one costs a turn: `work list` and `campaign contacts`
+do not exist.
 
 ## What admission does and deliberately does not do
 

@@ -121,6 +121,10 @@ terminal can be unavailable to a runtime that started at logon.
 wrong. It is all or nothing: a package problem rejects the whole reload, and the runtime carries on with the
 plugins it already had.
 
+Those two verbs are the whole plugin vocabulary, and **there is no `jason plugin get`**. One plugin by name is
+that listing read down to its row — `--human` for a person, or the default JSON for a session that is going to
+pick the row out itself.
+
 ```
 jason route list --human
 jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation campaign.enroll --human
