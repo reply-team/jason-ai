@@ -1,0 +1,301 @@
+# Family 11 — Meetings, qualification and handoff (17)
+#
+# Where the job is paid. Booked, held, accepted and converted are four separately recorded facts and
+# none may be derived from another: an invitation is not an acceptance, recording an outcome notifies
+# nobody, and who books a meeting and who owns it are routinely different people.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 11
+
+operations:
+
+  - name: meeting.propose
+    intent: >
+      "Offer them a time" — concrete slots, or a way to pick their own; also how we counter when their
+      slots do not work
+    reach: act
+    reversibility: compensatable
+    approval: confirm_each
+    approval_departs: true
+    approval_reason: >
+      raised: it puts words and specific times in front of a named person.
+    before_repeating: >
+      outstanding proposals to this person and the slots already offered — a repeat double-books the
+      calendar and mails them twice.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost:
+      value: metered
+      conditional: true
+      detail: >
+        metered against the message allowance where the channel meters messages; `none` otherwise.
+    cost_basis: per message, where the channel meters messages
+    meter: message
+    questions: [28]
+
+  - name: meeting.book
+    intent: >
+      "Book it" — time, attendees, how to join, and whose calendar and whose meeting it is
+    reach:
+      value: act
+      conditional: true
+      detail: >
+        `act` when the booking issues the invitation; `control` when it records a meeting invited
+        elsewhere — resolved by the preview.
+    reversibility: compensatable
+    approval:
+      value: confirm_each
+      conditional: true
+      detail: confirm_each when it acts, auto when the preview resolves it to `control`.
+    approval_artefact: preview
+    approval_departs: true
+    approval_reason: >
+      confirm_each when the booking issues the invitation, because each invitation reaches one
+      person's calendar and is its own decision; auto when the preview resolves it to recording a
+      meeting invited elsewhere. Act × compensatable derives confirm_once, so the acting side sits
+      deliberately above the table.
+    before_repeating: >
+      read first — existing meetings for this person and owner in the window; a booking that timed out
+      may already have invited them.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: meeting.confirm
+    intent: >
+      "Confirm tomorrow's meetings and chase the ones nobody has answered" — a daily act, not an edge
+      case
+    reach: act
+    reversibility: compensatable
+    approval: confirm_each
+    approval_departs: true
+    approval_reason: >
+      raised: it reaches named people.
+    before_repeating: >
+      whether a confirmation has already gone for this meeting and whether the attendee has already
+      responded.
+    idempotency_key: required
+    per_item_results: required
+    cost:
+      value: metered
+      conditional: true
+      detail: >
+        metered against the message allowance where the channel meters messages; `none` otherwise.
+    cost_basis: per message, where the channel meters messages
+    meter: message
+    questions: [28]
+
+  - name: meeting.reschedule
+    intent: >
+      "Move it, keeping it the same meeting with the same history"
+    reach: act
+    reversibility: compensatable
+    approval: confirm_each
+    approval_departs: true
+    approval_reason: >
+      raised: the attendee is told.
+    before_repeating: >
+      the meeting's current time and each attendee's response.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: [28]
+
+  - name: meeting.cancel
+    intent: >
+      "Call it off" — a booked meeting, or an outstanding proposal whose offered times we are
+      withdrawing
+    reach: act
+    reversibility: compensatable
+    approval: confirm_each
+    approval_departs: true
+    approval_reason: >
+      raised: the attendee is told.
+    before_repeating: >
+      the meeting's or proposal's state; an already-cancelled one is a success on retry.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: [28]
+
+  - name: meeting_outcome.record
+    intent: >
+      "What actually happened at the appointed time" — held, no-show, cancelled beforehand, moved
+      beforehand, and who did not turn up
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the outcome currently recorded
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: meeting.list
+    intent: >
+      "What is on the calendar" — mine or someone else's, coming up or already past, with outcomes
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: meeting.get
+    intent: >
+      "One meeting in full" — attendees and what each answered, how to join, the owner, and what it came
+      from
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: qualification.record
+    intent: >
+      "Write down the evidence behind 'this is worth someone's time', in the account's own questions"
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the qualification record already attached to this person or meeting, and its version — a
+      correction is a new version and the earlier one stays.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: handoff.create
+    intent: >
+      "Pass this person on, with everything the receiver needs" — the qualification evidence, the
+      meeting, the thread, and what was agreed as the next step
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised: it commits another person's time and starts their clock.
+    before_repeating: >
+      whether a handoff for this person is already open or already accepted.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [4]
+
+  - name: handoff.accept
+    intent: >
+      "I will take this, and I will contact them within this time"
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the handoff's state; acceptance happens once and the commitment clock starts once.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: handoff.reject
+    intent: >
+      "I am not taking this, and here is exactly why"
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: the handoff's state
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: handoff.return
+    intent: >
+      "I accepted this and I cannot work it — giving it back, with the reason"
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the handoff's state; only an accepted handoff can be returned.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: handoff.withdraw
+    intent: >
+      "Pull it back before anyone takes it" — they opted out, the meeting fell through, or it went to
+      the wrong person
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the handoff's state; an already-accepted handoff refuses withdrawal and must be returned by the
+      receiver instead.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: handoff.list
+    intent: >
+      "What has been handed to me and not answered, and what have I handed on that nobody has picked
+      up?" — with the clock on each
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: handoff.get
+    intent: >
+      "Everything I need to decide whether to accept" — the evidence, the thread, the meeting, the
+      agreed next step, and who is asking
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: opportunity.create
+    intent: >
+      "Record the conversion: this became a real deal in the pipeline"
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised: it is one of the four facts people are paid on, and an accidental one corrupts attainment
+      for the period.
+    before_repeating: >
+      whether an open opportunity already exists for this account and this motion.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []

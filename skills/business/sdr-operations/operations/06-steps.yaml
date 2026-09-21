@@ -1,0 +1,313 @@
+# Family 6 — Steps, content and content policy (18)
+#
+# A step is channel by execution mode by kind: what carries it, whether a human has to do it, and
+# whether it touches the person, waits, branches, or is real work that occupies a day and reaches
+# nobody. The three axes are independent, and collapsing them loses real cadences. Content is
+# versioned beside the steps: a published version is immutable, and a variant test reports counts and
+# the sample size it would need without ever naming a winner.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 6
+
+operations:
+
+  - name: step.list
+    intent: >
+      "What does this campaign actually send, in what order, and which steps owe a human?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: [16]
+
+  - name: step.add
+    intent: >
+      "Add a step" — channel, execution mode, kind, position, delay with unit and basis, optional
+      declared intent, personalisation mode and budget, content binding, threading, and for a branch
+      its condition, evaluation window and early-satisfaction behaviour.
+    reach:
+      value: act
+      conditional: true
+      detail: >
+        `control` on a campaign that is not live; `act` on a live one, with magnitude equal to the
+        enrolments at or past the insertion point.
+    reversibility:
+      value: irreversible
+      conditional: true
+      detail: reversible while not live; irreversible once a touch has gone.
+    approval:
+      value: confirm_once
+      conditional: true
+      detail: >
+        auto while not live; confirm_once while live, with a mandatory statement of what happens to
+        in-flight enrolments.
+    approval_artefact: in-flight statement
+    approval_departs: false
+    before_repeating: >
+      the step list for a step already created under this key, and the campaign's live state.
+    cost: none
+    idempotency_key: required
+    per_item_results: required
+    questions: [16]
+
+  - name: step.update
+    intent: >
+      "Change a step" — delay, content binding, intent, personalisation, threading, branch condition,
+      or whether it is enabled at all. Never its position.
+    reach:
+      value: act
+      conditional: true
+      detail: '`control` while not live, `act` while live.'
+    reversibility: reversible
+    approval:
+      value: confirm_once
+      conditional: true
+      detail: auto while not live; confirm_once while live with the in-flight statement.
+    approval_artefact: in-flight statement
+    approval_departs: false
+    before_repeating: read the step; a setter is last-write-wins
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: step.remove
+    intent: >
+      "Delete a step" — destroys its variants and their measurement history and can advance everyone
+      waiting on it sooner than they expected.
+    reach:
+      value: act
+      conditional: true
+      detail: '`control` while not live, `act` while live.'
+    reversibility: irreversible
+    approval: confirm_once
+    approval_departs: false
+    approval_artefact: in-flight statement
+    before_repeating: >
+      the step list — an absent step is a completed removal, not a failure.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: step.reorder
+    intent: >
+      "Put the new step at position 2" — moves steps without delete-and-re-add, so variants, template
+      bindings and history survive.
+    reach:
+      value: act
+      conditional: true
+      detail: '`control` while not live, `act` while live.'
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: false
+    approval_artefact: in-flight statement
+    before_repeating: the step list, compared by position
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: variant.add
+    intent: >
+      "Try a second version of this step's copy", optionally with a split share — an unsettable split
+      is reported, never silently assumed to be even.
+    reach:
+      value: act
+      conditional: true
+      detail: '`control` while not live, `act` while live.'
+    reversibility: reversible
+    approval:
+      value: confirm_once
+      conditional: true
+      detail: auto while not live, confirm_once while live.
+    approval_departs: false
+    approval_artefact: in-flight statement
+    before_repeating: list variants for one already created under this key
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: variant.update
+    intent: >
+      "Change a variant's content, its split share, or whether it is enabled"
+    reach:
+      value: act
+      conditional: true
+      detail: '`control` while not live, `act` while live.'
+    reversibility: reversible
+    approval:
+      value: confirm_once
+      conditional: true
+      detail: auto while not live, confirm_once while live.
+    approval_departs: false
+    approval_artefact: in-flight statement
+    before_repeating: read the variant; last-write-wins
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: variant.remove
+    intent: >
+      "Delete this version" — destroys its measurement history, so a variant under test is disabled
+      rather than removed.
+    reach: control
+    reversibility: irreversible
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: list variants — absence is a completed removal
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: variant.list
+    intent: >
+      "What versions of this step exist, which are enabled, and at what share?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: template.create
+    intent: >
+      "Save this copy so other campaigns can use it" — creates the template and its first draft
+      version; a draft cannot be sent.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: list templates for one already created under this key
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: template.update
+    intent: >
+      "Change the copy" — always produces a new draft version, never mutates a published one.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the template's version list for a draft created under this key
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: template.get
+    intent: >
+      "Show me this template" — the content of each version, which version is published, when each was
+      published or retired, and which live campaigns bind each version.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: template.list
+    intent: >
+      "What content do we have, and what state is it in?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: template.publish
+    intent: >
+      "Make this version sendable" — a published version is immutable.
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: the template's published version
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: template.retire
+    intent: >
+      "Stop anyone using this version" — refused while live campaigns bind it unless a replacement is
+      named; history stays readable.
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: the version's state and its dependents
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  # UNCLEAR: the raise to confirm_once is declared without a stated reason, so the reason below is
+  # the strongest one the rest of the contract carries rather than a transcription.
+  - name: content_policy.define
+    intent: >
+      "State a rule our copy must obey" — never mention pricing, always carry the identification
+      block, never claim a customer by name, never use a competitor's trademark — each with its scope
+      and whether a breach blocks or warns.
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised above the derived auto: a rule written here blocks or permits every send in its scope,
+      so relaxing one — or scoping it to everything by accident — changes what may leave without any
+      other operation being called.
+    before_repeating: list the rules for one already created under this key
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: content_policy.list
+    intent: >
+      "Which content rules apply here, and which of them block rather than warn?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: content_policy.check
+    intent: >
+      "Does this draft break any of them?" — takes a rendered message and returns the rules that
+      fired, where, and whether each blocks or warns.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []

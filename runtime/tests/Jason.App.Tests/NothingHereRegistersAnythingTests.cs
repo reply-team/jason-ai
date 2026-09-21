@@ -62,11 +62,30 @@ public partial class NothingHereRegistersAnythingTests
     }
 
     /// <summary>
-    /// The source with adjacent string literals joined: <c>"auto" + "start"</c> becomes <c>"autostart"</c>. A
-    /// scan that did not do this is defeated by the one idiom somebody reaches for precisely when they are
-    /// trying not to trip it.
+    /// The source as this rule reads it: whole-line comments removed, then adjacent string literals joined, so
+    /// that <c>"auto" + "start"</c> is the word it is.
     /// </summary>
-    private static string Joined(string text) => Concatenation().Replace(text, string.Empty);
+    /// <remarks>
+    /// <para>
+    /// Joining the literals closes the one idiom somebody reaches for precisely when they are trying not to
+    /// trip this. Removing the comments is the opposite concern, and it cost a run to learn: a comment cannot
+    /// register anything, so prose here has to be free to name the hazard it warns about. Without this, a file
+    /// that explains the seam it holds trips the rule by explaining it, and the fix is to describe the danger
+    /// in words that avoid its name — which leaves the file invisible to anybody grepping for it.
+    /// </para>
+    /// <para>
+    /// Only whole-line comments go, never a trailing one. A line whose first non-space characters are two
+    /// slashes holds no code, so nothing can hide behind it; cutting from two slashes anywhere in a line would
+    /// cut into a string literal such as a URL, and a rule that quietly deletes part of the code it scans is a
+    /// rule that stops finding things.
+    /// </para>
+    /// </remarks>
+    private static string Joined(string text) => Concatenation().Replace(Uncommented(text), string.Empty);
+
+    private static string Uncommented(string text) =>
+        string.Join(
+            '\n',
+            text.Split('\n').Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
 
     [GeneratedRegex("\"\\s*\\+\\s*\"")]
     private static partial Regex Concatenation();

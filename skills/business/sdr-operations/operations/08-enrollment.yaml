@@ -1,0 +1,162 @@
+# Family 8 — Enrollment (7)
+#
+# An enrolment is one person's participation in one campaign, addressable by (person, campaign).
+# There is one active participation and many historical ones.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 8
+
+operations:
+
+  - name: campaign.enroll
+    core: true
+    intent: >
+      "Put these fifty people into the Q3 campaign" — with an explicit collision policy, an explicit
+      start position and an explicit first-touch timing: the authored delay, the next open window, or
+      immediately.
+    reach:
+      value: act
+      conditional: true
+      detail: >
+        bookkeeping while the campaign is not live, `act` the moment it is; resolved by the preview,
+        never assumed.
+    reversibility:
+      value: irreversible
+      conditional: true
+      detail: compensatable until the first touch goes, irreversible after.
+    approval:
+      value: confirm_once
+      conditional: true
+      detail: >
+        confirm_once before go-live; confirm_once with a mandatory preview once live. One call over a
+        set is one decision, and the preview is the approval artefact — it names the population, it
+        does not count it.
+    approval_artefact: preview
+    approval_departs: false
+    before_repeating: >
+      the per-item outcome of the prior run under this key, and the campaign's live state — re-running
+      blind into a live campaign sends twice.
+    idempotency_key: required
+    per_item_results: required
+    cost:
+      value: metered
+      conditional: true
+      detail: none while the campaign is not live; metered once it is.
+    cost_basis: per enrolled person, once the campaign is live
+    meter: message
+    questions: []
+
+  - name: enrollment.list
+    core: true
+    intent: >
+      "Who is in this campaign?" and "where is this person across everything?" — the same read from
+      either end, and with historical participations included on request.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: enrollment.get
+    intent: >
+      "Where is this person in this campaign?" — state, position, why it is not progressing, exit
+      reason, business outcome, the sending identity behind it, and when the next touch is due.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results:
+      value: required
+      conditional: true
+      detail: when a collection of (person, campaign) pairs is given.
+    cost: none
+    questions: []
+
+  - name: enrollment.pause
+    core: true
+    intent: >
+      "Hold this person here" — with a reason and an optional dated automatic resume.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the current state per person; only an active participation can be held, so per-item refusals are
+      real answers rather than errors.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [1]
+
+  - name: enrollment.resume
+    intent: >
+      "Let them carry on" — refuses unless the participation is actually held.
+    reach:
+      value: act
+      conditional: true
+      detail: '`act` when the campaign is live; `control` when it is not.'
+    reversibility:
+      value: irreversible
+      conditional: true
+      detail: irreversible when live, reversible when not.
+    approval:
+      value: confirm_once
+      conditional: true
+      detail: >
+        confirm_once with a mandatory preview naming who resumes while the campaign is live; auto
+        while it is not.
+    approval_artefact: preview
+    approval_departs: false
+    before_repeating: >
+      the current state per person, and the first-touch ledger since the attempt.
+    idempotency_key: required
+    per_item_results: required
+    cost:
+      value: metered
+      conditional: true
+      detail: metered while the campaign is live; none while it is not.
+    cost_basis: per resumed person, while the campaign is live
+    meter: message
+    questions: [1]
+
+  - name: enrollment.stop
+    core: true
+    intent: >
+      "Take them out, and record why" — the reason is mandatory and must be able to name a different
+      person as the cause.
+    reach: control
+    reversibility: irreversible
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the participation is absent or finished — either reads as a completed stop.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: disposition.set
+    intent: >
+      "What came of this participation?" — the business outcome, from the account's declared
+      vocabulary, distinct from any reply's intent and from the execution state.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the current disposition; last-write-wins, and a regression may be legitimately refused, which is
+      a per-item answer.
+    idempotency_key:
+      value: required
+      conditional: true
+      detail: when a collection is given.
+    per_item_results: required
+    cost: none
+    questions: []

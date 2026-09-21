@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Jason.App.Tests.Skills;
 
 /// <summary>
@@ -7,7 +5,7 @@ namespace Jason.App.Tests.Skills;
 /// <c>skills/runtime/</c> is guarded on the day it is added, which is the only version of this that keeps
 /// working after the person who wrote the guards has stopped thinking about them.
 /// </summary>
-public partial class SkillPackTests
+public class SkillPackTests
 {
     /// <summary>
     /// One front-matter shape, because three separate readers parse it: the launcher's, the role guard's and
@@ -22,47 +20,12 @@ public partial class SkillPackTests
         Assert.Contains(skills, skill => skill.IsRole);
         Assert.Contains(skills, skill => !skill.IsRole);
 
+        // The rule itself lives in PackShape, because the business pack obeys the same one. Two copies of a
+        // front-matter rule is how the readers that parse this front matter start to disagree while each of
+        // them still looks correct.
         foreach (var skill in skills)
         {
-            var front = SkillFrontMatter.Read(skill.File);
-
-            Assert.True(
-                front.Problems.Count == 0,
-                $"'{skill.File}' does not read as front matter: {string.Join("; ", front.Problems)}");
-
-            // A skill is looked up by the directory it lives in and must name itself the same way; a host
-            // answers a mismatch by loading nothing and saying nothing.
-            Assert.Equal(skill.Name, front.Top.GetValueOrDefault("name"));
-
-            // The description is what a host reads to decide whether to load the skill at all.
-            var description = front.Top.GetValueOrDefault("description") ?? string.Empty;
-            Assert.False(string.IsNullOrWhiteSpace(description), $"'{skill.File}' describes nothing.");
-            Assert.True(
-                description.Length <= 1536,
-                $"'{skill.File}' has a description of {description.Length} characters, and a host truncates the "
-                + "combined description and when_to_use in the skill listing at 1,536 - the listing it chooses "
-                + "from, so everything past it is invisible where it matters.");
-
-            // Everything this pack invents of its own lives under metadata, which is the documented map for
-            // exactly that. An unknown top-level key is tolerated by one host and is a hard error outside it.
-            // Assert.Equal carries no message, and a pack of fourteen files needs one: the failure has to name
-            // the file somebody would open and the key that does not belong.
-            var top = front.Keys.Order().ToArray();
-            Assert.True(
-                top is ["description", "metadata", "name"],
-                $"'{skill.File}' declares the top-level keys [{string.Join(", ", top)}]. The pack's front matter "
-                + "is name, description and metadata, and nothing else: an unknown top-level key is tolerated by "
-                + "one host and is a hard error outside it.");
-
-            // And metadata holds exactly one entry in this version. A second custom key admitted silently is
-            // the thing moving status under metadata was about: the map is the documented place for what this
-            // pack invents, not a place where anything may accumulate unread.
-            var custom = front.Metadata.Keys.Order().ToArray();
-            Assert.True(
-                custom is ["status"],
-                $"'{skill.File}' puts [{string.Join(", ", custom)}] under metadata. This version has exactly one "
-                + "entry there, status, and a second one admitted silently is a key nobody reads.");
-            Assert.Contains(front.Metadata.GetValueOrDefault("status"), (string[])["draft", "verified"]);
+            PackShape.ReadsAsTheSkillItIs(skill);
         }
     }
 
@@ -74,7 +37,7 @@ public partial class SkillPackTests
     public void Every_skill_is_in_the_catalog_and_every_catalog_entry_is_a_skill()
     {
         var catalog = File.ReadAllText(SkillPack.Catalog());
-        var linked = Links(catalog).ToList();
+        var linked = PackCatalog.Links(catalog).ToList();
 
         // Both halves read markdown links, and neither reads prose. A forward half that searched the text for
         // the path would count a skill merely *named* in a sentence as catalogued — and this catalog does name
@@ -96,23 +59,6 @@ public partial class SkillPackTests
                 $"The catalog links '{link}', and there is no skill there.");
         }
     }
-
-    /// <summary>
-    /// Every <c>SKILL.md</c> the catalog <em>links</em>. Markdown links only, and never any token that happens
-    /// to end in the file's name: the catalog also explains where a role's skill ends up — at
-    /// <c>.claude/skills/&lt;role&gt;/SKILL.md</c> inside the attempt's work directory — and a reader that took
-    /// prose for a link would report a missing skill for a sentence that is telling the truth.
-    /// </summary>
-    private static IEnumerable<string> Links(string catalog)
-    {
-        foreach (var match in LinkTarget().Matches(catalog).Cast<Match>())
-        {
-            yield return match.Groups[1].Value;
-        }
-    }
-
-    [GeneratedRegex(@"\]\(([^()\s]+/SKILL\.md)\)")]
-    private static partial Regex LinkTarget();
 
     /// <summary>
     /// What a skill says about itself in its own body, held to what its front matter says. These are two

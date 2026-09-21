@@ -1,0 +1,258 @@
+# Family 21 — Introspection and runtime (15)
+#
+# The contract's description of itself, and the machinery that makes a lost result recoverable.
+# A preview never acts and never spends; authority resolves at plan time rather than at execution
+# time; and every fact about limits, ceilings and page sizes belongs to the installation, not to an
+# operation's own definition.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 21
+
+operations:
+
+  - name: operation.search
+    core: true
+    intent: >
+      "Find me the operation for this" — the door to everything not sitting in front of you.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: operation.describe
+    intent: >
+      "Show me one operation in full" — what it does, what it refuses to do, its five properties,
+      worked examples, and the operations it must not be confused with.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: operation.preview
+    intent: >
+      "Dry run this exact call" — who would be reached and how many, when the first touch would land,
+      what allowance it would consume, and whether the effect resolves to a send.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake; a preview that cannot be produced without acting must refuse, and may never
+      act.
+    idempotency_key: none
+    per_item_results:
+      value: required
+      conditional: true
+      detail: when previewing a call that takes a collection.
+    cost:
+      value: none
+      detail: it never spends the allowance it projects.
+    questions: []
+
+  - name: plan.validate
+    intent: >
+      "Check a whole plan before any of it runs" — authority for every step, ordering, preconditions,
+      live bindings, budget headroom and capacity.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake; re-validate after any change to authority, autonomy, budget or the people
+      named.
+    idempotency_key: none
+    per_item_results:
+      value: required
+      detail: one verdict per planned step.
+    cost: none
+    questions: []
+
+  - name: contract.describe
+    intent: >
+      "Which version of this contract is in force, what was renamed from what, the derivation table and
+      absence-defaults it binds you to, and how much of this account's vocabulary it covers"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: capability.list
+    core: true
+    intent: >
+      "What is this credential actually allowed to do?" — granted, denied, or unknown, one answer per
+      capability.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake; authority changes when the credential changes, so re-read at the start of any
+      unattended run.
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: vocabulary.list
+    core: true
+    intent: >
+      "What values is this account allowed to use?" — stages, dispositions, reply categories, enrolment
+      statuses, meeting outcomes, step intents, exit reasons, content-policy rule classes, and the
+      properties a branch condition may be written over.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake; `unknown` is a legal answer for a kind this account has not declared, and a
+      write of an undeclared value is a guess.
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: schema.describe
+    intent: >
+      "Which fields exist on this kind of record, and which of them can be written" — custom fields
+      included. Returns no values.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: channel.describe
+    intent: >
+      "A channel's own rules" — whether automation is sanctioned there at all, how its message
+      allowance works, how long a reply window stays open, what recording consent it expects.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: adapter.describe
+    intent: >
+      "How much, how fast, inline or queued" — request ceilings, batch ceilings, page sizes, and the
+      scope and lifetime of an idempotency key.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: adapter.verify
+    intent: >
+      "Prove by test, not by assertion, which operations this installation actually fulfils, how
+      faithfully, and where a promise is composed out of several smaller acts."
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the last verification record and its timestamp
+    idempotency_key:
+      value: required
+      detail: so an interrupted run is not paid for twice.
+    per_item_results:
+      value: required
+      detail: one verdict per operation.
+    cost: metered
+    cost_basis: request allowance, per call made during the run
+    meter: request
+    questions: []
+
+  - name: job.get
+    intent: >
+      "How far has this queued work got, and what happened to each item?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: job.cancel
+    intent: >
+      "Stop queued work. Items already done stay done"
+    reach: control
+    reversibility:
+      value: irreversible
+      detail: cancelling does not undo the items already processed.
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: the job's state and its per-item ledger
+    idempotency_key:
+      value: none
+      detail: the operation names a terminal state, so a repeat is harmless.
+    key_exempt: terminal_state
+    per_item_results:
+      value: required
+      detail: processed / cancelled / already-terminal per item.
+    cost: none
+    questions: []
+
+  - name: invocation.get
+    intent: >
+      "I lost the result of a call — show me what actually happened, by the key I sent, instead of
+      running it again."
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake; if the key is unknown the answer is `never_seen`, which is different from
+      `seen_and_failed` and must never be collapsed with it.
+    idempotency_key:
+      value: none
+      detail: it is keyed on one; that is its whole purpose.
+    per_item_results:
+      value: required
+      detail: it returns the original call's per-item ledger.
+    cost: none
+    questions: []
+
+  - name: term.resolve
+    intent: >
+      "Someone said a word I do not use — a colleague's shorthand, an inherited spreadsheet header,
+      another system's label. Which concept is it?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake; the answer is resolved, ambiguous or unknown — never a guess.
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []

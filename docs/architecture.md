@@ -1406,9 +1406,12 @@ jason-ai/
 │   ├── src/Jason.PluginHost  embedded JavaScript engine and Host SDK
 │   ├── src/Jason.Contracts   DTOs and operation names shared by server and clients
 │   └── tests/             xUnit projects mirroring src/
-├── plugins/               plugin marketplace: one directory per plugin
+├── plugins/               the plugin marketplace: one directory per provider plugin
 ├── skills/runtime/        runtime skills
 ├── skills/business/       business skills
+├── .claude-plugin/        the skills marketplace: offers both packs to an agent harness by
+│                          relative path. A different thing from plugins/ above — that one holds
+│                          JavaScript that executes provider operations, this one holds no code
 ├── docs/                  maintained documentation
 ├── global.json            pins the .NET SDK; commands run from the repository root
 └── README.md  CLAUDE.md  LICENSE
