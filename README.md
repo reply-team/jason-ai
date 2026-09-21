@@ -48,8 +48,8 @@ survives the chat session. Jason is that missing layer — three parts working a
 2. **Skills** — the semantic layer: vendor-neutral SDR expertise, role reasoning, and
    guardrails that teach *your* AI agents how to plan and run outbound work through Jason.
    Runtime skills ship with the runtime under [`skills/runtime`](skills/runtime): five for a
-   person's own session, one per moment they ask for something, and one per launched role for
-   the two roles taught so far. [`skills/business`](skills/business) is where the SDR
+   person's own session, one per moment they ask for something, and one for each of the nine
+   roles this runtime seeds, every one of them held to the same launch contract. [`skills/business`](skills/business) is where the SDR
    profession's own knowledge will live and is a placeholder today.
 3. **Provider plugins** — strict, vendor-neutral canonical operations executed by JavaScript
    plugin packages in a short-lived plugin-host process started from the same executable.

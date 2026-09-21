@@ -39,6 +39,9 @@ two must match: a skill whose front matter names anything else is loaded by nobo
 ## The skills a launched role reads
 
 `roles/<role>/` holds one skill per role, named after its directory because that is how a host looks one up.
+All **nine roles this runtime seeds** are taught here, and every one of them carries the same launch contract
+— what it may type, what its note is worth, what shape its answer takes — held identical by a test. What
+differs between them is one paragraph of purpose and one of what this build can and cannot give that role.
 
 - [`roles/researcher`](roles/researcher/SKILL.md) — **draft.** The brief a role is given when the runtime
   launches it: how to call home in the one command form that is permitted, how to read and keep its campaign
