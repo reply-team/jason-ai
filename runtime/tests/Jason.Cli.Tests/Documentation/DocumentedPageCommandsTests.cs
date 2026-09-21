@@ -94,7 +94,15 @@ public class DocumentedPageCommandsTests
     /// suite ran.
     /// </remarks>
     internal static CliEnvironment Machine(TempPaths dir, StringWriter error) =>
-        new(new StringWriter(), error, dir.Paths, new Unreachable(), Autostart: new Autostart.RecordingRegistrar());
+        new(
+            new StringWriter(),
+            error,
+            dir.Paths,
+            new Unreachable(),
+            Processes: new Process.FakeProcessControl(),
+            Autostart: new Autostart.RecordingRegistrar(),
+            Harnesses: Jason.Cli.Skills.HarnessLocators.At(dir.Paths.Root),
+            Programs: new Process.FakeProgramRunner());
 
     /// <summary>
     /// Every request refused before it leaves the process. Most of these commands never get this far — there is

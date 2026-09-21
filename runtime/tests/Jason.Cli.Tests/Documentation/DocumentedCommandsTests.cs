@@ -48,7 +48,9 @@ public class DocumentedCommandsTests
             {
                 OnLaunch = _ => new FakeProcessHandle(0) { HasExited = true, ExitCode = 1 },
             },
-            Autostart: new Autostart.RecordingRegistrar());
+            Autostart: new Autostart.RecordingRegistrar(),
+            Harnesses: Jason.Cli.Skills.HarnessLocators.At(dir.Paths.Root),
+            Programs: new FakeProgramRunner());
 
     /// <summary>The file as MSBuild copied it beside these tests, so nothing depends on the working directory.</summary>
     private static string Page(params string[] parts)

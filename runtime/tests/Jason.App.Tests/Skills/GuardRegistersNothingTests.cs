@@ -39,6 +39,22 @@ public class GuardRegistersNothingTests
     }
 
     /// <summary>
+    /// And names neither of the two seams the skills verbs arrived with, for the same reason and with the same
+    /// answer. A pack that printed <c>jason skills install</c> would have this guard type it: with a locator
+    /// behind it that is a write into somebody's own skills directory, and with a program runner behind it a
+    /// <c>git clone</c> over the network. Null refuses, and null is what this holds.
+    /// </summary>
+    [Fact]
+    public void The_guard_that_types_pack_lines_can_reach_no_harness_root_and_start_no_program()
+    {
+        using var tree = new TempTree();
+        var machine = DocumentedSkillCommandsTests.Machine(tree, new StringWriter());
+
+        Assert.Null(machine.Harnesses);
+        Assert.Null(machine.Programs);
+    }
+
+    /// <summary>
     /// And what that comes to when the line is really typed, through the guard's own path: the line a page
     /// teaches somebody to type is understood, answered with a business refusal, and nothing on this machine
     /// changes. Exit 1 rather than 2 is the whole point — the guard beside this one asserts the line is not a
