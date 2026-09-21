@@ -64,6 +64,9 @@ two must match: a skill whose front matter names anything else is loaded by nobo
 - [`roles/analyst`](roles/analyst/SKILL.md) — **draft.** What is working in a campaign, read off the three
   things this runtime keeps — the work items, the chronicle and the reports — and honest about where the
   record runs out.
+- [`roles/deliverability-specialist`](roles/deliverability-specialist/SKILL.md) — **draft.** What the
+  do-not-contact register and the failed items say about whether anything is arriving, and what somebody
+  would have to do outside Jason about it.
 
 These are not read from here at run time. An operator composes the directory the runtime hands out,
 `<data>/skills/roles/<role>/`, from this pack and — later — from the business pack, and the runtime copies it
