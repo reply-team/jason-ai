@@ -49,6 +49,9 @@ two must match: a skill whose front matter names anything else is loaded by nobo
 - [`roles/planner`](roles/planner/SKILL.md) — **draft.** The next short horizon of work: what a planner reads
   before it plans, what this build stores of a plan and what it does not, and how a horizon becomes work items
   a dispatcher will claim.
+- [`roles/copywriter`](roles/copywriter/SKILL.md) — **draft.** The campaign-level messaging: what the campaign
+  itself says about voice and guardrails, where the copy goes when it is written, and why writing it is not
+  sending it.
 
 These are not read from here at run time. An operator composes the directory the runtime hands out,
 `<data>/skills/roles/<role>/`, from this pack and — later — from the business pack, and the runtime copies it
