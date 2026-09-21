@@ -5,7 +5,7 @@ namespace Jason.App.Tests.Skills;
 /// <c>skills/runtime/</c> is guarded on the day it is added, which is the only version of this that keeps
 /// working after the person who wrote the guards has stopped thinking about them.
 /// </summary>
-public partial class SkillPackTests
+public class SkillPackTests
 {
     /// <summary>
     /// One front-matter shape, because three separate readers parse it: the launcher's, the role guard's and

@@ -59,14 +59,10 @@ public class DocumentedSkillCommandsTests
 
     /// <summary>
     /// Typed at this program, with four seams in place: its own data directory, a process table that launches
-    /// nothing, a release-feed handler that throws, and no registrar for the thing this machine would start at
-    /// logon — which production answers with a refusal. Internal because the business pack's guard types its
-    /// lines through this same method: a second copy with its own environment is how a documentation guard
-    /// starts a process on three CI runners.
-    ///
-    /// The seam above is named around the verb on purpose. The guard next door refuses any file that both
-    /// names that verb and can reach the environment that would perform it, and this file already names the
-    /// router in the comment below.
+    /// nothing, a release-feed handler that throws, and no autostart registrar at all — which production
+    /// answers with a refusal. Internal because the business pack's guard types its lines through this same
+    /// method: a second copy with its own environment is how a documentation guard starts a process on three
+    /// CI runners.
     /// </summary>
     internal static async Task AssertUnderstoodAsync(string command, string source)
     {
