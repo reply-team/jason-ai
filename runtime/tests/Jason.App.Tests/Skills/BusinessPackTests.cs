@@ -30,9 +30,19 @@ public class BusinessPackTests
             $"skills/business holds [{string.Join(", ", names)}]. The pack is nine skills; a tenth that arrived "
             + "without a guard, or one that went missing in a move, is what this names.");
 
-        Assert.All(skills, skill => Assert.False(
-            skill.IsRole,
-            $"'{skill.Name}' is in skills/business, and nothing there is ever launched as a role."));
+        // Every skill is a direct child of the pack root. This is not tidiness: a host looks for
+        // <name>/SKILL.md one level below a declared path and does not recurse, so a skill that moved a
+        // level deeper is still in the repository, still passes every other guard here, and is delivered
+        // to nobody. Asserting IsRole here would prove nothing — the walk is told this pack has no roles,
+        // so the flag reports what it was handed rather than what is on disk.
+        foreach (var skill in skills)
+        {
+            var parent = Path.GetDirectoryName(skill.Directory);
+            Assert.True(
+                string.Equals(parent, SkillPack.BusinessRoot(), StringComparison.Ordinal),
+                $"'{skill.Name}' sits at '{skill.Directory}', which is not directly under the pack root. A "
+                + "host does not recurse, so this skill would be offered and never delivered.");
+        }
 
         Assert.True(File.Exists(SkillPack.BusinessCatalog()), "The business pack has no catalog.");
 

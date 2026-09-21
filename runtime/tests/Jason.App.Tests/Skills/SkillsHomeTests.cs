@@ -92,8 +92,27 @@ public class SkillsHomeTests
             DocumentedSkillCommandsTests.Machine(tree, error),
             TestContext.Current.CancellationToken);
 
-        var absent = exit == ExitCodes.Usage
-            && error.ToString().Contains("Unrecognized command or argument 'skills'", StringComparison.Ordinal);
+        // Three cases, not two. The hinge is a sentence the argument-parsing library writes, and a library
+        // upgrade may reword it; if that happened and this read only "does it say unrecognised?", the guard
+        // would quietly decide the verb had arrived and start demanding that two true sentences be deleted.
+        // So the third case says what it is: this can no longer tell, and somebody has to look.
+        // The two answers overlap: while the noun is unknown this program says both that a command was
+        // required and that it did not recognise this one. So the unrecognised line is the whole of the
+        // discriminator, and the other sentence only confirms the parser is still answering the way it does.
+        var said = error.ToString();
+        var unknown = said.Contains("Unrecognized command or argument 'skills'", StringComparison.Ordinal);
+        var absent = exit == ExitCodes.Usage && unknown;
+        var present = !unknown
+            && (exit != ExitCodes.Usage
+                || said.Contains("Required command was not provided", StringComparison.Ordinal));
+
+        Assert.True(
+            absent ^ present,
+            "This guard can no longer tell whether 'jason skills' exists. It asks this program for the bare "
+            + $"noun and reads the answer: exit {exit}, saying:{Environment.NewLine}{said}{Environment.NewLine}"
+            + "It expected either 'Unrecognized command or argument' while the verb is absent, or a missing "
+            + "subcommand once it is present. Neither matched, so the sentence this guard requires in the "
+            + "documents cannot be decided here — look, and fix the reading rather than the documents.");
 
         foreach (var file in PublicDocuments())
         {

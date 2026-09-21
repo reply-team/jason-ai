@@ -19,7 +19,12 @@ internal static class PackShape
 
         // A skill is looked up by the directory it lives in and must name itself the same way; a host answers
         // a mismatch by loading nothing and saying nothing.
-        Assert.Equal(skill.Name, front.Top.GetValueOrDefault("name"));
+        var declared = front.Top.GetValueOrDefault("name");
+        Assert.True(
+            string.Equals(declared, skill.Name, StringComparison.Ordinal),
+            $"'{skill.File}' names itself '{declared ?? "nothing"}' and lives in '{skill.Name}'. A skill is "
+            + "looked up by the directory it lives in, and a host answers the mismatch by loading nothing and "
+            + "saying nothing.");
 
         // The description is what a host reads to decide whether to load the skill at all.
         var description = front.Top.GetValueOrDefault("description") ?? string.Empty;
@@ -49,6 +54,10 @@ internal static class PackShape
             custom is ["status"],
             $"'{skill.File}' puts [{string.Join(", ", custom)}] under metadata. This version has exactly one "
             + "entry there, status, and a second one admitted silently is a key nobody reads.");
-        Assert.Contains(front.Metadata.GetValueOrDefault("status"), (string[])["draft", "verified"]);
+        var status = front.Metadata.GetValueOrDefault("status");
+        Assert.True(
+            status is "draft" or "verified",
+            $"'{skill.File}' says metadata.status is '{status ?? "nothing"}'. This repository has two values: "
+            + "draft, and verified for a body a named host has read and whose digest is recorded.");
     }
 }
