@@ -44,6 +44,39 @@ internal static class SkillPack
 
     public static PackSkill Find(string name) => Assert.Single(All(), skill => skill.Name == name);
 
+    /// <summary>Every <c>jason …</c> line a skill prints, read from the file.</summary>
+    public static IReadOnlyList<string> PrintedCommands(string file) =>
+        PrintedCommands(System.IO.File.ReadAllLines(file));
+
+    /// <summary>
+    /// Every <c>jason …</c> line inside a fenced block, which is where a page prints what to type, and as
+    /// <em>whole lines</em>: a guard that searched the text for a substring would let a printed command grow
+    /// an option that nothing ever runs, which is the one thing these guards exist to prevent.
+    /// </summary>
+    public static IReadOnlyList<string> PrintedCommands(IReadOnlyList<string> lines)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+
+        var commands = new List<string>();
+        var fenced = false;
+        foreach (var line in lines)
+        {
+            if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
+            {
+                fenced = !fenced;
+                continue;
+            }
+
+            var text = line.Trim();
+            if (fenced && text.StartsWith("jason ", StringComparison.Ordinal))
+            {
+                commands.Add(text);
+            }
+        }
+
+        return commands;
+    }
+
     /// <summary>
     /// The text a host would read, digested. The front matter is deliberately not part of it: promoting a
     /// skill from draft to verified edits the front matter, so a digest that covered it could never be

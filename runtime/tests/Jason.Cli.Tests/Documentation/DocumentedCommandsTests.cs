@@ -134,7 +134,12 @@ public class DocumentedCommandsTests
         }
     }
 
-    /// <summary>Every <c>jason …</c> line inside a fenced block, which is where a page prints what to type.</summary>
+    /// <summary>
+    /// Every <c>jason …</c> line inside a fenced block, which is where a page prints what to type. The
+    /// skills pack has one of these too, in <c>Jason.App.Tests</c>, and deliberately not this one: this
+    /// project reads the pages under <c>docs/</c> and knows nothing about the pack, which is the separation
+    /// that keeps a CLI test from depending on what ships beside the runtime.
+    /// </summary>
     private static IReadOnlyList<string> Commands(IReadOnlyList<string> lines)
     {
         var commands = new List<string>();

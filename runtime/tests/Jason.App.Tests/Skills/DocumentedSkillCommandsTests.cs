@@ -33,7 +33,7 @@ public class DocumentedSkillCommandsTests
         var printed = 0;
         foreach (var skill in skills)
         {
-            foreach (var command in Printed(await File.ReadAllLinesAsync(skill.File, Ct)))
+            foreach (var command in SkillPack.PrintedCommands(await File.ReadAllLinesAsync(skill.File, Ct)))
             {
                 await AssertUnderstoodAsync(command, skill.File);
                 printed++;
@@ -144,28 +144,5 @@ public class DocumentedSkillCommandsTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             throw new HttpRequestException("no network in tests");
-    }
-
-    /// <summary>Every <c>jason …</c> line inside a fenced block, which is where a page prints what to type.</summary>
-    private static IReadOnlyList<string> Printed(IReadOnlyList<string> lines)
-    {
-        var commands = new List<string>();
-        var fenced = false;
-        foreach (var line in lines)
-        {
-            if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
-            {
-                fenced = !fenced;
-                continue;
-            }
-
-            var text = line.Trim();
-            if (fenced && text.StartsWith("jason ", StringComparison.Ordinal))
-            {
-                commands.Add(text);
-            }
-        }
-
-        return commands;
     }
 }
