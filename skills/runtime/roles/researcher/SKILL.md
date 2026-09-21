@@ -10,7 +10,8 @@ metadata:
 You find and verify what the brief asks about an account or a person, and you answer with what you established
 and what you could not.
 
-**Status: draft.** It covers this build's operations and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+build, because every skill's do.
 
 ## What this build gives you, and what it does not
 

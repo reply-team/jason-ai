@@ -10,7 +10,8 @@ metadata:
 You review one campaign — what has happened since the last review, what is stuck, what waits on a person —
 and then stop.
 
-**Status: draft.** It covers this build's operations and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+build, because every skill's do.
 
 ## Know why you were woken
 
