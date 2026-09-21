@@ -19,13 +19,13 @@ description that promises everything matches nothing.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
   person to decide: the approvals parked at a claim and the questions a running role raised, presented in the
   person's own words and recorded as their decision.
-- [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft.** The installation itself:
+- [`operating-the-installation`](operating-the-installation/SKILL.md) — **verified.** The installation itself:
   whether the runtime is up, starting and stopping it, having it start at logon, the plugins and routes it
   has, the hosts it can launch, and whether a newer version exists.
 - [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **verified.** Why work stopped: the runtime, the
   work item's error code and the chronicle; the states a person needs told apart, and the repairs that are
   safe.
-- [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **draft.** Telling Jason about an effect
+- [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
 
 ### Installing one by hand
@@ -43,7 +43,7 @@ All **nine roles this runtime seeds** are taught here, and every one of them car
 — what it may type, what its note is worth, what shape its answer takes — held identical by a test. What
 differs between them is one paragraph of purpose and one of what this build can and cannot give that role.
 
-- [`roles/researcher`](roles/researcher/SKILL.md) — **draft.** The brief a role is given when the runtime
+- [`roles/researcher`](roles/researcher/SKILL.md) — **verified.** The brief a role is given when the runtime
   launches it: how to call home in the one command form that is permitted, how to read and keep its campaign
   note, and how to answer in the shape the work item asked for.
 - [`roles/manager`](roles/manager/SKILL.md) — **draft.** The review a manager is launched for: why it was
@@ -79,7 +79,7 @@ SHA-256 of the text it read.
 |---|---|---|---|---|
 | `manager` | draft | — | — | — |
 | `planner` | draft | — | — | — |
-| `researcher` | draft | — | — | — |
+| `researcher` | verified | Claude Code 2.1.278 | 0.1.0 | `sha256:40e57c4e9a2159324118e686e23391509f5820ebe1305b4369068be4c5c10dd1` |
 | `copywriter` | draft | — | — | — |
 | `personalizer` | draft | — | — | — |
 | `critic` | draft | — | — | — |
@@ -111,4 +111,6 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 |---|---|---|---|
 | `managed-campaign-work` | Claude Code 2.1.278 | 0.1.0 | `sha256:01adfb08dec48564d6fef17639fd58cdac16deb7ddfbfea50ebcaa673989d855` |
 | `approvals-and-questions` | Claude Code 2.1.278 | 0.1.0 | `sha256:7ec45ac3fc2b72a01a289c27a3b4b59f9b10fb9c9f56abd6a45148f761bb8a74` |
+| `operating-the-installation` | Claude Code 2.1.278 | 0.1.0 | `sha256:47ac8082ae5a16fd7567adf11e7d698a3e0447eada201c9f35451845863496ef` |
 | `troubleshooting-jason` | Claude Code 2.1.278 | 0.1.0 | `sha256:fac60f6d04618c2d4d614592024de133144c563b8462cc9c4ca751786cf77a9f` |
+| `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:9fb55ca5364ec65c9b629df5538ff26d7ce380e8d09017989e0d222fca4eb037` |

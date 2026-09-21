@@ -2,7 +2,7 @@
 name: reporting-outside-effects
 description: Use when an effect on a person happened outside Jason and Jason does not know - you or somebody else sent, enrolled or replied by hand or through another tool - so that it is recorded as what was done, by whom, and when, before Jason acts on a view of the world that is wrong.
 metadata:
-  status: draft
+  status: verified
 ---
 
 # Reporting effects that happened outside Jason
@@ -11,8 +11,7 @@ Jason knows about the work it performed itself. An effect produced anywhere else
 person somebody enrolled through the provider's own CLI, a reply typed into a web app because the managed path
 failed — leaves no trace here at all. This skill is how you tell it, and what telling it is worth.
 
-**Status: draft.** This text has been edited since a host last read it. It covers what this build records
-and nothing beyond it.
+**Status: verified** against Claude Code 2.1.278. It covers what this build records and nothing beyond it.
 
 ## Why this matters at all
 
