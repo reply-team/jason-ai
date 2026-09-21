@@ -7,6 +7,11 @@ metadata:
 
 # Performance analysis
 
+> **Knowledge, not the enforced contract.** This skill names operations from the vendor-neutral
+> catalogue in `sdr-operations`, which says what an SDR operation *is*. What this runtime validates
+> and executes is the smaller set of JSON documents under `docs/contracts/operations/`; where the
+> two disagree, the contract is what decides.
+
 > **Partly an expert skeleton.** The diagnostic method is complete. The benchmark numbers
 > below are explicitly heuristics carried over from the prototype and are marked
 > `TODO(expert)` — they need validation against real outbound data, by the experts who own this

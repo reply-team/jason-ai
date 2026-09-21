@@ -7,6 +7,11 @@ metadata:
 
 # Audience building
 
+> **Knowledge, not the enforced contract.** This skill names operations from the vendor-neutral
+> catalogue in `sdr-operations`, which says what an SDR operation *is*. What this runtime validates
+> and executes is the smaller set of JSON documents under `docs/contracts/operations/`; where the
+> two disagree, the contract is what decides.
+
 > **Partly an expert skeleton.** The mechanics below are complete and safe to follow. The
 > judgement calls — what makes a segment worth targeting, when a list is too dirty to send
 > to — are marked `TODO(expert)` and need validation by outbound experts before this skill

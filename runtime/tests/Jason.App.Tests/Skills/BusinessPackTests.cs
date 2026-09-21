@@ -121,6 +121,57 @@ public class BusinessPackTests
         }
     }
 
+    /// <summary>
+    /// Two documents in this repository name the same operations, and only one of them is enforced. The
+    /// contract under <c>docs/contracts/operations</c> is data the runtime validates against; this pack is
+    /// knowledge a person's agent reads. A skill that names an enforced operation without pointing at the
+    /// enforced document is how a reader comes to believe the pack is the contract — and then writes a plan
+    /// the runtime refuses.
+    /// </summary>
+    /// <remarks>
+    /// Per skill, not per file. The skill is the unit a host loads and the door a reader comes in through; the
+    /// YAML families and the reference documents are reached from it. Per file, the rule would fire on data
+    /// that arrived byte-identical and the fix would be a pointer injected into a machine-readable catalogue,
+    /// which is a worse outcome than the problem.
+    /// </remarks>
+    [Fact]
+    public void A_skill_that_names_an_enforced_operation_points_at_the_contract()
+    {
+        var enforced = Directory
+            .EnumerateFiles(
+                Path.Combine(SkillPack.RepositoryRoot(), "docs", "contracts", "operations"),
+                "*.json")
+            .Select(Path.GetFileNameWithoutExtension)
+            .OfType<string>()
+            .ToArray();
+        Assert.NotEmpty(enforced);
+
+        foreach (var skill in SkillPack.Business())
+        {
+            var named = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (var file in Directory.EnumerateFiles(skill.Directory, "*", SearchOption.AllDirectories))
+            {
+                var text = File.ReadAllText(file);
+                foreach (var operation in enforced.Where(one => text.Contains(one, StringComparison.Ordinal)))
+                {
+                    named.Add(operation);
+                }
+            }
+
+            if (named.Count == 0)
+            {
+                continue;
+            }
+
+            Assert.True(
+                File.ReadAllText(skill.File).Contains("docs/contracts", StringComparison.Ordinal),
+                $"'{skill.Name}' names [{string.Join(", ", named)}], which this runtime enforces from "
+                + "docs/contracts/operations, and its SKILL.md points at nothing. One of the two documents is "
+                + "data the runtime validates against and the other is knowledge; a skill that names an "
+                + "operation without saying which it is leaves the reader to guess.");
+        }
+    }
+
     private static IEnumerable<string> Files() =>
         Directory.EnumerateFiles(SkillPack.BusinessRoot(), "*", SearchOption.AllDirectories);
 }

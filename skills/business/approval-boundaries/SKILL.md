@@ -7,6 +7,11 @@ metadata:
 
 # Approval boundaries
 
+> **Knowledge, not the enforced contract.** This skill names operations from the vendor-neutral
+> catalogue in `sdr-operations`, which says what an SDR operation *is*. What this runtime validates
+> and executes is the smaller set of JSON documents under `docs/contracts/operations/`; where the
+> two disagree, the contract is what decides.
+
 ## Purpose
 
 Automated outbound acts on real people, using the user's domain, accounts and reputation.

@@ -7,6 +7,11 @@ metadata:
 
 # Campaign launch
 
+> **Knowledge, not the enforced contract.** This skill names operations from the vendor-neutral
+> catalogue in `sdr-operations`, which says what an SDR operation *is*. What this runtime validates
+> and executes is the smaller set of JSON documents under `docs/contracts/operations/`; where the
+> two disagree, the contract is what decides.
+
 > **Partly an expert skeleton.** The launch procedure and its gates are complete. Message
 > strategy — cadence, channel mix, what makes an opener work — is marked `TODO(expert)` and
 > needs validation by outbound experts before this skill leaves `draft`.

@@ -7,6 +7,13 @@ metadata:
 
 # SDR business operations
 
+> **Knowledge, not the enforced contract.** This catalogue says what an SDR operation *is*, for any
+> provider and any runtime. It is not what this runtime enforces. The operations this build
+> validates and executes are the JSON documents under `docs/contracts/operations/` — a far smaller
+> set, embedded into the runtime so the file a plugin author reads is the file the runtime checks
+> against. Where the two disagree, the contract is what decides, and an operation named here that
+> the contract does not carry is knowledge this build cannot yet execute.
+
 ## Purpose
 
 Outbound and inbound sales development decompose into a stable set of operations: find a person,

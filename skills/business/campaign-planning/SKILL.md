@@ -7,6 +7,11 @@ metadata:
 
 # Campaign planning
 
+> **Knowledge, not the enforced contract.** This skill names operations from the vendor-neutral
+> catalogue in `sdr-operations`, which says what an SDR operation *is*. What this runtime validates
+> and executes is the smaller set of JSON documents under `docs/contracts/operations/`; where the
+> two disagree, the contract is what decides.
+
 > **Partly an expert skeleton.** The planning method is complete. The strategic judgement —
 > which play fits which situation, how to sequence experiments — is marked `TODO(expert)` and
 > needs validation by outbound experts before this skill leaves `draft`.
