@@ -57,6 +57,15 @@ directory is not a silent act. These are the rules the verb keeps:
   The cap comes from the running runtime, because it is a live setting; where no runtime answers, the
   documented default is used and the output says which was used, since a pass against the wrong cap is
   not a pass.
+- **A role is deployed by rename.** Each skill is assembled beside its destination and moved into place,
+  so a launch reading a role's tree sees the tree that was there or the tree that arrived and never a
+  blend of the two. A launch that loses that race reads again; one that loses it twice is refused rather
+  than run with no skill, because a role that was given a skill and did not receive it would do the job
+  untaught at the price of a real launch.
+- **And if a launch is reading a role's skill when the deployment reaches it, the deployment waits** — up
+  to ten seconds — **and then fails for that role rather than forcing it**, leaving what was there in
+  place and saying which role and why. Stop the runtime, or try again. What it will not do is write over
+  a tree somebody is reading.
 - **There is nothing to reload.** The runtime reads the role skills directory at every launch, so a
   deployment is live the moment it lands.
 - **A file you have edited is reported and kept.** An installer that quietly reverts somebody's edit is

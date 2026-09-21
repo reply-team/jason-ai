@@ -10,12 +10,17 @@ namespace Jason.Runtime.Execution.Hosts;
 /// attempt before a child exists and carries the code it ends with, because a skill that quietly did not arrive
 /// reads afterwards as a model that ignored it.
 /// </summary>
-public sealed record WorkDirectoryReport(string? RefusalCode, string? Message, RoleSkillDto? Skill = null)
+/// <param name="Rescued">
+/// This attempt lost a race with a deployment and was saved by reading the tree a second time. It is on the
+/// report so a test can prove the second read ran at all — a race test that never exercised the rescue would
+/// pass for the wrong reason — and so the launcher can log that it happened.
+/// </param>
+public sealed record WorkDirectoryReport(string? RefusalCode, string? Message, RoleSkillDto? Skill = null, bool Rescued = false)
 {
     public static WorkDirectoryReport Ready { get; } = new(null, null);
 
     /// <summary>Ready, and carrying what the role was taught so the attempt can record it.</summary>
-    public static WorkDirectoryReport Taught(RoleSkillDto skill) => new(null, null, skill);
+    public static WorkDirectoryReport Taught(RoleSkillDto skill, bool rescued = false) => new(null, null, skill, rescued);
 
     public static WorkDirectoryReport Refused(string code, string message) => new(code, message);
 }
@@ -92,6 +97,38 @@ public static class WorkDirectory
             return WorkDirectoryReport.Ready;
         }
 
+        try
+        {
+            return Deliver(host, role, roleSkillsRoot, maxSkillBytes, rescued: false);
+        }
+        catch (RoleSkillTreeChanged)
+        {
+            // A deployment renamed this role's tree while it was being read. Read it again from the top: the
+            // second read sees the tree that arrived, or sees nothing, and either of those is a whole answer.
+        }
+
+        var lost = Path.Combine(host, SkillsDirectory, role);
+        Discard(lost);
+
+        try
+        {
+            return Deliver(host, role, roleSkillsRoot, maxSkillBytes, rescued: true);
+        }
+        catch (RoleSkillTreeChanged changed)
+        {
+            // Twice running, which takes two deployments inside one launch's copy. Refused rather than run
+            // untaught: a skill that was configured and did not arrive is what this launcher already refuses
+            // over, and the role would otherwise do the job untaught at the price of a real launch.
+            Discard(lost);
+            return WorkDirectoryReport.Refused(
+                AttemptErrors.RoleSkillUnreadable,
+                $"The skill for role '{role}' could not be read consistently: a deployment was in flight and a second read of it lost the race too. {changed.Message}");
+        }
+    }
+
+    /// <summary>One read of the role's tree, and the copy of exactly what that read found.</summary>
+    private static WorkDirectoryReport Deliver(string host, string role, string roleSkillsRoot, int maxSkillBytes, bool rescued)
+    {
         var source = Path.Combine(roleSkillsRoot, role);
         var reading = RoleSkillRules.Read(source, role, maxSkillBytes);
         if (!reading.Exists)
@@ -99,7 +136,7 @@ public static class WorkDirectory
             // The brief travels in the envelope. A role without a skill was never given one, which is not a
             // failure of this attempt — but it is recorded, because "was this role taught anything?" is a
             // question about a finished attempt that nothing else can answer afterwards.
-            return WorkDirectoryReport.Taught(new RoleSkillDto(false, role, 0));
+            return WorkDirectoryReport.Taught(new RoleSkillDto(false, role, 0), rescued);
         }
 
         if (reading.Problem is { } problem)
@@ -107,14 +144,74 @@ public static class WorkDirectory
             return WorkDirectoryReport.Refused(AttemptErrors.RoleSkillInvalid, problem.Message);
         }
 
+        BetweenReadAndCopy.Value?.Invoke();
+
         var target = Path.Combine(host, SkillsDirectory, role);
         foreach (var file in reading.Files)
         {
             var copy = Path.Combine(target, Path.GetRelativePath(source, file));
             Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
-            File.Copy(file, copy, overwrite: true);
+            try
+            {
+                File.Copy(file, copy, overwrite: true);
+            }
+            catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+            {
+                // The path was read before the rename and is dead after it. On a platform where a directory
+                // can be renamed out from under an open tree, this is where losing the race is felt.
+                throw new RoleSkillTreeChanged(file, exception);
+            }
         }
 
-        return WorkDirectoryReport.Taught(new RoleSkillDto(true, role, reading.Bytes));
+        // The copy reads by path, and a path resolves to whatever is there when it is used rather than to what
+        // the walk saw. So a deployment that renamed a same-shaped tree into place mid-copy would be copied
+        // without a single failure, and reported with the byte count of the tree that is no longer there.
+        // Reading the tree again brackets the copy: a different file list or a different total means it moved.
+        var after = RoleSkillRules.Read(source, role, maxSkillBytes);
+        if (!after.Exists || after.Bytes != reading.Bytes || !after.Files.SequenceEqual(reading.Files, StringComparer.Ordinal))
+        {
+            throw new RoleSkillTreeChanged(source, new IOException("The tree read before the copy is not the tree that is there after it."));
+        }
+
+        return WorkDirectoryReport.Taught(new RoleSkillDto(true, role, reading.Bytes), rescued);
     }
+
+    /// <summary>
+    /// What a lost read had already copied. It goes before the second read, so no part of the tree that was
+    /// there survives into the one that arrived — a blend is the outcome this whole arrangement exists to
+    /// make impossible.
+    /// </summary>
+    private static void Discard(string target)
+    {
+        try
+        {
+            if (Directory.Exists(target))
+            {
+                Directory.Delete(target, recursive: true);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The second read overwrites everything it copies, so a directory that will not go is survivable.
+            // What would not be is a file the new tree does not have, and that is what this removes.
+        }
+    }
+
+    /// <summary>
+    /// Runs once between reading this role's tree and copying it, so a test can make the rename a deployment
+    /// performs happen at the one instant that matters. Null everywhere but that test.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An <see cref="AsyncLocal{T}"/> and not a static field. A static one is process-global mutable state in
+    /// an assembly whose test collections run in parallel, set from inside its own callback: a test that armed
+    /// it would arm it for whatever ran beside it, and the failure would land in the other test.
+    /// </para>
+    /// <para>
+    /// It exists because the alternative is a probabilistic test of the one path that exists to make a
+    /// probabilistic failure impossible — a guard that can pass without ever exercising what it guards. It is
+    /// why this assembly carries the repository's only friend declaration.
+    /// </para>
+    /// </remarks>
+    internal static AsyncLocal<Action?> BetweenReadAndCopy { get; } = new();
 }

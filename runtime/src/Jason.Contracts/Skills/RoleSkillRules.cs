@@ -2,6 +2,16 @@ using System.Globalization;
 
 namespace Jason.Contracts.Skills;
 
+/// <summary>The tree moved while it was being read.</summary>
+/// <remarks>
+/// Raised rather than swallowed because it is the one IO failure that is not a fault: something renamed the
+/// role's directory, which is what a deployment does. The caller's answer is to read again, not to report an
+/// unreadable skill — and before this existed the launcher could not tell the two apart, so it reported
+/// having been taught a tree it had only partly copied.
+/// </remarks>
+public sealed class RoleSkillTreeChanged(string path, Exception cause)
+    : IOException($"'{path}' moved while it was being read.", cause);
+
 /// <summary>Why a role's skill cannot be given to the role, in the words the launcher refuses with.</summary>
 public sealed record RoleSkillProblem(string Message);
 
@@ -180,7 +190,21 @@ public static class RoleSkillRules
 
     private static void Walk(string directory, List<string> files)
     {
-        foreach (var file in Directory.EnumerateFiles(directory))
+        IReadOnlyList<string> entries;
+        IReadOnlyList<string> children;
+        try
+        {
+            entries = Directory.GetFiles(directory);
+            children = Directory.GetDirectories(directory);
+        }
+        catch (DirectoryNotFoundException exception)
+        {
+            // The directory was there when this walk reached it and is not there now, which is what a
+            // deployment renaming into place looks like from in here.
+            throw new RoleSkillTreeChanged(directory, exception);
+        }
+
+        foreach (var file in entries)
         {
             if (!IsLink(file))
             {
@@ -188,7 +212,7 @@ public static class RoleSkillRules
             }
         }
 
-        foreach (var child in Directory.EnumerateDirectories(directory))
+        foreach (var child in children)
         {
             if (IsLink(child))
             {
@@ -199,24 +223,45 @@ public static class RoleSkillRules
         }
     }
 
+    /// <summary>
+    /// Whether this path is a link, and therefore neither copied nor followed.
+    /// </summary>
+    /// <remarks>
+    /// Unreadable answers true — unreadable is not copyable either, and this is the cheapest way to say so.
+    /// A path that is <em>gone</em> does not, because that is not a link and not an unreadable file: it is
+    /// this walk losing a race with a deployment, and answering true would drop the file from the tree being
+    /// delivered and report the rest as a whole skill.
+    /// </remarks>
     private static bool IsLink(string path)
     {
         try
         {
             return new FileInfo(path).LinkTarget is not null || new DirectoryInfo(path).LinkTarget is not null;
         }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        {
+            throw new RoleSkillTreeChanged(path, exception);
+        }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or PathTooLongException)
         {
-            // Unreadable is not copyable either, and this is the cheapest way to say so.
             return true;
         }
     }
 
+    /// <summary>
+    /// One file's length. A file that cannot be read counts as nothing, which is what this has always done;
+    /// a file that is not there any more is the signal a rename gives, and counting it as nothing would
+    /// understate the bytes an attempt records while reporting the teach as complete.
+    /// </summary>
     private static long Length(string file)
     {
         try
         {
             return new FileInfo(file).Length;
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        {
+            throw new RoleSkillTreeChanged(file, exception);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {

@@ -15,4 +15,12 @@
   <ItemGroup>
     <ProjectReference Include="../Jason.Contracts/Jason.Contracts.csproj" />
   </ItemGroup>
+
+  <!-- The only friend assembly in this repository. WorkDirectory carries one internal test hook, because the
+       launcher's behaviour when a deployment renames a role's tree under it cannot otherwise be proved except
+       by racing, and a racing proof of an anti-race is worth nothing. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Jason.Runtime.Tests" />
+  </ItemGroup>
+
 </Project>

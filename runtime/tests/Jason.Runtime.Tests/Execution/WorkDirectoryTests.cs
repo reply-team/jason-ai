@@ -229,11 +229,12 @@ public class WorkDirectoryTests : IDisposable
 
     /// <summary>
     /// And the case the helper's <c>catch</c> really is about: a file that was enumerated and is gone by the
-    /// time it is measured is counted as nothing, silently. Today that understates the bytes an attempt
-    /// records; it is the signal a deployment's rename produces, and it is what the next increment raises.
+    /// time it is measured. It used to be counted as nothing, silently, which understated the bytes an attempt
+    /// recorded while reporting the teach as complete. It is now raised, because it is not a fault — it is the
+    /// signal a deployment's rename produces, and the answer to it is to read the tree again.
     /// </summary>
     [Fact]
-    public void A_file_that_vanished_between_the_walk_and_the_measurement_is_counted_as_nothing()
+    public void A_file_that_vanished_between_the_walk_and_the_measurement_is_raised_rather_than_counted_as_nothing()
     {
         Skill($"---\nname: {Role}\ndescription: one line\n---\n\nbody\n");
         var vanishing = Path.Combine(SkillsRoot, Role, "reference.md");
@@ -242,7 +243,8 @@ public class WorkDirectoryTests : IDisposable
         var files = RoleSkillRules.Files(Path.Combine(SkillsRoot, Role));
         File.Delete(vanishing);
 
-        Assert.Equal(new FileInfo(Path.Combine(SkillsRoot, Role, WorkDirectory.SkillFile)).Length, RoleSkillRules.Measure(files));
+        var changed = Assert.Throws<RoleSkillTreeChanged>(() => RoleSkillRules.Measure(files));
+        Assert.Contains("reference.md", changed.Message, StringComparison.Ordinal);
     }
 
     private void Skill(string text) =>

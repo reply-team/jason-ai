@@ -43,6 +43,18 @@ public static class AttemptErrors
     /// </summary>
     public const string RoleSkillInvalid = "role_skill_invalid";
 
+    /// <summary>
+    /// The role's skill could not be read consistently: a deployment was in flight and a second read of it
+    /// lost the race too.
+    /// </summary>
+    /// <remarks>
+    /// Refused rather than run untaught, for the reason <see cref="RoleSkillInvalid"/> already gives about a
+    /// skill that was configured and did not arrive — the role would do the job untaught at the price of a
+    /// real launch. It is not that code: nothing about the skill is invalid. It takes two deployments landing
+    /// inside one launch's copy to see this.
+    /// </remarks>
+    public const string RoleSkillUnreadable = "role_skill_unreadable";
+
     /// <summary>This build publishes no contract for the operation the work item names.</summary>
     public const string OperationUnknown = "operation_unknown";
 

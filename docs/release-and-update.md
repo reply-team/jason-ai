@@ -151,6 +151,11 @@ be measured at all, which is not the same as a skill of no bytes.
 moment it lands and there is nothing to reload. That is also why this section reports what is on disk now
 rather than what was there when the runtime started.
 
+Because it is read at every launch, something deploying into it can be reading it at the same moment. A
+deployment therefore assembles each skill beside its destination and moves it into place, so a launch sees the
+tree that was there or the tree that arrived and never a blend; a launch that loses that race reads the tree
+again, and one that loses it twice ends with `role_skill_unreadable` rather than running with no skill.
+
 ## 5. Asking by hand
 
 ```sh

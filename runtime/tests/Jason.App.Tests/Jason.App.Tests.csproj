@@ -24,5 +24,10 @@
     <Compile Include="../Jason.Runtime.Tests/TempTree.cs" Link="Skills/TempTree.cs" />
     <!-- The process table that launches nothing: a null seam falls back to the one that starts real processes. -->
     <Compile Include="../Jason.Cli.Tests/Process/FakeProcessControl.cs" Link="Skills/FakeProcessControl.cs" />
+
+    <!-- The race test drives the installer and the launcher in one process, and the installer needs a runner
+         that runs nothing: this is the only project that may hold both sides at once. -->
+    <Compile Include="../Jason.Cli.Tests/Process/FakeProgramRunner.cs" Link="Skills/FakeProgramRunner.cs" />
+    <Compile Include="../Jason.Runtime.Tests/TempDataDir.cs" Link="Skills/TempDataDir.cs" />
   </ItemGroup>
 </Project>

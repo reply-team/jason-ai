@@ -108,7 +108,7 @@ public static class SkillsCommands
             return ExitCodes.Success;
         }
 
-        var report = SkillsDeployer.Apply(plan, options.Force, TimeProvider.System);
+        var report = SkillsDeployer.Apply(plan, env.Paths, options.Force, TimeProvider.System);
         foreach (var problem in report.Problems)
         {
             env.Error.WriteLine(problem);
