@@ -52,6 +52,9 @@ two must match: a skill whose front matter names anything else is loaded by nobo
 - [`roles/copywriter`](roles/copywriter/SKILL.md) — **draft.** The campaign-level messaging: what the campaign
   itself says about voice and guardrails, where the copy goes when it is written, and why writing it is not
   sending it.
+- [`roles/personalizer`](roles/personalizer/SKILL.md) — **draft.** The messaging adapted to one person: what
+  this runtime knows about them and where to read it, where the wording goes afterwards, and why a contact
+  record is not the place for it.
 
 These are not read from here at run time. An operator composes the directory the runtime hands out,
 `<data>/skills/roles/<role>/`, from this pack and — later — from the business pack, and the runtime copies it
