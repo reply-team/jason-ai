@@ -1,7 +1,8 @@
 ---
 name: researcher
 description: Use when Jason launches you as the researcher role on an ai_role work item — find and verify what the brief asks about an account or a person, answer in the shape the item requires, and keep the campaign note that your later runs will read.
-status: draft
+metadata:
+  status: draft
 ---
 
 # Researcher

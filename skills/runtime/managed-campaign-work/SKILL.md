@@ -1,7 +1,8 @@
 ---
 name: managed-campaign-work
-description: Use when an interactive agent session should turn an outbound objective into durable campaign work that Jason performs — creating a campaign, adding the people it is about, submitting managed provider operations, and handling the approvals they wait on.
-status: draft
+description: Use when an interactive agent session should turn an outbound objective into durable campaign work that Jason performs - creating a campaign, adding the people it is about, submitting managed provider operations and AI role work, and following what the runtime does with them.
+metadata:
+  status: verified
 ---
 
 # Managed campaign work
@@ -11,7 +12,7 @@ the Jason CLI has not happened: it will not survive the session, will not be dis
 anybody, and will leave no history. This skill is the managed path — how to put work where the runtime can
 perform it, and what to do while it waits.
 
-**Status: draft.** It covers the operations this build publishes and nothing else.
+**Status: verified** against Claude Code 2.1.278. It covers the operations this build publishes and nothing else.
 
 ## What you are responsible for, and what the runtime is
 
@@ -20,6 +21,12 @@ decides *whether and when* it happens: it validates the arguments against the op
 refuses work it cannot route, waits for a person where a person is required, retries what is worth retrying, and
 records every attempt. Do not re-implement any of that in a session — if the runtime refuses something, read the
 code it answered with rather than working around it.
+
+**The runtime owns scheduling and resumption.** Once a work item exists, the runtime decides when it runs, runs
+it, retries it if that is what its failure deserves, and picks it up again after a restart — **nothing else wakes
+the work**. Not this session, not a file you keep, not a reminder you set yourself. So a session's job ends when
+the work is committed and the person has been told what to expect; there is nothing to keep in the conversation
+afterwards, and nothing that has to be running for the work to go on.
 
 ## Before you start: is this installation connected to a provider?
 
@@ -39,6 +46,8 @@ operation would go for one campaign:
 jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation campaign.enroll
 ```
 
+Setting one up is `operating-the-installation`, which is where plugins, routes, profiles and updates live.
+
 ## The work itself
 
 A campaign, the people it is about, and then one work item per thing to be done.
@@ -46,8 +55,13 @@ A campaign, the people it is about, and then one work item per thing to be done.
 ```
 jason campaign create --name "Q3 LatAm founders"
 jason campaign add-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --file contacts.json --match-by email
+jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
+
+**The campaign's own people are `campaign list-contacts`.** `contact list` answers with everyone this runtime
+knows and takes no campaign at all, so `contact list --campaign …` is the spelling to expect yourself to reach
+for and the one that costs you a turn on `Unrecognized command or argument`.
 
 `contacts.json` is a JSON array of people, each with their channels:
 
@@ -68,8 +82,16 @@ jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operat
 ```
 
 The arguments are validated when the item is created, so a refusal here is about what you asked for, not about
-the provider. Read the operation's own document under `docs/contracts/operations/` before you invent a field:
-it is the same document the runtime enforces.
+the provider. Read the operation's own document before you invent a field: it is the same document the runtime
+enforces, and it is published with the project's source, under `docs/contracts/operations/`. **No verb prints
+one**, so on a machine with no copy of the source you cannot read it from here — ask the operator for it rather
+than guessing a field, because a guess is refused at `workitem.create` anyway.
+
+Work that needs a model rather than a provider is an `ai_role` item, named for the role that should do it:
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role researcher --context '{"account":"Analytical Engines","question":"which of the two sites is the target"}'
+```
 
 Then follow the work:
 
@@ -123,40 +145,26 @@ written. Where a note disagrees with what the runtime says now, the runtime is r
 where to look first; check what it claims before you repeat it. Campaign context is the campaign's
 shared knowledge and a different thing — do not write one into the other.
 
-## When work waits for a person
+## Three things that will happen to work you created
 
-An operation whose contract says a person must confirm it parks at the claim: the item's status becomes
-`awaiting_approval`, no attempt is made, and nothing is sent to the provider. The decision is a person's — a
-session must not make it, and the runtime refuses a decision that does not name one.
+Each of them is a skill of its own, because each is a different moment and a person arrives at it saying
+something different. What belongs here is only that they exist.
 
-```
-jason approval list
-jason approval get apr_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-```
+**It may stop and wait for a person.** An operation whose contract says a person must confirm it parks at the
+claim: the item's status becomes `awaiting_approval`, no attempt is made, and nothing is sent to the provider.
+The decision is a person's — a session must not make it, and the runtime refuses a decision that does not name
+one. Presenting what is waiting, and recording what the person says about it, is **`approvals-and-questions`**.
 
-`approval get` shows what would happen if it were approved: the intent, who would be reached and where, what it
-would cost, what could be undone, and which account it would act through. Show that to the person, in their
-words, and let them answer:
+**It may stop with a code.** A work item that failed carries an error, and the code is the answer: it says
+whether this is somebody's configuration, your arguments, a provider that was unreachable, or a person who has
+not answered yet. Reading one, telling the states apart and naming the repair that is safe is
+**`troubleshooting-jason`**.
 
-```
-jason approval approve apr_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --actor human:ada --reason "checked the list"
-jason approval reject apr_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --actor human:ada --reason "wrong audience"
-```
-
-An approval covers exactly what it was shown. Change the work item's input afterwards and the runtime parks it
-again with a fresh question, because what the person agreed to is no longer what would happen.
-
-## When work stops
-
-Read the code, then decide. Common ones: `no_route` (nothing says where this operation goes),
-`plugin_unavailable` (the package is there but the program it needs is not), `input_invalid` (the arguments do
-not satisfy the contract), `approval_required` (a person has not answered yet), `suppressed` (the person is on
-the suppression list). Do not retry blindly: the runtime already retries what is worth retrying, and a failure it
-called final is final for a reason.
-
-An unanswered ending — a crash, a lost connection — is recorded as `ambiguous`, which means nobody can say
-whether the provider acted. Where the operation's contract declares a recovery read, the next attempt asks the
-provider what happened before it writes anything; where it does not, the work stops and a person decides.
+**The effect may happen somewhere else.** If you or somebody else sends, enrols or replies by hand — through
+the provider's own CLI, or because the managed path was not available — Jason does not know, and until it is
+told its view of the world is wrong and it will act on that view: a second enrolment for somebody who already
+had one, an approval question about work that is already done. Telling it is **`reporting-outside-effects`**,
+and it is owed as soon as you know.
 
 The chronicle is the record of all of it:
 
@@ -164,49 +172,8 @@ The chronicle is the record of all of it:
 jason journal list --work-item wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-## When you did it yourself, outside Jason
-
-Sometimes the effect happens somewhere else: you sent the email through the provider's own CLI because the
-managed path was not available, or somebody asked you to do it by hand and you did. That is allowed — Jason
-does not own every tool you have. What is not allowed is leaving Jason believing it never happened. Until you
-say so, Jason's view of the world is wrong and it will act on that view: a second enrolment for somebody who
-has already had one, an approval question about work that is already done. Report it as soon as you know, in
-the session where you know it.
-
-```
-jason report submit --actor human:ada --effect email_sent --tool reply-cli --summary "Sent the intro by hand after the enrolment failed." --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --work-item wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation campaign.enroll --provider reply --account team@example.com --occurred-at 2026-09-17T11:04:00Z --unknown observed_at --idempotency-key intro-marta-1
-```
-
-It is recorded as your word and as nothing else. Jason does not route it, verify it, retry it, or move any
-work item because of it — it writes down what you said, who said it and when it arrived, and shows it where
-somebody reading the campaign later will find it, including on the work item itself, listed apart from that
-item's own attempts so that neither can be mistaken for the other.
-
-Four things to get right:
-
-- **Say what you do not know with `--unknown <field>`, rather than guessing it.** A guessed timestamp is
-  worse than a missing one, because nobody reading it afterwards can tell it was a guess. `--uncertainty`
-  takes prose for whatever the field names cannot carry.
-- **`--account` names an identity — a mailbox, a workspace, a login. Never a credential.** Jason holds no
-  credential anywhere, and a report is something people read.
-- **Give `--idempotency-key` a value of your own.** If the submission fails halfway and you send it again,
-  the same key answers with the same report instead of recording a second effect. Without a key, a resend of
-  the same words is matched by its content and still answers with the first report.
-- **Use a fresh key when the same effect genuinely happened twice.** Two sends really did reach that person,
-  and a key each puts both on record. With no key, the second is taken for a repeat of the first and you
-  will never see it again.
-
-Read them back the way you read anything else:
-
-```
-jason report list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
-```
-
-What admission does and deliberately does not establish — and why nothing is held or reconsidered
-automatically — is in `docs/reports.md`.
-
 ## What this skill does not cover
 
-Background AI work and the roles that perform it; anything a campaign manager or planner does with an
-approval; and installing plugins or writing routes. Those are other people's jobs or other skills, and
-guessing at them here would be worse than saying so.
+The roles that perform background AI work and how each of them reasons; anything a campaign manager does with
+a check-in; and installing plugins, writing routes or updating the installation. Those are other roles' jobs or
+other skills, and guessing at them here would be worse than saying so.
