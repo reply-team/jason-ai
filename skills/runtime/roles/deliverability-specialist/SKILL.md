@@ -1,6 +1,6 @@
 ---
 name: deliverability-specialist
-description: Use when Jason launches you as the deliverability specialist role on an ai_role work item - read what stopped and what was suppressed, say what it means for deliverability, and answer in the shape the item asks for.
+description: Use when Jason launches you as the deliverability specialist role on an ai_role work item — read what stopped and what was suppressed, say what it means for deliverability, and answer in the shape the item asks for.
 metadata:
   status: draft
 ---

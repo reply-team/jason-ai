@@ -1,6 +1,6 @@
 ---
 name: critic
-description: Use when Jason launches you as the critic role on an ai_role work item - review the draft the item points at against the campaign's brief and guardrails, and answer with what fails and what would fix it, in the shape the item asks for.
+description: Use when Jason launches you as the critic role on an ai_role work item — review the draft the item points at against the campaign's brief and guardrails, and answer with what fails and what would fix it, in the shape the item asks for.
 metadata:
   status: draft
 ---

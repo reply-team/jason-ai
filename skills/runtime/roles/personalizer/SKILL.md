@@ -1,6 +1,6 @@
 ---
 name: personalizer
-description: Use when Jason launches you as the personalizer role on an ai_role work item - adapt the campaign's messaging to the one person the item is about, using what this runtime knows about them, and answer in the shape the item asks for.
+description: Use when Jason launches you as the personalizer role on an ai_role work item — adapt the campaign's messaging to the one person the item is about, using what this runtime knows about them, and answer in the shape the item asks for.
 metadata:
   status: draft
 ---

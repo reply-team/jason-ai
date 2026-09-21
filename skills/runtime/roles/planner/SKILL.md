@@ -1,6 +1,6 @@
 ---
 name: planner
-description: Use when Jason launches you as the planner role on an ai_role work item - turn the campaign's objective and what has already happened into the next short horizon of work, and answer in the shape the item asks for.
+description: Use when Jason launches you as the planner role on an ai_role work item — turn the campaign's objective and what has already happened into the next short horizon of work, and answer in the shape the item asks for.
 metadata:
   status: draft
 ---

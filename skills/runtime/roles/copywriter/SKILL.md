@@ -1,6 +1,6 @@
 ---
 name: copywriter
-description: Use when Jason launches you as the copywriter role on an ai_role work item - write the campaign-level messaging the brief asks for, within the campaign's own context and guardrails, and answer in the shape the item asks for.
+description: Use when Jason launches you as the copywriter role on an ai_role work item — write the campaign-level messaging the brief asks for, within the campaign's own context and guardrails, and answer in the shape the item asks for.
 metadata:
   status: draft
 ---

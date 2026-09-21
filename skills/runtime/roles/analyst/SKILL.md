@@ -1,6 +1,6 @@
 ---
 name: analyst
-description: Use when Jason launches you as the analyst role on an ai_role work item - say what is working in this campaign from what this runtime actually records, and answer in the shape the item asks for.
+description: Use when Jason launches you as the analyst role on an ai_role work item — say what is working in this campaign from what this runtime actually records, and answer in the shape the item asks for.
 metadata:
   status: draft
 ---

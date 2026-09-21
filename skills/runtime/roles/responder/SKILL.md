@@ -1,6 +1,6 @@
 ---
 name: responder
-description: Use when Jason launches you as the responder role on an ai_role work item - work out what a reply the brief carries means and what should happen next, and answer in the shape the item asks for.
+description: Use when Jason launches you as the responder role on an ai_role work item — work out what a reply the brief carries means and what should happen next, and answer in the shape the item asks for.
 metadata:
   status: draft
 ---
