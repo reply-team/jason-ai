@@ -1,12 +1,26 @@
 using System.CommandLine;
 using Jason.Cli.Commands;
+using Jason.Cli.Status;
 
 namespace Jason.Cli;
 
 /// <summary>
-/// Verb map of the CLI. Thin and one-to-one with API operations; parsing errors exit with 2, every
-/// command action returns its own exit code.
+/// Verb map of the CLI. Thin and one-to-one with API operations, with one declared exception; parsing errors
+/// exit with 2, every command action returns its own exit code.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>The exception is <c>jason status</c>, and it is stated here because this is where the rule is written.</b>
+/// Every other top-level name is a noun that an API operation stands behind. <c>status</c> is a verb and cannot
+/// be a noun, because half of what it reports is not the runtime's to know: an executable on PATH, another
+/// vendor's CLI and whether it answers, files in a folder in the operator's home directory. No API operation
+/// can answer "am I ready to work?", because the runtime is not the authority on the machine it runs on.
+/// </para>
+/// <para>
+/// One exception, and a guard holds it to one: a second has to be added in the open rather than arriving as
+/// one more verb somebody thought was obviously fine.
+/// </para>
+/// </remarks>
 public static class CliApp
 {
     public static async Task<int> RunAsync(string[] args, CliEnvironment env, CancellationToken cancellationToken = default)
@@ -76,6 +90,7 @@ public static class CliApp
         root.Subcommands.Add(PluginCommands.Build(env, actor));
         root.Subcommands.Add(RouteCommands.Build(env, actor));
         root.Subcommands.Add(UpdateCommands.Build(env, actor));
+        root.Subcommands.Add(StatusCommand.Build(env));
 
         return root;
     }

@@ -26,7 +26,7 @@ public class DocumentedPageCommandsTests
     private static readonly string[] Nouns =
     [
         "jason profile ", "jason rolenote ", "jason campaign ", "jason workitem ", "jason decision ", "jason update ",
-        "jason runtime autostart ",
+        "jason runtime autostart ", "jason status",
     ];
 
     /// <summary>The pages whose printed commands are guarded.</summary>

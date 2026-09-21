@@ -112,6 +112,39 @@ download, drain, stop, swap, start, health check — driven by a ledger written 
 that dies half-way is finished or put back by the next run. `status` says where one stands, and reads the
 ledger without needing a runtime.
 
+### Can this installation start work?
+
+```sh
+jason status
+jason status --human
+```
+
+One question, answered check by check. It is the only command here that is not one-to-one with an API
+operation, and it cannot be: half of what it reports is not the runtime's to know — an executable on PATH,
+another vendor's CLI and whether it answers, files in a folder in your home directory. No API operation can
+answer "am I ready to work?", because the runtime is not the authority on the machine it runs on.
+
+| Required — a failure exits 1 | Optional — absent never fails |
+|---|---|
+| the runtime answers | a provider plugin is installed |
+| migrations are applied | a route is configured |
+| the plugin registry is alive (zero plugins is alive) | a binding names an account |
+| role skills are present, named after their directories and within the runtime's live cap | a provider CLI **you name** answers |
+| `jason` resolves on PATH, and which file answers | the skill packs are deployed to an agent harness |
+| | autostart is registered |
+
+**It exits 0 or 1 and never 3.** Exit 3 means "I could not ask the runtime", and this is the verb whose whole
+job is to answer when the runtime cannot be asked — so a runtime that is down is a failed check rather than an
+error envelope. The JSON body carries `ready` and a state per check, so an agent branches on the body rather
+than on the code. A check reports a fact and, where there is one, the command that repairs it; it never reads
+a log and never explains a failure, which is what keeps it from growing into a diagnostics verb.
+
+The provider check runs only a program **you** name — `jason status --provider-cli <program>`, run as
+`<program> --version` with a ten-second bound. Which provider you use is yours, and a readiness check that knew
+one vendor's command by heart would be this product naming a vendor in its own sources, which it does not. It
+names the exact command it ran in its own output, and prints no credential — not the key, not a prefix of it,
+not its length.
+
 ## Building from source
 
 Requires the .NET SDK version pinned in `global.json`. From the repository root:
