@@ -2,7 +2,7 @@
 name: troubleshooting-jason
 description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the nine states apart, and name the repair that is safe.
 metadata:
-  status: draft
+  status: verified
 ---
 
 # Troubleshooting Jason
@@ -12,7 +12,7 @@ told: waiting for a moment that has not arrived, waiting for a person who has no
 it cannot route. This skill is how to tell those apart from a genuine failure, and how to name the one repair
 that is safe rather than the first one that comes to mind.
 
-**Status: draft.** It covers what this build records and nothing else.
+**Status: verified** against Claude Code 2.1.278. It covers what this build records and nothing else.
 
 ## Look here first, in this order
 
@@ -147,9 +147,11 @@ there have been and what the last one said, and leave it to run.
 
 **How you recognise it.** `input_invalid`, or a failure the plugin classed `permanent` or `validation`.
 
-Two spellings to expect yourself to get wrong while you look: the campaign's own people are
-`campaign list-contacts`, because `contact list` takes no campaign; and these listings print JSON already, so
-there is no `--json` — `--human` is the one that changes the rendering.
+Three spellings to expect yourself to get wrong while you look. **A campaign id is an argument, not an
+option**: it is `campaign list-contacts cmp_…`, and `campaign list-contacts --campaign cmp_…` is refused —
+which is the one every session so far has reached for first. The campaign's own people are that verb, because
+`contact list` takes no campaign at all. And these listings print JSON already, so there is no `--json`;
+`--human` is the option that changes the rendering.
 
 **What it means.** The arguments do not satisfy the operation's published contract, or the provider refused
 them outright. This is final by design, and it is final because asking again with the same arguments would

@@ -2,7 +2,7 @@
 name: managed-campaign-work
 description: Use when an interactive agent session should turn an outbound objective into durable campaign work that Jason performs - creating a campaign, adding the people it is about, submitting managed provider operations and AI role work, and following what the runtime does with them.
 metadata:
-  status: draft
+  status: verified
 ---
 
 # Managed campaign work
@@ -12,7 +12,7 @@ the Jason CLI has not happened: it will not survive the session, will not be dis
 anybody, and will leave no history. This skill is the managed path — how to put work where the runtime can
 perform it, and what to do while it waits.
 
-**Status: draft.** It covers the operations this build publishes and nothing else.
+**Status: verified** against Claude Code 2.1.278. It covers the operations this build publishes and nothing else.
 
 ## What you are responsible for, and what the runtime is
 

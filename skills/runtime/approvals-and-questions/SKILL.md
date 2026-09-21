@@ -2,7 +2,7 @@
 name: approvals-and-questions
 description: Use when a person asks what Jason is waiting for them to decide, or tells you to decide something Jason has parked - list the approvals and the questions waiting on a person, present each in their own words, and record their decision as theirs.
 metadata:
-  status: draft
+  status: verified
 ---
 
 # Approvals and questions
@@ -15,7 +15,7 @@ are confident, not when they told you earlier to handle things, not when work is
 runtime refuses a decision that does not name a person, and that refusal is the floor of this rule
 rather than the whole of it.
 
-**Status: draft.** It covers the two waiting things this build publishes and nothing else.
+**Status: verified** against Claude Code 2.1.278. It covers the two waiting things this build publishes and nothing else.
 
 ## The two things that wait, and how they differ
 
