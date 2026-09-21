@@ -1,0 +1,162 @@
+# Family 12 — Signals and triggers (10)
+#
+# Work that arrives because something happened out in the world rather than because a calendar said
+# so. A signal is one observation; a trigger is the standing rule that turns observations into work.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 12
+
+operations:
+
+  - name: signal.list
+    intent: >
+      "What has happened out there that I should know about" — someone changed job, someone was on
+      the pricing page, funding was announced, usage jumped, someone engaged publicly.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake, but each result carries when it was observed and how long it stays valid.
+    idempotency_key:
+      value: required
+      conditional: true
+      detail: required where the results are metered; none where we produce the observations ourselves.
+    per_item_results: not_applicable
+    cost:
+      value: metered
+      conditional: true
+      detail: >
+        metered where the observations come from a purchased feed; none for observations we produce
+        ourselves.
+    cost_basis: per result returned, where the observations come from a purchased feed
+    meter: signal
+    questions: []
+
+  - name: signal.get
+    intent: >
+      "One observation in full, including what it was derived from".
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: signal.acknowledge
+    intent: >
+      "Handled — stop showing me this".
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      whether this observation is already acknowledged and by whom.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: signal_policy.define
+    intent: >
+      "When two things fire on the same person at once, which one wins, and does it interrupt what is
+      running, add to it, or wait its turn?"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the policy in force; written as a whole policy, so replaying it is harmless.
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: signal_policy.get
+    intent: >
+      "What ordering is actually in force right now?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: trigger.create
+    intent: >
+      "A standing rule: when this happens, produce this work".
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the rules already in force for this observation type and scope — a duplicated standing rule
+      silently doubles everything it produces for as long as nobody notices.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: trigger.update
+    intent: >
+      "Change the rule, including switching it off without losing it".
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the rule's current definition and whether it is enabled.
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: trigger.list
+    intent: >
+      "What standing rules are running, what do they watch, and what do they produce?" — in full.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: trigger.delete
+    intent: >
+      "Remove the rule entirely".
+    reach: control
+    reversibility: irreversible
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      whether the rule still exists; an already-deleted rule is a success on retry.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: trigger_run.list
+    intent: >
+      "What did my rules actually do last night" — which fired, on whom, what work came out, and what
+      was held back by policy.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []

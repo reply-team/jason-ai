@@ -1,0 +1,20 @@
+{
+  "name": "jason-ai",
+  "description": "The skills that ship with the Jason runtime: how to operate the runtime itself, and vendor-neutral knowledge of the SDR profession.",
+  "owner": {
+    "name": "Jason",
+    "url": "https://github.com/reply-team/jason-ai"
+  },
+  "plugins": [
+    {
+      "name": "jason-runtime-skills",
+      "source": "./skills/runtime",
+      "description": "Operating Jason: turning an objective into durable campaign work, what is waiting on a person, running the installation, why work stopped, and reporting effects produced outside Jason. Moves in lockstep with the runtime's API."
+    },
+    {
+      "name": "jason-business-skills",
+      "source": "./skills/business",
+      "description": "The SDR profession, independent of any provider or runtime: the operation catalogue, campaign planning and launch, audience building, inbox triage, performance analysis, and the approval, sending and social guardrails."
+    }
+  ]
+}

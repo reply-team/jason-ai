@@ -1,0 +1,184 @@
+# Family 13 — Inbound (11)
+#
+# Someone raised their hand. This is the third door into an audience, alongside searching a database
+# and importing a file, and it is not outbound with the first step skipped: the arrival is an event
+# we did not cause, latency rather than persistence is the dominant variable, and nothing is worked
+# before it is owned.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 13
+
+operations:
+
+  - name: inbound_lead.record
+    core: true
+    intent: >
+      "Somebody raised their hand — record it now, and tell me who they are".
+    reach: control
+    reversibility:
+      value: irreversible
+      conditional: true
+      detail: >
+        an arrival happened and cannot un-happen, and its time is evidence for the response clock and
+        often for consent; where it created a contact, that part is compensatable by `contact.delete`.
+    approval: auto
+    approval_departs: true
+    protective_floor: true
+    approval_reason: >
+      the protective floor — recording an event that already occurred outside our control is not a
+      decision, and delaying it burns the only thing this motion is measured on.
+    before_repeating: >
+      whether an arrival with this key, or this source and source reference, is already recorded —
+      submission notifications retry, and a doubly-recorded arrival routes twice and restarts a clock
+      that was already running.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: inbound_lead.list
+    core: true
+    intent: >
+      "What has come in and not been worked, oldest first" — with how long each has been waiting and
+      how long is left.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: inbound_lead.get
+    intent: >
+      "Everything about this one" — what they told us, who they turned out to be, what we already
+      have running against them, who owns it and what the clock says.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: inbound_lead.route
+    intent: >
+      "Send it to the right owner by the rule" — territory, who already owns the account,
+      round-robin, whoever is actually available.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the current owner, and whether routing has already run — re-routing a lead someone is working
+      moves it out from under them.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [2]
+
+  - name: inbound_lead.claim
+    intent: >
+      "Mine — taking it off the shared queue".
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the current owner; a lead already owned by somebody else refuses rather than overwriting.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [2]
+
+  - name: inbound_lead.release
+    intent: >
+      "I cannot work this — put it back".
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the current owner
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: inbound_lead.triage
+    intent: >
+      "What kind of request is this actually?" — a sales enquiry, a support problem, a billing
+      question, a job application, someone selling to us, a student, an existing customer wanting
+      more, or noise.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the disposition already recorded on this arrival.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: inbound_lead.close
+    intent: >
+      "Done with this arrival, and here is what became of it" — a meeting, a handoff, answered and
+      nothing more, routed elsewhere, unreachable, or nothing.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the arrival's state and recorded outcome.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: inbound_lead.reopen
+    intent: >
+      "That was closed too early".
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the arrival's state
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: response_policy.define
+    intent: >
+      "State how fast a human has to respond, by source and by what kind of request it is — and what
+      happens when the target is missed".
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the policy in force for this subject and source; written as a whole policy, so replaying it is
+      harmless.
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: [5]
+
+  - name: response_policy.get
+    intent: >
+      "What are we actually holding ourselves to?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []

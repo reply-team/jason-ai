@@ -1,0 +1,145 @@
+# Family 9 — Conversations and activity (9)
+#
+# The inbox: where the day starts, and where every outbound programme finds out whether it worked. A
+# thread carries a meaning a branch can be planned on, together with who decided it and how sure they
+# were; a request to stop is never one of those meanings, and closing a thread neither records a
+# business outcome nor stops outreach.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 9
+
+operations:
+
+  - name: conversation.list
+    core: true
+    intent: >
+      "What came back overnight, and what needs answering first?" — filterable by meaning, channel,
+      owner, campaign and how long each has been waiting, ordered by what is most overdue
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake; page with the returned cursor
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: conversation.get
+    core: true
+    intent: >
+      "Read me the thread before I answer" — every message in order, who is on it, what we have decided
+      it means, and what it is attached to
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: conversation.classify
+    core: true
+    intent: >
+      "What does this reply actually mean, in a value I can plan a branch on — and who decided it, from
+      which message, and how sure were they?"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the meaning currently on the thread, with who assigned it and when.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: conversation.assign
+    intent: >
+      "Give this thread to someone else's inbox" — internal routing only; nothing is promised and no
+      clock starts
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the thread's current owner
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [4]
+
+  - name: conversation.snooze
+    intent: >
+      "Not now — bring it back on this date"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the thread's snooze-until time
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: conversation.close
+    intent: >
+      "Done with this thread" — worked, not ignored
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the thread's state
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: conversation.reopen
+    intent: >
+      "I closed that too early — put it back in the queue"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the thread's state; reopening an open thread is a no-op.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: referral.record
+    intent: >
+      "I'm not the right person — talk to Steve in finance" — record who they named, where the name came
+      from, and take this person out of the campaign as referred out
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised: it creates a person we will contact on the strength of a stranger's sentence.
+    before_repeating: >
+      whether a referral from this message is already recorded, and whether the named person already
+      exists.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [6]
+
+  - name: activity.log
+    intent: >
+      "Record something that happened outside the tool so the record is not a lie" — an email from a
+      personal client, a hallway conversation, a message on a channel we do not send from, a note
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      whether an activity with this key, or this subject and time, is already recorded.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []

@@ -1,0 +1,201 @@
+# Family 19 — Accounts and buying groups (12)
+#
+# The company as a unit of coordination: something we own and work as one, not a search result.
+# The unit of engagement stays the person — a buying group sends nothing by itself, it decides who
+# is engaged, in what order, and what one person's reply does to the rest.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 19
+
+operations:
+
+  - name: account.get
+    intent: >
+      "Show me this company as something we own" — its state, its tier, who owns it, what is happening
+      on it.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: account.search
+    intent: >
+      "Which of the companies we already hold match this?" — never queries an outside database and
+      never costs anything.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: account.update
+    intent: >
+      "Change the company's state — in play, enrolled, nurture, blocked, customer, partner — or its
+      tier, with a reason."
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the current state of each account
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: account.claim
+    intent: >
+      "Reserve this company for my attention for a stated period" — a lease, not ownership, and it
+      expires by itself.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: existing claims on the account and their expiry
+    idempotency_key:
+      value: required
+      detail: a replayed claim must not silently extend the lease.
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: account.release
+    intent: >
+      "Give the claim back before it expires."
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: whether the claim is still live and still mine
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: account_membership.create
+    intent: >
+      "Attach this person to this company deliberately, rather than letting a new company appear for
+      every spelling of a name."
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the membership rows already on the account
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: account_membership.list
+    intent: >
+      "Who do we hold at this company, how do we know they belong to it, and which of them is being
+      touched right now?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results:
+      value: required
+      detail: every row states its basis.
+    cost: none
+    questions: [10]
+
+  - name: account_membership.delete
+    intent: >
+      "Detach a person from this company."
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the membership rows on the account
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: collision.check
+    intent: >
+      "Who else is touching this company, and why?" — my other campaign, another person's campaign, or
+      a live customer, support or opportunity motion.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake; re-check immediately before enrolling, because collisions appear between
+      planning and execution.
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: [6]
+
+  - name: buying_group.define
+    intent: >
+      "Name the people who decide together at this company, and what each of them does in the
+      decision" — create-or-replace over the whole group; defining it with no members removes it.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the group already defined on this account
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: buying_group.get
+    intent: >
+      "Show me the group: who is in it, in what role, and where each of them stands."
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: buying_group.enroll
+    intent: >
+      "Engage the group deliberately" — how many at once, staggered by how many working days, in what
+      order, and what one person's reply does to the others.
+    reach:
+      value: act
+      conditional: true
+      detail: >
+        bookkeeping while the campaign is not live, `act` the moment it is, with reach equal to the
+        members it will contact; resolved by the same preview as `campaign.enroll`.
+    reversibility:
+      value: irreversible
+      conditional: true
+      detail: compensatable until the first touch goes, irreversible after.
+    approval:
+      value: confirm_once
+      conditional: true
+      detail: >
+        confirm_once before go-live; confirm_once with a mandatory preview once live.
+    approval_artefact: preview
+    approval_departs: false
+    before_repeating: >
+      the per-member outcome from the previous run — enrolled, staggered to a future date, skipped,
+      refused — and the group's current state.
+    idempotency_key: required
+    per_item_results:
+      value: required
+      detail: one outcome per member with the reason.
+    cost:
+      value: none
+      detail: '`none` in itself; the sends it causes carry the channel''s own.'
+    questions: []

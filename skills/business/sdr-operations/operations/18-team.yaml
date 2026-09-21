@@ -1,0 +1,227 @@
+# Family 18 — The team: people, ownership, workload and targets (15)
+#
+# Our own side of the table: who is here, what each person is carrying, who owns which work, and
+# what they are measured against. Hiring, activating and deactivating people is not in this
+# contract — this family reads an actor's state and refuses to write against anyone who is not
+# active.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 18
+
+operations:
+
+  - name: actor.list
+    intent: >
+      "Who is on our side of the table, and what state are they in: active, ramping, unavailable,
+      gone?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: actor.get
+    intent: >
+      "One person: their state, their team, and the ceilings that apply to them"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: team.list
+    intent: >
+      "What groups do people belong to?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: workload.get
+    intent: >
+      "What is this person actually carrying" — open tasks, what is due today, live enrolments, and
+      everything wired to them that would break if they left tomorrow.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake; read it before handing anyone more work, before an unattended run that names
+      them, and before transferring a book.
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: workload_policy.define
+    intent: >
+      "State how much one person may be holding at once" — open tasks, live enrolments, touches
+      assigned per day — and whether a breach defers the work or refuses it.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the policy in force for this scope
+    idempotency_key: none
+    key_exempt: absolute_valued
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: workload_policy.get
+    intent: >
+      "What ceiling applies to this person, and how much headroom is left?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake; where none is declared the answer is "none declared", which means unlimited
+      and says so.
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: ownership.get
+    intent: >
+      "Who owns this person or this company — and would acting on it make me the owner?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: ownership.assign
+    intent: >
+      "Give this contact or account to someone" — a named person, or whoever an assignment policy
+      picks.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the current owner of each subject
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: assignment_policy.define
+    intent: >
+      "The rule that picks who gets the next piece of work" — a pool, a selection method and an
+      availability test.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the policy in force
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: assignment_policy.get
+    intent: >
+      "What routing rule is in force here, and who would it pick right now?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: book.transfer
+    intent: >
+      "Move someone's whole book of work to someone else, or split it across a policy" — ownership,
+      the senders behind live threads, open tasks, open conversations, authored content.
+    reach: act
+    reversibility: compensatable
+    approval: confirm_once
+    approval_artefact: preview
+    approval_departs: false
+    before_repeating: >
+      the per-item transfer ledger from the previous run — a partially applied transfer repeated
+      wholesale re-points threads that were already re-pointed.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [15]
+
+  - name: goal.define
+    intent: >
+      "Set the target" — the number, the unit this account actually pays on, the period, and the ramp
+      for anyone not yet at full load.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the goal in force for this subject and period
+    idempotency_key: none
+    key_exempt: absolute_valued
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: goal.get
+    intent: >
+      "What is this person's or team's target for this period, and in what unit?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: goal.list
+    intent: >
+      "What targets exist across the team this period?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: pace.get
+    intent: >
+      "Am I on track?" — target, achieved, in flight, working days gone and left, the run rate needed
+      from here, and what makes the projection unreliable.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake; two pace numbers are only comparable if the unit, the period and the working-day
+      calendar match.
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []

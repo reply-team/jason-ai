@@ -1,0 +1,231 @@
+# Family 16 — Social and messaging channels (13)
+#
+# The channel-shaped operations with no email analogue: a relationship graph you must be inside
+# before you may write, an allowance spent by looking, a currency that expires and is refunded on a
+# reply, and a window that opens only when the other person speaks first.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 16
+
+operations:
+
+  - name: social_invitation.send
+    intent: >
+      "Connect with them first, then talk" — a connection request, with an optional note.
+    reach: act
+    reversibility: compensatable
+    approval: confirm_each
+    approval_departs: true
+    approval_reason: >
+      raised: the note is content addressed to a named person.
+    before_repeating: >
+      the invitation state for this pair: none / pending / accepted / withdrawn / declined.
+    idempotency_key: required
+    per_item_results: required
+    cost: metered
+    cost_basis: per invitation
+    meter: invitation
+    questions: []
+
+  - name: social_invitation.list
+    intent: >
+      "What is still pending, and how old is it?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: social_invitation.withdraw
+    intent: >
+      "Take one back" — and it does not lift a restriction.
+    reach: control
+    reversibility:
+      value: compensatable
+      conditional: true
+      detail: >
+        compensatable, subject to a channel-declared cooling-off before the same person may be invited
+        again.
+    approval:
+      value: confirm_once
+      conditional: true
+      detail: auto for one invitation; confirm_once for a collection.
+    approval_departs: false
+    before_repeating: >
+      the invitation's state.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: social_invitation.accept
+    intent: >
+      "Accept an invitation someone sent us".
+    reach: act
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    approval_artefact: preview
+    before_repeating: >
+      the invitation's state.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: social_invitation.decline
+    intent: >
+      "Decline one we do not want".
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the invitation's state.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: social_relationship.get
+    intent: >
+      "What is our standing with this person — connected, pending, none — and at what degree?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key:
+      value: required
+      conditional: true
+      detail: required where the read is metered.
+    per_item_results: required
+    cost:
+      value: metered
+      conditional: true
+      detail: >
+        metered on channels that meter profile reads; none elsewhere.
+    cost_basis: per person looked up, on channels that meter profile reads
+    meter: profile_read
+    questions: []
+
+  - name: social_profile.view
+    intent: >
+      "Open their profile" — it spends a counted allowance, and on some channels they can see that we
+      did.
+    reach:
+      value: act
+      conditional: true
+      detail: >
+        `act` where the channel surfaces the view to the person; `read` where the operator has
+        declared that it does not. Where the operator has declared neither, absence resolves to `act`.
+    reversibility: irreversible
+    approval:
+      value: confirm_each
+      conditional: true
+      detail: >
+        confirm_each while it resolves to `act`; auto where it resolves to `read`. Bulk profile
+        research is exactly the case a standing approval exists for.
+    approval_departs: false
+    before_repeating: >
+      the view ledger for this person and sender in the current window.
+    idempotency_key: required
+    per_item_results: required
+    cost: metered
+    cost_basis: per profile viewed
+    meter: profile_read
+    questions: []
+
+  - name: social_profile.follow
+    intent: >
+      "Follow them without connecting".
+    reach: act
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    approval_artefact: preview
+    before_repeating: >
+      the follow state for this pair.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: social_profile.unfollow
+    intent: >
+      "Stop following".
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the follow state for this pair.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: social_post.react
+    intent: >
+      "React to something they posted".
+    reach: act
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    approval_artefact: preview
+    before_repeating: >
+      the reaction state for this post and sender.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: social_post.comment
+    intent: >
+      "Comment on something they posted" — published content under a named human's identity.
+    reach: act
+    reversibility: compensatable
+    approval: confirm_each
+    approval_departs: true
+    approval_reason: >
+      raised from confirm_once: it is published content under a named human's identity.
+    before_repeating: >
+      the comment ledger for this post and sender.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: social_credit.get
+    intent: >
+      "How many metered messaging credits are left, when do they expire, and does a reply give one
+      back?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: conversation_window.get
+    intent: >
+      "May I write to this person freely right now, or only with pre-approved content, or only by
+      spending a credit?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []

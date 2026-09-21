@@ -8,9 +8,10 @@ fields of its own about execution. This is the list of every place the two diffe
 Three kinds of entry appear here. A **restriction** is Jason doing less than the contract allows, deliberately. An
 **addition** is a field the contract has no opinion about because it is not a contract-level concern. A **gap** is
 somewhere the contract names a thing without defining it, and Jason had to choose — those are the ones worth
-feeding back, because the next implementer will otherwise choose differently. Feedback travels through the issues
-of [`reply-team/reply-skills`](https://github.com/reply-team/reply-skills), where that contract is published — an
-issue per row, not a private note.
+feeding back, because the next implementer will otherwise choose differently. The contract now lives in this repository, in
+[`skills/business/sdr-operations`](../../skills/business/sdr-operations/SKILL.md) — it was published in
+[`reply-team/reply-skills`](https://github.com/reply-team/reply-skills), **formerly** its home — so feedback
+travels through this repository's issues: an issue per row, not a private note.
 
 | Aspect | What the contract says | What Jason v0 does | Why | Feed back? |
 |---|---|---|---|---|

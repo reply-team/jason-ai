@@ -1,0 +1,46 @@
+<!-- Generated. Do not edit by hand. -->
+
+# Family 14 — Consent, suppression and privacy
+
+Generated from the contract fragments in `operations/`. Edit a fragment, not this file.
+
+*Permission and capability* · 23 operations · contract 2.0.0
+
+**Reading the table.** † marks a core operation. The five properties are *reach*
+(`read` changes nothing · `control` changes state we own · `act` reaches the outside world),
+*reversibility* (`reversible` · `compensatable` · `irreversible`), *approval*
+(`auto` · `confirm_once` · `confirm_each`, derived from reversibility × reach), *before repeating*
+(the observable state to read before running it again) and *cost* (`none` · `metered`, with its
+basis and the meter it consumes). *Key* and *per-item* are the two standing obligations: an
+idempotency key on every act, every metered call, every write accepting a collection and every
+write creating a durable object. A write that takes no key says why in *exempt* — `absolute_valued`
+(the same value written again), `terminal_state` (the same state arrived at again), or `unstated`,
+which is the contract admitting it has no reason and not a claim that one exists. And one outcome
+per item whenever a collection is carried. Where a property is conditional the cell holds the
+dangerous reading, with the condition beneath it.
+
+| Operation | Intent | Reach | Reversibility | Approval | Before repeating | Cost | Key | Per-item | Invariants |
+|---|---|---|---|---|---|---|---|---|---|
+| `outreach.precheck` † | "May I contact this person, on this channel, right now — and if not, when, and what would fix it?" | `read` | `reversible` | `auto` | nothing at stake where it costs nothing; where the register gate screens live, the screening recorded under this key. In every case its result is stale the moment it returns. | `metered`<br>*conditional:* none, unless the external-register gate performs a live screening rather than reading a cached one inside its staleness allowance — then metered.<br>*basis:* per identifier screened, where the external-register gate screens live<br>*meter:* `screening` | `required`<br>*conditional:* required where the register gate screens live. | `required` | `A5`, `A6`, `A7`, `A8`, `A9`, `A12`, `A15`, `A16`, `A17`, `A18`, `A20`, `A21`, `A22`, `E15`, `F2`, `F12`, `J4`, `K7`, `K9` |
+| `suppression.check` | "Is this address, number, profile, domain or account one we must not touch — and why?" — works on a raw identifier that is not a person in our system yet. | `read` | `reversible` | `auto` | nothing at stake | `none` | `none` | `required` | `A9` |
+| `suppression.list` | "Show me the exclusion lists" — by scope, reason class and who put them there. | `read` | `reversible` | `auto` | nothing at stake | `none` | `none` | `not_applicable` | — |
+| `suppression.add` †<br>*questions:* 8 | "Never contact this again, and here is why" — a person, an address, a number, a profile, a domain or a whole account. | `control` | `irreversible` | `confirm_once`<br>*conditional:* auto for a single verified identifier, which is protective; confirm_once for a domain, an account pattern or a collection. | list first — adding a pattern that already exists is a refusal, so a blind retry is wrong. | `none` | `required` | `required` | `A2`, `A11`, `A12`, `A14`, `A15`, `B12`, `L6` |
+| `suppression.remove`<br>*questions:* 26 | "Lift this exclusion, and here is the evidence that lets me". | `control` | `irreversible` | `confirm_once` | the entry's current state, its reason class, and whether a retention floor still applies — the sends made during a wrongful lift cannot be restored by any second act. | `none` | `required` | `required` | `A1`, `A11`, `L6` |
+| `optout.record` † | "They said stop" — records the act itself: what they said, where it arrived, when they did it, when we learned of it. | `control` | `irreversible` | `auto`<br>*protective floor:* the protective floor — recording that somebody said stop is an operation whose non-performance is itself the harm, and waiting for permission to stop is the destructive choice. | the current opt-out state for this person and identifier, with its recorded event time. | `none` | `required` | `required` | `A2`, `A3`, `A4`, `K2` |
+| `optout.poll` | "What stop signals happened at the channel that we have not ingested yet?" — one-click unsubscribes, list-unsubscribe requests, blocks, stop keywords, platform-side opt-outs. | `read` | `reversible` | `auto` | nothing at stake | `none` | `none` | `required` | `A3`, `F7` |
+| `optout.confirm` | "Send the one confirmation of their opt-out that this channel permits" — exactly once, non-promotional, and it may never require anything of the recipient. | `act` | `irreversible` | `confirm_each` | the confirmation ledger for this person and channel: sent / not sent. A second one is a breach, not a duplicate. | `metered`<br>*conditional:* metered where the channel meters sending.<br>*basis:* per confirmation sent, where the channel meters sending<br>*meter:* `message` | `required` | `not_applicable` | — |
+| `consent.record` | "Here is the permission we hold, what they were told, when, how it was captured, and what it covers". | `control` | `irreversible` | `confirm_once`<br>*artefact:* preview | the current basis for this person, channel and purpose, with its as-of. | `none` | `required` | `required` | `A15`, `A16`, `A17`, `A19`, `K7` |
+| `consent.revalidate` | "Has a time-limited permission quietly expired?" — recompute it and downgrade contactability without waiting for a human. | `control` | `reversible` | `auto` | the current basis state and the last revalidation as-of. | `none` | `required` | `required` | `A19` |
+| `consent.prove` | "Show me the evidence that we were allowed to send this" — status plus the bundle. | `read` | `reversible` | `auto` | nothing at stake | `none` | `none` | `required` | `A16`, `A19` |
+| `notice.send` | "Deliver the privacy notice to someone whose data we did not get from them, and record that we did". | `act` | `irreversible` | `confirm_each` | the notice-delivery record for this person: delivered or not, and when. | `metered`<br>*conditional:* metered where the channel meters sending.<br>*basis:* per notice sent, where the channel meters sending<br>*meter:* `message` | `required` | `not_applicable` | `A18` |
+| `disclosure.check` | "Must this outreach say it was machine-generated — in what form, in which places, on this channel?" | `read` | `reversible` | `auto` | nothing at stake | `none` | `none` | `required` | `A21`, `E14` |
+| `disclosure.record` | "It did say so, here, in this message". | `control` | `irreversible` | `confirm_once` | the disclosure record bound to this message. | `none` | `required` | `required` | `A21` |
+| `dnc_registry.check` | "Screen these numbers or addresses against the external do-not-contact register this jurisdiction requires". | `read` | `reversible` | `auto` | nothing at stake | `metered`<br>*basis:* per identifier screened<br>*meter:* `screening` | `required` | `required` | `A6` |
+| `privacy_request.create` | "Someone has asked to see, correct, restrict, port or erase their data — start the clock". | `control` | `irreversible` | `auto`<br>*protective floor:* the protective floor — failing to open the record is itself the breach. | the open request for this subject and type. | `none` | `required` | `required` | `A3`, `A4` |
+| `privacy_request.update` | "Verify who they are, or extend the deadline with the reason recorded, because the reason has to be told to them". | `control` | `compensatable` | `auto` | the request's current state and its recorded due dates. | `none` | `required` | `not_applicable` | `A4` |
+| `privacy_request.refuse` | "Refuse it, with the demonstrable basis". | `control` | `compensatable` | `confirm_once` | the request's state; a refused request may not be refused twice. | `none` | `required` | `not_applicable` | — |
+| `privacy_request.fulfill` | "Export or erase against a recorded request — the only path to either". | `act`<br>*conditional:* `act` when it discloses data to the requester; `control` when it erases. | `irreversible` | `confirm_each` | the per-store, per-identifier fulfilment ledger for this request. | `none` | `required` | `required` | `A9`, `A10`, `A13`, `B12` |
+| `deletion_feed.poll` | "Pull the erasure demands waiting on the external register and match them against what we hold". | `read` | `reversible` | `auto` | nothing at stake | `none` | `none` | `required` | — |
+| `deletion_feed.report`<br>*questions:* 23 | "Tell the register what we did with each of its requests". | `control` | `irreversible` | `auto`<br>*protective floor:* the protective floor — the reporting deadline is the obligation, so not reporting is the harm. | the per-request report ledger: reported or not, with the reported outcome. | `none` | `required` | `required` | `A4`, `A13` |
+| `retention.apply` | "Enforce the storage limits — and stop at the floors that an erasure may not cross". | `control` | `irreversible` | `confirm_once` | the last applied-through timestamp per data category and the pending count. | `none` | `required` | `required` | `A10` |
+| `audit_log.search` | "Who changed what, when, on our side — and why was this person contacted at all?" | `read` | `reversible` | `auto` | nothing at stake | `none` | `none` | `not_applicable` | — |

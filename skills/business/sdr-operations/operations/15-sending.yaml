@@ -1,0 +1,558 @@
+# Family 15 — Sending capability and deliverability (34)
+#
+# A sending capability is a mailbox, a social account, a number or a business messaging identity —
+# one noun, because every fact in this family holds for all of them. The family answers whether we
+# can physically deliver, from what, how much, and what is stopping us right now.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 15
+
+operations:
+
+  - name: sender.list
+    intent: >
+      "What can we send from?" — mailboxes, social accounts, numbers and business messaging
+      identities in one list.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: sender.get
+    intent: >
+      "Show me this sending capability in full" — identity, channel, configured pacing, message
+      defaults, pool membership, registration.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: sender.health
+    core: true
+    intent: >
+      "Can this sender send today, and if not why?" — connection, restrictions, warm-up position,
+      capacity budgets, and the channel's automation sanction.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: sender.connect
+    intent: >
+      "Attach a mailbox, social account, number or business messaging identity".
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the sender's existence and state — a half-finished connection must read as `pending_setup`, not
+      as absent.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: sender.disconnect
+    intent: >
+      "Detach it" — refused while live enrolments or open conversations depend on it, unless a rebind
+      target is supplied.
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the sender's state and what is still bound to it.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: [15]
+
+  - name: sender.reauthorize
+    intent: >
+      "Restore a lapsed authorisation without losing the history behind it".
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the sender's authorisation state and its last-checked time.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: sender.pause
+    intent: >
+      "Stop this capability sending, now" — the first move in every incident on every channel.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the sender's send state.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: sender.resume
+    intent: >
+      "Let it send again" — refuses unless the warm-up position is valid or an override is recorded.
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised from auto: sender.pause is protective, and the restart direction of a protective pair is
+      never auto. Platforms escalate on the frequency of restrictions, not their type, so resuming at
+      pre-restriction volume the moment a block lifts is the standard way to turn a temporary
+      restriction into a permanent one; a recorded restriction invalidates the current warm-up
+      position and this operation refuses while it is invalid unless a ramp restart is supplied or an
+      override is recorded with an actor and a reason.
+    before_repeating: >
+      the sender's send state, its warm-up position and whether that position was invalidated.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: sender_limit.set
+    intent: >
+      "How much may this send, how fast, and with what spacing" — one decision, not three.
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised from auto: one call declares how much this capability may send, how fast and with what
+      spacing, over limits somebody else may have declared — the read before repeating is the limits
+      in force and who declared each. The derivation table admits confirm_once where a call may
+      overwrite state someone else owns only in the compensatable column, so declaring it on a
+      reversible control is a raise.
+    before_repeating: >
+      the limits in force and who declared each.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: warmup_plan.set
+    intent: >
+      "Define the ramp this sender follows, and whether it is running".
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised from auto: warm-up is a state machine with a position, and that position is what
+      sender.resume refuses on — a recorded restriction invalidates it — so redefining the ramp
+      overwrites the state that governs whether the sender may send at all.
+    before_repeating: >
+      the current plan, position and whether the position is valid.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: message_element.set
+    intent: >
+      "The mandatory elements every message from this sender carries" — legal identification block,
+      postal address where required, the channel's required stop artefacts each separately (on email:
+      header, one-click endpoint, visible link), tracking domain.
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised from auto: the call overwrites what every message sent afterwards is legally held to, and
+      the unsubscribe mechanism is three separate artefacts — a header, a machine-actionable endpoint
+      that actually honours a request, and a visible link in the body — each separately required,
+      configured and checked, where header presence proves only the first.
+    before_repeating: >
+      the elements currently in force.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: sender.reserve
+    intent: >
+      "Claim one unit of allowance so parallel work cannot spend it twice".
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the reservation ledger for this sender and window.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: sender.release
+    intent: >
+      "Give the claim back".
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the reservation's state.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: sender.summarize
+    intent: >
+      "This sender's numbers over a window" — failures by class, complaints with their publisher and
+      denominator, deferrals, throttles.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: restriction.record
+    intent: >
+      "The platform has restricted this sender" — including the ones we only learned about from a
+      refusal.
+    reach: control
+    reversibility: irreversible
+    approval: auto
+    approval_departs: true
+    protective_floor: true
+    approval_reason: >
+      the protective floor: recording an event that already happened outside our control derives auto
+      whatever its reversibility, and waiting for permission to record a restriction is the
+      destructive choice — the invalidated warm-up position and the recurrence count both hang off
+      this record.
+    before_repeating: >
+      the restriction ledger for this sender: an identical open restriction must not be double-counted
+      into the recurrence count.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: restriction.appeal
+    intent: >
+      "Appeal it where the platform offers a route — and say plainly when it does not".
+    reach: act
+    reversibility: irreversible
+    approval: confirm_each
+    approval_departs: true
+    approval_reason: >
+      raised from confirm_once: an appeal is written content submitted under a named human's identity,
+      usually with one chance.
+    before_repeating: >
+      the appeal state for this restriction: none / submitted / decided.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: sender_pool.create
+    intent: >
+      "Group these capabilities so work can rotate across them".
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the pool's existence and membership.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: sender_pool.update
+    intent: >
+      "Change who is in the pool and how work is routed across it" — including sticky per recipient,
+      which on conversational channels is correctness and not optimisation.
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised from auto: the call carries the pool's membership and its routing policy, and rotation is
+      not a cure — where a budget's scope is the pool, the organisation or the recipient, rotating
+      across senders moves the problem, and sticky per recipient is correctness on conversational
+      channels rather than optimisation, so this overwrites state that live conversations depend on.
+    before_repeating: >
+      the pool's current membership and routing policy.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: sender_pool.list
+    intent: >
+      "What pools exist, who is in them, and how do they route?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: sender_pool.delete
+    intent: >
+      "Dissolve the pool" — refused while campaigns bind it unless a replacement target is supplied;
+      the capabilities themselves are untouched.
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the pool's existence and what still binds it.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: sending_domain.register
+    intent: >
+      "Declare a domain we send from".
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the domain's registration state.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: sending_domain.list
+    intent: >
+      "Which domains do we send from, and what is each one's compliance state as of when?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: sending_domain.retire
+    intent: >
+      "Stop treating this as a domain we send from" — refused while any sender on it has live
+      enrolments or open conversations, unless a rebind target is supplied.
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the domain's state and what is still bound to it.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: authentication_requirement.list
+    intent: >
+      "What has to be published for this domain to authenticate" — publishing it is not ours to do.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: domain_compliance.check
+    intent: >
+      "Per publisher, per requirement: pass, fail or unknown — and name the failing requirement".
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: domain_reputation.get
+    intent: >
+      "The named signals about this domain, each with its publisher, scale, window and denominator" —
+      including blocklist listings and the dataset each came from.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key:
+      value: required
+      conditional: true
+      detail: required where the read is metered.
+    per_item_results: required
+    cost:
+      value: metered
+      conditional: true
+      detail: none unless a signal comes from a paid dataset — then metered.
+    cost_basis: per dataset queried, where a signal comes from a paid dataset
+    meter: dataset
+    questions: []
+
+  - name: message_compliance.check
+    intent: >
+      "Check this rendered message against the requirements it will actually be held to" — required
+      elements, a working unsubscribe checked properly, and the reputation of every domain it links
+      to.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: placement_test.create
+    intent: >
+      "Send this to a monitored set of addresses and see where it lands".
+    reach: act
+    reversibility: irreversible
+    approval: confirm_each
+    approval_departs: false
+    before_repeating: >
+      the test ledger — a test already running for this message must not be started twice.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: metered
+    cost_basis: per test
+    meter: test
+    questions: []
+
+  - name: placement_test.get
+    intent: >
+      "What did the test say, per mailbox provider" — typed as simulated placement, never as our inbox
+      rate.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: messaging_registration.submit
+    intent: >
+      "Register the brand and the use case, because on this channel we may not send at all until it is
+      approved".
+    reach: act
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the registration's state: none / pending / approved / rejected.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost:
+      value: metered
+      conditional: true
+      detail: metered where the channel charges for a registration; none where it does not.
+    cost_basis: per registration, where the channel charges for one
+    meter: registration
+    questions: []
+
+  - name: messaging_registration.get
+    intent: >
+      "What is the registration's status, and on refusal what must change?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: approved_content.submit
+    intent: >
+      "Submit content for platform pre-approval, where the platform gates the content rather than the
+      sender".
+    reach: act
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the content's state: none / pending / approved / rejected / paused.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: approved_content.get
+    intent: >
+      "Approval status and quality state" — including whether the platform has paused it under us.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: approved_content.retire
+    intent: >
+      "Withdraw it from use" — the correct fix when it is the content that got flagged and not the
+      sender.
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the content's state and what is still bound to it.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []

@@ -1,0 +1,208 @@
+# Family 1 — Discovery, enrichment and verification (12)
+#
+# Finding people and companies we do not own yet, and buying facts about the people we do own. A
+# candidate is somebody found in a database we do not control; a contact is somebody we own, and
+# `candidate.promote` is the only crossing between the two — which is where duplicates get made and
+# where the money goes.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 1
+
+operations:
+
+  - name: candidate.search
+    intent: >
+      "Find me people out in the wider world who look like this and we do not already have"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the recorded result under this key — repeating spends again and the database has moved.
+    idempotency_key: required
+    per_item_results: not_applicable
+    cost: metered
+    cost_basis: per call or per result returned; may resolve to zero
+    meter: discovery
+    questions: []
+
+  - name: candidate.get
+    intent: >
+      "Show me everything about this found person that I have already paid for"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: candidate.promote
+    intent: >
+      "Buy this person's details and make them ours"
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the per-item promotion ledger under this key: created / matched / ambiguous / withheld /
+      failed, with the spend per item.
+    idempotency_key: required
+    per_item_results: required
+    cost: metered
+    cost_basis: >
+      per person revealed, plus the enrichment allowance per field where fields are revealed one at
+      a time
+    meter: [reveal, enrichment]
+    questions: [19]
+
+  - name: company.search
+    intent: >
+      "Find me companies that look like this"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the recorded result under this key
+    idempotency_key: required
+    per_item_results: not_applicable
+    cost: metered
+    cost_basis: per call or per result returned
+    meter: discovery
+    questions: []
+
+  - name: company.resolve
+    intent: >
+      "Four spellings of the same company came in — which company is this, really?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the recorded resolution under this key
+    idempotency_key: required
+    per_item_results: required
+    cost:
+      value: metered
+      conditional: true
+      detail: >
+        none where the question is satisfied from companies we already hold; metered per item
+        resolved otherwise.
+    cost_basis: per item resolved
+    meter: discovery
+    questions: []
+
+  - name: contact.enrich
+    intent: >
+      "Buy the fields we are missing on these people"
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the per-item ledger under this key: per person, per field, which source answered, what it
+      returned, what it consumed.
+    idempotency_key: required
+    per_item_results: required
+    cost: metered
+    cost_basis: per field found and per source attempted
+    meter: enrichment
+    questions: []
+
+  - name: company.enrich
+    intent: >
+      "Buy the firmographics we are missing on these companies"
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: the per-item enrichment ledger under this key
+    idempotency_key: required
+    per_item_results: required
+    cost: metered
+    cost_basis: per field found and per source attempted
+    meter: enrichment
+    questions: []
+
+  - name: employment.check
+    intent: >
+      "Has this person left the company we have them at?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the last recorded check for this person and its time — the answer moves slowly and re-asking
+      daily is pure spend.
+    idempotency_key: required
+    per_item_results: required
+    cost: metered
+    cost_basis: per record checked, or per record watched per period
+    meter: monitoring
+    questions: [27]
+
+  - name: email_address.verify
+    intent: >
+      "Will this address actually accept mail, and what does our policy say to do about it?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the recorded verdict for this address under this key, with its check time and the staleness
+      window in force.
+    idempotency_key: required
+    per_item_results: required
+    cost: metered
+    cost_basis: per address checked
+    meter: verification
+    questions: []
+
+  - name: phone_number.verify
+    intent: >
+      "Is this number reachable, and is it a mobile, a desk line or a virtual one?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the recorded verdict for this number under this key, with its check time.
+    idempotency_key: required
+    per_item_results: required
+    cost: metered
+    cost_basis: per number checked
+    meter: verification
+    questions: [7]
+
+  - name: enrichment_policy.define
+    intent: >
+      "Decide once, in what order we try to buy data, when we stop, and how much we will spend"
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised above the derived `auto`: it carries four decisions with no safe default — source
+      order, the acceptance predicate that stops the chain, per-field granularity, and a budget
+      ceiling per run and per period — and every later purchase is made under it.
+    before_repeating: the policy in force, with its version and who set it
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: enrichment_policy.get
+    intent: >
+      "What is our current buying order and spend ceiling?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []

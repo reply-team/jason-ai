@@ -1,0 +1,247 @@
+# Family 3 — Audience and lists (16)
+#
+# Turning criteria into a population, freezing that population so "who did we actually contact"
+# stays answerable, and deciding who is contactable at all. A segment is criteria and its membership
+# moves under your feet; a list is enumerated and its membership is a fact with a date on it.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 3
+
+operations:
+
+  - name: segment.define
+    intent: >
+      "Save this definition of who we are going after"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the current definition under this name and its version.
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: segment.get
+    intent: >
+      "Show me what this segment actually says" — without evaluating it.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: segment.list
+    intent: >
+      "What audience definitions do we have?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: segment.delete
+    intent: >
+      "Retire this definition"
+    reach: control
+    reversibility:
+      value: irreversible
+      conditional: true
+      detail: >
+        compensatable inside the restore window; lists already materialised are untouched.
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: whether it still exists and what still references it
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: segment.preview
+    intent: >
+      "Before I spend anything: will this definition actually run, and how big is it?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the recorded preview under this key, with the time it was taken.
+    idempotency_key: required
+    per_item_results: not_applicable
+    cost:
+      value: metered
+      conditional: true
+      detail: >
+        metered per call only where the universe is external; none over our own contacts.
+    cost_basis: per call, only where the universe is external
+    meter: discovery
+    questions: []
+
+  - name: segment.materialize
+    intent: >
+      "Freeze this audience as it is right now and give it a name"
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      whether a list already exists for this definition, version and as-of time, and the per-item
+      ledger under this key.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: list.create
+    intent: >
+      "Make a named list"
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: whether a list of this name already exists
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: list.list
+    intent: >
+      "What lists do we have?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: list.get
+    intent: >
+      "What is on this list, and where did it come from?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: list_membership.add
+    intent: >
+      "Put these people on this list"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      current membership for these people, and the per-item ledger under this key.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: list_membership.remove
+    intent: >
+      "Take these people off this list"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      current membership for these people, and the per-item ledger under this key.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: list.delete
+    intent: >
+      "We are done with this list"
+    reach: control
+    reversibility:
+      value: irreversible
+      conditional: true
+      detail: compensatable inside the restore window.
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: whether it still exists and what still references it
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: audience.assess
+    intent: >
+      "Is this set of people actually fit to work?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: audience.screen
+    intent: >
+      "Re-check this list against everything we must not contact, and take them out"
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      current membership, and the per-item removal ledger under this key.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: contactability_policy.define
+    intent: >
+      "Decide who we are willing to send to, before anyone asks"
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised above the derived `auto`: it answers, per verdict and per flag, one of send, hold or
+      never_send for every address the account will ever offer, and nothing in it has a default.
+    before_repeating: the policy in force, with its version and who set it
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: [17]
+
+  - name: contactability_policy.get
+    intent: >
+      "What are we currently willing to send to?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []

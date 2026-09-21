@@ -1,0 +1,389 @@
+# Family 14 — Consent, suppression and privacy (23)
+#
+# The family that answers whether we may contact this person, on this channel, right now — and holds
+# the evidence for the answer. Being wrong here is the most expensive kind of wrong in this domain,
+# because the evidence is the defence, not the behaviour.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 14
+
+operations:
+
+  - name: outreach.precheck
+    core: true
+    intent: >
+      "May I contact this person, on this channel, right now — and if not, when, and what would fix
+      it?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake where it costs nothing; where the register gate screens live, the screening
+      recorded under this key. In every case its result is stale the moment it returns.
+    idempotency_key:
+      value: required
+      conditional: true
+      detail: required where the register gate screens live.
+    per_item_results: required
+    cost:
+      value: metered
+      conditional: true
+      detail: >
+        none, unless the external-register gate performs a live screening rather than reading a
+        cached one inside its staleness allowance — then metered.
+    cost_basis: per identifier screened, where the external-register gate screens live
+    meter: screening
+    questions: []
+
+  - name: suppression.check
+    intent: >
+      "Is this address, number, profile, domain or account one we must not touch — and why?" — works
+      on a raw identifier that is not a person in our system yet.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: suppression.list
+    intent: >
+      "Show me the exclusion lists" — by scope, reason class and who put them there.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: suppression.add
+    core: true
+    intent: >
+      "Never contact this again, and here is why" — a person, an address, a number, a profile, a
+      domain or a whole account.
+    reach: control
+    reversibility: irreversible
+    approval:
+      value: confirm_once
+      conditional: true
+      detail: >
+        auto for a single verified identifier, which is protective; confirm_once for a domain, an
+        account pattern or a collection.
+    approval_departs: false
+    before_repeating: >
+      list first — adding a pattern that already exists is a refusal, so a blind retry is wrong.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [8]
+
+  - name: suppression.remove
+    intent: >
+      "Lift this exclusion, and here is the evidence that lets me".
+    reach: control
+    reversibility: irreversible
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the entry's current state, its reason class, and whether a retention floor still applies — the
+      sends made during a wrongful lift cannot be restored by any second act.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [26]
+
+  - name: optout.record
+    core: true
+    intent: >
+      "They said stop" — records the act itself: what they said, where it arrived, when they did it,
+      when we learned of it.
+    reach: control
+    reversibility: irreversible
+    approval: auto
+    approval_departs: true
+    protective_floor: true
+    approval_reason: >
+      the protective floor — recording that somebody said stop is an operation whose non-performance
+      is itself the harm, and waiting for permission to stop is the destructive choice.
+    before_repeating: >
+      the current opt-out state for this person and identifier, with its recorded event time.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: optout.poll
+    intent: >
+      "What stop signals happened at the channel that we have not ingested yet?" — one-click
+      unsubscribes, list-unsubscribe requests, blocks, stop keywords, platform-side opt-outs.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: optout.confirm
+    intent: >
+      "Send the one confirmation of their opt-out that this channel permits" — exactly once,
+      non-promotional, and it may never require anything of the recipient.
+    reach: act
+    reversibility: irreversible
+    approval: confirm_each
+    approval_departs: false
+    before_repeating: >
+      the confirmation ledger for this person and channel: sent / not sent. A second one is a breach,
+      not a duplicate.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost:
+      value: metered
+      conditional: true
+      detail: metered where the channel meters sending.
+    cost_basis: per confirmation sent, where the channel meters sending
+    meter: message
+    questions: []
+
+  - name: consent.record
+    intent: >
+      "Here is the permission we hold, what they were told, when, how it was captured, and what it
+      covers".
+    reach: control
+    reversibility: irreversible
+    approval: confirm_once
+    approval_artefact: preview
+    approval_departs: false
+    before_repeating: >
+      the current basis for this person, channel and purpose, with its as-of.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: consent.revalidate
+    intent: >
+      "Has a time-limited permission quietly expired?" — recompute it and downgrade contactability
+      without waiting for a human.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the current basis state and the last revalidation as-of.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: consent.prove
+    intent: >
+      "Show me the evidence that we were allowed to send this" — status plus the bundle.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: notice.send
+    intent: >
+      "Deliver the privacy notice to someone whose data we did not get from them, and record that we
+      did".
+    reach: act
+    reversibility: irreversible
+    approval: confirm_each
+    approval_departs: false
+    before_repeating: >
+      the notice-delivery record for this person: delivered or not, and when.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost:
+      value: metered
+      conditional: true
+      detail: metered where the channel meters sending.
+    cost_basis: per notice sent, where the channel meters sending
+    meter: message
+    questions: []
+
+  - name: disclosure.check
+    intent: >
+      "Must this outreach say it was machine-generated — in what form, in which places, on this
+      channel?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: disclosure.record
+    intent: >
+      "It did say so, here, in this message".
+    reach: control
+    reversibility: irreversible
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the disclosure record bound to this message.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: dnc_registry.check
+    intent: >
+      "Screen these numbers or addresses against the external do-not-contact register this
+      jurisdiction requires".
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: required
+    per_item_results: required
+    cost: metered
+    cost_basis: per identifier screened
+    meter: screening
+    questions: []
+
+  - name: privacy_request.create
+    intent: >
+      "Someone has asked to see, correct, restrict, port or erase their data — start the clock".
+    reach: control
+    reversibility: irreversible
+    approval: auto
+    approval_departs: true
+    protective_floor: true
+    approval_reason: >
+      the protective floor — failing to open the record is itself the breach.
+    before_repeating: >
+      the open request for this subject and type.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: privacy_request.update
+    intent: >
+      "Verify who they are, or extend the deadline with the reason recorded, because the reason has
+      to be told to them".
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the request's current state and its recorded due dates.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: privacy_request.refuse
+    intent: >
+      "Refuse it, with the demonstrable basis".
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the request's state; a refused request may not be refused twice.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: privacy_request.fulfill
+    intent: >
+      "Export or erase against a recorded request — the only path to either".
+    reach:
+      value: act
+      conditional: true
+      detail: '`act` when it discloses data to the requester; `control` when it erases.'
+    reversibility: irreversible
+    approval: confirm_each
+    approval_departs: false
+    before_repeating: >
+      the per-store, per-identifier fulfilment ledger for this request.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: deletion_feed.poll
+    intent: >
+      "Pull the erasure demands waiting on the external register and match them against what we
+      hold".
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: deletion_feed.report
+    intent: >
+      "Tell the register what we did with each of its requests".
+    reach: control
+    reversibility: irreversible
+    approval: auto
+    approval_departs: true
+    protective_floor: true
+    approval_reason: >
+      the protective floor — the reporting deadline is the obligation, so not reporting is the harm.
+    before_repeating: >
+      the per-request report ledger: reported or not, with the reported outcome.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [23]
+
+  - name: retention.apply
+    intent: >
+      "Enforce the storage limits — and stop at the floors that an erasure may not cross".
+    reach: control
+    reversibility: irreversible
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the last applied-through timestamp per data category and the pending count.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: audit_log.search
+    intent: >
+      "Who changed what, when, on our side — and why was this person contacted at all?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []

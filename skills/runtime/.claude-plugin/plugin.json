@@ -1,0 +1,5 @@
+{
+  "name": "jason-runtime-skills",
+  "description": "Skills that teach an AI agent how to operate the Jason runtime.",
+  "skills": ["./"]
+}

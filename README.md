@@ -49,8 +49,11 @@ survives the chat session. Jason is that missing layer — three parts working a
    guardrails that teach *your* AI agents how to plan and run outbound work through Jason.
    Runtime skills ship with the runtime under [`skills/runtime`](skills/runtime): five for a
    person's own session, one per moment they ask for something, and one for each of the nine
-   roles this runtime seeds, every one of them held to the same launch contract. [`skills/business`](skills/business) is where the SDR
-   profession's own knowledge will live and is a placeholder today.
+   roles this runtime seeds, every one of them held to the same launch contract.
+   [`skills/business`](skills/business) holds the SDR profession's own knowledge — nine skills and a
+   catalogue of 325 named business operations — refreshed on its own cadence rather than with the
+   runtime. [`skills/README.md`](skills/README.md) says why the two are kept apart and how a pack is
+   installed.
 3. **Provider plugins** — strict, vendor-neutral canonical operations executed by JavaScript
    plugin packages in a short-lived plugin-host process started from the same executable.
    [Reply.io](https://reply.io) is the intended default execution provider (through
@@ -77,7 +80,8 @@ design — lives in **[docs/architecture.md](docs/architecture.md)**.
 | `runtime/` | All C#: the solution, `src/Jason.App` (the single executable; picks CLI, runtime-service or plugin-host mode from its arguments), `src/Jason.Cli`, `src/Jason.Runtime`, `src/Jason.PluginHost`, `src/Jason.Contracts`, and `tests/` |
 | `plugins/` | Plugin marketplace: one folder per plugin with its manifest and JavaScript |
 | `skills/runtime/` | Skills that teach an agent to operate Jason: the interactive ones, and one per launched role |
-| `skills/business/` | Skills that teach an agent the SDR profession |
+| `skills/business/` | Skills that teach an agent the SDR profession, independently of any provider or runtime |
+| `.claude-plugin/` | The skills marketplace: offers both packs to an agent harness by relative path. Distinct from `plugins/`, which is the plugin marketplace |
 | `docs/` | Maintained documentation |
 
 ## Installing
@@ -260,7 +264,7 @@ jason report list --campaign <campaign-id> --human
 | `reply-team/jason-ai` (this repo) | Product entry point: the Runtime, Jason CLI, plugin host, the official Reply plugin, and the runtime and business skills |
 | [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) | Reply.io provider CLI: auth, profiles, teams, full API v3 access, and the Reply-specific skills |
 | [`reply-team/reply-mcp`](https://github.com/reply-team/reply-mcp) | Remote MCP server exposing curated Reply tools to MCP-capable agents |
-| [`reply-team/reply-skills`](https://github.com/reply-team/reply-skills) | Earlier home of the skills packs. The runtime half now lives here, in [`skills/runtime`](skills/runtime), re-authored around the Runtime API; the business half has not moved yet, and the Reply-specific half belongs with `reply-cli` |
+| [`reply-team/reply-skills`](https://github.com/reply-team/reply-skills) | **Formerly** the home of the skills packs. Both halves now live here: the runtime skills in [`skills/runtime`](skills/runtime), re-authored around the Runtime API, and the business skills in [`skills/business`](skills/business), moved across unchanged and then held to this repository's own guards. The Reply-specific half belongs with `reply-cli` |
 
 ## Naming
 

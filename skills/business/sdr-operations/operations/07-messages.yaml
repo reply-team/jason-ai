@@ -1,0 +1,116 @@
+# Family 7 — Messages (5)
+#
+# The message itself, on any channel, behind a single send verb: channel differences — required
+# elements, cost, preconditions, failure modes — are inputs and outputs of one operation rather than
+# reasons for a second one in front of the highest-consequence act in the contract. A scheduled send
+# is pending outbound and is visible to everything that reads what is owed to a person.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 7
+
+operations:
+
+  - name: message.draft
+    core: true
+    intent: >
+      "Show me exactly what this person would receive" — the real bytes: merge fields resolved against
+      this contact, fallbacks applied or reported missing, footer, identification block and unsubscribe
+      mechanism in place. Persists nothing sendable and queues nothing
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake — but where drafting is metered, recover a lost draft rather than re-drafting it.
+    idempotency_key:
+      value: required
+      conditional: true
+      detail: required where drafting is metered.
+    per_item_results:
+      value: required
+      conditional: true
+      detail: when a collection of recipients is given.
+    cost:
+      value: metered
+      conditional: true
+      detail: >
+        metered against the content-generation allowance where the draft is generated rather than
+        merged; `none` for a pure render.
+    cost_basis: per call, where the draft is generated rather than merged
+    meter: content_generation
+    questions: []
+
+  - name: message.send
+    core: true
+    intent: >
+      "Send this message to this person" — one person, one channel per call, with that channel's own
+      required elements and cost
+    reach: act
+    reversibility: irreversible
+    approval: confirm_each
+    approval_departs: false
+    before_repeating: >
+      read first: no send recorded for this person on this thread or step in the window — a timed-out
+      send may already have succeeded.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost:
+      value: metered
+      conditional: true
+      detail: >
+        metered against the message allowance on channels that meter sending; `none` on channels that
+        do not.
+    cost_basis: per message, on channels that meter sending
+    meter: message
+    questions: []
+
+  - name: message.schedule
+    intent: >
+      "Send this on the 14th" — the Q3 they asked for, the day they come back from leave, the morning
+      after the event
+    reach: act
+    reversibility:
+      value: irreversible
+      conditional: true
+      detail: compensatable while pending; irreversible the moment it sends.
+    approval: confirm_each
+    approval_departs: false
+    before_repeating: the pending scheduled sends for this person on this thread
+    idempotency_key: required
+    per_item_results:
+      value: required
+      conditional: true
+      detail: when a collection is given.
+    cost: metered
+    cost_basis: the message allowance at the time it fires, where the channel meters sending
+    meter: message
+    questions: []
+
+  - name: scheduled_message.list
+    intent: >
+      "What is queued to go out, to whom, and when?" — by person, campaign, sender, or everything
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: scheduled_message.cancel
+    intent: >
+      "Do not send that after all"
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the pending list — an already-cancelled item is a success, not a failure.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []

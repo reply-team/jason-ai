@@ -1,0 +1,8 @@
+# Who reviews what.
+#
+# One owner, named as a person, because that is what is true today. GitHub team handles are
+# deliberately absent: an entry naming a team that does not exist is a promise of review that
+# nobody receives, and in a public repository it is read as a statement about how this project
+# is maintained. When teams exist, they replace the line below.
+
+*                       @ArtemKosolap

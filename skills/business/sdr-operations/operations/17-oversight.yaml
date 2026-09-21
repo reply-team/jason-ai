@@ -1,0 +1,515 @@
+# Family 17 — Oversight, review and safety (32)
+#
+# Who may act without asking, what stops for a human to look at, what a human recorded about the
+# work afterwards, and what halts the work by itself when nobody is watching.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 17
+
+operations:
+
+  - name: approval.request
+    intent: >
+      "Put something in front of a human and wait" — a message about to go, a bulk write, a piece of
+      content, a policy change.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the pending queue for this subject and artefact; a request already pending is not a reason to
+      raise a second one.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [4]
+
+  - name: approval.list
+    core: true
+    intent: >
+      "What is waiting for a human to look at, and how long has it been waiting?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: approval.get
+    intent: >
+      "Show me this one item exactly as it will go out, with the reasoning behind it"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: approval.resolve
+    core: true
+    intent: >
+      "Approve this, or reject it with a reason." Approving is the send.
+    reach:
+      value: act
+      conditional: true
+      detail: >
+        `act` on approve, `control` on reject.
+    reversibility:
+      value: irreversible
+      conditional: true
+      detail: irreversible on approve, reversible on reject.
+    approval:
+      value: confirm_each
+      conditional: true
+      detail: >
+        confirm_each on approve, confirm_once on reject — and the resolution is the confirmation when
+        a human performs it directly.
+    approval_departs: false
+    before_repeating: >
+      the item's state; a resolved item must never resolve twice, and a timed-out approve may already
+      have sent.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: autonomy.get
+    intent: >
+      "What may this agent currently do without asking, in this scope, on this channel — and where
+      does the gate live?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake; re-read at the start of every unattended run.
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: autonomy.set
+    intent: >
+      "Set what runs unattended and what stops" — the gate, the mode, the queue timeout and what a
+      timeout means, the unattended action cap, the escalation target, and which channels are treated
+      differently.
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised, because the acts permitted under a loosened setting are not reversible even though the
+      setting is.
+    before_repeating: >
+      the current setting for the scope, and whether an unattended run is in flight under the old one.
+    idempotency_key: none
+    key_exempt: absolute_valued
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: escalation.raise
+    intent: >
+      "I cannot or must not proceed; a named human owns this now" — explicitly not an approval,
+      because nobody is granting permission.
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      open escalations for this subject; an open one is a reason to add context, not to raise a
+      second.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [4]
+
+  - name: escalation.list
+    intent: >
+      "What has been handed to a human and not yet picked up, and how old is it?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: escalation.resolve
+    intent: >
+      "Record how it ended, and whether the work comes back to the agent or stays with the human"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the escalation's state
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [22]
+
+  - name: editorial_review.record
+    intent: >
+      "A named human read this machine-drafted message, changed what they changed, and let it go" —
+      bound to the message actually sent, with the editor, the time and the difference from the draft.
+    reach: control
+    reversibility: irreversible
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      whether a review is already bound to this sent message; two reviews of one send is an
+      unresolvable evidence record.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: editorial_review.get
+    intent: >
+      "Show me the human review behind this message that went out — or tell me plainly that there is
+      none"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake; `none` is a first-class answer and the one an auditor most needs.
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: review.request
+    intent: >
+      "Put a call, a sent message or an unsent draft into someone's review queue" — mine going out for
+      feedback, or a manager's going to a named reviewer.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the pending review queue for this artefact
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: review.list
+    intent: >
+      "The review queue: what is waiting, what is done, by person and by period"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: review.get
+    intent: >
+      "One review in full" — the answers, the scorecard version used, who was scored, who scored, and
+      whether I am entitled to see it.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake; a refusal to show a score is a correct answer, not a failure.
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: review.score
+    intent: >
+      "Score an artefact against a published scorecard" — recording who was scored, who scored, and
+      which version was used.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      existing scores on this artefact for this scored person; a machine-assigned score never
+      overwrites a human one.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: feedback.record
+    intent: >
+      "I have actually spoken to them about it" — scored and told-them are different facts and only
+      one changes behaviour.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      whether feedback is already marked given for this review.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: review_policy.define
+    intent: >
+      "State which completed work gets reviewed, at what sample rate, how far back, and by whom"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the policy currently in force
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: review_policy.get
+    intent: >
+      "What is the review policy in force, and what coverage does it actually imply?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: scorecard.define
+    intent: >
+      "The questions, their types and their weights, with the arithmetic stated out loud"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the current draft and its publication state
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: scorecard.list
+    intent: >
+      "What scorecards exist, which are published, and what is each scoped to?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: scorecard.publish
+    intent: >
+      "Make this version usable for scoring"
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised, because every score taken afterwards carries this version and past scores must stay
+      comparable.
+    before_repeating: the scorecard's publication state and version
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  # UNCLEAR: the appendix declares confirm_once against control x reversible, which the derivation
+  # table produces as auto, and — unlike scorecard.publish, budget.set and stoprule.clear — marks no
+  # raise and states no justification for it. Transcribed as declared, which is the more dangerous
+  # side, with the reason drawn from the appendix's own words for the row.
+  - name: scorecard.retire
+    intent: >
+      "Take it out of use for new scoring" — everything already scored keeps its history.
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      declared confirm_once where control × reversible derives auto, and the contract does not yet
+      state why. The row's own terms are that it can be published again and everything already
+      scored keeps its history, so the raise stops at one confirmation. Kept at the declared,
+      stricter class until the question is settled: an unexplained confirmation costs a sentence,
+      and lowering a class on a guess costs whatever relied on it.
+    before_repeating: the scorecard's publication state
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: coaching.summarize
+    intent: >
+      "Per coach, per period: how much coaching actually happened" — attended, listened, commented,
+      scored, feedback given.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: budget.get
+    intent: >
+      "What allowance is left on this meter, in this scope, for this period?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake; `unknown` is a real answer, and unknown remaining allowance is not the same as
+      ample remaining allowance.
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  # UNCLEAR: "confirm_once, raised whenever it raises a ceiling" reads two ways — one class for the
+  # whole operation, justified by the case where the ceiling goes up; or confirm_once when it goes up
+  # and auto when it comes down. Transcribed as the dangerous reading, confirm_once throughout, with
+  # the appendix's qualifier kept in approval_reason.
+  - name: budget.set
+    intent: >
+      "The ceiling the pre-flight check reads" — a hard stop, not an alert.
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised whenever it raises a ceiling, because the spending it then permits is not reversible.
+    before_repeating: the ceiling in force and the consumption against it
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: stoprule.set
+    intent: >
+      "The condition that stops the work by itself" — what is measured, over what window, at what
+      threshold, and what it halts.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the rules already in force for this scope; two rules on one subject is usually a mistake, not
+      belt and braces.
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: stoprule.list
+    intent: >
+      "What stop rules are in force right now, over what scope, and what would each halt?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: stoprule.clear
+    intent: >
+      "Remove a stop rule"
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised, because removing a safety rule is exactly the write that should never happen by
+      accident.
+    before_repeating: >
+      the rules in force, and whether this rule is currently in a fired state.
+    idempotency_key: none
+    key_exempt: unstated
+    per_item_results: required
+    cost: none
+    questions: [25]
+
+  - name: stoprule_firing.list
+    intent: >
+      "What has fired, when, on what measured value, and what is still stopped because of it?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake; this is the read that tells the next session why sending is off.
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: stoprule_firing.get
+    intent: >
+      "One firing in full" — the rule, the value that tripped it, the operations halted, and every
+      item left unprocessed.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: outreach.hold
+    core: true
+    intent: >
+      "Stop everything for this person, this company or this domain, now" — the kill switch.
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      no active enrolment, no open task, no pending approval, no un-accepted handoff, no outstanding
+      meeting proposal and no scheduled message for anyone in scope.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [10]
+
+  - name: outreach.release
+    intent: >
+      "Lift a hold"
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised, because a restart resumes contact with people whose situation may have changed while
+      they were held.
+    before_repeating: >
+      the hold's per-item ledger and each person's current eligibility.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []

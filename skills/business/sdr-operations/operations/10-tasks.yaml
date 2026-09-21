@@ -1,0 +1,180 @@
+# Family 10 — Task queue and touches (12)
+#
+# An SDR does not experience the day as campaigns but as a prioritised list of what is owed today, fed
+# by cadences, by signals and by other people — plus the two touches that are not messages. Completing
+# a queued task never sends anything, and recording a call never advances a cadence.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 10
+
+operations:
+
+  - name: task.list
+    core: true
+    intent: >
+      "What do I owe today, in the order I should do it?" — everything due, including work a signal put
+      there rather than a calendar
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: [21]
+
+  - name: task.get
+    intent: >
+      "Show me this one properly, including what it is actually asking me to send"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: task.create
+    intent: >
+      "Put work in someone's queue" — a call to make, a message to write, a person to research, a
+      meeting to confirm
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      whether a task with this key already exists for this person and this reason.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: task.complete
+    core: true
+    intent: >
+      "I did this one"
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the task's state; an already-finished task is a success on retry.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: task.skip
+    intent: >
+      "I am not doing this one, and that is different from having done it"
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: the task's state
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: task.reschedule
+    intent: >
+      "The day overran — push these to tomorrow"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: each task's current due time
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: task.cancel
+    intent: >
+      "This work should not happen at all — drop it"
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: the task's state
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: task.reassign
+    intent: >
+      "Give this work to someone else"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: each task's current assignee
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: call.place
+    intent: >
+      "Dial this person now"
+    reach: act
+    reversibility: irreversible
+    approval: confirm_each
+    approval_departs: false
+    before_repeating: >
+      read first — whether a call attempt to this person from this identity is already recorded in the
+      window; a dial that timed out may already have connected.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: metered
+    cost_basis: per attempt and per connected minute
+    meter: call
+    questions: [20]
+
+  - name: call.log
+    intent: >
+      "Record the call that happened: what came of it, how long we talked, and whether it was recorded
+      with everyone's agreement"
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      whether a call with this key, or this person and start time, is already recorded.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [20]
+
+  - name: call_recording.get
+    intent: >
+      "Play me that call back, and show me the agreement that let us record it"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: call_recording.discard
+    intent: >
+      "They did not agree to be recorded, or we should never have recorded it — destroy it and say why"
+    reach: control
+    reversibility: irreversible
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: whether a recording still exists for this call
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []

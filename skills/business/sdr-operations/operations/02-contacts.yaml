@@ -1,0 +1,352 @@
+# Family 2 — Contacts, identity and hygiene (23)
+#
+# The people we own, the rules by which we decide that two records are one human, and the work of
+# keeping the database from lying to us.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 2
+
+operations:
+
+  - name: contact.search
+    core: true
+    intent: >
+      "Who do we already have that matches this?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: contact.get
+    core: true
+    intent: >
+      "Show me this person's record"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: contact.resolve
+    intent: >
+      "Here are some identity keys — is this somebody we already have?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: contact.create
+    core: true
+    intent: >
+      "Put these people in"
+    reach: control
+    reversibility:
+      value: irreversible
+      conditional: true
+      detail: compensatable where it created; irreversible where it updated.
+    approval:
+      value: confirm_once
+      conditional: true
+      detail: >
+        auto for create-only over a single record; confirm_once for any collection and any policy
+        that may update.
+    approval_departs: false
+    before_repeating: >
+      the per-item outcome ledger under this key: created / updated / matched / skipped /
+      quarantined, with the reason.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [19]
+
+  - name: contact.update
+    intent: >
+      "Change these fields on these people"
+    reach: control
+    reversibility: compensatable
+    approval:
+      value: confirm_once
+      conditional: true
+      detail: auto for a single record; confirm_once for a collection.
+    approval_departs: false
+    before_repeating: >
+      the current field values, and the per-item ledger under this key.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  # The class is declared above what the derivation gives, so it is carried as a departure with its
+  # own justification rather than left to look like an ordinary derived value.
+  - name: contact.delete
+    intent: >
+      "Take this person out of the working database"
+    reach: control
+    reversibility:
+      value: irreversible
+      conditional: true
+      detail: compensatable inside the account's restore window; irreversible after it.
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised: it destroys working history other operations key on.
+    before_repeating: the record's presence and its restore eligibility
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: contact.restore
+    intent: >
+      "Bring back the person we deleted"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the record's presence
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: timeline.get
+    intent: >
+      "What has actually happened to this person?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: provenance.set
+    intent: >
+      "Record where this person's data came from, and under what terms"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the provenance currently recorded, with its own recorded time.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: job_change.record
+    intent: >
+      "This person has moved to a new employer — fork the record"
+    reach: control
+    reversibility: irreversible
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the person's current employment record and whether a fork already exists.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: cooldown.set
+    intent: >
+      "Come back to this person in Q4, not before"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the cooldown in force, its scope and its date
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [14]
+
+  - name: contact.disqualify
+    intent: >
+      "This person is not a prospect, and here is why"
+    reach: control
+    reversibility: compensatable
+    approval: auto
+    approval_departs: false
+    before_repeating: the current qualification state and its reason
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: contact.requalify
+    intent: >
+      "We were wrong, or the situation changed — they are a prospect again"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the current qualification state, its reason and its date.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: contact.normalize
+    intent: >
+      "Put these records into our house format, and keep what was there before"
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised above the derived `auto` as a bulk write: one call rewrites values across every record
+      in scope under the account's declared rule set.
+    before_repeating: >
+      the per-item ledger under this key, and the rule set that produced it.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: identity_policy.define
+    intent: >
+      "Decide how we tell whether two records are the same human"
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised above the derived `auto`: it carries seven decisions, none with a safe default, and
+      records already written under the old policy are not re-decided.
+    before_repeating: the policy in force, with its version and who set it
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: identity_policy.get
+    intent: >
+      "What rules are we currently matching people under?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: duplicate.list
+    intent: >
+      "Where do we think we have the same human twice?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: duplicate.merge
+    intent: >
+      "These records are one person — combine them"
+    reach: control
+    reversibility: irreversible
+    approval: confirm_each
+    approval_departs: true
+    approval_reason: >
+      raised above the derived `confirm_once`: each cluster is a separate irreversible judgement
+      about a different human.
+    before_repeating: >
+      the per-cluster merge ledger under this key, and whether the losing records still exist.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: duplicate.link
+    intent: >
+      "Same human, two records, and both have to stay"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the pair's current link state
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: duplicate.unlink
+    intent: >
+      "We were wrong — those are two different people"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the pair's current link state
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: duplicate.reject
+    intent: >
+      "Those two are not the same person — stop asking me"
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the pair's current decision state
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: field.define
+    intent: >
+      "This source carries something we have nowhere to put — make somewhere"
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      whether a field of this name and type already exists.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: field.retire
+    intent: >
+      "We do not use this field any more"
+    reach: control
+    reversibility: irreversible
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      whether the field is still referenced by a mapping, a segment or a policy.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []

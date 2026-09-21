@@ -1,0 +1,80 @@
+# Family 4 — Import (5)
+#
+# The path from a file somebody was sent to people we own. The reference to the source is a
+# first-class thing here — an uploaded file, a location we can read, a query against a system we are
+# connected to, or rows supplied inline — because the source, its retrieval time and its terms are
+# provenance rather than a transport detail.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 4
+
+operations:
+
+  - name: source.inspect
+    intent: >
+      "Look at this file and tell me what is in it and how it would land"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: import.apply
+    intent: >
+      "Take this file, this mapping and these rules, and put the people in"
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the batch record for this key: its state and its per-row ledger. A re-run without the key is a
+      second import, not a retry.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [18, 19]
+
+  - name: import.list
+    intent: >
+      "What imports have we run?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: import.get
+    intent: >
+      "Show me that import in full"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: import.revert
+    intent: >
+      "That import was wrong — undo it"
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: >
+      the batch's revert state and the per-row revert ledger under this key.
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: [3]

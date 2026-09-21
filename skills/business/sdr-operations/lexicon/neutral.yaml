@@ -1,0 +1,367 @@
+# The neutral register of the SDR business operations contract.
+#
+# The contract owns the CONCEPTS, and the words it will ACCEPT on input. A provider adapter owns
+# the words a product DISPLAYS. Aliases in, labels out — this file is the "in" half, and it emits
+# nothing. A plan, a report and an operation name are always written in `prefLabel`; the surface a
+# user reads may call it whatever that surface calls it, and choosing that word is the adapter's
+# business, not this file's.
+#
+# THE ACCEPTANCE TEST. Delete every dialect pack and the contract still works — only the words a
+# user sees change. If something breaks, a concept leaked into a dialect and belongs here.
+#
+# ---------------------------------------------------------------------------------------------
+# SCHEMA — one entry per concept, under `concepts:`
+# ---------------------------------------------------------------------------------------------
+#
+#   - id: campaign            # the contract's entity, exactly as it appears in an operation name
+#     prefLabel: campaign     # the one word the contract writes. Never an alias, never a plural.
+#     altLabels: [cadence]    # accepted on input, NEVER emitted. Spellings, regional variants,
+#                             # and the words practitioners actually say for this concept.
+#     hiddenLabels: [cmp]     # searchable, never displayed and never written back. Misspellings,
+#                             # abbreviations, plurals and inherited column headers live here, so
+#                             # a lookup succeeds without the word ever reaching a reader.
+#     definition: >           # what the concept IS, in one or two sentences, with no product in it
+#     never_means:            # senses this word carries elsewhere that do not exist here. Optional,
+#       - context: marketing  # and present only where the confusion is real and load-bearing.
+#         sense: >            # the other reading, stated plainly enough to be recognised
+#         because: >          # why it cannot be that here — the structural reason, not a preference
+#
+# `context` is a key, not prose: it names the register the other sense comes from, so a resolver
+# can report "you are using the marketing sense of this word" rather than "unknown". Values are
+# free but stable — reuse an existing one before inventing another.
+#
+# WHAT IS NOT HERE. Labels a product shows. Field names. Anything that varies by installation:
+# an account's own vocabulary — stages, dispositions, reply categories, meeting outcomes — is read
+# with `vocabulary.list` and is an account fact, not a contract fact. A word nobody actually says
+# is not an alias; do not invent input we have never received.
+#
+# WHERE prefLabel GOVERNS, AND WHERE IT DOES NOT. It governs everything written back: an
+# operation name, a plan, a report, a durable artefact, an identifier, a machine-readable field.
+# It does not govern explanatory prose, which may reach for an alias where the alias reads better
+# — a skill saying "the prospect sees a new From address" is using the accepted input word for
+# `contact` in a sentence nobody parses. The line is the sense, not the word: an alias must never
+# be used in a sense this register denies (see `never_means`), and it is never the word a plan or
+# a report writes.
+#
+# ONE DOCUMENTED SPELLING SPLIT. Identifiers are US-spelled — `enrollment.pause`, `campaign.enroll`
+# — because an operation name is a token and tokens do not get regional variants. Prose in this
+# repository is UK-spelled, so it says "enrolment" while naming `enrollment.list` in the same
+# sentence. That looks like an inconsistency and is a deliberate one: the identifier is fixed by
+# the contract and the surrounding sentence follows the repository's own English. `enrolment` is
+# an accepted input alias for exactly this reason.
+#
+# HOW A WORD IS RESOLVED AT RUNTIME. `term.resolve` answers with the concept, or with `ambiguous`,
+# or with `unknown` — never with a guess. This file is what it resolves against. An alias resolving
+# to two concepts is a defect here, not an ambiguity to be reported at runtime.
+
+version: 2.0.0
+register: neutral
+
+# ---------------------------------------------------------------------------------------------
+# RETIRED WORDS — not aliases, and never resolved to a concept.
+#
+# NOT A SECOND DECLARATION. `operations/families.yaml` declares the retirement and the build reads
+# it from there; if the two ever disagree, that file is right. They are repeated here because a
+# word lookup starts in the lexicon, and a retired word must come back as *retired* rather than as
+# *unknown*: a sentence written today that says `sequence.activate` or `metrics.campaign` is naming
+# something that does not exist, and the reader deserves to be told which, instead of having the
+# token pass as ordinary prose or as a typo.
+#
+# They are deliberately NOT listed as altLabels of the concepts that replaced them. An alias
+# resolves silently; that is the whole point of an alias, and it is exactly the wrong behaviour
+# here. A renamed entity is a defect in the sentence, not a dialect to be accommodated.
+retired:
+  - word: sequence
+    became: campaign
+    resolves_to: nothing
+    why: >
+      Renamed, not aliased. Accepting it on input would let stale plans keep working and keep the
+      old vocabulary alive indefinitely, in the one layer whose job is to fix vocabulary.
+  - word: metrics
+    became: engagement
+    resolves_to: nothing
+    why: >
+      The entity collapsed rather than moved: what were separate per-scope reads became one
+      measure set with the grouping as an argument. There is no one operation the old word maps
+      onto, so no alias could be honest about what it points at.
+
+concepts:
+
+  - id: campaign
+    prefLabel: campaign
+    altLabels: [cadence, drip, play, programme, program, nurture track, touch pattern, outreach flow, flow, journey]
+    hiddenLabels: [campaigns, campain, campagne, cmp, outbound programme, multi-step programme]
+    definition: >
+      A named multi-step programme of touches to named people, with its own steps, schedule,
+      senders, pacing, reply policy and terminal condition. It is always created as a draft;
+      going live is one separate named act, and it is the only entity in this contract that can
+      cause sending to begin on its own.
+    never_means:
+      - context: marketing
+        sense: >
+          A budgeted media effort measured in impressions, reach and spend against a placement —
+          the sense of the word in advertising, brand and demand-generation work.
+        because: >
+          No such object exists in this contract. There is no budget line, no impression, no
+          placement and no audience bought in aggregate. Every touch here is one message to one
+          named person on one channel, and the countable things are people, sends, replies and
+          the meters an operation consumes. A plan that treats a campaign as a spend decision
+          will look for controls that are not here and will mis-read the ones that are.
+      - context: political
+        sense: A time-boxed effort to win something, with volunteers and a deadline.
+        because: >
+          Harmless in conversation and misleading in a plan: it carries no notion of steps,
+          schedule, senders or per-person state, which are the only things a campaign has here.
+
+  - id: enrollment
+    prefLabel: enrollment
+    altLabels: [enrolment, participation, campaign membership, engagement in a campaign]
+    hiddenLabels: [enrol, enroll, enrolled, enrollee, participant]
+    definition: >
+      One contact's participation in one campaign: its position, state, first-touch timing, the
+      reason it ended and who or what ended it. It is an entity in its own right — the same
+      person may participate in several campaigns, and the same campaign holds many
+      participations, each with its own state.
+    never_means:
+      - context: consumer_marketing
+        sense: A subscription to a list, which the person themself opted into.
+        because: >
+          A participation carries no permission of its own and creates none. Permission is
+          evaluated per contact per channel at send time, by `outreach.precheck`, against
+          suppression, lawful basis and the channel's own rules. Reading an enrolment as a
+          subscription is how a suppressed person gets contacted by a plan that looked correct.
+      - context: hr
+        sense: Signing an employee up for a benefit or a course.
+        because: >
+          The word's everyday sense implies the enrolled party consented and can withdraw. Here
+          the operator enrols, and the person's own stop is a different act entirely, recorded by
+          `optout.record` and enforced by suppression.
+
+  - id: step
+    prefLabel: step
+    altLabels: [touch, touchpoint, message step, wait step, branch, beat]
+    hiddenLabels: [steps, stp, position, node, action in a campaign]
+    definition: >
+      One position in a campaign's ordering: its channel, kind, execution mode, delay with a unit
+      and a basis, content binding, threading, and for a branch its condition and evaluation
+      window. Steps are ordered relative to one another, never dated — the calendar is resolved
+      per person from the schedule, the windows and the blackouts.
+    never_means:
+      - context: pipeline
+        sense: A stage a deal sits in — discovery, proposal, negotiation, closed.
+        because: >
+          A step is a position in a programme we control; a pipeline stage is a claim about where
+          a deal actually is. They move for different reasons and are read by different people.
+          Stage values are account vocabulary, read with `vocabulary.list`.
+      - context: workflow
+        sense: A node in an automation graph that may fan out, loop or call another workflow.
+        because: >
+          Steps here are a sequence with declared branches, not a general graph. There is no loop
+          and no re-entry, because a programme with no terminal condition fails validation.
+
+  - id: contact
+    prefLabel: contact
+    altLabels: [person, prospect, recipient, human, target]
+    hiddenLabels: [contacts, cntct, individual, record, people]
+    definition: >
+      A person we hold in the working database, with identity keys, fields, provenance, consent
+      state and history. This is the unit that permission attaches to and that suppression bars —
+      not an address, not a profile, and not a company.
+    never_means:
+      - context: crm
+        sense: >
+          A lead — an inbound arrival that has not been qualified or assigned yet, distinct from
+          a contact attached to an account.
+        because: >
+          An inbound arrival is its own entity here, `inbound_lead`, because it has its own clock
+          and its own first-response obligation. Collapsing the two loses the clock, which is the
+          only part of it with a deadline attached.
+      - context: pipeline
+        sense: The opportunity or deal the person is attached to.
+        because: >
+          An opportunity is a separate entity with its own stages and its own owner. A person can
+          be on several, or none, and their contactability does not follow from either.
+      - context: telephony
+        sense: An entry in an address book, identified by a number.
+        because: >
+          Identity here is not a single identifier. A person may hold several addresses, numbers
+          and profiles, each with its own reachability and its own suppression state.
+
+  - id: sender
+    prefLabel: sender
+    altLabels: [sending capability, sending identity, connected account, channel account, seat]
+    hiddenLabels: [senders, sndr, mailbox, from-address, sending account, outbound account]
+    definition: >
+      A capability to send on one channel — a mailbox at a mailbox provider, an account on a
+      professional network, a number, or a business messaging identity — together with its
+      authorisation, warm-up position, configured pacing, pool membership, allowance and the
+      channel's own sanction on automation. If it cannot send today, that is a fact about the
+      sender, and it is read before anything is planned against it.
+    never_means:
+      - context: message_header
+        sense: The From line of a message — the display name and address a recipient sees.
+        because: >
+          That is one attribute of a sender, and the least consequential one. Everything that
+          decides whether a message can go out — authorisation, warm-up, restrictions, remaining
+          allowance, the channel's sanction — sits on the capability, not on the header.
+      - context: deliverability
+        sense: The sending domain, its authentication records and its reputation.
+        because: >
+          A domain is a separate entity here and is shared by many senders. A healthy domain does
+          not make a particular mailbox able to send, and one restricted mailbox does not
+          condemn the domain.
+
+  - id: candidate
+    prefLabel: candidate
+    altLabels: [found person, discovered person, search result, potential contact]
+    hiddenLabels: [candidates, cand, lookalike, hit, match]
+    definition: >
+      A person located in a data source we do not own and have not taken ownership of. Reading
+      detail about one, and taking ownership of one, are separately metered; promotion is what
+      turns a candidate into a contact, and only then does the person exist in our database with
+      provenance and consent state of their own.
+    never_means:
+      - context: recruiting
+        sense: A job applicant, or somebody being considered for a role.
+        because: >
+          Nothing in this contract concerns hiring. The word is used in its literal sense —
+          somebody who is a candidate for becoming a contact — and the recruiting reading imports
+          an entire vocabulary of stages and interviews that has no counterpart here.
+      - context: politics
+        sense: Somebody standing for election.
+        because: Listed only because the word is common enough to mis-trigger a resolver.
+
+  - id: company
+    prefLabel: company
+    altLabels: [firm, business, employer, target company]
+    hiddenLabels: [companies, co, corp, organisation record, org record]
+    definition: >
+      A firm as it exists in somebody else's database — found, resolved or enriched before we own
+      anything about it. It becomes an `account` the moment it is a record of ours with owners,
+      state and a working history.
+    never_means:
+      - context: crm
+        sense: The company record we already hold and work.
+        because: >
+          That is `account`, and the two carry different obligations: a company is bought or
+          matched, an account is owned, stated and reported on. `company.resolve` answers "is this
+          the same firm"; `account.update` changes what we have decided about one.
+
+  - id: account
+    prefLabel: account
+    altLabels: [organisation, organization, buying organisation, target organisation]
+    hiddenLabels: [accounts, acct, org, logo]
+    definition: >
+      A company as a record of ours: owned, stated, worked and reported on, with members, a state
+      and a tier.
+    never_means:
+      - context: authentication
+        sense: A login, a seat, or the credential a run authenticates with.
+        because: >
+          That is a `sender` or a credential, and confusing them puts a person's mailbox and a
+          target company in the same word.
+
+  - id: engagement
+    prefLabel: engagement
+    altLabels: [outreach performance, campaign performance, engagement figures]
+    hiddenLabels: [engagements, stats, numbers, metrics_view, performance figures]
+    definition: >
+      What happened to outreach, read as one measure set over a stated window with the grouping as
+      an argument — sent, delivered, opened, replied, and every did-not-happen count beside them.
+    never_means:
+      - context: reporting
+        sense: A separate read per scope — one for the account, one per campaign, one per channel.
+        because: >
+          The `metrics` entity was retired precisely because it collapsed: there is one
+          `engagement.summarize` and the grouping is an argument. Looking for a per-campaign
+          operation is how a name that exists in a single playbook gets invented.
+
+  - id: consent
+    prefLabel: consent
+    altLabels: [permission, lawful basis, legal basis, opt-in]
+    hiddenLabels: [consents, gdpr basis, permission record, subscribed]
+    definition: >
+      The evidence that reaching a person is permitted: kind, capture artefact, collecting legal
+      entity, jurisdiction, channels, purposes, subject-matter scope and expiry. Never the answer
+      on its own.
+    never_means:
+      - context: crm
+        sense: A boolean on the person — consented, yes or no.
+        because: >
+          A basis is not a boolean (`A19`). A flag with no artefact behind it is exactly the answer
+          that cannot be used, which is why `consent.prove` must be able to answer `unprovable` and
+          why there is no `consent.check`.
+      - context: marketing
+        sense: The absence of an opt-out.
+        because: >
+          Not having said stop is not permission. An opt-out is an obligation recorded against a
+          person; consent is evidence recorded about a permission, and neither implies the other.
+
+  - id: signal
+    prefLabel: signal
+    altLabels: [observation, buying signal, intent signal, trigger event]
+    hiddenLabels: [signals, sig, intent data, event]
+    definition: >
+      One observation about a person or a company, carrying its source, the time it was observed,
+      a confidence and a validity window.
+    never_means:
+      - context: sales_intelligence
+        sense: A score — an intent number, a fit grade, a heat rating.
+        because: >
+          A signal is an observation, never a score (`J1`). A number with no source, no
+          observation time and no validity window cannot be reasoned about, and acting on a stale
+          observation is worse than not acting at all (`J2`).
+
+  - id: suppression
+    prefLabel: suppression
+    altLabels: [exclusion, do-not-contact entry, never-contact, exclusion list entry]
+    hiddenLabels: [suppressions, dnc, blacklist, blocklist, deny list, suppress, do not mail]
+    definition: >
+      A standing bar on contacting a person, an address, a number, a profile, a domain or a whole
+      company, carrying a reason class and the evidence required to lift it. It is checked before
+      every send, it survives merges and imports, and no operation anywhere clears one by editing
+      a field — the only lift is the named one, and it is refusable while a retention floor
+      applies.
+    never_means:
+      - context: deliverability
+        sense: >
+          Throttling, deferring or pausing sending — holding traffic back to protect a domain or
+          a mailbox.
+        because: >
+          Those are pacing and incident decisions, reversible by design and taken on our own
+          behalf. A suppression is a standing prohibition, usually taken on somebody else's
+          behalf, and treating it as a throttle is how a bar gets lifted when volume recovers.
+      - context: data_management
+        sense: Hiding or filtering a record from a view.
+        because: >
+          Suppression is not visibility. A suppressed person stays fully readable and fully
+          reportable; what changes is that they may not be contacted.
+
+  - id: disposition
+    prefLabel: disposition
+    altLabels: [outcome, business outcome, participation outcome, result]
+    hiddenLabels: [dispositions, disp, dispo, close reason, end state]
+    definition: >
+      The business outcome of one participation, drawn from the account's own declared
+      vocabulary — what came of it, decided by a human or by a rule, and recorded against the
+      participation rather than against the person.
+    never_means:
+      - context: conversation
+        sense: What a reply meant — interested, not now, wrong person, please stop.
+        because: >
+          That is a classification, on a different axis, recorded by `conversation.classify` with
+          its own evidence and confidence. Keeping them apart is load-bearing: a request to stop
+          is an obligation, and if it sat on the outcome axis a relabel would lift a legal duty.
+      - context: call_center
+        sense: >
+          The code an agent or a dialler writes at the end of a call — busy, no answer, left
+          voicemail.
+        because: >
+          That is the outcome of one activity, not of a participation. A call that reached nobody
+          says nothing about what came of the person's involvement in the campaign.
+      - context: execution_state
+        sense: Where the participation currently stands — active, paused, finished.
+        because: >
+          State is what the system knows; disposition is what a human concluded. A finished
+          participation with no disposition is a normal and common condition, and inferring one
+          from the state would manufacture a business judgement nobody made.
