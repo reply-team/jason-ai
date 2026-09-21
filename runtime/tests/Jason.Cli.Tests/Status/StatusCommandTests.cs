@@ -117,10 +117,7 @@ public class StatusCommandTests
         Assert.Equal(CheckState.Failed, skills.State);
         Assert.Contains("1 of 2 seeded roles have no skill", skills.Fact, StringComparison.Ordinal);
         Assert.Contains("planner", skills.Fact, StringComparison.Ordinal);
-
-        // Null, not "jason skills install": that verb does not exist in this build, and a repair nobody
-        // can type teaches a person the tool is broken at the moment they most need it not to be.
-        Assert.Null(skills.Fix);
+        Assert.Equal("jason skills install", skills.Fix);
     }
 
     /// <summary>
@@ -144,7 +141,7 @@ public class StatusCommandTests
         Assert.Equal(ExitCodes.ApiError, exit);
         Assert.Equal(CheckState.Failed, skills.State);
         Assert.Contains("holds no SKILL.md", skills.Fact, StringComparison.Ordinal);
-        Assert.Null(skills.Fix);
+        Assert.Equal("jason skills install --force", skills.Fix);
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using System.CommandLine;
 using Jason.Cli.Commands;
+using Jason.Cli.Skills;
 using Jason.Cli.Status;
 
 namespace Jason.Cli;
@@ -90,6 +91,7 @@ public static class CliApp
         root.Subcommands.Add(PluginCommands.Build(env, actor));
         root.Subcommands.Add(RouteCommands.Build(env, actor));
         root.Subcommands.Add(UpdateCommands.Build(env, actor));
+        root.Subcommands.Add(SkillsCommands.Build(env));
         root.Subcommands.Add(StatusCommand.Build(env));
 
         return root;

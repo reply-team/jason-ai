@@ -26,13 +26,16 @@ public class DocumentedPageCommandsTests
     private static readonly string[] Nouns =
     [
         "jason profile ", "jason rolenote ", "jason campaign ", "jason workitem ", "jason decision ", "jason update ",
-        "jason runtime autostart ", "jason status",
+        "jason runtime autostart ", "jason status", "jason skills ",
     ];
 
     /// <summary>The pages whose printed commands are guarded.</summary>
     private static readonly string[] Pages =
     [
         "README.md",
+        Path.Combine("skills", "README.md"),
+        Path.Combine("skills", "runtime", "README.md"),
+        Path.Combine("skills", "business", "README.md"),
         Path.Combine("docs", "execution-profiles.md"),
         Path.Combine("docs", "campaign-manager.md"),
         Path.Combine("docs", "release-and-update.md"),

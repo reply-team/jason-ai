@@ -61,11 +61,19 @@ disagree about the profession, the disagreement is recorded rather than silently
 
 ## Installing them
 
-**There is no install verb yet** — `jason skills install` does not ship in this build yet; it arrives with the
-first-run work. Until then a person installs a skill by copying its directory into wherever their own agent
-host looks for skills: for Claude Code that is `~/.claude/skills/<name>/` for themselves, or
-`.claude/skills/<name>/` inside a project. The directory name is the skill's name and the two must match — a
-skill whose front matter names anything else is loaded by nobody and reported by nobody.
+```sh
+jason skills install --dry-run --pack jason-business-skills
+jason skills install --pack jason-business-skills
+```
+
+The first prints what would be written where and changes nothing. Both print the target roots before writing,
+because writing into somebody's home directory is not a silent act.
+[`skills/README.md`](../README.md) is the contract the verb keeps.
+
+A person without this build installs a skill by copying its directory into wherever their own agent host looks
+for skills: for Claude Code that is `~/.claude/skills/<name>/` for themselves, or `.claude/skills/<name>/`
+inside a project. The directory name is the skill's name and the two must match — a skill whose front matter
+names anything else is loaded by nobody and reported by nobody.
 
 This repository also offers both packs to a harness through the **skills marketplace** at
 [`.claude-plugin/marketplace.json`](../../.claude-plugin/marketplace.json), which is a different thing from

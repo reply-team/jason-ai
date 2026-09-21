@@ -28,13 +28,23 @@ description that promises everything matches nothing.
 - [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
 
-### Installing one by hand
+### Installing them
 
-**There is no install verb yet.** Until there is, a person installs an interactive skill by copying its
-directory into wherever their own agent host looks for skills — for Claude Code that is
-`~/.claude/skills/<name>/` for themselves or `.claude/skills/<name>/` inside a project, as its own
-documentation describes. Other hosts have their own location. The directory name is the skill's name, and the
-two must match: a skill whose front matter names anything else is loaded by nobody and reported by nobody.
+```sh
+jason skills install --dry-run --pack jason-runtime-skills
+jason skills install --pack jason-runtime-skills
+```
+
+That deploys the five interactive skills into the agent harnesses it finds, and the nine role skills below
+into the runtime's own data directory, where the runtime reads them at every launch. The second destination is
+not optional: a runtime with no role skills launches every role untaught.
+[`skills/README.md`](../README.md) is the contract the verb keeps.
+
+A person without this build installs an interactive skill by copying its directory into wherever their own
+agent host looks for skills — for Claude Code that is `~/.claude/skills/<name>/` for themselves or
+`.claude/skills/<name>/` inside a project, as its own documentation describes. Other hosts have their own
+location. The directory name is the skill's name, and the two must match: a skill whose front matter names
+anything else is loaded by nobody and reported by nobody.
 
 ## The skills a launched role reads
 

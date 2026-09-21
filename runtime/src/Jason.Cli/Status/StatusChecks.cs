@@ -27,19 +27,19 @@ namespace Jason.Cli.Status;
 internal static class StatusChecks
 {
     /// <summary>
-    /// The repairs that will be commands once the verb exists, named in one place so that the commit which
-    /// ships it turns them all on together.
+    /// The repairs a check can print, named in one place.
     /// </summary>
     /// <remarks>
-    /// They are null until then, deliberately. A check whose repair is a command this build does not answer
-    /// teaches a person the tool is broken at the moment they most need it not to be — which is the failure
-    /// the guard beside this one exists to catch, and it would catch this.
+    /// They were null until the verb existed, deliberately: a check whose repair is a command this build does
+    /// not answer teaches a person the tool is broken at the moment they most need it not to be. The guard
+    /// beside this one types every repair printed here, so the commit that shipped the verb is the commit that
+    /// turned these on and proved them.
     /// </remarks>
     private static class Repair
     {
-        public const string? Install = null;
+        public const string Install = "jason skills install";
 
-        public const string? Reinstall = null;
+        public const string Reinstall = "jason skills install --force";
     }
 
     /// <summary>
