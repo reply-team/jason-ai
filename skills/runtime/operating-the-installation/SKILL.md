@@ -2,7 +2,7 @@
 name: operating-the-installation
 description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which agent hosts are registered, and whether a newer version has been released.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Operating the installation
@@ -11,7 +11,8 @@ This skill is about the installation, not about the work it performs. A person r
 Jason is up, why nothing is happening, what is installed, where work would go, or whether they are on the
 current version. Campaign work itself is `managed-campaign-work`.
 
-**Status: verified** against Claude Code 2.1.278. It covers what this build does and nothing else.
+**Status: draft.** This text has been edited since a host last read it. It covers what this build does and
+nothing else.
 
 Two things are true throughout and are easy to forget. **Nothing is registered until somebody asks**: Jason
 starts because you started it, or because somebody registered it to start at logon. And **no provider ships
@@ -120,6 +121,10 @@ terminal can be unavailable to a runtime that started at logon.
 `jason plugin reload` reads every package again and swaps the snapshot, or keeps the old one and says what is
 wrong. It is all or nothing: a package problem rejects the whole reload, and the runtime carries on with the
 plugins it already had.
+
+Those two verbs are the whole plugin vocabulary, and **there is no `jason plugin get`**. One plugin by name is
+that listing read down to its row — `--human` for a person, or the default JSON for a session that is going to
+pick the row out itself.
 
 ```
 jason route list --human

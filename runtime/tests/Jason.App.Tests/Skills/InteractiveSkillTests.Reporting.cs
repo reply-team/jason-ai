@@ -41,5 +41,15 @@ public partial class InteractiveSkillTests
         // cancel the queued work item that would produce it again. A session that waited for that would leave
         // the duplicate work armed and tell the person it had been handled.
         Assert.Contains("moves no work item", skill, StringComparison.Ordinal);
+
+        // "What has Jason done for this person?" is one call, and a session that does not know it invents one:
+        // two independent gated runs typed `work list --contact` and `campaign contacts` hunting for it.
+        Assert.Contains("jason workitem list --contact cnt_", skill, StringComparison.Ordinal);
+
+        // And whose name goes on the report. A gated run derived an actor from the filesystem path rather than
+        // asking — defensible for a reporter naming themselves, and the same habit on an approval would record
+        // somebody's decision against a name they never gave.
+        Assert.Contains("Ask whose name goes on it", skill, StringComparison.Ordinal);
+        Assert.Contains("never derived from the machine", skill, StringComparison.Ordinal);
     }
 }

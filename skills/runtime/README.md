@@ -19,13 +19,13 @@ description that promises everything matches nothing.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
   person to decide: the approvals parked at a claim and the questions a running role raised, presented in the
   person's own words and recorded as their decision.
-- [`operating-the-installation`](operating-the-installation/SKILL.md) — **verified.** The installation itself:
+- [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft.** The installation itself:
   whether the runtime is up, starting and stopping it, having it start at logon, the plugins and routes it
   has, the hosts it can launch, and whether a newer version exists.
 - [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **verified.** Why work stopped: the runtime, the
   work item's error code and the chronicle; the states a person needs told apart, and the repairs that are
   safe.
-- [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
+- [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **draft.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
 
 ### Installing one by hand
@@ -111,6 +111,4 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 |---|---|---|---|
 | `managed-campaign-work` | Claude Code 2.1.278 | 0.1.0 | `sha256:01adfb08dec48564d6fef17639fd58cdac16deb7ddfbfea50ebcaa673989d855` |
 | `approvals-and-questions` | Claude Code 2.1.278 | 0.1.0 | `sha256:7ec45ac3fc2b72a01a289c27a3b4b59f9b10fb9c9f56abd6a45148f761bb8a74` |
-| `operating-the-installation` | Claude Code 2.1.278 | 0.1.0 | `sha256:ed28ec2546b0d35366323f53536138f2094389254f269946c14af47e456da3a8` |
 | `troubleshooting-jason` | Claude Code 2.1.278 | 0.1.0 | `sha256:fac60f6d04618c2d4d614592024de133144c563b8462cc9c4ca751786cf77a9f` |
-| `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:8dbe1841388310a6151215a4e58d4972b4530aa0e7717700d77d318919c98fae` |
