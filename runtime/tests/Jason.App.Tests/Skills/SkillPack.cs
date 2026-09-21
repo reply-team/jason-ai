@@ -21,11 +21,24 @@ internal static class SkillPack
 
     public static string Root() => Path.Combine(RepositoryRoot(), "skills", "runtime");
 
+    /// <summary>
+    /// The second pack: the SDR profession's own knowledge, which a person's session reads and no launch ever
+    /// does. Nothing here is a role, so the directory that tells one from the other in the runtime pack has no
+    /// counterpart — and the walk is told so rather than inferring it from a path that happens not to begin
+    /// with <c>roles/</c>.
+    /// </summary>
+    public static string BusinessRoot() => Path.Combine(RepositoryRoot(), "skills", "business");
+
     public static string Catalog() => Path.Combine(Root(), "README.md");
 
-    public static IReadOnlyList<PackSkill> All()
+    public static string BusinessCatalog() => Path.Combine(BusinessRoot(), "README.md");
+
+    public static IReadOnlyList<PackSkill> All() => Walk(Root(), rolesLive: true);
+
+    public static IReadOnlyList<PackSkill> Business() => Walk(BusinessRoot(), rolesLive: false);
+
+    private static IReadOnlyList<PackSkill> Walk(string root, bool rolesLive)
     {
-        var root = Root();
         var skills = new List<PackSkill>();
         foreach (var file in Directory.EnumerateFiles(root, SkillFile, SearchOption.AllDirectories))
         {
@@ -35,7 +48,7 @@ internal static class SkillPack
                 Path.GetFileName(directory),
                 directory,
                 file,
-                relative.StartsWith("roles/", StringComparison.Ordinal)));
+                rolesLive && relative.StartsWith("roles/", StringComparison.Ordinal)));
         }
 
         skills.Sort((left, right) => string.CompareOrdinal(left.File, right.File));
