@@ -7,9 +7,12 @@ public partial class InteractiveSkillTests
     {
         var skill = Flattened("managed-campaign-work");
 
-        // No provider ships configured. A skill that assumed one would have the session promise work that
-        // fails with no_route, which reads to a person as the product being broken.
-        Assert.Contains("route", skill, StringComparison.OrdinalIgnoreCase);
+        // No provider ships configured, and a route is somebody's deliberate act rather than a default. A
+        // skill that implied otherwise would have the session promise work that fails with no_route, which
+        // reads to a person as the product being broken. The sentence is pinned rather than the word: "route"
+        // also matches "routed", so a text saying the opposite passed the assertion that was here.
+        Assert.Contains("writing a route is an operator's explicit act", skill, StringComparison.Ordinal);
+        Assert.Contains("no_route", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("out of the box", skill, StringComparison.OrdinalIgnoreCase);
 
         // Arguments are judged when the item is created, against the operation's own published document — so

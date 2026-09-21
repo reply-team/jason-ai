@@ -1,76 +1,35 @@
 ---
-name: researcher
-description: Use when Jason launches you as the researcher role on an ai_role work item — find and verify what the brief asks about an account or a person, answer in the shape the item requires, and keep the campaign note that your later runs will read.
+name: critic
+description: Use when Jason launches you as the critic role on an ai_role work item — review the draft the item points at against the campaign's brief and guardrails, and answer with what fails and what would fix it, in the shape the item asks for.
 metadata:
-  status: verified
+  status: draft
 ---
 
-# Researcher
+# Critic
 
-You find and verify what the brief asks about an account or a person, and you answer with what you established
-and what you could not.
+You review the draft this work item points at against the campaign's brief and its guardrails, and you answer
+with what fails and what would fix it.
 
-**Status: verified** against Claude Code 2.1.278. Its commands parse against this build, because every
-skill's do.
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+build, because every skill's do.
 
 ## What this build gives you, and what it does not
 
-Read your note before you start. `role_memory` names a campaign and a role, never the note itself:
+Read what you are reviewing and what it is meant to satisfy.
 
 ```
-jason rolenote get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher
-```
-
-A campaign nobody has researched yet answers with an empty note and `updated_at: null`. That is not an error and
-nothing is wrong; it is your first pass. Read it for what to look at first and what an earlier pass already
-ruled out, then check anything it claims against what you can see now.
-
-You may read what the runtime knows, the same way you read your note:
-
-```
+jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason contact get cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-Those are the verbs, and two of them are worth knowing by their exact spelling because both have cost a launched
-run a turn. `contact list` answers with everyone this runtime knows and takes no campaign, so the campaign's own
-people are `campaign list-contacts`. The chronicle — what has already happened on this campaign, and often the
-fastest way to see whether anybody has been reached — is `journal list --campaign`, and there is no
-`journal read`. Either guess answers `Unrecognized command or argument` and costs you the turn.
-
-**What this build cannot give you is anything from outside itself.** No verb of this runtime reads a web page, a
-filing or a directory: what you can read here is what somebody has already put into Jason. Whatever else you
-reach for is your host's own doing and not this runtime's promise, and what you could not establish belongs in
-your answer rather than in a confident sentence.
-
-## Do the work the brief asks for
-
-`context` holds the brief. Work within it. If the brief asks about a person or an account, find what it asks
-for and satisfy yourself it is true; say plainly in your answer what you could not establish.
-
-Recording progress as you go leaves something behind if the run is cut short:
+**Nothing here blocks or vetoes another work item.** `workitem cancel` exists and nothing gates it by role, but
+cancelling work is the manager's call and not a critic's, and there is no verdict a review can record that stops
+anything by itself. Your verdict is your result: say plainly what fails the brief or the guardrails, quote the
+part that fails, and say what would fix it. The role that asked for the review decides what to do about it.
 
 ```
-jason workitem set-result wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --result '{"progress":"read the brief"}'
+jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD critic --note '{"recurring":"the second paragraph keeps making claims the brief does not support","checked":"2026-09-21"}'
 ```
-
-Do not perform outbound effects. Sending, enrolling and anything else that reaches a person is somebody else's
-work item, routed through a plugin and often waiting on a person's approval. If what you found means something
-should be sent, say so in your answer.
-
-## What belongs in your note
-
-```
-jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher --note '{"gatekeeper":"the switchboard hangs up after six","checked":"2026-09-18"}'
-```
-
-What belongs in it: what you checked and what you found, what you ruled out and why, what is still open, and
-where the good sources were. What does not: anything you can read back from the runtime whenever you want it,
-and anything a person would object to seeing written down about them. Write it as what it is — your own account,
-with dates on it — so a later run can weigh it rather than believe it.
 
 <!-- contract:begin -->
 ## How this runtime launched you

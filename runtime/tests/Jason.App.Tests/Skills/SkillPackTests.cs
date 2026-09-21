@@ -45,12 +45,23 @@ public partial class SkillPackTests
 
             // Everything this pack invents of its own lives under metadata, which is the documented map for
             // exactly that. An unknown top-level key is tolerated by one host and is a hard error outside it.
-            Assert.Equal(["description", "metadata", "name"], front.Keys.Order());
+            // Assert.Equal carries no message, and a pack of fourteen files needs one: the failure has to name
+            // the file somebody would open and the key that does not belong.
+            var top = front.Keys.Order().ToArray();
+            Assert.True(
+                top is ["description", "metadata", "name"],
+                $"'{skill.File}' declares the top-level keys [{string.Join(", ", top)}]. The pack's front matter "
+                + "is name, description and metadata, and nothing else: an unknown top-level key is tolerated by "
+                + "one host and is a hard error outside it.");
 
             // And metadata holds exactly one entry in this version. A second custom key admitted silently is
             // the thing moving status under metadata was about: the map is the documented place for what this
             // pack invents, not a place where anything may accumulate unread.
-            Assert.Equal(["status"], front.Metadata.Keys.Order());
+            var custom = front.Metadata.Keys.Order().ToArray();
+            Assert.True(
+                custom is ["status"],
+                $"'{skill.File}' puts [{string.Join(", ", custom)}] under metadata. This version has exactly one "
+                + "entry there, status, and a second one admitted silently is a key nobody reads.");
             Assert.Contains(front.Metadata.GetValueOrDefault("status"), (string[])["draft", "verified"]);
         }
     }
@@ -203,25 +214,49 @@ public partial class SkillPackTests
         foreach (var skill in SkillPack.All())
         {
             var status = SkillFrontMatter.Read(skill.File).Metadata.GetValueOrDefault("status");
-            var row = Row(catalog, skill.Name);
+            var rows = Rows(catalog, skill.Name);
 
             if (status != "verified")
             {
-                Assert.True(
-                    row is null,
-                    $"'{skill.Name}' is not verified and the catalog records a reading of it anyway.");
+                // A draft may be listed — the catalog lists every role, with its status, so that a reader can
+                // see at a glance which of them a host has read. What it may not have is a reading recorded
+                // for it: a digest in a row is the claim that a host read this text, and none has.
+                foreach (var row in rows)
+                {
+                    Assert.False(
+                        row.Contains("sha256:", StringComparison.Ordinal),
+                        $"'{skill.Name}' is '{status}' and the catalog records a reading of it anyway: {row}");
+                }
+
                 continue;
             }
 
-            Assert.True(row is not null, $"'{skill.Name}' says it is verified and the catalog records no reading.");
-            Assert.Contains(SkillPack.BodyDigest(skill.File), row, StringComparison.Ordinal);
-            Assert.Contains("Claude Code 2.1.", row, StringComparison.Ordinal);
+            var reading = rows.Where(row => row.Contains("sha256:", StringComparison.Ordinal)).ToList();
+            Assert.True(
+                reading.Count > 0,
+                $"'{skill.Name}' says it is verified and the catalog records no reading of it.");
+
+            var digest = SkillPack.BodyDigest(skill.File);
+            foreach (var row in reading)
+            {
+                Assert.True(
+                    row.Contains(digest, StringComparison.Ordinal),
+                    $"'{skill.Name}' says it is verified, and the text that is here now digests to {digest}, "
+                    + $"which is not what the catalog records: {row}. Either it was edited after the reading, "
+                    + "in which case it is a draft again until a host has read it, or the row is wrong.");
+                Assert.Contains("Claude Code 2.1.", row, StringComparison.Ordinal);
+            }
         }
     }
 
-    /// <summary>The catalog's row for one skill, if it has one: a table line whose first cell names it.</summary>
-    private static string? Row(string catalog, string name) =>
-        catalog.Split('\n').FirstOrDefault(line => line.StartsWith($"| `{name}`", StringComparison.Ordinal));
+    /// <summary>
+    /// Every table row whose first cell names this skill. More than one table lists a skill now — the
+    /// interactive readings and the roles — so this reads them all rather than the first it meets.
+    /// </summary>
+    private static IReadOnlyList<string> Rows(string catalog, string name) =>
+    [
+        .. catalog.Split('\n').Where(line => line.StartsWith($"| `{name}`", StringComparison.Ordinal)),
+    ];
 
     /// <summary>
     /// The detector, before the pack. Every phrase on the list is absent from the pack today, so a guard with

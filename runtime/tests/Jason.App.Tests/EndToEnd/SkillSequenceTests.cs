@@ -225,32 +225,9 @@ public class SkillSequenceTests
         return (campaign, contact, item, (string)waiting["id"]!);
     }
 
-    /// <summary>
-    /// Every <c>jason …</c> line a skill prints, as whole lines. Whole lines rather than a substring search
-    /// over the text, because a substring match would let a printed line grow an option — the skill would then
-    /// be teaching a command this test never runs, which is exactly what it exists to prevent.
-    /// </summary>
-    internal static IReadOnlyList<string> Prints(string skill)
-    {
-        var lines = new List<string>();
-        var fenced = false;
-        foreach (var line in File.ReadAllLines(SkillPack.Find(skill).File))
-        {
-            if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
-            {
-                fenced = !fenced;
-                continue;
-            }
-
-            var text = line.Trim();
-            if (fenced && text.StartsWith("jason ", StringComparison.Ordinal))
-            {
-                lines.Add(text);
-            }
-        }
-
-        return lines;
-    }
+    /// <summary>Every <c>jason …</c> line this skill prints, by the pack's one reader of them.</summary>
+    internal static IReadOnlyList<string> Prints(string skill) =>
+        SkillPack.PrintedCommands(SkillPack.Find(skill).File);
 
     /// <summary>The printed line with this run's own identifiers in place of the skill's placeholders.</summary>
     internal static IReadOnlyList<string> Substituted(

@@ -168,6 +168,10 @@ skill that *was* configured and could not be given to the role — misnamed, or 
 `Roles:MaxSkillBytes` — refuses the attempt instead, because a role doing the job untaught costs a
 real launch and leaves only a log line behind.
 
+This repository's runtime pack now contributes a `SKILL.md` for **every one of the nine roles the
+runtime seeds**, so a role launching with no skill directory is a directory an operator has not
+composed rather than a role nobody wrote for.
+
 **Who contributes what to that directory.** An operator composes `<data>/skills/roles/<role>/` from the
 skill packs, and the packs contribute **different files** so that installing one never overwrites the
 other. This repository's runtime pack contributes `SKILL.md`: the launch contract every role is held to

@@ -18,8 +18,6 @@
     <Compile Include="../Jason.Runtime.Tests/Plugins/Reply/ReplyAccount.cs" Link="EndToEnd/ReplyAccount.cs" />
     <!-- One definition of the environment a spawned test runtime gets — its own data directory, and no update check — shared for the same reason: eight sites spawn one, and a variable spelled by hand in each is one a ninth forgets. -->
     <Compile Include="../Jason.Runtime.Tests/TestRuntimeEnvironment.cs" Link="EndToEnd/TestRuntimeEnvironment.cs" />
-    <!-- The skills pack these guards enumerate, linked the way Jason.Cli.Tests links it. -->
-    <None Include="../../../skills/**/SKILL.md" LinkBase="Skills" CopyToOutputDirectory="PreserveNewest" />
     <!-- One shell splitter for every guard in this repository that types a documented line. -->
     <Compile Include="../Jason.Cli.Tests/Documentation/ShellWords.cs" Link="Skills/ShellWords.cs" />
     <!-- The suite's one disposable temporary directory, rather than a second copy of the same idea. -->

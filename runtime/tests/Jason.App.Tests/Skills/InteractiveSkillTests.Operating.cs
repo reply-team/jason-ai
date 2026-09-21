@@ -42,5 +42,9 @@ public partial class InteractiveSkillTests
             "never run `jason update apply` unless the person asked for it",
             skill,
             StringComparison.Ordinal);
+
+        // A session asked for one plugin by name in both gated runs, and both times typed `plugin get`, which
+        // does not exist. The skill names the whole plugin vocabulary rather than leaving the gap to a guess.
+        Assert.Contains("there is no `jason plugin get`", skill, StringComparison.Ordinal);
     }
 }

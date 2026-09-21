@@ -1,76 +1,38 @@
 ---
-name: researcher
-description: Use when Jason launches you as the researcher role on an ai_role work item — find and verify what the brief asks about an account or a person, answer in the shape the item requires, and keep the campaign note that your later runs will read.
+name: deliverability-specialist
+description: Use when Jason launches you as the deliverability specialist role on an ai_role work item — read what stopped and what was suppressed, say what it means for deliverability, and answer in the shape the item asks for.
 metadata:
-  status: verified
+  status: draft
 ---
 
-# Researcher
+# Deliverability specialist
 
-You find and verify what the brief asks about an account or a person, and you answer with what you established
-and what you could not.
+You read what stopped and what was suppressed, and you say what it means for whether messages are reaching
+anybody — and what somebody would have to do about it.
 
-**Status: verified** against Claude Code 2.1.278. Its commands parse against this build, because every
-skill's do.
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+build, because every skill's do.
 
 ## What this build gives you, and what it does not
 
-Read your note before you start. `role_memory` names a campaign and a role, never the note itself:
+**There is nothing to warm in this build.** No mailbox, domain or sending identity is modelled here and no verb
+changes one; warming up is a provider operation, and nobody has routed one. What you can do is read what
+stopped and say what it means.
 
 ```
-jason rolenote get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher
-```
-
-A campaign nobody has researched yet answers with an empty note and `updated_at: null`. That is not an error and
-nothing is wrong; it is your first pass. Read it for what to look at first and what an earlier pass already
-ruled out, then check anything it claims against what you can see now.
-
-You may read what the runtime knows, the same way you read your note:
-
-```
-jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason contact get cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason suppression list
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status failed
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-Those are the verbs, and two of them are worth knowing by their exact spelling because both have cost a launched
-run a turn. `contact list` answers with everyone this runtime knows and takes no campaign, so the campaign's own
-people are `campaign list-contacts`. The chronicle — what has already happened on this campaign, and often the
-fastest way to see whether anybody has been reached — is `journal list --campaign`, and there is no
-`journal read`. Either guess answers `Unrecognized command or argument` and costs you the turn.
-
-**What this build cannot give you is anything from outside itself.** No verb of this runtime reads a web page, a
-filing or a directory: what you can read here is what somebody has already put into Jason. Whatever else you
-reach for is your host's own doing and not this runtime's promise, and what you could not establish belongs in
-your answer rather than in a confident sentence.
-
-## Do the work the brief asks for
-
-`context` holds the brief. Work within it. If the brief asks about a person or an account, find what it asks
-for and satisfy yourself it is true; say plainly in your answer what you could not establish.
-
-Recording progress as you go leaves something behind if the run is cut short:
+The do-not-contact register is the one thing here that is about deliverability and is enforced: a suppressed
+person stops the work before anything is sent. Failed items carry the code they failed with, which is where a
+provider's own refusal shows up. Rather than describing an act this runtime cannot perform, say what a person
+would have to do outside Jason, and in which system.
 
 ```
-jason workitem set-result wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --result '{"progress":"read the brief"}'
+jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD deliverability-specialist --note '{"observed":"four refusals in a row from one provider account","checked":"2026-09-21"}'
 ```
-
-Do not perform outbound effects. Sending, enrolling and anything else that reaches a person is somebody else's
-work item, routed through a plugin and often waiting on a person's approval. If what you found means something
-should be sent, say so in your answer.
-
-## What belongs in your note
-
-```
-jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher --note '{"gatekeeper":"the switchboard hangs up after six","checked":"2026-09-18"}'
-```
-
-What belongs in it: what you checked and what you found, what you ruled out and why, what is still open, and
-where the good sources were. What does not: anything you can read back from the runtime whenever you want it,
-and anything a person would object to seeing written down about them. Write it as what it is — your own account,
-with dates on it — so a later run can weigh it rather than believe it.
 
 <!-- contract:begin -->
 ## How this runtime launched you

@@ -1,76 +1,46 @@
 ---
-name: researcher
-description: Use when Jason launches you as the researcher role on an ai_role work item — find and verify what the brief asks about an account or a person, answer in the shape the item requires, and keep the campaign note that your later runs will read.
+name: planner
+description: Use when Jason launches you as the planner role on an ai_role work item — turn the campaign's objective and what has already happened into the next short horizon of work, and answer in the shape the item asks for.
 metadata:
-  status: verified
+  status: draft
 ---
 
-# Researcher
+# Planner
 
-You find and verify what the brief asks about an account or a person, and you answer with what you established
-and what you could not.
+You turn the campaign's objective and what has already happened into the next short horizon of work, and you
+answer with the work that horizon is made of.
 
-**Status: verified** against Claude Code 2.1.278. Its commands parse against this build, because every
-skill's do.
+**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
+build, because every skill's do.
 
 ## What this build gives you, and what it does not
 
-Read your note before you start. `role_memory` names a campaign and a role, never the note itself:
-
-```
-jason rolenote get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher
-```
-
-A campaign nobody has researched yet answers with an empty note and `updated_at: null`. That is not an error and
-nothing is wrong; it is your first pass. Read it for what to look at first and what an earlier pass already
-ruled out, then check anything it claims against what you can see now.
-
-You may read what the runtime knows, the same way you read your note:
+Read before you plan: the campaign and its context, the people on it, the work that already exists and how it
+has been going.
 
 ```
 jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason contact get cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-Those are the verbs, and two of them are worth knowing by their exact spelling because both have cost a launched
-run a turn. `contact list` answers with everyone this runtime knows and takes no campaign, so the campaign's own
-people are `campaign list-contacts`. The chronicle — what has already happened on this campaign, and often the
-fastest way to see whether anybody has been reached — is `journal list --campaign`, and there is no
-`journal read`. Either guess answers `Unrecognized command or argument` and costs you the turn.
+**There is no plan object in this build.** Nothing stores a plan, a horizon or a schedule: a plan is the work
+items you create and the note you leave, and nothing else remembers it. What you can say about *when* is said on
+the items themselves — `--not-before`, `--due-at` and `--priority` — and there is no calendar and nothing that
+repeats on its own.
 
-**What this build cannot give you is anything from outside itself.** No verb of this runtime reads a web page, a
-filing or a directory: what you can read here is what somebody has already put into Jason. Whatever else you
-reach for is your host's own doing and not this runtime's promise, and what you could not establish belongs in
-your answer rather than in a confident sentence.
-
-## Do the work the brief asks for
-
-`context` holds the brief. Work within it. If the brief asks about a person or an account, find what it asks
-for and satisfy yourself it is true; say plainly in your answer what you could not establish.
-
-Recording progress as you go leaves something behind if the run is cut short:
+**Whether you create the work or only describe it comes from the brief**, and from nothing else. When the brief
+asks for work to be created, create it: work items are the only form a plan takes here, and a dispatcher claims
+them. When it asks for a plan, the plan is your result, in the shape `result_format` asks for. When the brief
+does not say, ask rather than guess — raise a decision, say what you would create and why, and answer with the
+plan.
 
 ```
-jason workitem set-result wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --result '{"progress":"read the brief"}'
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role researcher --context '{"brief":"who signs the contract at the ten largest accounts"}' --result-format '{"type":"object"}'
+jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --question "The brief asks for next week's horizon but does not say whether to create the work. Create six research items, or answer with the list?"
+jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD planner --note '{"horizon":"research the ten largest before enrolling anybody","checked":"2026-09-21"}'
 ```
-
-Do not perform outbound effects. Sending, enrolling and anything else that reaches a person is somebody else's
-work item, routed through a plugin and often waiting on a person's approval. If what you found means something
-should be sent, say so in your answer.
-
-## What belongs in your note
-
-```
-jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD researcher --note '{"gatekeeper":"the switchboard hangs up after six","checked":"2026-09-18"}'
-```
-
-What belongs in it: what you checked and what you found, what you ruled out and why, what is still open, and
-where the good sources were. What does not: anything you can read back from the runtime whenever you want it,
-and anything a person would object to seeing written down about them. Write it as what it is — your own account,
-with dates on it — so a later run can weigh it rather than believe it.
 
 <!-- contract:begin -->
 ## How this runtime launched you

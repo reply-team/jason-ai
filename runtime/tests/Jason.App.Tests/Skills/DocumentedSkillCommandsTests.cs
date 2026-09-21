@@ -33,7 +33,7 @@ public class DocumentedSkillCommandsTests
         var printed = 0;
         foreach (var skill in skills)
         {
-            foreach (var command in Printed(await File.ReadAllLinesAsync(skill.File, Ct)))
+            foreach (var command in SkillPack.PrintedCommands(await File.ReadAllLinesAsync(skill.File, Ct)))
             {
                 await AssertUnderstoodAsync(command, skill.File);
                 printed++;
@@ -51,6 +51,12 @@ public class DocumentedSkillCommandsTests
     public async Task The_command_line_that_starts_a_background_runtime_is_understood() =>
         await AssertUnderstoodAsync("jason runtime run --detached --data-dir /tmp/jason-somewhere", "this test");
 
+    /// <summary>The one line the version mode answers, typed, so the branch below is exercised by name
+    /// whatever the pack happens to print.</summary>
+    [Fact]
+    public async Task The_version_mode_answers_the_bare_line_and_nothing_longer() =>
+        await AssertUnderstoodAsync("jason --version", "this test");
+
     private static async Task AssertUnderstoodAsync(string command, string source)
     {
         // The splitter drops the program's own name, so what is left is what the program is handed — which
@@ -66,6 +72,15 @@ public class DocumentedSkillCommandsTests
                 return;
 
             case Mode.Version:
+                // The router answers only the bare line, so this branch may never bless a longer one:
+                // anything after --version falls through to the CLI and is judged there. Asserted
+                // rather than assumed, because a branch that returns in silence is indistinguishable
+                // from one that blesses whatever it is handed, and the difference shows up the day
+                // the router's pattern changes.
+                Assert.True(
+                    arguments is ["--version"],
+                    $"'{command}' in {source} is answered by the version mode although it is longer "
+                    + $"than the line that mode answers: [{string.Join(", ", arguments)}].");
                 return;
 
             case Mode.PluginHost:
@@ -144,28 +159,5 @@ public class DocumentedSkillCommandsTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             throw new HttpRequestException("no network in tests");
-    }
-
-    /// <summary>Every <c>jason …</c> line inside a fenced block, which is where a page prints what to type.</summary>
-    private static IReadOnlyList<string> Printed(IReadOnlyList<string> lines)
-    {
-        var commands = new List<string>();
-        var fenced = false;
-        foreach (var line in lines)
-        {
-            if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
-            {
-                fenced = !fenced;
-                continue;
-            }
-
-            var text = line.Trim();
-            if (fenced && text.StartsWith("jason ", StringComparison.Ordinal))
-            {
-                commands.Add(text);
-            }
-        }
-
-        return commands;
     }
 }

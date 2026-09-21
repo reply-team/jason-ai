@@ -44,6 +44,39 @@ internal static class SkillPack
 
     public static PackSkill Find(string name) => Assert.Single(All(), skill => skill.Name == name);
 
+    /// <summary>Every <c>jason …</c> line a skill prints, read from the file.</summary>
+    public static IReadOnlyList<string> PrintedCommands(string file) =>
+        PrintedCommands(System.IO.File.ReadAllLines(file));
+
+    /// <summary>
+    /// Every <c>jason …</c> line inside a fenced block, which is where a page prints what to type, and as
+    /// <em>whole lines</em>: a guard that searched the text for a substring would let a printed command grow
+    /// an option that nothing ever runs, which is the one thing these guards exist to prevent.
+    /// </summary>
+    public static IReadOnlyList<string> PrintedCommands(IReadOnlyList<string> lines)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+
+        var commands = new List<string>();
+        var fenced = false;
+        foreach (var line in lines)
+        {
+            if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
+            {
+                fenced = !fenced;
+                continue;
+            }
+
+            var text = line.Trim();
+            if (fenced && text.StartsWith("jason ", StringComparison.Ordinal))
+            {
+                commands.Add(text);
+            }
+        }
+
+        return commands;
+    }
+
     /// <summary>
     /// The text a host would read, digested. The front matter is deliberately not part of it: promoting a
     /// skill from draft to verified edits the front matter, so a digest that covered it could never be
@@ -58,18 +91,23 @@ internal static class SkillPack
 
     /// <summary>
     /// The text a host reads: everything below the front matter, line endings normalised and trailing space
-    /// trimmed. The opening fence is the file's first line, so the close is the first <c>---</c> on a line of
-    /// its own after it.
+    /// trimmed. Where the front matter ends is asked of the reader that parses it, rather than worked out a
+    /// second time here — a file whose front matter is malformed has no body at all, and taking the first
+    /// <c>---</c> line instead would digest whatever happened to follow the next rule in the text.
     /// </summary>
     public static string Body(string file)
     {
-        var text = System.IO.File.ReadAllText(file).Replace("\r\n", "\n", StringComparison.Ordinal);
-        Assert.StartsWith("---\n", text, StringComparison.Ordinal);
+        var front = SkillFrontMatter.Read(file);
+        Assert.True(
+            front.Close >= 0 && front.Problems.Count == 0,
+            $"'{file}' does not read as front matter, so it has no body to digest: "
+            + (front.Problems.Count > 0 ? string.Join("; ", front.Problems) : "it never closes"));
 
-        var close = text.IndexOf("\n---\n", StringComparison.Ordinal);
-        Assert.True(close > 0, $"'{file}' does not close its front matter.");
+        var lines = System.IO.File.ReadAllText(file)
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Split('\n');
 
-        return text[(close + 5)..].TrimEnd();
+        return string.Join('\n', lines.Skip(front.Close + 1)).TrimEnd();
     }
 
     public static string RepositoryRoot()
