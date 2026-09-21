@@ -1,22 +1,8 @@
 ---
 name: sending-guardrails
-description: >
-  Protect sender reputation and inbox placement: domain authentication, warm-up, volume
-  pacing, bounce interpretation and recovery. Use before launching significant email volume,
-  when bounce rates rise, when replies collapse, or when a sending account or domain is new.
+description: Protect sender reputation and inbox placement: domain authentication, warm-up, volume pacing, bounce interpretation and recovery. Use before launching significant email volume, when bounce rates rise, when replies collapse, or when a sending account or domain is new.
 metadata:
-  version: 0.3.0
-  pack: ai-sdr-core
-  category: protection
-  maturity: draft
-  status: active
-  owner: outbound-experts
-  tags: [deliverability, reputation, warm-up, volume, protection]
-  tools: []
-  api: []
-  relations:
-    depends-on: [sdr-operations]
-    recommends: [campaign-launch, performance-analysis, approval-boundaries]
+  status: draft
 ---
 
 # Sending guardrails

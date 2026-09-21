@@ -43,4 +43,46 @@ public class BusinessPackTests
         var carried = Directory.EnumerateFiles(operations.Directory, "*", SearchOption.AllDirectories).Count();
         Assert.True(carried == 50, $"sdr-operations arrived with {carried} files and it has fifty.");
     }
+
+    /// <summary>
+    /// One vocabulary for both packs. This pack arrived carrying <c>maturity: draft</c> beside
+    /// <c>status: active</c> under the same <c>metadata</c> key this repository already defines as
+    /// draft | verified — two words for one idea, and a third value for a key that has two.
+    /// </summary>
+    /// <remarks>
+    /// Landing that unchanged does not merely fail a guard: it teaches the next reader the wrong word, in a
+    /// tree where the right one is load-bearing. The front matter is normalised on import and the pack's
+    /// catalog says so, because a later re-sync from upstream would otherwise restore four keys and fail here
+    /// for reasons nobody could reconstruct.
+    /// </remarks>
+    [Fact]
+    public void Every_business_skill_declares_itself_in_the_shape_the_pack_agreed()
+    {
+        var skills = SkillPack.Business();
+        Assert.NotEmpty(skills);
+
+        foreach (var skill in skills)
+        {
+            PackShape.ReadsAsTheSkillItIs(skill);
+        }
+    }
+
+    /// <summary>
+    /// Nothing in this pack has been read by a named host against this runtime, so nothing in it is verified
+    /// and nothing carries a body digest. The day one is, it is promoted by the act the runtime pack uses:
+    /// promote, reword, record the digest, then read.
+    /// </summary>
+    [Fact]
+    public void No_business_skill_claims_a_host_has_read_it()
+    {
+        foreach (var skill in SkillPack.Business())
+        {
+            var status = SkillFrontMatter.Read(skill.File).Metadata.GetValueOrDefault("status");
+            Assert.True(
+                status == "draft",
+                $"'{skill.Name}' says metadata.status is '{status}'. No host has read this pack against this "
+                + "runtime, and 'verified' means a named host read this exact body and its digest is in the "
+                + "catalog.");
+        }
+    }
 }

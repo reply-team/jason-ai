@@ -1,25 +1,8 @@
 ---
 name: approval-boundaries
-description: >
-  Where an agent must stop and ask the user before acting, how an operation's approval class
-  is derived from its reversibility and its reach, what a valid confirmation looks like, and
-  the one case where acting first is correct. Covers previews, retries and idempotency keys,
-  unattended runs, standing approvals and anomaly stop-rules. Use before any operation that
-  reaches a real person, when deciding whether an approval still applies, or when configuring
-  an agent to run without a human present.
+description: Where an agent must stop and ask the user before acting, how an operation's approval class is derived from its reversibility and its reach, what a valid confirmation looks like, and the one case where acting first is correct. Covers previews, retries and idempotency keys, unattended runs, standing approvals and anomaly stop-rules. Use before any operation that reaches a real person, when deciding whether an approval still applies, or when configuring an agent to run without a human present.
 metadata:
-  version: 2.0.0
-  pack: ai-sdr-core
-  category: protection
-  maturity: draft
-  status: active
-  owner: skills-maintainers
-  tags: [safety, approval, derivation, idempotency, unattended, anomalies]
-  tools: []
-  api: []
-  relations:
-    depends-on: [sdr-operations]
-    recommends: [sending-guardrails, linkedin-guardrails]
+  status: draft
 ---
 
 # Approval boundaries

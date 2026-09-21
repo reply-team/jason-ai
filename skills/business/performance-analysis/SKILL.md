@@ -1,23 +1,8 @@
 ---
 name: performance-analysis
-description: >
-  An honest read on outreach performance: account and per-campaign figures over a stated
-  window, a diagnosis that separates deliverability from copy from targeting, and one or two
-  high-impact recommendations. Use when the user asks how campaigns are performing, what is
-  underperforming, what to fix or pause, or wants outreach analytics.
+description: An honest read on outreach performance: account and per-campaign figures over a stated window, a diagnosis that separates deliverability from copy from targeting, and one or two high-impact recommendations. Use when the user asks how campaigns are performing, what is underperforming, what to fix or pause, or wants outreach analytics.
 metadata:
-  version: 3.0.0
-  pack: ai-sdr-core
-  category: strategy
-  maturity: draft
-  status: active
-  owner: outbound-experts
-  tags: [analytics, diagnosis, optimization, evidence]
-  tools: []
-  api: []
-  relations:
-    depends-on: [sdr-operations]
-    recommends: [sending-guardrails, campaign-launch, inbox-triage, approval-boundaries]
+  status: draft
 ---
 
 # Performance analysis

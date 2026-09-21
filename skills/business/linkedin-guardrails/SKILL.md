@@ -1,22 +1,8 @@
 ---
 name: linkedin-guardrails
-description: >
-  Keep social accounts safe under automation: invitation pacing, messaging windows, metered
-  allowances, daily limits and recovery when the platform restricts an account. Use before any
-  LinkedIn outreach volume, when configuring account limits, or when an account shows a warning.
+description: Keep social accounts safe under automation: invitation pacing, messaging windows, metered allowances, daily limits and recovery when the platform restricts an account. Use before any LinkedIn outreach volume, when configuring account limits, or when an account shows a warning.
 metadata:
-  version: 0.3.0
-  pack: ai-sdr-core
-  category: protection
-  maturity: draft
-  status: active
-  owner: outbound-experts
-  tags: [linkedin, limits, pacing, protection]
-  tools: []
-  api: []
-  relations:
-    depends-on: [sdr-operations]
-    recommends: [campaign-launch, approval-boundaries, sending-guardrails]
+  status: draft
 ---
 
 # LinkedIn guardrails

@@ -1,24 +1,8 @@
 ---
 name: campaign-launch
-description: >
-  Prepare and launch an outreach campaign with every precondition checked and the user's
-  explicit approval of what will actually be sent. Covers sending capability, step content,
-  schedule, the test send, validation, enrolment and the go-live gate. Use when the user wants
-  to create or start a campaign, add contacts to one, or begin sending — including when they
-  call it a sequence, a cadence or a drip.
+description: Prepare and launch an outreach campaign with every precondition checked and the user's explicit approval of what will actually be sent. Covers sending capability, step content, schedule, the test send, validation, enrolment and the go-live gate. Use when the user wants to create or start a campaign, add contacts to one, or begin sending — including when they call it a sequence, a cadence or a drip.
 metadata:
-  version: 3.0.0
-  pack: ai-sdr-core
-  category: strategy
-  maturity: draft
-  status: active
-  owner: outbound-experts
-  tags: [campaigns, launch, sending, cadence]
-  tools: []
-  api: []
-  relations:
-    depends-on: [sdr-operations, approval-boundaries]
-    recommends: [campaign-planning, audience-building, sending-guardrails, linkedin-guardrails, performance-analysis]
+  status: draft
 ---
 
 # Campaign launch

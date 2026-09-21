@@ -1,25 +1,8 @@
 ---
 name: sdr-operations
-description: >
-  The vendor-neutral contract of SDR business operations — 325 named atomic operations in 21
-  families, from finding and verifying a person, through campaigns, steps, enrolment and
-  conversations, to consent, oversight and measurement. Each one is fixed by five properties:
-  what it reaches, whether it can be undone, what approval it needs, what to read before
-  repeating it, and what it costs. Use when planning any outbound or inbound sales development
-  work, when writing a plan another agent or person must execute, when deciding whether a step
-  needs the user's approval, or before reaching for a provider-specific execution skill.
+description: The vendor-neutral contract of SDR business operations — 325 named atomic operations in 21 families, from finding and verifying a person, through campaigns, steps, enrolment and conversations, to consent, oversight and measurement. Each one is fixed by five properties: what it reaches, whether it can be undone, what approval it needs, what to read before repeating it, and what it costs. Use when planning any outbound or inbound sales development work, when writing a plan another agent or person must execute, when deciding whether a step needs the user's approval, or before reaching for a provider-specific execution skill.
 metadata:
-  version: 2.0.0
-  pack: ai-sdr-core
-  category: operations
-  maturity: draft
-  status: active
-  owner: skills-maintainers
-  tags: [contract, operations, vocabulary, lexicon, vendor-neutral]
-  tools: []
-  api: []
-  relations:
-    recommends: [approval-boundaries, campaign-planning]
+  status: draft
 ---
 
 # SDR business operations

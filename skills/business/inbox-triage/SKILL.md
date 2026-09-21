@@ -1,23 +1,8 @@
 ---
 name: inbox-triage
-description: >
-  Work the inbound replies: surface the conversations that matter first, give the user
-  compact thread context, draft responses together, send only what was explicitly approved,
-  and record the outcome of each conversation. Use when the user asks about replies, inbox
-  triage, responding to prospects, or finding the interested leads.
+description: Work the inbound replies: surface the conversations that matter first, give the user compact thread context, draft responses together, send only what was explicitly approved, and record the outcome of each conversation. Use when the user asks about replies, inbox triage, responding to prospects, or finding the interested leads.
 metadata:
-  version: 3.0.0
-  pack: ai-sdr-core
-  category: strategy
-  maturity: draft
-  status: active
-  owner: outbound-experts
-  tags: [inbox, replies, triage, dispositions]
-  tools: []
-  api: []
-  relations:
-    depends-on: [sdr-operations, approval-boundaries]
-    recommends: [performance-analysis, campaign-launch]
+  status: draft
 ---
 
 # Inbox triage

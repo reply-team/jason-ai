@@ -1,23 +1,8 @@
 ---
 name: campaign-planning
-description: >
-  Turn a vague outbound goal into an executable plan: clarify the objective until success is
-  observable, surface the constraints that shape it, compose the work from known operations
-  and playbooks, and decide the checkpoints. Use when the user states a business goal — book
-  meetings, launch a campaign, grow pipeline — rather than a single concrete action.
+description: Turn a vague outbound goal into an executable plan: clarify the objective until success is observable, surface the constraints that shape it, compose the work from known operations and playbooks, and decide the checkpoints. Use when the user states a business goal — book meetings, launch a campaign, grow pipeline — rather than a single concrete action.
 metadata:
-  version: 2.2.0
-  pack: ai-sdr-core
-  category: strategy
-  maturity: draft
-  status: active
-  owner: outbound-experts
-  tags: [planning, decomposition, strategy, checkpoints]
-  tools: []
-  api: []
-  relations:
-    depends-on: [sdr-operations]
-    recommends: [approval-boundaries, audience-building, campaign-launch, inbox-triage, performance-analysis, sending-guardrails, linkedin-guardrails, durable-work]
+  status: draft
 ---
 
 # Campaign planning

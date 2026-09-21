@@ -1,24 +1,8 @@
 ---
 name: audience-building
-description: >
-  Turn raw prospect data into a clean, deliberately-shaped audience: decide who belongs, source
-  or import the people, state how two records become one person, check what is actually reachable,
-  and freeze the result into a list a campaign can address. Use when the user wants to import
-  contacts, find or build an audience, extend a list, define a segment, or asks what to do about
-  duplicates and messy data.
+description: Turn raw prospect data into a clean, deliberately-shaped audience: decide who belongs, source or import the people, state how two records become one person, check what is actually reachable, and freeze the result into a list a campaign can address. Use when the user wants to import contacts, find or build an audience, extend a list, define a segment, or asks what to do about duplicates and messy data.
 metadata:
-  version: 3.0.0
-  pack: ai-sdr-core
-  category: strategy
-  maturity: draft
-  status: active
-  owner: outbound-experts
-  tags: [audience, icp, segmentation, lists, data-quality]
-  tools: []
-  api: []
-  relations:
-    depends-on: [sdr-operations]
-    recommends: [campaign-launch, sending-guardrails, approval-boundaries]
+  status: draft
 ---
 
 # Audience building
