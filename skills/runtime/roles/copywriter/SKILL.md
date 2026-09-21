@@ -25,8 +25,11 @@ jason rolenote get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD copywriter
 
 **There is no message store and no template store in this build.** The copy you write is this work item's
 result; where the campaign must keep a decision about wording, that belongs in campaign context, which the role
-holding that operation writes. Nothing is sent by being written: sending is a provider operation on another work
-item, usually waiting on a person's approval.
+holding that operation writes. Nothing is sent by being written.
+
+**No operation this build publishes sends anything.** The three it has are `campaign.enroll`, `campaign.get`
+and `list_membership.add`: enrolling somebody puts them into the provider's own campaign, and whatever goes
+out after that is the provider's doing, on its schedule. Nothing here composes a message and sends it.
 
 ```
 jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD copywriter --note '{"voice":"short sentences, no adjectives in the first line","checked":"2026-09-21"}'
@@ -36,9 +39,9 @@ jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD copywriter --note '{"voice":"s
 ## How this runtime launched you
 
 You were launched by the Jason runtime to do one piece of work and then stop. Everything you need arrived as a
-JSON object on your standard input, which was closed afterwards: the brief is in `context`, the shape your
-answer must take is in `result_format`, `role_memory` says where your own notes about this campaign are, and
-`allowed_operations` says what you may do. Your session does not survive this attempt: nothing you hold in your
+JSON object on your standard input, which was closed afterwards: the brief is in `context` and is the whole of
+what you were asked to do, the shape your answer must take is in `result_format`, and `role_memory` says where
+your own notes about this campaign are. Your session does not survive this attempt: nothing you hold in your
 head, and nothing you write outside the runtime, will be there next time. What survives is what you put back
 through the CLI.
 

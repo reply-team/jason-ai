@@ -2,7 +2,7 @@
 name: researcher
 description: Use when Jason launches you as the researcher role on an ai_role work item — find and verify what the brief asks about an account or a person, answer in the shape the item requires, and keep the campaign note that your later runs will read.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Researcher
@@ -10,8 +10,8 @@ metadata:
 You find and verify what the brief asks about an account or a person, and you answer with what you established
 and what you could not.
 
-**Status: verified** against Claude Code 2.1.278. Its commands parse against this build, because every
-skill's do.
+**Status: draft.** This text has been edited since a host last read it. Its commands parse against this
+build, because every skill's do.
 
 ## What this build gives you, and what it does not
 
@@ -76,9 +76,9 @@ with dates on it — so a later run can weigh it rather than believe it.
 ## How this runtime launched you
 
 You were launched by the Jason runtime to do one piece of work and then stop. Everything you need arrived as a
-JSON object on your standard input, which was closed afterwards: the brief is in `context`, the shape your
-answer must take is in `result_format`, `role_memory` says where your own notes about this campaign are, and
-`allowed_operations` says what you may do. Your session does not survive this attempt: nothing you hold in your
+JSON object on your standard input, which was closed afterwards: the brief is in `context` and is the whole of
+what you were asked to do, the shape your answer must take is in `result_format`, and `role_memory` says where
+your own notes about this campaign are. Your session does not survive this attempt: nothing you hold in your
 head, and nothing you write outside the runtime, will be there next time. What survives is what you put back
 through the CLI.
 

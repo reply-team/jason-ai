@@ -92,8 +92,14 @@ public class LaunchContractTests
         foreach (var role in SkillPack.All().Where(skill => skill.IsRole))
         {
             var text = File.ReadAllText(role.File);
-            Assert.Equal(1, Occurrences(text, LaunchContract.Begin));
-            Assert.Equal(1, Occurrences(text, LaunchContract.End));
+            foreach (var marker in new[] { LaunchContract.Begin, LaunchContract.End })
+            {
+                var found = Occurrences(text, marker);
+                Assert.True(
+                    found == 1,
+                    $"'{role.File}' carries {marker} {found} times. One block per file: a second one is read by "
+                    + "no guard here, which is the quiet way a correction lands in a file and changes nothing.");
+            }
         }
     }
 

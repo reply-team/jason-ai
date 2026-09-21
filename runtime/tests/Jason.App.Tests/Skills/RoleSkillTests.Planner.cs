@@ -12,8 +12,15 @@ public partial class RoleSkillTests
         // write its horizon where nothing reads it instead of into work items a dispatcher will claim.
         Assert.Contains("There is no plan object in this build", skill, StringComparison.Ordinal);
 
-        // And what it may actually do is not a property of the role but of this item's envelope.
-        Assert.Contains("allowed_operations", skill, StringComparison.Ordinal);
+        // Where the decision to create work comes from. The sentence that was here read it out of an
+        // `allowed_operations` list, which no planner item carries: the literal reading was "never create
+        // work", in the one section that exists to be honest about what this build does and does not have.
+        // Pinned as a sentence rather than as the token, because the token also appears in the shared launch
+        // contract, so the guard stayed green while the rule it was guarding was replaced.
+        Assert.Contains(
+            "Whether you create the work or only describe it comes from the brief",
+            skill,
+            StringComparison.Ordinal);
 
         CarriesTheLaunchContract("planner");
     }

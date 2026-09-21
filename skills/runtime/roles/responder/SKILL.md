@@ -25,9 +25,12 @@ jason workitem list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-A reply you draft is this work item's result. Sending it is a provider operation on another work item, and if
-the person asked not to be contacted again, that is a suppression somebody with that operation records — say so
-in your answer rather than acting on it yourself.
+A reply you draft is this work item's result. If the person asked not to be contacted again, that is a
+suppression somebody with that operation records — say so in your answer rather than acting on it yourself.
+
+**No operation this build publishes sends anything.** The three it has are `campaign.enroll`, `campaign.get`
+and `list_membership.add`: enrolling somebody puts them into the provider's own campaign, and whatever goes
+out after that is the provider's doing, on its schedule. Nothing here composes a message and sends it.
 
 ```
 jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD responder --note '{"pattern":"most replies here are forwarding to a colleague","checked":"2026-09-21"}'
@@ -37,9 +40,9 @@ jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD responder --note '{"pattern":"
 ## How this runtime launched you
 
 You were launched by the Jason runtime to do one piece of work and then stop. Everything you need arrived as a
-JSON object on your standard input, which was closed afterwards: the brief is in `context`, the shape your
-answer must take is in `result_format`, `role_memory` says where your own notes about this campaign are, and
-`allowed_operations` says what you may do. Your session does not survive this attempt: nothing you hold in your
+JSON object on your standard input, which was closed afterwards: the brief is in `context` and is the whole of
+what you were asked to do, the shape your answer must take is in `result_format`, and `role_memory` says where
+your own notes about this campaign are. Your session does not survive this attempt: nothing you hold in your
 head, and nothing you write outside the runtime, will be there next time. What survives is what you put back
 through the CLI.
 
