@@ -4,15 +4,24 @@ using Jason.Cli.Tests.Process;
 namespace Jason.Cli.Tests.Documentation;
 
 /// <summary>
-/// Everything this repository teaches somebody to type, typed. The skill an agent reads and the walkthrough a
-/// person follows both print commands, and a command that stopped existing — renamed, moved under a different
-/// noun, given a required option — would leave both of them quietly wrong. So every printed command is handed
-/// to the real parser here: not executed against anything, only parsed, and a usage error is a failed test.
+/// The walkthrough a person follows, typed. A command that stopped existing — renamed, moved under a
+/// different noun, given a required option — would leave the page quietly wrong, so every printed command is
+/// handed to the real parser here: not executed against anything, only parsed, and a usage error is a failed
+/// test.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The check is "does this CLI understand it", which is exactly what exit code 2 answers. A command that parses
 /// and then cannot reach a runtime answers 3 instead, and that is a pass: what is being guarded is the spelling
 /// of the vocabulary, not whether a runtime happens to be running while the tests are.
+/// </para>
+/// <para>
+/// The skills pack used to be guarded here too, three files named one by one. It moved to
+/// <c>Jason.App.Tests</c> and is enumerated there instead: a skill may print a line the CLI never sees —
+/// <c>runtime run</c> is answered by the runtime service before the CLI is reached — and a guard that knew
+/// only this library would call such a line a usage error. What stays here is the page, which types nothing
+/// the CLI does not answer.
+/// </para>
 /// </remarks>
 [Collection(WorkingDirectoryCollection.Name)]
 public class DocumentedCommandsTests
@@ -20,50 +29,15 @@ public class DocumentedCommandsTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task Every_command_the_skill_prints_is_a_command_this_cli_parses() =>
-        await AssertEveryCommandParsesAsync(Page("Skills", "runtime", "managed-campaign-work", "SKILL.md"));
-
-    [Fact]
     public async Task Every_command_the_walkthrough_prints_is_a_command_this_cli_parses() =>
         await AssertEveryCommandParsesAsync(Page("Documentation", "golden-path.md"));
-
-    /// <summary>
-    /// The role skill is read by a launched agent that has no way to ask what a command should have been: a
-    /// wrong spelling there is a refused callback in the middle of somebody's paid attempt.
-    /// </summary>
-    [Fact]
-    public async Task Every_command_the_role_skill_prints_is_a_command_this_cli_parses() =>
-        await AssertEveryCommandParsesAsync(Page("Skills", "runtime", "roles", "researcher", "SKILL.md"));
-
-    /// <summary>
-    /// The manager's skill prints more verbs than any other page here, and the manager reads it in the middle
-    /// of a review it was launched for — where a wrong spelling is a refused callback on a paid attempt.
-    /// </summary>
-    [Fact]
-    public async Task Every_command_the_manager_skill_prints_is_a_command_this_cli_parses() =>
-        await AssertEveryCommandParsesAsync(Page("Skills", "runtime", "roles", "manager", "SKILL.md"));
-
-    [Fact]
-    public void The_skill_says_what_it_is_and_does_not_oversell_it()
-    {
-        var skill = File.ReadAllText(Page("Skills", "runtime", "managed-campaign-work", "SKILL.md"));
-
-        // An honest status, because a first draft that called itself finished would be the one claim in it a
-        // reader could not check.
-        Assert.Contains("status: draft", skill, StringComparison.Ordinal);
-
-        // And no promise the product does not make: no provider is configured out of the box, and the skill has
-        // to say a route is somebody's explicit act rather than assume one exists.
-        Assert.Contains("route", skill, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("out of the box", skill, StringComparison.OrdinalIgnoreCase);
-    }
 
     /// <summary>
     /// The machine these lines are typed against. Nothing here may act on it: the data directory is this
     /// test's own and holds no descriptor, the one command that would start a runtime is handed a process
     /// table that launches nothing, and the one that would register something at logon is handed a registrar
-    /// that records rather than registers — the day a skill prints <c>jason runtime autostart enable</c>, this
-    /// guard types it for real on a developer's machine and on three CI runners.
+    /// that records rather than registers — the day the walkthrough prints that verb, this guard types it for
+    /// real on a developer's machine and on three CI runners.
     /// </summary>
     internal static CliEnvironment Machine(TempPaths dir, StringWriter error) =>
         new(

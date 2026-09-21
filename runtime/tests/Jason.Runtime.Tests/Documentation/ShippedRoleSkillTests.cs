@@ -256,20 +256,9 @@ public partial class ShippedRoleSkillTests
         }
     }
 
-    /// <summary>
-    /// An honest status, the way the other shipped skill carries one. A first draft that called itself
-    /// finished would be the one claim in it a reader could not check.
-    /// </summary>
-    [Fact]
-    public void Every_shipped_role_skill_says_what_it_is()
-    {
-        foreach (var pack in Directory.GetDirectories(RoleSkillsPack()))
-        {
-            var file = Path.Combine(pack, WorkDirectory.SkillFile);
-            Assert.Equal("draft", FrontMatter(file, "status"));
-            Assert.False(string.IsNullOrWhiteSpace(FrontMatter(file, "description")), $"'{file}' describes nothing.");
-        }
-    }
+    // An honest status and a description that says what the skill is for are asserted over the whole pack,
+    // interactive skills and roles alike, by SkillPackTests in Jason.App.Tests: this project's own reader
+    // knows only what the launcher reads, which is the name.
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex Whitespace();
