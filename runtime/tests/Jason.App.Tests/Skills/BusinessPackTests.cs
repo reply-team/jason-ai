@@ -172,6 +172,63 @@ public class BusinessPackTests
         }
     }
 
+    [Fact]
+    public void Every_business_skill_is_in_the_catalog_and_every_entry_is_a_skill()
+    {
+        var catalog = File.ReadAllText(SkillPack.BusinessCatalog());
+        var linked = PackCatalog.Links(catalog).ToList();
+
+        foreach (var skill in SkillPack.Business())
+        {
+            var link = Path.GetRelativePath(SkillPack.BusinessRoot(), skill.File).Replace('\\', '/');
+            Assert.True(
+                linked.Contains(link, StringComparer.Ordinal),
+                $"'{skill.Name}' is a skill in this pack and the catalog does not link it as '{link}'. "
+                + $"The catalog links: {string.Join(", ", linked)}");
+        }
+
+        foreach (var link in linked)
+        {
+            Assert.True(
+                File.Exists(Path.Combine(SkillPack.BusinessRoot(), link)),
+                $"The catalog links '{link}', and there is no skill there.");
+        }
+    }
+
+    /// <summary>
+    /// A digest in a catalog records that a named host read an exact body. Nothing here has been read, so a
+    /// row carrying one would be a claim about a reading that never happened.
+    /// </summary>
+    [Fact]
+    public void No_catalog_row_records_a_reading_that_never_happened()
+    {
+        Assert.DoesNotContain("sha256:", File.ReadAllText(SkillPack.BusinessCatalog()), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// This pack prints no <c>jason</c> commands: it teaches provider-neutral operations, and its nine skills
+    /// carry no fenced block at all. The guard is here for the day one appears — if a text prints a command,
+    /// the command has to be real — and it is proven by a probe, because a guard over an empty set proves
+    /// nothing by passing.
+    /// </summary>
+    /// <remarks>
+    /// The line is typed through the runtime pack's own path, which holds four seams: its own data directory,
+    /// a process table that launches nothing, a release feed that throws, and no autostart registrar, which
+    /// production answers with a refusal. The business pack inherits all four by using that method rather than
+    /// a second copy of it.
+    /// </remarks>
+    [Fact]
+    public async Task Any_jason_command_this_pack_prints_is_a_real_one()
+    {
+        foreach (var skill in SkillPack.Business())
+        {
+            foreach (var command in SkillPack.PrintedCommands(skill.File))
+            {
+                await DocumentedSkillCommandsTests.AssertUnderstoodAsync(command, skill.File);
+            }
+        }
+    }
+
     private static IEnumerable<string> Files() =>
         Directory.EnumerateFiles(SkillPack.BusinessRoot(), "*", SearchOption.AllDirectories);
 }

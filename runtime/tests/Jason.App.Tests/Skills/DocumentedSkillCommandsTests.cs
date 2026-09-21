@@ -57,7 +57,14 @@ public class DocumentedSkillCommandsTests
     public async Task The_version_mode_answers_the_bare_line_and_nothing_longer() =>
         await AssertUnderstoodAsync("jason --version", "this test");
 
-    private static async Task AssertUnderstoodAsync(string command, string source)
+    /// <summary>
+    /// Typed at this program, with four seams in place: its own data directory, a process table that launches
+    /// nothing, a release-feed handler that throws, and no autostart registrar at all — which production
+    /// answers with a refusal. Internal because the business pack's guard types its lines through this same
+    /// method: a second copy with its own environment is how a documentation guard starts a process on three
+    /// CI runners.
+    /// </summary>
+    internal static async Task AssertUnderstoodAsync(string command, string source)
     {
         // The splitter drops the program's own name, so what is left is what the program is handed — which
         // is what ModeRouter reads to decide which of its modes answers at all.
