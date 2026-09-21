@@ -211,7 +211,7 @@ Conversations contain personal data; keep quotes to what the decision requires. 
   a playbook, and the skill now says so. Reply-strategy gaps remain marked for expert
   validation.
 - 2.0.0 (2026-07-30): renamed from `manage-replies` and rewritten vendor-neutral for the
-  `ai-sdr-core` pack — Reply inbox endpoints and scopes moved to `reply-operations-mapping`.
+  business pack — provider inbox endpoints and scopes moved out to the provider's own skills.
   Reply-strategy gaps marked for expert validation; safety now defers to
   `approval-boundaries`.
 - 1.0.0 (2026-07-27): ported from the prototype workflow as `manage-replies`.

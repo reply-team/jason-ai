@@ -349,7 +349,7 @@ reports or logs beyond what the outcome requires.
   useless at the same time. Sourcing is still out of scope — the four routes to it are now
   in scope, and refusing without them is listed as a failure mode.
 - 2.0.0 (2026-07-30): renamed from `import-prospects` and rewritten vendor-neutral for the
-  `ai-sdr-core` pack — Reply endpoint and CLI detail moved to `reply-operations-mapping` in
-  the adapter pack. Scope widened from "import a file" to "shape an audience": segment
+  business pack — provider endpoint and CLI detail moved out to the provider's own skills.
+  Scope widened from "import a file" to "shape an audience": segment
   definition, exclusions, suppression and consent added; expert judgement calls marked.
 - 1.0.0 (2026-07-27): ported from the prototype workflow as `import-prospects`.

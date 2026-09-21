@@ -278,7 +278,7 @@ send it is.
   skill has been validated, and naming the operation a number will live in is not the same as
   having the number.
 - 0.2.0 (2026-07-30): renamed from `email-deliverability` and made vendor-neutral for the
-  `ai-sdr-core` pack — Reply endpoints moved to `reply-operations-mapping`. Reframed as a
+  business pack — provider endpoints moved out to the provider's own skills. Reframed as a
   constraint on planning rather than a workflow step; safety now defers to
   `approval-boundaries`. Still an expert skeleton: no threshold has been validated.
 - 0.1.0 (2026-07-27): expert skeleton — structure and safety posture.

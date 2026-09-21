@@ -42,10 +42,13 @@ this knowledge and the runtime guidance. It moved here at commit `cce5812`, byte
 SHA-256 matched its source — and four things were then changed in the open, each in its own commit:
 
 - **The front matter is normalised on import.** A skill here declares `name`, a one-line `description`, and
-  `metadata.status`, and nothing else. The source's `version`, `pack`, `category`, `maturity` and `relations`
-  keys are **not** carried, and folded descriptions are unfolded onto one line. Three readers parse this front
-  matter and none of them is a YAML parser. *If you re-sync this pack from upstream, normalise it again* —
-  otherwise four keys come back and the pack's guards fail for reasons that are hard to reconstruct. The
+  `metadata.status`, and **nothing else** — that is the rule, and it is what the guards enforce, so read it as
+  the rule rather than as the list below. What the source carried under `metadata` was ten keys, all ten on all
+  nine skills: `version`, `pack`, `category`, `maturity`, `status` (whose value there was `active`, a third
+  meaning for a key that has two here), `owner`, `tags`, `tools`, `api` and `relations`. Only `status` survives,
+  as `draft`. Folded descriptions are unfolded onto one line as well: three readers parse this front matter and
+  none of them is a YAML parser. *If you re-sync this pack from upstream, normalise it again* — otherwise nine
+  keys come back and the pack's guards fail for a reason that is hard to reconstruct from the failure. The
   removed values stay readable at the source commit named above.
 - **Pointers to packs this repository does not ship were re-pointed**, not deleted: sentences that explained
   where plans and work items live now say that this runtime owns them, and that where no runtime is installed

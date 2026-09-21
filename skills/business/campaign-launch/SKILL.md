@@ -284,7 +284,7 @@ different gate from anything on this page. Full rules: `approval-boundaries`.
   the contract ships no cadence figures at all, which is why the message-strategy markers remain
   open rather than being resolvable by lookup.
 - 2.0.0 (2026-07-30): renamed from `launch-outreach` and rewritten vendor-neutral for the
-  `ai-sdr-core` pack — Reply endpoints, scopes and CLI calls moved to
-  `reply-operations-mapping`. Safety rules now defer to `approval-boundaries` rather than
+  business pack — provider endpoints, scopes and CLI calls moved out to the provider's own
+  skills. Safety rules now defer to `approval-boundaries` rather than
   restating them; message-strategy gaps marked for expert validation.
 - 1.0.0 (2026-07-27): ported from the prototype workflow as `launch-outreach`.

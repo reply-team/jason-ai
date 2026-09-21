@@ -206,7 +206,7 @@ email and less forgiving. Full rules: `approval-boundaries`.
   one gap rather than inventing a name for it: the contract names no invitation-acceptance
   measure. No pacing number was validated or invented: every expert marker survives untouched.
 - 0.2.0 (2026-07-30): renamed from `linkedin-safety` and made vendor-neutral for the
-  `ai-sdr-core` pack — Reply endpoints moved to `reply-operations-mapping`. Framed as a
+  business pack — provider endpoints moved out to the provider's own skills. Framed as a
   channel instance of a general posture; safety defers to `approval-boundaries`. Still an
   expert skeleton: no pacing number has been validated.
 - 0.1.0 (2026-07-27): expert skeleton — structure and safety posture.

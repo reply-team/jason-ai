@@ -233,7 +233,7 @@ gated for that reason, not for its cost. Full rules: `approval-boundaries`.
   invariants rather than restated advice, and states what the contract does not cover. Every
   benchmark band and all three expert markers are unchanged.
 - 2.0.0 (2026-07-30): renamed from `analyze-performance` and rewritten vendor-neutral for the
-  `ai-sdr-core` pack — Reply reporting endpoints and scopes moved to
-  `reply-operations-mapping`. Diagnostic method and heuristic bands preserved; open-rate
+  business pack — provider reporting endpoints and scopes moved out to the provider's own
+  skills. Diagnostic method and heuristic bands preserved; open-rate
   caveat added; every benchmark explicitly marked for expert validation.
 - 1.0.0 (2026-07-27): ported from the prototype workflow as `analyze-performance`.

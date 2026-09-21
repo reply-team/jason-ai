@@ -431,9 +431,9 @@ was left unprocessed. A report that shows approvals is what makes an autonomous 
 
 ## Safety
 
-This skill *is* the safety layer for the operation contract, and it ships inside `ai-sdr-core`
-for exactly that reason: guardrails must not be an optional extra that a selective install can
-leave out. It states no threshold and no product mechanism of its own — the classes it applies
+This skill *is* the safety layer for the operation contract, and it ships in the same pack as the
+contract for exactly that reason: guardrails must not be an optional extra that a selective install
+can leave out. It states no threshold and no product mechanism of its own — the classes it applies
 are derived in the contract, and where this skill and `sdr-operations` disagree the contract
 wins and the disagreement is a defect to fix here. Weakening a rule here weakens every workflow
 that relies on it, so such changes need review by the owning group, not a quick edit.
