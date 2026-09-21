@@ -1,0 +1,329 @@
+# The SDR business operations contract — family register and fragment schema.
+#
+# This directory is the source of truth for the contract. Every normative table in this skill,
+# and every mapping table in a provider adapter, is generated from these files. Edit here, then
+# regenerate. Never edit a generated markdown table.
+#
+# ---------------------------------------------------------------------------------------------
+# FRAGMENT SCHEMA — one file per family, named NN-<slug>.yaml
+# ---------------------------------------------------------------------------------------------
+#
+#   family: 8                      # must match the NN in the filename
+#   operations:
+#     - name: campaign.enroll      # entity.verb — two segments, singular snake_case entity,
+#                                  # single-word imperative verb. Globally unique.
+#       core: true                 # one of the 30 kept in front of the agent at all times
+#       intent: >                  # what it is for, in the practitioner's words
+#       reach: act                 # read | control | act
+#       reversibility: compensatable
+#       approval: confirm_once     # auto | confirm_once | confirm_each
+#       approval_artefact: preview # when the approval is carried by an artefact rather than a prompt
+#       approval_departs: false    # true when the value RAISES above the derivation table below
+#       protective_floor: false    # true for the one legitimate LOWERING: an operation whose
+#                                  # non-performance is itself the harm. Requires approval `auto`
+#                                  # and a reason, and the build refuses it where the table already
+#                                  # derives auto — so the floor is a checked set rather than a
+#                                  # phrase somebody remembered to write in a reason.
+#       approval_reason: >         # REQUIRED for either
+#       before_repeating: >        # the observable state to read before running it again
+#       idempotency_key: required  # required | none | conditional
+#       key_exempt: absolute_valued # REQUIRED on a collection write that takes no key:
+#                                  # absolute_valued | terminal_state | unstated. The first two are
+#                                  # the shapes a repeat is harmless for; `unstated` is for the rows
+#                                  # where the source declares no key and gives no reason, and it is
+#                                  # carried visibly rather than justified by invention.
+#       accepts_collection: false  # ONLY on an operation that carries exactly one object.
+#                                  # Defaults to true, because absence must read as the dangerous
+#                                  # value. A key and a per-item report answer different questions:
+#                                  # a key is required on four independent grounds, and only one of
+#                                  # them is "accepts a collection". Saying an operation returns no
+#                                  # per-item report is therefore a positive assertion about its
+#                                  # arity, not an inference from its key.
+#       per_item_results: required # required | not_applicable | conditional
+#       cost: none                 # none | metered
+#       cost_basis: >              # REQUIRED when cost is metered — a basis, never a price
+#       meter: message             # the meter consumed, from the register below. A list where one
+#                                  # call buys two different things — `[reveal, enrichment]` — so
+#                                  # that both legs stay machine-readable and the preview can
+#                                  # project each of them separately, rather than one of them
+#                                  # surviving only as prose inside the basis.
+#       questions: [4]             # open-question numbers this operation is unsettled by
+#
+# A fragment does NOT list the invariants an operation is bound by. Each rule in
+# references/invariants.md already names the operations that enforce it, so the binding is
+# derived by inverting those lists — one statement, no second copy to drift, and an operation
+# named by a rule that does not exist in the contract is a build failure rather than a ghost
+# reference nobody notices.
+#
+# ABSENCE IS NOT A DEFAULT. A missing property reads as the most dangerous value:
+# reach `act`, reversibility `irreversible`, approval `confirm_each`, cost `metered`. Nothing is
+# left blank because it seemed obvious.
+#
+# ---------------------------------------------------------------------------------------------
+# CONDITIONAL PROPERTIES
+# ---------------------------------------------------------------------------------------------
+#
+# reach, reversibility, approval and cost may each be a scalar OR a conditional block, because
+# some operations genuinely change class with state — enrolling into a draft campaign is
+# bookkeeping, enrolling into a live one is an act:
+#
+#       reach:
+#         value: act               # what the machine reasons with — ALWAYS the more dangerous side
+#         conditional: true
+#         detail: >
+#           bookkeeping while the campaign is not live, `act` the moment it is; resolved by the
+#           preview
+#
+# `value` is the dangerous reading and `detail` is what the agent reads. Every derivation check,
+# the approval table and the idempotency rule run against `value`, so a conditional can never
+# soften a gate. A conditional without `detail` is an error.
+#
+# ---------------------------------------------------------------------------------------------
+# THE DERIVATION TABLE — approval follows from reversibility x reach
+# ---------------------------------------------------------------------------------------------
+#
+#              | reversible     | compensatable  | irreversible
+#   -----------|----------------|----------------|---------------------------------------------
+#   read       | auto           | auto           | auto
+#   control    | auto           | auto*          | confirm_once
+#   act        | confirm_once+p | confirm_once+p | confirm_each, or confirm_once+p where one call
+#              |                |                | is one decision over a set
+#
+#   * confirm_once where the call carries a collection or a pattern, or may overwrite state
+#     someone else owns.
+#   +p = with a mandatory preview naming the population, not counting it.
+#
+# Policy may raise the class; nothing may lower it. Every raise sets approval_departs: true and
+# states approval_reason at the operation.
+#
+# THE PROTECTIVE FLOOR, which is not a lowering: an operation whose non-performance is itself the
+# harm — stopping sending, recording that somebody said stop, opening a privacy request, recording
+# an event that already happened outside our control — derives `auto` whatever its reversibility.
+# Waiting for permission to stop is the destructive choice. The restart direction of every such
+# pair is never `auto`.
+#
+# ---------------------------------------------------------------------------------------------
+# THE TWO STANDING OBLIGATIONS
+# ---------------------------------------------------------------------------------------------
+#
+# 1. An idempotency key is required on every operation with reach `act`, on every write accepting
+#    a collection, on every write creating a durable object, and on every metered operation —
+#    including metered reads, because a lost result there costs real money to obtain again.
+#    Two shapes take no key, because replaying them is harmless by construction: a policy setter
+#    written as an absolute value ("the ceiling is 400", never "add 200"), and an operation naming a
+#    terminal state, which a repeat can only arrive at again. They declare which through
+#    `key_exempt`, and a collection write that declares neither fails the build. The `act` and
+#    metered grounds are enforced mechanically; "creates a durable object" is not a field and stays
+#    a reviewer's rule.
+# 2. Any operation accepting a collection returns one outcome per item, with the reason. A partial
+#    success reported as a single verdict is a defect.
+#
+# ---------------------------------------------------------------------------------------------
+# THE METERS
+# ---------------------------------------------------------------------------------------------
+#
+# Named conceptually. Which of them an account holds, and at what granularity it is charged, is an
+# account fact and not a contract fact. Every metered operation returns what it actually consumed,
+# including zero — "found nothing and was not charged" and "found nothing and was charged anyway"
+# are different facts and callers plan differently on each.
+
+contract_version: 2.0.0
+
+# Entity words this contract has retired. They are not aliases and they must never quietly resolve:
+# a sentence written today that says `sequence.activate` or `metrics.sequence` is naming something
+# that does not exist, and the reader deserves to be told so rather than have the token pass as
+# ordinary prose.
+#
+# This list exists because an entity set derived from the operations alone cannot see them. Both
+# words were renamed rather than dropped — `sequence` became `campaign`, `metrics` collapsed into
+# `engagement` plus a grouping argument — so neither appears in any fragment, and without this
+# every stale reference to them would read as "not an operation reference at all" instead of as a
+# defect. It is kept after the migration for the same reason it was needed during it.
+retired_entities:
+  - name: sequence
+    became: campaign
+  - name: metrics
+    became: engagement, with the grouping as an argument rather than a separate operation
+
+# Names this contract deliberately does NOT define. They are listed because the contract sometimes
+# has to name an operation in order to say it does not exist — "there is no `consent.check`" is a
+# statement worth making, and it would otherwise read to a checker as a reference to a missing
+# operation.
+#
+# Declaring them here does two things a blanket exemption could not. Prose may name them without
+# the name-resolution check going blind to a genuine typo in the same file. And a name that appears
+# both here and in a fragment is a contradiction the build refuses — so if somebody later adds the
+# operation, the sentence claiming it does not exist cannot quietly survive.
+declared_absent:
+  - name: consent.check
+    instead: consent.prove, or outreach.precheck
+    because: >
+      A permission status with no evidence behind it is precisely the answer that cannot be used.
+
+meters:
+  - id: discovery
+    consumed_by: searching a database we do not own
+    typical_basis: per call, or per result returned
+  - id: reveal
+    consumed_by: taking ownership of a person found in someone else's database
+    typical_basis: per person revealed
+  - id: enrichment
+    consumed_by: buying named fields for a person or company we own
+    typical_basis: per field found, per source attempted
+  - id: verification
+    consumed_by: checking whether an address or number is reachable
+    typical_basis: per item checked
+  - id: monitoring
+    consumed_by: standing watch on a record for employer change
+    typical_basis: per record, per period
+  - id: message
+    consumed_by: sending, on channels that meter sending
+    typical_basis: per message, or per message unit
+  - id: call
+    consumed_by: dialling
+    typical_basis: per attempt and per connected minute
+  - id: profile_read
+    consumed_by: looking at a person on a channel that meters looking
+    typical_basis: per profile viewed
+  - id: signal
+    consumed_by: observations bought from a feed
+    typical_basis: per result returned
+  - id: screening
+    consumed_by: live screening against an external preference register
+    typical_basis: per identifier screened
+  - id: dataset
+    consumed_by: reputation signals from a paid dataset
+    typical_basis: per dataset queried
+  - id: content_generation
+    consumed_by: drafting a message rather than merging one
+    typical_basis: per call
+  - id: request
+    consumed_by: the installation's own call budget
+    typical_basis: per call made
+  - id: invitation
+    consumed_by: >
+      asking to connect on a channel that meters invitations, whether or not a note travels with the
+      ask
+    typical_basis: per invitation sent
+  - id: test
+    consumed_by: >
+      a deliverability or placement test run through a provider's own seed network, which costs
+      something to run and reaches nobody real
+    typical_basis: per test run
+  - id: registration
+    consumed_by: >
+      submitting a sender, a number or a channel for the approval a channel requires before it will
+      carry anything at all, where the channel charges to register
+    typical_basis: per registration submitted
+
+# `slug` fixes the generated filenames in every pack:
+#   this skill        -> references/catalog-NN-<slug>.md
+#   a provider adapter -> references/mapping-NN-<slug>.md
+# `area` is the reading order of the guide this contract was drafted from; it groups families for
+# a human scanning the index and has no normative force.
+families:
+  - id: 1
+    slug: discovery
+    title: Discovery, enrichment and verification
+    area: People and audience
+    operations: 12
+  - id: 2
+    slug: contacts
+    title: Contacts, identity and hygiene
+    area: People and audience
+    operations: 23
+  - id: 3
+    slug: audiences
+    title: Audience and lists
+    area: People and audience
+    operations: 16
+  - id: 4
+    slug: import
+    title: Import
+    area: People and audience
+    operations: 5
+  - id: 5
+    slug: campaigns
+    title: Campaign, schedule, windows and limits
+    area: The programme
+    operations: 26
+  - id: 6
+    slug: steps
+    title: Steps, content and content policy
+    area: The programme
+    operations: 18
+  - id: 7
+    slug: messages
+    title: Messages
+    area: The programme
+    operations: 5
+  - id: 8
+    slug: enrollment
+    title: Enrollment
+    area: The programme
+    operations: 7
+  - id: 9
+    slug: conversations
+    title: Conversations and activity
+    area: The conversation, the queue and the day
+    operations: 9
+  - id: 10
+    slug: tasks
+    title: Task queue and touches
+    area: The conversation, the queue and the day
+    operations: 12
+  - id: 11
+    slug: meetings
+    title: Meetings, qualification and handoff
+    area: The conversation, the queue and the day
+    operations: 17
+  - id: 12
+    slug: signals
+    title: Signals and triggers
+    area: The conversation, the queue and the day
+    operations: 10
+  - id: 13
+    slug: inbound
+    title: Inbound
+    area: The conversation, the queue and the day
+    operations: 11
+  - id: 14
+    slug: privacy
+    title: Consent, suppression and privacy
+    area: Permission and capability
+    operations: 23
+  - id: 15
+    slug: sending
+    title: Sending capability and deliverability
+    area: Permission and capability
+    operations: 34
+  - id: 16
+    slug: social
+    title: Social and messaging channels
+    area: Permission and capability
+    operations: 13
+  - id: 17
+    slug: oversight
+    title: Oversight, review and safety
+    area: The organisation around the work
+    operations: 32
+  - id: 18
+    slug: team
+    title: 'The team: people, ownership, workload and targets'
+    area: The organisation around the work
+    operations: 15
+  - id: 19
+    slug: accounts
+    title: Accounts and buying groups
+    area: The organisation around the work
+    operations: 12
+  - id: 20
+    slug: measurement
+    title: Measurement
+    area: The organisation around the work
+    operations: 10
+  - id: 21
+    slug: introspection
+    title: Introspection and runtime
+    area: The organisation around the work
+    operations: 15

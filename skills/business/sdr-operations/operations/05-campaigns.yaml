@@ -1,0 +1,478 @@
+# Family 5 — Campaign, schedule, windows and limits (26)
+#
+# Authoring a programme, deciding when it may send, how fast, and from what — and turning it on. A
+# campaign is never live on creation; activating one holding N enrolments is an act of magnitude N;
+# and every release of suppressed sending — activate, resume, unfreeze, blackout removal — is an act
+# whose preview names the backlog.
+#
+# Schema, the derivation table and the meters: families.yaml.
+
+family: 5
+
+operations:
+
+  - name: campaign.list
+    core: true
+    intent: >
+      "What is running?" — every campaign with its state and health: fine, not progressing, degraded,
+      blocked.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: campaign.get
+    core: true
+    intent: >
+      "Show me this campaign" — settings, senders, schedule and timezone policy, pacing, reply policy,
+      declared successor, and the count of people in each state.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: campaign.create
+    intent: >
+      "Start a new campaign" — always a draft; creating never sends and never arms anything.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: list campaigns for one already created under this key
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: campaign.clone
+    intent: >
+      "Build this one from the one that worked" — structure, steps, variants, schedule, pacing and
+      reply policy; never enrolments, history or results.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: a campaign already created under this key
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: campaign.update
+    intent: >
+      "Change the campaign's own settings" — name, owner, description, personalisation tier, declared
+      successor, and the exit rules that are not reply events.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: read the campaign; a setter is last-write-wins
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: reply_policy.set
+    intent: >
+      "What happens when they answer?" — one decision per event class, plus the window inside which a
+      reply is still attributed to this campaign.
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised above the derived auto: turning "stop on reply" off is how a campaign keeps writing to
+      somebody who already answered, which is simultaneously the rudest and the most reputationally
+      damaging thing an outbound programme can do. The operation is safe to repeat; the confirmation
+      is about the content of the decision, not the mechanics of the call.
+    before_repeating: the policy in force, from `campaign.get`
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: schedule.set
+    intent: >
+      "When may this campaign send?" — windows per day, timezone policy with its ordered fallback,
+      delay basis, out-of-window behaviour, attached blackout calendars.
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised above the derived auto, because a schedule change silently rewrites every future date in
+      the campaign.
+    before_repeating: >
+      the schedule in force, and re-resolve the calendar — the same authored delay is a different date
+      under a different basis.
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: pacing.set
+    intent: >
+      "Slow this campaign without slowing everything else on the same mailbox" — people admitted per
+      day and messages sent per day, plus minimum gap, jitter and cold-start ramp.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the pacing in force, from `campaign.get`
+    idempotency_key: none
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: sender_binding.set
+    intent: >
+      "Send this from these mailboxes, numbers or social accounts" — for a campaign or for named
+      participations.
+    reach:
+      value: act
+      conditional: true
+      detail: >
+        `control` for new entrants only; `act` where it rebinds live participations, because the
+        prospect sees a new From address mid-thread; resolved by the preview.
+    reversibility: compensatable
+    approval: confirm_once
+    approval_artefact: preview
+    approval_departs: false
+    before_repeating: the current bindings and the per-enrolment rebind ledger
+    idempotency_key: required
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: campaign.validate
+    intent: >
+      "Is this safe to turn on?" — missing or unpublished content, steps no sender can serve, a
+      schedule that never opens, no terminal condition, the count already enrolled, projected
+      first-24-hour volume, projected metered cost, whether the test send passed, and any successor
+      campaign.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      nothing at stake — validation is a report, and the gate is a human reading it.
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: [12]
+
+  - name: campaign.test
+    intent: >
+      "Let me receive step 1 myself, and click the unsubscribe link, before two hundred strangers do" —
+      only to addresses the workspace can demonstrate it owns.
+    reach: act
+    reversibility: irreversible
+    approval: confirm_each
+    approval_departs: false
+    before_repeating: >
+      the test ledger for this campaign, step and address; a timed-out test may already have arrived.
+    idempotency_key: required
+    per_item_results: required
+    cost: metered
+    cost_basis: per message
+    meter: message
+    questions: []
+
+  - name: campaign.activate
+    intent: >
+      "Turn it on"
+    reach:
+      value: act
+      conditional: true
+      detail: >
+        `act`, with magnitude equal to the enrolled population; `control` only where the campaign holds
+        no enrolments, and even then it arms the campaign so the next enrolment sends immediately.
+    reversibility: irreversible
+    approval: confirm_once
+    approval_artefact: preview
+    approval_departs: false
+    before_repeating: >
+      the campaign's live state and its first-touch ledger — an activation whose result was lost may
+      already be sending.
+    idempotency_key: required
+    per_item_results:
+      value: required
+      conditional: true
+      detail: when a collection is given.
+    cost: metered
+    cost_basis: per message released
+    meter: message
+    questions: []
+
+  - name: campaign.pause
+    core: true
+    intent: >
+      "Stop this campaign" — incident response: never requires a lookup first and never waits for
+      permission.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the campaign's state; pausing a paused campaign is a no-op, not an error.
+    idempotency_key:
+      value: required
+      conditional: true
+      detail: when a collection is given.
+    per_item_results: required
+    cost: none
+    questions: [9]
+
+  - name: campaign.resume
+    intent: >
+      "Start it sending again" — refuses unless it is actually paused.
+    reach: act
+    reversibility: irreversible
+    approval: confirm_once
+    approval_artefact: preview
+    approval_departs: false
+    before_repeating: >
+      the campaign's state and its first-touch ledger since the attempt.
+    idempotency_key: required
+    per_item_results:
+      value: required
+      conditional: true
+      detail: when a collection is given.
+    cost: metered
+    cost_basis: per message released
+    meter: message
+    questions: []
+
+  - name: campaign.freeze
+    intent: >
+      "Suspend it over the holidays, the conference, the incident" — carries a mandatory expiry and
+      resumes itself.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: >
+      the campaign's state and the freeze's expiry — freezing twice with different expiries is a
+      change, not a repeat.
+    idempotency_key: none
+    key_exempt: unstated
+    per_item_results:
+      value: required
+      conditional: true
+      detail: when a collection is given.
+    cost: none
+    questions: [9, 25]
+
+  - name: campaign.unfreeze
+    intent: >
+      "Let it go early"
+    reach: act
+    reversibility: irreversible
+    approval: confirm_once
+    approval_artefact: preview
+    approval_departs: false
+    before_repeating: >
+      the campaign's state and the first-touch ledger since the attempt.
+    idempotency_key: required
+    per_item_results:
+      value: required
+      conditional: true
+      detail: when a collection is given.
+    cost: metered
+    cost_basis: per message released
+    meter: message
+    questions: []
+
+  - name: campaign.archive
+    intent: >
+      "Retire it" — refused while active enrolments remain unless they are first stopped with a
+      reason.
+    reach: control
+    reversibility: compensatable
+    approval: confirm_once
+    approval_departs: false
+    before_repeating: the campaign's archived state
+    idempotency_key:
+      value: required
+      conditional: true
+      detail: when a collection is given.
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: campaign.unarchive
+    intent: >
+      "Bring it back into the working set" — never resumes sending.
+    reach: control
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: the campaign's archived state
+    idempotency_key:
+      value: required
+      conditional: true
+      detail: when a collection is given.
+    per_item_results: required
+    cost: none
+    questions: []
+
+  - name: schedule.resolve
+    intent: >
+      "Show me the actual calendar" — day by day, for a campaign or one person's participation,
+      including what a weekend, a holiday, a closed window or a deferral moved.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results:
+      value: required
+      conditional: true
+      detail: when a collection of enrolments is given.
+    cost: none
+    questions: []
+
+  - name: send_window.resolve
+    intent: >
+      "When may this person be contacted on this channel?" — legal quiet hours in their local time,
+      operator blackouts, working days, the campaign's windows, and the basis used for each.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results:
+      value: required
+      conditional: true
+      detail: when a collection of people is given.
+    cost: none
+    questions: []
+
+  # UNCLEAR: the raise to confirm_once is declared without a stated reason, so the reason below is
+  # the strongest one the rest of the contract carries rather than a transcription.
+  - name: blackout.define
+    intent: >
+      "Nothing goes out that week" — named date ranges and region-coded holiday calendars, each with
+      defer-or-skip and whose region applies.
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised above the derived auto: a blackout suppresses sending across every campaign its region
+      and date range cover, and defer-or-skip decides whether the touches it stops come back at all.
+      Lifting it again is itself a release of suppressed sending, so the range is agreed once, when it
+      is drawn.
+    before_repeating: list blackouts for one already created under this key
+    idempotency_key: required
+    per_item_results:
+      value: required
+      conditional: true
+      detail: when a collection of ranges is given.
+    cost: none
+    questions: []
+
+  - name: blackout.list
+    intent: >
+      "What is currently suppressing sending, and until when?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: blackout.remove
+    intent: >
+      "Lift the suppression"
+    reach:
+      value: act
+      conditional: true
+      detail: >
+        `act` where the removal exposes a window open now on a live campaign; `control` otherwise —
+        resolved by the preview.
+    reversibility:
+      value: irreversible
+      conditional: true
+      detail: irreversible in the act case, reversible otherwise.
+    approval: confirm_once
+    approval_artefact: preview
+    approval_departs: false
+    before_repeating: >
+      the blackout list and the first-touch ledger for the affected campaigns.
+    idempotency_key: required
+    per_item_results: required
+    cost: metered
+    cost_basis: per message released
+    meter: message
+    questions: []
+
+  - name: frequency_policy.define
+    intent: >
+      "Nobody hears from us more than this often" — max touches per person, account or domain per
+      window type; which message classes count and which are exempt; and whether a breach defers with
+      a date or skips.
+    reach: control
+    reversibility: reversible
+    approval: confirm_once
+    approval_departs: true
+    approval_reason: >
+      raised above the derived auto: the cap declared here is evaluated for every campaign, every
+      channel and every sender at once, and which message classes count has no default — a policy
+      written loosely either silences the answers people asked for or lets one person hear from us
+      three times in a day.
+    before_repeating: >
+      the policy in force; a second define under the same key must not create a second policy.
+    idempotency_key: required
+    accepts_collection: false
+    per_item_results: not_applicable
+    cost: none
+    questions: [11]
+
+  - name: frequency_policy.get
+    intent: >
+      "What cap is in force here, and where did it come from?"
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
+
+  - name: capacity.estimate
+    intent: >
+      "Can this plan physically run?" — sending capacity, windows, blackouts, pacing and existing load
+      over a stated horizon, against the volume the plan implies.
+    reach: read
+    reversibility: reversible
+    approval: auto
+    approval_departs: false
+    before_repeating: nothing at stake
+    idempotency_key: none
+    per_item_results: not_applicable
+    cost: none
+    questions: []
