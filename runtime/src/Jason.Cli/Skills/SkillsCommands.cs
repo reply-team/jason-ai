@@ -25,7 +25,91 @@ public static class SkillsCommands
 
         var command = new Command("skills", "Install and update the skills this build ships.");
         command.Subcommands.Add(Install(env));
+        command.Subcommands.Add(Update(env));
         return command;
+    }
+
+    /// <summary>
+    /// <c>jason skills update</c>: the act re-run against what the record says it was installed from.
+    /// </summary>
+    /// <remarks>
+    /// It takes no <c>--source</c> and no <c>--ref</c>, on purpose. An update is the same deployment repeated
+    /// rather than a second decision about where things come from: a verb that accepted both would let
+    /// somebody "update" a deployment into one from somewhere else, leaving a record saying it had always
+    /// been that way.
+    /// </remarks>
+    private static Command Update(CliEnvironment env)
+    {
+        var update = new Command("update", "Re-run the deployment against the source and ref its record names.");
+
+        var root = new Option<string?>("--root") { Description = "Update this directory as a harness root, instead of detection." };
+        var host = new Option<string?>("--host") { Description = "Update only this detected harness." };
+        var pack = new Option<string?>("--pack") { Description = "Update only this pack." };
+        var dryRun = new Option<bool>("--dry-run") { Description = "Print exactly what would be written where, and change nothing." };
+        var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept." };
+
+        foreach (var option in new Option[] { root, host, pack, dryRun, force })
+        {
+            update.Options.Add(option);
+        }
+
+        update.SetAction((parse, cancellationToken) => UpdateAsync(
+            env,
+            new InstallOptions(null, null, parse.GetValue(root), parse.GetValue(host), parse.GetValue(pack), parse.GetValue(dryRun), parse.GetValue(force)),
+            cancellationToken));
+
+        return update;
+    }
+
+    private static async Task<int> UpdateAsync(CliEnvironment env, InstallOptions options, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<HarnessRoot> harnesses;
+        try
+        {
+            harnesses = Roots(env, options);
+        }
+        catch (SkillsRefused refused)
+        {
+            env.Error.WriteLine(refused.Message);
+            return ExitCodes.ApiError;
+        }
+
+        // The role root is Jason's own and is never detected, but it is a root a deployment wrote into and so
+        // is one an update has to carry.
+        var roots = harnesses.Select(harness => harness.Directory).Append(env.Paths.RoleSkillsDirectory);
+
+        SkillsDeployment? newest = null;
+        foreach (var root in roots)
+        {
+            SkillsRecord? record;
+            try
+            {
+                record = SkillsRecord.Read(root);
+            }
+            catch (SkillsRecordUnreadable unreadable)
+            {
+                env.Error.WriteLine(unreadable.Message);
+                return ExitCodes.ApiError;
+            }
+
+            foreach (var deployment in record?.Packs ?? [])
+            {
+                if (newest is null || deployment.InstalledAt > newest.InstalledAt)
+                {
+                    newest = deployment;
+                }
+            }
+        }
+
+        if (newest is null)
+        {
+            env.Error.WriteLine("Nothing here was installed by Jason, so there is nothing to update. Run 'jason skills install' first.");
+            return ExitCodes.ApiError;
+        }
+
+        env.Out.WriteLine($"Updating from {newest.Source} at {newest.Ref}, as the record names it.");
+        return await RunAsync(env, options with { Source = newest.Source, Ref = newest.RefOverridden ? newest.Ref : null }, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static Command Install(CliEnvironment env)

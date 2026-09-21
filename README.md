@@ -115,9 +115,17 @@ ledger without needing a runtime.
 ### Can this installation start work?
 
 ```sh
+jason skills install --dry-run
+jason skills install
+jason skills update
 jason status
 jason status --human
 ```
+
+`jason skills install` puts the role skills where the runtime reads them at every launch and the interactive
+and business packs where your agent harness looks, printing the target roots before it writes anything. It
+refuses a deployment the runtime would later refuse to launch, rather than writing one.
+[`skills/README.md`](skills/README.md) is the contract both verbs keep.
 
 One question, answered check by check. It is the only command here that is not one-to-one with an API
 operation, and it cannot be: half of what it reports is not the runtime's to know — an executable on PATH,

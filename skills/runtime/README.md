@@ -33,6 +33,7 @@ description that promises everything matches nothing.
 ```sh
 jason skills install --dry-run --pack jason-runtime-skills
 jason skills install --pack jason-runtime-skills
+jason skills update --pack jason-runtime-skills
 ```
 
 That deploys the five interactive skills into the agent harnesses it finds, and the nine role skills below

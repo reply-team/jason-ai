@@ -64,10 +64,13 @@ disagree about the profession, the disagreement is recorded rather than silently
 ```sh
 jason skills install --dry-run --pack jason-business-skills
 jason skills install --pack jason-business-skills
+jason skills update --pack jason-business-skills
 ```
 
-The first prints what would be written where and changes nothing. Both print the target roots before writing,
-because writing into somebody's home directory is not a silent act.
+The first prints what would be written where and changes nothing; all three print the target roots before
+writing, because writing into somebody's home directory is not a silent act. `update` re-runs the deployment
+against the source and ref its record names — this pack is refreshed on its own cadence, so it is the verb this
+pack is meant to be kept current with.
 [`skills/README.md`](../README.md) is the contract the verb keeps.
 
 A person without this build installs a skill by copying its directory into wherever their own agent host looks

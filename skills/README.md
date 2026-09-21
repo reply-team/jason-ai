@@ -21,11 +21,20 @@ text and they are meant to stay that way.
 ```sh
 jason skills install --dry-run
 jason skills install
+jason skills update
 ```
 
 The first prints exactly what would be written where and changes nothing; the second does it. **The
-target roots are printed before anything is written, in both** — writing into somebody's home
-directory is not a silent act. These are the rules the verb keeps:
+target roots are printed before anything is written, in every mode** — writing into somebody's home
+directory is not a silent act.
+
+`update` re-runs the deployment against the source and ref its own record names, which is why it takes
+neither `--source` nor `--ref`: an update is the same act repeated, not a second decision about where
+things come from. A verb that accepted both would let you "update" a deployment into one from somewhere
+else and leave a record saying it had always been that way. With nothing to update it says so and names
+`jason skills install` rather than quietly installing.
+
+These are the rules both verbs keep:
 
 - **Skills are pulled from git, never from the release bundle.** A release archive is frozen at a
   version; the business pack is refreshed on its own cadence, and a person who installed Jason in
