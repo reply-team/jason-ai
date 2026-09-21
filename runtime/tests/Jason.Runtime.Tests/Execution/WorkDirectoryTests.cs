@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Jason.Contracts.Skills;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Execution.Hosts;
 
@@ -170,6 +171,78 @@ public class WorkDirectoryTests : IDisposable
         catch (UnauthorizedAccessException)
         {
         }
+    }
+
+    /// <summary>
+    /// The launcher refuses in the shared rule's words rather than in words of its own. Two copies of a
+    /// sentence agree until somebody edits one, and the other copy is the one an installer applies before it
+    /// writes — so a drift between them is a deployment that passes and a launch that refuses it.
+    /// </summary>
+    [Fact]
+    public void The_launcher_refuses_in_the_shared_rules_words()
+    {
+        Skill($"---\nname: {Role}-v2\ndescription: one line\n---\n\nbody\n");
+
+        var report = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024 * 1024);
+
+        Assert.Equal(AttemptErrors.RoleSkillInvalid, report.RefusalCode);
+        Assert.Equal(
+            RoleSkillRules.Read(Path.Combine(SkillsRoot, Role), Role, 1024 * 1024).Problem!.Message,
+            report.Message);
+    }
+
+    /// <summary>
+    /// A file another process is holding exclusively. It is measured — a length is directory metadata, which a
+    /// lock does not hide — and the copy of it throws, so the attempt ends there.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Pinned because it is the case people assume the measuring helper's <c>catch</c> is about, and it is
+    /// not: a locked file is measured perfectly well. The only thing that helper actually swallows is a file
+    /// that is <em>not there any more</em> — the signal a deployment's rename produces — which is the case
+    /// about to change. Without this fact the two would be told apart by whoever read the diff.
+    /// </para>
+    /// <para>
+    /// The copy throwing is today's behaviour and this is not changing it. Turning an unreadable-but-present
+    /// file into a reported refusal is a real concern and a different one.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void A_file_another_process_holds_is_measured_and_then_fails_the_copy()
+    {
+        Skill($"---\nname: {Role}\ndescription: one line\n---\n\nbody\n");
+        var locked = Path.Combine(SkillsRoot, Role, "reference.md");
+        File.WriteAllText(locked, new string('x', 4096));
+        using var held = File.Open(locked, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        // Measured: a lock hides the contents, not the length.
+        var reading = RoleSkillRules.Read(Path.Combine(SkillsRoot, Role), Role, 1024 * 1024);
+        Assert.Null(reading.Problem);
+        Assert.Equal(
+            new FileInfo(Path.Combine(SkillsRoot, Role, WorkDirectory.SkillFile)).Length + 4096,
+            reading.Bytes);
+
+        // And the copy does not swallow, so this is where the attempt ends.
+        var thrown = Assert.Throws<IOException>(() => WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024 * 1024));
+        Assert.Contains("reference.md", thrown.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And the case the helper's <c>catch</c> really is about: a file that was enumerated and is gone by the
+    /// time it is measured is counted as nothing, silently. Today that understates the bytes an attempt
+    /// records; it is the signal a deployment's rename produces, and it is what the next increment raises.
+    /// </summary>
+    [Fact]
+    public void A_file_that_vanished_between_the_walk_and_the_measurement_is_counted_as_nothing()
+    {
+        Skill($"---\nname: {Role}\ndescription: one line\n---\n\nbody\n");
+        var vanishing = Path.Combine(SkillsRoot, Role, "reference.md");
+        File.WriteAllText(vanishing, new string('x', 4096));
+
+        var files = RoleSkillRules.Files(Path.Combine(SkillsRoot, Role));
+        File.Delete(vanishing);
+
+        Assert.Equal(new FileInfo(Path.Combine(SkillsRoot, Role, WorkDirectory.SkillFile)).Length, RoleSkillRules.Measure(files));
     }
 
     private void Skill(string text) =>

@@ -242,4 +242,135 @@ public class SystemInfoTests
         Assert.Equal(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero), info.Update.CheckedAt);
         Assert.Equal("https://example.test/notes", info.Update.ReleaseNotesUrl);
     }
+
+    /// <summary>
+    /// What the runtime will teach its roles from: the directory it owns, the cap it will enforce, and every
+    /// directory in it with what would stop a launch being taught it. The cap is reported because it is a
+    /// live setting, and an installer that guessed it would validate against the wrong number.
+    /// </summary>
+    [Fact]
+    public async Task System_info_reports_every_deployed_role_and_the_cap_it_will_enforce()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                Directory.CreateDirectory(paths.ConfigDirectory);
+                File.WriteAllText(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Roles":{"MaxSkillBytes":4096}}""");
+                Deploy(Path.Combine(paths.RoleSkillsDirectory, "researcher"), "researcher");
+                Deploy(Path.Combine(paths.RoleSkillsDirectory, "planner"), "planner", padding: 5_000);
+            });
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        Assert.NotNull(info.Skills);
+        Assert.Null(info.Skills.Problem);
+        Assert.Equal(fixture.Paths.RoleSkillsDirectory, info.Skills.RoleSkillsDirectory);
+        Assert.Equal(4096, info.Skills.MaxSkillBytes);
+
+        var planner = Assert.Single(info.Skills.Roles, role => role.Role == "planner");
+        Assert.NotNull(planner.Problem);
+        Assert.Contains("Roles:MaxSkillBytes", planner.Problem, StringComparison.Ordinal);
+
+        var researcher = Assert.Single(info.Skills.Roles, role => role.Role == "researcher");
+        Assert.Null(researcher.Problem);
+        Assert.NotNull(researcher.Bytes);
+    }
+
+    /// <summary>A directory with no skill file is copied and teaches a host nothing, so it is said here.</summary>
+    [Fact]
+    public async Task A_deployed_role_with_no_skill_file_is_reported_as_teaching_nothing()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                Directory.CreateDirectory(paths.ConfigDirectory);
+                File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+                var role = Directory.CreateDirectory(Path.Combine(paths.RoleSkillsDirectory, "researcher")).FullName;
+                File.WriteAllText(Path.Combine(role, "references.md"), "where to look");
+            });
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        var researcher = Assert.Single(info.Skills!.Roles);
+        Assert.NotNull(researcher.Problem);
+        Assert.Contains("holds no SKILL.md", researcher.Problem, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A role directory that disappears while this section is being composed. A deployment renames these
+    /// directories, so the walk will meet it — and this operation is what an applier asks when a machine is
+    /// already in a bad state, so it answers rather than failing.
+    /// </summary>
+    [Fact]
+    public async Task A_role_directory_that_vanishes_mid_walk_never_makes_this_operation_fail()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                Directory.CreateDirectory(paths.ConfigDirectory);
+                File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+                for (var index = 0; index < 60; index++)
+                {
+                    Deploy(Path.Combine(paths.RoleSkillsDirectory, $"role-{index}"), $"role-{index}", files: 8);
+                }
+            });
+
+        var roles = fixture.Paths.RoleSkillsDirectory;
+        using var churn = new CancellationTokenSource();
+        var renaming = Task.Run(
+            () =>
+            {
+                while (!churn.IsCancellationRequested)
+                {
+                    var role = Path.Combine(roles, $"role-{Random.Shared.Next(60)}");
+                    var aside = role + ".aside";
+                    try
+                    {
+                        Directory.Move(role, aside);
+                        Directory.Move(aside, role);
+                    }
+                    catch (IOException)
+                    {
+                        // This test losing its own race with the walk, which is not what is under test.
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                    }
+                }
+            },
+            CancellationToken.None);
+
+        try
+        {
+            for (var ask = 0; ask < 40; ask++)
+            {
+                var (status, body) = await fixture.PostAsync(Operations.SystemInfo, null, Ct);
+                Assert.True(
+                    status == HttpStatusCode.OK,
+                    $"system.info answered {(int)status} while a role directory was being renamed under it: {body}");
+            }
+        }
+        finally
+        {
+            await churn.CancelAsync();
+            await renaming;
+        }
+    }
+
+    /// <summary>A role directory composed the way an operator composes one: a skill, and some files beside it.</summary>
+    private static void Deploy(string directory, string role, int files = 1, int padding = 0)
+    {
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(
+            Path.Combine(directory, "SKILL.md"),
+            $"---\nname: {role}\ndescription: one line\n---\n\n{new string('x', padding)}\n");
+
+        for (var index = 0; index < files; index++)
+        {
+            File.WriteAllText(Path.Combine(directory, $"reference-{index}.md"), "where to look");
+        }
+    }
 }

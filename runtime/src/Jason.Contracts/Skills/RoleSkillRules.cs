@@ -1,0 +1,226 @@
+using System.Globalization;
+
+namespace Jason.Contracts.Skills;
+
+/// <summary>Why a role's skill cannot be given to the role, in the words the launcher refuses with.</summary>
+public sealed record RoleSkillProblem(string Message);
+
+/// <summary>
+/// One reading of one role directory: what is in it, how large it is, and what is wrong with it — all from a
+/// single walk.
+/// </summary>
+/// <remarks>
+/// One walk and not two, because the two callers are a launcher copying the tree and a runtime reporting its
+/// size, and a second walk can see a different tree from the first: a deployment renames these directories. A
+/// total measured from a different walk than the file list is a measurement of something else.
+/// </remarks>
+/// <param name="Exists">
+/// False when the directory is not there, which is not a problem: a role with no skill was never given one.
+/// </param>
+/// <param name="HasSkillFile">
+/// False when the directory holds no <see cref="RoleSkillRules.SkillFile"/>. The launcher delivers such a
+/// directory and a host loads nothing from it, so it is not a refusal — but it is a deployment nobody meant
+/// to make, and the caller that is writing one can still refuse to.
+/// </param>
+public sealed record RoleSkillReading(
+    bool Exists,
+    bool HasSkillFile,
+    IReadOnlyList<string> Files,
+    long Bytes,
+    RoleSkillProblem? Problem);
+
+/// <summary>
+/// The two rules a role's skill must satisfy before a launch can be taught it: it must name itself after the
+/// directory it lives in, and its tree must fit the cap the runtime enforces.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Here rather than in the launcher because two programs apply them and only one of them may see the other.
+/// The launcher refuses an attempt on these; an installer has to apply them <em>before</em> it writes,
+/// because a deployment that fails them turns a role with no skill — which runs — into a role whose every
+/// launch is refused. The CLI may never reference the runtime, so the contracts are the only place both can
+/// read one rule rather than two that agree until somebody edits one.
+/// </para>
+/// </remarks>
+public static class RoleSkillRules
+{
+    /// <summary>The file a skill introduces itself in; a directory without one teaches a host nothing.</summary>
+    public const string SkillFile = "SKILL.md";
+
+    /// <summary>How far into a file a skill's front matter may be looked for; a real one is a handful of lines.</summary>
+    private const int FrontMatterLines = 64;
+
+    /// <summary>
+    /// One walk: the files, their total, and the two refusals in the order the launcher applies them — the
+    /// name first, the size second.
+    /// </summary>
+    public static RoleSkillReading Read(string roleDirectory, string role, int maxSkillBytes)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(roleDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(role);
+
+        if (!Directory.Exists(roleDirectory))
+        {
+            return new RoleSkillReading(false, false, [], 0, null);
+        }
+
+        var introduction = Path.Combine(roleDirectory, SkillFile);
+        var hasSkillFile = File.Exists(introduction);
+        if (hasSkillFile && Named(introduction) is var named && named != role)
+        {
+            // A host answers this mismatch by ignoring the skill and saying nothing, and an agent that was
+            // never taught its job reads afterwards as a model that refused to do it. Reported here instead,
+            // where it can be read: a skill is looked up by the directory it lives in, and must name itself
+            // the same way.
+            return new RoleSkillReading(
+                true,
+                true,
+                [],
+                0,
+                new RoleSkillProblem(
+                    $"The skill in '{roleDirectory}' names itself '{named ?? "nothing"}', and role '{role}' looks its skill up as '{role}'. A host answers that mismatch by ignoring the skill without reporting it."));
+        }
+
+        var files = Files(roleDirectory);
+        var bytes = Measure(files);
+
+        // A skill that was configured and did not arrive is the failure worth refusing over: the role would do
+        // the job untaught, at the price of a real launch, and the only trace would be a log line nobody is
+        // reading at the time. Left behind for being too large is the same thing to the agent as left behind
+        // for being misnamed, so it is answered the same way.
+        return bytes > maxSkillBytes
+            ? new RoleSkillReading(
+                true,
+                hasSkillFile,
+                files,
+                bytes,
+                new RoleSkillProblem(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The skill in '{roleDirectory}' is {bytes} bytes and Roles:MaxSkillBytes allows {maxSkillBytes}, so it cannot be given to the role. Trim the skill, or raise Roles:MaxSkillBytes.")))
+            : new RoleSkillReading(true, hasSkillFile, files, bytes, null);
+    }
+
+    /// <summary>
+    /// Every real file under the skill, and nothing a link points at: a link reaches outside the directory
+    /// somebody meant to hand over, so it is neither copied nor followed — on the way down through the
+    /// directories as much as at the file itself.
+    /// </summary>
+    public static IReadOnlyList<string> Files(string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+
+        var files = new List<string>();
+        Walk(directory, files);
+        return files;
+    }
+
+    /// <summary>The total of what <see cref="Files"/> found.</summary>
+    public static long Measure(IReadOnlyList<string> files)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+
+        long bytes = 0;
+        foreach (var file in files)
+        {
+            bytes += Length(file);
+        }
+
+        return bytes;
+    }
+
+    /// <summary>
+    /// The name a skill gives itself, or null. Front matter is the first block between two <c>---</c> lines; a
+    /// file without one names nothing, which a host answers exactly as it answers a wrong name — it loads no
+    /// skill — so both are treated the same way. A file that is a link names nothing either: it is not copied,
+    /// so what a host would read is not what was inspected here.
+    /// </summary>
+    public static string? Named(string skillFile)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(skillFile);
+
+        if (IsLink(skillFile))
+        {
+            return null;
+        }
+
+        string[] lines;
+        try
+        {
+            lines = [.. File.ReadLines(skillFile).Take(FrontMatterLines)];
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return null;
+        }
+
+        if (lines.Length == 0 || lines[0].Trim() != "---")
+        {
+            return null;
+        }
+
+        foreach (var line in lines.Skip(1))
+        {
+            if (line.Trim() == "---")
+            {
+                break;
+            }
+
+            if (!line.StartsWith("name:", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var value = line["name:".Length..].Trim().Trim('"', '\'');
+            return value.Length == 0 ? null : value;
+        }
+
+        return null;
+    }
+
+    private static void Walk(string directory, List<string> files)
+    {
+        foreach (var file in Directory.EnumerateFiles(directory))
+        {
+            if (!IsLink(file))
+            {
+                files.Add(file);
+            }
+        }
+
+        foreach (var child in Directory.EnumerateDirectories(directory))
+        {
+            if (IsLink(child))
+            {
+                continue;
+            }
+
+            Walk(child, files);
+        }
+    }
+
+    private static bool IsLink(string path)
+    {
+        try
+        {
+            return new FileInfo(path).LinkTarget is not null || new DirectoryInfo(path).LinkTarget is not null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            // Unreadable is not copyable either, and this is the cheapest way to say so.
+            return true;
+        }
+    }
+
+    private static long Length(string file)
+    {
+        try
+        {
+            return new FileInfo(file).Length;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return 0;
+        }
+    }
+}

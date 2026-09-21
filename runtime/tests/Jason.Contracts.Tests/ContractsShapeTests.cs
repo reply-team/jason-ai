@@ -4,6 +4,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Execution;
 using Jason.Contracts.Json;
 using Jason.Contracts.Plugins;
+using Jason.Contracts.Tests.OperationContracts;
 
 namespace Jason.Contracts.Tests;
 
@@ -13,6 +14,33 @@ using Operations = Jason.Contracts.Api.Operations;
 
 public class ContractsShapeTests
 {
+    /// <summary>
+    /// The phrase "canonical operation" belongs to <c>docs/contracts/</c>, where it means a unit of SDR work
+    /// with a published JSON contract and executed fixtures. The names in <c>Operations</c> are Runtime API
+    /// operations, which have neither, and that file used to call them canonical — which is how a reader
+    /// concludes <c>system.info</c> has a contract document and goes looking for one.
+    /// </summary>
+    /// <remarks>
+    /// Asserted the positive way round, which took one red run to learn: a guard that refuses the phrase
+    /// cannot tell a claim from its retraction, and it failed on the very sentence written to retract the
+    /// claim. So what is held is that the retraction is still there — and, because a disclaimer nobody reads
+    /// is cheap, that the example it teaches instead is a real operation that really routes that way.
+    /// </remarks>
+    [Fact]
+    public void The_api_operation_vocabulary_says_it_is_not_the_canonical_one()
+    {
+        var file = Path.Combine(ContractFiles.Root, "runtime", "src", "Jason.Contracts", "Api", "Operations.cs");
+        Assert.True(File.Exists(file), $"The file this guard reads is not there: '{file}'.");
+        var text = File.ReadAllText(file);
+
+        Assert.Contains("These are not the <em>canonical operations</em>", text, StringComparison.Ordinal);
+
+        // And the three levels it prints as the example are the three levels that exist.
+        Assert.Contains("<c>campaign.list</c> ↔ <c>POST /v1/campaign.list</c> ↔ <c>jason campaign list</c>", text, StringComparison.Ordinal);
+        Assert.Equal("campaign.list", Operations.CampaignList);
+        Assert.Equal("/v1/campaign.list", Operations.Route(Operations.CampaignList));
+    }
+
     [Fact]
     public void Every_operation_name_is_noun_dot_verb_and_routes_under_v1()
     {
@@ -120,20 +148,64 @@ public class ContractsShapeTests
     [Fact]
     public void System_info_says_what_the_last_update_check_learned_and_null_until_it_has_looked()
     {
-        var info = new SystemInfoResponse(
+        var info = SystemInfo();
+
+        Assert.Contains(
+            "\"update\":{\"available\":true,\"version\":\"0.2.0\",\"checked_at\":\"2026-09-19T08:00:00.000Z\",\"release_notes_url\":\"https://example.test/notes\"}",
+            JsonSerializer.Serialize(info, JasonJson.Options),
+            StringComparison.Ordinal);
+        Assert.Contains("\"update\":null", JsonSerializer.Serialize(info with { Update = null }, JasonJson.Options), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What the runtime will teach its roles from rides on <c>system.info</c> as a section of its own: the
+    /// directory it owns, the cap it will enforce, and what is deployed there right now. An installer that
+    /// guessed the cap would validate against the wrong number, and the cap is a live setting.
+    /// </summary>
+    /// <remarks>
+    /// <c>bytes</c> is nullable and null means "could not be measured", which is not the same as an empty
+    /// skill: a role directory renamed away mid-walk — which an installer causes — would otherwise be
+    /// reported as a skill of zero bytes.
+    /// </remarks>
+    [Fact]
+    public void System_info_says_what_it_will_teach_its_roles_from_and_the_cap_it_will_enforce()
+    {
+        var info = SystemInfo() with
+        {
+            Skills = new SkillsInfo("/data/skills/roles", 1_048_576, [new DeployedRoleSkill("researcher", 4_096, null)]),
+        };
+
+        Assert.EndsWith(
+            "\"skills\":{\"role_skills_directory\":\"/data/skills/roles\",\"max_skill_bytes\":1048576,"
+                + "\"roles\":[{\"role\":\"researcher\",\"bytes\":4096,\"problem\":null}],\"problem\":null}}",
+            JsonSerializer.Serialize(info, JasonJson.Options),
+            StringComparison.Ordinal);
+
+        // A runtime older than this section reports none at all, which every other section here also does and
+        // which the CLI renders as "unknown" rather than as an empty deployment.
+        Assert.EndsWith("\"skills\":null}", JsonSerializer.Serialize(info with { Skills = null }, JasonJson.Options), StringComparison.Ordinal);
+    }
+
+    /// <summary>A role the walk could not measure says so, rather than reporting a skill of no bytes.</summary>
+    [Fact]
+    public void A_role_that_could_not_be_measured_carries_a_problem_and_no_byte_count()
+    {
+        var skills = new SkillsInfo("/data/skills/roles", 4096, [new DeployedRoleSkill("researcher", null, "it moved while it was being read")]);
+
+        Assert.Equal(
+            "{\"role_skills_directory\":\"/data/skills/roles\",\"max_skill_bytes\":4096,"
+                + "\"roles\":[{\"role\":\"researcher\",\"bytes\":null,\"problem\":\"it moved while it was being read\"}],\"problem\":null}",
+            JsonSerializer.Serialize(skills, JasonJson.Options));
+    }
+
+    private static SystemInfoResponse SystemInfo() =>
+        new(
             "0.1.0", "v1", "rt_01J", 1234, DateTimeOffset.UnixEpoch, "/data",
             new DatabaseInfo([], [], null),
             new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0, 0),
             new PluginsInfo(1, "snp_01J", DateTimeOffset.UnixEpoch, true),
             new RoutesInfo("rts_01J", DateTimeOffset.UnixEpoch, null, 0, 0),
             new UpdateInfo(true, "0.2.0", new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero), "https://example.test/notes"));
-
-        Assert.EndsWith(
-            "\"update\":{\"available\":true,\"version\":\"0.2.0\",\"checked_at\":\"2026-09-19T08:00:00.000Z\",\"release_notes_url\":\"https://example.test/notes\"}}",
-            JsonSerializer.Serialize(info, JasonJson.Options),
-            StringComparison.Ordinal);
-        Assert.EndsWith("\"update\":null}", JsonSerializer.Serialize(info with { Update = null }, JasonJson.Options), StringComparison.Ordinal);
-    }
 
     [Fact]
     public void The_work_enums_are_snake_case_strings_in_both_directions()

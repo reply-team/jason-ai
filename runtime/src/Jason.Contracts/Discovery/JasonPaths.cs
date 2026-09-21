@@ -45,6 +45,26 @@ public sealed class JasonPaths
     /// </summary>
     public string RoleSkillsDirectory => Path.Combine(Root, "skills", "roles");
 
+    /// <summary>
+    /// Where a skills deployment assembles a role's tree before it is renamed into place, and where the tree
+    /// it replaces is kept until the replacement is complete.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately a sibling of <see cref="RoleSkillsDirectory"/> rather than a directory inside it: the
+    /// runtime reports every directory under the role root as a deployed role, so staging inside it would be
+    /// reported as one — by the operation an operator asks whether this installation is ready. A sibling under
+    /// the same parent also keeps both renames on one volume, so both stay metadata operations rather than
+    /// turning into a copy.
+    /// </remarks>
+    public string SkillsStagingDirectory => Path.Combine(Root, "skills", ".staging");
+
+    /// <summary>
+    /// Where a skills source fetched from git is unpacked, one directory per ref. Here rather than composed
+    /// wherever the fetching happens: this file is what knows the layout, and a second place that knows where
+    /// Jason writes is a second place to change when the layout moves.
+    /// </summary>
+    public string SkillsStagedSourceDirectory(string reference) => Path.Combine(Root, "skills", "staged", reference);
+
     /// <summary>Where one installed plugin lives: the directory name is the plugin's id, and the manifest must agree.</summary>
     public string PluginPackageDirectory(string pluginId) => Path.Combine(PluginsDirectory, pluginId);
 

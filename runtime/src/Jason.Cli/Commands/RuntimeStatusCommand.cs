@@ -96,7 +96,38 @@ public static class RuntimeStatusCommand
         output.WriteLine($"Dispatcher: {Dispatcher(info.Dispatcher)}");
         output.WriteLine($"Plugins:    {Plugins(info.Plugins)}");
         output.WriteLine($"Routes:     {Routes(info.Routes)}");
+        output.WriteLine($"Skills:     {Skills(info.Skills)}");
         output.WriteLine($"Update:     {Update(info.Update)}");
+    }
+
+    /// <summary>
+    /// What the runtime will teach its roles from. A runtime older than the section reports none at all, and
+    /// an empty root is worth spelling out: until something deploys there, every role this runtime launches
+    /// runs untaught, quietly and by omission.
+    /// </summary>
+    private static string Skills(SkillsInfo? skills)
+    {
+        if (skills is null)
+        {
+            return "unknown";
+        }
+
+        if (skills.Problem is { } problem)
+        {
+            return problem;
+        }
+
+        var cap = string.Create(CultureInfo.InvariantCulture, $"cap {skills.MaxSkillBytes} bytes");
+        if (skills.Roles.Count == 0)
+        {
+            return $"no role skills deployed · every role would launch untaught · {cap}";
+        }
+
+        var refused = skills.Roles.Count(role => role.Problem is not null);
+        var taught = Plural(skills.Roles.Count - refused, "role");
+        return refused == 0
+            ? $"{taught} taught · {cap}"
+            : string.Create(CultureInfo.InvariantCulture, $"{taught} taught · {refused} would be refused · {cap}");
     }
 
     /// <summary>

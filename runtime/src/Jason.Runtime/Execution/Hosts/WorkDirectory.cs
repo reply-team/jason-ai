@@ -1,5 +1,5 @@
 using Jason.Contracts.Api;
-using System.Globalization;
+using Jason.Contracts.Skills;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -38,7 +38,7 @@ public static class WorkDirectory
     public const string SkillsDirectory = "skills";
 
     /// <summary>The file a skill introduces itself in; a directory without one teaches a host nothing.</summary>
-    public const string SkillFile = "SKILL.md";
+    public const string SkillFile = RoleSkillRules.SkillFile;
 
     private static readonly JsonSerializerOptions Settings = new() { WriteIndented = true };
 
@@ -80,6 +80,11 @@ public static class WorkDirectory
     /// The role's skill, if it has one. A role's name is the roster's own spelling — lowercase letters, digits
     /// and hyphens — so it is one directory name and never a path; anything else names no skill directory here.
     /// </summary>
+    /// <remarks>
+    /// What makes a skill deliverable is <see cref="RoleSkillRules"/>, in the contracts, because an installer
+    /// writing into this root has to apply the same two rules before it writes: a deployment that fails them
+    /// turns a role with no skill — which runs — into a role whose every launch is refused.
+    /// </remarks>
     private static WorkDirectoryReport Teach(string host, string? role, string roleSkillsRoot, int maxSkillBytes)
     {
         if (string.IsNullOrWhiteSpace(role) || role != Path.GetFileName(role) || role is "." or "..")
@@ -88,7 +93,8 @@ public static class WorkDirectory
         }
 
         var source = Path.Combine(roleSkillsRoot, role);
-        if (!Directory.Exists(source))
+        var reading = RoleSkillRules.Read(source, role, maxSkillBytes);
+        if (!reading.Exists)
         {
             // The brief travels in the envelope. A role without a skill was never given one, which is not a
             // failure of this attempt — but it is recorded, because "was this role taught anything?" is a
@@ -96,150 +102,19 @@ public static class WorkDirectory
             return WorkDirectoryReport.Taught(new RoleSkillDto(false, role, 0));
         }
 
-        var introduction = Path.Combine(source, SkillFile);
-        if (File.Exists(introduction) && Named(introduction) is var named && named != role)
+        if (reading.Problem is { } problem)
         {
-            // A host answers this by ignoring the skill and saying nothing, and an agent that was never taught
-            // its job reads afterwards as a model that refused to do it. Refused here instead, where it can be
-            // read: a skill is looked up by the directory it lives in, and it must name itself the same way.
-            return WorkDirectoryReport.Refused(
-                AttemptErrors.RoleSkillInvalid,
-                $"The skill in '{source}' names itself '{named ?? "nothing"}', and role '{role}' looks its skill up as '{role}'. A host answers that mismatch by ignoring the skill without reporting it.");
-        }
-
-        var files = new List<string>();
-        long bytes = 0;
-        foreach (var file in Files(source))
-        {
-            bytes += Length(file);
-            files.Add(file);
-        }
-
-        // A skill that was configured and did not arrive is the failure worth refusing over: the role would do
-        // the job untaught, at the price of a real launch, and the only trace would be a log line nobody is
-        // reading at the time. Left behind for being too large is the same thing to the agent as left behind for
-        // being misnamed, so it is answered the same way.
-        if (bytes > maxSkillBytes)
-        {
-            return WorkDirectoryReport.Refused(
-                AttemptErrors.RoleSkillInvalid,
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"The skill in '{source}' is {bytes} bytes and Roles:MaxSkillBytes allows {maxSkillBytes}, so it cannot be given to the role. Trim the skill, or raise Roles:MaxSkillBytes."));
+            return WorkDirectoryReport.Refused(AttemptErrors.RoleSkillInvalid, problem.Message);
         }
 
         var target = Path.Combine(host, SkillsDirectory, role);
-        foreach (var file in files)
+        foreach (var file in reading.Files)
         {
             var copy = Path.Combine(target, Path.GetRelativePath(source, file));
             Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
             File.Copy(file, copy, overwrite: true);
         }
 
-        return WorkDirectoryReport.Taught(new RoleSkillDto(true, role!, bytes));
-    }
-
-    /// <summary>
-    /// Every real file under the skill, and nothing a link points at: a link reaches outside the directory
-    /// somebody meant to hand over, so it is neither copied nor followed — on the way down through the
-    /// directories as much as at the file itself.
-    /// </summary>
-    private static IEnumerable<string> Files(string directory)
-    {
-        foreach (var file in Directory.EnumerateFiles(directory))
-        {
-            if (!IsLink(file))
-            {
-                yield return file;
-            }
-        }
-
-        foreach (var child in Directory.EnumerateDirectories(directory))
-        {
-            if (IsLink(child))
-            {
-                continue;
-            }
-
-            foreach (var file in Files(child))
-            {
-                yield return file;
-            }
-        }
-    }
-
-    private static bool IsLink(string path)
-    {
-        try
-        {
-            return new FileInfo(path).LinkTarget is not null || new DirectoryInfo(path).LinkTarget is not null;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or PathTooLongException)
-        {
-            // Unreadable is not copyable either, and this is the cheapest way to say so.
-            return true;
-        }
-    }
-
-    private static long Length(string file)
-    {
-        try
-        {
-            return new FileInfo(file).Length;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            return 0;
-        }
-    }
-
-    /// <summary>How far into a file a skill's front matter may be looked for; a real one is a handful of lines.</summary>
-    private const int FrontMatterLines = 64;
-
-    /// <summary>
-    /// The name a skill gives itself, or null. Front matter is the first block between two <c>---</c> lines; a
-    /// file without one names nothing, which a host answers exactly as it answers a wrong name — it loads no
-    /// skill — so both are refused the same way. A file that is a link names nothing either: it is not copied,
-    /// so what a host would read is not what was inspected here.
-    /// </summary>
-    private static string? Named(string file)
-    {
-        if (IsLink(file))
-        {
-            return null;
-        }
-
-        string[] lines;
-        try
-        {
-            lines = [.. File.ReadLines(file).Take(FrontMatterLines)];
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
-        {
-            return null;
-        }
-
-        if (lines.Length == 0 || lines[0].Trim() != "---")
-        {
-            return null;
-        }
-
-        foreach (var line in lines.Skip(1))
-        {
-            if (line.Trim() == "---")
-            {
-                break;
-            }
-
-            if (!line.StartsWith("name:", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var value = line["name:".Length..].Trim().Trim('"', '\'');
-            return value.Length == 0 ? null : value;
-        }
-
-        return null;
+        return WorkDirectoryReport.Taught(new RoleSkillDto(true, role, reading.Bytes));
     }
 }
