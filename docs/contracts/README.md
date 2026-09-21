@@ -206,5 +206,5 @@ this runtime validates and executes. Where they disagree, these documents decide
 of the catalogue it was copied from under
 `l1.contract_version`, together with the family and the operation's name there. Jason implements a small, strict
 subset of it, and [`divergence-from-l1.md`](divergence-from-l1.md) records every place the two differ, why, and
-whether the difference is something the upstream contract should take back. Feedback travels through that
-repository's issues.
+whether the difference is something the catalogue should take back. The catalogue is in this repository now, so
+feedback travels through this repository's issues.

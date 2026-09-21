@@ -28,8 +28,10 @@ discovered:
   installation works before any release exists, which today is the only way it can work at all.
 - **From a pinned ref, not a moving branch.** A floating default would mean two people installing on
   the same day could get different texts, and nothing could then say whether a deployment is current.
-  The pin is a constant this build carries and a flag overrides it.
-- **The installed version is recorded where it was installed, and reported.** Each target directory
+  The pin will be a constant the build carries, and a flag will override it. Neither exists yet: this
+  paragraph is the rule the verb is written against, not a description of something already here.
+- **The installed version is recorded where it was installed, and `jason status` reports it.** Each target
+  directory
   keeps a record naming the pack, the source and ref it came from, the commit, a digest per file, and
   every path the installer wrote. That record is what says whether a deployment is current, and it is
   what an uninstall removes by — a verb that deleted by pattern would eventually delete somebody's
@@ -48,7 +50,8 @@ discovered:
   `verified`. `verified` means a named agent host read that exact body while driving this runtime and
   the digest of what it read is recorded in the pack's catalog. It is a claim about evidence, and the
   guards refuse it without one.
-- A `README.md` beside them that links every skill and is linked by nothing else — the catalog.
+- A `README.md` beside them that links every skill — the catalog. A guard holds both halves: every skill
+  linked, and every link a skill.
 - No build step and no dependency on the runtime's source.
 
 ## Installing without the verb
