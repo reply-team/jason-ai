@@ -68,6 +68,22 @@ two must match: a skill whose front matter names anything else is loaded by nobo
   do-not-contact register and the failed items say about whether anything is arriving, and what somebody
   would have to do outside Jason about it.
 
+**Which of them a host has read.** The words mean here what they mean for the skills above, and a `verified`
+row carries the same three things: which host read the text, which Jason build it read it against, and the
+SHA-256 of the text it read.
+
+| role | status | host that read it | Jason | the text it read |
+|---|---|---|---|---|
+| `manager` | draft | — | — | — |
+| `planner` | draft | — | — | — |
+| `researcher` | draft | — | — | — |
+| `copywriter` | draft | — | — | — |
+| `personalizer` | draft | — | — | — |
+| `critic` | draft | — | — | — |
+| `responder` | draft | — | — | — |
+| `analyst` | draft | — | — | — |
+| `deliverability-specialist` | draft | — | — | — |
+
 These are not read from here at run time. An operator composes the directory the runtime hands out,
 `<data>/skills/roles/<role>/`, from this pack and — later — from the business pack, and the runtime copies it
 into each attempt's own work directory. Composing rather than reading from two places keeps one question
