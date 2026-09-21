@@ -332,10 +332,11 @@ fixed by regenerating rather than by editing the table. The same applies to a ru
   case where acting first is correct. It reads the approval property defined here; the vocabulary is
   shared and versioned together.
 - `campaign-planning` — turns a business goal into a plan expressed in these operations.
-- For provider execution: the **`reply-adapter`** pack maps these operations onto a real product's
-  surface. Install it to make this contract executable — and note that **the adapter, not this
-  contract, states what a provider can and cannot do**. A "not fulfilled" there is a fact about the
-  product, never a reason to remove the operation from here.
+- For provider execution: a **provider plugin** maps operations onto a real product's surface.
+  In this repository that is the plugin marketplace under `plugins/`, and `docs/plugins.md` is the
+  contract a plugin is written against — and note that **the plugin, not this document, states what
+  a provider can and cannot do**. A "not fulfilled" there is a fact about the product, never a
+  reason to remove the operation from here.
 
 ## Changelog
 

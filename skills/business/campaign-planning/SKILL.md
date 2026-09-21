@@ -24,8 +24,9 @@ without asking what was meant.
   rather than an *action* ("import this file").
 - Do NOT use for single concrete actions — route straight to the matching skill.
 - This skill produces a plan; it does not persist one. Where plans, work items and progress
-  physically live is the job of a runtime — `durable-work`, if the `agentic-runtime` pack is
-  installed. This skill works without it, and says so rather than assuming a workspace exists.
+  physically live is the job of a runtime: Jason owns them as campaigns and work items and is the
+  authority on what has happened to each. This skill also works with no runtime at all, and says
+  which of the two is true rather than assuming somewhere durable exists.
 
 ## Prerequisites
 
@@ -125,8 +126,9 @@ an invention from a name they simply have not met.
 contract can *check* a plan (`plan.validate`), but it defines no operation that creates, stores,
 revises or supersedes one, and none that records a checkpoint against it. Say that plainly
 rather than naming an operation that would be convenient. Persisting a plan is a runtime
-concern and belongs to `durable-work`; where no runtime is installed the plan lives wherever the
-user keeps it, and the plan text says which of the two is true.
+concern: with Jason the plan becomes work items the runtime owns, schedules and records against.
+Where no runtime is installed the plan lives wherever the user keeps it, and the plan text says
+which of the two is true.
 
 ## Execution guidance
 
@@ -143,8 +145,9 @@ recovered by lookup instead of re-run.
 
 **Replanning preserves completed work.** When the plan changes, the finished parts stay
 finished: supersede the plan rather than rewriting history. If a runtime is available it
-defines how (`durable-work`); if not, the same principle applies to however the user is
-keeping track — a new revision, not an edit over the old one.
+defines how — with Jason, by creating the work that is now wanted and leaving the finished
+attempts on the record where they are. If not, the same principle applies to however the user is
+keeping track: a new revision, not an edit over the old one.
 
 ## Validation
 
@@ -201,8 +204,8 @@ in `approval-boundaries`.
   and what changes when the plan runs with nobody present.
 - `audience-building` · `campaign-launch` · `inbox-triage` · `performance-analysis` — the
   usual building blocks.
-- `durable-work` (in `agentic-runtime`, optional) — where plans and work items physically
-  live, and how progress survives a session ending.
+- The runtime itself — where plans and work items physically live, and how progress survives a
+  session ending. With Jason that is the Runtime API and the skills under `skills/runtime`.
 
 ## Changelog
 
@@ -223,7 +226,7 @@ in `approval-boundaries`.
   clarification. A plan that opens with an unnamed "find the people" stalls immediately,
   which is how a goal stated in one sentence turned into a refusal one step later.
 - 2.0.0 (2026-07-30): renamed from `outbound-campaign-planning` and rewritten for the
-  `ai-sdr-core` pack. The durable-work and workspace mechanics moved out to `durable-work` in
-  `agentic-runtime`; the Reply CLI dependency is gone, so planning now works with any
-  provider and with no runtime at all. Constraint-surfacing and replan triggers strengthened.
+  business pack. The mechanics of storing plans and work moved out to whatever runtime is
+  present; the provider-CLI dependency is gone, so planning now works with any provider and with
+  no runtime at all. Constraint-surfacing and replan triggers strengthened.
 - 1.0.0 (2026-07-27): initial version as `outbound-campaign-planning`.

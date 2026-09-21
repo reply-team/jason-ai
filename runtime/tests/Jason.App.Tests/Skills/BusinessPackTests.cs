@@ -85,4 +85,42 @@ public class BusinessPackTests
                 + "catalog.");
         }
     }
+
+    /// <summary>
+    /// Every file of the pack, not only the nine a host loads: the catalogue's references and YAML families are
+    /// where a reader ends up, and a pointer is as broken there as it is in a skill's own text.
+    /// </summary>
+    [Fact]
+    public void No_business_file_points_at_a_pack_this_repository_does_not_ship()
+    {
+        foreach (var file in Files())
+        {
+            var found = AbsentPacks.Find(File.ReadAllText(file));
+            Assert.True(
+                found.Count == 0,
+                $"'{file}' names [{string.Join(", ", found)}]. That pack is not in this repository, so the "
+                + "sentence sends a reader — or an agent that cannot check — to a file that is not there.");
+        }
+    }
+
+    /// <summary>
+    /// The model this runtime replaced, refused in the second pack as it is in the first. The pack measured
+    /// clean of all ten phrases on the day it moved, which is why it was worth moving; the guard is what keeps
+    /// it clean afterwards.
+    /// </summary>
+    [Fact]
+    public void No_business_file_teaches_the_model_this_runtime_replaced()
+    {
+        foreach (var file in Files())
+        {
+            var found = SupersededVocabulary.Find(File.ReadAllText(file));
+            Assert.True(
+                found.Count == 0,
+                $"'{file}' uses [{string.Join(", ", found)}]. Operational state lives in the runtime, and the "
+                + "runtime is what decides when work runs.");
+        }
+    }
+
+    private static IEnumerable<string> Files() =>
+        Directory.EnumerateFiles(SkillPack.BusinessRoot(), "*", SearchOption.AllDirectories);
 }
