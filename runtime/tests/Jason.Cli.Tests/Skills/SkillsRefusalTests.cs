@@ -47,7 +47,7 @@ public class SkillsRefusalTests
         using (var held = File.Open(Path.Combine(live, "SKILL.md"), FileMode.Open, FileAccess.Read, FileShare.Read))
         {
             var refused = await InstallAsync(dir, Source(dir, "SECOND-AND-LONGER"), expectSuccess: false);
-            Assert.Contains("a launch is reading this role's skill", refused.Error, StringComparison.Ordinal);
+            Assert.Contains("something is holding this role's skill open", refused.Error, StringComparison.Ordinal);
         }
 
         // The live tree is the old one, and so is the record.

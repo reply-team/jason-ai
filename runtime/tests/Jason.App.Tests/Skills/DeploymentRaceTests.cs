@@ -140,7 +140,7 @@ public class DeploymentRaceTests
         if (OperatingSystem.IsWindows())
         {
             Assert.Equal(ExitCodes.ApiError, exit);
-            Assert.Contains("a launch is reading this role's skill right now", error.ToString(), StringComparison.Ordinal);
+            Assert.Contains("something is holding this role's skill open", error.ToString(), StringComparison.Ordinal);
             Assert.Contains("Nothing was changed for it.", error.ToString(), StringComparison.Ordinal);
             Assert.Equal(before, RoleSkillRules.Read(live, Role, int.MaxValue).Bytes);
         }

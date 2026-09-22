@@ -17,10 +17,17 @@ namespace Jason.Cli.Skills;
 /// <para>
 /// There is no atomic directory replace on either platform — POSIX <c>rename(2)</c> replaces only an empty
 /// directory, and Windows answers <c>[WinError 183]</c> — so replacing one is two renames, and the order
-/// matters. <b>The live tree goes aside first</b>, because that is the one a reader can refuse: on Windows
+/// matters. <b>The live tree goes aside first</b>, because that is the one a launch can be reading: on Windows
 /// <c>Directory.Move</c> is denied while a file inside is open, and denied <em>cleanly</em>, leaving the source
-/// where it was and creating nothing. A failure there has therefore changed nothing. The second rename targets
-/// a path nothing can hold open, so it cannot be blocked.
+/// where it was and creating nothing. A failure there has therefore changed nothing.
+/// </para>
+/// <para>
+/// <b>Both renames can be blocked, and the second's failure is the worse one.</b> What denies a directory
+/// rename on Windows is a handle inside the <em>source</em>, and the source of the second rename is the tree
+/// this deployment has just written — which an indexer or a scanner opens for exactly that reason. By then
+/// the live tree has gone aside, so a failure there leaves the role neither old nor new: every launch of it
+/// runs untaught, and the next deployment's collection removes the only copy of what was there. So both are
+/// retried, and if the second still will not go the tree that was there is put back.
 /// </para>
 /// <para>
 /// A first deployment is one rename and has no window at all; an unchanged one does not rename.
@@ -82,12 +89,38 @@ public static class SkillsSwap
             return $"'{name}' could not be replaced: {refusal} Nothing was changed for it. Stop the runtime, or try again.";
         }
 
-        Directory.Move(staged, live);
+        // The second rename can be blocked too, and the remark this file used to carry was about the wrong
+        // end of the call: what blocks a Windows directory rename is a handle *inside the source*, and the
+        // source here is the tree this deployment has just finished writing -- which an indexer or a scanner
+        // opens for exactly that reason. Unguarded, its failure was the worst outcome in the file: the live
+        // tree has already gone aside, so the role is neither old nor new, every launch of it runs untaught,
+        // and the next run's collection deletes the only copy of what was there.
+        if (!TryMove(staged, live, clock, out var blocked))
+        {
+            // Put back what was there. A role that is missing is worse than a role that is out of date, and
+            // this is the one moment when the old tree is still in hand.
+            if (TryMove(aside, live, clock, out _))
+            {
+                return $"'{name}' could not be replaced: {blocked} What was there has been put back. Try again.";
+            }
+
+            return $"'{name}' could not be replaced: {blocked} What was there is at '{aside}' and could not be put back; move it to '{live}' by hand before launching that role.";
+        }
+
         Remove(aside);
         return null;
     }
 
-    private static bool TryMoveAside(string live, string aside, TimeProvider clock, out string refusal)
+    private static bool TryMoveAside(string live, string aside, TimeProvider clock, out string refusal) =>
+        TryMove(live, aside, clock, out refusal);
+
+    /// <summary>
+    /// One rename, retried while something holds the tree it is moving. Both renames of a replacement go
+    /// through it: the first can be blocked by a launch reading the live tree, and the second by anything
+    /// holding the staged one -- and the second's failure is the worse of the two, so retrying only the first
+    /// was protecting the cheaper end.
+    /// </summary>
+    private static bool TryMove(string from, string to, TimeProvider clock, out string refusal)
     {
         var started = clock.GetTimestamp();
         refusal = string.Empty;
@@ -96,14 +129,15 @@ public static class SkillsSwap
         {
             try
             {
-                Directory.Move(live, aside);
+                Directory.Move(from, to);
                 return true;
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                // Windows denies this while a launch holds a file inside the tree open, which is exactly what
-                // teaching a role does. It denies it cleanly, so nothing has moved and waiting is safe.
-                refusal = "a launch is reading this role's skill right now, and it has held it for "
+                // Windows denies this while anything holds a file inside the tree being moved -- a launch
+                // reading the live one, an indexer walking the staged one. It denies it cleanly, so nothing
+                // has moved and waiting is safe.
+                refusal = "something is holding this role's skill open, and it has held it for "
                     + $"{ReplaceTimeout.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)} seconds.";
 
                 if (clock.GetElapsedTime(started) >= ReplaceTimeout)
