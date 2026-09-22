@@ -295,6 +295,7 @@ profile, so there is no level to name.
 | `profile_disabled` | it exists and is out of service |
 | `host_not_available` | its program is not on this machine |
 | `role_skill_invalid` | the role's skill could not be given to it |
+| `role_skill_unreadable` | the role's skill was being replaced while this launch tried to read it |
 | `role_not_launchable` | no profile at any level, and the role has no entry command either |
 
 None of them is classified, and an attempt error the failure rules do not name is final. That is the right

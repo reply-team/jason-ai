@@ -278,6 +278,7 @@ existed. It is the same rule the twelve provider checks follow.
 | 3 | `profile_disabled` | it exists and is out of service. Enable it, or name another |
 | 4 | `host_not_available` | the profile's program is not on this machine. Install it, or point the profile somewhere else |
 | 5 | `role_skill_invalid` | the role's skill could not be given to it — misnamed, or past `Roles:MaxSkillBytes` |
+| 5 | `role_skill_unreadable` | the role's skill was being replaced by a deployment and could not be read consistently while this launch waited |
 | 6 | `role_not_launchable` | no profile anywhere, and the role has no entry command either |
 
 The child is started in a per-attempt **work directory**, `~/.jason/work/<wi_…>/<att_…>/`, which the

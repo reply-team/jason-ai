@@ -18,6 +18,7 @@ public partial class ExecutionProfileDocTests
         AttemptErrors.ProfileDisabled,
         AttemptErrors.HostNotAvailable,
         AttemptErrors.RoleSkillInvalid,
+        AttemptErrors.RoleSkillUnreadable,
         AttemptErrors.RoleNotLaunchable,
     ];
 

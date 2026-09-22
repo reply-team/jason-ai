@@ -2,6 +2,7 @@ using System.Globalization;
 using Jason.Cli.Process;
 using Jason.Contracts;
 using Jason.Contracts.Update;
+using Jason.Contracts.Skills;
 
 namespace Jason.Cli.Skills;
 
@@ -90,13 +91,22 @@ public static class SkillsSource
                 $"'{where}' is not a directory on this machine and this environment cannot run git, so it cannot be fetched. Name a directory with --source.");
         }
 
-        var staged = env.Paths.SkillsStagedSourceDirectory(Sanitized(pin));
+        string staged;
+        try
+        {
+            staged = env.Paths.SkillsStagedSourceDirectory(DirectoryNameFor(pin));
+        }
+        catch (ArgumentException refused)
+        {
+            throw new SkillsSourceUnavailable($"'{pin}' cannot be used as a ref: {refused.Message} Name a tag or a branch.");
+        }
+
         if (Directory.Exists(staged))
         {
             Directory.Delete(staged, recursive: true);
         }
 
-        Directory.CreateDirectory(Path.GetDirectoryName(staged)!);
+        Directory.CreateDirectory(env.Paths.SkillsStagedSourcesDirectory);
 
         var clone = await runner.RunAsync(
             "git",
@@ -137,9 +147,26 @@ public static class SkillsSource
     }
 
     /// <summary>
-    /// A ref as a directory name. A ref can hold slashes, and this composes a path from it — so what is kept is
-    /// the characters a ref is allowed to have that a path also is, and nothing that could walk anywhere.
+    /// A ref as a directory name: every character a directory name may not carry replaced, and then the whole
+    /// thing refused if what is left is not an ordinary name.
     /// </summary>
-    private static string Sanitized(string reference) =>
-        new([.. reference.Select(character => char.IsLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '-')]);
+    /// <remarks>
+    /// Replacing on its own is what made this dangerous. A filter that keeps dots leaves <c>..</c> exactly as
+    /// it was, and the path composed from it is the directory holding every deployed skill — which the caller
+    /// deletes before unpacking. So the refusal is the guard and the replacement is only a convenience for the
+    /// refs that are fine; <see cref="JasonPaths.SkillsStagedSourceDirectory"/> refuses again on its own
+    /// account, because that is where the path is made.
+    /// </remarks>
+    private static string DirectoryNameFor(string reference)
+    {
+        var name = new string([.. reference.Select(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '-')]);
+
+        if (name.Length == 0 || name.All(character => character == '.'))
+        {
+            throw new SkillsSourceUnavailable(
+                $"'{reference}' cannot be used as a ref: it leaves no ordinary directory name to unpack into. Name a tag or a branch.");
+        }
+
+        return name;
+    }
 }

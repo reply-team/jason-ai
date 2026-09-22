@@ -6,6 +6,7 @@ using Jason.Cli.Http;
 using Jason.Cli.Skills;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Contracts.Skills;
 
 namespace Jason.Cli.Status;
 

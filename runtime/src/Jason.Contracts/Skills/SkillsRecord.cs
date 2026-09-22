@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Jason.Contracts.Json;
 
-namespace Jason.Cli.Skills;
+namespace Jason.Contracts.Skills;
 
 /// <summary>There is a record file in this root and it is not one this build can read.</summary>
 /// <remarks>
@@ -40,6 +40,12 @@ public sealed record SkillsDeployment(
     IReadOnlyList<DeployedFile> Files);
 
 /// <summary>Every pack Jason put in one root, in one file beside them.</summary>
+/// <remarks>
+/// In the contracts rather than in the CLI that writes it, for the same reason the rules are: two programs
+/// need it and only one of them may see the other. The launcher reads it to tell a role that never had a
+/// skill from one whose directory is being replaced this instant — the first runs untaught and is recorded
+/// as such, the second is a race and must not be.
+/// </remarks>
 /// <remarks>
 /// One file per root rather than one per pack, because a harness root holds skills from everywhere and the
 /// question asked of it is "what did Jason put here?" — which is one question with one answer.
@@ -119,6 +125,48 @@ public sealed record SkillsRecord(int Version, IReadOnlyList<SkillsDeployment> P
         var staged = file + ".writing";
         File.WriteAllText(staged, JsonSerializer.Serialize(record, JasonJson.Options));
         File.Move(staged, file, overwrite: true);
+    }
+
+    /// <summary>
+    /// The role names a record in the role skills root says are deployed there.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is what tells a role that never had a skill from one whose directory is being replaced this
+    /// instant. Both look identical from the disk — the directory is not there — and they are opposite facts:
+    /// the first runs untaught and is recorded as such, the second is a race and must never be reported as a
+    /// role that was taught nothing.
+    /// </para>
+    /// <para>
+    /// It never throws. A launch is not the place to discover that a record is malformed, and answering "no
+    /// record" restores exactly what the launcher did before this existed.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlySet<string> RolesDeployedIn(string roleSkillsRoot)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(roleSkillsRoot);
+
+        SkillsRecord? record;
+        try
+        {
+            record = Read(roleSkillsRoot);
+        }
+        catch (SkillsRecordUnreadable)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        var roles = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var file in record?.Packs.SelectMany(pack => pack.Files) ?? [])
+        {
+            var segment = file.Path.Split('/', 2)[0];
+            if (segment.Length > 0)
+            {
+                roles.Add(segment);
+            }
+        }
+
+        return roles;
     }
 
     /// <summary>The digest of one file's bytes, spelled one way so two of them can be compared.</summary>

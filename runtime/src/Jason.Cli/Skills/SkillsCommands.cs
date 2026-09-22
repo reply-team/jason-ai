@@ -5,6 +5,7 @@ using Jason.Cli.Discovery;
 using Jason.Cli.Http;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Contracts.Skills;
 
 namespace Jason.Cli.Skills;
 

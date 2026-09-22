@@ -97,34 +97,56 @@ public static class WorkDirectory
             return WorkDirectoryReport.Ready;
         }
 
-        try
-        {
-            return Deliver(host, role, roleSkillsRoot, maxSkillBytes, rescued: false);
-        }
-        catch (RoleSkillTreeChanged)
-        {
-            // A deployment renamed this role's tree while it was being read. Read it again from the top: the
-            // second read sees the tree that arrived, or sees nothing, and either of those is a whole answer.
-        }
-
         var lost = Path.Combine(host, SkillsDirectory, role);
-        Discard(lost);
+        var started = Environment.TickCount64;
+        RoleSkillTreeChanged? last = null;
 
-        try
+        for (var read = 0; ; read++)
         {
-            return Deliver(host, role, roleSkillsRoot, maxSkillBytes, rescued: true);
+            if (read > 0)
+            {
+                // Whatever the lost read had already copied, before anything of the tree that arrived lands
+                // beside it. A blend is the one outcome this whole arrangement exists to make impossible.
+                Discard(lost);
+            }
+
+            try
+            {
+                return Deliver(host, role, roleSkillsRoot, maxSkillBytes, rescued: read > 0);
+            }
+            catch (RoleSkillTreeChanged changed)
+            {
+                last = changed;
+                if (Environment.TickCount64 - started >= ReadBudgetMs)
+                {
+                    break;
+                }
+
+                // A replacement is two renames of the same directory, so the window is microseconds wide and
+                // waiting a moment is what gets past it. Reading again instantly, over and over, would mostly
+                // land in the same window — which is how a rescue that exists comes to almost never fire.
+                Thread.Sleep(ReadPauseMs);
+            }
         }
-        catch (RoleSkillTreeChanged changed)
-        {
-            // Twice running, which takes two deployments inside one launch's copy. Refused rather than run
-            // untaught: a skill that was configured and did not arrive is what this launcher already refuses
-            // over, and the role would otherwise do the job untaught at the price of a real launch.
-            Discard(lost);
-            return WorkDirectoryReport.Refused(
-                AttemptErrors.RoleSkillUnreadable,
-                $"The skill for role '{role}' could not be read consistently: a deployment was in flight and a second read of it lost the race too. {changed.Message}");
-        }
+
+        Discard(lost);
+        return WorkDirectoryReport.Refused(
+            AttemptErrors.RoleSkillUnreadable,
+            $"The skill for role '{role}' could not be read consistently: a deployment was in flight for longer than this launch waited. {last!.Message}");
     }
+
+    /// <summary>
+    /// How long a launch keeps trying to read a role's tree while a deployment is replacing it.
+    /// </summary>
+    /// <remarks>
+    /// Generous against what it is waiting for, which is two renames of one directory, and short against what
+    /// it is holding up, which is one launch of one role. Reading exactly twice was tried first and was not
+    /// enough: the window a real deployment opens is between its two renames, and a second read taken
+    /// immediately is still inside it far more often than not.
+    /// </remarks>
+    private const int ReadBudgetMs = 2_000;
+
+    private const int ReadPauseMs = 15;
 
     /// <summary>One read of the role's tree, and the copy of exactly what that read found.</summary>
     private static WorkDirectoryReport Deliver(string host, string role, string roleSkillsRoot, int maxSkillBytes, bool rescued)
@@ -133,9 +155,21 @@ public static class WorkDirectory
         var reading = RoleSkillRules.Read(source, role, maxSkillBytes);
         if (!reading.Exists)
         {
-            // The brief travels in the envelope. A role without a skill was never given one, which is not a
-            // failure of this attempt — but it is recorded, because "was this role taught anything?" is a
-            // question about a finished attempt that nothing else can answer afterwards.
+            // Absent, and there are two ways to be absent that look identical from here and are opposite
+            // facts. A deployment replaces a role by renaming its tree aside and the new one in, and between
+            // those two renames this directory does not exist -- so "not there" during a replacement is a
+            // race, not an answer. A record in this root names every role a deployment put here, which is
+            // what tells the two apart.
+            if (SkillsRecord.RolesDeployedIn(roleSkillsRoot).Contains(role))
+            {
+                throw new RoleSkillTreeChanged(
+                    source,
+                    new IOException("a deployment's record names this role, so its directory is being replaced rather than absent."));
+            }
+
+            // The brief travels in the envelope. A role that was never given a skill is not a failure of this
+            // attempt — but it is recorded, because "was this role taught anything?" is a question about a
+            // finished attempt that nothing else can answer afterwards.
             return WorkDirectoryReport.Taught(new RoleSkillDto(false, role, 0), rescued);
         }
 

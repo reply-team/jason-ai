@@ -1,4 +1,5 @@
 using Jason.Cli.Skills;
+using Jason.Contracts.Skills;
 
 namespace Jason.Cli.Tests.Skills;
 

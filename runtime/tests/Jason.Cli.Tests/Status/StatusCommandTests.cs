@@ -4,6 +4,7 @@ using System.Text.Json;
 using Jason.Cli;
 using Jason.Cli.Process;
 using Jason.Cli.Skills;
+using Jason.Contracts.Skills;
 using Jason.Cli.Status;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Tests.Commands;

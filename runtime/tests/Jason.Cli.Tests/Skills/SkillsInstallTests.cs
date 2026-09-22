@@ -1,6 +1,7 @@
 using Jason.Cli;
 using Jason.Cli.Process;
 using Jason.Cli.Skills;
+using Jason.Contracts.Skills;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Tests.Process;
 

@@ -1,3 +1,4 @@
+using Jason.Cli;
 using Jason.Cli.Process;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Process;
@@ -93,6 +94,54 @@ public class SkillsSourceTests
             () => SkillsSource.StageAsync(Machine(dir), new Uri(origin).AbsoluteUri, "v9.9.9", Ct));
 
         Assert.Contains("v9.9.9", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A ref that is a way out of the staging directory is refused, and nothing is deleted on the way to
+    /// finding that out.
+    /// </summary>
+    /// <remarks>
+    /// This staged into a directory named after the ref and deleted that directory before unpacking. The
+    /// filter that made the name kept dots, so <c>..</c> survived it whole, the path resolved to the
+    /// directory holding every deployed skill, and one command removed all of them — before any validation,
+    /// in the verb whose contract is that nothing is written until the whole tree is deliverable.
+    /// </remarks>
+    [Theory]
+    [InlineData("..")]
+    [InlineData("../..")]
+    [InlineData(".")]
+    public async Task A_ref_that_climbs_out_of_the_staging_directory_is_refused_and_deletes_nothing(string reference)
+    {
+        using var dir = new TempPaths();
+        var deployed = Directory.CreateDirectory(Path.Combine(dir.Paths.RoleSkillsDirectory, "researcher")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(deployed, "SKILL.md"), "---\nname: researcher\n---\n\nbody\n", Ct);
+        var record = Path.Combine(dir.Paths.Root, "skills", ".jason-skills.json");
+        await File.WriteAllTextAsync(record, """{"version":1,"packs":[]}""", Ct);
+
+        var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+            () => SkillsSource.StageAsync(Machine(dir), "https://example.test/x.git", reference, Ct));
+
+        Assert.Contains(reference, refusal.Message, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(deployed, "SKILL.md")), "The deployed skill was deleted by a refused ref.");
+        Assert.True(File.Exists(record), "The deployment record was deleted by a refused ref.");
+    }
+
+    /// <summary>And the whole verb answers the same way, since that is where a person meets it.</summary>
+    [Fact]
+    public async Task The_install_verb_refuses_a_climbing_ref_and_leaves_every_deployed_skill_where_it_is()
+    {
+        using var dir = new TempPaths();
+        var deployed = Directory.CreateDirectory(Path.Combine(dir.Paths.RoleSkillsDirectory, "researcher")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(deployed, "SKILL.md"), "---\nname: researcher\n---\n\nbody\n", Ct);
+
+        var error = new StringWriter();
+        var exit = await CliApp.RunAsync(
+            ["skills", "install", "--ref", "..", "--root", Path.Combine(dir.Paths.Root, "harness")],
+            new CliEnvironment(new StringWriter(), error, dir.Paths, Programs: new FakeProgramRunner()),
+            Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.True(File.Exists(Path.Combine(deployed, "SKILL.md")), "The deployed skill was deleted by 'jason skills install --ref ..'.");
     }
 
     /// <summary>An environment with no program runner refuses rather than reaching for the network.</summary>

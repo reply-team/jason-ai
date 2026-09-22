@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Skills;
 
 namespace Jason.Cli.Skills;
 

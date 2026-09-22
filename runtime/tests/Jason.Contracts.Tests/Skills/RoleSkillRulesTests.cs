@@ -123,6 +123,35 @@ public class RoleSkillRulesTests : IDisposable
         Assert.Equal(expected, RoleSkillRules.Named(file));
     }
 
+    /// <summary>
+    /// A skill file that is gone is the tree moving, not a skill that names nothing.
+    /// </summary>
+    /// <remarks>
+    /// The difference is the whole of it. Null here reads to the caller as "this skill calls itself something
+    /// other than its directory", which refuses the attempt as invalid and sends the operator to fix front
+    /// matter that is already correct. And <c>SKILL.md</c> is the one file every deployment touches, so this
+    /// is where a rename is most likely to be met — the raise was applied everywhere except where it mattered
+    /// most.
+    /// </remarks>
+    [Fact]
+    public void A_skill_file_that_is_gone_is_the_tree_moving_rather_than_a_skill_that_names_nothing()
+    {
+        var file = Path.Combine(Directory.CreateDirectory(Path.Combine(_root, "gone")).FullName, RoleSkillRules.SkillFile);
+
+        var changed = Assert.Throws<RoleSkillTreeChanged>(() => RoleSkillRules.Named(file));
+
+        Assert.Contains(RoleSkillRules.SkillFile, changed.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>And a directory that is gone under it answers the same way, for the same reason.</summary>
+    [Fact]
+    public void A_skill_file_whose_directory_is_gone_is_the_tree_moving_too()
+    {
+        var directory = Path.Combine(_root, "never-made");
+
+        Assert.Throws<RoleSkillTreeChanged>(() => RoleSkillRules.Named(Path.Combine(directory, RoleSkillRules.SkillFile)));
+    }
+
     public void Dispose()
     {
         GC.SuppressFinalize(this);

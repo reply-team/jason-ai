@@ -159,6 +159,15 @@ public static class RoleSkillRules
         {
             lines = [.. File.ReadLines(skillFile).Take(FrontMatterLines)];
         }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        {
+            // The one place this mattered most and was answered worst. A file that is gone is not a file that
+            // names nothing: the caller reads null as "the skill names itself something else" and refuses the
+            // attempt as invalid, sending the operator to fix front matter that is already correct. And
+            // SKILL.md is the one file every deployment touches, so this is where a rename is most likely to
+            // be met. It is the tree moving, and the answer is to read again.
+            throw new RoleSkillTreeChanged(skillFile, exception);
+        }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             return null;
