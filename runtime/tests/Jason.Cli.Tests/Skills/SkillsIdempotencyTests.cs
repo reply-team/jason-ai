@@ -81,6 +81,34 @@ public class SkillsIdempotencyTests
         Assert.Contains("--force", again.Error, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A file the operator puts <em>inside</em> a deployed skill is theirs too, and it is the one the
+    /// "reported and kept" promise could not see.
+    /// </summary>
+    /// <remarks>
+    /// A skill is replaced whole — the old tree moved aside and removed — so an extra file in one is
+    /// destroyed by an ordinary re-run against an unchanged source: no <c>--force</c> asked for, the run
+    /// reporting a write and never mentioning the deletion. Walking the plan's own files could never catch
+    /// it, because the plan does not know the file exists.
+    /// </remarks>
+    [Fact]
+    public async Task A_file_the_operator_put_inside_a_deployed_skill_is_reported_and_kept()
+    {
+        using var dir = new TempPaths();
+        var source = Source(dir);
+        await InstallAsync(dir, source);
+
+        var mine = Path.Combine(Harness(dir), "operating", "my-notes.md");
+        await File.WriteAllTextAsync(mine, "what I worked out", Ct);
+
+        var again = await InstallAsync(dir, source);
+
+        Assert.Equal(ExitCodes.ApiError, again.Exit);
+        Assert.True(File.Exists(mine), "A file the operator put inside a deployed skill was deleted by a re-run.");
+        Assert.Contains("my-notes.md", again.Error, StringComparison.Ordinal);
+        Assert.Contains("--force", again.Error, StringComparison.Ordinal);
+    }
+
     /// <summary>And --force is the word that says otherwise.</summary>
     [Fact]
     public async Task Force_overwrites_the_edit()

@@ -230,6 +230,32 @@ public class StatusCommandTests
     }
 
     /// <summary>
+    /// A roster that could not be read is unknown, never ok.
+    /// </summary>
+    /// <remarks>
+    /// Turning a failed <c>role.list</c> into "zero seeded roles" made this check answer "0 roles taught, all
+    /// within the cap" and <c>ready: true</c> on a machine where every role launches untaught — the hole this
+    /// increment exists to close, reported as closed, by the one verb whose whole job is to be trusted about
+    /// readiness. Everything else unreadable in this verb answers unknown, and so does this.
+    /// </remarks>
+    [Fact]
+    public async Task A_roster_that_could_not_be_read_is_unknown_and_never_ready()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir, rosterFails: true);
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var report = Read(output);
+        var skills = Assert.Single(report.Checks, check => check.Name == "role_skills");
+        Assert.Equal(CheckState.Unknown, skills.State);
+        Assert.False(report.Ready);
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.DoesNotContain("all within", skills.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Named by the operator and by nobody else. Which provider somebody uses is theirs, and a build that knew
     /// one vendor's command by heart would be this product naming a vendor in its own sources, which A7(a)
     /// forbids and a guard reads off them.
@@ -272,13 +298,16 @@ public class StatusCommandTests
         JsonSerializer.Deserialize<StatusReport>(output.ToString(), JasonJson.Options)!;
 
     /// <summary>A descriptor on disk and a runtime behind it answering the three operations status asks.</summary>
-    private static void Running(TempPaths dir, IReadOnlyList<string>? roles = null, SkillsInfo? skills = null)
+    /// <summary>A descriptor and a runtime behind it. <paramref name="roles"/> null makes role.list fail.</summary>
+    private static void Running(TempPaths dir, IReadOnlyList<string>? roles = null, SkillsInfo? skills = null, bool rosterFails = false)
     {
         dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_01J"));
-        Answers[dir.Paths.Root] = (roles ?? ["researcher"], skills ?? new SkillsInfo("/data/skills/roles", 1048576, [Taught("researcher")]));
+        Answers[dir.Paths.Root] = (
+            rosterFails ? null : roles ?? ["researcher"],
+            skills ?? new SkillsInfo("/data/skills/roles", 1048576, [Taught("researcher")]));
     }
 
-    private static readonly Dictionary<string, (IReadOnlyList<string> Roles, SkillsInfo Skills)> Answers = [];
+    private static readonly Dictionary<string, (IReadOnlyList<string>? Roles, SkillsInfo Skills)> Answers = [];
 
     /// <summary>
     /// The machine these run against: this test's own data directory, a runtime that exists only in a handler,
@@ -330,6 +359,11 @@ public class StatusCommandTests
 
         if (route.EndsWith(Operations.RoleList, StringComparison.Ordinal))
         {
+            if (answers.Roles is null)
+            {
+                return RuntimeVerbs.Response(HttpStatusCode.InternalServerError, "{}");
+            }
+
             var page = new Page<RoleDto>(
                 [.. answers.Roles.Select(name => new RoleDto($"rol_{name}", name, true, null, [], new System.Text.Json.Nodes.JsonObject(), null, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch))],
                 null);

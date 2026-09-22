@@ -94,27 +94,37 @@ public static class SkillsDeployer
 
             foreach (var pack in plan.Packs.Where(pack => string.Equals(pack.Root, root, StringComparison.Ordinal)))
             {
+                var recorded = deployments.FirstOrDefault(deployment => string.Equals(deployment.Pack, pack.Pack, StringComparison.Ordinal));
+
                 var mine = new List<DeployedFile>();
                 foreach (var unit in pack.Units)
                 {
-                    mine.AddRange(unit.Files.Select(file => new DeployedFile(Relative(root, file.Target), file.Sha256)));
-
                     if (Current(unit))
                     {
                         unchanged += unit.Files.Count;
+                        mine.AddRange(Planned(root, unit));
                         continue;
                     }
 
                     if (Swap(unit, staging, clock) is { } refusal)
                     {
                         problems.Add(refusal);
+
+                        // The live tree is still the old one, so the record must still describe the old one.
+                        // Writing the digests of bytes that were never written is how a transient refusal --
+                        // a launch reading this role's skill, the exact case the design exists for -- becomes
+                        // permanent: the next run compares disk against a record that never matched it,
+                        // calls the difference the operator's own edit, and refuses until somebody types
+                        // --force about a file Jason wrote. It also falsifies the message printed a moment
+                        // ago, which says nothing was changed for this role.
+                        mine.AddRange(Previously(recorded, Relative(root, unit.Unit)));
                         continue;
                     }
 
                     written += unit.Files.Count;
+                    mine.AddRange(Planned(root, unit));
                 }
 
-                var recorded = deployments.FirstOrDefault(deployment => string.Equals(deployment.Pack, pack.Pack, StringComparison.Ordinal));
                 var next = new SkillsDeployment(
                     pack.Pack,
                     plan.Source.Source,
@@ -254,6 +264,22 @@ public static class SkillsDeployer
                     edited.Add(file.Target);
                 }
             }
+
+            // And every file inside a deployed skill that this plan does not name. A skill is replaced whole
+            // -- the old tree is moved aside and removed -- so a file the operator put in one is destroyed by
+            // an ordinary re-run, silently, with no --force asked for and nothing said afterwards. Walking
+            // only the plan's own files could never see it: the plan does not know it exists.
+            foreach (var unit in pack.Units.Where(unit => Directory.Exists(unit.Unit)))
+            {
+                var ours = unit.Files.Select(file => file.Target).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                foreach (var found in Directory.GetFiles(unit.Unit, "*", SearchOption.AllDirectories))
+                {
+                    if (!ours.Contains(found))
+                    {
+                        edited.Add(found);
+                    }
+                }
+            }
         }
 
         return edited;
@@ -261,6 +287,17 @@ public static class SkillsDeployer
 
     private static string Relative(string root, string target) =>
         Path.GetRelativePath(root, target).Replace('\\', '/');
+
+    /// <summary>What this skill's files are, once they are on disk as the plan describes them.</summary>
+    private static IEnumerable<DeployedFile> Planned(string root, PlannedUnit unit) =>
+        unit.Files.Select(file => new DeployedFile(Relative(root, file.Target), file.Sha256));
+
+    /// <summary>
+    /// What the record already said about one skill, for a replacement that was refused. A record describes
+    /// what is on disk, and what is on disk for that skill is what was there before.
+    /// </summary>
+    private static IEnumerable<DeployedFile> Previously(SkillsDeployment? recorded, string unit) =>
+        recorded?.Files.Where(file => file.Path.StartsWith(unit + "/", StringComparison.Ordinal)) ?? [];
 
     private static SkillsRecord? Existing(string root, List<string> problems)
     {

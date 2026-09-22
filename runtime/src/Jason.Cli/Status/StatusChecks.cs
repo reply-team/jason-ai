@@ -154,9 +154,25 @@ internal static class StatusChecks
             return new StatusCheck("role_skills", true, CheckState.Failed, problem, null);
         }
 
+        // A roster that could not be read is not an empty roster. Turning one into the other made this check
+        // answer "0 roles taught, all within the cap" and ready: true on a machine where every role launches
+        // untaught -- which is the hole this whole increment exists to close, reported as closed, by the one
+        // verb whose job is to be trusted about readiness. Everything else unreadable in this file says
+        // Unknown, and so does this.
         var roster = client is null
-            ? []
-            : (await ReadAsync<Page<RoleDto>>(client, Operations.RoleList, cancellationToken).ConfigureAwait(false))?.Items ?? [];
+            ? null
+            : (await ReadAsync<Page<RoleDto>>(client, Operations.RoleList, cancellationToken).ConfigureAwait(false))?.Items;
+
+        if (roster is null)
+        {
+            return new StatusCheck(
+                "role_skills",
+                true,
+                CheckState.Unknown,
+                $"{skills.Roles.Count} role directories are deployed, and the roster could not be read, so whether every seeded role has one is unknown.",
+                null);
+        }
+
         var seeded = roster.Select(role => role.Name).ToHashSet(StringComparer.Ordinal);
         var deployed = skills.Roles.Select(role => role.Role).ToHashSet(StringComparer.Ordinal);
 
