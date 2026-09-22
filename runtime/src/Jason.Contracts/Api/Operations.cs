@@ -1,9 +1,21 @@
 namespace Jason.Contracts.Api;
 
 /// <summary>
-/// Operation names shared by the runtime, the CLI and the skills. One vocabulary at three levels:
-/// canonical operation <c>system.info</c> ↔ <c>POST /v1/system.info</c> ↔ <c>jason system info</c>.
+/// Runtime API operation names, shared by the runtime, the CLI and the skills. One vocabulary at three
+/// levels: <c>campaign.list</c> ↔ <c>POST /v1/campaign.list</c> ↔ <c>jason campaign list</c>.
 /// </summary>
+/// <remarks>
+/// <para>
+/// These are not the <em>canonical operations</em> of <c>docs/contracts/</c>. That phrase is taken there and
+/// means something else: one unit of SDR work a plugin implements, published as a JSON document and enforced
+/// against it. Spending the phrase on both is how a reader concludes that an operation named here has a
+/// contract document, and goes looking for one that was never meant to exist.
+/// </para>
+/// <para>
+/// And not every name here has a command. <c>system.info</c> is reached through <c>jason runtime status</c>;
+/// there is no <c>system</c> noun in the CLI, so nothing types <c>jason system info</c>.
+/// </para>
+/// </remarks>
 public static class Operations
 {
     public const string SystemInfo = "system.info";

@@ -1,5 +1,6 @@
 using Jason.Cli.Autostart;
 using Jason.Cli.Process;
+using Jason.Cli.Skills;
 using Jason.Contracts.Discovery;
 
 namespace Jason.Cli;
@@ -18,8 +19,35 @@ namespace Jason.Cli;
 /// for real. So <see cref="Default"/> names this machine's registrar and nothing else does: null is
 /// <c>autostart_unsupported</c>, which is the wrong answer to get by accident and a harmless one to get.
 /// </param>
-public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null)
+/// <param name="Harnesses">
+/// Where the person's own agent harnesses keep skills — and the second seam whose default is the refusal. The
+/// same reasoning as <paramref name="Autostart"/>, with a different directory at the end of it: a verb that
+/// detected for itself would write into the home directory of whoever ran the suite, and into three CI
+/// runners'. Null refuses, which is the wrong answer to get by accident and a harmless one to get.
+/// </param>
+/// <param name="SearchPath">
+/// The directories a bare command name is looked up in — <c>PATH</c>. Null asks the operating system, which is
+/// the answer everywhere but a test, for the same reason <paramref name="InstallPath"/> gives: whether
+/// <c>jason</c> can be typed by name is a fact about the machine, and a test that read the real one would
+/// report the developer's machine rather than the installation under test.
+/// </param>
+/// <param name="Programs">
+/// How a program that is not a Jason runtime is run — and the third. One of the verbs those guards will type
+/// fetches a skills source with <c>git</c>; a seam that defaulted to the real runner would make a
+/// documentation guard the first test in this repository to open a socket to the internet.
+/// </param>
+public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null)
 {
     public static CliEnvironment Default() =>
-        new(Console.Out, Console.Error, JasonPaths.FromEnvironment(), null, Console.In, RuntimeProcessControl.Instance, null, AutostartRegistrars.ForThisMachine());
+        new(
+            Console.Out,
+            Console.Error,
+            JasonPaths.FromEnvironment(),
+            null,
+            Console.In,
+            RuntimeProcessControl.Instance,
+            null,
+            AutostartRegistrars.ForThisMachine(),
+            HarnessLocators.ForThisMachine(),
+            ProgramRunners.ForThisMachine());
 }

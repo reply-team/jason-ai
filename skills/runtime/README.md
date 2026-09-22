@@ -8,6 +8,13 @@ this pack ships with Jason **0.1.0**.
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
 
+**What they do not teach yet.** None of the five mentions `jason skills install`, `jason skills update` or
+`jason status`. Each is marked `verified`, which in this repository means a named agent host read *that exact
+body* while driving this runtime and the digest of what it read is recorded — so the texts cannot gain the new
+verbs without being re-read by a host, and no host has read them since the verbs existed. They teach what this
+build did before them, correctly and incompletely. The re-reading is the first-run increment's, and until it
+happens this paragraph is the honest form of the gap.
+
 ## The skills a person's own session reads
 
 One per moment somebody asks for something, because a host chooses a skill by its description and a
@@ -28,13 +35,24 @@ description that promises everything matches nothing.
 - [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
 
-### Installing one by hand
+### Installing them
 
-**There is no install verb yet.** Until there is, a person installs an interactive skill by copying its
-directory into wherever their own agent host looks for skills — for Claude Code that is
-`~/.claude/skills/<name>/` for themselves or `.claude/skills/<name>/` inside a project, as its own
-documentation describes. Other hosts have their own location. The directory name is the skill's name, and the
-two must match: a skill whose front matter names anything else is loaded by nobody and reported by nobody.
+```sh
+jason skills install --dry-run --pack jason-runtime-skills
+jason skills install --pack jason-runtime-skills
+jason skills update --pack jason-runtime-skills
+```
+
+That deploys the five interactive skills into the agent harnesses it finds, and the nine role skills below
+into the runtime's own data directory, where the runtime reads them at every launch. The second destination is
+not optional: a runtime with no role skills launches every role untaught.
+[`skills/README.md`](../README.md) is the contract the verb keeps.
+
+A person without this build installs an interactive skill by copying its directory into wherever their own
+agent host looks for skills — for Claude Code that is `~/.claude/skills/<name>/` for themselves or
+`.claude/skills/<name>/` inside a project, as its own documentation describes. Other hosts have their own
+location. The directory name is the skill's name, and the two must match: a skill whose front matter names
+anything else is loaded by nobody and reported by nobody.
 
 ## The skills a launched role reads
 

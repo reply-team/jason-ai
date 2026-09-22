@@ -1,5 +1,5 @@
 using Jason.Contracts.Api;
-using System.Globalization;
+using Jason.Contracts.Skills;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -10,12 +10,17 @@ namespace Jason.Runtime.Execution.Hosts;
 /// attempt before a child exists and carries the code it ends with, because a skill that quietly did not arrive
 /// reads afterwards as a model that ignored it.
 /// </summary>
-public sealed record WorkDirectoryReport(string? RefusalCode, string? Message, RoleSkillDto? Skill = null)
+/// <param name="Rescued">
+/// This attempt lost a race with a deployment and was saved by reading the tree a second time. It is on the
+/// report so a test can prove the second read ran at all — a race test that never exercised the rescue would
+/// pass for the wrong reason — and so the launcher can log that it happened.
+/// </param>
+public sealed record WorkDirectoryReport(string? RefusalCode, string? Message, RoleSkillDto? Skill = null, bool Rescued = false)
 {
     public static WorkDirectoryReport Ready { get; } = new(null, null);
 
     /// <summary>Ready, and carrying what the role was taught so the attempt can record it.</summary>
-    public static WorkDirectoryReport Taught(RoleSkillDto skill) => new(null, null, skill);
+    public static WorkDirectoryReport Taught(RoleSkillDto skill, bool rescued = false) => new(null, null, skill, rescued);
 
     public static WorkDirectoryReport Refused(string code, string message) => new(code, message);
 }
@@ -38,7 +43,7 @@ public static class WorkDirectory
     public const string SkillsDirectory = "skills";
 
     /// <summary>The file a skill introduces itself in; a directory without one teaches a host nothing.</summary>
-    public const string SkillFile = "SKILL.md";
+    public const string SkillFile = RoleSkillRules.SkillFile;
 
     private static readonly JsonSerializerOptions Settings = new() { WriteIndented = true };
 
@@ -80,6 +85,11 @@ public static class WorkDirectory
     /// The role's skill, if it has one. A role's name is the roster's own spelling — lowercase letters, digits
     /// and hyphens — so it is one directory name and never a path; anything else names no skill directory here.
     /// </summary>
+    /// <remarks>
+    /// What makes a skill deliverable is <see cref="RoleSkillRules"/>, in the contracts, because an installer
+    /// writing into this root has to apply the same two rules before it writes: a deployment that fails them
+    /// turns a role with no skill — which runs — into a role whose every launch is refused.
+    /// </remarks>
     private static WorkDirectoryReport Teach(string host, string? role, string roleSkillsRoot, int maxSkillBytes)
     {
         if (string.IsNullOrWhiteSpace(role) || role != Path.GetFileName(role) || role is "." or "..")
@@ -87,159 +97,159 @@ public static class WorkDirectory
             return WorkDirectoryReport.Ready;
         }
 
+        var lost = Path.Combine(host, SkillsDirectory, role);
+        var started = Environment.TickCount64;
+        RoleSkillTreeChanged? last = null;
+
+        for (var read = 0; ; read++)
+        {
+            if (read > 0)
+            {
+                // Whatever the lost read had already copied, before anything of the tree that arrived lands
+                // beside it. A blend is the one outcome this whole arrangement exists to make impossible.
+                Discard(lost);
+            }
+
+            try
+            {
+                return Deliver(host, role, roleSkillsRoot, maxSkillBytes, rescued: read > 0);
+            }
+            catch (RoleSkillTreeChanged changed)
+            {
+                last = changed;
+                if (Environment.TickCount64 - started >= ReadBudgetMs)
+                {
+                    break;
+                }
+
+                // A replacement is two renames of the same directory, so the window is microseconds wide and
+                // waiting a moment is what gets past it. Reading again instantly, over and over, would mostly
+                // land in the same window — which is how a rescue that exists comes to almost never fire.
+                Thread.Sleep(ReadPauseMs);
+            }
+        }
+
+        Discard(lost);
+        return WorkDirectoryReport.Refused(
+            AttemptErrors.RoleSkillUnreadable,
+            $"The skill for role '{role}' could not be read consistently: a deployment was in flight for longer than this launch waited. {last!.Message}");
+    }
+
+    /// <summary>
+    /// How long a launch keeps trying to read a role's tree while a deployment is replacing it.
+    /// </summary>
+    /// <remarks>
+    /// Generous against what it is waiting for, which is two renames of one directory, and short against what
+    /// it is holding up, which is one launch of one role. Reading exactly twice was tried first and was not
+    /// enough: the window a real deployment opens is between its two renames, and a second read taken
+    /// immediately is still inside it far more often than not.
+    /// </remarks>
+    private const int ReadBudgetMs = 2_000;
+
+    private const int ReadPauseMs = 15;
+
+    /// <summary>One read of the role's tree, and the copy of exactly what that read found.</summary>
+    private static WorkDirectoryReport Deliver(string host, string role, string roleSkillsRoot, int maxSkillBytes, bool rescued)
+    {
         var source = Path.Combine(roleSkillsRoot, role);
-        if (!Directory.Exists(source))
+        var reading = RoleSkillRules.Read(source, role, maxSkillBytes);
+        if (!reading.Exists)
         {
-            // The brief travels in the envelope. A role without a skill was never given one, which is not a
-            // failure of this attempt — but it is recorded, because "was this role taught anything?" is a
-            // question about a finished attempt that nothing else can answer afterwards.
-            return WorkDirectoryReport.Taught(new RoleSkillDto(false, role, 0));
+            // Absent, and there are two ways to be absent that look identical from here and are opposite
+            // facts. A deployment replaces a role by renaming its tree aside and the new one in, and between
+            // those two renames this directory does not exist -- so "not there" during a replacement is a
+            // race, not an answer. A record in this root names every role a deployment put here, which is
+            // what tells the two apart.
+            if (SkillsRecord.RolesDeployedIn(roleSkillsRoot).Contains(role))
+            {
+                throw new RoleSkillTreeChanged(
+                    source,
+                    new IOException("a deployment's record names this role, so its directory is being replaced rather than absent."));
+            }
+
+            // The brief travels in the envelope. A role that was never given a skill is not a failure of this
+            // attempt — but it is recorded, because "was this role taught anything?" is a question about a
+            // finished attempt that nothing else can answer afterwards.
+            return WorkDirectoryReport.Taught(new RoleSkillDto(false, role, 0), rescued);
         }
 
-        var introduction = Path.Combine(source, SkillFile);
-        if (File.Exists(introduction) && Named(introduction) is var named && named != role)
+        if (reading.Problem is { } problem)
         {
-            // A host answers this by ignoring the skill and saying nothing, and an agent that was never taught
-            // its job reads afterwards as a model that refused to do it. Refused here instead, where it can be
-            // read: a skill is looked up by the directory it lives in, and it must name itself the same way.
-            return WorkDirectoryReport.Refused(
-                AttemptErrors.RoleSkillInvalid,
-                $"The skill in '{source}' names itself '{named ?? "nothing"}', and role '{role}' looks its skill up as '{role}'. A host answers that mismatch by ignoring the skill without reporting it.");
+            return WorkDirectoryReport.Refused(AttemptErrors.RoleSkillInvalid, problem.Message);
         }
 
-        var files = new List<string>();
-        long bytes = 0;
-        foreach (var file in Files(source))
-        {
-            bytes += Length(file);
-            files.Add(file);
-        }
-
-        // A skill that was configured and did not arrive is the failure worth refusing over: the role would do
-        // the job untaught, at the price of a real launch, and the only trace would be a log line nobody is
-        // reading at the time. Left behind for being too large is the same thing to the agent as left behind for
-        // being misnamed, so it is answered the same way.
-        if (bytes > maxSkillBytes)
-        {
-            return WorkDirectoryReport.Refused(
-                AttemptErrors.RoleSkillInvalid,
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"The skill in '{source}' is {bytes} bytes and Roles:MaxSkillBytes allows {maxSkillBytes}, so it cannot be given to the role. Trim the skill, or raise Roles:MaxSkillBytes."));
-        }
+        BetweenReadAndCopy.Value?.Invoke();
 
         var target = Path.Combine(host, SkillsDirectory, role);
-        foreach (var file in files)
+        foreach (var file in reading.Files)
         {
             var copy = Path.Combine(target, Path.GetRelativePath(source, file));
             Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
-            File.Copy(file, copy, overwrite: true);
+            try
+            {
+                File.Copy(file, copy, overwrite: true);
+            }
+            catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+            {
+                // The path was read before the rename and is dead after it. On a platform where a directory
+                // can be renamed out from under an open tree, this is where losing the race is felt.
+                throw new RoleSkillTreeChanged(file, exception);
+            }
         }
 
-        return WorkDirectoryReport.Taught(new RoleSkillDto(true, role!, bytes));
+        // The copy reads by path, and a path resolves to whatever is there when it is used rather than to what
+        // the walk saw. So a deployment that renamed a same-shaped tree into place mid-copy would be copied
+        // without a single failure, and reported with the byte count of the tree that is no longer there.
+        // Reading the tree again brackets the copy: a different file list or a different total means it moved.
+        // Per file, not just the list and the sum. Comparing totals leaves a compensating change through --
+        // one file growing by the bytes another loses, both swapped in mid-copy -- and the launch would then
+        // deliver a blend under a total that is arithmetically right for neither tree whole. The walk already
+        // has every length, so this costs nothing it had not already paid for.
+        var after = RoleSkillRules.Read(source, role, maxSkillBytes);
+        if (!after.Exists || !after.Measurements.SequenceEqual(reading.Measurements))
+        {
+            throw new RoleSkillTreeChanged(source, new IOException("The tree read before the copy is not the tree that is there after it."));
+        }
+
+        return WorkDirectoryReport.Taught(new RoleSkillDto(true, role, reading.Bytes), rescued);
     }
 
     /// <summary>
-    /// Every real file under the skill, and nothing a link points at: a link reaches outside the directory
-    /// somebody meant to hand over, so it is neither copied nor followed — on the way down through the
-    /// directories as much as at the file itself.
+    /// What a lost read had already copied. It goes before the second read, so no part of the tree that was
+    /// there survives into the one that arrived — a blend is the outcome this whole arrangement exists to
+    /// make impossible.
     /// </summary>
-    private static IEnumerable<string> Files(string directory)
-    {
-        foreach (var file in Directory.EnumerateFiles(directory))
-        {
-            if (!IsLink(file))
-            {
-                yield return file;
-            }
-        }
-
-        foreach (var child in Directory.EnumerateDirectories(directory))
-        {
-            if (IsLink(child))
-            {
-                continue;
-            }
-
-            foreach (var file in Files(child))
-            {
-                yield return file;
-            }
-        }
-    }
-
-    private static bool IsLink(string path)
+    private static void Discard(string target)
     {
         try
         {
-            return new FileInfo(path).LinkTarget is not null || new DirectoryInfo(path).LinkTarget is not null;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or PathTooLongException)
-        {
-            // Unreadable is not copyable either, and this is the cheapest way to say so.
-            return true;
-        }
-    }
-
-    private static long Length(string file)
-    {
-        try
-        {
-            return new FileInfo(file).Length;
+            if (Directory.Exists(target))
+            {
+                Directory.Delete(target, recursive: true);
+            }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            return 0;
+            // The second read overwrites everything it copies, so a directory that will not go is survivable.
+            // What would not be is a file the new tree does not have, and that is what this removes.
         }
     }
-
-    /// <summary>How far into a file a skill's front matter may be looked for; a real one is a handful of lines.</summary>
-    private const int FrontMatterLines = 64;
 
     /// <summary>
-    /// The name a skill gives itself, or null. Front matter is the first block between two <c>---</c> lines; a
-    /// file without one names nothing, which a host answers exactly as it answers a wrong name — it loads no
-    /// skill — so both are refused the same way. A file that is a link names nothing either: it is not copied,
-    /// so what a host would read is not what was inspected here.
+    /// Runs once between reading this role's tree and copying it, so a test can make the rename a deployment
+    /// performs happen at the one instant that matters. Null everywhere but that test.
     /// </summary>
-    private static string? Named(string file)
-    {
-        if (IsLink(file))
-        {
-            return null;
-        }
-
-        string[] lines;
-        try
-        {
-            lines = [.. File.ReadLines(file).Take(FrontMatterLines)];
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
-        {
-            return null;
-        }
-
-        if (lines.Length == 0 || lines[0].Trim() != "---")
-        {
-            return null;
-        }
-
-        foreach (var line in lines.Skip(1))
-        {
-            if (line.Trim() == "---")
-            {
-                break;
-            }
-
-            if (!line.StartsWith("name:", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var value = line["name:".Length..].Trim().Trim('"', '\'');
-            return value.Length == 0 ? null : value;
-        }
-
-        return null;
-    }
+    /// <remarks>
+    /// <para>
+    /// An <see cref="AsyncLocal{T}"/> and not a static field. A static one is process-global mutable state in
+    /// an assembly whose test collections run in parallel, set from inside its own callback: a test that armed
+    /// it would arm it for whatever ran beside it, and the failure would land in the other test.
+    /// </para>
+    /// <para>
+    /// It exists because the alternative is a probabilistic test of the one path that exists to make a
+    /// probabilistic failure impossible — a guard that can pass without ever exercising what it guards. It is
+    /// why this assembly carries the repository's only friend declaration.
+    /// </para>
+    /// </remarks>
+    internal static AsyncLocal<Action?> BetweenReadAndCopy { get; } = new();
 }

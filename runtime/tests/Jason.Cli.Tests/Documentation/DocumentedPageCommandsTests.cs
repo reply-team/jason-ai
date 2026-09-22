@@ -26,13 +26,16 @@ public class DocumentedPageCommandsTests
     private static readonly string[] Nouns =
     [
         "jason profile ", "jason rolenote ", "jason campaign ", "jason workitem ", "jason decision ", "jason update ",
-        "jason runtime autostart ",
+        "jason runtime autostart ", "jason status", "jason skills ",
     ];
 
     /// <summary>The pages whose printed commands are guarded.</summary>
     private static readonly string[] Pages =
     [
         "README.md",
+        Path.Combine("skills", "README.md"),
+        Path.Combine("skills", "runtime", "README.md"),
+        Path.Combine("skills", "business", "README.md"),
         Path.Combine("docs", "execution-profiles.md"),
         Path.Combine("docs", "campaign-manager.md"),
         Path.Combine("docs", "release-and-update.md"),
@@ -94,7 +97,15 @@ public class DocumentedPageCommandsTests
     /// suite ran.
     /// </remarks>
     internal static CliEnvironment Machine(TempPaths dir, StringWriter error) =>
-        new(new StringWriter(), error, dir.Paths, new Unreachable(), Autostart: new Autostart.RecordingRegistrar());
+        new(
+            new StringWriter(),
+            error,
+            dir.Paths,
+            new Unreachable(),
+            Processes: new Process.FakeProcessControl(),
+            Autostart: new Autostart.RecordingRegistrar(),
+            Harnesses: Jason.Cli.Skills.HarnessLocators.At(dir.Paths.Root),
+            Programs: new Process.FakeProgramRunner());
 
     /// <summary>
     /// Every request refused before it leaves the process. Most of these commands never get this far — there is

@@ -1,0 +1,400 @@
+using System.Collections.Generic;
+using System.Net;
+using System.Text.Json;
+using Jason.Cli;
+using Jason.Cli.Process;
+using Jason.Cli.Skills;
+using Jason.Contracts.Skills;
+using Jason.Cli.Status;
+using Jason.Cli.Tests.Autostart;
+using Jason.Cli.Tests.Commands;
+using Jason.Cli.Tests.Process;
+using Jason.Contracts.Api;
+using Jason.Contracts.Json;
+
+namespace Jason.Cli.Tests.Status;
+
+/// <summary>
+/// <c>jason status</c>: can this installation start work? The one command here that is not one-to-one with an
+/// API operation, and the one that never exits 3.
+/// </summary>
+public class StatusCommandTests
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>
+    /// A runtime that is not answering, and that is the answer rather than the reason there is none. Exit 3
+    /// means "I could not ask", and this is the verb whose whole job is to answer when the runtime cannot be
+    /// asked — so a person whose runtime is down gets a report, not an error envelope.
+    /// </summary>
+    [Fact]
+    public async Task A_runtime_that_does_not_answer_is_a_failed_check_and_never_exit_three()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.NotEqual(ExitCodes.RuntimeUnavailable, exit);
+
+        var report = Read(output);
+        Assert.False(report.Ready);
+        var runtime = Assert.Single(report.Checks, check => check.Name == "runtime");
+        Assert.Equal(CheckState.Failed, runtime.State);
+        Assert.Equal("jason runtime start", runtime.Fix);
+    }
+
+    /// <summary>A ready installation exits 0, and says so in the body as well as in the code.</summary>
+    [Fact]
+    public async Task An_installation_with_every_required_check_passing_is_ready()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var report = Read(output);
+        Assert.True(report.Ready, string.Join(Environment.NewLine, report.Checks.Where(check => check.Required && check.State != CheckState.Ok).Select(check => check.Fact)));
+        Assert.Equal(ExitCodes.Success, exit);
+    }
+
+    /// <summary>
+    /// Nothing optional can fail the run. That is what optional means, and a person whose provider is not
+    /// configured yet has a working installation rather than a broken one.
+    /// </summary>
+    [Fact]
+    public async Task Nothing_optional_can_fail_the_run()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var report = Read(output);
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains(report.Checks, check => !check.Required && check.State == CheckState.Absent);
+        Assert.DoesNotContain(report.Checks, check => !check.Required && check.State == CheckState.Failed);
+    }
+
+    /// <summary>
+    /// The hole this wave exists to close. A role whose skill the launcher would refuse is worse than one with
+    /// no skill at all — it refuses every launch of that role rather than running it untaught — and the check
+    /// re-reads the cap from the runtime rather than trusting the number an installer validated against.
+    /// </summary>
+    [Fact]
+    public async Task Role_skills_the_launcher_would_refuse_are_a_required_failure_naming_the_cap()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir, skills: new SkillsInfo(
+            "/data/skills/roles",
+            4096,
+            [new DeployedRoleSkill("researcher", 5000, "The skill in '/data/skills/roles/researcher' is 5000 bytes and Roles:MaxSkillBytes allows 4096.")]));
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var skills = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.True(skills.Required);
+        Assert.Equal(CheckState.Failed, skills.State);
+        Assert.Contains("Roles:MaxSkillBytes", skills.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>And a seeded role nothing has taught is the same failure by omission.</summary>
+    [Fact]
+    public async Task A_seeded_role_with_no_skill_at_all_is_a_required_failure()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir, roles: ["researcher", "planner"], skills: new SkillsInfo("/data/skills/roles", 1048576, [Taught("researcher")]));
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var skills = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(CheckState.Failed, skills.State);
+        Assert.Contains("1 of 2 seeded roles have no skill", skills.Fact, StringComparison.Ordinal);
+        Assert.Contains("planner", skills.Fact, StringComparison.Ordinal);
+        Assert.Equal("jason skills install", skills.Fix);
+    }
+
+    /// <summary>
+    /// A deployed role with no skill file. The launcher does not refuse it — it copies what is there and the
+    /// host loads nothing — so this is the only place it is ever reported: M3's hole wearing a different coat,
+    /// the role running untaught while a deployment on disk says it was taught.
+    /// </summary>
+    [Fact]
+    public async Task A_deployed_role_with_no_skill_file_is_a_required_failure()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir, skills: new SkillsInfo(
+            "/data/skills/roles",
+            1048576,
+            [new DeployedRoleSkill("researcher", 12, "'/data/skills/roles/researcher' holds no SKILL.md, so a launch copies what is there and the host loads no skill from it.")]));
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var skills = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(CheckState.Failed, skills.State);
+        Assert.Contains("holds no SKILL.md", skills.Fact, StringComparison.Ordinal);
+
+        // A plain install, not --force. Overwriting is not what repairs a directory missing its SKILL.md,
+        // and --force overwrites every edited file in every root of the plan — so printing it here would
+        // cost an operator unrelated work for a problem that never needed it.
+        Assert.Equal("jason skills install", skills.Fix);
+    }
+
+    /// <summary>
+    /// The other half of the same comparison: a directory that is not a seeded role. It is inert — the
+    /// launcher looks a skill up by role name, so nothing will ever read it — and saying so is worth a line
+    /// and is not worth failing over.
+    /// </summary>
+    [Fact]
+    public async Task A_deployed_directory_that_is_not_a_seeded_role_is_reported_and_does_not_fail_the_run()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir, roles: ["researcher"], skills: new SkillsInfo("/data/skills/roles", 1048576, [Taught("researcher"), Taught("leftovers")]));
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var report = Read(output);
+        var skills = Assert.Single(report.Checks, check => check.Name == "role_skills");
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.True(report.Ready);
+        Assert.NotEqual(CheckState.Failed, skills.State);
+        Assert.Contains("'leftovers' is deployed and is not a role this runtime seeds", skills.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The provider check names the command it runs, bounds it, and prints nothing that is a secret — not the
+    /// key, not a prefix of it, not its length.
+    /// </summary>
+    [Fact]
+    public async Task The_provider_check_names_its_command_bounds_it_and_prints_no_credential()
+    {
+        const string Secret = "rk_live_do_not_print_me";
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var runner = new FakeProgramRunner(_ => new ProgramResult(-1, Secret, Secret, TimedOut: true));
+
+        var exit = await CliApp.RunAsync(["status", "--provider-cli", "acme-sdr"], Machine(dir, output, runner), Ct);
+
+        var provider = Assert.Single(Read(output).Checks, check => check.Name == "provider_cli");
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.False(provider.Required);
+        Assert.Equal(CheckState.Absent, provider.State);
+        Assert.Contains("acme-sdr --version", provider.Fact, StringComparison.Ordinal);
+        Assert.Contains("did not answer in 10 seconds", provider.Fact, StringComparison.Ordinal);
+        Assert.DoesNotContain(Secret, output.ToString(), StringComparison.OrdinalIgnoreCase);
+
+        var asked = Assert.Single(runner.Requested);
+        Assert.Equal(TimeSpan.FromSeconds(10), asked.Timeout);
+    }
+
+    /// <summary>
+    /// A harness root whose record cannot be read is unknown, never absent. Absent would say "nothing is
+    /// installed here", and an uninstall reading that would remove nothing and report success.
+    /// </summary>
+    [Fact]
+    public async Task A_harness_root_with_an_unreadable_record_is_unknown_rather_than_absent()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var harness = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(harness, SkillsRecord.FileName), "{ not json", Ct);
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, harnesses: HarnessLocators.At(harness)), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "harness_skills");
+        Assert.Equal(CheckState.Unknown, check.State);
+    }
+
+    /// <summary>The human shape says the same thing, and prints the repairs under their own heading.</summary>
+    [Fact]
+    public async Task The_human_shape_says_whether_it_is_ready_and_what_would_repair_it()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        var exit = await CliApp.RunAsync(["status", "--human"], Machine(dir, output), Ct);
+
+        var text = output.ToString();
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains("Not ready.", text, StringComparison.Ordinal);
+        Assert.Contains("To repair:", text, StringComparison.Ordinal);
+        Assert.Contains("jason runtime start", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A roster that could not be read is unknown, never ok.
+    /// </summary>
+    /// <remarks>
+    /// Turning a failed <c>role.list</c> into "zero seeded roles" made this check answer "0 roles taught, all
+    /// within the cap" and <c>ready: true</c> on a machine where every role launches untaught — the hole this
+    /// increment exists to close, reported as closed, by the one verb whose whole job is to be trusted about
+    /// readiness. Everything else unreadable in this verb answers unknown, and so does this.
+    /// </remarks>
+    [Fact]
+    public async Task A_roster_that_could_not_be_read_is_unknown_and_never_ready()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir, rosterFails: true);
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var report = Read(output);
+        var skills = Assert.Single(report.Checks, check => check.Name == "role_skills");
+        Assert.Equal(CheckState.Unknown, skills.State);
+        Assert.False(report.Ready);
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.DoesNotContain("all within", skills.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Named by the operator and by nobody else. Which provider somebody uses is theirs, and a build that knew
+    /// one vendor's command by heart would be this product naming a vendor in its own sources, which A7(a)
+    /// forbids and a guard reads off them.
+    /// </summary>
+    [Fact]
+    public async Task With_no_provider_named_nothing_is_run_and_the_check_says_how_to_name_one()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var runner = new FakeProgramRunner();
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, runner), Ct);
+
+        var provider = Assert.Single(Read(output).Checks, check => check.Name == "provider_cli");
+        Assert.Equal(CheckState.Absent, provider.State);
+        Assert.Contains("--provider-cli", provider.Fact, StringComparison.Ordinal);
+        Assert.Empty(runner.Requested);
+    }
+
+    /// <summary>And the partition is published in help, because an exit code means nothing until it is.</summary>
+    [Fact]
+    public async Task Help_publishes_which_checks_are_required_and_that_this_verb_never_exits_three()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["status", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), Ct);
+
+        var text = output.ToString();
+        Assert.Contains("Required", text, StringComparison.Ordinal);
+        Assert.Contains("Optional", text, StringComparison.Ordinal);
+        Assert.Contains("Never 3", text, StringComparison.Ordinal);
+        Assert.Contains("--provider-cli", text, StringComparison.Ordinal);
+    }
+
+    private static DeployedRoleSkill Taught(string role) => new(role, 4096, null);
+
+    private static StatusReport Read(StringWriter output) =>
+        JsonSerializer.Deserialize<StatusReport>(output.ToString(), JasonJson.Options)!;
+
+    /// <summary>A descriptor on disk and a runtime behind it answering the three operations status asks.</summary>
+    /// <summary>A descriptor and a runtime behind it. <paramref name="roles"/> null makes role.list fail.</summary>
+    private static void Running(TempPaths dir, IReadOnlyList<string>? roles = null, SkillsInfo? skills = null, bool rosterFails = false)
+    {
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_01J"));
+        Answers[dir.Paths.Root] = (
+            rosterFails ? null : roles ?? ["researcher"],
+            skills ?? new SkillsInfo("/data/skills/roles", 1048576, [Taught("researcher")]));
+    }
+
+    private static readonly Dictionary<string, (IReadOnlyList<string>? Roles, SkillsInfo Skills)> Answers = [];
+
+    /// <summary>
+    /// The machine these run against: this test's own data directory, a runtime that exists only in a handler,
+    /// a process table that launches nothing, a recording registrar, a harness root inside the test's tree, a
+    /// runner that runs nothing -- and a PATH of this test's own.
+    /// </summary>
+    /// <remarks>
+    /// The last one is not a nicety. Whether `jason` resolves by name is a fact about the machine, and reading
+    /// the real PATH would make this suite report the developer's machine rather than the installation under
+    /// test: green where somebody has Jason installed and red on every CI runner, for the same code.
+    /// </remarks>
+    private static CliEnvironment Machine(
+        TempPaths dir,
+        StringWriter output,
+        IProgramRunner? programs = null,
+        IHarnessLocator? harnesses = null,
+        bool onPath = true) =>
+        new(
+            output,
+            new StringWriter(),
+            dir.Paths,
+            new FakeHandler(request => Answer(dir, request)),
+            Processes: new FakeProcessControl(),
+            Autostart: new RecordingRegistrar(),
+            Harnesses: harnesses ?? HarnessLocators.At(Path.Combine(dir.Paths.Root, "no-harness-here")),
+            Programs: programs ?? new FakeProgramRunner(_ => new ProgramResult(-1, string.Empty, "not found", false)),
+            SearchPath: onPath ? Installed(dir) : Path.Combine(dir.Paths.Root, "nowhere"));
+
+    /// <summary>A directory on this test's PATH with a file in it that a bare `jason` would resolve to.</summary>
+    private static string Installed(TempPaths dir)
+    {
+        var bin = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "bin")).FullName;
+        File.WriteAllText(Path.Combine(bin, OperatingSystem.IsWindows() ? "jason.exe" : "jason"), string.Empty);
+        return bin;
+    }
+
+    private static HttpResponseMessage Answer(TempPaths dir, HttpRequestMessage request)
+    {
+        if (!Answers.TryGetValue(dir.Paths.Root, out var answers))
+        {
+            throw new HttpRequestException("connection refused");
+        }
+
+        var route = request.RequestUri!.AbsolutePath;
+        if (route.EndsWith(Operations.SystemInfo, StringComparison.Ordinal))
+        {
+            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills), JasonJson.Options));
+        }
+
+        if (route.EndsWith(Operations.RoleList, StringComparison.Ordinal))
+        {
+            if (answers.Roles is null)
+            {
+                return RuntimeVerbs.Response(HttpStatusCode.InternalServerError, "{}");
+            }
+
+            var page = new Page<RoleDto>(
+                [.. answers.Roles.Select(name => new RoleDto($"rol_{name}", name, true, null, [], new System.Text.Json.Nodes.JsonObject(), null, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch))],
+                null);
+            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(page, JasonJson.Options));
+        }
+
+        if (route.EndsWith(Operations.RouteList, StringComparison.Ordinal))
+        {
+            var routes = new RoutesDto("rts_EMPTY", "snp_EMPTY", new RouteSetDto(null, new Dictionary<string, RouteDto>()), []);
+            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(routes, JasonJson.Options));
+        }
+
+        throw new HttpRequestException($"nothing answers {route} here");
+    }
+
+    private static SystemInfoResponse Info(SkillsInfo skills) =>
+        new(
+            "0.1.0-dev",
+            "v1",
+            "rt_01J",
+            77,
+            DateTimeOffset.UnixEpoch,
+            "/data",
+            new DatabaseInfo(["20260913225419_InitialCreate"], [], null),
+            new DispatcherInfo(DispatcherState.Running, 10, 4, 0, null, 0, 0),
+            new PluginsInfo(0, "snp_EMPTY", DateTimeOffset.UnixEpoch, true),
+            new RoutesInfo("rts_EMPTY", DateTimeOffset.UnixEpoch, null, 0, 0),
+            null,
+            skills);
+}

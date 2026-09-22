@@ -1,12 +1,33 @@
 using System.CommandLine;
 using Jason.Cli.Commands;
+using Jason.Cli.Skills;
+using Jason.Cli.Status;
 
 namespace Jason.Cli;
 
 /// <summary>
-/// Verb map of the CLI. Thin and one-to-one with API operations; parsing errors exit with 2, every
+/// Verb map of the CLI. Thin, and mostly one-to-one with API operations; parsing errors exit with 2, every
 /// command action returns its own exit code.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Three names are not one-to-one with anything, and they are named here because this is where the rule is
+/// written.</b> <c>status</c> is a verb rather than a noun, because half of what it reports is not the
+/// runtime's to know: an executable on PATH, another vendor's CLI and whether it answers, files in a folder in
+/// the operator's home directory. No API operation can answer "am I ready to work?", because the runtime is
+/// not the authority on the machine it runs on.
+/// </para>
+/// <para>
+/// <c>skills</c> and <c>update</c> are nouns with no operation behind them either. Both change this
+/// installation — fetching, verifying and copying files on this machine, or replacing the executable — which
+/// the runtime neither performs nor is asked about. <c>Operations</c> carries no <c>skills.*</c> and no
+/// <c>update.*</c>, and saying the map is one-to-one with one exception was false of two more.
+/// </para>
+/// <para>
+/// A guard holds the list to these: a fourth has to be added in the open rather than arriving as one more verb
+/// somebody thought was obviously fine.
+/// </para>
+/// </remarks>
 public static class CliApp
 {
     public static async Task<int> RunAsync(string[] args, CliEnvironment env, CancellationToken cancellationToken = default)
@@ -76,6 +97,8 @@ public static class CliApp
         root.Subcommands.Add(PluginCommands.Build(env, actor));
         root.Subcommands.Add(RouteCommands.Build(env, actor));
         root.Subcommands.Add(UpdateCommands.Build(env, actor));
+        root.Subcommands.Add(SkillsCommands.Build(env));
+        root.Subcommands.Add(StatusCommand.Build(env));
 
         return root;
     }

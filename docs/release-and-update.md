@@ -126,6 +126,36 @@ rewrite, and the digest inside it would then be the attacker's digest for the at
 It is `null` before the first successful check, and `available` is `false` when the release is not newer than
 what is running. `0.1.0-dev` is *older* than `0.1.0`, so a development build advertises the first release.
 
+### And what it says about the skills it will teach from
+
+`system.info` carries a `skills` section beside it, describing the one directory the runtime reads role skills
+from — `<data>/skills/roles` — as it is at the moment it is asked:
+
+```json
+{
+  "role_skills_directory": "/home/you/.jason/skills/roles",
+  "max_skill_bytes": 1048576,
+  "roles": [{ "role": "researcher", "bytes": 4096, "problem": null }],
+  "problem": null
+}
+```
+
+The cap is reported because it is a live setting rather than a constant, and something that deploys into that
+directory has to validate against the number this runtime will actually enforce: a deployment measured against
+the wrong cap is refused at every launch of that role. A `problem` on a role is why a launch would not be
+taught it — the two refusals the launcher makes, and the case it does not refuse but nobody meant, a directory
+with no `SKILL.md`, which is copied and teaches a host nothing. `bytes` is `null` when the directory could not
+be measured at all, which is not the same as a skill of no bytes.
+
+**Nothing here is cached.** The role skills directory is read at every launch, so a deployment is live the
+moment it lands and there is nothing to reload. That is also why this section reports what is on disk now
+rather than what was there when the runtime started.
+
+Because it is read at every launch, something deploying into it can be reading it at the same moment. A
+deployment therefore assembles each skill beside its destination and moves it into place, so a launch sees the
+tree that was there or the tree that arrived and never a blend; a launch that loses that race reads the tree
+again, and one that loses it twice ends with `role_skill_unreadable` rather than running with no skill.
+
 ## 5. Asking by hand
 
 ```sh

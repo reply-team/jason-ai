@@ -5,6 +5,7 @@ using System.Text.Json;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Skills;
 using Jason.Contracts.Update;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Persistence;
@@ -241,5 +242,201 @@ public class SystemInfoTests
         Assert.Equal("0.2.0", info.Update.Version);
         Assert.Equal(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero), info.Update.CheckedAt);
         Assert.Equal("https://example.test/notes", info.Update.ReleaseNotesUrl);
+    }
+
+    /// <summary>
+    /// What the runtime will teach its roles from: the directory it owns, the cap it will enforce, and every
+    /// directory in it with what would stop a launch being taught it. The cap is reported because it is a
+    /// live setting, and an installer that guessed it would validate against the wrong number.
+    /// </summary>
+    [Fact]
+    public async Task System_info_reports_every_deployed_role_and_the_cap_it_will_enforce()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                Directory.CreateDirectory(paths.ConfigDirectory);
+                File.WriteAllText(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Roles":{"MaxSkillBytes":4096}}""");
+                Deploy(Path.Combine(paths.RoleSkillsDirectory, "researcher"), "researcher");
+                Deploy(Path.Combine(paths.RoleSkillsDirectory, "planner"), "planner", padding: 5_000);
+            });
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        Assert.NotNull(info.Skills);
+        Assert.Null(info.Skills.Problem);
+        Assert.Equal(fixture.Paths.RoleSkillsDirectory, info.Skills.RoleSkillsDirectory);
+        Assert.Equal(4096, info.Skills.MaxSkillBytes);
+
+        var planner = Assert.Single(info.Skills.Roles, role => role.Role == "planner");
+        Assert.NotNull(planner.Problem);
+        Assert.Contains("Roles:MaxSkillBytes", planner.Problem, StringComparison.Ordinal);
+
+        var researcher = Assert.Single(info.Skills.Roles, role => role.Role == "researcher");
+        Assert.Null(researcher.Problem);
+        Assert.NotNull(researcher.Bytes);
+    }
+
+    /// <summary>A directory with no skill file is copied and teaches a host nothing, so it is said here.</summary>
+    [Fact]
+    public async Task A_deployed_role_with_no_skill_file_is_reported_as_teaching_nothing()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                Directory.CreateDirectory(paths.ConfigDirectory);
+                File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+                var role = Directory.CreateDirectory(Path.Combine(paths.RoleSkillsDirectory, "researcher")).FullName;
+                File.WriteAllText(Path.Combine(role, "references.md"), "where to look");
+            });
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        var researcher = Assert.Single(info.Skills!.Roles);
+        Assert.NotNull(researcher.Problem);
+        Assert.Contains("holds no SKILL.md", researcher.Problem, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A role directory that disappears while this section is being composed. A deployment renames these
+    /// directories, so the walk will meet it — and this operation is what an applier asks when a machine is
+    /// already in a bad state, so it answers rather than failing.
+    /// </summary>
+    [Fact]
+    public async Task A_role_directory_that_vanishes_mid_walk_never_makes_this_operation_fail()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                Directory.CreateDirectory(paths.ConfigDirectory);
+                File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+                for (var index = 0; index < 60; index++)
+                {
+                    Deploy(Path.Combine(paths.RoleSkillsDirectory, $"role-{index}"), $"role-{index}", files: 8);
+                }
+            });
+
+        var roles = fixture.Paths.RoleSkillsDirectory;
+        using var churn = new CancellationTokenSource();
+        var renaming = Task.Run(
+            () =>
+            {
+                while (!churn.IsCancellationRequested)
+                {
+                    var role = Path.Combine(roles, $"role-{Random.Shared.Next(60)}");
+                    var aside = role + ".aside";
+                    try
+                    {
+                        Directory.Move(role, aside);
+                        Directory.Move(aside, role);
+                    }
+                    catch (IOException)
+                    {
+                        // This test losing its own race with the walk, which is not what is under test.
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                    }
+                }
+            },
+            CancellationToken.None);
+
+        try
+        {
+            for (var ask = 0; ask < 40; ask++)
+            {
+                var (status, body) = await fixture.PostAsync(Operations.SystemInfo, null, Ct);
+                Assert.True(
+                    status == HttpStatusCode.OK,
+                    $"system.info answered {(int)status} while a role directory was being renamed under it: {body}");
+            }
+        }
+        finally
+        {
+            await churn.CancelAsync();
+            await renaming;
+        }
+    }
+
+    /// <summary>
+    /// A directory under the role root whose name is not a role name. This operation must not fail on it: the
+    /// reading it hands each directory to opens with a null-or-whitespace guard, so one <c>mkdir ' '</c> —
+    /// trivial on Linux and macOS — made every call a 500, which is the answer an applier must never get.
+    /// </summary>
+    [Fact]
+    public async Task A_directory_whose_name_is_not_a_role_name_is_skipped_rather_than_thrown_over()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // Windows refuses to create one, so there is nothing here to be robust against.
+            return;
+        }
+
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                Directory.CreateDirectory(paths.ConfigDirectory);
+                File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+                Deploy(Path.Combine(paths.RoleSkillsDirectory, "researcher"), "researcher");
+                Directory.CreateDirectory(Path.Combine(paths.RoleSkillsDirectory, " "));
+            });
+
+        var (status, body) = await fixture.PostAsync(Operations.SystemInfo, null, Ct);
+
+        Assert.True(status == HttpStatusCode.OK, $"system.info answered {(int)status} over a directory whose name is not a role name: {body}");
+        var info = JsonSerializer.Deserialize<SystemInfoResponse>(body, JasonJson.Options)!;
+        Assert.Equal("researcher", Assert.Single(info.Skills!.Roles).Role);
+    }
+
+    /// <summary>
+    /// And a tree that nests deeper than anything reads it. The walk recurses, and this operation now runs it
+    /// on every call rather than only at a launch — so unbounded, a deep enough tree would end the runtime
+    /// process, and a stack overflow cannot be caught by anything.
+    /// </summary>
+    [Fact]
+    public async Task A_tree_that_nests_deeper_than_it_is_read_is_a_problem_string_rather_than_a_crash()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                Directory.CreateDirectory(paths.ConfigDirectory);
+                File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+                var role = Path.Combine(paths.RoleSkillsDirectory, "researcher");
+                Deploy(role, "researcher");
+
+                var deep = role;
+                for (var level = 0; level <= RoleSkillRules.MaxDepth + 2; level++)
+                {
+                    deep = Path.Combine(deep, $"level-{level}");
+                }
+
+                Directory.CreateDirectory(deep);
+                File.WriteAllText(Path.Combine(deep, "buried.md"), "far down");
+            });
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        var researcher = Assert.Single(info.Skills!.Roles);
+        Assert.NotNull(researcher.Problem);
+        Assert.Contains("nests deeper", researcher.Problem, StringComparison.Ordinal);
+    }
+
+    /// <summary>A role directory composed the way an operator composes one: a skill, and some files beside it.</summary>
+    private static void Deploy(string directory, string role, int files = 1, int padding = 0)
+    {
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(
+            Path.Combine(directory, "SKILL.md"),
+            $"---\nname: {role}\ndescription: one line\n---\n\n{new string('x', padding)}\n");
+
+        for (var index = 0; index < files; index++)
+        {
+            File.WriteAllText(Path.Combine(directory, $"reference-{index}.md"), "where to look");
+        }
     }
 }

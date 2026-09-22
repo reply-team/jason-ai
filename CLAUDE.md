@@ -95,8 +95,14 @@ covered here.
   `plugins_reloaded`; there is no `plugin.invoke` operation.
   `docs/plugins.md` is the contract.
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for
-  people, stderr is diagnostics only. Exit codes: 0 success, 1 API business error, 2 usage error,
-  3 runtime unreachable or unauthorized.
+  people, stderr is diagnostics only. Exit codes: 0 success, 1 understood and refused (an API
+  business error, or a local act the CLI refused to perform), 2 usage error, 3 runtime unreachable
+  or unauthorized. The verb map is one-to-one with API operations with **one declared exception**:
+  `jason status` answers "can this installation start work?", half of which is not the runtime's to
+  know, so no operation can stand behind it. It exits 0 or 1 and **never 3** — "I could not ask the
+  runtime" is its answer rather than a reason it has none — and its body carries `ready` so an agent
+  branches on the body, never on the code. `CliApp` states the exception where the rule is written,
+  `jason status --help` publishes which checks are required, and a guard holds the exception to one.
 - Persistence: EF Core over SQLite in WAL mode, snake_case tables and columns, integer primary keys
   plus a unique public ULID. The `journal` table is append-only, enforced three times over: no API
   path that changes an entry, an EF interceptor, and database triggers. Schema-less JSON — campaign

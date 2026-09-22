@@ -2,6 +2,10 @@ namespace Jason.Contracts.Api;
 
 /// <summary>Response of <c>system.info</c>: what the runtime says about itself. Non-business by design.</summary>
 /// <param name="Update">What the last successful update check learned; null until there has been one.</param>
+/// <param name="Skills">
+/// The role skills this runtime will teach from; null on a runtime older than the section, which reads the
+/// same way as the other sections that arrived late.
+/// </param>
 public sealed record SystemInfoResponse(
     string RuntimeVersion,
     string ApiVersion,
@@ -13,7 +17,41 @@ public sealed record SystemInfoResponse(
     DispatcherInfo Dispatcher,
     PluginsInfo Plugins,
     RoutesInfo Routes,
-    UpdateInfo? Update = null);
+    UpdateInfo? Update = null,
+    SkillsInfo? Skills = null);
+
+/// <summary>
+/// The role skills this runtime will teach from, as they are on disk at the moment it is asked, and the cap
+/// it will enforce.
+/// </summary>
+/// <remarks>
+/// It reports the directory the runtime owns and nothing about the person's own agent harness: where somebody
+/// keeps their own skills is not the runtime's to read. The cap is here because it is a live setting — an
+/// installer that guessed it would validate a deployment against the wrong number, and be wrong in the
+/// direction that refuses every launch of a role.
+/// </remarks>
+/// <param name="Problem">
+/// Why this section could not be composed, and null when it was. A field rather than an exception because
+/// this operation cannot fail: an applier resuming an update asks it precisely when a machine is in a bad
+/// state, and a 500 here reads to that caller as a runtime that is not there at all.
+/// </param>
+public sealed record SkillsInfo(
+    string RoleSkillsDirectory,
+    int MaxSkillBytes,
+    IReadOnlyList<DeployedRoleSkill> Roles,
+    string? Problem = null);
+
+/// <summary>One directory under the role root, as the launcher would find it.</summary>
+/// <param name="Bytes">
+/// Null when it could not be measured at all — a directory renamed away mid-walk, which a deployment causes.
+/// Zero would read as an empty skill, which is a different thing and a survivable one.
+/// </param>
+/// <param name="Problem">
+/// Why a launch would not be taught this, and null when it would. It covers both refusals the launcher makes
+/// and the case it does not refuse but nobody meant: a directory with no <c>SKILL.md</c>, which is copied and
+/// teaches a host nothing.
+/// </param>
+public sealed record DeployedRoleSkill(string Role, long? Bytes, string? Problem);
 
 /// <summary>
 /// What the database is, and what this start did to it: every migration that has been applied, the ones this
