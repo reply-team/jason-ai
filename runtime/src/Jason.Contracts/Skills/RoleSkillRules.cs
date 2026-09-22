@@ -2,6 +2,15 @@ using System.Globalization;
 
 namespace Jason.Contracts.Skills;
 
+/// <summary>A skill's tree nests deeper than anything reading it will follow.</summary>
+/// <remarks>
+/// A refusal rather than a recursion, because the runtime walks these directories on every
+/// <c>system.info</c> call: unbounded, a deep enough tree ends the process, and a stack overflow cannot be
+/// caught by anything.
+/// </remarks>
+public sealed class RoleSkillTooDeep(string path, int depth)
+    : IOException($"'{path}' nests deeper than {depth} directories, which is deeper than a skill is read.");
+
 /// <summary>The tree moved while it was being read.</summary>
 /// <remarks>
 /// Raised rather than swallowed because it is the one IO failure that is not a fault: something renamed the
@@ -32,12 +41,21 @@ public sealed record RoleSkillProblem(string Message);
 /// directory and a host loads nothing from it, so it is not a refusal — but it is a deployment nobody meant
 /// to make, and the caller that is writing one can still refuse to.
 /// </param>
+/// <param name="Measurements">
+/// Every file with its own length, in the order the walk found them. A caller checking that a tree did not
+/// move under it needs this rather than the total: a change that grows one file by what it takes from another
+/// leaves the path list and the sum identical, and is still two trees blended.
+/// </param>
 public sealed record RoleSkillReading(
     bool Exists,
     bool HasSkillFile,
     IReadOnlyList<string> Files,
     long Bytes,
-    RoleSkillProblem? Problem);
+    RoleSkillProblem? Problem,
+    IReadOnlyList<RoleSkillFile> Measurements);
+
+/// <summary>One file of a skill, and how long it was when the walk saw it.</summary>
+public sealed record RoleSkillFile(string Path, long Bytes);
 
 /// <summary>
 /// The two rules a role's skill must satisfy before a launch can be taught it: it must name itself after the
@@ -71,7 +89,7 @@ public static class RoleSkillRules
 
         if (!Directory.Exists(roleDirectory))
         {
-            return new RoleSkillReading(false, false, [], 0, null);
+            return new RoleSkillReading(false, false, [], 0, null, []);
         }
 
         var introduction = Path.Combine(roleDirectory, SkillFile);
@@ -88,11 +106,13 @@ public static class RoleSkillRules
                 [],
                 0,
                 new RoleSkillProblem(
-                    $"The skill in '{roleDirectory}' names itself '{named ?? "nothing"}', and role '{role}' looks its skill up as '{role}'. A host answers that mismatch by ignoring the skill without reporting it."));
+                    $"The skill in '{roleDirectory}' names itself '{named ?? "nothing"}', and role '{role}' looks its skill up as '{role}'. A host answers that mismatch by ignoring the skill without reporting it."),
+                []);
         }
 
         var files = Files(roleDirectory);
-        var bytes = Measure(files);
+        var measurements = Measurements(files);
+        var bytes = measurements.Sum(file => file.Bytes);
 
         // A skill that was configured and did not arrive is the failure worth refusing over: the role would do
         // the job untaught, at the price of a real launch, and the only trace would be a log line nobody is
@@ -107,8 +127,9 @@ public static class RoleSkillRules
                 new RoleSkillProblem(
                     string.Create(
                         CultureInfo.InvariantCulture,
-                        $"The skill in '{roleDirectory}' is {bytes} bytes and Roles:MaxSkillBytes allows {maxSkillBytes}, so it cannot be given to the role. Trim the skill, or raise Roles:MaxSkillBytes.")))
-            : new RoleSkillReading(true, hasSkillFile, files, bytes, null);
+                        $"The skill in '{roleDirectory}' is {bytes} bytes and Roles:MaxSkillBytes allows {maxSkillBytes}, so it cannot be given to the role. Trim the skill, or raise Roles:MaxSkillBytes.")),
+                measurements)
+            : new RoleSkillReading(true, hasSkillFile, files, bytes, null, measurements);
     }
 
     /// <summary>
@@ -121,8 +142,24 @@ public static class RoleSkillRules
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
 
         var files = new List<string>();
-        Walk(directory, files);
+        Walk(directory, files, MaxDepth);
         return files;
+    }
+
+    /// <summary>
+    /// How deep a skill may nest. The walk recurses, and the runtime now runs it on every
+    /// <c>system.info</c> call rather than only at a launch — so a deeply nested tree would end the runtime
+    /// process outright, and a stack overflow is the one failure nothing can catch. A skill is a handful of
+    /// files beside a document; anything past this is not one.
+    /// </summary>
+    public const int MaxDepth = 32;
+
+    /// <summary>Every file <see cref="Files"/> found, with its own length.</summary>
+    public static IReadOnlyList<RoleSkillFile> Measurements(IReadOnlyList<string> files)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+
+        return [.. files.Select(file => new RoleSkillFile(file, Length(file)))];
     }
 
     /// <summary>The total of what <see cref="Files"/> found.</summary>
@@ -197,8 +234,13 @@ public static class RoleSkillRules
         return null;
     }
 
-    private static void Walk(string directory, List<string> files)
+    private static void Walk(string directory, List<string> files, int depth)
     {
+        if (depth <= 0)
+        {
+            throw new RoleSkillTooDeep(directory, MaxDepth);
+        }
+
         IReadOnlyList<string> entries;
         IReadOnlyList<string> children;
         try
@@ -228,7 +270,7 @@ public static class RoleSkillRules
                 continue;
             }
 
-            Walk(child, files);
+            Walk(child, files, depth - 1);
         }
     }
 

@@ -105,8 +105,10 @@ public class SkillsUpdateTests
         var update = await RunAsync(dir, ["skills", "update", "--root", Harness(dir)]);
 
         Assert.Equal(ExitCodes.Success, update.Exit);
+        var deployed = Directory.GetDirectories(dir.Paths.RoleSkillsDirectory);
+        Assert.NotEmpty(deployed);
         Assert.All(
-            Directory.EnumerateDirectories(dir.Paths.RoleSkillsDirectory),
+            deployed,
             entry => Assert.True(
                 File.Exists(Path.Combine(entry, "SKILL.md")),
                 $"'{entry}' survived the update and is not a role directory."));

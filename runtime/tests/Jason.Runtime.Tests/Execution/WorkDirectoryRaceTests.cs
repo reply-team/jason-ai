@@ -111,13 +111,49 @@ public class WorkDirectoryRaceTests : IDisposable
         var report = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024 * 1024);
 
         Assert.Equal(AttemptErrors.RoleSkillUnreadable, report.RefusalCode);
-        Assert.NotEqual(AttemptErrors.RoleSkillInvalid, report.RefusalCode);
         Assert.Contains("a deployment was in flight", report.Message!, StringComparison.Ordinal);
     }
 
-    /// <summary>Nothing arms the hook outside these tests, and none of them leaves it armed.</summary>
+    /// <summary>
+    /// Nothing outside a test ever arms the hook.
+    /// </summary>
+    /// <remarks>
+    /// Read off the sources rather than off the value. Asserting the value is null proves nothing at all: an
+    /// <see cref="AsyncLocal{T}"/> read on a fresh test flow is null whatever any other flow did, so the
+    /// assertion could not see the thing its own summary claimed it held. This is what that fact was asked
+    /// for, and a scan is the only shape that can fail.
+    /// </remarks>
     [Fact]
-    public void The_read_hook_is_not_armed() => Assert.Null(WorkDirectory.BetweenReadAndCopy.Value);
+    public void Nothing_in_the_product_arms_the_read_hook()
+    {
+        var sources = Directory
+            .EnumerateFiles(ProductSources(), "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.True(sources.Count > 50, $"Only {sources.Count} source files were scanned; the product tree was not found.");
+
+        foreach (var file in sources)
+        {
+            Assert.True(
+                !File.ReadAllText(file).Contains($"{nameof(WorkDirectory.BetweenReadAndCopy)}.Value =", StringComparison.Ordinal),
+                $"'{Path.GetFileName(file)}' arms the launcher's test hook. It exists so a race can be made "
+                + "deterministic in a test, and nothing that ships may set it.");
+        }
+    }
+
+    private static string ProductSources()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "global.json")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(directory);
+        return Path.Combine(directory.FullName, "runtime", "src");
+    }
 
     /// <summary>
     /// The replacement a deployment performs: the live tree aside first, then the staged tree in. The first is

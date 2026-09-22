@@ -18,8 +18,15 @@ namespace Jason.Cli.Tests;
 /// </remarks>
 public class VerbMapTests
 {
-    /// <summary>The one name that is not a noun. It cannot be one; <c>CliApp</c> says why.</summary>
+    /// <summary>The one name that is not a noun at all. It cannot be one; <c>CliApp</c> says why.</summary>
     private const string DeclaredException = "status";
+
+    /// <summary>
+    /// The nouns with no API operation behind them. Both change this installation rather than asking the
+    /// runtime about anything, so nothing in <c>Operations</c> stands behind either — which is why the map's
+    /// own doc comment no longer claims one-to-one with a single exception.
+    /// </summary>
+    private static readonly string[] WithoutAnOperation = ["skills", "update"];
 
     /// <summary>
     /// Exact, and exact at every commit. A noun arrives here in the same commit that adds it to the program,
@@ -68,6 +75,38 @@ public class VerbMapTests
     }
 
     public static TheoryData<string> EveryName() => [.. Nouns, DeclaredException];
+
+    /// <summary>
+    /// And the names that stand for no operation are exactly the ones declared. A noun that quietly grew
+    /// without one is the map drifting from the rule its own doc comment states.
+    /// </summary>
+    [Fact]
+    public void Exactly_the_declared_names_have_no_api_operation_behind_them()
+    {
+        var operations = typeof(Contracts.Api.Operations)
+            .GetFields()
+            .Where(field => field.IsLiteral)
+            .Select(field => (string)field.GetRawConstantValue()!)
+            .Select(name => name.Split('.')[0])
+            .ToHashSet(StringComparer.Ordinal);
+
+        var strangers = Nouns.Where(noun => !operations.Contains(Spoken(noun))).Order(StringComparer.Ordinal);
+
+        Assert.Equal(WithoutAnOperation.Order(StringComparer.Ordinal), strangers);
+    }
+
+    /// <summary>
+    /// What an operation calls the noun a command spells differently. Two of them differ on purpose, and this
+    /// is the whole of that list rather than a rule with exceptions nobody wrote down.
+    /// </summary>
+    private static string Spoken(string noun) => noun switch
+    {
+        // The one noun the API spells differently. `jason runtime status` is `system.info` and
+        // `jason runtime stop` is `system.shutdown`: the operations exist, under the name the runtime uses
+        // for itself rather than the one a person types.
+        "runtime" => "system",
+        _ => noun,
+    };
 
     /// <summary>
     /// The command names a help page prints: the section the library titles "Commands:", first word of each

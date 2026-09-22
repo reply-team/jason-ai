@@ -167,6 +167,27 @@ public static class SkillsSwap
         }
     }
 
+    /// <summary>
+    /// The staging directory itself, once a deployment has finished with it. Removed only when it is empty,
+    /// so a tree a launch is still holding is left for the next run to collect rather than fought over.
+    /// </summary>
+    public static void Tidy(string staging)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(staging);
+
+        try
+        {
+            if (Directory.Exists(staging) && Directory.GetFileSystemEntries(staging).Length == 0)
+            {
+                Directory.Delete(staging);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Debug.WriteLine($"The staging directory at '{staging}' was left in place: {exception.Message}");
+        }
+    }
+
     /// <summary>Everything a previous deployment set aside and could not remove at the time.</summary>
     public static void Collect(string asideRoot)
     {

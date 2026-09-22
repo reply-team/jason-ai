@@ -38,9 +38,24 @@ internal static class StatusChecks
     /// </remarks>
     private static class Repair
     {
+        /// <summary>Every repair this verb can print lives here, and a guard types all of them.</summary>
+        public const string Start = "jason runtime start";
+
+        public const string Restart = "jason runtime restart";
+
+        public const string ReloadPlugins = "jason plugin reload";
+
+        public const string EnableAutostart = "jason runtime autostart enable";
+
         public const string Install = "jason skills install";
 
-        public const string Reinstall = "jason skills install --force";
+        /// <summary>
+        /// Deliberately the same as <see cref="Install"/>. Overwriting is not what repairs a role whose
+        /// directory is missing a SKILL.md or is over the cap -- a plain install replaces it -- and --force
+        /// overwrites every edited file in every root of the plan, so printing it as the repair for any role
+        /// problem would cost an operator unrelated work for a problem that did not need it.
+        /// </summary>
+        public const string Reinstall = Install;
     }
 
     /// <summary>
@@ -97,7 +112,7 @@ internal static class StatusChecks
     {
         if (descriptor is null)
         {
-            return new StatusCheck("runtime", true, CheckState.Failed, "No runtime is running: there is no endpoint descriptor to ask.", "jason runtime start");
+            return new StatusCheck("runtime", true, CheckState.Failed, "No runtime is running: there is no endpoint descriptor to ask.", Repair.Start);
         }
 
         return info is null
@@ -109,7 +124,7 @@ internal static class StatusChecks
     {
         if (info is null)
         {
-            return new StatusCheck("migrations", true, CheckState.Unknown, "The runtime did not answer, so its database was not asked about.", "jason runtime start");
+            return new StatusCheck("migrations", true, CheckState.Unknown, "The runtime did not answer, so its database was not asked about.", Repair.Start);
         }
 
         var applied = info.Database.AppliedMigrations.Count;
@@ -122,7 +137,7 @@ internal static class StatusChecks
     {
         if (info is null)
         {
-            return new StatusCheck("plugin_registry", true, CheckState.Unknown, "The runtime did not answer, so its plugin registry was not asked about.", "jason runtime start");
+            return new StatusCheck("plugin_registry", true, CheckState.Unknown, "The runtime did not answer, so its plugin registry was not asked about.", Repair.Start);
         }
 
         // Zero plugins is alive. A registry that refused its last load is not, and that is the state worth
@@ -146,7 +161,7 @@ internal static class StatusChecks
     {
         if (info?.Skills is not { } skills)
         {
-            return new StatusCheck("role_skills", true, CheckState.Unknown, "The runtime did not answer, so its role skills were not asked about.", "jason runtime start");
+            return new StatusCheck("role_skills", true, CheckState.Unknown, "The runtime did not answer, so its role skills were not asked about.", Repair.Start);
         }
 
         if (skills.Problem is { } problem)
@@ -251,7 +266,16 @@ internal static class StatusChecks
         var configured = routes.Global.Default is not null || routes.Global.Operations.Count > 0 || routes.Campaigns.Count > 0;
         return configured
             ? new StatusCheck("route", false, CheckState.Ok, $"Routed: default {routes.Global.Default?.PluginId ?? "none"}.", null)
-            : new StatusCheck("route", false, CheckState.Absent, "Nothing is routed anywhere yet.", "jason route set --plugin <id>");
+            : new StatusCheck(
+                "route",
+                false,
+                CheckState.Absent,
+                // No repair, because there is no command. A global default route is written in the settings
+                // file and frozen by a reload; `route set` needs --campaign and refuses without it, so the
+                // line printed here was itself a usage error -- verbatim the failure the guard beside this
+                // one exists to prevent.
+                "Nothing is routed anywhere yet: set Routes in the settings file, or route one campaign.",
+                null);
     }
 
     private static StatusCheck Binding(RoutesDto? routes)
@@ -338,6 +362,9 @@ internal static class StatusChecks
             return new StatusCheck("harness_skills", false, CheckState.Unknown, "This environment does not detect agent harnesses.", null);
         }
 
+        // The runtime's own root as well as the person's. A deployment writes a record into both, and the
+        // one the documents call not optional was the one nothing read -- so "jason status reports it" was
+        // true of half of what the installer records.
         var roots = locator.Detect();
         if (roots.Count == 0)
         {
@@ -345,14 +372,14 @@ internal static class StatusChecks
         }
 
         var deployed = new List<string>();
-        foreach (var root in roots)
+        foreach (var root in roots.Select(root => root.Directory).Append(env.Paths.RoleSkillsDirectory).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             try
             {
-                var record = SkillsRecord.Read(root.Directory);
+                var record = SkillsRecord.Read(root);
                 if (record is not null)
                 {
-                    deployed.AddRange(record.Packs.Select(pack => $"{pack.Pack} at {pack.Ref} in {root.Directory}"));
+                    deployed.AddRange(record.Packs.Select(pack => $"{pack.Pack} at {pack.Ref} in {root}"));
                 }
             }
             catch (SkillsRecordUnreadable unreadable)
@@ -386,7 +413,7 @@ internal static class StatusChecks
 
         return state.Registered
             ? new StatusCheck("autostart", false, CheckState.Ok, "The runtime is registered to start at logon.", null)
-            : new StatusCheck("autostart", false, CheckState.Absent, "The runtime is not registered to start at logon.", "jason runtime autostart enable");
+            : new StatusCheck("autostart", false, CheckState.Absent, "The runtime is not registered to start at logon.", Repair.EnableAutostart);
     }
 
     private static async Task<T?> ReadAsync<T>(RuntimeClient client, string operation, CancellationToken cancellationToken)

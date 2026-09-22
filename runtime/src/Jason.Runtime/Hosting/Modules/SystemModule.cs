@@ -126,6 +126,17 @@ public static class SystemModule
         foreach (var directory in directories)
         {
             var role = Path.GetFileName(directory);
+
+            // A directory whose name is not a role name is skipped rather than read. `mkdir ' '` is trivial
+            // on Linux and macOS, and RoleSkillRules.Read opens with a null-or-whitespace guard -- so one such
+            // directory made every system.info call a 500, which is the answer an applier must never get and
+            // the one this section is shaped to avoid. The status verb already reports strangers as a
+            // non-failing fact, which is where a name nobody seeded belongs.
+            if (string.IsNullOrWhiteSpace(role) || role != Path.GetFileName(role) || role is "." or "..")
+            {
+                continue;
+            }
+
             try
             {
                 var reading = RoleSkillRules.Read(directory, role, maxSkillBytes);
@@ -144,7 +155,7 @@ public static class SystemModule
                             ? null
                             : $"'{directory}' holds no {RoleSkillRules.SkillFile}, so a launch copies what is there and the host loads no skill from it.")));
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
             {
                 roles.Add(new DeployedRoleSkill(role, null, $"It could not be read: {exception.Message}"));
             }

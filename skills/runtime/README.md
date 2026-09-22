@@ -8,6 +8,13 @@ this pack ships with Jason **0.1.0**.
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
 
+**What they do not teach yet.** None of the five mentions `jason skills install`, `jason skills update` or
+`jason status`. Each is marked `verified`, which in this repository means a named agent host read *that exact
+body* while driving this runtime and the digest of what it read is recorded — so the texts cannot gain the new
+verbs without being re-read by a host, and no host has read them since the verbs existed. They teach what this
+build did before them, correctly and incompletely. The re-reading is the first-run increment's, and until it
+happens this paragraph is the honest form of the gap.
+
 ## The skills a person's own session reads
 
 One per moment somebody asks for something, because a host chooses a skill by its description and a

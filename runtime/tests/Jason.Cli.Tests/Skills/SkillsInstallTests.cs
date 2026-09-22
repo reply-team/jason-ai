@@ -149,14 +149,44 @@ public class SkillsInstallTests
         var source = Source(dir);
         var (env, _, _) = Machine(dir);
 
-        await CliApp.RunAsync(["skills", "install", "--source", source, "--root", Harness(dir)], env, Ct);
+        var exit = await CliApp.RunAsync(["skills", "install", "--source", source, "--root", Harness(dir)], env, Ct);
+        Assert.Equal(ExitCodes.Success, exit);
 
+        // Over something, and after a deployment that succeeded. Asserting over an enumeration passes on an
+        // empty one, and the state this is meant to catch -- a role root with nothing in it -- is exactly
+        // what a failed install leaves.
+        var deployed = Directory.GetDirectories(dir.Paths.RoleSkillsDirectory);
+        Assert.NotEmpty(deployed);
         Assert.All(
-            Directory.EnumerateDirectories(dir.Paths.RoleSkillsDirectory),
+            deployed,
             entry => Assert.True(
                 File.Exists(Path.Combine(entry, "SKILL.md")),
                 $"'{entry}' is a directory under the role root and is not a role. Every directory under that "
                 + "root is reported as a deployed role, so the installer keeps its workings elsewhere."));
+    }
+
+    /// <summary>
+    /// And nothing of this deployment's own is left in the person's own directory. The role root's version of
+    /// this property was asserted from the start; the harness root's was not, and it is the one that is in
+    /// somebody's home rather than in Jason's.
+    /// </summary>
+    [Fact]
+    public async Task The_harness_root_is_left_holding_skill_directories_only()
+    {
+        using var dir = new TempPaths();
+        var source = Source(dir);
+        var (env, _, _) = Machine(dir);
+
+        var exit = await CliApp.RunAsync(["skills", "install", "--source", source, "--root", Harness(dir)], env, Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var deployed = Directory.GetDirectories(Harness(dir));
+        Assert.NotEmpty(deployed);
+        Assert.All(
+            deployed,
+            entry => Assert.True(
+                File.Exists(Path.Combine(entry, "SKILL.md")),
+                $"'{entry}' is a directory this deployment left in the person's own skills directory."));
     }
 
     /// <summary>A record is left in the harness root naming every path written.</summary>

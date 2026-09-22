@@ -53,7 +53,8 @@ These are the rules both verbs keep:
   digest per file, and every path the installer wrote. That record is what says whether a deployment is
   current, and it is what an uninstall removes by — a verb that deleted by pattern would eventually
   delete somebody's own file. A root whose record cannot be read is reported `unknown` and nothing
-  guesses at it.
+  guesses at it. **Both roots are read**: the harness roots a person chose and the runtime's own, which
+  is the half this document calls not optional.
 - **Two destinations, because there are two readers.** The role halves go to the runtime's own data
   directory, where the runtime reads them at every launch to teach a role its job; the interactive
   and business packs go to the agent harnesses a person actually uses. The first is not optional: a

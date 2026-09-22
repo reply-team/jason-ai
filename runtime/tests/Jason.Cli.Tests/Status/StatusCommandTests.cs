@@ -142,7 +142,11 @@ public class StatusCommandTests
         Assert.Equal(ExitCodes.ApiError, exit);
         Assert.Equal(CheckState.Failed, skills.State);
         Assert.Contains("holds no SKILL.md", skills.Fact, StringComparison.Ordinal);
-        Assert.Equal("jason skills install --force", skills.Fix);
+
+        // A plain install, not --force. Overwriting is not what repairs a directory missing its SKILL.md,
+        // and --force overwrites every edited file in every root of the plan — so printing it here would
+        // cost an operator unrelated work for a problem that never needed it.
+        Assert.Equal("jason skills install", skills.Fix);
     }
 
     /// <summary>

@@ -24,7 +24,7 @@ namespace Jason.Cli.Tests.Status;
 /// runs is the one the caller named, with one argument, through the one declared runner.
 /// </para>
 /// </remarks>
-public class StatusDisciplineTests
+public partial class StatusDisciplineTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -80,15 +80,11 @@ public class StatusDisciplineTests
     [Fact]
     public async Task Every_repair_a_check_prints_is_a_command_this_program_understands()
     {
-        using var dir = new TempPaths();
-        var output = new StringWriter();
-
-        // No runtime, no harness, nothing on PATH: the shape in which every repair this verb knows is printed.
-        await CliApp.RunAsync(["status"], Machine(dir, new FakeProgramRunner(), output), Ct);
-
-        var report = System.Text.Json.JsonSerializer.Deserialize<StatusReport>(output.ToString(), Contracts.Json.JasonJson.Options)!;
-        var repairs = report.Checks.Select(check => check.Fix).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
-        Assert.NotEmpty(repairs);
+        // Every repair this verb can print, read off the source rather than off one run of it. One shape of
+        // machine prints three of them; the guard claimed it reached every one, which is how a repair that is
+        // itself a usage error shipped green.
+        var repairs = Printed();
+        Assert.True(repairs.Count >= 4, $"Only {repairs.Count} repairs were found in the source, which is fewer than this verb prints.");
 
         foreach (var repair in repairs)
         {
@@ -105,6 +101,28 @@ public class StatusDisciplineTests
                 + $"{Environment.NewLine}{error}");
         }
     }
+
+    /// <summary>
+    /// Every repair string this verb can print, taken from the one class that names them and from the checks
+    /// themselves. A run only ever prints the repairs its own machine's state calls for.
+    /// </summary>
+    private static IReadOnlyList<string> Printed()
+    {
+        var source = File.ReadAllText(Path.Combine(StatusSources(), "StatusChecks.cs"));
+        var opens = source.IndexOf("private static class Repair", StringComparison.Ordinal);
+        Assert.True(opens > 0, "The class that names every repair is not there any more, so this guard cannot read them.");
+
+        var body = source[opens..];
+        var closes = body.IndexOf("\n    }", StringComparison.Ordinal);
+        Assert.True(closes > 0, "The class that names every repair has no end, so this guard cannot read it.");
+
+        return [.. Repair().Matches(body[..closes])
+            .Select(match => match.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal)];
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex("\"(jason [^\"]*)\"")]
+    private static partial System.Text.RegularExpressions.Regex Repair();
 
     private static CliEnvironment Machine(TempPaths dir, IProgramRunner runner, StringWriter? output = null) =>
         new(

@@ -55,7 +55,16 @@ public static class SkillsDeployer
             // it is written last, so a crash half-way through reads exactly like this. Such a root is
             // completed rather than trusted, and said out loud: one that silently repaired itself would hide
             // that something went wrong once.
-            if (record.Packs.Count == 0 && Directory.Exists(root) && Directory.GetDirectories(root).Length > 0)
+            // Only where skills this plan owns are already on disk with no record of them. Firing on any
+            // non-empty root meant firing on the first install on every machine that has Claude Code, which
+            // is how a real incomplete-deployment warning gets trained out of an operator.
+            var unrecorded = record.Packs.Count == 0
+                && plan.Packs
+                    .Where(pack => string.Equals(pack.Root, root, StringComparison.Ordinal))
+                    .SelectMany(pack => pack.Units)
+                    .Any(unit => Directory.Exists(unit.Unit));
+
+            if (unrecorded)
             {
                 notes.Add($"'{root}' holds skills and there is no record of what is there, so this deployment is being completed rather than trusted.");
             }
@@ -83,11 +92,13 @@ public static class SkillsDeployer
 
         var written = 0;
         var unchanged = 0;
+        var staged = new List<string>();
 
         foreach (var root in plan.Roots)
         {
             var staging = SkillsSwap.StagingFor(paths, root);
             SkillsSwap.Collect(staging);
+            staged.Add(staging);
 
             var deployments = new List<SkillsDeployment>(records[root].Packs);
             var rewrite = false;
@@ -160,6 +171,14 @@ public static class SkillsDeployer
             {
                 problems.Add($"The record in '{root}' could not be written: {exception.Message}");
             }
+        }
+
+        // Nothing of this deployment's own is left in somebody's home directory. The per-unit child went as
+        // each skill landed; this is the parent, which nothing removed and which would otherwise sit in a
+        // harness root for good.
+        foreach (var directory in staged)
+        {
+            SkillsSwap.Tidy(directory);
         }
 
         return new DeploymentReport(written, unchanged, edited, problems, notes);

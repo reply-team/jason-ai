@@ -201,8 +201,12 @@ public static class WorkDirectory
         // the walk saw. So a deployment that renamed a same-shaped tree into place mid-copy would be copied
         // without a single failure, and reported with the byte count of the tree that is no longer there.
         // Reading the tree again brackets the copy: a different file list or a different total means it moved.
+        // Per file, not just the list and the sum. Comparing totals leaves a compensating change through --
+        // one file growing by the bytes another loses, both swapped in mid-copy -- and the launch would then
+        // deliver a blend under a total that is arithmetically right for neither tree whole. The walk already
+        // has every length, so this costs nothing it had not already paid for.
         var after = RoleSkillRules.Read(source, role, maxSkillBytes);
-        if (!after.Exists || after.Bytes != reading.Bytes || !after.Files.SequenceEqual(reading.Files, StringComparer.Ordinal))
+        if (!after.Exists || !after.Measurements.SequenceEqual(reading.Measurements))
         {
             throw new RoleSkillTreeChanged(source, new IOException("The tree read before the copy is not the tree that is there after it."));
         }

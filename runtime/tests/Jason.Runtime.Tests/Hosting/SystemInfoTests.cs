@@ -5,6 +5,7 @@ using System.Text.Json;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Skills;
 using Jason.Contracts.Update;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Persistence;
@@ -358,6 +359,71 @@ public class SystemInfoTests
             await churn.CancelAsync();
             await renaming;
         }
+    }
+
+    /// <summary>
+    /// A directory under the role root whose name is not a role name. This operation must not fail on it: the
+    /// reading it hands each directory to opens with a null-or-whitespace guard, so one <c>mkdir ' '</c> —
+    /// trivial on Linux and macOS — made every call a 500, which is the answer an applier must never get.
+    /// </summary>
+    [Fact]
+    public async Task A_directory_whose_name_is_not_a_role_name_is_skipped_rather_than_thrown_over()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // Windows refuses to create one, so there is nothing here to be robust against.
+            return;
+        }
+
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                Directory.CreateDirectory(paths.ConfigDirectory);
+                File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+                Deploy(Path.Combine(paths.RoleSkillsDirectory, "researcher"), "researcher");
+                Directory.CreateDirectory(Path.Combine(paths.RoleSkillsDirectory, " "));
+            });
+
+        var (status, body) = await fixture.PostAsync(Operations.SystemInfo, null, Ct);
+
+        Assert.True(status == HttpStatusCode.OK, $"system.info answered {(int)status} over a directory whose name is not a role name: {body}");
+        var info = JsonSerializer.Deserialize<SystemInfoResponse>(body, JasonJson.Options)!;
+        Assert.Equal("researcher", Assert.Single(info.Skills!.Roles).Role);
+    }
+
+    /// <summary>
+    /// And a tree that nests deeper than anything reads it. The walk recurses, and this operation now runs it
+    /// on every call rather than only at a launch — so unbounded, a deep enough tree would end the runtime
+    /// process, and a stack overflow cannot be caught by anything.
+    /// </summary>
+    [Fact]
+    public async Task A_tree_that_nests_deeper_than_it_is_read_is_a_problem_string_rather_than_a_crash()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths =>
+            {
+                Directory.CreateDirectory(paths.ConfigDirectory);
+                File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+                var role = Path.Combine(paths.RoleSkillsDirectory, "researcher");
+                Deploy(role, "researcher");
+
+                var deep = role;
+                for (var level = 0; level <= RoleSkillRules.MaxDepth + 2; level++)
+                {
+                    deep = Path.Combine(deep, $"level-{level}");
+                }
+
+                Directory.CreateDirectory(deep);
+                File.WriteAllText(Path.Combine(deep, "buried.md"), "far down");
+            });
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        var researcher = Assert.Single(info.Skills!.Roles);
+        Assert.NotNull(researcher.Problem);
+        Assert.Contains("nests deeper", researcher.Problem, StringComparison.Ordinal);
     }
 
     /// <summary>A role directory composed the way an operator composes one: a skill, and some files beside it.</summary>

@@ -109,7 +109,11 @@ public static class SkillsCommands
         }
 
         env.Out.WriteLine($"Updating from {newest.Source} at {newest.Ref}, as the record names it.");
-        return await RunAsync(env, options with { Source = newest.Source, Ref = newest.RefOverridden ? newest.Ref : null }, cancellationToken)
+        // The record's ref, always. Passing null where the record did not override re-derived this build's
+        // own pin, so on a runtime upgraded since the install the line above said "at v0.1.0, as the record
+        // names it" and the plan underneath it described v0.2.0. Every update test used a directory source,
+        // where the ref never reaches staging at all.
+        return await RunAsync(env, options with { Source = newest.Source, Ref = newest.Ref }, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -171,6 +175,14 @@ public static class SkillsCommands
             return ExitCodes.ApiError;
         }
 
+        if (options.Pack is { } only && !SkillPacks.All.Contains(only, StringComparer.OrdinalIgnoreCase))
+        {
+            // A misspelled pack installed nothing and exited 0, while a misspelled --host refused. Silence
+            // and success is the worst answer to a typo: the operator believes the deployment happened.
+            env.Error.WriteLine($"'{only}' is not a pack this build ships. They are: {string.Join(", ", SkillPacks.All)}.");
+            return ExitCodes.ApiError;
+        }
+
         var (cap, fromRuntime) = await CapAsync(env, cancellationToken).ConfigureAwait(false);
         var plan = SkillsPlanner.Compose(staged, env.Paths.RoleSkillsDirectory, harnesses, cap, fromRuntime, options.Pack);
 
@@ -197,6 +209,13 @@ public static class SkillsCommands
         foreach (var note in report.Notes)
         {
             env.Out.WriteLine(note);
+        }
+
+        // What --force actually did, named. The report has carried this list all along and the command path
+        // never read it, so the one run that overwrites somebody's work was the one that said least about it.
+        if (options.Force && report.Edited.Count > 0)
+        {
+            env.Out.WriteLine($"Overwrote {report.Edited.Count} file(s) you had edited: {string.Join(", ", report.Edited)}.");
         }
 
         foreach (var problem in report.Problems)
