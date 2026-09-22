@@ -66,10 +66,16 @@ public static class SkillsSource
     /// is cloned by <c>git</c> at the ref, into the data directory, through the program seam — so an
     /// environment with no runner refuses rather than reaching for the network.
     /// </summary>
+    /// <param name="dryRun">
+    /// True when the caller has promised to change nothing. A source already on this machine is still used; a
+    /// source that is not there is refused rather than fetched, because a clone into the data directory is a
+    /// change and the network it reaches for is one the flag's own help says will not happen.
+    /// </param>
     public static async Task<StagedSource> StageAsync(
         CliEnvironment env,
         string? source,
         string? reference,
+        bool dryRun,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(env);
@@ -99,6 +105,25 @@ public static class SkillsSource
         catch (ArgumentException refused)
         {
             throw new SkillsSourceUnavailable($"'{pin}' cannot be used as a ref: {refused.Message} Name a tag or a branch.");
+        }
+
+        // A tree already fetched at this ref is used as it is. It was cloned at a pinned ref, which is one
+        // commit and cannot have moved, so re-fetching buys nothing -- and this is the one place a dry run
+        // would otherwise spend a network fetch and destroy a cache while promising to change nothing.
+        if (Directory.Exists(staged) && Directory.Exists(Path.Combine(staged, "skills")))
+        {
+            RequirePacks(staged, where);
+            var known = await runner.RunAsync("git", ["rev-parse", "HEAD"], staged, FetchTimeout, cancellationToken).ConfigureAwait(false);
+            return new StagedSource(staged, where, pin, overridden, known.ExitCode == 0 ? known.StandardOutput.Trim() : null);
+        }
+
+        if (dryRun)
+        {
+            // The flag's own help says it changes nothing, and a clone into the data directory is a change --
+            // never mind the network it reaches for. Refused rather than performed quietly, and the refusal
+            // says the one thing that makes it actionable.
+            throw new SkillsSourceUnavailable(
+                $"'{where}' at '{pin}' is not on this machine yet, and a dry run does not fetch it. Run the install without --dry-run to fetch it once, or name a directory with --source.");
         }
 
         if (Directory.Exists(staged))

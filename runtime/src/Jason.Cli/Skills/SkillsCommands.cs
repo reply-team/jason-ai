@@ -46,7 +46,7 @@ public static class SkillsCommands
         var root = new Option<string?>("--root") { Description = "Update this directory as a harness root, instead of detection." };
         var host = new Option<string?>("--host") { Description = "Update only this detected harness." };
         var pack = new Option<string?>("--pack") { Description = "Update only this pack." };
-        var dryRun = new Option<bool>("--dry-run") { Description = "Print exactly what would be written where, and change nothing." };
+        var dryRun = new Option<bool>("--dry-run") { Description = "Print exactly what would be written where, and change nothing. A source not already on this machine is refused rather than fetched." };
         var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept." };
 
         foreach (var option in new Option[] { root, host, pack, dryRun, force })
@@ -122,7 +122,7 @@ public static class SkillsCommands
         var root = new Option<string?>("--root") { Description = "Deploy into this directory as a harness root, instead of detection." };
         var host = new Option<string?>("--host") { Description = "Deploy only into this detected harness." };
         var pack = new Option<string?>("--pack") { Description = "Deploy only this pack." };
-        var dryRun = new Option<bool>("--dry-run") { Description = "Print exactly what would be written where, and change nothing." };
+        var dryRun = new Option<bool>("--dry-run") { Description = "Print exactly what would be written where, and change nothing. A source not already on this machine is refused rather than fetched." };
         var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept." };
 
         foreach (var option in new Option[] { source, reference, root, host, pack, dryRun, force })
@@ -163,7 +163,7 @@ public static class SkillsCommands
         StagedSource staged;
         try
         {
-            staged = await SkillsSource.StageAsync(env, options.Source, options.Ref, cancellationToken).ConfigureAwait(false);
+            staged = await SkillsSource.StageAsync(env, options.Source, options.Ref, options.DryRun, cancellationToken).ConfigureAwait(false);
         }
         catch (SkillsSourceUnavailable unavailable)
         {

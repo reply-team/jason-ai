@@ -46,7 +46,7 @@ public class SkillsSourceTests
         using var dir = new TempPaths();
         var clone = Pack(dir, "somewhere");
 
-        var staged = await SkillsSource.StageAsync(Machine(dir), clone, null, Ct);
+        var staged = await SkillsSource.StageAsync(Machine(dir), clone, null, dryRun: false, Ct);
 
         Assert.Equal(clone, staged.Directory);
         Assert.Null(staged.Commit);
@@ -61,7 +61,7 @@ public class SkillsSourceTests
         var empty = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "empty")).FullName;
 
         var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
-            () => SkillsSource.StageAsync(Machine(dir), empty, null, Ct));
+            () => SkillsSource.StageAsync(Machine(dir), empty, null, dryRun: false, Ct));
 
         Assert.Contains("skills", refusal.Message, StringComparison.Ordinal);
     }
@@ -73,7 +73,7 @@ public class SkillsSourceTests
         using var dir = new TempPaths();
         var origin = await RepositoryAsync(dir, "v0.1.0");
 
-        var staged = await SkillsSource.StageAsync(Machine(dir), new Uri(origin).AbsoluteUri, "v0.1.0", Ct);
+        var staged = await SkillsSource.StageAsync(Machine(dir), new Uri(origin).AbsoluteUri, "v0.1.0", dryRun: false, Ct);
 
         Assert.True(File.Exists(Path.Combine(staged.Directory, "skills", "README.md")));
         Assert.Equal("v0.1.0", staged.Ref);
@@ -91,7 +91,7 @@ public class SkillsSourceTests
         var origin = await RepositoryAsync(dir, "v0.1.0");
 
         var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
-            () => SkillsSource.StageAsync(Machine(dir), new Uri(origin).AbsoluteUri, "v9.9.9", Ct));
+            () => SkillsSource.StageAsync(Machine(dir), new Uri(origin).AbsoluteUri, "v9.9.9", dryRun: false, Ct));
 
         Assert.Contains("v9.9.9", refusal.Message, StringComparison.Ordinal);
     }
@@ -119,7 +119,7 @@ public class SkillsSourceTests
         await File.WriteAllTextAsync(record, """{"version":1,"packs":[]}""", Ct);
 
         var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
-            () => SkillsSource.StageAsync(Machine(dir), "https://example.test/x.git", reference, Ct));
+            () => SkillsSource.StageAsync(Machine(dir), "https://example.test/x.git", reference, dryRun: false, Ct));
 
         Assert.Contains(reference, refusal.Message, StringComparison.Ordinal);
         Assert.True(File.Exists(Path.Combine(deployed, "SKILL.md")), "The deployed skill was deleted by a refused ref.");
@@ -144,6 +144,41 @@ public class SkillsSourceTests
         Assert.True(File.Exists(Path.Combine(deployed, "SKILL.md")), "The deployed skill was deleted by 'jason skills install --ref ..'.");
     }
 
+    /// <summary>
+    /// A dry run does not fetch. The flag's own help says it changes nothing, and a clone into the data
+    /// directory is a change — this deleted whatever was staged at that ref first, so the safe-looking first
+    /// command the README prints was a network fetch that also destroyed a cache.
+    /// </summary>
+    [Fact]
+    public async Task A_dry_run_against_a_source_that_is_not_here_yet_refuses_rather_than_fetching()
+    {
+        using var dir = new TempPaths();
+        var runner = new FakeProgramRunner();
+
+        var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
+            () => SkillsSource.StageAsync(Machine(dir, runner), "https://example.test/x.git", "v0.1.0", dryRun: true, Ct));
+
+        Assert.Contains("--dry-run", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("--source", refusal.Message, StringComparison.Ordinal);
+        Assert.Empty(runner.Requested);
+    }
+
+    /// <summary>And a tree already fetched at that ref is used as it is, by a dry run and by an install.</summary>
+    [Fact]
+    public async Task A_ref_already_fetched_is_used_as_it_is_rather_than_fetched_again()
+    {
+        using var dir = new TempPaths();
+        var origin = await RepositoryAsync(dir, "v0.1.0");
+        var first = await SkillsSource.StageAsync(Machine(dir), new Uri(origin).AbsoluteUri, "v0.1.0", dryRun: false, Ct);
+        var marker = Path.Combine(first.Directory, "skills", "README.md");
+        await File.WriteAllTextAsync(marker, "the tree that was already here", Ct);
+
+        var again = await SkillsSource.StageAsync(Machine(dir), new Uri(origin).AbsoluteUri, "v0.1.0", dryRun: true, Ct);
+
+        Assert.Equal(first.Directory, again.Directory);
+        Assert.Equal("the tree that was already here", await File.ReadAllTextAsync(marker, Ct));
+    }
+
     /// <summary>An environment with no program runner refuses rather than reaching for the network.</summary>
     [Fact]
     public async Task Without_a_program_runner_a_git_source_is_refused()
@@ -152,7 +187,7 @@ public class SkillsSourceTests
         var machine = new CliEnvironment(new StringWriter(), new StringWriter(), dir.Paths);
 
         var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
-            () => SkillsSource.StageAsync(machine, "https://example.test/x.git", "v0.1.0", Ct));
+            () => SkillsSource.StageAsync(machine, "https://example.test/x.git", "v0.1.0", dryRun: false, Ct));
 
         Assert.Contains("cannot run git", refusal.Message, StringComparison.Ordinal);
     }
@@ -165,7 +200,7 @@ public class SkillsSourceTests
         var machine = Machine(dir, new FakeProgramRunner(_ => new ProgramResult(128, string.Empty, "fatal: could not read from remote", false)));
 
         var refusal = await Assert.ThrowsAsync<SkillsSourceUnavailable>(
-            () => SkillsSource.StageAsync(machine, "https://example.test/x.git", "v0.1.0", Ct));
+            () => SkillsSource.StageAsync(machine, "https://example.test/x.git", "v0.1.0", dryRun: false, Ct));
 
         Assert.Contains("could not read from remote", refusal.Message, StringComparison.Ordinal);
     }
