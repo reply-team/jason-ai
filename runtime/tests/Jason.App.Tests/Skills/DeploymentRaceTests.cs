@@ -80,6 +80,20 @@ public class DeploymentRaceTests
             Machine(data, harness),
             Ct);
 
+        // One launch after the deployment has landed, before the loop is stopped.
+        //
+        // The assertion at the end of this test -- that some launch was taught the new tree -- is what keeps
+        // it from being vacuous, and leaving that to the scheduler is why it went red on a release build
+        // while the product was whole: two launches were collected, both read the old tree, and the install
+        // landed after the last of them. A concurrent launch may or may not observe the new tree. This one
+        // must, because the deployment has already returned.
+        reports.Add(WorkDirectory.Prepare(
+            data.Paths.AttemptWorkDirectory("wi_A", "att_settled"),
+            [],
+            Role,
+            data.Paths.RoleSkillsDirectory,
+            1024 * 1024));
+
         await stop.CancelAsync();
         await launching;
 
@@ -106,6 +120,9 @@ public class DeploymentRaceTests
                 + "nor nothing at all.");
         }
 
+        // Certain, not hoped for: the settled launch above took place after the deployment returned. What a
+        // concurrent launch proves is the invariant in the loop above -- whole old tree, whole new tree, or
+        // nothing -- and what this proves is that the new tree is reachable at all.
         Assert.Contains(reports, report => report.Skill!.Bytes == after);
     }
 
