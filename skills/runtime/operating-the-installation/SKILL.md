@@ -2,7 +2,7 @@
 name: operating-the-installation
 description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which agent hosts are registered, and whether a newer version has been released.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Operating the installation
@@ -11,7 +11,10 @@ This skill is about the installation, not about the work it performs. A person r
 Jason is up, why nothing is happening, what is installed, where work would go, or whether they are on the
 current version. Campaign work itself is `managed-campaign-work`.
 
-**Status: verified** against Claude Code 2.1.278. It covers what this build does and nothing else.
+**Status: draft.** A host read an earlier text: the paragraph about releases below has been rewritten since,
+and a section on removing the installation has been added, so the reading no longer covers what is here. It
+returns to verified when a host has read *this* text. Everything in it is still current about this build --
+what a draft means is that nobody has done the job from it in this form.
 
 Two things are true throughout and are easy to forget. **Nothing is registered until somebody asks**: Jason
 starts because you started it, or because somebody registered it to start at logon. And **no provider ships
@@ -193,9 +196,29 @@ Each script works out the platform, verifies the download's SHA-256 before unpac
 under the person's own account — `~/.local/bin` on macOS and Linux, `%LOCALAPPDATA%\Programs\jason` on Windows —
 and puts that directory on the `PATH` unless `--no-modify-path` is passed. Nothing needs administrator rights.
 
-**Both lines resolve to the latest release, and no release has been published yet, so they answer 404 until the
-first release is published.** Until then the way to get a working Jason is to build it from source, which the
-repository's `README.md` explains. Say that, rather than pasting a line you know will fail.
+Both lines install the latest release. If they answer 404 the repository has no published release, and the way
+in is to build from source, which `README.md` and `docs/INSTALL.md` explain. Say that, rather than reporting
+the 404 as a failure of the tool or pasting a line again in the hope of a different answer.
+
+## Taking it off again
+
+```sh
+jason uninstall --human --dry-run
+jason uninstall
+```
+
+Show the dry run first: it prints exactly what would go and changes nothing.
+
+**It removes only what a receipt names.** Every root a deployment wrote into carries a record listing each
+path written there, and the verb removes those and nothing else. **A skill somebody copied into a harness by
+hand has no receipt, so it is removed by nobody, including this** — say so while you are there, rather than
+leaving them to find it months later. A recorded file whose bytes they have changed since is reported and
+kept unless `--force` says otherwise.
+
+**The data directory is kept** unless `--purge-data` says so, and the verb names it in one line. In the
+machine shape `--yes` has to be given in advance, because there is nobody there to be asked. It exits 0 when
+everything it set out to remove is gone and 1 when it understood and refused — a runtime that would not stop,
+a record it could not read, a file it could not remove. `docs/INSTALL.md` §7 is the fuller account.
 
 ## What this skill does not cover
 

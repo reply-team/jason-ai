@@ -22,10 +22,17 @@ public partial class InteractiveSkillTests
         // would refuse to answer "is Jason set to start at logon?", which it can always answer.
         Assert.Contains("needs no elevation", skill, StringComparison.Ordinal);
 
-        // The install one-liners resolve to the latest release and there is none. A skill that printed them
-        // without this would have a person paste a line that answers 404 and conclude the product does not
-        // install - when building from source is what works today.
-        Assert.Contains("404 until the first release", skill, StringComparison.Ordinal);
+        // The install one-liners resolve to the latest release. A skill that printed them without this would
+        // have a person paste a line, get a 404 and conclude the product does not install - when a repository
+        // with no published release simply has no latest, and building from source is the way in.
+        //
+        // Stated as the rule rather than as today's state, so that it does not turn false the day a release
+        // exists. The sentence this replaces asserted a present fact - "no release has been published yet" -
+        // and this assertion was what kept it alive: the fifth site of that shape in this repository, and the
+        // one the plan for this increment did not name.
+        Assert.Contains("If they answer 404", skill, StringComparison.Ordinal);
+        Assert.Contains("build from source", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("no release has been published yet", skill, StringComparison.Ordinal);
 
         // The runtime volunteers that a newer version exists, so every session on this installation learns
         // it. Without a bound, every one of them says so, and a person who declined once is told again.

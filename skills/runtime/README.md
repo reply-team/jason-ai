@@ -9,11 +9,15 @@ Every command any of these skills prints is handed to this build's own argument 
 so a skill cannot drift from the program it ships beside.
 
 **What they do not teach yet.** None of the five mentions `jason skills install`, `jason skills update` or
-`jason status`. Each is marked `verified`, which in this repository means a named agent host read *that exact
-body* while driving this runtime and the digest of what it read is recorded — so the texts cannot gain the new
-verbs without being re-read by a host, and no host has read them since the verbs existed. They teach what this
-build did before them, correctly and incompletely. The re-reading is the first-run increment's, and until it
-happens this paragraph is the honest form of the gap.
+`jason status`. `verified` in this repository means a named agent host read *that exact body* while driving
+this runtime and the digest of what it read is recorded, so a text cannot gain the new verbs without being
+re-read by a host — which is why these still teach what this build did before those verbs existed, correctly
+and incompletely.
+
+`operating-the-installation` is a `draft` again: its text changed in this increment and the reading that made
+it `verified` was of the earlier one. Demoting it is what that guard is for. It returns to `verified` when a
+host has read what ships, with a new digest recorded below — never by recomputing the digest of a text nobody
+read.
 
 ## The skills a person's own session reads
 
@@ -26,7 +30,7 @@ description that promises everything matches nothing.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
   person to decide: the approvals parked at a claim and the questions a running role raised, presented in the
   person's own words and recorded as their decision.
-- [`operating-the-installation`](operating-the-installation/SKILL.md) — **verified.** The installation itself:
+- [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft.** The installation itself:
   whether the runtime is up, starting and stopping it, having it start at logon, the plugins and routes it
   has, the hosts it can launch, and whether a newer version exists.
 - [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **verified.** Why work stopped: the runtime, the
@@ -131,6 +135,5 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 |---|---|---|---|
 | `managed-campaign-work` | Claude Code 2.1.278 | 0.1.0 | `sha256:01adfb08dec48564d6fef17639fd58cdac16deb7ddfbfea50ebcaa673989d855` |
 | `approvals-and-questions` | Claude Code 2.1.278 | 0.1.0 | `sha256:7ec45ac3fc2b72a01a289c27a3b4b59f9b10fb9c9f56abd6a45148f761bb8a74` |
-| `operating-the-installation` | Claude Code 2.1.278 | 0.1.0 | `sha256:47ac8082ae5a16fd7567adf11e7d698a3e0447eada201c9f35451845863496ef` |
 | `troubleshooting-jason` | Claude Code 2.1.278 | 0.1.0 | `sha256:fac60f6d04618c2d4d614592024de133144c563b8462cc9c4ca751786cf77a9f` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:9fb55ca5364ec65c9b629df5538ff26d7ce380e8d09017989e0d222fca4eb037` |
