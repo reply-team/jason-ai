@@ -104,6 +104,20 @@ public static class UninstallCommand
                 + $"The data directory at '{env.Paths.Root}' is untouched, as it is unless --purge-data says otherwise.");
         }
 
+        // Before anything is read, let alone removed. In the shape a person is reading, --purge-data asks;
+        // in the shape a script reads, there is nobody to ask, and a verb that blocked on a question nobody
+        // could see would hang for ever. So the word has to be said in advance, and this refuses with the
+        // whole installation still in place rather than with everything but the data gone.
+        if (options.PurgeData && !options.Yes && !options.Human)
+        {
+            return Refuse(
+                env,
+                options.Human,
+                CliErrors.UninstallRefused,
+                $"--purge-data deletes '{env.Paths.Root}' and everything in it. Nothing has been removed. "
+                + "Add --yes to say so in advance, or run with --human to be asked.");
+        }
+
         var plan = UninstallReader.Read(env, options.PurgeData);
 
         // A person is shown the plan before a byte of it is acted on, because a plan nobody saw is one

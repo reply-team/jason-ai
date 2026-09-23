@@ -31,10 +31,42 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
     public void RemoveFile(string path)
     {
         Record("file.remove", path);
-        if (ReallyRemoves)
+        if (ReallyRemoves && File.Exists(path))
         {
             File.Delete(path);
         }
+    }
+
+    /// <summary>Where a running image is pretended to have been moved, when this platform cannot delete one.</summary>
+    public string? MovesTo { get; set; }
+
+    public ExecutableOutcome RemoveExecutable(string path)
+    {
+        Record("executable.remove", path);
+
+        if (!File.Exists(path))
+        {
+            return new ExecutableOutcome(true, null, "It was already gone.");
+        }
+
+        if (CanRemoveRunningImage)
+        {
+            if (ReallyRemoves)
+            {
+                File.Delete(path);
+            }
+
+            return new ExecutableOutcome(true, null, null);
+        }
+
+        var moved = MovesTo ?? path + ".moved";
+        if (ReallyRemoves)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(moved)!);
+            File.Move(path, moved, overwrite: true);
+        }
+
+        return new ExecutableOutcome(false, moved, $"It is the running image, so it was moved to '{moved}'.");
     }
 
     public bool RemoveDirectoryIfEmpty(string path)

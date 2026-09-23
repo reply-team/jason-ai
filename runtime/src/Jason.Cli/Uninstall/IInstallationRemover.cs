@@ -42,6 +42,16 @@ public interface IInstallationRemover
     void RemoveFile(string path);
 
     /// <summary>
+    /// Removes the installed executable — which may be the image of the process doing the removing.
+    /// </summary>
+    /// <remarks>
+    /// Its own member rather than <see cref="RemoveFile"/>, because it is the one step whose answer is not
+    /// simply yes or no, and because how it is done is a property of the platform and therefore belongs to
+    /// the seam that owns the machine.
+    /// </remarks>
+    ExecutableOutcome RemoveExecutable(string path);
+
+    /// <summary>
     /// Removes a directory only if nothing is left in it, and says whether it went. A directory holding
     /// something this installer did not write is somebody else's, and it stays.
     /// </summary>
@@ -67,6 +77,16 @@ public interface IInstallationRemover
     PathEntryOutcome RemovePathEntry(PathEntryPlan plan);
 }
 
+/// <summary>What became of the executable, which is the one step that can honestly half-succeed.</summary>
+/// <param name="Removed">Whether the file is gone.</param>
+/// <param name="MovedTo">
+/// Where it went instead, when it could not be deleted because it is the image of the running process. The
+/// installation is off the machine either way — the install directory is empty and goes — but one copy of the
+/// binary is somewhere else, and this verb names it rather than calling that a clean uninstall.
+/// </param>
+/// <param name="Note">What happened, in words, where that is not simply "it is gone".</param>
+public sealed record ExecutableOutcome(bool Removed, string? MovedTo, string? Note);
+
 /// <summary>The removers this build knows how to make.</summary>
 public static class InstallationRemovers
 {
@@ -91,8 +111,68 @@ public static class InstallationRemovers
         public void RemoveFile(string path)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(path);
-            File.Delete(path);
+
+            // File.Delete forgives a missing file and not a missing directory: the second throws
+            // DirectoryNotFoundException, which made "removing what is not there is not an error" false of
+            // the commonest case there is -- a root somebody had already cleared out by hand.
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
         }
+
+        /// <summary>
+        /// Deleted where that is allowed; moved aside where it is not.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Windows will not delete the image of a running process, and this verb is ordinarily run from the
+        /// very file it is removing. It <em>will</em> rename one, though: the file object stays open under its
+        /// new name, so moving the executable into the system temporary directory empties the install
+        /// directory, which then goes, and leaves one copy of the binary somewhere the operating system
+        /// clears — named in the report, with the line that removes it now.
+        /// </para>
+        /// <para>
+        /// Two alternatives were considered. Re-executing from a copy of itself, the way the update applier
+        /// does, solves <em>replacing</em> the file rather than deleting it: the copy would still have to
+        /// outlive this process to delete its image, so it is a new detached-process surface whose own copy
+        /// leaks in exactly the same place this one does. And marking the file for deletion at the next
+        /// reboot needs an administrator, which nothing in this product does.
+        /// </para>
+        /// </remarks>
+        public ExecutableOutcome RemoveExecutable(string path)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+            if (!File.Exists(path))
+            {
+                return new ExecutableOutcome(true, null, "It was already gone.");
+            }
+
+            if (CanRemoveRunningImage || !IsRunningImage(path))
+            {
+                File.Delete(path);
+                return new ExecutableOutcome(true, null, null);
+            }
+
+            var aside = Path.Combine(Path.GetTempPath(), $"jason-uninstall-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(aside);
+            var moved = Path.Combine(aside, Path.GetFileName(path));
+            File.Move(path, moved);
+
+            return new ExecutableOutcome(
+                false,
+                moved,
+                "This is the file the uninstall is running from, and Windows does not delete the image of a "
+                + "running process. It was moved out of the install directory instead, so the installation is "
+                + $"off this machine; one copy of it is at '{moved}' until the system clears its temporary "
+                + "files, and `del` on that path removes it now.");
+        }
+
+        /// <summary>Whether that path is the image this process is running as.</summary>
+        private static bool IsRunningImage(string path) =>
+            Environment.ProcessPath is { } self
+            && string.Equals(Path.GetFullPath(self), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase);
 
         public bool RemoveDirectoryIfEmpty(string path)
         {
@@ -201,6 +281,8 @@ public static class InstallationRemovers
         public bool CanRemoveRunningImage => false;
 
         public void RemoveFile(string path) => throw Refusal();
+
+        public ExecutableOutcome RemoveExecutable(string path) => throw Refusal();
 
         public bool RemoveDirectoryIfEmpty(string path) => throw Refusal();
 

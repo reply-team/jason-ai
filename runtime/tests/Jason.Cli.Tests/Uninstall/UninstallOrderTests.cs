@@ -86,7 +86,7 @@ public class UninstallOrderTests
 
         // The whole order, so a step added later arrives in this diff rather than silently: the registration,
         // then the receipts (none here), then the PATH.
-        Assert.Equal(["autostart.remove", "path.remove"], log.Steps);
+        Assert.Equal(["autostart.remove", "path.remove", "executable.remove", "directory.remove_if_empty"], log.Steps);
     }
 
     /// <summary>

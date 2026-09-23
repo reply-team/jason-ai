@@ -76,6 +76,12 @@ public static class UninstallRunner
         // 4. The PATH entry, only where this installer wrote it.
         Step4RemovePathEntry(env, plan, done, kept, problems);
 
+        // 5. The executable and its install directory, last, because everything above is run from it.
+        Step5RemoveExecutable(env, plan, done, kept, problems);
+
+        // 6. And the data directory, only on the explicit word, after everything else.
+        Step6Data(env, plan, options, done, kept, problems);
+
         return new UninstallReport(plan, done, kept, problems, null, null);
     }
 
@@ -111,6 +117,146 @@ public static class UninstallRunner
             : "No logon registration was registered for this account.");
 
         return null;
+    }
+
+    /// <summary>
+    /// The data directory: kept unless the word was said, and the word asks first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>~/.jason</c> holds the database, the settings, the plugins, the logs and the work directories — the
+    /// record of what the operator did, which is theirs. So it is kept by default and the verb says in one
+    /// line that it kept it and where, because a person who wanted it gone needs to know it is still there.
+    /// </para>
+    /// <para>
+    /// Last, after everything else, because everything else lives in it or writes to it while it runs.
+    /// </para>
+    /// </remarks>
+    private static void Step6Data(
+        CliEnvironment env,
+        UninstallPlan plan,
+        UninstallOptions options,
+        List<string> done,
+        List<string> kept,
+        List<string> problems)
+    {
+        if (!options.PurgeData)
+        {
+            kept.Add(
+                $"The data directory at '{plan.DataDirectory}' is kept: it holds your database, settings, "
+                + "plugins, logs and any source this build fetched. --purge-data removes it.");
+            return;
+        }
+
+        if (options.Human && !options.Yes && !Confirmed(env, plan))
+        {
+            kept.Add($"The data directory at '{plan.DataDirectory}' was kept: you did not confirm.");
+            return;
+        }
+
+        try
+        {
+            env.Removes!.RemoveTree(plan.DataDirectory);
+            done.Add($"Removed the data directory at '{plan.DataDirectory}'.");
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+        {
+            problems.Add($"'{plan.DataDirectory}' could not be removed: {exception.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Prints exactly what will be deleted and asks. Only in the shape a person is reading: a machine shape
+    /// that blocked on a question nobody could see would hang a script for ever, so it refuses up front
+    /// instead, before anything at all has been removed.
+    /// </summary>
+    private static bool Confirmed(CliEnvironment env, UninstallPlan plan)
+    {
+        env.Out.WriteLine();
+        env.Out.WriteLine($"About to delete {plan.DataDirectory} and everything in it:");
+        foreach (var entry in Contents(plan.DataDirectory))
+        {
+            env.Out.WriteLine($"  {entry}");
+        }
+
+        env.Out.Write("Delete it? [y/N] ");
+        var answer = (env.In ?? TextReader.Null).ReadLine();
+        return answer is not null && (answer.Trim().Equals("y", StringComparison.OrdinalIgnoreCase)
+            || answer.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>What is in it, one line each, so the question is about something the person can see.</summary>
+    private static IEnumerable<string> Contents(string root)
+    {
+        IEnumerable<string> entries;
+        try
+        {
+            entries = Directory.Exists(root) ? Directory.EnumerateFileSystemEntries(root).Order(StringComparer.Ordinal) : [];
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return [$"(could not be listed: {exception.Message})"];
+        }
+
+        return entries.Select(entry => Path.GetFileName(entry) + (Directory.Exists(entry) ? "/" : string.Empty));
+    }
+
+    /// <summary>
+    /// The executable and the directory holding it, last of all.
+    /// </summary>
+    /// <remarks>
+    /// Last because every step above it is run from this file. And the one step that can honestly half
+    /// succeed: where the file is the image of this very process it is moved aside rather than deleted, and
+    /// the report names where it went and the line that removes it. It does not claim a clean uninstall it
+    /// did not perform.
+    /// </remarks>
+    private static void Step5RemoveExecutable(
+        CliEnvironment env,
+        UninstallPlan plan,
+        List<string> done,
+        List<string> kept,
+        List<string> problems)
+    {
+        if (plan.Executable is not { } executable)
+        {
+            kept.Add("Nothing named an executable, so none was removed.");
+            return;
+        }
+
+        try
+        {
+            var outcome = env.Removes!.RemoveExecutable(executable);
+            done.Add(outcome.Removed ? $"Removed the executable at '{executable}'." : $"Moved the executable out of '{executable}'.");
+
+            if (outcome.Note is { } note)
+            {
+                kept.Add(note);
+            }
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+        {
+            problems.Add(
+                $"'{executable}' could not be removed: {exception.Message} Everything else is gone; remove "
+                + "that one file yourself.");
+            return;
+        }
+
+        if (plan.InstallDirectory is not { Length: > 0 } directory)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!env.Removes!.RemoveDirectoryIfEmpty(directory) && Directory.Exists(directory))
+            {
+                kept.Add($"Kept '{directory}': something is in it that this installer did not write.");
+            }
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+        {
+            problems.Add($"'{directory}' could not be removed: {exception.Message}");
+        }
     }
 
     /// <summary>
