@@ -126,6 +126,26 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// And the repair <c>jason status</c> prints appends with the same <c>printf</c> the script appends with.
+    /// </summary>
+    /// <remarks>
+    /// Two spellings of "how a line goes into a profile" is how the verb that undoes an installer drifts away
+    /// from it, and a repair is not allowed to be a paraphrase of the script: it is the script's own format,
+    /// its own marker and its own line. The repair used to be the bare export line, which lasts one shell.
+    /// </remarks>
+    [Fact]
+    public void The_status_repair_appends_with_the_format_the_script_appends_with()
+    {
+        var format = Jason.Cli.Uninstall.PathEntry.AppendFormat;
+
+        Assert.Contains($"printf '{format}' \"$MARKER\" \"$LINE\"", Code("install.sh"), StringComparison.Ordinal);
+        Assert.StartsWith(
+            $"printf '{format}' ",
+            Jason.Cli.Uninstall.PathEntry.AppendCommand("/opt/jason/bin", "/home/a/.profile"),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// <c>--version X</c> names a release, and the manifest that comes back has to be that release's. Neither
     /// script looked: a feed that answered with another version — a stale mirror, a directory holding the wrong
     /// release, a download URL that resolved to something else — was installed anyway, under the version that

@@ -73,6 +73,77 @@ public static class PathEntry
         return profiles;
     }
 
+    /// <summary>The profile the running shell reads at login: the one file a repair may write into.</summary>
+    /// <remarks>
+    /// The last of <see cref="ProfileFiles"/>, and telling the two apart is the whole point of them. A removal
+    /// has to look in every profile the installer may have written to; a repair has to write into the one this
+    /// shell will actually read, and zsh does not read <c>~/.profile</c> at all — so a repair that named it
+    /// for somebody on zsh would be advice that appeared to have worked.
+    /// </remarks>
+    public static string LoginProfile(string home, string? shell) => ProfileFiles(home, shell)[^1];
+
+    /// <summary>The <c>printf</c> format <c>install.sh</c> appends with, and therefore the one a repair uses.</summary>
+    public const string AppendFormat = @"\n%s\n%s\n";
+
+    /// <summary>
+    /// The command that puts the directory on this account's PATH on Unix, spelled as <c>install.sh</c>
+    /// spells it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Both halves, because the installer has both: the marked line appended to the login profile, which is
+    /// what survives the shell, and an export for the shell it is typed in, which is what lets the next
+    /// <c>jason status</c> say something different. <see cref="ExportLine"/> on its own lasts exactly one
+    /// shell — printed as a repair it is advice that appears to have worked, and the Windows half of the same
+    /// repair writes the registry and persists, so the two platforms differed in kind with neither saying so.
+    /// </para>
+    /// <para>
+    /// Written the way the installer writes it, marker and all, so that <see cref="WithoutEntry"/> takes back
+    /// out what this puts in. A repair whose line <c>jason uninstall</c> could not find again would leave a
+    /// profile carrying Jason after Jason was gone.
+    /// </para>
+    /// </remarks>
+    public static string AppendCommand(string installDirectory, string profile)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(installDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(profile);
+
+        var line = ExportLine(installDirectory);
+        return $"printf '{AppendFormat}' {Word(Marker)} {Word(line)} >> {Word(profile)} && {line}";
+    }
+
+    /// <summary>
+    /// The command that puts the directory on this account's PATH on Windows, spelled as <c>install.ps1</c>
+    /// spells it.
+    /// </summary>
+    /// <remarks>
+    /// The installer's rule and not a shorter one that is nearly it: the entries are split and the empty ones
+    /// dropped before the directory is appended, because an account whose user <c>Path</c> is empty — a fresh
+    /// one — would otherwise be left with a leading separator, and an empty PATH entry is the current
+    /// directory. The running session is told as well, for the same reason the Unix half exports.
+    /// </remarks>
+    public static string RegistryCommand(string installDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(installDirectory);
+
+        var directory = Literal(installDirectory.TrimEnd('\\'));
+        return "[Environment]::SetEnvironmentVariable('Path', ((@([Environment]::GetEnvironmentVariable('Path','User')"
+            + " -split ';' | Where-Object { $_ }) + " + directory + ") -join ';'), 'User'); $env:Path += ';' + " + directory;
+    }
+
+    /// <summary>
+    /// A string as one shell word: single quotes, with the one escape POSIX has for a single quote inside
+    /// them.
+    /// </summary>
+    /// <remarks>
+    /// A directory with an apostrophe in it would otherwise end the word and turn the repair into a syntax
+    /// error — a command that looks like it ran, printed by the verb whose whole job is to be trusted.
+    /// </remarks>
+    private static string Word(string word) => "'" + word.Replace("'", @"'\''", StringComparison.Ordinal) + "'";
+
+    /// <summary>A string as one PowerShell literal, where the only escape is doubling the quote.</summary>
+    private static string Literal(string word) => "'" + word.Replace("'", "''", StringComparison.Ordinal) + "'";
+
     /// <summary>
     /// A profile with the three lines the installer appended taken out, or <b>the same string</b> when it
     /// carries none.

@@ -151,6 +151,93 @@ public class UninstallPathEntryTests
         Assert.Equal("# mine\n", PathEntry.WithoutEntry(before, Directory));
     }
 
+    /// <summary>
+    /// The profile a repair writes into is the one the running shell reads at login — which for zsh is not
+    /// <c>~/.profile</c> at all.
+    /// </summary>
+    [Theory]
+    [InlineData("/bin/zsh", ".zprofile")]
+    [InlineData("/usr/bin/zsh", ".zprofile")]
+    [InlineData("/bin/bash", ".profile")]
+    [InlineData("/bin/sh", ".profile")]
+    [InlineData(null, ".profile")]
+    public void A_repair_writes_into_the_profile_this_shell_reads_at_login(string? shell, string expected) =>
+        Assert.Equal(expected, Path.GetFileName(PathEntry.LoginProfile("/home/a", shell)));
+
+    /// <summary>
+    /// The Unix repair appends the marked line to that profile <b>and</b> exports it for the shell it is
+    /// typed in.
+    /// </summary>
+    /// <remarks>
+    /// Both halves, or it is not a repair. The bare export line lasts exactly one shell, so the next
+    /// <c>jason status</c> says what the last one said; and a line appended to a profile does nothing for the
+    /// shell the operator is standing in. The Windows half of this repair writes the registry and persists,
+    /// so with only one half the two platforms differed in kind and neither said so.
+    /// </remarks>
+    [Fact]
+    public void The_unix_repair_persists_the_line_and_exports_it_for_this_shell() =>
+        Assert.Equal(
+            "printf '\\n%s\\n%s\\n' '# added by jason install' 'export PATH=\"/home/a/.local/bin:$PATH\"'"
+            + " >> '/home/a/.profile' && export PATH=\"/home/a/.local/bin:$PATH\"",
+            PathEntry.AppendCommand(Directory, "/home/a/.profile"));
+
+    /// <summary>
+    /// And what the repair appends is what <c>jason uninstall</c> takes back out: marker, line and the blank
+    /// line above them.
+    /// </summary>
+    /// <remarks>
+    /// A repair whose line the removal could not find again would leave a profile carrying Jason after Jason
+    /// was gone. The appended text is composed here rather than by running the command — what is being held
+    /// is the order and the count of the newlines, and <c>InstallScriptTests</c> holds that format against
+    /// the one <c>install.sh</c> itself appends with.
+    /// </remarks>
+    [Fact]
+    public void What_the_repair_appends_is_what_the_removal_takes_back_out()
+    {
+        const string before = "# mine\nexport EDITOR=vim\n";
+        var appended = before + "\n" + PathEntry.Marker + "\n" + PathEntry.ExportLine(Directory) + "\n";
+
+        Assert.Equal(before, PathEntry.WithoutEntry(appended, Directory));
+    }
+
+    /// <summary>
+    /// A directory with an apostrophe in it is one shell word rather than a syntax error.
+    /// </summary>
+    /// <remarks>
+    /// A repair that does not parse is a command that appears to have run, printed by the verb whose whole
+    /// job is to be trusted about readiness.
+    /// </remarks>
+    [Fact]
+    public void A_directory_with_an_apostrophe_stays_one_shell_word()
+    {
+        var command = PathEntry.AppendCommand("/home/o'brien/bin", "/home/o'brien/.profile");
+
+        Assert.Contains(">> '/home/o'\\''brien/.profile'", command, StringComparison.Ordinal);
+        Assert.Contains("'export PATH=\"/home/o'\\''brien/bin:$PATH\"'", command, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The Windows repair is the installer's own rule: the empty entries are dropped before the directory is
+    /// appended, and the running session is told as well.
+    /// </summary>
+    /// <remarks>
+    /// An account whose user <c>Path</c> is empty — a fresh one — would otherwise be left with a leading
+    /// separator, and an empty PATH entry is the current directory.
+    /// </remarks>
+    [Fact]
+    public void The_windows_repair_drops_the_empty_entries_the_way_the_installer_does()
+    {
+        var command = PathEntry.RegistryCommand(@"C:\Users\a\AppData\Local\Programs\jason\");
+
+        Assert.Contains("Where-Object { $_ }", command, StringComparison.Ordinal);
+        Assert.Contains("'User')", command, StringComparison.Ordinal);
+        Assert.Contains("$env:Path +=", command, StringComparison.Ordinal);
+
+        // The trailing separator the caller wrote is not part of the entry, exactly as install.ps1 trims it.
+        Assert.Contains(@"'C:\Users\a\AppData\Local\Programs\jason'", command, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"jason\'", command, StringComparison.Ordinal);
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
