@@ -135,6 +135,20 @@ public static class SkillsPlanner
                 continue;
             }
 
+            // A directory whose name begins with a dot is metadata beside the skills rather than one of them.
+            // A host discovers a skill at `<root>/<name>/SKILL.md` and offers it under `<name>`, which nobody
+            // publishes as `.claude-plugin` -- and both packs here carry exactly such a directory, the skills
+            // marketplace manifest. Refusing them refused the whole deployment on this repository's own tree:
+            // the one source `docs/INSTALL.md` tells a stranger to install from.
+            //
+            // By the shape rather than by the name. A list holding `.claude-plugin` would be a rule against
+            // the one spelling somebody had thought of, which is how `--ref ..` got through a filter that
+            // kept dots.
+            if (name.StartsWith('.'))
+            {
+                continue;
+            }
+
             var reading = RoleSkillRules.Read(directory, name, isRole ? cap : int.MaxValue);
             if (!reading.HasSkillFile)
             {
