@@ -219,20 +219,64 @@ internal static class StatusChecks
             "role_skills",
             true,
             CheckState.Ok,
-            string.Create(CultureInfo.InvariantCulture, $"{deployed.Count} roles taught, all within the {skills.MaxSkillBytes}-byte cap.{note}"),
+            string.Create(CultureInfo.InvariantCulture, $"{deployed.Count} roles taught, all within the {skills.MaxSkillBytes}-byte cap.{note}{Deployment(skills.RoleSkillsDirectory)}"),
             null);
+    }
+
+    /// <summary>
+    /// What the record in the role root says was put there: which pack, from which ref.
+    /// </summary>
+    /// <remarks>
+    /// Here, because this is the check whose subject that root is. It used to be reported by the harness
+    /// check, which is about the person's own harnesses and was answering about a directory that is not one.
+    /// A root with no record is not a problem for this check to raise -- the roles are on disk, which is what
+    /// it asks -- so it simply says nothing.
+    /// </remarks>
+    private static string Deployment(string roleSkillsRoot)
+    {
+        try
+        {
+            var record = SkillsRecord.Read(roleSkillsRoot);
+            var packs = record?.Packs ?? [];
+            return packs.Count == 0
+                ? string.Empty
+                : " Deployed: " + string.Join(", ", packs.Select(pack => $"{pack.Pack} at {pack.Ref}")) + ".";
+        }
+        catch (SkillsRecordUnreadable unreadable)
+        {
+            return $" The record there could not be read: {unreadable.Message}";
+        }
     }
 
     /// <summary>
     /// Whether the product can be typed by name, and which file answers when it is. Both halves matter: a
     /// second installation earlier on PATH is why a person's <c>jason</c> is a version they did not install.
     /// </summary>
+    /// <remarks>
+    /// It stays <b>required</b>. Everything this product documents for an agent -- the README prompt,
+    /// <c>docs/INSTALL.md</c> -- tells it to type <c>jason</c>, and an installation where that name resolves
+    /// to nothing cannot do the work, whatever else is true. What was missing was the repair, not the
+    /// requirement.
+    /// </remarks>
     private static StatusCheck Path(CliEnvironment env)
     {
         var resolved = Executables.OnPath("jason", env.SearchPath);
         if (resolved is null)
         {
-            return new StatusCheck("path", true, CheckState.Failed, "'jason' does not resolve on PATH, so nothing can be typed by name.", null);
+            // Required, and now with the line that fixes it. This check is the one a from-source
+            // installation fails, and it failed with `Fix: null` -- so the verdict was "not ready" and the
+            // whole repair list was somebody else's optional check. A required failure with nothing to do
+            // about it tells a person the tool is broken at the moment they most need it not to be.
+            //
+            // The line is not invented here: it is the one this product's own installer writes, composed by
+            // the same rule `jason uninstall` reads backwards. One definition of "how Jason goes on a PATH"
+            // serves the installer, this repair and the removal.
+            return new StatusCheck(
+                "path",
+                true,
+                CheckState.Failed,
+                "'jason' does not resolve on PATH, so nothing can be typed by name.",
+                OnPathRepair(env));
         }
 
         var running = env.InstallPath;
@@ -247,6 +291,26 @@ internal static class StatusChecks
         }
 
         return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
+    }
+
+    /// <summary>
+    /// The line that puts this executable's directory on the PATH, per platform, as the installer writes it.
+    /// </summary>
+    /// <remarks>
+    /// Null where nothing named an executable, because then there is no directory to name and a repair that
+    /// said "add  to your PATH" would be worse than none.
+    /// </remarks>
+    private static string? OnPathRepair(CliEnvironment env)
+    {
+        var executable = env.InstallPath ?? Environment.ProcessPath;
+        if (executable is null || System.IO.Path.GetDirectoryName(executable) is not { Length: > 0 } directory)
+        {
+            return null;
+        }
+
+        return OperatingSystem.IsWindows()
+            ? $"[Environment]::SetEnvironmentVariable('Path', \"$([Environment]::GetEnvironmentVariable('Path','User'));{directory}\", 'User')"
+            : Uninstall.PathEntry.ExportLine(directory);
     }
 
     private static StatusCheck ProviderPlugin(SystemInfoResponse? info) =>
@@ -362,9 +426,13 @@ internal static class StatusChecks
             return new StatusCheck("harness_skills", false, CheckState.Unknown, "This environment does not detect agent harnesses.", null);
         }
 
-        // The runtime's own root as well as the person's. A deployment writes a record into both, and the
-        // one the documents call not optional was the one nothing read -- so "jason status reports it" was
-        // true of half of what the installer records.
+        // The harness roots, and only them. Appending the runtime's own role root here made this check answer
+        // `ok` on the strength of a root that is not a harness -- naming it, while the harness it had
+        // detected held nothing and the skills that really landed went unmentioned. The `absent` branch named
+        // only the detected harnesses, so the two branches disagreed about what the check was even about.
+        //
+        // Nothing is lost by taking it out: `role_skills` is required, its subject is that root, and it now
+        // reports the pack and ref the record there names.
         var roots = locator.Detect();
         if (roots.Count == 0)
         {
@@ -372,7 +440,7 @@ internal static class StatusChecks
         }
 
         var deployed = new List<string>();
-        foreach (var root in roots.Select(root => root.Directory).Append(env.Paths.RoleSkillsDirectory).Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var root in roots.Select(root => root.Directory).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             try
             {

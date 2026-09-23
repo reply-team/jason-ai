@@ -217,6 +217,95 @@ public class StatusCommandTests
         Assert.Equal(CheckState.Unknown, check.State);
     }
 
+    /// <summary>
+    /// One check, one subject. With the packs deployed into the runtime's own role root and a detected
+    /// harness holding nothing, the harness check is <c>absent</c> — because nothing is deployed into a
+    /// harness.
+    /// </summary>
+    /// <remarks>
+    /// It used to answer <c>ok</c> here, on the strength of the role root's record, naming a directory that
+    /// is not a harness while the harness it had detected went unmentioned. The README prompt tells an agent
+    /// to branch on this body, and that is a body it would read wrongly.
+    /// </remarks>
+    [Fact]
+    public async Task The_harness_check_is_about_harnesses_and_not_about_the_role_root()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        Deploy(dir.Paths.RoleSkillsDirectory);
+        var harness = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, harnesses: HarnessLocators.At(harness)), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "harness_skills");
+        Assert.Equal(CheckState.Absent, check.State);
+        Assert.DoesNotContain("skills", check.Fact.Replace(harness, string.Empty, StringComparison.Ordinal).Replace("skill packs", string.Empty, StringComparison.Ordinal), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>And what the record in the role root says is reported by the check whose subject it is.</summary>
+    [Fact]
+    public async Task The_role_check_names_the_pack_and_ref_its_own_record_carries()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        // The root the *runtime* reports, not the one this CLI would compose. They are the same on an
+        // ordinary machine and the runtime's is the truth where they differ: it is the directory it reads at
+        // every launch, whatever data directory this client thinks it is talking about.
+        Running(dir, skills: new SkillsInfo(dir.Paths.RoleSkillsDirectory, 1048576, [Taught("researcher")]));
+        Deploy(dir.Paths.RoleSkillsDirectory);
+
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Contains("jason-runtime-skills at v0.1.0", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A required check that failed prints the line that repairs it — and that line is the one this
+    /// product's own installer writes, so the repair and the installer cannot drift apart.
+    /// </summary>
+    /// <remarks>
+    /// This is the check a from-source installation fails, and it failed with no repair at all: the verdict
+    /// was "Not ready." and the whole repair list was an optional check's line. A required failure with
+    /// nothing to do about it tells a person the tool is broken at the moment they most need it not to be.
+    /// </remarks>
+    [Fact]
+    public async Task A_failing_path_check_carries_the_line_this_products_own_installer_writes()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, onPath: false), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.NotNull(check.Fix);
+
+        var directory = Path.GetDirectoryName(Environment.ProcessPath)!;
+        Assert.Contains(
+            OperatingSystem.IsWindows() ? "SetEnvironmentVariable" : Jason.Cli.Uninstall.PathEntry.ExportLine(directory),
+            check.Fix,
+            StringComparison.Ordinal);
+        Assert.Contains(directory, check.Fix, StringComparison.Ordinal);
+    }
+
+    /// <summary>A deployment record in a root, as `jason skills install` leaves one.</summary>
+    private static void Deploy(string root)
+    {
+        var skill = Path.Combine(root, "researcher", "SKILL.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(skill)!);
+        File.WriteAllText(skill, "---" + Environment.NewLine + "name: researcher" + Environment.NewLine + "---" + Environment.NewLine);
+        SkillsRecord.Write(root, new SkillsRecord(
+            SkillsRecord.CurrentVersion,
+            [new SkillsDeployment("jason-runtime-skills", "/somewhere", "v0.1.0", false, null, DateTimeOffset.UnixEpoch,
+                [new DeployedFile("researcher/SKILL.md", SkillsRecord.Digest(skill))])]));
+    }
+
     /// <summary>The human shape says the same thing, and prints the repairs under their own heading.</summary>
     [Fact]
     public async Task The_human_shape_says_whether_it_is_ready_and_what_would_repair_it()
