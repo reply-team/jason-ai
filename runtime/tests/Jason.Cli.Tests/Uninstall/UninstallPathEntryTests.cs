@@ -123,6 +123,34 @@ public class UninstallPathEntryTests
     public void Zsh_gets_both_profiles_and_everything_else_gets_one(string? shell, int expected) =>
         Assert.Equal(expected, PathEntry.ProfileFiles("/home/a", shell).Count);
 
+    /// <summary>
+    /// The block at the end of the file, which is what <c>install.sh</c> leaves behind whenever nothing was
+    /// appended after it — so it is the ordinary profile rather than the unusual one.
+    /// </summary>
+    /// <remarks>
+    /// This threw <see cref="ArgumentOutOfRangeException"/> out of <c>jason uninstall</c>. The walk goes
+    /// backwards from a length it measured once, and taking three lines off the end left it reading past the
+    /// end of a shorter list; every profile written by a test until now happened to carry a line after the
+    /// block, so nothing had ever asked.
+    /// </remarks>
+    [Fact]
+    public void A_block_at_the_end_of_the_profile_is_removed_rather_than_thrown_over()
+    {
+        const string before = "# mine\nexport EDITOR=vim\n\n# added by jason install\nexport PATH=\"/home/a/.local/bin:$PATH\"\n";
+
+        Assert.Equal("# mine\nexport EDITOR=vim\n", PathEntry.WithoutEntry(before, Directory));
+    }
+
+    /// <summary>And two of them — a profile two runs appended to — go in the one pass.</summary>
+    [Fact]
+    public void Two_blocks_for_the_same_directory_both_go()
+    {
+        const string before = "# mine\n\n# added by jason install\nexport PATH=\"/home/a/.local/bin:$PATH\"\n\n"
+            + "# added by jason install\nexport PATH=\"/home/a/.local/bin:$PATH\"\n";
+
+        Assert.Equal("# mine\n", PathEntry.WithoutEntry(before, Directory));
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

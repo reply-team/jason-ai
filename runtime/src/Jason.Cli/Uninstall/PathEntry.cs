@@ -119,6 +119,13 @@ public static class PathEntry
 
             lines.RemoveRange(first, index - first + 1);
             removed = true;
+
+            // And carry on above what was just taken out. Without this the walk stepped down into a list
+            // three shorter than the one it was measured against and read past its end — which is the shape
+            // `install.sh` leaves behind whenever nothing follows the block it appended, so `jason uninstall`
+            // threw on the ordinary profile rather than the unusual one. Found by asking, for the first time,
+            // whether what a repair writes is what the removal takes back out.
+            index = first;
         }
 
         return removed ? string.Join(newline, lines) : profileText;
