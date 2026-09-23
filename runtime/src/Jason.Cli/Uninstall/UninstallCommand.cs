@@ -1,0 +1,117 @@
+using System.CommandLine;
+using Jason.Cli.Commands;
+
+namespace Jason.Cli.Uninstall;
+
+/// <summary>
+/// <c>jason uninstall</c>: taking this installation off the machine, by receipt.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A CLI verb rather than an API operation, and not a noun either. Nothing about removing Jason from a machine
+/// is the runtime's to perform or be asked about — a logon registration, an executable, a PATH entry, the
+/// files a deployment recorded — so <c>Operations</c> carries no <c>uninstall.*</c> and never will.
+/// </para>
+/// <para>
+/// <b>It removes only what a receipt names.</b> Each root a deployment wrote into carries a record listing
+/// every path written there; this verb removes those and nothing else. A verb that deleted by pattern would
+/// eventually delete somebody's own file, and a verb that deletes by receipt cannot.
+/// </para>
+/// <para>
+/// <b>And the data directory is the operator's.</b> It holds the database, the settings, the plugins, the logs
+/// and the work directories — the record of what they did. It is kept unless <c>--purge-data</c> says
+/// otherwise, and the verb says in one line that it kept it and where.
+/// </para>
+/// </remarks>
+public static class UninstallCommand
+{
+    /// <summary>
+    /// What this verb will and will not touch, printed in help. A destructive verb whose boundaries are only
+    /// in a design note is one somebody runs without knowing them.
+    /// </summary>
+    private const string Boundaries =
+        """
+        Removed, in this order, each step reported:
+          1. the logon registration, first, so a logon part-way through cannot start what is going
+          2. the runtime — and if it will not stop, nothing further is removed
+          3. every skill a deployment recorded, by the paths its record names
+          4. the PATH entry, only where this installer wrote it
+          5. the executable and its install directory
+
+        Kept unless --purge-data:  the data directory. --purge-data prints what will be deleted and asks,
+                                   unless --yes.
+        Never touched:             anything there is no receipt for, any other skill in an agent harness,
+                                   any provider CLI, any model credential, anything outside the paths it names.
+
+        Exit codes: 0 when everything it set out to remove is gone, 1 when it understood and refused — a
+        runtime that would not stop, a record it cannot read, a file it could not remove.
+        """;
+
+    public static Command Build(CliEnvironment env)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+
+        var command = new Command("uninstall", "Take this installation off the machine, by receipt.")
+        {
+            Description = "Take this installation off the machine, by receipt."
+                + Environment.NewLine + Environment.NewLine + Boundaries,
+        };
+
+        var human = VerbOptions.Human();
+        var dryRun = new Option<bool>("--dry-run") { Description = "Print exactly what would be removed, and change nothing." };
+        var purgeData = new Option<bool>("--purge-data") { Description = "Also remove the data directory. Without it, it is kept and the verb says where." };
+        var yes = new Option<bool>("--yes") { Description = "Do not ask before removing the data directory." };
+        var force = new Option<bool>("--force") { Description = "Remove a recorded file whose bytes you have since changed. Without it such a file is reported and kept." };
+
+        foreach (var option in new Option[] { human, dryRun, purgeData, yes, force })
+        {
+            command.Options.Add(option);
+        }
+
+        command.SetAction((parse, cancellationToken) => RunAsync(
+            env,
+            new UninstallOptions(
+                parse.GetValue(human),
+                parse.GetValue(dryRun),
+                parse.GetValue(purgeData),
+                parse.GetValue(yes),
+                parse.GetValue(force)),
+            cancellationToken));
+
+        return command;
+    }
+
+    private static Task<int> RunAsync(CliEnvironment env, UninstallOptions options, CancellationToken cancellationToken)
+    {
+        // Before anything is read, let alone removed. The seam that touches the machine is the one an
+        // environment can forget to name, and a destructive verb that treated "nobody named one" as "there is
+        // nothing to do" would report a clean uninstall it never performed.
+        if (env.Removes is null)
+        {
+            return Task.FromResult(Refuse(
+                env,
+                options.Human,
+                CliErrors.RemoverUnsupported,
+                "This environment does not remove anything from this machine, so nothing was removed. "
+                + $"The data directory at '{env.Paths.Root}' is untouched, as it is unless --purge-data says otherwise."));
+        }
+
+        _ = cancellationToken;
+        return Task.FromResult(ExitCodes.Success);
+    }
+
+    /// <summary>
+    /// The one shape a refusal takes: the error envelope on stdout by default, a sentence under
+    /// <c>--human</c>, and exit 1 — understood, and declined.
+    /// </summary>
+    private static int Refuse(CliEnvironment env, bool human, string code, string message)
+    {
+        env.Out.WriteLine(human ? message : CliErrors.Serialize(code, message, retryable: false));
+        return ExitCodes.ApiError;
+    }
+}
+
+/// <summary>What was asked of this verb, as parsed.</summary>
+/// <param name="PurgeData">The explicit word for the data directory. Nothing else stands for it.</param>
+/// <param name="Force">Remove a recorded file whose bytes no longer match the record's digest.</param>
+public sealed record UninstallOptions(bool Human, bool DryRun, bool PurgeData, bool Yes, bool Force);

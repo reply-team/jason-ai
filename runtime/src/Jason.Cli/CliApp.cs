@@ -2,6 +2,7 @@ using System.CommandLine;
 using Jason.Cli.Commands;
 using Jason.Cli.Skills;
 using Jason.Cli.Status;
+using Jason.Cli.Uninstall;
 
 namespace Jason.Cli;
 
@@ -11,7 +12,7 @@ namespace Jason.Cli;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Three names are not one-to-one with anything, and they are named here because this is where the rule is
+/// <b>Four names are not one-to-one with anything, and they are named here because this is where the rule is
 /// written.</b> <c>status</c> is a verb rather than a noun, because half of what it reports is not the
 /// runtime's to know: an executable on PATH, another vendor's CLI and whether it answers, files in a folder in
 /// the operator's home directory. No API operation can answer "am I ready to work?", because the runtime is
@@ -24,7 +25,13 @@ namespace Jason.Cli;
 /// <c>update.*</c>, and saying the map is one-to-one with one exception was false of two more.
 /// </para>
 /// <para>
-/// A guard holds the list to these: a fourth has to be added in the open rather than arriving as one more verb
+/// <c>uninstall</c> is the fourth, and the second that is not a noun at all. It takes this installation off
+/// the machine — a logon registration, an executable, a PATH entry, the files a deployment recorded — none of
+/// which the runtime performs or is asked about. <c>Operations</c> carries no <c>uninstall.*</c> and never
+/// will, because there is nothing for it to stand for.
+/// </para>
+/// <para>
+/// A guard holds the list to these: a fifth has to be added in the open rather than arriving as one more verb
 /// somebody thought was obviously fine.
 /// </para>
 /// </remarks>
@@ -99,6 +106,7 @@ public static class CliApp
         root.Subcommands.Add(UpdateCommands.Build(env, actor));
         root.Subcommands.Add(SkillsCommands.Build(env));
         root.Subcommands.Add(StatusCommand.Build(env));
+        root.Subcommands.Add(UninstallCommand.Build(env));
 
         return root;
     }

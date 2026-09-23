@@ -3,9 +3,9 @@ using Jason.Cli;
 namespace Jason.Cli.Tests;
 
 /// <summary>
-/// Every top-level name is a noun, with one declared exception. The rule is in <c>CliApp</c>'s own doc comment
-/// and this is the half that bites: a second exception has to be added here, in the open, rather than arriving
-/// as one more verb somebody thought was obviously fine.
+/// Every top-level name is a noun, with the declared exceptions. The rule is in <c>CliApp</c>'s own doc
+/// comment and this is the half that bites: a further exception has to be added here, in the open, rather
+/// than arriving as one more verb somebody thought was obviously fine.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -18,8 +18,12 @@ namespace Jason.Cli.Tests;
 /// </remarks>
 public class VerbMapTests
 {
-    /// <summary>The one name that is not a noun at all. It cannot be one; <c>CliApp</c> says why.</summary>
-    private const string DeclaredException = "status";
+    /// <summary>
+    /// The names that are not nouns at all. Neither can be one; <c>CliApp</c> says why. <c>status</c> answers
+    /// about one installation rather than about anything the API owns, and <c>uninstall</c> takes this
+    /// installation off the machine, which is an act with no noun behind it and no operation either.
+    /// </summary>
+    private static readonly string[] DeclaredExceptions = ["status", "uninstall"];
 
     /// <summary>
     /// The nouns with no API operation behind them. Both change this installation rather than asking the
@@ -39,12 +43,18 @@ public class VerbMapTests
     ];
 
     [Fact]
-    public async Task Every_top_level_name_is_a_noun_except_the_one_declared_exception()
+    public async Task Every_top_level_name_is_a_noun_except_the_declared_exceptions()
     {
         var printed = await NamesFromHelpAsync();
 
-        Assert.Contains(DeclaredException, printed);
-        Assert.Equal(Nouns, printed.Where(name => name != DeclaredException).Order(StringComparer.Ordinal));
+        foreach (var exception in DeclaredExceptions)
+        {
+            Assert.Contains(exception, printed);
+        }
+
+        Assert.Equal(
+            Nouns,
+            printed.Where(name => !DeclaredExceptions.Contains(name, StringComparer.Ordinal)).Order(StringComparer.Ordinal));
     }
 
     /// <summary>And each of them really is a command, asked of the router rather than of the help text.</summary>
@@ -60,21 +70,26 @@ public class VerbMapTests
     }
 
     /// <summary>
-    /// And the exception has no subcommands. <c>jason status logs</c> and <c>jason status probe</c> are how a
-    /// status verb becomes a diagnostics verb, which is a story of its own and deliberately not this one.
+    /// And neither exception has subcommands. <c>jason status logs</c> and <c>jason status probe</c> are how a
+    /// status verb becomes a diagnostics verb, which is a story of its own and deliberately not this one; and
+    /// <c>jason uninstall everything</c> is how a destructive verb grows a second, less careful spelling.
     /// </summary>
-    [Fact]
-    public async Task The_exception_has_no_subcommands()
+    [Theory]
+    [MemberData(nameof(Exceptions))]
+    public async Task An_exception_has_no_subcommands(string name)
     {
-        var printed = await NamesFromHelpAsync(DeclaredException);
+        var printed = await NamesFromHelpAsync(name);
 
         Assert.True(
             printed.Count == 0,
-            $"'jason {DeclaredException}' has grown subcommands: {string.Join(", ", printed)}. A check may report "
+            $"'jason {name}' has grown subcommands: {string.Join(", ", printed)}. A check may report "
             + "a fact and the command that repairs it; a verb that grew a subcommand grew a diagnostics tool.");
     }
 
-    public static TheoryData<string> EveryName() => [.. Nouns, DeclaredException];
+    public static TheoryData<string> EveryName() => [.. Nouns, .. DeclaredExceptions];
+
+    /// <summary>And the exceptions are exactly these two, so a third arrives in this diff or not at all.</summary>
+    public static TheoryData<string> Exceptions() => [.. DeclaredExceptions];
 
     /// <summary>
     /// And the names that stand for no operation are exactly the ones declared. A noun that quietly grew
@@ -136,13 +151,32 @@ public class VerbMapTests
             "The root help page has no 'Commands:' section, so this guard can no longer read the verb map from "
             + $"it. Look, and fix the reading rather than the map:{Environment.NewLine}{text}");
 
+        // A row is a line indented to the name column. Everything indented further is the wrapped
+        // continuation of the description beside it, and a blank line can be part of one: a command whose
+        // help carries paragraphs prints them right here, under its own row.
+        //
+        // This used to break at the first blank line, which read the list as far as the first such command --
+        // and passed only because that command happened to be the last one in the map. Adding a verb after it
+        // is what showed it up. A guard that stops early looks exactly like a guard that did not.
+        const int NameColumn = 2;
         var names = new List<string>();
         for (var index = start + 1; start >= 0 && index < lines.Length; index++)
         {
             var line = lines[index];
-            if (line.Trim().Length == 0 || !char.IsWhiteSpace(line[0]))
+            if (line.Trim().Length == 0)
+            {
+                continue;
+            }
+
+            // The next section's heading, which is the one thing at column zero.
+            if (!char.IsWhiteSpace(line[0]))
             {
                 break;
+            }
+
+            if (line.Length - line.TrimStart().Length != NameColumn)
+            {
+                continue;
             }
 
             // "  campaign <id>  Manage campaigns" -> "campaign"; an argument or an alias follows the name.

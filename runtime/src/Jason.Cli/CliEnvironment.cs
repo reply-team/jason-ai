@@ -1,6 +1,7 @@
 using Jason.Cli.Autostart;
 using Jason.Cli.Process;
 using Jason.Cli.Skills;
+using Jason.Cli.Uninstall;
 using Jason.Contracts.Discovery;
 
 namespace Jason.Cli;
@@ -25,6 +26,13 @@ namespace Jason.Cli;
 /// detected for itself would write into the home directory of whoever ran the suite, and into three CI
 /// runners'. Null refuses, which is the wrong answer to get by accident and a harmless one to get.
 /// </param>
+/// <param name="Removes">
+/// How this machine has things taken off it — and the fourth seam here whose default is the refusal. The same
+/// reasoning as <paramref name="Autostart"/> and <paramref name="Harnesses"/>, with the sharpest consequence:
+/// the file <c>jason uninstall</c> removes is decided by <paramref name="InstallPath"/>, whose null means "ask
+/// the operating system", which under a test is the test host executable — and the PATH it edits belongs to
+/// whoever ran the suite. Null refuses before anything at all is removed.
+/// </param>
 /// <param name="SearchPath">
 /// The directories a bare command name is looked up in — <c>PATH</c>. Null asks the operating system, which is
 /// the answer everywhere but a test, for the same reason <paramref name="InstallPath"/> gives: whether
@@ -36,7 +44,7 @@ namespace Jason.Cli;
 /// fetches a skills source with <c>git</c>; a seam that defaulted to the real runner would make a
 /// documentation guard the first test in this repository to open a socket to the internet.
 /// </param>
-public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null)
+public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null)
 {
     public static CliEnvironment Default() =>
         new(
@@ -49,5 +57,7 @@ public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths
             null,
             AutostartRegistrars.ForThisMachine(),
             HarnessLocators.ForThisMachine(),
-            ProgramRunners.ForThisMachine());
+            ProgramRunners.ForThisMachine(),
+            null,
+            InstallationRemovers.ForThisMachine());
 }
