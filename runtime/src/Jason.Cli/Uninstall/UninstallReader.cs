@@ -1,4 +1,5 @@
 using Jason.Cli.Discovery;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Skills;
 
 namespace Jason.Cli.Uninstall;
@@ -43,10 +44,16 @@ public static class UninstallReader
                 [.. record.Packs.SelectMany(pack => pack.Files).Select(file => Measure(root, file))]));
         }
 
-        // The file this Jason is installed as, the same way `jason update apply` works it out. Reading it is
-        // safe anywhere: what makes this verb fail closed is that removing anything goes through the remover
-        // seam, which a test supplies and which refuses when nothing named one.
-        var executable = env.InstallPath ?? Environment.ProcessPath;
+        // The file this Jason is installed as, the same way `jason update apply` works it out -- which is
+        // what this comment said while the line below read `Environment.ProcessPath`. Under `dotnet jason.dll`
+        // that is the muxer, so this verb planned to remove `C:\Program Files\dotnet\dotnet.exe`, take its
+        // directory off this account's PATH, and on Windows -- where the image of a running process cannot be
+        // deleted but can be renamed -- move it aside, which succeeds. Running from source through `dotnet` is
+        // what this repository's own README tells a developer to do.
+        //
+        // The remover seam does not catch this. It is a decision taken before the seam is reached, which is
+        // why every test that substitutes the seam stayed green.
+        var executable = env.InstallPath ?? SelfExecutable.InstalledImage;
 
         var directory = executable is null ? null : Path.GetDirectoryName(executable);
 

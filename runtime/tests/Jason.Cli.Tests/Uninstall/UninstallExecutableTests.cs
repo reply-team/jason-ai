@@ -3,6 +3,7 @@ using Jason.Cli;
 using Jason.Cli.Skills;
 using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Uninstall;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 
 namespace Jason.Cli.Tests.Uninstall;
@@ -18,6 +19,39 @@ namespace Jason.Cli.Tests.Uninstall;
 public class UninstallExecutableTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>
+    /// Which file this installation <em>is</em>, which is the question asked before the remover seam is
+    /// reached — so no substituted seam can make a wrong answer safe.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A build started as <c>dotnet jason.dll</c> has the muxer for its process path. Read raw, this verb
+    /// planned to remove the muxer, take its directory off this account's PATH and — on Windows, where the
+    /// image of a running process cannot be deleted but can be renamed — move it aside, which succeeds. On a
+    /// developer's machine that is <c>C:\Program Files\dotnet\dotnet.exe</c>, and running from source
+    /// through <c>dotnet</c> is what this repository's README tells them to do.
+    /// </para>
+    /// <para>
+    /// The shape of such a command is asked of <see cref="SelfExecutable"/> rather than spelled here, for the
+    /// reason the update verb's own muxer test gives: a test that wrote <c>["dotnet", "jason.dll"]</c> by
+    /// hand would keep passing after that answer changed. The reproduction through the shipped program is in
+    /// <c>Jason.App.Tests</c>, which can be a muxed process rather than describe one.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void A_build_run_through_the_muxer_is_installed_as_no_file_at_all()
+    {
+        var muxer = SelfExecutable.Resolve(
+            OperatingSystem.IsWindows() ? @"C:\Program Files\dotnet\dotnet.exe" : "/usr/share/dotnet/dotnet",
+            Path.Combine("opt", "jason", "jason.dll"));
+
+        Assert.Null(SelfExecutable.Image(muxer));
+
+        // And a published installation is exactly the file it is running, which is the file this verb removes.
+        var published = Path.Combine("opt", "jason", "jason");
+        Assert.Equal(published, SelfExecutable.Image(SelfExecutable.Resolve(published, "jason.dll")));
+    }
 
     [Fact]
     public async Task The_executable_and_its_directory_go()

@@ -219,7 +219,14 @@ public static class UninstallRunner
     {
         if (plan.Executable is not { } executable)
         {
-            kept.Add("Nothing named an executable, so none was removed.");
+            // Not a bare "nothing named one". This is the muxer case -- `dotnet jason.dll`, which is how a
+            // build from source is run -- and a person reading silence here would read it as a clean
+            // uninstall of a file that is still on the machine.
+            kept.Add(
+                "This Jason is running through `dotnet`, so there is no single executable to remove and none "
+                + "was: the build it runs from is where it lives, and the muxer belongs to your .NET "
+                + "installation rather than to Jason. A published release is one file, and this verb removes "
+                + "that one.");
             return;
         }
 

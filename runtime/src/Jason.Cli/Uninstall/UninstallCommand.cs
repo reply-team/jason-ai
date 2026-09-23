@@ -207,6 +207,14 @@ public static class UninstallCommand
         {
             env.Out.WriteLine($"  the executable at {executable}");
         }
+        else
+        {
+            // Said here as well as in the report, because a dry run never reaches the report: the plan is the
+            // whole of what a person sees, and a list with no executable in it reads as one that forgot.
+            env.Out.WriteLine(
+                "  no executable: this Jason is running through `dotnet`, so there is no single file to "
+                + "remove. The build it runs from is where it lives.");
+        }
 
         foreach (var unknown in plan.Unknown)
         {

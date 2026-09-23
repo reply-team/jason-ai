@@ -187,15 +187,15 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     public static string ResolveInstallPath(IReadOnlyList<string> self)
     {
         ArgumentNullException.ThrowIfNull(self);
-        if (self.Count != 1)
-        {
-            throw new UpdateException(
+
+        // The rule itself is SelfExecutable's, so that the verb which removes this installation and the verb
+        // which replaces it cannot disagree about what "this installation" is. The code and the sentence stay
+        // here, because what an update does about it is an update's business.
+        return SelfExecutable.Image(self)
+            ?? throw new UpdateException(
                 UpdateCodes.NotUpdatable,
                 "This Jason is running through `dotnet`, so there is no single executable to replace. "
                 + "Update the build you run it from, or install a published release with the one-liner on the release page.");
-        }
-
-        return self[0];
     }
 
     private async Task<UpdateManifest> ReadFeedAsync(UpdateRequest request, CancellationToken cancellationToken)

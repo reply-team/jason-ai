@@ -6,6 +6,7 @@ using Jason.Cli.Http;
 using Jason.Cli.Skills;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
 
@@ -85,7 +86,9 @@ internal static class StatusChecks
         /// </remarks>
         public static string? OnPath(CliEnvironment env)
         {
-            var executable = env.InstallPath ?? Environment.ProcessPath;
+            // Never `Environment.ProcessPath`: under `dotnet jason.dll` that is the muxer, and this would
+            // print "put C:\Program Files\dotnet on your PATH" as the way to make `jason` typeable.
+            var executable = env.InstallPath ?? SelfExecutable.InstalledImage;
             if (executable is null || System.IO.Path.GetDirectoryName(executable) is not { Length: > 0 } directory)
             {
                 return null;
