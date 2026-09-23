@@ -155,9 +155,10 @@ public class UninstallPlanTests
         // Read back as the document it is rather than as a substring: the default shape is JSON, where a
         // Windows path is spelled with escaped separators, and a test matching the raw path would be
         // asserting about the escaping rather than about the plan.
-        var printed = JsonSerializer.Deserialize<UninstallPlan>(output.ToString(), JasonJson.Options);
+        var printed = JsonSerializer.Deserialize<UninstallReport>(output.ToString(), JasonJson.Options);
         Assert.NotNull(printed);
-        Assert.Contains(printed.Roots, candidate => Same(candidate.Root, root));
+        Assert.Contains(printed.Plan.Roots, candidate => Same(candidate.Root, root));
+        Assert.Empty(printed.Done);
 
         Assert.Empty(remover.Calls);
         Assert.True(File.Exists(mine), "--dry-run removed a file.");

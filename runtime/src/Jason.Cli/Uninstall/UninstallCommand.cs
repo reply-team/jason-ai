@@ -84,34 +84,68 @@ public static class UninstallCommand
         return command;
     }
 
-    private static Task<int> RunAsync(CliEnvironment env, UninstallOptions options, CancellationToken cancellationToken)
+    /// <summary>
+    /// The verb itself. Public, and taking its options as a record, for the reason <c>RuntimeStopCommand</c>
+    /// is: a test has to shorten the wait for a runtime to go, and the repository has exactly one friend
+    /// declaration, for a test that could not be written any other way. This one can.
+    /// </summary>
+    public static async Task<int> RunAsync(CliEnvironment env, UninstallOptions options, CancellationToken cancellationToken)
     {
         // Before anything is read, let alone removed. The seam that touches the machine is the one an
         // environment can forget to name, and a destructive verb that treated "nobody named one" as "there is
         // nothing to do" would report a clean uninstall it never performed.
         if (env.Removes is null)
         {
-            return Task.FromResult(Refuse(
+            return Refuse(
                 env,
                 options.Human,
                 CliErrors.RemoverUnsupported,
                 "This environment does not remove anything from this machine, so nothing was removed. "
-                + $"The data directory at '{env.Paths.Root}' is untouched, as it is unless --purge-data says otherwise."));
+                + $"The data directory at '{env.Paths.Root}' is untouched, as it is unless --purge-data says otherwise.");
         }
 
         var plan = UninstallReader.Read(env, options.PurgeData);
 
-        // Printed before a byte is removed, in every mode and not only under --dry-run. Taking things off
-        // somebody's machine is not a silent act, and a plan nobody saw is one nobody could have stopped.
-        Describe(env, plan, options);
-
-        if (options.DryRun)
+        // A person is shown the plan before a byte of it is acted on, because a plan nobody saw is one
+        // nobody could have stopped. A caller reading the machine shape gets one document at the end
+        // instead, carrying the plan and what became of it: two documents on one stdout is worse than
+        // late, and a caller that wants to look before anything happens has --dry-run for exactly that.
+        if (options.Human)
         {
-            return Task.FromResult(ExitCodes.Success);
+            Describe(env, plan, options);
         }
 
-        _ = cancellationToken;
-        return Task.FromResult(ExitCodes.Success);
+        var report = options.DryRun
+            ? new UninstallReport(plan, [], ["--dry-run: nothing was removed."], null, null)
+            : await UninstallRunner.RunAsync(env, plan, options, cancellationToken).ConfigureAwait(false);
+
+        Report(env, report, options);
+        return report.Completed ? ExitCodes.Success : ExitCodes.ApiError;
+    }
+
+    /// <summary>What happened, in the shape the caller asked for.</summary>
+    private static void Report(CliEnvironment env, UninstallReport report, UninstallOptions options)
+    {
+        if (!options.Human)
+        {
+            env.Out.WriteLine(JsonSerializer.Serialize(report, JasonJson.Options));
+            return;
+        }
+
+        foreach (var line in report.Done)
+        {
+            env.Out.WriteLine($"  {line}");
+        }
+
+        foreach (var line in report.Kept)
+        {
+            env.Out.WriteLine($"  {line}");
+        }
+
+        if (report.Refusal is { } refusal)
+        {
+            env.Error.WriteLine(refusal);
+        }
     }
 
     /// <summary>
@@ -171,8 +205,7 @@ public static class UninstallCommand
     /// The one shape a refusal takes: the error envelope on stdout by default, a sentence under
     /// <c>--human</c>, and exit 1 — understood, and declined.
     /// </summary>
-    private static int Refuse(CliEnvironment env, bool human, string code, string message)
-    {
+    private static int Refuse(CliEnvironment env, bool human, string code, string message)    {
         env.Out.WriteLine(human ? message : CliErrors.Serialize(code, message, retryable: false));
         return ExitCodes.ApiError;
     }
@@ -181,4 +214,13 @@ public static class UninstallCommand
 /// <summary>What was asked of this verb, as parsed.</summary>
 /// <param name="PurgeData">The explicit word for the data directory. Nothing else stands for it.</param>
 /// <param name="Force">Remove a recorded file whose bytes no longer match the record's digest.</param>
-public sealed record UninstallOptions(bool Human, bool DryRun, bool PurgeData, bool Yes, bool Force);
+/// <param name="StopTimeout">How long the runtime is given to go. Null is the stop verb's own wait.</param>
+/// <param name="StopPoll">How often it is asked. Null is the stop verb's own interval.</param>
+public sealed record UninstallOptions(
+    bool Human,
+    bool DryRun,
+    bool PurgeData,
+    bool Yes,
+    bool Force,
+    TimeSpan? StopTimeout = null,
+    TimeSpan? StopPoll = null);
