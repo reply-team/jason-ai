@@ -87,6 +87,12 @@ These are the rules both verbs keep:
   half of them is worse: you would have to work out which half. `--force` is the word that says
   otherwise. A file that merely differs from the source while still matching the record is out of date
   rather than edited, and is simply written — which is what the digest per file is for.
+- **And an uninstall removes by that record, or keeps what it cannot account for.** `jason uninstall`
+  removes the paths the record names and nothing else, then the record, then each directory only if
+  nothing is left in it — so a skill you put in the same root, and a file you added inside one of Jason's,
+  both stay. A recorded file whose bytes are no longer the bytes the record names is your edit, and it is
+  reported and kept unless `--force`; the record stays with it, because a receipt removed while the file
+  it names is still there leaves a file nothing can account for again.
 - **A deployment whose record never landed is completed rather than trusted**, and says so. The record is
   written last, so a crash half-way through reads as incomplete next time; a root that silently repaired
   itself would hide that something went wrong once.

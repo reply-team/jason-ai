@@ -116,7 +116,7 @@ public static class UninstallCommand
         }
 
         var report = options.DryRun
-            ? new UninstallReport(plan, [], ["--dry-run: nothing was removed."], null, null)
+            ? new UninstallReport(plan, [], ["--dry-run: nothing was removed."], [], null, null)
             : await UninstallRunner.RunAsync(env, plan, options, cancellationToken).ConfigureAwait(false);
 
         Report(env, report, options);
@@ -140,6 +140,11 @@ public static class UninstallCommand
         foreach (var line in report.Kept)
         {
             env.Out.WriteLine($"  {line}");
+        }
+
+        foreach (var problem in report.Problems)
+        {
+            env.Error.WriteLine(problem);
         }
 
         if (report.Refusal is { } refusal)

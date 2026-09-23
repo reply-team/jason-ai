@@ -1,22 +1,30 @@
+using System.Globalization;
 using Jason.Cli.Autostart;
 using Jason.Cli.Commands;
+using Jason.Contracts.Skills;
 
 namespace Jason.Cli.Uninstall;
 
 /// <summary>What an uninstall did, and — where it stopped early — what stopped it.</summary>
 /// <param name="Done">Each step that really happened, in the order it happened.</param>
 /// <param name="Kept">Things deliberately left alone, so the report says so rather than staying silent.</param>
+/// <param name="Problems">
+/// What could not be removed, where that did not stop the rest. A root whose record cannot be read is not a
+/// reason to leave an executable behind, but it is a reason this uninstall is not finished — so the steps
+/// carry on and the verb still exits 1, naming what is left.
+/// </param>
 /// <param name="RefusalCode">The snake_case code a caller branches on, or null where nothing refused.</param>
 /// <param name="Refusal">The same in words, with the command that repairs it where there is one.</param>
 public sealed record UninstallReport(
     UninstallPlan Plan,
     IReadOnlyList<string> Done,
     IReadOnlyList<string> Kept,
+    IReadOnlyList<string> Problems,
     string? RefusalCode,
     string? Refusal)
 {
     /// <summary>Whether everything it set out to remove is gone.</summary>
-    public bool Completed => RefusalCode is null;
+    public bool Completed => RefusalCode is null && Problems.Count == 0;
 }
 
 /// <summary>
@@ -48,20 +56,24 @@ public static class UninstallRunner
 
         var done = new List<string>();
         var kept = new List<string>();
+        var problems = new List<string>();
 
         // 1. The registration, first.
         if (Step1RemoveAutostart(env, plan, done, kept) is { } refusedAt1)
         {
-            return new UninstallReport(plan, done, kept, refusedAt1.Code, refusedAt1.Message);
+            return new UninstallReport(plan, done, kept, problems, refusedAt1.Code, refusedAt1.Message);
         }
 
         // 2. The runtime, and only then.
         if (await Step2StopRuntimeAsync(env, plan, options, done, kept, cancellationToken).ConfigureAwait(false) is { } refusedAt2)
         {
-            return new UninstallReport(plan, done, kept, refusedAt2.Code, refusedAt2.Message);
+            return new UninstallReport(plan, done, kept, problems, refusedAt2.Code, refusedAt2.Message);
         }
 
-        return new UninstallReport(plan, done, kept, null, null);
+        // 3. Everything a receipt names, and nothing else.
+        Step3RemoveByReceipt(env, plan, options, done, kept, problems);
+
+        return new UninstallReport(plan, done, kept, problems, null, null);
     }
 
     /// <summary>
@@ -96,6 +108,108 @@ public static class UninstallRunner
             : "No logon registration was registered for this account.");
 
         return null;
+    }
+
+    /// <summary>
+    /// Removes what the receipts name, root by root, and nothing else.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The record file goes <b>after</b> the files it names, and only when none of them is left. It is the one
+    /// thing that says what Jason put here, so removing it while a recorded file is still on disk would leave
+    /// a file nothing can ever account for again.
+    /// </para>
+    /// <para>
+    /// Then the directories, deepest first, and each only if nothing is left in it. A directory holding a file
+    /// the operator added stays, whole, and is reported — which is the difference between this verb and a
+    /// pattern.
+    /// </para>
+    /// </remarks>
+    private static void Step3RemoveByReceipt(
+        CliEnvironment env,
+        UninstallPlan plan,
+        UninstallOptions options,
+        List<string> done,
+        List<string> kept,
+        List<string> problems)
+    {
+        var remover = env.Removes!;
+
+        foreach (var unknown in plan.Unknown)
+        {
+            // Never guessed at. This is the file that says what Jason put here and this build cannot read it;
+            // removing what it recognises and reporting a clean uninstall is how the paths it does not
+            // recognise become nobody's.
+            problems.Add(
+                $"Nothing was removed from '{unknown.Root}': {unknown.Reason} Read the record there and "
+                + "remove what it names by hand, or leave it.");
+        }
+
+        foreach (var root in plan.Roots)
+        {
+            var removed = 0;
+            var remaining = 0;
+            var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var file in root.Files)
+            {
+                if (!file.Present)
+                {
+                    continue;
+                }
+
+                if (file.Edited && !options.Force)
+                {
+                    kept.Add($"Kept '{file.Path}': its contents are not what was installed. --force removes it.");
+                    remaining++;
+                    continue;
+                }
+
+                try
+                {
+                    remover.RemoveFile(file.Path);
+                    removed++;
+                    if (Path.GetDirectoryName(file.Path) is { Length: > 0 } directory)
+                    {
+                        directories.Add(directory);
+                    }
+                }
+                catch (RemovalRefused refusal)
+                {
+                    problems.Add(refusal.Message);
+                    remaining++;
+                }
+            }
+
+            done.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Removed {removed} file(s) of {string.Join(", ", root.Packs)} from '{root.Root}'."));
+
+            if (remaining > 0)
+            {
+                kept.Add($"Kept the record in '{root.Root}': it still names files that are there.");
+                continue;
+            }
+
+            try
+            {
+                remover.RemoveFile(Path.Combine(root.Root, SkillsRecord.FileName));
+            }
+            catch (RemovalRefused refusal)
+            {
+                problems.Add(refusal.Message);
+                continue;
+            }
+
+            // Deepest first, so a skill's own directory is offered before the root that holds it.
+            foreach (var directory in directories.Append(root.Root).OrderByDescending(path => path.Length))
+            {
+                if (!remover.RemoveDirectoryIfEmpty(directory) && Directory.Exists(directory))
+                {
+                    kept.Add($"Kept '{directory}': something is in it that this installer did not write.");
+                }
+            }
+        }
     }
 
     /// <summary>
