@@ -100,7 +100,15 @@ public static class StatusCommand
 
         output.WriteLine(table.Render());
 
-        var repairs = report.Checks.Where(check => check.State != CheckState.Ok && check.Fix is not null).ToList();
+        // Each line once, in the order it was first called for. Four checks that all want the runtime
+        // started want it started once, and a list that printed `jason runtime start` four times was the
+        // first thing a new installation said to whoever had just installed it.
+        var repairs = report.Checks
+            .Where(check => check.State != CheckState.Ok && check.Fix is not null)
+            .Select(check => check.Fix!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
         if (repairs.Count == 0)
         {
             return;
@@ -108,9 +116,9 @@ public static class StatusCommand
 
         output.WriteLine();
         output.WriteLine("To repair:");
-        foreach (var check in repairs)
+        foreach (var repair in repairs)
         {
-            output.WriteLine($"  {check.Fix}");
+            output.WriteLine($"  {repair}");
         }
     }
 

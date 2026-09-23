@@ -106,7 +106,12 @@ public class SkillsInstallTests
         Assert.Equal(ExitCodes.Success, exit);
         Assert.False(Directory.Exists(dir.Paths.RoleSkillsDirectory));
         Assert.Empty(Directory.EnumerateFileSystemEntries(Harness(dir)));
-        Assert.Contains("Would write", output.ToString(), StringComparison.Ordinal);
+        // The plan is stated in the same words either way -- what differs between a dry run and a real one
+        // is what happens next -- and the dry run says so on a line of its own.
+        var printed = output.ToString();
+        Assert.Contains("Target:", printed, StringComparison.Ordinal);
+        Assert.Contains("Dry run: nothing will be written.", printed, StringComparison.Ordinal);
+        Assert.DoesNotContain("Writing", printed, StringComparison.Ordinal);
     }
 
     /// <summary>

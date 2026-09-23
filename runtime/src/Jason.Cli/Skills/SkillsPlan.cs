@@ -187,11 +187,21 @@ public static class SkillsPlanner
 
         // Before anything is written, in every mode and not only under --dry-run. Writing into somebody's home
         // directory is not a silent act.
+        //
+        // And in the same words either way. This printed "Writing:" before validation had finished, so a run
+        // that then refused read "Writing: ... Writing: ... Nothing was written." -- the present tense for a
+        // decision not yet taken. What differs between a dry run and a real one is what happens next, not
+        // what the plan is, so the plan is stated and the tense is left to the line below it.
         foreach (var pack in plan.Packs)
         {
             output.WriteLine(string.Create(
                 CultureInfo.InvariantCulture,
-                $"{(dryRun ? "Would write" : "Writing")}: {pack.Units.Count} skills of {pack.Pack} into {pack.Root}"));
+                $"Target:  {pack.Units.Count} skills of {pack.Pack} into {pack.Root}"));
+        }
+
+        if (dryRun)
+        {
+            output.WriteLine("Dry run: nothing will be written.");
         }
     }
 }

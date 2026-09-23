@@ -294,6 +294,40 @@ public class StatusCommandTests
         Assert.Contains(directory, check.Fix, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Each repair once, in the order it was first called for.
+    /// </summary>
+    /// <remarks>
+    /// With no runtime, four required checks all want one started, and this printed
+    /// <c>jason runtime start</c> four times — the first thing a new installation said to whoever had just
+    /// installed it. The old guard asserted only that the heading was there, which is why it never noticed.
+    /// </remarks>
+    [Fact]
+    public async Task Each_repair_is_printed_once_in_the_order_it_was_first_called_for()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["status", "--human"], Machine(dir, output), Ct);
+
+        var lines = output.ToString().Split(Environment.NewLine, StringSplitOptions.None);
+        var heading = Array.FindIndex(lines, line => line.Trim() == "To repair:");
+        Assert.True(heading >= 0, output.ToString());
+
+        var repairs = lines.Skip(heading + 1).Where(line => line.StartsWith("  ", StringComparison.Ordinal)).Select(line => line.Trim()).ToList();
+
+        Assert.NotEmpty(repairs);
+        Assert.Equal(repairs.Distinct(StringComparer.Ordinal), repairs);
+        Assert.Contains("jason runtime start", repairs);
+
+        // And the checks really did ask for it more than once, so this is not passing because there was
+        // nothing to de-duplicate. Asked of the machine shape, since the prose above is not a document.
+        var machine = new StringWriter();
+        await CliApp.RunAsync(["status"], Machine(dir, machine), Ct);
+        var asked = Read(machine).Checks.Count(check => check.Fix == "jason runtime start");
+        Assert.True(asked > 1, $"only {asked} check asked for a runtime to be started, so nothing was de-duplicated.");
+    }
+
     /// <summary>A deployment record in a root, as `jason skills install` leaves one.</summary>
     private static void Deploy(string root)
     {
