@@ -54,12 +54,12 @@ public static class RuntimeStartCommand
 
             if (child.HasExited)
             {
-                return Fail(env, $"The runtime process exited with code {child.ExitCode} before publishing an endpoint descriptor. See the log files under '{env.Paths.LogsDirectory}'.", retryable: false);
+                return Fail(env, $"The runtime process exited with code {child.ExitCode} before publishing an endpoint descriptor. {Evidence(env)}", retryable: false);
             }
 
             if (elapsed.Elapsed >= waited)
             {
-                return Fail(env, $"The runtime did not publish an endpoint descriptor within {RuntimeStopCommand.Seconds(waited)} s. See the log files under '{env.Paths.LogsDirectory}'.", retryable: true);
+                return Fail(env, $"The runtime did not publish an endpoint descriptor within {RuntimeStopCommand.Seconds(waited)} s. {Evidence(env)}", retryable: true);
             }
 
             await Task.Delay(poll ?? DefaultPoll, cancellationToken).ConfigureAwait(false);
@@ -108,6 +108,34 @@ public static class RuntimeStartCommand
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Where to look — and never a directory with nothing in it.
+    /// </summary>
+    /// <remarks>
+    /// A runtime can fail before its logging is configured: preparing the data directory is the first thing it
+    /// does, and the log directory is created by that very step. So the message that sent an operator to
+    /// <c>logs/</c> was, in the one case they most needed it, sending them to six empty directories on the
+    /// first run of a new installation. Say which of the two happened instead.
+    /// </remarks>
+    private static string Evidence(CliEnvironment env)
+    {
+        bool any;
+        try
+        {
+            any = Directory.Exists(env.Paths.LogsDirectory) && Directory.EnumerateFiles(env.Paths.LogsDirectory).Any();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            any = false;
+        }
+
+        return any
+            ? $"See the log files under '{env.Paths.LogsDirectory}'."
+            : $"There are no log files under '{env.Paths.LogsDirectory}', so it stopped before logging started — "
+                + $"which is what happens when the data directory at '{env.Paths.Root}' cannot be prepared. "
+                + "Run 'jason runtime run' to see what it says.";
     }
 
     private static int Fail(CliEnvironment env, string message, bool retryable)

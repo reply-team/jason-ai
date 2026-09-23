@@ -64,7 +64,7 @@ public static class FilePermissions
             {
                 var security = new FileSecurity();
                 security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
-                security.SetOwner(user);
+                TakeOwnership(security, file.GetAccessControl().GetOwner(typeof(SecurityIdentifier)), user);
                 security.AddAccessRule(new FileSystemAccessRule(user, FileSystemRights.FullControl, AccessControlType.Allow));
                 file.SetAccessControl(security);
                 break;
@@ -74,7 +74,7 @@ public static class FilePermissions
             {
                 var security = new DirectorySecurity();
                 security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
-                security.SetOwner(user);
+                TakeOwnership(security, directory.GetAccessControl().GetOwner(typeof(SecurityIdentifier)), user);
                 security.AddAccessRule(new FileSystemAccessRule(
                     user,
                     FileSystemRights.FullControl,
@@ -84,6 +84,34 @@ public static class FilePermissions
                 directory.SetAccessControl(security);
                 break;
             }
+        }
+    }
+
+    /// <summary>
+    /// Sets the owner, and only when it is not the owner already.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Owning an object on Windows does not carry <c>WRITE_OWNER</c> — only <c>READ_CONTROL</c> and
+    /// <c>WRITE_DAC</c>. So setting the owner to the owner it already has, a call that changes nothing, is
+    /// <b>refused</b> on any object whose rights reach this account through an inherited <c>Modify</c> rather
+    /// than Full Control. That is every directory outside the user profile, and <c>JASON_DATA_DIR</c> may name
+    /// any directory at all: the whole runtime died here, before its logging existed to say so.
+    /// </para>
+    /// <para>
+    /// Dropping the unnecessary call weakens nothing that is checked. What protects the capability token is
+    /// the protected DACL above plus <see cref="VerifyRestrictedToCurrentUser"/>, and
+    /// <see cref="IsRestrictedOnWindows"/> reads access rules only — it has never looked at the owner.
+    /// </para>
+    /// </remarks>
+    [SupportedOSPlatform("windows")]
+    private static void TakeOwnership(FileSystemSecurity security, IdentityReference? owner, SecurityIdentifier user)
+    {
+        if (!user.Equals(owner))
+        {
+            // It belongs to somebody else, and taking it is the point. If this account may not, the refusal
+            // is a real one and the caller reports it rather than the process ending on it.
+            security.SetOwner(user);
         }
     }
 

@@ -96,6 +96,47 @@ public class RuntimeStartCommandTests
         Assert.Contains("1", envelope.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// And where there are no log files, it says so instead of sending somebody to read them.
+    /// </summary>
+    /// <remarks>
+    /// A runtime can fail before its logging is configured: preparing the data directory is the first thing
+    /// it does, and the log directory is created by that very step. So on the first run of a new installation
+    /// -- the one case where this message matters most -- "see the log files" sent the operator to six empty
+    /// directories.
+    /// </remarks>
+    [Fact]
+    public async Task A_child_that_died_before_logging_started_is_not_sent_to_an_empty_log_directory()
+    {
+        using var dir = new TempPaths();
+        var processes = new FakeProcessControl { OnLaunch = RuntimeVerbs.DiesWith(exitCode: 134) };
+        var (env, output, _) = RuntimeVerbs.Environment(dir, RuntimeVerbs.EchoesTheDescriptor(dir), processes);
+
+        var exit = await RuntimeStartCommand.RunAsync(env, human: false, Ct, RuntimeVerbs.Timeout, RuntimeVerbs.Poll);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var message = RuntimeVerbs.Envelope(output.ToString()).Message;
+        Assert.DoesNotContain("See the log files", message, StringComparison.Ordinal);
+        Assert.Contains("stopped before logging started", message, StringComparison.Ordinal);
+        Assert.Contains(dir.Paths.Root, message, StringComparison.Ordinal);
+        Assert.Contains("jason runtime run", message, StringComparison.Ordinal);
+    }
+
+    /// <summary>And where there is one, it still sends them there.</summary>
+    [Fact]
+    public async Task A_child_that_died_after_writing_a_log_is_sent_to_it()
+    {
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(dir.Paths.LogsDirectory);
+        await File.WriteAllTextAsync(Path.Combine(dir.Paths.LogsDirectory, "jason.log"), "{}", Ct);
+        var processes = new FakeProcessControl { OnLaunch = RuntimeVerbs.DiesWith(exitCode: 1) };
+        var (env, output, _) = RuntimeVerbs.Environment(dir, RuntimeVerbs.EchoesTheDescriptor(dir), processes);
+
+        await RuntimeStartCommand.RunAsync(env, human: false, Ct, RuntimeVerbs.Timeout, RuntimeVerbs.Poll);
+
+        Assert.Contains("See the log files", RuntimeVerbs.Envelope(output.ToString()).Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_child_that_never_publishes_a_descriptor_exits_1_after_the_wait()
     {

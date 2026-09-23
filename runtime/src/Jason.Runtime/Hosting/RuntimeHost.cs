@@ -35,7 +35,19 @@ public static class RuntimeHost
         ArgumentNullException.ThrowIfNull(paths);
         options ??= new RuntimeHostOptions();
 
-        DataDirectoryLayout.Ensure(paths);
+        try
+        {
+            DataDirectoryLayout.Ensure(paths);
+        }
+        catch (Exception cause) when (cause is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+        {
+            // The first thing this process does, and it runs before logging exists -- so an exception escaping
+            // here killed the runtime with nothing written anywhere and a CLI pointing at an empty log
+            // directory. A first run that cannot proceed owes a sentence, not a stack trace and six empty
+            // directories.
+            throw new DataDirectoryUnusableException(paths.Root, cause);
+        }
+
         var configuration = JasonConfiguration.Build(paths, options.ShippedSettingsDirectory);
         var settings = JasonConfiguration.Load(configuration);
 
@@ -90,6 +102,11 @@ public static class RuntimeHost
             runtime = await StartAsync(paths, options, cancellationToken).ConfigureAwait(false);
         }
         catch (RuntimeAlreadyRunningException ex)
+        {
+            await Console.Error.WriteLineAsync(ex.Message).ConfigureAwait(false);
+            return 1;
+        }
+        catch (DataDirectoryUnusableException ex)
         {
             await Console.Error.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
