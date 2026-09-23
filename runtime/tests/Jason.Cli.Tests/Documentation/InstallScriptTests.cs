@@ -25,7 +25,12 @@ namespace Jason.Cli.Tests.Documentation;
 /// </summary>
 public partial class InstallScriptTests
 {
-    private const string Marker = "# added by jason install";
+    /// <summary>
+    /// Read from the product rather than restated here. <c>jason uninstall</c> undoes what this script wrote,
+    /// so the marker has one definition -- <see cref="Jason.Cli.Uninstall.PathEntry.Marker"/> -- and this is
+    /// the assertion that the script still spells it that way.
+    /// </summary>
+    private const string Marker = Jason.Cli.Uninstall.PathEntry.Marker;
 
     [Fact]
     public void Both_scripts_exist()

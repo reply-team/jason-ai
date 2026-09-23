@@ -53,6 +53,16 @@ public interface IInstallationRemover
     /// </summary>
     void RemoveTree(string path);
 
+    /// <summary>
+    /// How this account's PATH carries that directory, read from the machine.
+    /// </summary>
+    /// <remarks>
+    /// Behind this seam rather than in the reader, for the reason the whole seam exists. On Windows the
+    /// answer lives in this account's registry and on Unix in this account's login profiles, so a reader that
+    /// worked it out for itself would make every plan depend on the machine the suite happens to run on.
+    /// </remarks>
+    PathEntryPlan ReadPathEntry(string directory);
+
     /// <summary>Takes the install directory off this account's PATH, in the way the installer put it on.</summary>
     PathEntryOutcome RemovePathEntry(PathEntryPlan plan);
 }
@@ -109,10 +119,81 @@ public static class InstallationRemovers
             }
         }
 
-        public PathEntryOutcome RemovePathEntry(PathEntryPlan plan) => throw new RemovalRefused(
-            CliErrors.UninstallRefused,
-            "This build does not yet know how to take a directory off this account's PATH, so it refused "
-            + "rather than reporting a PATH entry removed that is still there.");
+        public PathEntryPlan ReadPathEntry(string directory)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+
+            if (OperatingSystem.IsWindows())
+            {
+                var value = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User) ?? string.Empty;
+
+                // No marker here, and none is wanted: install.ps1 puts the directory on this account's own
+                // Path value, "where a directory is its own mark". So being there is what makes it ours.
+                return new PathEntryPlan(directory, [], value, PathEntry.Carries(value, directory));
+            }
+
+            var line = PathEntry.ExportLine(directory);
+            var profiles = PathEntry
+                .ProfileFiles(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.GetEnvironmentVariable("SHELL"))
+                .Where(profile => Carries(profile, line))
+                .ToList();
+
+            return new PathEntryPlan(directory, profiles, null, profiles.Count > 0);
+        }
+
+        public PathEntryOutcome RemovePathEntry(PathEntryPlan plan)
+        {
+            ArgumentNullException.ThrowIfNull(plan);
+
+            if (!plan.Ours)
+            {
+                return new PathEntryOutcome(false, [], "This installer did not put that directory on the PATH, so it was left there.");
+            }
+
+            if (OperatingSystem.IsWindows())
+            {
+                var value = plan.RegistryValue ?? string.Empty;
+                var without = PathEntry.WithoutDirectory(value, plan.Directory);
+                if (ReferenceEquals(without, value))
+                {
+                    return new PathEntryOutcome(false, [], "That directory is not on this account's PATH.");
+                }
+
+                Environment.SetEnvironmentVariable("Path", without, EnvironmentVariableTarget.User);
+                return new PathEntryOutcome(true, ["the Path value for this account"], null);
+            }
+
+            var touched = new List<string>();
+            foreach (var profile in plan.Profiles)
+            {
+                var text = File.ReadAllText(profile);
+                var without = PathEntry.WithoutEntry(text, plan.Directory);
+
+                // The same instance back means the line is not in there, and the file is not opened for
+                // writing at all. Rewriting a login profile identically is still rewriting it.
+                if (ReferenceEquals(without, text))
+                {
+                    continue;
+                }
+
+                File.WriteAllText(profile, without);
+                touched.Add(profile);
+            }
+
+            return new PathEntryOutcome(touched.Count > 0, touched, touched.Count > 0 ? null : "That line is not in any login profile.");
+        }
+
+        private static bool Carries(string profile, string line)
+        {
+            try
+            {
+                return File.Exists(profile) && File.ReadAllText(profile).Contains(line, StringComparison.Ordinal);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
     }
 
     private sealed class RefusingRemover : IInstallationRemover
@@ -124,6 +205,8 @@ public static class InstallationRemovers
         public bool RemoveDirectoryIfEmpty(string path) => throw Refusal();
 
         public void RemoveTree(string path) => throw Refusal();
+
+        public PathEntryPlan ReadPathEntry(string directory) => throw Refusal();
 
         public PathEntryOutcome RemovePathEntry(PathEntryPlan plan) => throw Refusal();
 

@@ -33,6 +33,7 @@ public sealed record UnknownRoot(string Root, string Reason);
 /// <param name="RuntimePid">The runtime this installation has running, or null where none is.</param>
 /// <param name="Roots">The roots a deployment recorded, each with the paths its record names.</param>
 /// <param name="Unknown">The roots nothing may guess at.</param>
+/// <param name="PathEntry">How this account's PATH carries the install directory, or null where nothing does.</param>
 /// <param name="Executable">The file this Jason is installed as, or null where nothing named one.</param>
 /// <param name="InstallDirectory">The directory holding it, removed only if nothing else is left in it.</param>
 /// <param name="PurgesData">Whether the explicit word was said. Nothing else stands for it.</param>
@@ -43,6 +44,7 @@ public sealed record UninstallPlan(
     int? RuntimePid,
     IReadOnlyList<RootRemoval> Roots,
     IReadOnlyList<UnknownRoot> Unknown,
+    PathEntryPlan? PathEntry,
     string? Executable,
     string? InstallDirectory,
     bool PurgesData,

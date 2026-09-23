@@ -83,7 +83,10 @@ public class UninstallOrderTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.DoesNotContain("system.shutdown", log.Steps);
-        Assert.Equal(["autostart.remove"], log.Steps);
+
+        // The whole order, so a step added later arrives in this diff rather than silently: the registration,
+        // then the receipts (none here), then the PATH.
+        Assert.Equal(["autostart.remove", "path.remove"], log.Steps);
     }
 
     /// <summary>

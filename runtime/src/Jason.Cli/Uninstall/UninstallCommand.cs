@@ -184,6 +184,11 @@ public static class UninstallCommand
                 $"  {root.Files.Count(file => file.Present && !file.Edited)} file(s) of {string.Join(", ", root.Packs)} in {root.Root}"));
         }
 
+        if (plan.PathEntry is { Ours: true } entry)
+        {
+            env.Out.WriteLine($"  '{entry.Directory}' off the PATH");
+        }
+
         if (plan.Executable is { } executable)
         {
             env.Out.WriteLine($"  the executable at {executable}");

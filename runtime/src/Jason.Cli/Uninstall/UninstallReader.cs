@@ -48,14 +48,17 @@ public static class UninstallReader
         // seam, which a test supplies and which refuses when nothing named one.
         var executable = env.InstallPath ?? Environment.ProcessPath;
 
+        var directory = executable is null ? null : Path.GetDirectoryName(executable);
+
         return new UninstallPlan(
             autostart.Registered,
             autostart.ArtifactPath,
             new DescriptorReader(env.Paths).Read()?.Pid,
             roots,
             unknown,
+            directory is { Length: > 0 } ? env.Removes?.ReadPathEntry(directory) : null,
             executable,
-            executable is null ? null : Path.GetDirectoryName(executable),
+            directory,
             purgeData,
             env.Paths.Root);
     }

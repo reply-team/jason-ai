@@ -58,6 +58,18 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
         }
     }
 
+    /// <summary>What this pretend machine's PATH carries. A test that cares sets it.</summary>
+    public PathEntryPlan? PathEntry { get; set; }
+
+    /// <summary>Directories this was asked about. Separate from <see cref="Calls"/>: reading is not removing, and a test asserting that nothing was removed must not be tripped by a question.</summary>
+    public List<string> Reads { get; } = [];
+
+    public PathEntryPlan ReadPathEntry(string directory)
+    {
+        Reads.Add(directory);
+        return PathEntry ?? new PathEntryPlan(directory, [], null, Ours: false);
+    }
+
     public PathEntryOutcome RemovePathEntry(PathEntryPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);

@@ -73,6 +73,9 @@ public static class UninstallRunner
         // 3. Everything a receipt names, and nothing else.
         Step3RemoveByReceipt(env, plan, options, done, kept, problems);
 
+        // 4. The PATH entry, only where this installer wrote it.
+        Step4RemovePathEntry(env, plan, done, kept, problems);
+
         return new UninstallReport(plan, done, kept, problems, null, null);
     }
 
@@ -108,6 +111,45 @@ public static class UninstallRunner
             : "No logon registration was registered for this account.");
 
         return null;
+    }
+
+    /// <summary>
+    /// Takes the install directory off this account's PATH, in the way the installer put it on.
+    /// </summary>
+    /// <remarks>
+    /// Only where this installer wrote it. A directory somebody put on their own PATH is their line in their
+    /// own document, and a verb that removed it would be editing something it was never asked to touch.
+    /// </remarks>
+    private static void Step4RemovePathEntry(
+        CliEnvironment env,
+        UninstallPlan plan,
+        List<string> done,
+        List<string> kept,
+        List<string> problems)
+    {
+        if (plan.PathEntry is not { } entry)
+        {
+            kept.Add("Nothing named an install directory, so no PATH entry was looked for.");
+            return;
+        }
+
+        try
+        {
+            var outcome = env.Removes!.RemovePathEntry(entry);
+            if (outcome.Removed)
+            {
+                done.Add($"Took '{entry.Directory}' off the PATH in {string.Join(", ", outcome.Touched)}.");
+                return;
+            }
+
+            kept.Add(outcome.Note ?? $"'{entry.Directory}' was left on the PATH.");
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+        {
+            problems.Add(
+                $"'{entry.Directory}' could not be taken off the PATH: {exception.Message} "
+                + "Remove that line yourself; nothing else was left behind.");
+        }
     }
 
     /// <summary>
