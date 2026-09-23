@@ -97,9 +97,14 @@ irm https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.p
 Each script works out your platform, verifies the download's SHA-256 before unpacking it, installs the
 executable under your own account — `~/.local/bin` on macOS and Linux, `%LOCALAPPDATA%\Programs\jason` on
 Windows — and puts that directory on your PATH unless you pass `--no-modify-path`. Nothing needs administrator
-rights. **Both lines resolve to the latest release, so until the first release is published they answer 404**;
-build from source until then. `docs/release-and-update.md` is the contract for what a release publishes and how
-a running runtime finds out that a newer one exists:
+rights. Both lines install the **latest release**, and a repository with no published release has no latest:
+if they answer 404 there is nothing to install from, and *Building from source* below is the way in.
+
+**[docs/INSTALL.md](docs/INSTALL.md)** is the whole of it in order — what you need, from a release, from
+source, teaching it, asking whether it can work, starting it, and taking it off again — written to be
+followed by a person or an agent without reading anything else first.
+`docs/release-and-update.md` is the contract for what a release publishes and how a running runtime finds out
+that a newer one exists:
 
 ```sh
 jason update check
@@ -111,6 +116,38 @@ jason update status
 download, drain, stop, swap, start, health check — driven by a ledger written before each step, so a machine
 that dies half-way is finished or put back by the next run. `status` says where one stands, and reads the
 ledger without needing a runtime.
+
+### Ask an agent to do it
+
+Paste this into an agent that has a shell on the machine you want Jason on. It is the whole prompt — no
+preamble, no repository tour:
+
+```text
+Install Jason on this machine and tell me whether it can start work.
+
+Follow docs/INSTALL.md in this repository, in order, from section 2.
+
+1. Try the install one-liner for this platform. If it answers 404 there is no published release
+   yet. That is a fact about the repository and not a failure of anything, so build from source
+   as section 3 describes rather than stopping to report it.
+2. Teach it before you judge it. Run this first and read what it says it would write:
+   jason skills install --dry-run --source .
+   Then run the same line without --dry-run. A runtime with no role skills launches every role
+   untaught, so this is not an optional step.
+3. Ask whether it can work:
+   jason status
+   Branch on "ready" in the JSON body, never on the exit code. This verb exits 0 or 1 and never
+   3, and "the runtime did not answer" is one of its answers rather than an error.
+4. For each check that is not ok, run the repair it prints. A repair that is a jason command you
+   can run as it stands. The path check's repair is a line for this machine's own shell instead;
+   read section 3's note about login shells before you run it, because a profile you append to is
+   read by a login shell and not by your next non-interactive command.
+5. Stop when ready is true, or when a required check still fails after you have run its repair.
+   Report which checks failed, exactly what you ran, and what it changed.
+
+Do not install anything else. Do not edit files outside the install directory and the data
+directory. Do not leave a long-running process behind other than through jason runtime start.
+```
 
 ### Can this installation start work?
 
@@ -152,6 +189,29 @@ The provider check runs only a program **you** name — `jason status --provider
 one vendor's command by heart would be this product naming a vendor in its own sources, which it does not. It
 names the exact command it ran in its own output, and prints no credential — not the key, not a prefix of it,
 not its length.
+
+### Taking it off again
+
+```sh
+jason uninstall --human --dry-run
+jason uninstall
+jason uninstall --purge-data --yes
+```
+
+**It removes only what a receipt names.** Every root a deployment wrote into carries a record listing each
+path written there, and this verb removes those and nothing else — a skill you copied into a harness by hand
+has no receipt, so it is removed by nobody, including this. The order is fixed: the logon registration first,
+so a logon part-way through cannot start what is going; then the runtime, and if it will not stop, nothing
+after that is removed; then the recorded skills; then the PATH entry, only where this installer wrote it;
+then the executable and its install directory. A recorded file whose bytes have changed since is reported and
+kept unless `--force` says otherwise.
+
+**The data directory is kept** — the database, the settings, the plugins, the logs and the work directories
+are the record of what you did — and the verb says in one line that it kept it and where. `--purge-data`
+removes it too, and in the machine shape the word has to be said in advance, because there is nobody there to
+be asked. This is the second of the two commands in this CLI that no API operation stands behind: removing
+Jason from a machine is not something the runtime performs or is asked about.
+[docs/INSTALL.md](docs/INSTALL.md) §7 is the fuller account.
 
 ## Building from source
 
