@@ -1,5 +1,8 @@
 using System.CommandLine;
+using System.Globalization;
+using System.Text.Json;
 using Jason.Cli.Commands;
+using Jason.Contracts.Json;
 
 namespace Jason.Cli.Uninstall;
 
@@ -96,8 +99,72 @@ public static class UninstallCommand
                 + $"The data directory at '{env.Paths.Root}' is untouched, as it is unless --purge-data says otherwise."));
         }
 
+        var plan = UninstallReader.Read(env, options.PurgeData);
+
+        // Printed before a byte is removed, in every mode and not only under --dry-run. Taking things off
+        // somebody's machine is not a silent act, and a plan nobody saw is one nobody could have stopped.
+        Describe(env, plan, options);
+
+        if (options.DryRun)
+        {
+            return Task.FromResult(ExitCodes.Success);
+        }
+
         _ = cancellationToken;
         return Task.FromResult(ExitCodes.Success);
+    }
+
+    /// <summary>
+    /// The plan, in the shape the caller asked for: the compact JSON an agent reads, or the lines a person
+    /// does. Both name every root, including the ones nothing may guess at.
+    /// </summary>
+    private static void Describe(CliEnvironment env, UninstallPlan plan, UninstallOptions options)
+    {
+        if (!options.Human)
+        {
+            env.Out.WriteLine(JsonSerializer.Serialize(plan, JasonJson.Options));
+            return;
+        }
+
+        env.Out.WriteLine(options.DryRun ? "This would be removed:" : "Removing:");
+
+        if (plan.AutostartRegistered)
+        {
+            env.Out.WriteLine("  the logon registration" + (plan.AutostartArtifact is { } document ? $" ({document})" : string.Empty));
+        }
+
+        if (plan.RuntimePid is { } pid)
+        {
+            env.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  the running runtime, pid {pid}"));
+        }
+
+        foreach (var root in plan.Roots)
+        {
+            env.Out.WriteLine(string.Create(
+                CultureInfo.InvariantCulture,
+                $"  {root.Files.Count(file => file.Present && !file.Edited)} file(s) of {string.Join(", ", root.Packs)} in {root.Root}"));
+        }
+
+        if (plan.Executable is { } executable)
+        {
+            env.Out.WriteLine($"  the executable at {executable}");
+        }
+
+        foreach (var unknown in plan.Unknown)
+        {
+            env.Out.WriteLine($"  NOT touched: {unknown.Root} — {unknown.Reason}");
+        }
+
+        if (plan.Edited > 0)
+        {
+            env.Out.WriteLine(string.Create(
+                CultureInfo.InvariantCulture,
+                $"  kept: {plan.Edited} file(s) whose contents are no longer what was installed. --force removes them."));
+        }
+
+        env.Out.WriteLine(plan.PurgesData
+            ? $"  the data directory at {plan.DataDirectory}, with everything in it"
+            : $"The data directory at {plan.DataDirectory} is kept. --purge-data removes it.");
     }
 
     /// <summary>
