@@ -4,6 +4,7 @@ using Jason.Cli.Autostart;
 using Jason.Cli.Discovery;
 using Jason.Cli.Http;
 using Jason.Cli.Skills;
+using Jason.Cli.Uninstall;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
@@ -28,17 +29,34 @@ namespace Jason.Cli.Status;
 internal static class StatusChecks
 {
     /// <summary>
-    /// The repairs a check can print, named in one place.
+    /// Every repair a check can print, composed in one place — and there are two kinds of them.
     /// </summary>
     /// <remarks>
-    /// They were null until the verb existed, deliberately: a check whose repair is a command this build does
-    /// not answer teaches a person the tool is broken at the moment they most need it not to be. The guard
-    /// beside this one types every repair printed here, so the commit that shipped the verb is the commit that
-    /// turned these on and proved them.
+    /// <para>
+    /// Most are <c>jason</c> commands, and a guard types every one: a check whose repair is a command this
+    /// build does not answer teaches a person the tool is broken at the moment they most need it not to be.
+    /// They were null until the verb existed, deliberately, so that the commit shipping a verb is the commit
+    /// that turns its repairs on and proves them.
+    /// </para>
+    /// <para>
+    /// One of them is not a <c>jason</c> command and cannot be. Putting this executable on the PATH is the
+    /// shell's own act and no verb of this product's performs it; inventing <c>jason path add</c> so that a
+    /// guard's sentence could stay short would be a verb that exists for a test. So a repair may also be a
+    /// line for this machine's own shell, and the guard checks that kind by rules of its own: it is not
+    /// empty, it names a directory that is really there, and it is written for the platform it was composed
+    /// on.
+    /// </para>
+    /// <para>
+    /// What holds of both kinds is that every repair is composed <em>here</em>. That sentence was written
+    /// before it was true: the PATH repair arrived as a method further down this file, outside the class the
+    /// guard slices, and three checks were passing their line as a literal that happened to duplicate a
+    /// constant beside it. Neither was visible to a guard claiming to reach every repair, which is the defect
+    /// that guard exists to prevent — so a second guard now reads every <c>new StatusCheck</c> in these
+    /// sources and refuses a repair spelled anywhere but here.
+    /// </para>
     /// </remarks>
     private static class Repair
     {
-        /// <summary>Every repair this verb can print lives here, and a guard types all of them.</summary>
         public const string Start = "jason runtime start";
 
         public const string Restart = "jason runtime restart";
@@ -56,6 +74,36 @@ internal static class StatusChecks
         /// problem would cost an operator unrelated work for a problem that did not need it.
         /// </summary>
         public const string Reinstall = Install;
+
+        /// <summary>
+        /// The repair that is not a <c>jason</c> command: the line putting this executable's directory on
+        /// this account's PATH, spelled as this product's own installer spells it.
+        /// </summary>
+        /// <remarks>
+        /// Null where nothing named an executable, or where this account has no home to write into. There is
+        /// then no directory to name, and a repair reading "add  to your PATH" is worse than none.
+        /// </remarks>
+        public static string? OnPath(CliEnvironment env)
+        {
+            var executable = env.InstallPath ?? Environment.ProcessPath;
+            if (executable is null || System.IO.Path.GetDirectoryName(executable) is not { Length: > 0 } directory)
+            {
+                return null;
+            }
+
+            if (OperatingSystem.IsWindows())
+            {
+                return PathEntry.RegistryCommand(directory);
+            }
+
+            // Into the profile this shell reads at login, and exported for the shell it is typed in. The bare
+            // export line lasts exactly one shell: printed as a repair it is advice that appears to have
+            // worked, and it left the two platforms' repairs differing in kind with neither saying so.
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            return home.Length == 0
+                ? null
+                : PathEntry.AppendCommand(directory, PathEntry.LoginProfile(home, Environment.GetEnvironmentVariable("SHELL")));
+        }
     }
 
     /// <summary>
@@ -116,7 +164,7 @@ internal static class StatusChecks
         }
 
         return info is null
-            ? new StatusCheck("runtime", true, CheckState.Failed, $"A descriptor names {descriptor.BaseUrl} and nothing answered there.", "jason runtime start")
+            ? new StatusCheck("runtime", true, CheckState.Failed, $"A descriptor names {descriptor.BaseUrl} and nothing answered there.", Repair.Start)
             : new StatusCheck("runtime", true, CheckState.Ok, $"Running: version {info.RuntimeVersion}, pid {info.Pid.ToString(CultureInfo.InvariantCulture)}, data directory {info.DataDir}.", null);
     }
 
@@ -129,7 +177,7 @@ internal static class StatusChecks
 
         var applied = info.Database.AppliedMigrations.Count;
         return applied == 0
-            ? new StatusCheck("migrations", true, CheckState.Failed, "The database has no migrations applied.", "jason runtime restart")
+            ? new StatusCheck("migrations", true, CheckState.Failed, "The database has no migrations applied.", Repair.Restart)
             : new StatusCheck("migrations", true, CheckState.Ok, string.Create(CultureInfo.InvariantCulture, $"{applied} migrations applied."), null);
     }
 
@@ -143,7 +191,7 @@ internal static class StatusChecks
         // Zero plugins is alive. A registry that refused its last load is not, and that is the state worth
         // telling apart: nothing is loaded, on purpose, and nothing will run until somebody looks at why.
         return info.Plugins.LastReloadActivated == false
-            ? new StatusCheck("plugin_registry", true, CheckState.Failed, "The last plugin load was rejected, so nothing is active.", "jason plugin reload")
+            ? new StatusCheck("plugin_registry", true, CheckState.Failed, "The last plugin load was rejected, so nothing is active.", Repair.ReloadPlugins)
             : new StatusCheck(
                 "plugin_registry",
                 true,
@@ -276,7 +324,7 @@ internal static class StatusChecks
                 true,
                 CheckState.Failed,
                 "'jason' does not resolve on PATH, so nothing can be typed by name.",
-                OnPathRepair(env));
+                Repair.OnPath(env));
         }
 
         var running = env.InstallPath;
@@ -291,26 +339,6 @@ internal static class StatusChecks
         }
 
         return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
-    }
-
-    /// <summary>
-    /// The line that puts this executable's directory on the PATH, per platform, as the installer writes it.
-    /// </summary>
-    /// <remarks>
-    /// Null where nothing named an executable, because then there is no directory to name and a repair that
-    /// said "add  to your PATH" would be worse than none.
-    /// </remarks>
-    private static string? OnPathRepair(CliEnvironment env)
-    {
-        var executable = env.InstallPath ?? Environment.ProcessPath;
-        if (executable is null || System.IO.Path.GetDirectoryName(executable) is not { Length: > 0 } directory)
-        {
-            return null;
-        }
-
-        return OperatingSystem.IsWindows()
-            ? $"[Environment]::SetEnvironmentVariable('Path', \"$([Environment]::GetEnvironmentVariable('Path','User'));{directory}\", 'User')"
-            : Uninstall.PathEntry.ExportLine(directory);
     }
 
     private static StatusCheck ProviderPlugin(SystemInfoResponse? info) =>
