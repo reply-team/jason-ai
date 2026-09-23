@@ -26,7 +26,11 @@ public class DocumentedPageCommandsTests
     private static readonly string[] Nouns =
     [
         "jason profile ", "jason rolenote ", "jason campaign ", "jason workitem ", "jason decision ", "jason update ",
-        "jason runtime autostart ", "jason status", "jason skills ",
+        // Two lists called Nouns, two different questions. VerbMapTests.Nouns is "top-level names that are
+        // nouns", and `uninstall` is not one -- it is declared there beside `status`, as a name no operation
+        // stands behind. This list is "command prefixes whose printed lines this guard types", where the
+        // prefix is only how a line is recognised in a page.
+        "jason runtime autostart ", "jason status", "jason skills ", "jason uninstall",
     ];
 
     /// <summary>The pages whose printed commands are guarded.</summary>
@@ -39,6 +43,7 @@ public class DocumentedPageCommandsTests
         Path.Combine("docs", "execution-profiles.md"),
         Path.Combine("docs", "campaign-manager.md"),
         Path.Combine("docs", "release-and-update.md"),
+        Path.Combine("docs", "INSTALL.md"),
     ];
 
     public static TheoryData<string, string> DocumentedCommands()
@@ -105,7 +110,13 @@ public class DocumentedPageCommandsTests
             Processes: new Process.FakeProcessControl(),
             Autostart: new Autostart.RecordingRegistrar(),
             Harnesses: Jason.Cli.Skills.HarnessLocators.At(dir.Paths.Root),
-            Programs: new Process.FakeProgramRunner());
+            Programs: new Process.FakeProgramRunner(),
+            // The fourth seam this guard has to supply, for the same reason as the third. These lines are
+            // typed for real, and one of the nouns above now removes files, edits this account's PATH and
+            // deletes an executable it resolves for itself -- which, with no InstallPath given, is the test
+            // host. A remover that records rather than removes is the only safe one here, and forgetting it
+            // costs a refusal rather than a developer's PATH.
+            Removes: new Uninstall.RecordingRemover());
 
     /// <summary>
     /// Every request refused before it leaves the process. Most of these commands never get this far — there is
