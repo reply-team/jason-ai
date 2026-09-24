@@ -100,9 +100,13 @@ public static class InstallationRemovers
     /// This machine's. The file operations are what they look like; taking a directory off this account's
     /// PATH is the installer's own act read backwards and arrives with the rules that describe it.
     /// </summary>
-    public static IInstallationRemover ForThisMachine() => new MachineRemover();
+    /// <param name="pathKey">
+    /// The key under <c>HKEY_CURRENT_USER</c> whose <c>Path</c> this reads and edits on Windows. Always
+    /// <c>Environment</c>, except in a test that points it at a key of its own.
+    /// </param>
+    public static IInstallationRemover ForThisMachine(string pathKey = UserPathValue.EnvironmentKey) => new MachineRemover(pathKey);
 
-    private sealed class MachineRemover : IInstallationRemover
+    private sealed class MachineRemover(string pathKey) : IInstallationRemover
     {
         // A process cannot delete its own image on Windows. Everywhere else the directory entry goes and the
         // file lives on until the last handle closes, which is exactly what is wanted.
@@ -205,7 +209,10 @@ public static class InstallationRemovers
 
             if (OperatingSystem.IsWindows())
             {
-                var value = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User) ?? string.Empty;
+                // As the registry stores it, %VARIABLE%s and all. This is the value the plan prints and the
+                // one the removal edits, so reading it expanded here is where a whole Path's entries turned
+                // into fixed strings.
+                var value = new UserPathValue(pathKey).Read()?.Raw ?? string.Empty;
 
                 // No marker here, and none is wanted: install.ps1 puts the directory on this account's own
                 // Path value, "where a directory is its own mark". So being there is what makes it ours.
@@ -232,14 +239,18 @@ public static class InstallationRemovers
 
             if (OperatingSystem.IsWindows())
             {
-                var value = plan.RegistryValue ?? string.Empty;
+                // Read again rather than taken from the plan, and written back with the kind it had: the plan
+                // is what was shown, this is what is edited, and an account's REG_EXPAND_SZ Path stays one.
+                var userPath = new UserPathValue(pathKey);
+                var stored = userPath.Read();
+                var value = stored?.Raw ?? string.Empty;
                 var without = PathEntry.WithoutDirectory(value, plan.Directory);
-                if (ReferenceEquals(without, value))
+                if (stored is null || ReferenceEquals(without, value))
                 {
                     return new PathEntryOutcome(false, [], "That directory is not on this account's PATH.");
                 }
 
-                Environment.SetEnvironmentVariable("Path", without, EnvironmentVariableTarget.User);
+                userPath.Write(without, stored.Kind);
                 return new PathEntryOutcome(true, ["the Path value for this account"], null);
             }
 

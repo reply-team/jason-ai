@@ -312,6 +312,21 @@ internal static class StatusChecks
     private static StatusCheck Path(CliEnvironment env)
     {
         var resolved = Executables.OnPath("jason", env.SearchPath);
+        if (resolved is null && Persisted(env) is { } persisted)
+        {
+            // Two different facts had one answer. The PATH this process inherited is the shell's, fixed when
+            // that shell started; the one this account keeps is what every shell started afterwards reads. In
+            // the shell the installer ran in, the first does not carry Jason and the second does -- and this
+            // check said `failed` there, beside a repair that appended the directory a second time. The
+            // installation is right and the shell is old, so the check says so, and says how to reach it here.
+            return new StatusCheck(
+                "path",
+                true,
+                CheckState.Ok,
+                $"'jason' does not resolve in this shell, but {persisted.Where} carries {persisted.Directory}, so {persisted.Reader} started from now on finds it: this one started before it was put there. Here, type it by its full path, {persisted.Executable}.",
+                null);
+        }
+
         if (resolved is null)
         {
             // Required, and now with the line that fixes it. This check is the one a from-source
@@ -342,6 +357,46 @@ internal static class StatusChecks
         }
 
         return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
+    }
+
+    /// <summary>
+    /// Where this account keeps the directory of the file answering here on its PATH for shells not yet
+    /// started, or null where it does not — or where that cannot be read, which leaves the check as it was.
+    /// </summary>
+    /// <remarks>
+    /// Read through the seam that owns the machine, the same read <c>jason uninstall</c> plans by: this
+    /// account's registry on Windows, its login profiles on Unix. A reader that worked it out here would be a
+    /// second definition of "how Jason is on a PATH", and this file already had to be taught once that there
+    /// is only one.
+    /// </remarks>
+    private static (string Where, string Directory, string Reader, string Executable)? Persisted(CliEnvironment env)
+    {
+        // Never `Environment.ProcessPath`, for the reason the repair gives: under `dotnet jason.dll` that is
+        // the muxer.
+        var executable = env.InstallPath ?? SelfExecutable.InstalledImage;
+        if (env.Removes is not { } machine || executable is null || System.IO.Path.GetDirectoryName(executable) is not { Length: > 0 } directory)
+        {
+            return null;
+        }
+
+        PathEntryPlan entry;
+        try
+        {
+            entry = machine.ReadPathEntry(directory);
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return null;
+        }
+
+        if (!entry.Ours)
+        {
+            return null;
+        }
+
+        return OperatingSystem.IsWindows()
+            ? ("this account's Path value", directory, "a shell", executable)
+            : (string.Join(" and ", entry.Profiles), directory, "a login shell", executable);
     }
 
     private static StatusCheck ProviderPlugin(SystemInfoResponse? info) =>

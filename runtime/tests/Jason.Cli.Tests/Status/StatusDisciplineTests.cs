@@ -156,8 +156,11 @@ public partial class StatusDisciplineTests
 
         if (OperatingSystem.IsWindows())
         {
-            Assert.Contains("[Environment]::SetEnvironmentVariable('Path'", repair, StringComparison.Ordinal);
-            Assert.Contains("'User')", repair, StringComparison.Ordinal);
+            // The account's own Path, read unexpanded and written back with its kind; never through the
+            // [Environment] pair that turned an account's REG_EXPAND_SZ Path into fixed strings.
+            Assert.Contains("CurrentUser.CreateSubKey('Environment')", repair, StringComparison.Ordinal);
+            Assert.Contains("'DoNotExpandEnvironmentNames'", repair, StringComparison.Ordinal);
+            Assert.DoesNotContain("SetEnvironmentVariable('Path'", repair, StringComparison.Ordinal);
             Assert.DoesNotContain("export PATH=", repair, StringComparison.Ordinal);
         }
         else

@@ -177,8 +177,9 @@ public class UninstallPathEntryTests
     [Fact]
     public void The_unix_repair_persists_the_line_and_exports_it_for_this_shell() =>
         Assert.Equal(
-            "printf '\\n%s\\n%s\\n' '# added by jason install' 'export PATH=\"/home/a/.local/bin:$PATH\"'"
-            + " >> '/home/a/.profile' && export PATH=\"/home/a/.local/bin:$PATH\"",
+            "(grep -qxF 'export PATH=\"/home/a/.local/bin:$PATH\"' '/home/a/.profile' 2>/dev/null"
+            + " || printf '\\n%s\\n%s\\n' '# added by jason install' 'export PATH=\"/home/a/.local/bin:$PATH\"' >> '/home/a/.profile')"
+            + " && case \":$PATH:\" in *:'/home/a/.local/bin':*) ;; *) export PATH=\"/home/a/.local/bin:$PATH\" ;; esac",
             PathEntry.AppendCommand(Directory, "/home/a/.profile"));
 
     /// <summary>
@@ -222,7 +223,8 @@ public class UninstallPathEntryTests
     /// </summary>
     /// <remarks>
     /// An account whose user <c>Path</c> is empty — a fresh one — would otherwise be left with a leading
-    /// separator, and an empty PATH entry is the current directory.
+    /// separator, and an empty PATH entry is the current directory. What the line does, rather than what it
+    /// says, is run in <see cref="UserPathRegistryTests"/>.
     /// </remarks>
     [Fact]
     public void The_windows_repair_drops_the_empty_entries_the_way_the_installer_does()
@@ -230,12 +232,42 @@ public class UninstallPathEntryTests
         var command = PathEntry.RegistryCommand(@"C:\Users\a\AppData\Local\Programs\jason\");
 
         Assert.Contains("Where-Object { $_ }", command, StringComparison.Ordinal);
-        Assert.Contains("'User')", command, StringComparison.Ordinal);
+        Assert.Contains("CreateSubKey('Environment')", command, StringComparison.Ordinal);
         Assert.Contains("$env:Path +=", command, StringComparison.Ordinal);
 
         // The trailing separator the caller wrote is not part of the entry, exactly as install.ps1 trims it.
         Assert.Contains(@"'C:\Users\a\AppData\Local\Programs\jason'", command, StringComparison.Ordinal);
         Assert.DoesNotContain(@"jason\'", command, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The value is read unexpanded, so an entry is compared the way Windows will read it: a directory the
+    /// Path spells with a variable is still that directory.
+    /// </summary>
+    [Fact]
+    public void An_entry_spelled_with_a_variable_is_the_directory_it_expands_to()
+    {
+        static string Expand(string entry) => entry.Replace("%LOCALAPPDATA%", @"C:\Users\a\AppData\Local", StringComparison.OrdinalIgnoreCase);
+
+        Assert.True(PathEntry.Carries(@"%USERPROFILE%\bin;%LOCALAPPDATA%\Programs\jason", @"C:\Users\a\AppData\Local\Programs\jason", Expand));
+        Assert.Equal(@"%USERPROFILE%\bin", PathEntry.WithoutDirectory(@"%USERPROFILE%\bin;%LOCALAPPDATA%\Programs\jason", @"C:\Users\a\AppData\Local\Programs\jason", Expand));
+    }
+
+    /// <summary>
+    /// And every entry it keeps is kept as it was written, variables unexpanded. Expanding them on the way
+    /// through is what turned an account's whole Path into fixed strings.
+    /// </summary>
+    [Fact]
+    public void The_entries_it_keeps_keep_their_variables()
+    {
+        static string Expand(string entry) => entry.Replace("%USERPROFILE%", @"C:\Users\a", StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(
+            @"%USERPROFILE%\AppData\Local\Microsoft\WindowsApps;%USERPROFILE%\.local\bin",
+            PathEntry.WithoutDirectory(
+                @"%USERPROFILE%\AppData\Local\Microsoft\WindowsApps;%USERPROFILE%\.local\bin;C:\Users\a\AppData\Local\Programs\jason",
+                @"C:\Users\a\AppData\Local\Programs\jason",
+                Expand));
     }
 
     private static string RepositoryRoot()

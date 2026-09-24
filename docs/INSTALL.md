@@ -143,7 +143,7 @@ the runtime's to know.
 | migrations are applied | a route is configured |
 | the plugin registry is alive (zero plugins is alive) | a binding names an account |
 | role skills are present, named after their directories and within the runtime's live cap | a provider CLI **you name** answers |
-| `jason` resolves on PATH, and which file answers | the skill packs are deployed to an agent harness |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | the skill packs are deployed to an agent harness |
 | | autostart is registered |
 
 **It exits 0 or 1 and never 3.** Exit 3 means "I could not ask the runtime", and this is the verb whose whole
@@ -153,7 +153,14 @@ job is to answer when the runtime cannot be asked. The JSON body carries `ready`
 A check reports a fact and, where there is one, the command that repairs it. Most repairs are `jason`
 commands. One is not: putting an executable on a PATH is the shell's own act, so the `path` check prints the
 line your platform needs — the same line this product's own installer writes — which you type rather than
-hand back to `jason`. Read §3's note about login shells before you type it.
+hand back to `jason`. Typed twice, it changes nothing the second time. Read §3's note about login shells
+before you type it.
+
+A shell that started before the installer put Jason on this account's PATH does not see it — and an agent's
+commands usually run in exactly such a shell, because each one inherits the environment the agent itself
+started with. That is an old shell, not a broken installation: when this account's PATH carries the
+directory, `path` is `ok`, says that this shell predates it, and names the full path to type in the meantime.
+A shell started from now on finds `jason` by name.
 
 A fresh installation that has done §2 through §4 but has not yet started the runtime is expected to report
 `runtime`, `migrations`, `plugin_registry` and `role_skills` as failed-or-unknown with `jason runtime start`

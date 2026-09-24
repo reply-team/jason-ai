@@ -11,6 +11,8 @@ using Jason.Cli.Tests.Commands;
 using Jason.Cli.Tests.Process;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Cli.Tests.Uninstall;
+using Jason.Cli.Uninstall;
 
 namespace Jason.Cli.Tests.Status;
 
@@ -288,10 +290,61 @@ public class StatusCommandTests
 
         var directory = Path.GetDirectoryName(Environment.ProcessPath)!;
         Assert.Contains(
-            OperatingSystem.IsWindows() ? "SetEnvironmentVariable" : Jason.Cli.Uninstall.PathEntry.ExportLine(directory),
+            OperatingSystem.IsWindows() ? "CreateSubKey('Environment')" : Jason.Cli.Uninstall.PathEntry.ExportLine(directory),
             check.Fix,
             StringComparison.Ordinal);
         Assert.Contains(directory, check.Fix, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A shell older than the installation is not a broken installation: when this account's PATH carries the
+    /// directory and this shell's does not, the check is ok and says which case it is — and how to reach the
+    /// executable from here.
+    /// </summary>
+    /// <remarks>
+    /// The shell an installer ran in is exactly this case, and it is the one an agent is standing in. The check
+    /// read only the PATH this process inherited, so it said <c>failed</c> there although every new shell
+    /// found <c>jason</c>, and its repair, typed as told, appended the directory to the account's Path a second
+    /// time.
+    /// </remarks>
+    [Fact]
+    public async Task A_path_this_account_carries_and_this_shell_does_not_is_ok_and_says_so()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(dir.Paths.Root, "programs", "jason", OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+        var carried = new RecordingRemover
+        {
+            PathEntry = new PathEntryPlan(Path.GetDirectoryName(installed)!, ["/home/a/.profile"], "carried", Ours: true),
+        };
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, onPath: false, machine: carried, installPath: installed), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Null(check.Fix);
+        Assert.Contains("started before it was put there", check.Fact, StringComparison.Ordinal);
+        Assert.Contains(installed, check.Fact, StringComparison.Ordinal);
+        Assert.Equal([Path.GetDirectoryName(installed)!], carried.Reads);
+        Assert.Empty(carried.Calls);
+    }
+
+    /// <summary>And where the account does not carry it either, it is the failure it always was, with the repair.</summary>
+    [Fact]
+    public async Task A_path_neither_this_shell_nor_this_account_carries_still_fails_with_its_repair()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(dir.Paths.Root, "programs", "jason", OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, onPath: false, machine: new RecordingRemover(), installPath: installed), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Contains(Path.GetDirectoryName(installed)!, check.Fix, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -451,17 +504,21 @@ public class StatusCommandTests
         StringWriter output,
         IProgramRunner? programs = null,
         IHarnessLocator? harnesses = null,
-        bool onPath = true) =>
+        bool onPath = true,
+        IInstallationRemover? machine = null,
+        string? installPath = null) =>
         new(
             output,
             new StringWriter(),
             dir.Paths,
             new FakeHandler(request => Answer(dir, request)),
             Processes: new FakeProcessControl(),
+            InstallPath: installPath,
             Autostart: new RecordingRegistrar(),
             Harnesses: harnesses ?? HarnessLocators.At(Path.Combine(dir.Paths.Root, "no-harness-here")),
             Programs: programs ?? new FakeProgramRunner(_ => new ProgramResult(-1, string.Empty, "not found", false)),
-            SearchPath: onPath ? Installed(dir) : Path.Combine(dir.Paths.Root, "nowhere"));
+            SearchPath: onPath ? Installed(dir) : Path.Combine(dir.Paths.Root, "nowhere"),
+            Removes: machine);
 
     /// <summary>A directory on this test's PATH with a file in it that a bare `jason` would resolve to.</summary>
     private static string Installed(TempPaths dir)

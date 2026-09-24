@@ -102,6 +102,12 @@ public static class PathEntry
     /// out what this puts in. A repair whose line <c>jason uninstall</c> could not find again would leave a
     /// profile carrying Jason after Jason was gone.
     /// </para>
+    /// <para>
+    /// And typed twice, it changes nothing the second time — which is the installer's own rule, the whole line
+    /// looked for before it is appended. The repair appended unconditionally, so an agent that ran it in a
+    /// shell the installer had already served got a second block, and the export half put the directory on
+    /// the running PATH twice.
+    /// </para>
     /// </remarks>
     public static string AppendCommand(string installDirectory, string profile)
     {
@@ -109,26 +115,71 @@ public static class PathEntry
         ArgumentException.ThrowIfNullOrWhiteSpace(profile);
 
         var line = ExportLine(installDirectory);
-        return $"printf '{AppendFormat}' {Word(Marker)} {Word(line)} >> {Word(profile)} && {line}";
+        return $"(grep -qxF {Word(line)} {Word(profile)} 2>/dev/null || printf '{AppendFormat}' {Word(Marker)} {Word(line)} >> {Word(profile)})"
+            + $" && case \":$PATH:\" in *:{Word(installDirectory)}:*) ;; *) {line} ;; esac";
     }
 
     /// <summary>
-    /// The command that puts the directory on this account's PATH on Windows, spelled as <c>install.ps1</c>
-    /// spells it.
+    /// The command that puts the directory on this account's PATH on Windows: <see cref="RegistryStatements"/>,
+    /// on one line, in a script block of its own so that nothing it names is left in the caller's session.
     /// </summary>
-    /// <remarks>
-    /// The installer's rule and not a shorter one that is nearly it: the entries are split and the empty ones
-    /// dropped before the directory is appended, because an account whose user <c>Path</c> is empty — a fresh
-    /// one — would otherwise be left with a leading separator, and an empty PATH entry is the current
-    /// directory. The running session is told as well, for the same reason the Unix half exports.
-    /// </remarks>
-    public static string RegistryCommand(string installDirectory)
+    /// <param name="installDirectory">The directory to put on it.</param>
+    /// <param name="subKey">
+    /// The key under <c>HKEY_CURRENT_USER</c> whose <c>Path</c> it edits. Always <c>Environment</c>, except in
+    /// a test that runs this very text against a key of its own.
+    /// </param>
+    public static string RegistryCommand(string installDirectory, string subKey = UserPathValue.EnvironmentKey)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(installDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(subKey);
 
-        var directory = Literal(installDirectory.TrimEnd('\\'));
-        return "[Environment]::SetEnvironmentVariable('Path', ((@([Environment]::GetEnvironmentVariable('Path','User')"
-            + " -split ';' | Where-Object { $_ }) + " + directory + ") -join ';'), 'User'); $env:Path += ';' + " + directory;
+        return "& { " + string.Join("; ", RegistryStatements(Literal(installDirectory.TrimEnd('\\')), Literal(subKey))) + " }";
+    }
+
+    /// <summary>
+    /// What puts a directory on this account's PATH on Windows, one statement a line: the text
+    /// <c>install.ps1</c> runs and the repair <c>jason status</c> prints, which a test holds to each other.
+    /// </summary>
+    /// <param name="directory">A PowerShell expression for the directory: a literal, or the installer's variable.</param>
+    /// <param name="subKey">A PowerShell expression for the key under <c>HKEY_CURRENT_USER</c>.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>The value is read unexpanded and written back with its own kind.</b> Through
+    /// <c>[Environment]::GetEnvironmentVariable</c> and its setter, every <c>%USERPROFILE%\…</c> entry came
+    /// back expanded and the whole value went back as <c>REG_SZ</c>: one install turned an ordinary account's
+    /// <c>REG_EXPAND_SZ</c> Path into fixed strings. A Path that does not exist yet is created as
+    /// <c>ExpandString</c>, the kind Windows gives one.
+    /// </para>
+    /// <para>
+    /// <b>Nothing is appended that is already there</b>, compared the way Windows will read it — expanded,
+    /// ignoring case and a trailing separator — so a second run, or a repair typed after the installer, changes
+    /// nothing. The empty entries are dropped before the directory is appended, the installer's rule, because
+    /// an empty PATH entry is the current directory.
+    /// </para>
+    /// <para>
+    /// <b>Then running programs are told</b>, which the setter used to do for free: without the broadcast, a
+    /// terminal opened from the Start menu inherits Explorer's environment from logon and does not find
+    /// <c>jason</c> until the person signs out. And the session it is typed in learns it too, once.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> RegistryStatements(string directory, string subKey)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(subKey);
+
+        return
+        [
+            $"$entry = {directory}",
+            $"$key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey({subKey})",
+            "$stored = [string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')",
+            "$kind = if ($key.GetValueNames() -contains 'Path') { $key.GetValueKind('Path') } else { 'ExpandString' }",
+            "if (-not @($stored -split ';' | Where-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\\') -ieq $entry })) { $key.SetValue('Path', ((@($stored -split ';' | Where-Object { $_ }) + $entry) -join ';'), $kind) }",
+            "$key.Dispose()",
+            "if (-not ('Jason.UserEnvironment' -as [type])) { Add-Type -Namespace Jason -Name UserEnvironment -MemberDefinition '[DllImport(\"user32.dll\", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessageTimeout(IntPtr window, uint message, UIntPtr wParam, string lParam, uint flags, uint timeout, out UIntPtr result);' }",
+            "$answer = [UIntPtr]::Zero",
+            "[void][Jason.UserEnvironment]::SendMessageTimeout([IntPtr]0xffff, 0x1a, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$answer)",
+            "if (-not @($env:Path -split ';' | Where-Object { $_.TrimEnd('\\') -ieq $entry })) { $env:Path += ';' + $entry }",
+        ];
     }
 
     /// <summary>
@@ -207,18 +258,24 @@ public static class PathEntry
     /// verbatim and in order, or <b>the same string</b> when it is not in there.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <c>install.ps1</c> writes no marker on Windows, because "the user's PATH lives in the registry, where a
     /// directory is its own mark". So the directory is what is matched — ignoring case, as the file system
     /// does, and ignoring a trailing separator, which is the same directory written differently.
+    /// </para>
+    /// <para>
+    /// The value is the one the registry stores, <c>%VARIABLE%</c>s and all, so each entry is compared as
+    /// Windows will read it — expanded — and every entry that is kept is kept as it was written. Reading it
+    /// expanded is what turned a whole Path's <c>%USERPROFILE%</c> entries into fixed strings on the way back.
+    /// </para>
     /// </remarks>
-    public static string WithoutDirectory(string registryValue, string installDirectory)
+    public static string WithoutDirectory(string registryValue, string installDirectory, Func<string, string>? expand = null)
     {
         ArgumentNullException.ThrowIfNull(registryValue);
         ArgumentException.ThrowIfNullOrWhiteSpace(installDirectory);
 
-        var wanted = Normalise(installDirectory);
         var entries = registryValue.Split(';');
-        var kept = entries.Where(entry => !string.Equals(Normalise(entry), wanted, StringComparison.OrdinalIgnoreCase)).ToList();
+        var kept = entries.Where(entry => !Names(entry, installDirectory, expand)).ToList();
 
         // Every other entry as it was, in the order it was in: this edit is about one directory, and a PATH
         // rewritten "equivalently" is still a PATH somebody did not ask to have rewritten.
@@ -226,14 +283,20 @@ public static class PathEntry
     }
 
     /// <summary>Whether that value carries the directory at all, by the same rule.</summary>
-    public static bool Carries(string registryValue, string installDirectory)
+    public static bool Carries(string registryValue, string installDirectory, Func<string, string>? expand = null)
     {
         ArgumentNullException.ThrowIfNull(registryValue);
         ArgumentException.ThrowIfNullOrWhiteSpace(installDirectory);
 
-        var wanted = Normalise(installDirectory);
-        return registryValue.Split(';').Any(entry => string.Equals(Normalise(entry), wanted, StringComparison.OrdinalIgnoreCase));
+        return registryValue.Split(';').Any(entry => Names(entry, installDirectory, expand));
     }
+
+    /// <summary>Whether one entry, as Windows would read it, is that directory.</summary>
+    private static bool Names(string entry, string installDirectory, Func<string, string>? expand) =>
+        string.Equals(
+            Normalise((expand ?? Environment.ExpandEnvironmentVariables)(entry)),
+            Normalise(installDirectory),
+            StringComparison.OrdinalIgnoreCase);
 
     private static string Normalise(string entry) => entry.Trim().TrimEnd('\\', '/');
 }

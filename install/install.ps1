@@ -178,15 +178,29 @@ function Install-Jason {
     if ($NoModifyPath) { return }
 
     # The user's PATH lives in the registry, where a directory is its own mark: it is added when it is not there
-    # and left alone when it is, so a second run changes nothing. The running session learns it too.
+    # and left alone when it is, so a second run changes nothing.
+    #
+    # Read as the registry stores it and written back with the kind it had. An ordinary account's Path is
+    # REG_EXPAND_SZ and full of %USERPROFILE%, and the [Environment] pair this used to go through expanded every
+    # entry on the way in and wrote the whole value back as REG_SZ. Running programs are told, which that setter
+    # did for free, and so is this session.
+    #
+    # `jason status` prints these same statements, on one line, as its repair for a PATH that does not carry
+    # Jason, and a test holds the two to each other line by line.
     $directory = $InstallDir.TrimEnd('\')
-    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    $entries = @(if ($userPath) { $userPath -split ';' | Where-Object { $_ } })
-    if (@($entries | Where-Object { $_.TrimEnd('\') -ieq $directory }).Count -gt 0) { return }
-
-    [Environment]::SetEnvironmentVariable('Path', (($entries + $directory) -join ';'), 'User')
-    if (@($env:Path -split ';' | Where-Object { $_.TrimEnd('\') -ieq $directory }).Count -eq 0) { $env:Path = "$env:Path;$directory" }
-    Write-Host "Added $directory to your PATH; open a new terminal to run jason from anywhere."
+    & {
+        $entry = $directory
+        $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+        $stored = [string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+        $kind = if ($key.GetValueNames() -contains 'Path') { $key.GetValueKind('Path') } else { 'ExpandString' }
+        if (-not @($stored -split ';' | Where-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -ieq $entry })) { $key.SetValue('Path', ((@($stored -split ';' | Where-Object { $_ }) + $entry) -join ';'), $kind) }
+        $key.Dispose()
+        if (-not ('Jason.UserEnvironment' -as [type])) { Add-Type -Namespace Jason -Name UserEnvironment -MemberDefinition '[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessageTimeout(IntPtr window, uint message, UIntPtr wParam, string lParam, uint flags, uint timeout, out UIntPtr result);' }
+        $answer = [UIntPtr]::Zero
+        [void][Jason.UserEnvironment]::SendMessageTimeout([IntPtr]0xffff, 0x1a, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$answer)
+        if (-not @($env:Path -split ';' | Where-Object { $_.TrimEnd('\') -ieq $entry })) { $env:Path += ';' + $entry }
+    }
+    Write-Host "$directory is on your PATH; open a new terminal to run jason from anywhere."
 }
 
 # Removed again whatever happens: the one-liner is `irm ... | iex`, which runs this text in the session that

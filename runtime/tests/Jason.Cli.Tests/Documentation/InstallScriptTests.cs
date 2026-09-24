@@ -139,10 +139,67 @@ public partial class InstallScriptTests
         var format = Jason.Cli.Uninstall.PathEntry.AppendFormat;
 
         Assert.Contains($"printf '{format}' \"$MARKER\" \"$LINE\"", Code("install.sh"), StringComparison.Ordinal);
-        Assert.StartsWith(
-            $"printf '{format}' ",
-            Jason.Cli.Uninstall.PathEntry.AppendCommand("/opt/jason/bin", "/home/a/.profile"),
-            StringComparison.Ordinal);
+        var repair = Jason.Cli.Uninstall.PathEntry.AppendCommand("/opt/jason/bin", "/home/a/.profile");
+        var looked = repair.IndexOf("grep -qxF ", StringComparison.Ordinal);
+        var appended = repair.IndexOf($"printf '{format}' ", StringComparison.Ordinal);
+
+        // And, like the script, it looks for the whole line before it appends: typed twice, it adds nothing.
+        Assert.True(looked >= 0 && looked < appended, "The repair appends without looking for the line the script would have written.");
+    }
+
+    /// <summary>
+    /// The Unix repair, typed twice, leaves one block in the profile and the directory once on the PATH.
+    /// </summary>
+    /// <remarks>
+    /// Typed after the installer is the ordinary case rather than the unusual one: an agent standing in the
+    /// shell the installer ran in reads <c>path</c> as failed and types what it is told. It appended a second
+    /// block, and the export half put the directory on the running PATH twice.
+    /// </remarks>
+    [Fact]
+    public void The_unix_repair_typed_twice_changes_nothing_the_second_time()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The Unix repair is written for sh, on the platforms that print it.");
+
+        using var tree = new TempTree();
+        var profile = Path.Combine(tree.NewDirectory("home"), ".profile");
+        File.WriteAllText(profile, "# mine\n");
+        var command = Jason.Cli.Uninstall.PathEntry.AppendCommand("/opt/jason bin", profile);
+
+        var (exit, stdout, stderr) = Run(
+            "/bin/sh",
+            new Dictionary<string, string>(),
+            "-c", $"{command}; {command}; echo \"$PATH\" | tr ':' '\\n' | grep -cxF '/opt/jason bin'");
+
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("1", stdout.Trim());
+        Assert.Equal(
+            "# mine\n\n" + Marker + "\n" + Jason.Cli.Uninstall.PathEntry.ExportLine("/opt/jason bin") + "\n",
+            File.ReadAllText(profile));
+    }
+
+    /// <summary>
+    /// <c>install.ps1</c> runs the statements the Windows repair prints: one definition of how Jason goes on a
+    /// Windows PATH, held to the script line by line and in order.
+    /// </summary>
+    /// <remarks>
+    /// Two spellings of it are how the kind of an account's Path was lost in three places at once. What the
+    /// statements do is run, against a registry key of the test's own, in <c>UserPathRegistryTests</c>.
+    /// </remarks>
+    [Fact]
+    public void The_installer_runs_the_statements_the_repair_prints()
+    {
+        var script = Code("install.ps1").Split('\n').Select(line => line.Trim()).ToList();
+
+        var at = -1;
+        foreach (var statement in Jason.Cli.Uninstall.PathEntry.RegistryStatements("$directory", $"'{Jason.Cli.Uninstall.UserPathValue.EnvironmentKey}'"))
+        {
+            var found = script.FindIndex(at + 1, line => line == statement);
+            Assert.True(found > at, $"install.ps1 does not run, in this order: {statement}");
+            at = found;
+        }
+
+        Assert.DoesNotContain(script, line => line.Contains("GetEnvironmentVariable('Path'", StringComparison.Ordinal));
+        Assert.DoesNotContain(script, line => line.Contains("SetEnvironmentVariable('Path'", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -191,7 +248,7 @@ public partial class InstallScriptTests
     public void Install_ps1_adds_the_directory_to_the_user_path_only_when_it_is_not_there()
     {
         var text = Script("install.ps1");
-        Assert.Contains("'User'", text, StringComparison.Ordinal);
+        Assert.Contains("CurrentUser.CreateSubKey('Environment')", text, StringComparison.Ordinal);
         Assert.Contains("-split ';'", text, StringComparison.Ordinal);
         Assert.DoesNotContain("$PROFILE", text, StringComparison.Ordinal);
     }
