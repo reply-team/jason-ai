@@ -119,19 +119,29 @@ public class UserPathRegistryTests
     /// A directory the Path already names through a variable is the same directory, so nothing is appended:
     /// comparing the stored text would have added it a second time.
     /// </summary>
+    /// <remarks>
+    /// Through a variable this test sets itself. It was <c>%TEMP%</c>, on the assumption that the variable
+    /// expands to exactly the prefix <see cref="Path.GetTempPath"/> returns; on the Windows CI runner the two
+    /// spell that directory differently, so the entry and the directory were different text and the repair
+    /// appended it — correctly, by its own rule, which compares what Windows reads rather than resolving
+    /// one spelling of a path into another.
+    /// </remarks>
     [Theory]
     [MemberData(nameof(Shells))]
     public void The_repair_finds_the_directory_behind_a_variable(string shell)
     {
         using var key = ScratchKey.Create();
         var directory = key.NewDirectory();
-        var spelled = "%TEMP%" + directory[Path.GetTempPath().TrimEnd('\\').Length..];
+        var spelled = $"%{SpelledRoot}%\\{Path.GetFileName(directory)}";
         key.SetPath(spelled, RegistryValueKind.ExpandString);
 
-        Run(shell, PathEntry.RegistryCommand(directory, key.SubKey));
+        Run(shell, PathEntry.RegistryCommand(directory, key.SubKey), new() { [SpelledRoot] = Path.GetDirectoryName(directory)! });
 
         Assert.Equal((spelled, RegistryValueKind.ExpandString), key.ReadPath());
     }
+
+    /// <summary>The variable that test spells its directory with, set for the shell it runs and nowhere else.</summary>
+    private const string SpelledRoot = "JASON_TESTS_SPELLED_ROOT";
 
     public static TheoryData<string> Shells()
     {
@@ -148,7 +158,7 @@ public class UserPathRegistryTests
         return shells;
     }
 
-    private static string Run(string shell, string command)
+    private static string Run(string shell, string command, Dictionary<string, string>? environment = null)
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "The repair edits the Windows registry, so it runs where there is one.");
         var executable = shell == "pwsh" ? OnPath("pwsh.exe") : shell;
@@ -165,6 +175,11 @@ public class UserPathRegistryTests
         foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command })
         {
             start.ArgumentList.Add(argument);
+        }
+
+        foreach (var (name, value) in environment ?? [])
+        {
+            start.Environment[name] = value;
         }
 
         using var process = System.Diagnostics.Process.Start(start)!;
