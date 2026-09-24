@@ -513,6 +513,30 @@ jobs:
           printf '# mine\n' | cmp - "$HOME/.bash_profile"
           [ ! -e "$HOME/.local/bin/jason" ]
 
+      - name: Install beside another tool with no SHELL set, and leave the line it is found through
+        shell: bash
+        env:
+          JASON_INSTALL_FEED: ${{ github.workspace }}/feed
+        run: |
+          # ~/.local/bin is where other tools install too, and once the installer's line is there they are found
+          # through it; the uninstall takes the line back only where the directory holds nothing but jason. And no
+          # SHELL at all, as in a container's build step: the installer runs under set -eu and still writes the
+          # profile every other shell reads.
+          export HOME="$RUNNER_TEMP/home-shared"
+          mkdir -p "$HOME/.local/bin"
+          printf '#!/bin/sh\necho another tool\n' > "$HOME/.local/bin/another-tool"
+          chmod 755 "$HOME/.local/bin/another-tool"
+
+          env -u SHELL sh install/install.sh
+          [ "$(grep -c '# added by jason install' "$HOME/.profile")" = "1" ]
+
+          export JASON_DATA_DIR="$HOME/.jason"
+          "$HOME/.local/bin/jason" uninstall > uninstall.json || { cat uninstall.json; exit 1; }
+          [ ! -e "$HOME/.local/bin/jason" ]
+          [ "$("$HOME/.local/bin/another-tool")" = "another tool" ]
+          [ "$(grep -c '# added by jason install' "$HOME/.profile")" = "1" ] || { echo "the uninstall took away the line another tool is found through"; exit 1; }
+          grep -q 'holds more than this installer writes there' uninstall.json || { cat uninstall.json; exit 1; }
+
   install-ps1:
     name: install.ps1 on windows
     needs: [version, build-test-publish]

@@ -174,12 +174,12 @@ esac
 # The line goes behind a marker, and the profile is searched before the line is written, so a second run adds
 # nothing. Into the one file a login shell of this account reads: zsh reads ~/.zprofile; bash reads the first of
 # ~/.bash_profile, ~/.bash_login and ~/.profile that exists, and never ~/.profile when one of the others does;
-# everything else reads ~/.profile. The same rule is `jason status`'s and its repair's, which spell it in C# and
-# hold this function to it word for word.
+# everything else reads ~/.profile, as does an account with no SHELL at all. The same rule is `jason status`'s and
+# its repair's, which spell it in C# and hold this function to it word for word.
 login_profile() {
-    case "${SHELL##*/}" in
-        zsh) echo "$HOME/.zprofile" ;;
-        bash)
+    case "${SHELL:-}" in
+        zsh|*/zsh) echo "$HOME/.zprofile" ;;
+        bash|*/bash)
             for candidate in .bash_profile .bash_login; do
                 if [ -f "$HOME/$candidate" ]; then
                     echo "$HOME/$candidate"

@@ -99,9 +99,13 @@ public static class PathEntry
     public static string LoginProfile(string home, string? shell, Func<string, bool>? exists = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(home);
-        exists ??= File.Exists;
+        exists ??= IsRegularFile;
 
-        switch (Path.GetFileName((shell ?? string.Empty).TrimEnd('/')))
+        // What sh's ${SHELL##*/} is: everything after the last slash, so a trailing one leaves nothing, and no
+        // SHELL at all is the empty name. The name was trimmed of a trailing slash here and not in the script,
+        // so SHELL=/bin/bash/ had the two answer different files.
+        var name = shell is null ? string.Empty : shell[(shell.LastIndexOf('/') + 1)..];
+        switch (name)
         {
             case "zsh":
                 return Path.Combine(home, ".zprofile");
@@ -117,6 +121,35 @@ public static class PathEntry
                 return Path.Combine(home, ".profile");
             default:
                 return Path.Combine(home, ".profile");
+        }
+    }
+
+    /// <summary>
+    /// What sh's <c>[ -f ]</c> answers: a regular file, found through any link — so a link whose target is not there
+    /// is not one.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="File.Exists"/> answers for the link itself, and on macOS and Linux a link whose target is missing
+    /// exists. So a dangling <c>~/.bash_profile</c> was the file a login bash reads, where bash skips it and reads
+    /// <c>~/.profile</c>; and the repair, appending there, created the target — after which bash read that file and
+    /// stopped reading <c>~/.profile</c>, and whatever the account had there with it.
+    /// </remarks>
+    private static bool IsRegularFile(string path)
+    {
+        try
+        {
+            var file = new FileInfo(path);
+            if (!file.Exists)
+            {
+                return false;
+            }
+
+            return file.LinkTarget is null || file.ResolveLinkTarget(returnFinalTarget: true) is FileInfo { Exists: true };
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // A link that goes round in a circle is not a file sh can open either.
+            return false;
         }
     }
 
@@ -180,14 +213,20 @@ public static class PathEntry
 
     /// <summary>
     /// <see cref="LoginProfile"/>, as the function <c>install.sh</c> defines and calls. The script carries this text
-    /// verbatim, and a test runs it in <c>sh</c> against every case of the rule above.
+    /// verbatim, and a test runs it in <c>sh</c>, under the script's own <c>set -eu</c>, against every case of the
+    /// rule above.
     /// </summary>
+    /// <remarks>
+    /// <c>${SHELL:-}</c> rather than <c>${SHELL##*/}</c>, which is the same name matched by pattern: the script runs
+    /// under <c>set -u</c>, and with no <c>SHELL</c> at all — a container's build step — the expansion ended the
+    /// installer before it wrote any profile, where this rule answers <c>~/.profile</c>.
+    /// </remarks>
     public const string LoginProfileFunction =
         """
         login_profile() {
-            case "${SHELL##*/}" in
-                zsh) echo "$HOME/.zprofile" ;;
-                bash)
+            case "${SHELL:-}" in
+                zsh|*/zsh) echo "$HOME/.zprofile" ;;
+                bash|*/bash)
                     for candidate in .bash_profile .bash_login; do
                         if [ -f "$HOME/$candidate" ]; then
                             echo "$HOME/$candidate"
@@ -429,9 +468,17 @@ public static class PathEntry
     /// </summary>
     public static IReadOnlyList<string> InstallerFiles { get; } = ["jason.exe", "jason.previous.exe"];
 
+    /// <summary>What <c>install.sh</c> ever leaves in an install directory: the executable, and nothing else.</summary>
+    public static IReadOnlyList<string> UnixInstallerFiles { get; } = ["jason"];
+
     /// <summary>
     /// Whether a directory holding those entries is Jason's own: nothing in it but what the installer writes.
     /// </summary>
+    /// <param name="entries">What the directory holds.</param>
+    /// <param name="windows">
+    /// Whose installer: <c>install.ps1</c>'s names, compared as Windows compares them, or <c>install.sh</c>'s,
+    /// compared byte for byte.
+    /// </param>
     /// <remarks>
     /// On Windows there is no marker — the Path is in the registry, "where a directory is its own mark" — so being
     /// on the Path is not enough to make an entry Jason's. <c>install.ps1 -InstallDir</c> into a directory already
@@ -518,18 +565,10 @@ public static class PathEntry
         return kept.Count == entries.Length ? registryValue : string.Join(';', kept);
     }
 
-    /// <summary>What <c>install.sh</c> ever leaves in an install directory: the executable, and nothing else.</summary>
-    public static IReadOnlyList<string> UnixInstallerFiles { get; } = ["jason"];
-
     /// <summary>
     /// How the entries of a Path value of that kind are read by Windows: expanded where it is
     /// <c>REG_EXPAND_SZ</c>, and exactly as written where it is <c>REG_SZ</c>, which Windows never expands.
     /// </summary>
-    /// <param name="entries">What the directory holds.</param>
-    /// <param name="windows">
-    /// Whose installer: <c>install.ps1</c>'s names, compared as Windows compares them, or <c>install.sh</c>'s,
-    /// compared byte for byte.
-    /// </param>
     /// <remarks>
     /// Always expanding counted <c>%VARIABLE%\bin</c> in a <c>REG_SZ</c> Path as the directory it would expand to,
     /// so the check said a new shell would find <c>jason</c> through an entry no shell ever resolves.

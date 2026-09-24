@@ -235,7 +235,11 @@ public class UninstallPathEntryTests
         { "/bin/sh", [".bash_profile"], ".profile" },
         { "/bin/dash", [], ".profile" },
         { "", [".bash_profile"], ".profile" },
-        { null, [], ".profile" },
+        { null, [".bash_profile"], ".profile" },
+        { "bash", [".bash_profile"], ".bash_profile" },
+        { "zsh", [], ".zprofile" },
+        { "/opt/notzsh", [], ".profile" },
+        { "/bin/bash/", [".bash_profile"], ".profile" },
     };
 
     /// <summary>
@@ -251,7 +255,15 @@ public class UninstallPathEntryTests
         Assert.Contains("add_to_profile \"$(login_profile)\"", script, StringComparison.Ordinal);
     }
 
-    /// <summary>And the function, run in <c>sh</c> against real files, answers what the C# answers, case by case.</summary>
+    /// <summary>
+    /// And the function, run in <c>sh</c> against real files, answers what the C# answers, case by case — under the
+    /// installer's own <c>set -eu</c>, and with no <c>SHELL</c> at all for the row that has none.
+    /// </summary>
+    /// <remarks>
+    /// The null row used to set <c>SHELL</c> to the empty string and run without <c>set -eu</c>, so it tested a case
+    /// the installer never meets: with <c>SHELL</c> unset — a container's build step — <c>${SHELL##*/}</c> under
+    /// <c>set -u</c> ended the installer before it wrote a profile, while this rule answered <c>~/.profile</c>.
+    /// </remarks>
     [Theory]
     [MemberData(nameof(LoginProfiles))]
     public void The_installers_function_answers_what_the_rule_answers(string? shell, string[] existing, string expected)
@@ -265,6 +277,43 @@ public class UninstallPathEntryTests
             File.WriteAllText(Path.Combine(home, name), "# mine\n");
         }
 
+        var (said, error) = LoginProfileInSh(home, shell);
+
+        Assert.True(Path.Combine(home, expected) == said, $"sh answered '{said}' ({error}), not '{Path.Combine(home, expected)}'.");
+        Assert.Equal(PathEntry.LoginProfile(home, shell), said);
+    }
+
+    /// <summary>
+    /// A <c>~/.bash_profile</c> that is a link to nothing is not a file bash reads — <c>[ -f ]</c> says so — and it is
+    /// not the one this rule names either: the repair would append through the link, create its target, and bash
+    /// would then stop reading <c>~/.profile</c>.
+    /// </summary>
+    [Fact]
+    public void A_bash_profile_that_links_to_nothing_is_not_the_one_bash_reads()
+    {
+        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        var home = tree.NewDirectory("home");
+        File.WriteAllText(Path.Combine(home, ".profile"), "# mine\n");
+        try
+        {
+            File.CreateSymbolicLink(Path.Combine(home, ".bash_profile"), Path.Combine(home, "nowhere", ".bash_profile"));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Assert.Skip($"this account may not create a symbolic link here: {exception.Message}");
+        }
+
+        Assert.Equal(Path.Combine(home, ".profile"), PathEntry.LoginProfile(home, "/bin/bash"));
+
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Equal(Path.Combine(home, ".profile"), LoginProfileInSh(home, "/bin/bash").Said);
+        }
+    }
+
+    /// <summary>What <c>install.sh</c>'s <c>login_profile</c> prints under the script's own <c>set -eu</c>.</summary>
+    private static (string Said, string Error) LoginProfileInSh(string home, string? shell)
+    {
         var start = new System.Diagnostics.ProcessStartInfo("/bin/sh")
         {
             RedirectStandardOutput = true,
@@ -272,16 +321,22 @@ public class UninstallPathEntryTests
             UseShellExecute = false,
         };
         start.ArgumentList.Add("-c");
-        start.ArgumentList.Add(PathEntry.LoginProfileFunction + "\nlogin_profile");
+        start.ArgumentList.Add("set -eu\n" + PathEntry.LoginProfileFunction + "\nlogin_profile");
         start.Environment["HOME"] = home;
-        start.Environment["SHELL"] = shell ?? string.Empty;
+        if (shell is null)
+        {
+            start.Environment.Remove("SHELL");
+        }
+        else
+        {
+            start.Environment["SHELL"] = shell;
+        }
 
         using var process = System.Diagnostics.Process.Start(start)!;
+        var error = process.StandardError.ReadToEndAsync();
         var said = process.StandardOutput.ReadToEnd().Trim();
         process.WaitForExit();
-
-        Assert.Equal(Path.Combine(home, expected), said);
-        Assert.Equal(PathEntry.LoginProfile(home, shell), said);
+        return (said, error.GetAwaiter().GetResult().Trim());
     }
 
     /// <summary>

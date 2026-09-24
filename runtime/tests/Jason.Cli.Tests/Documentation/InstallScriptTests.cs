@@ -397,6 +397,22 @@ public partial class InstallScriptTests
         Assert.True(ci.IndexOf("printf '# mine\\n' | cmp - \"$HOME/.bash_profile\"", step, StringComparison.Ordinal) > step, "the step no longer holds the uninstall to the profile's own bytes.");
     }
 
+    /// <summary>
+    /// And CI holds the uninstall to the directory rule on a real machine: installed into a <c>~/.local/bin</c> that
+    /// another tool is in, the line it is found through stays — and the installer, run with no <c>SHELL</c> under
+    /// its own <c>set -eu</c>, writes the profile rather than dying before it.
+    /// </summary>
+    [Fact]
+    public void Ci_holds_the_uninstall_to_a_directory_other_tools_share_and_the_installer_to_no_shell()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
+        var step = ci.IndexOf("name: Install beside another tool with no SHELL set, and leave the line it is found through", StringComparison.Ordinal);
+
+        Assert.True(step >= 0, "ci.yml no longer installs into a directory another tool shares.");
+        Assert.True(ci.IndexOf("env -u SHELL sh install/install.sh", step, StringComparison.Ordinal) > step, "the step no longer runs the installer with no SHELL.");
+        Assert.True(ci.IndexOf("the uninstall took away the line another tool is found through", step, StringComparison.Ordinal) > step, "the step no longer asserts the line stays.");
+    }
+
     /// <summary>The real proof: CI runs each script against the archives the same run packaged, from a local directory.</summary>
     [Fact]
     public void Ci_runs_both_scripts_against_the_archives_it_built()
