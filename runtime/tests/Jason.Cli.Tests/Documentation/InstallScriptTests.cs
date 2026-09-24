@@ -352,6 +352,25 @@ public partial class InstallScriptTests
             $"ci.yml uploads '{name}', which the install jobs' `jason-*` download would merge over a platform archive."));
     }
 
+    /// <summary>
+    /// And CI holds the Windows installer to the kind of the account's Path on a real machine: the one proof of
+    /// that installer's PATH edit which is not against a registry key a test made for itself.
+    /// </summary>
+    /// <remarks>
+    /// The agent run on a fresh account cannot give it: the prompt's one-liner fetches the installer from
+    /// <c>main</c>, so a branch that changes the installer is installed there with the old one.
+    /// </remarks>
+    [Fact]
+    public void Ci_holds_the_installer_to_the_kind_of_the_accounts_path()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
+        var job = ci.IndexOf("name: install.ps1 on windows", StringComparison.Ordinal);
+
+        Assert.True(job >= 0, "ci.yml no longer runs install.ps1 on Windows.");
+        Assert.True(ci.IndexOf("'DoNotExpandEnvironmentNames'", job, StringComparison.Ordinal) > job, "the install.ps1 job no longer reads the account's Path as the registry holds it.");
+        Assert.True(ci.IndexOf("the install turned the user Path from ExpandString", job, StringComparison.Ordinal) > job, "the install.ps1 job no longer asserts the kind of the account's Path.");
+    }
+
     /// <summary>The real proof: CI runs each script against the archives the same run packaged, from a local directory.</summary>
     [Fact]
     public void Ci_runs_both_scripts_against_the_archives_it_built()

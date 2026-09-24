@@ -507,6 +507,16 @@ jobs:
           Remove-Item Env:\JASON_DATA_DIR
           if ((UserPathEntries).Count -ne 0) { throw "-NoModifyPath edited the user PATH" }
 
+          # The account's Path as an ordinary account has it: REG_EXPAND_SZ, with an entry spelled through a variable.
+          # Through [Environment]'s pair the script expanded every such entry and wrote the whole value back as
+          # REG_SZ, which a fresh account's install turned out to do. This runner's own value is whatever the image
+          # left, so the job gives it the shape to be kept rather than hoping for one; everything already in it stays.
+          $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+          $kept = '%USERPROFILE%\jason-ci-kept'
+          $storedBefore = ((@(([string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')) -split ';' | Where-Object { $_ })) + $kept) -join ';'
+          $key.SetValue('Path', $storedBefore, [Microsoft.Win32.RegistryValueKind]::ExpandString)
+          $key.Dispose()
+
           # The same version again: nothing is downloaded, the script says so, and this time the PATH gains the directory.
           # 6>&1 because the script talks to the person in front of it with Write-Host, which goes to the
           # information stream: an assignment on its own captures nothing, and the check below would be reading
@@ -515,6 +525,16 @@ jobs:
           Write-Host $again
           if ($again -notmatch 'already installed') { throw "the second run did not say the version was already installed" }
           if ((UserPathEntries).Count -ne 1) { throw "the user PATH does not hold the directory exactly once" }
+
+          # And it kept the value's kind and every entry as it was written, variables unexpanded.
+          $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
+          $kindAfter = $key.GetValueKind('Path')
+          $storedAfter = [string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+          $key.Dispose()
+          Write-Host "user Path before: ExpandString  $storedBefore"
+          Write-Host "user Path after:  $kindAfter  $storedAfter"
+          if ($kindAfter -ne [Microsoft.Win32.RegistryValueKind]::ExpandString) { throw "the install turned the user Path from ExpandString into $kindAfter" }
+          foreach ($entry in @($storedBefore -split ';')) { if (@($storedAfter -split ';') -cnotcontains $entry) { throw "the install rewrote the user Path entry '$entry'" } }
 
           # A third run adds no second entry.
           ./install/install.ps1
