@@ -44,6 +44,16 @@ public interface IRuntimeProcessControl
     IProcessHandle Launch(JasonPaths paths, IReadOnlyList<string> executable);
 
     bool IsRunning(int pid);
+
+    /// <summary>
+    /// When the process with that id started, or null where this account may not ask — or it has gone.
+    /// </summary>
+    /// <remarks>
+    /// A pid names a process only while that process lives. After a restart the id a descriptor recorded belongs
+    /// to whatever the machine started next under it, and "is that pid running" answers yes about a stranger; the
+    /// start time is what tells the two apart.
+    /// </remarks>
+    DateTimeOffset? StartTime(int pid);
 }
 
 /// <inheritdoc />
@@ -155,6 +165,23 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         {
             // It is there, and this prompt may not ask it anything. See the remarks above.
             return true;
+        }
+    }
+
+    public DateTimeOffset? StartTime(int pid)
+    {
+        try
+        {
+            using var process = OperatingSystemProcess.GetProcessById(pid);
+
+            // Through universal time, which keeps the hidden mark a local time carries in the hour a clock goes back
+            // and so says the one instant it was.
+            return new DateTimeOffset(process.StartTime.ToUniversalTime(), TimeSpan.Zero);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or Win32Exception or NotSupportedException)
+        {
+            // Gone, or in a session this prompt may not open -- the logon registration's runtime, on Windows.
+            return null;
         }
     }
 

@@ -61,11 +61,13 @@ public static class UninstallReader
         var executable = env.InstallPath ?? SelfExecutable.InstalledImage;
 
         var directory = executable is null ? null : Path.GetDirectoryName(executable);
+        var descriptor = new DescriptorReader(env.Paths).Read();
 
         return new UninstallPlan(
             autostart.Registered,
             autostart.ArtifactPath,
-            new DescriptorReader(env.Paths).Read()?.Pid,
+            descriptor?.Pid,
+            descriptor?.StartedAt,
             roots,
             unknown,
             directory is { Length: > 0 } ? env.Removes?.ReadPathEntry(directory) : null,

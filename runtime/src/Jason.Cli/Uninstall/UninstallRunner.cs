@@ -648,15 +648,22 @@ public static class UninstallRunner
             return null;
         }
 
+        // A process is named for ending only once it is shown to be the runtime. One whose start could not be read
+        // may be a stranger with the runtime's old id, and ending it on this verb's word could end anything.
         return new RemovalRefused(
             CliErrors.RuntimeStillRunning,
-            (left.Pid is { } pid
-                ? string.Create(CultureInfo.InvariantCulture, $"The runtime, process {pid}, did not stop, ")
-                : "The runtime did not stop, ")
+            (left.Pid, left.Identified) switch
+            {
+                ({ } pid, true) => string.Create(CultureInfo.InvariantCulture, $"The runtime, process {pid}, did not stop, "),
+                ({ } pid, false) => string.Create(CultureInfo.InvariantCulture, $"The runtime may still be running — process {pid}, which its descriptor names, is — "),
+                _ => "The runtime did not stop, ",
+            }
             + "so nothing further was removed and this installation is as it was — "
             + "except the logon registration, which had already been taken away and which "
-            + "'jason runtime autostart enable' puts back. Stop the runtime with 'jason runtime stop' — or, where "
-            + "it does not answer that either, end that process — and run this again. "
+            + "'jason runtime autostart enable' puts back. "
+            + (left.Identified
+                ? "Stop the runtime with 'jason runtime stop' — or, where it does not answer that either, end that process — and run this again. "
+                : "Stop the runtime with 'jason runtime stop' and run this again. ")
             + (left.Note is { } note ? note + " " : string.Empty)
             + $"It said: {said.ToString().Trim()}");
     }
@@ -666,17 +673,25 @@ public static class UninstallRunner
     /// the one the plan saw, or one a descriptor on disk names now — or nothing.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// A descriptor whose process has gone is not a runtime — a crash, or a restart of the machine under it,
     /// leaves one behind — and refusing on it would hold up every uninstall on a machine whose runtime once
     /// died, saying it "did not stop" when nothing was running. A descriptor that cannot be read names nothing
     /// that can be asked about, so it is refused on rather than guessed past.
+    /// </para>
+    /// <para>
+    /// <b>Nor is a process that merely has its id.</b> After a restart the id a stale descriptor recorded belongs
+    /// to whatever the machine started next under it, so "that pid is running" was answered yes about a stranger,
+    /// the verb refused, and it told the operator to end that process. The descriptor carries the moment the
+    /// runtime started; a process that started after it is somebody else's.
+    /// </para>
     /// </remarks>
     private static Runtime Left(CliEnvironment env, UninstallPlan plan)
     {
         var processes = env.Processes ?? RuntimeProcessControl.Instance;
-        if (plan.RuntimePid is { } planned && processes.IsRunning(planned))
+        if (plan.RuntimePid is { } planned && Identify(processes, planned, plan.RuntimeStartedAt, env.Paths.DescriptorFile) is { Running: true } running)
         {
-            return new Runtime(true, planned, null);
+            return running;
         }
 
         if (!File.Exists(env.Paths.DescriptorFile))
@@ -690,17 +705,63 @@ public static class UninstallRunner
                 true,
                 null,
                 $"The descriptor at '{env.Paths.DescriptorFile}' cannot be read, so whether a runtime is running "
-                + "cannot be told; where none is, delete that file.");
+                + "cannot be told; where none is, delete that file.",
+                Identified: false);
         }
 
-        return processes.IsRunning(descriptor.Pid)
-            ? new Runtime(true, descriptor.Pid, null)
+        return Identify(processes, descriptor.Pid, descriptor.StartedAt, env.Paths.DescriptorFile);
+    }
+
+    /// <summary>
+    /// How far after the moment a runtime records as its start its own process may be read to have started, and
+    /// still be it.
+    /// </summary>
+    /// <remarks>
+    /// The process always starts first — the runtime takes the time once it is running — so this is not a window
+    /// for the order to be wrong in. It covers how coarsely a platform reports a process's start: Linux derives it
+    /// from the time since boot, to the clock tick.
+    /// </remarks>
+    private static readonly TimeSpan StartAllowance = TimeSpan.FromSeconds(5);
+
+    /// <summary>Whether the process with that id is the runtime a descriptor describes — started when it said it did.</summary>
+    private static Runtime Identify(IRuntimeProcessControl processes, int pid, DateTimeOffset? startedAt, string descriptor)
+    {
+        if (!processes.IsRunning(pid))
+        {
+            return new Runtime(false, null, $"The runtime was not running: the descriptor at '{descriptor}' was left by one whose process has gone.");
+        }
+
+        if (startedAt is not { } recorded || processes.StartTime(pid) is not { } started)
+        {
+            // Running, and not shown to be the runtime or not to be: refused on, as the runtime it may be, and never
+            // named as a process to end.
+            return processes.IsRunning(pid)
+                ? new Runtime(
+                    true,
+                    pid,
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"When process {pid} started cannot be read from here, so whether it is that runtime cannot be told; "
+                        + $"if no runtime is running, it is another program that now has the runtime's old id, and deleting "
+                        + $"the descriptor at '{descriptor}' lets this run."),
+                    Identified: false)
+                : new Runtime(false, null, $"The runtime was not running: the descriptor at '{descriptor}' was left by one whose process has gone.");
+        }
+
+        return started <= recorded + StartAllowance
+            ? new Runtime(true, pid, null)
             : new Runtime(
                 false,
                 null,
-                $"The runtime was not running: the descriptor at '{env.Paths.DescriptorFile}' was left by one whose process has gone.");
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The runtime was not running: the descriptor at '{descriptor}' was left by one that has gone, and process "
+                    + $"{pid}, which has its id now, started after it did — another program, left alone."));
     }
 
-    /// <summary>Whether a runtime is still there after the question, which process, and anything worth saying.</summary>
-    private sealed record Runtime(bool Running, int? Pid, string? Note);
+    /// <summary>
+    /// Whether a runtime is still there after the question, which process, anything worth saying, and whether that
+    /// process is shown to be the runtime rather than only to have its id.
+    /// </summary>
+    private sealed record Runtime(bool Running, int? Pid, string? Note, bool Identified = true);
 }

@@ -31,6 +31,10 @@ public sealed record UnknownRoot(string Root, string Reason);
 /// <param name="AutostartRegistered">Whether this account has a logon registration to take away.</param>
 /// <param name="AutostartArtifact">Where the registration's document lives, for a person who wants to look.</param>
 /// <param name="RuntimePid">The runtime this installation has running, or null where none is.</param>
+/// <param name="RuntimeStartedAt">
+/// When that runtime says it started, from the same descriptor: what tells it apart from a later process that has
+/// its id.
+/// </param>
 /// <param name="Roots">The roots a deployment recorded, each with the paths its record names.</param>
 /// <param name="Unknown">The roots nothing may guess at.</param>
 /// <param name="PathEntry">How this account's PATH carries the install directory, or null where nothing does.</param>
@@ -51,6 +55,7 @@ public sealed record UninstallPlan(
     bool AutostartRegistered,
     string? AutostartArtifact,
     int? RuntimePid,
+    DateTimeOffset? RuntimeStartedAt,
     IReadOnlyList<RootRemoval> Roots,
     IReadOnlyList<UnknownRoot> Unknown,
     PathEntryPlan? PathEntry,

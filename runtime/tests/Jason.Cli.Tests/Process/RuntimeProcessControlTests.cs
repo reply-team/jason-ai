@@ -41,6 +41,26 @@ public class RuntimeProcessControlTests
     public void A_pid_nobody_owns_does_not_count_as_running() =>
         Assert.False(RuntimeProcessControl.Instance.IsRunning(int.MaxValue));
 
+    /// <summary>
+    /// A process's start is read as the instant it was, in universal time: this process's own is before now, and
+    /// is what the operating system says it is.
+    /// </summary>
+    [Fact]
+    public void This_process_started_before_now_and_says_when()
+    {
+        var started = RuntimeProcessControl.Instance.StartTime(System.Environment.ProcessId);
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
+
+        Assert.NotNull(started);
+        Assert.Equal(TimeSpan.Zero, started.Value.Offset);
+        Assert.InRange(started.Value, DateTimeOffset.UtcNow - TimeSpan.FromDays(1), DateTimeOffset.UtcNow);
+        Assert.InRange(started.Value - new DateTimeOffset(self.StartTime.ToUniversalTime(), TimeSpan.Zero), TimeSpan.FromSeconds(-1), TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public void A_pid_nobody_owns_has_no_start() =>
+        Assert.Null(RuntimeProcessControl.Instance.StartTime(int.MaxValue));
+
     [Fact]
     public void Launching_without_a_data_directory_is_a_programming_error() =>
         Assert.Throws<ArgumentNullException>(() => RuntimeProcessControl.Instance.Launch(null!, SelfExecutable.Command));

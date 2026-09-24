@@ -160,6 +160,91 @@ public class UninstallOrderTests
     }
 
     /// <summary>
+    /// A pid names a process only while that process lives. After a restart the pid a stale descriptor recorded
+    /// belongs to whatever the machine started next under it, and "is that pid running" says yes about a stranger:
+    /// the verb refused with <c>runtime_still_running</c> and told the operator to end it. A process that started
+    /// after the runtime recorded its own start is not that runtime, and the verb carries on as it does for a
+    /// process that has gone.
+    /// </summary>
+    [Fact]
+    public async Task A_live_process_that_started_after_the_runtime_it_is_taken_for_does_not_hold_the_verb_up()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_REUSED"));
+        var log = new StepLog();
+        var processes = new FakeProcessControl();
+        processes.StartTimes[RuntimeVerbs.Pid] = DateTimeOffset.UnixEpoch.AddHours(1);
+
+        var (exit, output, _) = await RunAsync(dir, log, DoesNotAnswer("refused", log), processes: processes, everything: true);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.DoesNotContain(CliErrors.RuntimeStillRunning, output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("started after", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("path.remove", log.Steps);
+    }
+
+    /// <summary>But a process that started before the runtime recorded its start is that runtime, and still ends the verb.</summary>
+    [Fact]
+    public async Task A_live_process_that_started_before_the_runtime_recorded_its_start_still_ends_the_verb()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_SILENT"));
+        var log = new StepLog();
+        var processes = new FakeProcessControl();
+        processes.StartTimes[RuntimeVerbs.Pid] = DateTimeOffset.UnixEpoch.AddSeconds(-1);
+
+        var (exit, output, remover) = await RunAsync(dir, log, DoesNotAnswer("refused", log), processes: processes, everything: true);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains(CliErrors.RuntimeStillRunning, output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("end that process", output.ToString(), StringComparison.Ordinal);
+        Assert.Empty(remover.Calls);
+    }
+
+    /// <summary>
+    /// And one this prompt may not ask when it started is neither shown to be the runtime nor shown not to be: the
+    /// verb refuses, because it may be, and does not tell the operator to end a process nobody has shown is it.
+    /// </summary>
+    [Fact]
+    public async Task A_live_process_whose_start_cannot_be_read_ends_the_verb_and_is_not_named_for_ending()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_HIDDEN"));
+        var log = new StepLog();
+        var processes = new FakeProcessControl();
+        processes.StartTimes[RuntimeVerbs.Pid] = null;
+
+        var (exit, output, remover) = await RunAsync(dir, log, DoesNotAnswer("refused", log), processes: processes, everything: true);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains(CliErrors.RuntimeStillRunning, output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("cannot be told", output.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("end that process", output.ToString(), StringComparison.Ordinal);
+        Assert.Empty(remover.Calls);
+    }
+
+    /// <summary>
+    /// A descriptor that cannot be read names nothing that can be asked about, so the verb refuses rather than guess
+    /// past it — and names the file, which is what the operator deletes where no runtime is running.
+    /// </summary>
+    [Fact]
+    public async Task A_descriptor_that_cannot_be_read_ends_the_verb()
+    {
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(Path.GetDirectoryName(dir.Paths.DescriptorFile)!);
+        File.WriteAllText(dir.Paths.DescriptorFile, "{ not a descriptor");
+        var log = new StepLog();
+
+        var (exit, output, remover) = await RunAsync(dir, log, RuntimeVerbs.NeverCalled(), everything: true);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains(CliErrors.RuntimeStillRunning, output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("cannot be read", output.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("end that process", output.ToString(), StringComparison.Ordinal);
+        Assert.Empty(remover.Calls);
+    }
+
+    /// <summary>
     /// The whole order, with something to do at every step, so that a step moved — the receipts after the PATH,
     /// the data directory before the executable — arrives in this diff rather than silently.
     /// </summary>

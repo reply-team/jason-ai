@@ -49,5 +49,13 @@ public sealed class FakeProcessControl : IRuntimeProcessControl
         return OnLaunch?.Invoke(paths) ?? new FakeProcessHandle(4242);
     }
 
+    /// <summary>
+    /// When each pid's process started, where a test says; null is a process this account may not ask. A pid with
+    /// no entry started long ago, before any runtime it could be taken for.
+    /// </summary>
+    public Dictionary<int, DateTimeOffset?> StartTimes { get; } = [];
+
     public bool IsRunning(int pid) => RunningPids.Contains(pid);
+
+    public DateTimeOffset? StartTime(int pid) => StartTimes.TryGetValue(pid, out var started) ? started : DateTimeOffset.MinValue;
 }
