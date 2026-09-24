@@ -92,19 +92,29 @@ standing in it.
 
 ## 4. Teach it
 
-Jason's skills are what teach an agent the job — one pack for operating the installation, one for the SDR
-profession, and one directory per launched role that the runtime reads at every launch. **A runtime with no
-role skills launches every role untaught**, so this step is not optional.
+Jason's skills are what teach an agent the job — one directory per launched role, which the runtime reads at
+every launch, and two packs for your own agent: one for operating the installation, one for the SDR
+profession. **A runtime with no role skills launches every role untaught**, so the first half is not optional.
 
-Look first. Nothing is written, and the target roots are printed:
+Look first. Nothing is written, and the one target root is printed — the runtime's own, inside its data
+directory:
 
 ```sh
-jason skills install --dry-run --source .
+jason skills install --roles-only --dry-run --source .
 ```
 
 Then do it:
 
 ```sh
+jason skills install --roles-only --source .
+```
+
+That is everything a runtime needs, and it writes nowhere else. The other two packs go into your agent's own
+configuration — for Claude Code, `~/.claude/skills` — which is yours to allow rather than Jason's to assume.
+Without `--roles-only` the same verb deploys all three, again printing every root before it writes any:
+
+```sh
+jason skills install --dry-run --source .
 jason skills install --source .
 ```
 
@@ -120,6 +130,8 @@ Later, to move an existing deployment to a newer set:
 ```sh
 jason skills update
 ```
+
+It updates only where a deployment was made: an installation taught with `--roles-only` stays that way.
 
 [`skills/README.md`](../skills/README.md) is the contract both verbs keep, including the record each root
 carries — which is what §7 removes by.

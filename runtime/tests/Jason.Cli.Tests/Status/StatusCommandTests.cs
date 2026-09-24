@@ -120,7 +120,11 @@ public class StatusCommandTests
         Assert.Equal(CheckState.Failed, skills.State);
         Assert.Contains("1 of 2 seeded roles have no skill", skills.Fact, StringComparison.Ordinal);
         Assert.Contains("planner", skills.Fact, StringComparison.Ordinal);
-        Assert.Equal("jason skills install", skills.Fix);
+
+        // The role half alone. A required check whose one repair also wrote the interactive and business packs
+        // into the agent's own configuration could not be repaired by somebody who would not allow that — an
+        // agent told to change nothing outside the install and data directories stopped here, twice.
+        Assert.Equal("jason skills install --roles-only", skills.Fix);
     }
 
     /// <summary>
@@ -147,8 +151,9 @@ public class StatusCommandTests
 
         // A plain install, not --force. Overwriting is not what repairs a directory missing its SKILL.md,
         // and --force overwrites every edited file in every root of the plan — so printing it here would
-        // cost an operator unrelated work for a problem that never needed it.
-        Assert.Equal("jason skills install", skills.Fix);
+        // cost an operator unrelated work for a problem that never needed it. And the role half alone, for
+        // the reason the check above gives.
+        Assert.Equal("jason skills install --roles-only", skills.Fix);
     }
 
     /// <summary>

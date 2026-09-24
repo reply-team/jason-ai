@@ -21,6 +21,7 @@ text and they are meant to stay that way.
 ```sh
 jason skills install --dry-run
 jason skills install
+jason skills install --roles-only
 jason skills update
 ```
 
@@ -59,6 +60,11 @@ These are the rules both verbs keep:
   directory, where the runtime reads them at every launch to teach a role its job; the interactive
   and business packs go to the agent harnesses a person actually uses. The first is not optional: a
   runtime with no role skills launches every role untaught.
+- **So the first can be deployed on its own.** `--roles-only` writes into the runtime's own directory and
+  into no agent harness, and it is what `jason status` prints as the repair for `role_skills`. The harness
+  half is somebody's own agent configuration, and a required check whose only repair also wrote there could
+  not be repaired by anybody who would not allow that. `update` carries a harness only where its record
+  says a deployment was made, so an installation taught with `--roles-only` stays that way.
 - **Nothing is written until the whole tree is known to be deliverable.** The runtime refuses to launch
   a role whose skill names itself differently from its directory, or whose tree is over
   `Roles:MaxSkillBytes`. A deployment that wrote such a tree would turn a role with no skill — which

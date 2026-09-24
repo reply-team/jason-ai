@@ -66,15 +66,28 @@ internal static class StatusChecks
 
         public const string EnableAutostart = "jason runtime autostart enable";
 
+        /// <summary>The harness half as well as the role half: the repair for an agent harness nothing was deployed to.</summary>
         public const string Install = "jason skills install";
 
         /// <summary>
-        /// Deliberately the same as <see cref="Install"/>. Overwriting is not what repairs a role whose
+        /// The role skills alone, into the runtime's own directory — the repair for the required check, which
+        /// must never cost the optional half.
+        /// </summary>
+        /// <remarks>
+        /// It was <see cref="Install"/>, which also writes the interactive and business packs into the agent's
+        /// own configuration. So an operator who would not let Jason write there — an agent told to change
+        /// nothing outside the install and data directories, which is what the README's prompt tells it —
+        /// could not repair a required check without breaking that rule, and stopped rather than reach ready.
+        /// </remarks>
+        public const string InstallRoles = "jason skills install --roles-only";
+
+        /// <summary>
+        /// Deliberately the same as <see cref="InstallRoles"/>. Overwriting is not what repairs a role whose
         /// directory is missing a SKILL.md or is over the cap -- a plain install replaces it -- and --force
         /// overwrites every edited file in every root of the plan, so printing it as the repair for any role
         /// problem would cost an operator unrelated work for a problem that did not need it.
         /// </summary>
-        public const string Reinstall = Install;
+        public const string Reinstall = InstallRoles;
 
         /// <summary>
         /// The repair that is not a <c>jason</c> command: the line putting this executable's directory on
@@ -258,7 +271,7 @@ internal static class StatusChecks
                 string.Create(
                     CultureInfo.InvariantCulture,
                     $"{untaught.Count} of {seeded.Count} seeded roles have no skill, so they would launch untaught: {string.Join(", ", untaught)}."),
-                Repair.Install);
+                Repair.InstallRoles);
         }
 
         var stranger = deployed.Except(seeded).Order(StringComparer.Ordinal).ToList();

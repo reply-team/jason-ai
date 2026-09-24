@@ -127,11 +127,14 @@ Install Jason on this machine and tell me whether it can start work.
 
 Follow docs/INSTALL.md in this repository, in order, from section 2.
 
-1. Try the install one-liner for this platform. If it answers 404 there is no published release
-   yet. That is a fact about the repository and not a failure of anything, so build from source
-   as section 3 describes rather than stopping to report it.
-2. Teach it before you judge it. Run this first and read what it says it would write:
-   jason skills install --dry-run --source .
+1. Run the install one-liner for this platform. If the one-liner itself answers 404, there is no
+   published release yet. That is a fact about the repository and not a failure of anything, so
+   build from source as section 3 describes rather than stopping to report it. If it installs, or
+   says Jason is already installed, go on to step 2: a 404 from anything else you look up is not
+   that answer.
+2. Teach the runtime its roles before you judge it. Run this first and read where it says it
+   would write:
+   jason skills install --roles-only --dry-run --source .
    Then run the same line without --dry-run. A runtime with no role skills launches every role
    untaught, so this is not an optional step.
 3. Ask whether it can work:
@@ -145,13 +148,22 @@ Follow docs/INSTALL.md in this repository, in order, from section 2.
 5. Stop when ready is true, or when a required check still fails after you have run its repair.
    Report which checks failed, exactly what you ran, and what it changed.
 
-Do not install anything else. Do not edit files outside the install directory and the data
-directory. Do not leave a long-running process behind other than through jason runtime start.
+Change nothing on this machine except what these steps write: the executable and its install
+directory; this account's PATH entry for it; Jason's data directory, which is where the role
+skills go; the system's temporary directory, which the installer downloads into and the
+executable unpacks its native libraries into when it first runs; and, only if you build from
+source, the checkout's own build output and what the .NET SDK writes into this home directory
+as it builds — its package cache, and a first-run setup that may add its own tools directory to
+this account's PATH. Nothing in your own agent's configuration: jason skills install without
+--roles-only would put skills there too, and that is mine to decide, so ask.
+Do not install anything else. Do not leave a long-running process behind other than through
+jason runtime start.
 ```
 
 ### Can this installation start work?
 
 ```sh
+jason skills install --roles-only
 jason skills install --dry-run
 jason skills install
 jason skills update
@@ -159,9 +171,11 @@ jason status
 jason status --human
 ```
 
-`jason skills install` puts the role skills where the runtime reads them at every launch and the interactive
-and business packs where your agent harness looks, printing the target roots before it writes anything. It
-refuses a deployment the runtime would later refuse to launch, rather than writing one.
+`jason skills install --roles-only` puts the role skills where the runtime reads them at every launch — the
+half a runtime cannot work without — and writes nowhere else. `jason skills install` does that and puts the
+interactive and business packs where your agent harness looks as well, which is its configuration and yours
+to allow. Both print the target roots before they write anything, and both refuse a deployment the runtime
+would later refuse to launch, rather than writing one.
 [`skills/README.md`](skills/README.md) is the contract both verbs keep.
 
 One question, answered check by check. It is the only command here that is not one-to-one with an API

@@ -134,6 +134,33 @@ public class SkillsUpdateTests
         Assert.Equal(ExitCodes.Usage, refused.Exit);
     }
 
+    /// <summary>
+    /// An update carries a harness only where a record says a deployment was made there, so an installation
+    /// made with <c>--roles-only</c> stays one.
+    /// </summary>
+    /// <remarks>
+    /// Before, it wrote the interactive and business packs into every harness it could find: the first update
+    /// after a roles-only install put into the agent's configuration exactly what the operator had declined.
+    /// </remarks>
+    [Fact]
+    public async Task An_update_after_a_roles_only_install_writes_into_no_harness()
+    {
+        using var dir = new TempPaths();
+        var source = Source(dir);
+        var install = await RunAsync(dir, ["skills", "install", "--source", source, "--roles-only"]);
+        Assert.Equal(ExitCodes.Success, install.Exit);
+
+        Change(source, "roles/researcher", "a newer body");
+        var update = await RunAsync(dir, ["skills", "update", "--root", Harness(dir)]);
+
+        Assert.Equal(ExitCodes.Success, update.Exit);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Harness(dir)));
+        Assert.Contains(
+            "a newer body",
+            await File.ReadAllTextAsync(Path.Combine(dir.Paths.RoleSkillsDirectory, "researcher", "SKILL.md"), Ct),
+            StringComparison.Ordinal);
+    }
+
     private static string Harness(TempPaths dir) =>
         Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
 

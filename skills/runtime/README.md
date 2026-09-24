@@ -49,7 +49,12 @@ jason skills update --pack jason-runtime-skills
 
 That deploys the five interactive skills into the agent harnesses it finds, and the nine role skills below
 into the runtime's own data directory, where the runtime reads them at every launch. The second destination is
-not optional: a runtime with no role skills launches every role untaught.
+not optional: a runtime with no role skills launches every role untaught — which is why it can be deployed on
+its own, into nothing but the runtime's directory:
+
+```sh
+jason skills install --roles-only
+```
 [`skills/README.md`](../README.md) is the contract the verb keeps.
 
 A person without this build installs an interactive skill by copying its directory into wherever their own
