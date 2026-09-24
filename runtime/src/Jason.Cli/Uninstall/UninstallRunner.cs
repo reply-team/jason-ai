@@ -237,7 +237,9 @@ public static class UninstallRunner
             kept.Add(
                 $"Kept '{plan.DataDirectory}' and {string.Join(", ", others.Select(entry => $"'{Path.GetFileName(entry)}'"))} in it: "
                 + "Jason does not keep anything by that name in a data directory, so it is not Jason's to remove. "
-                + (own.Count > 0 ? "Everything Jason keeps there is gone." : "Nothing Jason keeps there was in it."));
+                + (own.Count == 0 ? "Nothing Jason keeps there was in it."
+                    : failed ? "Not everything Jason keeps there could be removed; what is left is named among the problems."
+                    : "Everything Jason keeps there is gone."));
             return;
         }
 
@@ -363,6 +365,7 @@ public static class UninstallRunner
             return;
         }
 
+        string? previousLeft = null;
         if (plan.PreviousExecutable is { } previous)
         {
             try
@@ -372,6 +375,7 @@ public static class UninstallRunner
             }
             catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
             {
+                previousLeft = previous;
                 problems.Add(
                     $"'{previous}' could not be removed: {exception.Message} It is the executable an earlier install "
                     + "replaced while it was running, and something may be running it still.");
@@ -384,7 +388,11 @@ public static class UninstallRunner
             {
                 if (!env.Removes!.RemoveDirectoryIfEmpty(directory) && Directory.Exists(directory))
                 {
-                    kept.Add($"Kept '{directory}': something is in it that this installer did not write.");
+                    // Not "something this installer did not write" where what is left is the installer's own file,
+                    // named among the problems just above.
+                    kept.Add(previousLeft is null
+                        ? $"Kept '{directory}': something is in it that this installer did not write."
+                        : $"Kept '{directory}': '{previousLeft}' is still in it.");
                 }
             }
             catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
@@ -482,9 +490,11 @@ public static class UninstallRunner
         }
         catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
         {
+            // Not "nothing else was left behind": this is step 4, and the executable and the data directory have not
+            // been tried yet. Whatever they come to is listed on its own.
             problems.Add(
                 $"'{entry.Directory}' could not be taken off the PATH: {exception.Message} "
-                + "Remove that line yourself; nothing else was left behind.");
+                + "Take it off by hand; the steps after this one still ran, and each is listed.");
         }
     }
 

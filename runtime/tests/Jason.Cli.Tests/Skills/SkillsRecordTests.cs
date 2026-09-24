@@ -77,7 +77,6 @@ public class SkillsRecordTests
         Assert.Contains(tree.Paths.Root, refusal.Message, StringComparison.Ordinal);
     }
 
-    /// <summary>And so is one this build has no way to understand: a newer writer left it.</summary>
     /// <summary>
     /// A record whose shape is there and whose contents are not — a list that is null, a pack with no files, a
     /// file with no path — is unreadable, and says which root, rather than throwing a NullReferenceException that
@@ -136,6 +135,7 @@ public class SkillsRecordTests
         Assert.Equal(2, Assert.Single(SkillsRecord.Read(tree.Paths.Root)!.Packs).Files.Count);
     }
 
+    /// <summary>And a record this build has no way to understand is unreadable too: a newer writer left it.</summary>
     [Fact]
     public void A_record_from_a_later_version_is_not_guessed_at()
     {

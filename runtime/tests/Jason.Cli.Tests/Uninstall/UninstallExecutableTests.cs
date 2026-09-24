@@ -453,6 +453,76 @@ public class UninstallExecutableTests
     }
 
     /// <summary>
+    /// And where it could not be removed, the directory it keeps is not said to hold "something this installer did
+    /// not write": the installer wrote it, and the report says it is what is still there.
+    /// </summary>
+    [Fact]
+    public async Task A_previous_executable_that_could_not_be_removed_is_named_as_what_keeps_the_directory()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var previous = Path.Combine(Path.GetDirectoryName(executable)!, UninstallReader.PreviousExecutableName);
+        File.WriteAllText(previous, "the one before");
+        var remover = new RecordingRemover { ReallyRemoves = true };
+        remover.Locked.Add(previous);
+
+        var (exit, report) = await RunAsync(dir, executable, remover);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.DoesNotContain(report.Kept, line => line.Contains("did not write", StringComparison.Ordinal));
+        Assert.Contains(report.Kept, line => line.Contains(Path.GetDirectoryName(executable)!, StringComparison.Ordinal)
+            && line.Contains(UninstallReader.PreviousExecutableName, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A PATH entry that could not be taken off is a problem, and the report does not add that nothing else was left
+    /// behind: it said so at step 4, before the executable and the data directory had been tried at all.
+    /// </summary>
+    [Fact]
+    public async Task A_path_entry_that_could_not_be_taken_off_does_not_speak_for_the_steps_after_it()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var directory = Path.GetDirectoryName(executable)!;
+        var remover = new RecordingRemover { ReallyRemoves = true, PathEntry = new PathEntryPlan(directory, [], "the value", Ours: true) };
+        remover.Locked.Add(directory);
+
+        var (exit, report) = await RunAsync(dir, executable, remover);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var problem = Assert.Single(report.Problems, line => line.Contains("could not be taken off the PATH", StringComparison.Ordinal));
+        Assert.DoesNotContain("nothing else was left behind", problem, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And the move goes where that rule says: with the temporary directory on another volume, beside the install
+    /// directory. The rule is a function of its own and every test of it stayed green while the move did not call
+    /// it — this is the test of the move calling it.
+    /// </summary>
+    [Fact]
+    public void A_running_image_is_moved_beside_its_directory_when_the_temporary_directory_is_on_another_volume()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Skip("Drive letters are how two volumes are told apart here; elsewhere the running image is deleted, not moved.");
+        }
+
+        var other = "ZYXWVUTSRQPONMLKJIHGFED".Select(letter => $"{letter}:\\").FirstOrDefault(root => !Directory.Exists(root));
+        if (other is null)
+        {
+            Assert.Skip("Every drive letter is taken on this machine, so there is no volume to be another one.");
+        }
+
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+
+        var outcome = InstallationRemovers.MoveAside(executable, Path.Combine(other, "Temp"), (from, to) => File.Move(from, to), _ => 4242);
+
+        Assert.StartsWith(Path.Combine(dir.Paths.Root, ".jason-uninstall-"), outcome.MovedTo, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(outcome.MovedTo));
+    }
+
+    /// <summary>
     /// The plan names the executable and says nothing about "no executable" beside it. That line sat under the
     /// unpacked libraries' branch, so a build that had unpacked none printed both.
     /// </summary>

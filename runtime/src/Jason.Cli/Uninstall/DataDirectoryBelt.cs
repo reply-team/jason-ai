@@ -13,9 +13,15 @@ namespace Jason.Cli.Uninstall;
 /// </para>
 /// <para>
 /// So a directory that holds any of these is refused: a file-system root, this account's profile, the system's
-/// temporary directory, and the installation itself. Refused rather than narrowed, and said before the plan is
-/// acted on, because the one thing a person who typed this needs to hear is that the directory they named is
-/// not a data directory.
+/// temporary directory, and the installation itself — and a repository's working tree, whose <c>plugins</c> and
+/// <c>skills</c> share names with what Jason keeps. Refused rather than narrowed, and said before the plan is
+/// acted on, because the one thing a person who typed this needs to hear is that the directory they named is not
+/// a data directory.
+/// </para>
+/// <para>
+/// <b>Compared as the file system finds them, not as they are spelled.</b> The comparison was of strings, so the
+/// profile through a junction, or behind the <c>\\?\</c> prefix that turns off Windows' path parsing, was another
+/// directory and got past.
 /// </para>
 /// </remarks>
 public static class DataDirectoryBelt
@@ -45,6 +51,11 @@ public static class DataDirectoryBelt
             }
         }
 
+        if (Path.Exists(Path.Combine(data, ".git")))
+        {
+            return $"'{dataDirectory}' holds '.git': it is a repository's working tree, not a data directory.";
+        }
+
         return null;
     }
 
@@ -55,11 +66,58 @@ public static class DataDirectoryBelt
 
     private static string Trimmed(string path)
     {
-        var full = Path.GetFullPath(path);
+        var full = Resolved(path, hops: 0);
         var root = Path.GetPathRoot(full) ?? string.Empty;
 
         // A root keeps its separator -- `C:\` and `/` -- and everything else loses a trailing one, so two spellings
         // of one directory compare equal.
         return full.Length > root.Length ? full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) : full;
+    }
+
+    /// <summary>
+    /// A path as the file system finds it: full, without the prefix that only turns off Windows' parsing, and with
+    /// every link along it followed, however deep.
+    /// </summary>
+    private static string Resolved(string path, int hops)
+    {
+        var full = Path.GetFullPath(path);
+        if (OperatingSystem.IsWindows())
+        {
+            if (full.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
+            {
+                full = @"\\" + full[8..];
+            }
+            else if (full.StartsWith(@"\\?\", StringComparison.Ordinal) || full.StartsWith(@"\\.\", StringComparison.Ordinal))
+            {
+                full = full[4..];
+            }
+        }
+
+        var root = Path.GetPathRoot(full) ?? string.Empty;
+        var current = root;
+        foreach (var part in full[root.Length..].Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, part);
+
+            // A chain of links that goes round is not followed for ever; a directory it cannot read is taken as
+            // spelled, which is what the comparison did before it followed anything.
+            if (hops >= 40)
+            {
+                continue;
+            }
+
+            try
+            {
+                if (new DirectoryInfo(current).LinkTarget is not null && new DirectoryInfo(current).ResolveLinkTarget(returnFinalTarget: true) is { } target)
+                {
+                    current = Resolved(target.FullName, hops + 1);
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        return current;
     }
 }

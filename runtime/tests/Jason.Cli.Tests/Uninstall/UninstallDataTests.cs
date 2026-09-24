@@ -282,6 +282,32 @@ public class UninstallDataTests
     }
 
     /// <summary>
+    /// And where one of Jason's own entries could not be removed, the line about what was kept does not say that
+    /// everything Jason keeps there is gone: the entry is a problem, and the verb exits 1 for it.
+    /// </summary>
+    [Fact]
+    public async Task A_purge_that_could_not_remove_an_entry_does_not_say_everything_is_gone()
+    {
+        using var dir = new TempPaths();
+        Plant(dir);
+        File.WriteAllText(Path.Combine(dir.Paths.Root, "my-notes.txt"), "mine");
+        var remover = new RecordingRemover { ReallyRemoves = true };
+        remover.Locked.Add(dir.Paths.ConfigDirectory);
+        var output = new StringWriter();
+
+        var exit = await UninstallCommand.RunAsync(
+            Machine(dir, output, remover),
+            new UninstallOptions(Human: false, DryRun: false, PurgeData: true, Yes: true, Force: false),
+            Ct);
+
+        var report = JsonSerializer.Deserialize<UninstallReport>(output.ToString(), JasonJson.Options)!;
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains(report.Problems, line => line.Contains(dir.Paths.ConfigDirectory, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(report.Kept, line => line.Contains("is gone", StringComparison.Ordinal));
+        Assert.Contains(report.Kept, line => line.Contains("my-notes.txt", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// A directory that is not a data directory is refused before anything is read, let alone removed: here, one
     /// holding the installation. The rest of the belt's cases are <c>DataDirectoryBeltTests</c>.
     /// </summary>
