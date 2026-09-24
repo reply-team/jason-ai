@@ -190,12 +190,17 @@ public partial class InstallScriptTests
     {
         var script = Code("install.ps1").Split('\n').Select(line => line.Trim()).ToList();
 
-        var at = -1;
-        foreach (var statement in Jason.Cli.Uninstall.PathEntry.RegistryStatements("$directory", $"'{Jason.Cli.Uninstall.UserPathValue.EnvironmentKey}'"))
+        // One block, line after line, rather than each statement somewhere after the one before it: a line
+        // between two of them — an edit to the value, a second SetValue — would have kept an order-only match
+        // green while the installer ran something the repair does not print.
+        var statements = Jason.Cli.Uninstall.PathEntry.RegistryStatements("$directory", $"'{Jason.Cli.Uninstall.UserPathValue.EnvironmentKey}'");
+        var at = script.IndexOf(statements[0]);
+        Assert.True(at >= 0, $"install.ps1 does not run: {statements[0]}");
+        for (var index = 1; index < statements.Count; index++)
         {
-            var found = script.FindIndex(at + 1, line => line == statement);
-            Assert.True(found > at, $"install.ps1 does not run, in this order: {statement}");
-            at = found;
+            Assert.True(
+                at + index < script.Count && script[at + index] == statements[index],
+                $"install.ps1 does not run, on the line after the one before it: {statements[index]}");
         }
 
         Assert.DoesNotContain(script, line => line.Contains("GetEnvironmentVariable('Path'", StringComparison.Ordinal));

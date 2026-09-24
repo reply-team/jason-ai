@@ -232,21 +232,28 @@ public partial class StatusDisciplineTests
                 + "this guard does not understand. Teach it that shape before writing one here, or this guard "
                 + "is reading the file wrongly and reporting nothing.");
 
+            var read = 0;
             foreach (var (line, fix) in Constructed(source))
             {
-                sites++;
+                read++;
+
+                // One member of the class, and nothing after it: `Repair.Install + " --force"` began with
+                // "Repair." too, and is a repair spelled here rather than there.
                 Assert.True(
-                    fix is "null" || fix.StartsWith("Repair.", StringComparison.Ordinal),
+                    fix is "null" || System.Text.RegularExpressions.Regex.IsMatch(fix, @"^Repair\.[A-Za-z]+(\(env\))?$"),
                     $"{name}:{line} gives a check the repair `{fix}`. Every repair is composed in the Repair "
                     + "class, because that class is what the guards above read; a repair spelled anywhere "
                     + "else is one nothing types and nothing checks.");
             }
+
+            // Exactly as many as the file constructs, rather than a floor: a reader that matched nothing reports
+            // no failures, and eleven read out of forty-two passed a floor of eleven as well as forty-two did.
+            var written = source.Split("new StatusCheck(").Length - 1;
+            Assert.True(read == written, $"'{name}' constructs {written} checks and this guard read {read} of them.");
+            sites += read;
         }
 
-        // A floor against the failure this repository has met before: a reader that matches nothing reports
-        // no failures, and that is not evidence of absence. This verb composes eleven checks, so it builds at
-        // least eleven of these.
-        Assert.True(sites >= 11, $"Only {sites} checks were read out of the sources, which is fewer than this verb composes.");
+        Assert.True(sites > 0, "No check was read out of the sources at all.");
     }
 
     /// <summary>

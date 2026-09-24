@@ -48,6 +48,11 @@ public class DeploymentRaceTests
         var thrown = new ConcurrentBag<Exception>();
         using var stop = new CancellationTokenSource();
 
+        // The loop has launched once before the deployment begins, so what it collects is never nothing: the
+        // assertions over its reports below would otherwise hold of an empty list on a machine slow enough that
+        // the deployment finished before the loop's first launch.
+        var launched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
         var launching = Task.Run(
             async () =>
             {
@@ -68,6 +73,8 @@ public class DeploymentRaceTests
                         thrown.Add(exception);
                     }
 
+                    launched.TrySetResult();
+
                     // A gap, because real launches are seconds apart. A loop with none is not the scenario: it
                     // is a permanent lock, under which the installer is meant to fail and does.
                     await Task.Delay(2, CancellationToken.None);
@@ -75,10 +82,16 @@ public class DeploymentRaceTests
             },
             CancellationToken.None);
 
+        await launched.Task.WaitAsync(Ct);
+
         var exit = await CliApp.RunAsync(
             ["skills", "install", "--source", source, "--root", harness],
             Machine(data, harness),
             Ct);
+
+        // What the loop collected, counted before the settled launch below joins the list: `NotEmpty` over the
+        // list after that join held whatever the loop did.
+        var collected = reports.Count;
 
         // One launch after the deployment has landed, before the loop is stopped.
         //
@@ -104,7 +117,7 @@ public class DeploymentRaceTests
 
         // Side two: every report the launching loop collected.
         Assert.Empty(thrown);
-        Assert.NotEmpty(reports);
+        Assert.True(collected > 0, "the launching loop collected nothing, so nothing here raced the deployment.");
         foreach (var report in reports)
         {
             Assert.True(
