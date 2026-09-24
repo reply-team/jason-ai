@@ -325,6 +325,33 @@ public partial class InstallScriptTests
         Assert.True(ci.IndexOf("uninstall --purge-data --yes", step, StringComparison.Ordinal) > step, "the uninstall step does not purge, which is the shape that failed.");
     }
 
+    /// <summary>
+    /// No artifact in CI but the three platform ones is named so that the install jobs' download takes it.
+    /// </summary>
+    /// <remarks>
+    /// They download <c>jason-*</c> and merge what they get into one directory. The update job's second version
+    /// was uploaded as <c>jason-&lt;rid&gt;-next</c>, carrying an archive with the same file name as the real
+    /// one; when it landed before an install job's download — which it did once the platform jobs grew a step —
+    /// its archive went over the real one beside the other artifact's fragment, and the feed refused itself.
+    /// </remarks>
+    [Fact]
+    public void Only_the_platform_artifacts_are_named_like_the_ones_the_install_jobs_download()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
+        Assert.Contains("pattern: jason-*", ci, StringComparison.Ordinal);
+
+        var named = ci.Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith("artifact:", StringComparison.Ordinal))
+            .Select(line => line["artifact:".Length..].Trim())
+            .ToList();
+
+        Assert.NotEmpty(named);
+        Assert.All(named, name => Assert.False(
+            name.StartsWith("jason-", StringComparison.Ordinal),
+            $"ci.yml uploads '{name}', which the install jobs' `jason-*` download would merge over a platform archive."));
+    }
+
     /// <summary>The real proof: CI runs each script against the archives the same run packaged, from a local directory.</summary>
     [Fact]
     public void Ci_runs_both_scripts_against_the_archives_it_built()

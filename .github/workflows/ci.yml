@@ -210,14 +210,17 @@ jobs:
 
       # Packaged by the action a release packages with, so what this job installs is an archive of the same
       # shape, with the same licence in it and the same digest written beside it. Only the artifact's name
-      # differs: two uploads in one run cannot share one.
+      # differs: two uploads in one run cannot share one. And it does not begin with `jason-`: the install
+      # jobs download `jason-*` and merge what they get into one directory, so an upload named like the
+      # platform ones that landed before their download put this version's archive over the real one — the
+      # file names inside are the same — beside the other artifact's fragment, and the feed refused itself.
       - name: Package the next version
         id: package
         uses: ./.github/actions/package
         with:
           rid: ${{ matrix.rid }}
           version: ${{ steps.next.outputs.next }}
-          artifact: jason-${{ matrix.rid }}-next
+          artifact: next-jason-${{ matrix.rid }}
 
       - name: Serve that version from a feed on this machine
         shell: pwsh
