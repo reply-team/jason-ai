@@ -12,6 +12,12 @@ concurrency:
 permissions:
   contents: read
 
+# Neither the .NET SDK nor PowerShell reports telemetry from this workflow: nothing here but the checkout, the
+# toolchain and the package restore reaches the network.
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  POWERSHELL_TELEMETRY_OPTOUT: '1'
+
 jobs:
   version:
     name: The version this tree carries
@@ -143,7 +149,12 @@ jobs:
           $plan = (& $exe uninstall --dry-run | Out-String | ConvertFrom-Json).plan
           if ($LASTEXITCODE -ne 0) { throw "the dry run exited $LASTEXITCODE" }
           if (-not (Same $plan.executable $exe)) { throw "the plan names '$($plan.executable)', not the file it runs as ('$exe')" }
-          if ($plan.path_entry.ours) { throw "a copy in a scratch directory was planned as this runner's PATH entry" }
+          # The logon registration and the agent harnesses are this account's, not this scratch data directory's,
+          # so the uninstall below would take them too. On a fresh runner there are none; anywhere else - a
+          # developer rehearsing this step on their own machine - it refuses before anything is removed.
+          if ($plan.autostart_registered -or @($plan.roots).Count -gt 0 -or $plan.path_entry.ours) {
+              throw "this account has a logon registration, recorded skills or a PATH entry of its own; this step uninstalls a scratch copy only, and refuses here"
+          }
           Write-Host "unpacked libraries: $($plan.extracted_libraries)"
 
           $said = & $exe uninstall --purge-data --yes 2>&1

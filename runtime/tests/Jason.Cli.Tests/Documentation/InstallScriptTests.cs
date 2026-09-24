@@ -323,6 +323,11 @@ public partial class InstallScriptTests
         Assert.True(step >= 0, "ci.yml no longer uninstalls the published executable.");
         Assert.True(ci.IndexOf("steps.package.outputs.executable", step, StringComparison.Ordinal) > step, "the uninstall step does not run the executable the job packaged.");
         Assert.True(ci.IndexOf("uninstall --purge-data --yes", step, StringComparison.Ordinal) > step, "the uninstall step does not purge, which is the shape that failed.");
+
+        // And it refuses, before anything is removed, wherever the account has something of its own: the logon
+        // registration and the harnesses are the account's, and this step is rehearsed on developer machines.
+        var guard = ci.IndexOf("$plan.autostart_registered -or @($plan.roots).Count -gt 0 -or $plan.path_entry.ours", step, StringComparison.Ordinal);
+        Assert.True(guard > step && guard < ci.IndexOf("uninstall --purge-data --yes", step, StringComparison.Ordinal), "the uninstall step no longer refuses on an account with a registration, recorded skills or a PATH entry.");
     }
 
     /// <summary>
@@ -546,6 +551,9 @@ public partial class InstallScriptTests
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
+        // PowerShell reports telemetry over the network unless told not to, and no test in this repository
+        // reaches the network.
+        start.Environment["POWERSHELL_TELEMETRY_OPTOUT"] = "1";
         foreach (var argument in arguments)
         {
             start.ArgumentList.Add(argument);

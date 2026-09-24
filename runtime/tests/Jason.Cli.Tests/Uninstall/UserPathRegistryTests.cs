@@ -185,6 +185,52 @@ public class UserPathRegistryTests
         Assert.Equal((spelled, RegistryValueKind.ExpandString), key.ReadPath());
     }
 
+    /// <summary>
+    /// But in a <c>REG_SZ</c> Path a variable names nothing: Windows expands the variables of a
+    /// <c>REG_EXPAND_SZ</c> value alone. The repair counted such an entry as the directory and appended nothing, so
+    /// no new shell found <c>jason</c>; it now appends, and keeps the value's kind.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Shells))]
+    public void In_a_plain_string_path_a_variable_names_nothing_and_the_repair_appends(string shell)
+    {
+        using var key = ScratchKey.Create();
+        var directory = key.NewDirectory();
+        var spelled = $"%{SpelledRoot}%\\{Path.GetFileName(directory)}";
+        key.SetPath(spelled, RegistryValueKind.String);
+
+        Run(shell, PathEntry.RegistryCommand(directory, key.SubKey), new() { [SpelledRoot] = Path.GetDirectoryName(directory)! });
+
+        Assert.Equal((spelled + ";" + directory, RegistryValueKind.String), key.ReadPath());
+    }
+
+    /// <summary>And the read the path check and the uninstall share says the same: such an entry is not the directory.</summary>
+    [Fact]
+    public void In_a_plain_string_path_a_variable_is_not_the_directory_it_would_expand_to()
+    {
+        using var key = ScratchKey.Create();
+        var directory = key.Installed();
+        var variable = "JASON_TESTS_N4_" + Guid.NewGuid().ToString("N");
+        Environment.SetEnvironmentVariable(variable, Path.GetDirectoryName(directory));
+        try
+        {
+            key.SetPath($"%{variable}%\\{Path.GetFileName(directory)}", RegistryValueKind.String);
+            var plain = InstallationRemovers.ForThisMachine(key.SubKey).ReadPathEntry(directory);
+
+            key.SetPath($"%{variable}%\\{Path.GetFileName(directory)}", RegistryValueKind.ExpandString);
+            var expandable = InstallationRemovers.ForThisMachine(key.SubKey).ReadPathEntry(directory);
+
+            Assert.Null(plain.Persisted);
+            Assert.False(plain.Ours);
+            Assert.NotNull(expandable.Persisted);
+            Assert.True(expandable.Ours);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variable, null);
+        }
+    }
+
     /// <summary>The variable that test spells its directory with, set for the shell it runs and nowhere else.</summary>
     private const string SpelledRoot = "JASON_TESTS_SPELLED_ROOT";
 
@@ -226,6 +272,10 @@ public class UserPathRegistryTests
         {
             start.Environment[name] = value;
         }
+
+        // PowerShell reports telemetry over the network unless told not to, and no test in this repository
+        // reaches the network.
+        start.Environment["POWERSHELL_TELEMETRY_OPTOUT"] = "1";
 
         using var process = System.Diagnostics.Process.Start(start)!;
         var stdout = process.StandardOutput.ReadToEndAsync();

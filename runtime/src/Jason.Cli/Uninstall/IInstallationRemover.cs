@@ -460,8 +460,9 @@ public static class InstallationRemovers
                 // As the registry stores it, %VARIABLE%s and all. This is the value the plan prints and the
                 // one the removal edits, so reading it expanded here is where a whole Path's entries turned
                 // into fixed strings.
-                var value = new UserPathValue(pathKey).Read()?.Raw ?? string.Empty;
-                var carried = PathEntry.Carries(value, directory);
+                var stored = new UserPathValue(pathKey).Read();
+                var value = stored?.Raw ?? string.Empty;
+                var carried = PathEntry.Carries(value, directory, PathEntry.ReadAs(stored?.Kind != Microsoft.Win32.RegistryValueKind.String));
 
                 // No marker here: install.ps1 puts the directory on this account's own Path value, "where a
                 // directory is its own mark". Being there used to be what made it ours, and it is not: the
@@ -518,7 +519,7 @@ public static class InstallationRemovers
                 var userPath = new UserPathValue(pathKey);
                 var stored = userPath.Read();
                 var value = stored?.Raw ?? string.Empty;
-                var without = PathEntry.WithoutDirectory(value, plan.Directory);
+                var without = PathEntry.WithoutDirectory(value, plan.Directory, PathEntry.ReadAs(stored?.Kind != Microsoft.Win32.RegistryValueKind.String));
                 if (stored is null || ReferenceEquals(without, value))
                 {
                     return new PathEntryOutcome(false, [], "That directory is not on this account's PATH.");

@@ -253,9 +253,10 @@ public static class PathEntry
     /// <c>ExpandString</c>, the kind Windows gives one.
     /// </para>
     /// <para>
-    /// <b>Nothing is appended that is already there</b>, compared the way Windows will read it — expanded,
-    /// ignoring case and a trailing separator — so a second run, or a repair typed after the installer, changes
-    /// nothing. The empty entries are dropped before the directory is appended, the installer's rule, because
+    /// <b>Nothing is appended that is already there</b>, compared the way Windows will read it — ignoring case
+    /// and a trailing separator, and expanded only where the value is <c>REG_EXPAND_SZ</c>: Windows expands the
+    /// variables of that kind alone, so a <c>%VARIABLE%</c> entry in a <c>REG_SZ</c> Path names no directory at
+    /// all — so a second run, or a repair typed after the installer, changes nothing. The empty entries are dropped before the directory is appended, the installer's rule, because
     /// an empty PATH entry is the current directory.
     /// </para>
     /// <para>
@@ -275,7 +276,7 @@ public static class PathEntry
             $"$key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey({subKey})",
             "$stored = [string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')",
             "$kind = if ($key.GetValueNames() -contains 'Path') { $key.GetValueKind('Path') } else { 'ExpandString' }",
-            "if (-not @($stored -split ';' | Where-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\\') -ieq $entry })) { $key.SetValue('Path', ((@($stored -split ';' | Where-Object { $_ }) + $entry) -join ';'), $kind) }",
+            "if (-not @($stored -split ';' | Where-Object { $(if ($kind -eq 'ExpandString') { [Environment]::ExpandEnvironmentVariables($_) } else { $_ }).TrimEnd('\\') -ieq $entry })) { $key.SetValue('Path', ((@($stored -split ';' | Where-Object { $_ }) + $entry) -join ';'), $kind) }",
             "$key.Dispose()",
             "if (-not ('Jason.UserEnvironment' -as [type])) { Add-Type -Namespace Jason -Name UserEnvironment -MemberDefinition '[DllImport(\"user32.dll\", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessageTimeout(IntPtr window, uint message, UIntPtr wParam, string lParam, uint flags, uint timeout, out UIntPtr result);' }",
             "$answer = [UIntPtr]::Zero",
@@ -457,6 +458,17 @@ public static class PathEntry
         // rewritten "equivalently" is still a PATH somebody did not ask to have rewritten.
         return kept.Count == entries.Length ? registryValue : string.Join(';', kept);
     }
+
+    /// <summary>
+    /// How the entries of a Path value of that kind are read by Windows: expanded where it is
+    /// <c>REG_EXPAND_SZ</c>, and exactly as written where it is <c>REG_SZ</c>, which Windows never expands.
+    /// </summary>
+    /// <remarks>
+    /// Always expanding counted <c>%VARIABLE%\bin</c> in a <c>REG_SZ</c> Path as the directory it would expand to,
+    /// so the check said a new shell would find <c>jason</c> through an entry no shell ever resolves.
+    /// </remarks>
+    public static Func<string, string> ReadAs(bool expandable) =>
+        expandable ? Environment.ExpandEnvironmentVariables : static entry => entry;
 
     /// <summary>Whether that value carries the directory at all, by the same rule.</summary>
     public static bool Carries(string registryValue, string installDirectory, Func<string, string>? expand = null)
