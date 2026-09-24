@@ -77,8 +77,15 @@ public static class CliApp
         }
         catch (Exception unexpected)
         {
-            // What the handler we switched off used to do: report, do not print a stack trace at anyone.
+            // What the handler we switched off used to do: report, do not print a stack trace at anyone. But
+            // every cause, not only the outermost: a type initializer that fails says only that it failed, and
+            // what failed is in the exception it wraps.
             env.Error.WriteLine(unexpected.Message);
+            foreach (var cause in Causes.Within(unexpected))
+            {
+                env.Error.WriteLine($"  because {cause}");
+            }
+
             return ExitCodes.ApiError;
         }
     }

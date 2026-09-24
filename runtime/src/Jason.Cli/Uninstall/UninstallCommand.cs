@@ -39,15 +39,17 @@ public static class UninstallCommand
           2. the runtime — and if it will not stop, nothing further is removed
           3. every skill a deployment recorded, by the paths its record names
           4. the PATH entry, only where this installer wrote it
-          5. the executable and its install directory
+          5. the executable, its install directory, and the native libraries it unpacked on first run
 
-        Kept unless --purge-data:  the data directory. --purge-data prints what will be deleted and asks,
-                                   unless --yes.
+        Kept unless --purge-data:  the data directory. --purge-data prints what will be deleted and asks
+                                   before anything at all is removed, unless --yes.
         Never touched:             anything there is no receipt for, any other skill in an agent harness,
                                    any provider CLI, any model credential, anything outside the paths it names.
 
-        Exit codes: 0 when everything it set out to remove is gone, 1 when it understood and refused — a
-        runtime that would not stop, a record it cannot read, a file it could not remove.
+        Exit codes: 0 when everything it set out to remove is gone. 1 when it did not get there: it refused
+        (a runtime that would not stop), or something it set out to remove is still there (a record it cannot
+        read, a file it could not remove), or it stopped part-way. Every step that did happen is listed
+        either way — in the report, or on stderr where the report itself could not be written.
         """;
 
     public static Command Build(CliEnvironment env)
@@ -131,10 +133,56 @@ public static class UninstallCommand
 
         var report = options.DryRun
             ? new UninstallReport(plan, [], ["--dry-run: nothing was removed."], [], null, null)
-            : await UninstallRunner.RunAsync(env, plan, options, cancellationToken).ConfigureAwait(false);
+            : await UninstallRunner
+                .RunAsync(
+                    env,
+                    plan,
+                    options,
+                    cancellationToken,
+                    beforeTheImageGoes: soFar => Report(env with { Out = TextWriter.Null, Error = TextWriter.Null }, soFar, options))
+                .ConfigureAwait(false);
 
-        Report(env, report, options);
-        return report.Completed ? ExitCodes.Success : ExitCodes.ApiError;
+        return Reported(env, report, options) && report.Completed ? ExitCodes.Success : ExitCodes.ApiError;
+    }
+
+    /// <summary>
+    /// The report, or — where it cannot be written — every line of it on stderr, in words, and false.
+    /// </summary>
+    /// <remarks>
+    /// By the time the report is written this verb has removed things. A report that failed to render used to
+    /// leave the process with one sentence about a type initializer and nothing about what was already gone;
+    /// the lines below need nothing a published build has not long since loaded, so they are what a caller gets
+    /// instead. And the exit code is 1, because the document a script reads is not on stdout.
+    /// </remarks>
+    private static bool Reported(CliEnvironment env, UninstallReport report, UninstallOptions options)
+    {
+        try
+        {
+            Report(env, report, options);
+            return true;
+        }
+        catch (Exception unexpected) when (unexpected is not OperationCanceledException)
+        {
+            env.Error.WriteLine($"The report could not be written: {Causes.Line(unexpected)}");
+
+            env.Error.WriteLine("What this uninstall did:");
+            foreach (var line in report.Done)
+            {
+                env.Error.WriteLine($"  done: {line}");
+            }
+
+            foreach (var line in report.Kept)
+            {
+                env.Error.WriteLine($"  kept: {line}");
+            }
+
+            foreach (var line in report.Problems.Append(report.Refusal).OfType<string>())
+            {
+                env.Error.WriteLine($"  problem: {line}");
+            }
+
+            return false;
+        }
     }
 
     /// <summary>What happened, in the shape the caller asked for.</summary>
@@ -206,6 +254,11 @@ public static class UninstallCommand
         if (plan.Executable is { } executable)
         {
             env.Out.WriteLine($"  the executable at {executable}");
+        }
+
+        if (plan.ExtractedLibraries is { } extracted)
+        {
+            env.Out.WriteLine($"  the native libraries it unpacked, at {extracted}");
         }
         else
         {

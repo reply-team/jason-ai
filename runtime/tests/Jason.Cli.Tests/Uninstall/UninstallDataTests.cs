@@ -122,6 +122,45 @@ public class UninstallDataTests
         Assert.False(Directory.Exists(dir.Paths.Root));
     }
 
+    /// <summary>
+    /// The question is asked before anything at all is removed, not after everything else has gone.
+    /// </summary>
+    /// <remarks>
+    /// It used to be the last step, so a person who stopped at the prompt to think was looking at a machine
+    /// already half uninstalled — and on Windows the answer was read by a process whose own file had already
+    /// been moved aside, which is the state a single-file build can no longer load anything new in.
+    /// </remarks>
+    [Fact]
+    public async Task The_question_is_asked_before_anything_is_removed()
+    {
+        using var dir = new TempPaths();
+        Plant(dir);
+        var remover = new RecordingRemover { ReallyRemoves = true };
+        var answer = new Answering("y", () => remover.Calls.Count);
+        var env = Machine(dir, new StringWriter(), remover) with { In = answer };
+
+        var exit = await UninstallCommand.RunAsync(
+            env,
+            new UninstallOptions(Human: true, DryRun: false, PurgeData: true, Yes: false, Force: false),
+            Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(0, answer.RemovedBeforeAsked);
+        Assert.False(Directory.Exists(dir.Paths.Root));
+    }
+
+    /// <summary>An answer, and how much had been removed at the moment it was asked for.</summary>
+    private sealed class Answering(string answer, Func<int> removedSoFar) : TextReader
+    {
+        public int? RemovedBeforeAsked { get; private set; }
+
+        public override string? ReadLine()
+        {
+            RemovedBeforeAsked ??= removedSoFar();
+            return answer;
+        }
+    }
+
     /// <summary>Nothing on the stream at all is not a yes. The default is the safe one.</summary>
     [Fact]
     public async Task An_empty_answer_keeps_it()

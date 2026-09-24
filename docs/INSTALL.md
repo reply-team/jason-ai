@@ -218,7 +218,13 @@ path written there, and this verb removes those and nothing else. A skill you co
 has no receipt, so it is removed by nobody — including this. The order is fixed: the logon registration
 first, so a logon part-way through cannot start what is going; then the runtime, and if it will not stop,
 nothing after that is removed; then the recorded skills; then the PATH entry, only where this installer wrote
-it; then the executable and its install directory.
+it; then the executable, its install directory, and the native libraries a release unpacks into the system's
+temporary directory the first time it runs.
+
+On Windows the executable is the file the uninstall is running from, and Windows does not delete the image of a
+running process. So it is moved out of the install directory — which then goes, before the verb returns — and a
+cleanup it starts removes the moved copy as soon as the verb has exited. The report names both, and the line
+that removes the copy by hand should it still be there.
 
 A recorded file whose bytes have changed since is reported and kept, because the record says what Jason
 wrote and a mismatch says somebody else wrote it afterwards. `--force` removes it anyway:
@@ -229,7 +235,8 @@ jason uninstall --force
 
 **The data directory is kept.** It holds the database, the settings, the plugins, the logs and the work
 directories — the record of what you did — and the verb says in one line that it kept it and where. To remove
-that as well you have to say so, in advance when nobody is there to be asked:
+that as well you have to say so: `--human` prints what will be deleted and asks before anything at all is
+removed, and when nobody is there to be asked the word is said in advance:
 
 ```sh
 jason uninstall --purge-data --yes
@@ -237,5 +244,6 @@ jason uninstall --purge-data --yes
 
 Nothing else is touched: no other skill in an agent harness, no provider CLI, no model credential, nothing
 outside the paths the receipts name. It exits 0 when everything it set out to remove is gone, and 1 when it
-understood and refused — a runtime that would not stop, a record it could not read, a file it could not
-remove — with the reason on stderr and the whole report on stdout.
+did not get there — it refused (a runtime that would not stop), something it set out to remove is still there
+(a record it could not read, a file it could not remove), or it stopped part-way. Every step that did happen
+is listed either way: in the report on stdout, or on stderr where the report itself could not be written.

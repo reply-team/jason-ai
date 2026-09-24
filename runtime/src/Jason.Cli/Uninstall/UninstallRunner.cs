@@ -44,11 +44,22 @@ public sealed record UninstallReport(
 /// </remarks>
 public static class UninstallRunner
 {
+    /// <param name="env">The environment the verb runs in.</param>
+    /// <param name="plan">What was read, and shown, before anything is removed.</param>
+    /// <param name="options">What was asked.</param>
+    /// <param name="cancellationToken">Stops a wait for the runtime; nothing after that point is cancellable.</param>
+    /// <param name="beforeTheImageGoes">
+    /// Called with the report so far, immediately before the executable step: the caller renders its report
+    /// there once and throws it away. After that step a single-file build may no longer be able to load an
+    /// assembly it has not loaded yet — see <see cref="IInstallationRemover.RemoveExecutable"/> — and the
+    /// report is the one thing still to be written.
+    /// </param>
     public static async Task<UninstallReport> RunAsync(
         CliEnvironment env,
         UninstallPlan plan,
         UninstallOptions options,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<UninstallReport>? beforeTheImageGoes = null)
     {
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(plan);
@@ -57,6 +68,13 @@ public static class UninstallRunner
         var done = new List<string>();
         var kept = new List<string>();
         var problems = new List<string>();
+
+        // The one question this verb asks, asked before anything at all is removed. It used to be asked last,
+        // after the executable had gone -- so a person who stopped to think at the prompt was looking at a
+        // machine already half uninstalled, and the answer had to be read by a process that no longer had its
+        // own file to load anything from.
+        var purge = options.PurgeData && (!options.Human || options.Yes || Confirmed(env, plan));
+        var declined = options.PurgeData && !purge;
 
         // 1. The registration, first.
         if (Step1RemoveAutostart(env, plan, done, kept) is { } refusedAt1)
@@ -70,17 +88,35 @@ public static class UninstallRunner
             return new UninstallReport(plan, done, kept, problems, refusedAt2.Code, refusedAt2.Message);
         }
 
-        // 3. Everything a receipt names, and nothing else.
-        Step3RemoveByReceipt(env, plan, options, done, kept, problems);
+        try
+        {
+            // 3. Everything a receipt names, and nothing else.
+            Step3RemoveByReceipt(env, plan, options, done, kept, problems);
 
-        // 4. The PATH entry, only where this installer wrote it.
-        Step4RemovePathEntry(env, plan, done, kept, problems);
+            // 4. The PATH entry, only where this installer wrote it.
+            Step4RemovePathEntry(env, plan, done, kept, problems);
 
-        // 5. The executable and its install directory, last, because everything above is run from it.
-        Step5RemoveExecutable(env, plan, done, kept, problems);
+            // Rendered once and thrown away, while this process can still load whatever rendering it needs.
+            beforeTheImageGoes?.Invoke(new UninstallReport(plan, [.. done], [.. kept], [.. problems], null, null));
 
-        // 6. And the data directory, only on the explicit word, after everything else.
-        Step6Data(env, plan, options, done, kept, problems);
+            // 5. The executable, its install directory and what it unpacked, last, because everything above is
+            //    run from it.
+            Step5RemoveExecutable(env, plan, done, kept, problems);
+
+            // 6. And the data directory, only on the explicit word, after everything else.
+            Step6Data(env, plan, purge, declined, done, kept, problems);
+        }
+        catch (Exception unexpected) when (unexpected is not OperationCanceledException)
+        {
+            // Never out of here. Everything above this point has already removed something, and an exception
+            // that left the verb took the list of what with it: a published build once answered with one line
+            // about a type initializer after it had deleted the data directory. So it becomes the last problem
+            // in a report that still names every step that did happen.
+            problems.Add(
+                $"The uninstall stopped part-way, on something it did not expect: {Causes.Line(unexpected)} Every step "
+                + "listed as done did happen; nothing after the one that failed was attempted. Run it again to "
+                + "finish: what is already gone is not an error the second time.");
+        }
 
         return new UninstallReport(plan, done, kept, problems, null, null);
     }
@@ -135,22 +171,23 @@ public static class UninstallRunner
     private static void Step6Data(
         CliEnvironment env,
         UninstallPlan plan,
-        UninstallOptions options,
+        bool purge,
+        bool declined,
         List<string> done,
         List<string> kept,
         List<string> problems)
     {
-        if (!options.PurgeData)
+        if (declined)
+        {
+            kept.Add($"The data directory at '{plan.DataDirectory}' was kept: you did not confirm.");
+            return;
+        }
+
+        if (!purge)
         {
             kept.Add(
                 $"The data directory at '{plan.DataDirectory}' is kept: it holds your database, settings, "
                 + "plugins, logs and any source this build fetched. --purge-data removes it.");
-            return;
-        }
-
-        if (options.Human && !options.Yes && !Confirmed(env, plan))
-        {
-            kept.Add($"The data directory at '{plan.DataDirectory}' was kept: you did not confirm.");
             return;
         }
 
@@ -248,21 +285,74 @@ public static class UninstallRunner
             return;
         }
 
-        if (plan.InstallDirectory is not { Length: > 0 } directory)
+        if (plan.InstallDirectory is { Length: > 0 } directory)
+        {
+            try
+            {
+                if (!env.Removes!.RemoveDirectoryIfEmpty(directory) && Directory.Exists(directory))
+                {
+                    kept.Add($"Kept '{directory}': something is in it that this installer did not write.");
+                }
+            }
+            catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+            {
+                problems.Add($"'{directory}' could not be removed: {exception.Message}");
+            }
+        }
+
+        RemoveExtractedLibraries(env, plan, done, kept, problems);
+    }
+
+    /// <summary>
+    /// What a single-file build unpacked on its first run, and the directory holding it if that is now empty.
+    /// </summary>
+    /// <remarks>
+    /// The parent is where every build of this program unpacks, one directory each: earlier versions of this
+    /// installation left theirs there, and so would another installation. None of those is this build's to
+    /// remove, so the parent goes only if nothing is left in it, and the report says why when it stays.
+    /// </remarks>
+    private static void RemoveExtractedLibraries(
+        CliEnvironment env,
+        UninstallPlan plan,
+        List<string> done,
+        List<string> kept,
+        List<string> problems)
+    {
+        if (plan.ExtractedLibraries is not { } extracted)
         {
             return;
         }
 
         try
         {
-            if (!env.Removes!.RemoveDirectoryIfEmpty(directory) && Directory.Exists(directory))
+            env.Removes!.RemoveExtractedLibraries(extracted);
+            done.Add($"Removed the native libraries this build unpacked, at '{extracted}'.");
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+        {
+            problems.Add(
+                $"'{extracted}' could not be removed: {exception.Message} It holds only native libraries this "
+                + "build unpacked; another copy of this build still running would be holding one of them.");
+            return;
+        }
+
+        if (Path.GetDirectoryName(extracted) is not { Length: > 0 } parent)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!env.Removes!.RemoveDirectoryIfEmpty(parent) && Directory.Exists(parent))
             {
-                kept.Add($"Kept '{directory}': something is in it that this installer did not write.");
+                kept.Add(
+                    $"Kept '{parent}': other builds of this program unpacked their libraries there too — earlier "
+                    + "versions of this installation, or another one. Nothing of this build's is left in it.");
             }
         }
         catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
         {
-            problems.Add($"'{directory}' could not be removed: {exception.Message}");
+            problems.Add($"'{parent}' could not be removed: {exception.Message}");
         }
     }
 

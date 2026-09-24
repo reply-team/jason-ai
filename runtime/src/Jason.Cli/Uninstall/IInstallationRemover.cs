@@ -1,3 +1,8 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
+using Jason.Cli.Process;
+
 namespace Jason.Cli.Uninstall;
 
 /// <summary>A removal this build will not perform, in words the operator can act on.</summary>
@@ -75,6 +80,28 @@ public interface IInstallationRemover
 
     /// <summary>Takes the install directory off this account's PATH, in the way the installer put it on.</summary>
     PathEntryOutcome RemovePathEntry(PathEntryPlan plan);
+
+    /// <summary>
+    /// Where this build unpacked the native libraries it carries, when <paramref name="executable"/> is the
+    /// image of this very process — or null, for any other file and for a build that unpacked nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A single-file build carries SQLite's native library inside itself and unpacks it, on first run, into a
+    /// directory of its own under the system's temporary directory: one per build, named for the bundle. The
+    /// executable went and that directory stayed, on every uninstall, and on a Windows that never clears its
+    /// temporary directory it stays for good.
+    /// </para>
+    /// <para>
+    /// Only the running process can name its own, because only the host that unpacked it knows which it was.
+    /// So this answers for the running image and for nothing else, and a directory it cannot name for certain
+    /// is left alone rather than guessed at — the same rule the receipts keep.
+    /// </para>
+    /// </remarks>
+    string? ReadExtractedLibraries(string executable);
+
+    /// <summary>Removes that directory and everything this build unpacked into it.</summary>
+    void RemoveExtractedLibraries(string directory);
 }
 
 /// <summary>What became of the executable, which is the one step that can honestly half-succeed.</summary>
@@ -126,22 +153,40 @@ public static class InstallationRemovers
         }
 
         /// <summary>
-        /// Deleted where that is allowed; moved aside where it is not.
+        /// Deleted where that is allowed; moved aside where it is not, and the copy removed once this process
+        /// has gone.
         /// </summary>
         /// <remarks>
         /// <para>
         /// Windows will not delete the image of a running process, and this verb is ordinarily run from the
         /// very file it is removing. It <em>will</em> rename one, though: the file object stays open under its
         /// new name, so moving the executable into the system temporary directory empties the install
-        /// directory, which then goes, and leaves one copy of the binary somewhere the operating system
-        /// clears — named in the report, with the line that removes it now.
+        /// directory, which then goes, before this verb returns — which is what anybody checking afterwards
+        /// looks at.
+        /// </para>
+        /// <para>
+        /// The copy used to be left there "until the system clears its temporary files", and a Windows left to
+        /// itself never does: every uninstall left one executable of the whole product behind, named in the
+        /// report and removed by nobody. So a cleanup is started that waits for this process to exit and then
+        /// removes the directory the copy is in. It is Windows PowerShell, which every Windows this runs on
+        /// carries and <c>install.ps1</c> already needs, started by its full path, holding none of this
+        /// process's streams, and deleting nothing but the one directory this call created for the copy.
+        /// </para>
+        /// <para>
+        /// <b>Started before the move, never after.</b> A single-file build reads each assembly it has not yet
+        /// loaded out of its own file, by the path it started from; once that path is gone, the first type
+        /// from a new assembly fails to load. Starting a process can need assemblies nothing has loaded yet,
+        /// so it goes first. The verb's report is rendered once before this step for the same reason — a
+        /// published build answered <c>--purge-data</c> with "the type initializer for JsonSerializer threw",
+        /// after it had removed everything, because its report was the first JSON it wrote.
         /// </para>
         /// <para>
         /// Two alternatives were considered. Re-executing from a copy of itself, the way the update applier
         /// does, solves <em>replacing</em> the file rather than deleting it: the copy would still have to
-        /// outlive this process to delete its image, so it is a new detached-process surface whose own copy
-        /// leaks in exactly the same place this one does. And marking the file for deletion at the next
-        /// reboot needs an administrator, which nothing in this product does.
+        /// outlive this process to delete its image, so it needs exactly this cleanup as well, and a caller
+        /// waiting for the verb's answer would get it from a process that had not yet done the work. And
+        /// marking the file for deletion at the next reboot needs an administrator, which nothing in this
+        /// product does.
         /// </para>
         /// </remarks>
         public ExecutableOutcome RemoveExecutable(string path)
@@ -162,16 +207,130 @@ public static class InstallationRemovers
             var aside = Path.Combine(Path.GetTempPath(), $"jason-uninstall-{Guid.NewGuid():N}");
             Directory.CreateDirectory(aside);
             var moved = Path.Combine(aside, Path.GetFileName(path));
+
+            var cleanup = StartCleanup(aside);
             File.Move(path, moved);
+
+            const string Why = "This is the file the uninstall is running from, and Windows does not delete the image of a "
+                + "running process. It was moved out of the install directory instead, so the installation is off "
+                + "this machine";
 
             return new ExecutableOutcome(
                 false,
                 moved,
-                "This is the file the uninstall is running from, and Windows does not delete the image of a "
-                + "running process. It was moved out of the install directory instead, so the installation is "
-                + $"off this machine; one copy of it is at '{moved}' until the system clears its temporary "
-                + "files, and `del` on that path removes it now.");
+                cleanup is { } pid
+                    ? string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{Why}, to '{moved}'; a cleanup, process {pid}, removes '{aside}' as soon as this process has "
+                        + $"exited. If it is still there afterwards, `Remove-Item -Recurse '{aside}'` removes it.")
+                    : $"{Why}; one copy of it is at '{moved}', and no cleanup could be started to remove it, so "
+                        + $"`Remove-Item -Recurse '{aside}'` removes it now.");
         }
+
+        /// <summary>
+        /// Starts the process that removes the moved copy once this one has exited, and says which it is — or
+        /// null, where it could not be started and the report has to say so instead.
+        /// </summary>
+        /// <remarks>
+        /// It waits for this process by its id, bounded, and then tries the directory a few times: whatever was
+        /// holding the file — this process, or something scanning a new executable — lets go within moments.
+        /// Its three streams are its own, and this process's are kept out of it: a caller reading this verb's
+        /// output to the end would otherwise wait on the cleanup as well.
+        /// </remarks>
+        private static int? StartCleanup(string directory)
+        {
+            var powershell = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            if (!File.Exists(powershell))
+            {
+                return null;
+            }
+
+            var target = "'" + directory.Replace("'", "''", StringComparison.Ordinal) + "'";
+            var script = string.Create(
+                CultureInfo.InvariantCulture,
+                $"$ErrorActionPreference = 'SilentlyContinue'; Wait-Process -Id {Environment.ProcessId} -Timeout 600; "
+                + $"for ($attempt = 0; $attempt -lt 40 -and (Test-Path -LiteralPath {target}); $attempt++) "
+                + $"{{ Remove-Item -LiteralPath {target} -Recurse -Force; if (Test-Path -LiteralPath {target}) {{ Start-Sleep -Milliseconds 250 }} }}");
+
+            var start = new ProcessStartInfo(powershell)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-Command", script })
+            {
+                start.ArgumentList.Add(argument);
+            }
+
+            StandardStreams.KeepOutOfChildren();
+
+            try
+            {
+                using var process = System.Diagnostics.Process.Start(start);
+                if (process is null)
+                {
+                    return null;
+                }
+
+                process.StandardInput.Close();
+                return process.Id;
+            }
+            catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
+            {
+                return null;
+            }
+        }
+
+        public string? ReadExtractedLibraries(string executable)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(executable);
+
+            // The host passes the directories it resolved native libraries from, and for a build that unpacked
+            // them the one it unpacked into is among them -- measured on a published build, where it is the
+            // only entry. Nothing else in this process knows which directory that was.
+            if (!IsRunningImage(executable) || AppContext.GetData("NATIVE_DLL_SEARCH_DIRECTORIES") is not string searched)
+            {
+                return null;
+            }
+
+            var name = Path.GetFileNameWithoutExtension(executable);
+            var installed = Trimmed(Path.GetDirectoryName(Path.GetFullPath(executable))!);
+
+            foreach (var entry in searched.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var directory = Trimmed(Path.GetFullPath(entry));
+
+                // The host names it <base>/<program>/<bundle id>, and holds nothing in it but files it unpacked.
+                // Anything else it searches -- the directory the executable itself is in, above all -- is not
+                // something it unpacked, and is not this verb's to remove.
+                if (string.Equals(directory, installed, StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(Path.GetFileName(Path.GetDirectoryName(directory)), name, StringComparison.OrdinalIgnoreCase)
+                    || !Directory.Exists(directory)
+                    || Directory.EnumerateDirectories(directory).Any())
+                {
+                    continue;
+                }
+
+                return directory;
+            }
+
+            return null;
+        }
+
+        public void RemoveExtractedLibraries(string directory)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        private static string Trimmed(string path) => path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
         /// <summary>Whether that path is the image this process is running as.</summary>
         private static bool IsRunningImage(string path) =>
@@ -234,7 +393,15 @@ public static class InstallationRemovers
 
             if (!plan.Ours)
             {
-                return new PathEntryOutcome(false, [], "This installer did not put that directory on the PATH, so it was left there.");
+                // Said as what was found. "Did not put it there, so it was left there" read as though the
+                // directory were on the PATH, and on Windows -- where being on the Path value is what makes it
+                // ours -- it never is when this line is reached.
+                return new PathEntryOutcome(
+                    false,
+                    [],
+                    OperatingSystem.IsWindows()
+                        ? "That directory is not on this account's Path, so there was nothing to take off it."
+                        : "No login profile carries the line this installer writes for that directory, so nothing was taken off the PATH.");
             }
 
             if (OperatingSystem.IsWindows())
@@ -302,6 +469,10 @@ public static class InstallationRemovers
         public PathEntryPlan ReadPathEntry(string directory) => throw Refusal();
 
         public PathEntryOutcome RemovePathEntry(PathEntryPlan plan) => throw Refusal();
+
+        public string? ReadExtractedLibraries(string executable) => throw Refusal();
+
+        public void RemoveExtractedLibraries(string directory) => throw Refusal();
 
         private static RemovalRefused Refusal() => new(
             CliErrors.RemoverUnsupported,

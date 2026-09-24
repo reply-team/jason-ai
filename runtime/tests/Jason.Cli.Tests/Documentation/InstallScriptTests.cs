@@ -304,6 +304,27 @@ public partial class InstallScriptTests
         Assert.True(started > unpacked, $"{script} does not run the unpacked executable before installing it.");
     }
 
+    /// <summary>
+    /// And CI runs the published executable's own uninstall, from the file it removes, on every platform it
+    /// packages for.
+    /// </summary>
+    /// <remarks>
+    /// The one shape the suite cannot reach: it runs as a test host, not as a single-file build, and only a
+    /// single-file build loses the ability to load a new assembly once its own file has been moved or deleted.
+    /// A published build removed everything and then answered with one line about a type initializer; every
+    /// test of this verb was green.
+    /// </remarks>
+    [Fact]
+    public void Ci_uninstalls_the_published_executable_from_its_own_image()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
+        var step = ci.IndexOf("- name: Uninstall the published executable, from its own image", StringComparison.Ordinal);
+
+        Assert.True(step >= 0, "ci.yml no longer uninstalls the published executable.");
+        Assert.True(ci.IndexOf("steps.package.outputs.executable", step, StringComparison.Ordinal) > step, "the uninstall step does not run the executable the job packaged.");
+        Assert.True(ci.IndexOf("uninstall --purge-data --yes", step, StringComparison.Ordinal) > step, "the uninstall step does not purge, which is the shape that failed.");
+    }
+
     /// <summary>The real proof: CI runs each script against the archives the same run packaged, from a local directory.</summary>
     [Fact]
     public void Ci_runs_both_scripts_against_the_archives_it_built()

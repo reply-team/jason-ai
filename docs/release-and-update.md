@@ -514,7 +514,7 @@ The order is the order that makes a half-finished run safe:
 | the runtime | and if it will not stop, **nothing after this is removed** |
 | every recorded skill | by the paths its root's record names, digest by digest |
 | the PATH entry | only where this installer wrote it — a PATH is a person's own document |
-| the executable and its install directory | last, and the running image removes itself from a copy |
+| the executable, its install directory and what it unpacked | last, because everything above runs from it. On Windows the running image cannot be deleted, so it is moved out of the install directory and a cleanup removes the copy once the verb has exited; the native libraries the build unpacked on its first run go too |
 
 A recorded file whose bytes have changed since is reported and kept, because the record says what Jason wrote
 and a mismatch says somebody else wrote it afterwards. `--force` removes it anyway, and the containing
@@ -526,7 +526,8 @@ name. **The data directory is kept** — §10 below says what is in it — unles
 and in the machine shape that word has to be said in advance with `--yes`, because there is nobody there to
 be asked and a verb that blocked on an invisible question would hang for ever.
 
-It exits 0 when everything it set out to remove is gone, and 1 when it understood and refused.
+It exits 0 when everything it set out to remove is gone, and 1 when it did not get there — it refused,
+something is still there, or it stopped part-way — and every step that did happen is listed either way.
 
 ## 10. Where things live
 

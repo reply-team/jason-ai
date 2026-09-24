@@ -97,6 +97,28 @@ public class CliAppTests
     }
 
     [Fact]
+    public async Task An_unexpected_failure_prints_every_cause_rather_than_the_outermost_one()
+    {
+        // A type initializer that fails says only that it failed; what failed is in the exception it wraps. A
+        // published build once answered an uninstall with exactly that one sentence after the uninstall had
+        // already deleted things, and nothing on the screen said why.
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(new("v1", "0.1.0-dev", "rt_LIVE", 77, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch));
+        var error = new StringWriter();
+        var handler = new FakeHandler(_ => throw new TypeInitializationException(
+            "Some.Serializer",
+            new InvalidOperationException("the outer cause", new FileNotFoundException("Could not load file or assembly 'Some.Assembly'."))));
+
+        var exit = await CliApp.RunAsync(["campaign", "list"], new CliEnvironment(new StringWriter(), error, dir.Paths, handler), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var said = error.ToString();
+        Assert.Contains("The type initializer for 'Some.Serializer' threw an exception.", said, StringComparison.Ordinal);
+        Assert.Contains("InvalidOperationException: the outer cause", said, StringComparison.Ordinal);
+        Assert.Contains("FileNotFoundException: Could not load file or assembly 'Some.Assembly'.", said, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Help_describes_the_global_actor_option()
     {
         using var dir = new TempPaths();

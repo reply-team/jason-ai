@@ -109,8 +109,37 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
         return new PathEntryOutcome(plan.Ours, plan.Ours ? [.. plan.Profiles] : [], plan.Ours ? null : "not ours");
     }
 
+    /// <summary>Where this pretend build unpacked its native libraries. A test that cares sets it.</summary>
+    public string? ExtractedLibraries { get; set; }
+
+    public string? ReadExtractedLibraries(string executable)
+    {
+        Reads.Add(executable);
+        return ExtractedLibraries;
+    }
+
+    public void RemoveExtractedLibraries(string directory)
+    {
+        Record("extracted.remove", directory);
+        if (ReallyRemoves && Directory.Exists(directory))
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Paths on which this remover fails with something nobody planned for, rather than refusing: the shape of
+    /// an exception an uninstall did not expect, part-way through a run that has already removed things.
+    /// </summary>
+    public HashSet<string> Breaks { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     private void Record(string verb, string path)
     {
+        if (Breaks.Contains(path))
+        {
+            throw new InvalidOperationException($"nobody planned for '{path}'.", new FileNotFoundException(string.Empty, "Some.Assembly"));
+        }
+
         if (Refuses.Contains(path))
         {
             throw new RemovalRefused(CliErrors.UninstallRefused, $"'{path}' could not be removed.");

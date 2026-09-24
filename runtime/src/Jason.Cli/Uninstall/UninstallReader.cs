@@ -66,8 +66,48 @@ public static class UninstallReader
             directory is { Length: > 0 } ? env.Removes?.ReadPathEntry(directory) : null,
             executable,
             directory,
+            Extracted(env, executable, directory),
             purgeData,
             env.Paths.Root);
+    }
+
+    /// <summary>
+    /// The directory this build unpacked its native libraries into, when the remover can name it — and never
+    /// one that holds the data directory or the installation, whatever the remover said.
+    /// </summary>
+    /// <remarks>
+    /// The belt on a recursive delete. The remover already names only a directory the host unpacked into; a
+    /// plan that could ever carry <c>~/.jason</c> in this field would be one bug away from purging it without
+    /// the word, so the reader refuses the shape outright.
+    /// </remarks>
+    private static string? Extracted(CliEnvironment env, string? executable, string? installDirectory)
+    {
+        if (executable is null || env.Removes is not { } remover)
+        {
+            return null;
+        }
+
+        string? extracted;
+        try
+        {
+            extracted = remover.ReadExtractedLibraries(executable);
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        return extracted is null || Holds(extracted, env.Paths.Root) || (installDirectory is not null && Holds(extracted, installDirectory))
+            ? null
+            : extracted;
+    }
+
+    /// <summary>Whether <paramref name="directory"/> is <paramref name="path"/> or one of its ancestors.</summary>
+    private static bool Holds(string directory, string path)
+    {
+        var outer = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var inner = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return inner.StartsWith(outer, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

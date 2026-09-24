@@ -117,6 +117,55 @@ jobs:
           # own exit code. Everything asserted above passed, so the step succeeded.
           exit 0
 
+      # The published executable's own uninstall, run from the file it removes, with no runtime running: the one
+      # shape the test suite cannot reach, because the suite runs as a test host and not as a single-file build.
+      # Such a build reads each assembly it has not loaded yet out of its own file, by the path it started from;
+      # once the verb has moved or deleted that file, the first new assembly fails to load. A published build
+      # once removed everything and then answered with one line about a type initializer, because its report was
+      # the first JSON it wrote. A copy is uninstalled, so the executable this job packaged stays where it is.
+      - name: Uninstall the published executable, from its own image
+        shell: pwsh
+        env:
+          EXECUTABLE: ${{ steps.package.outputs.executable }}
+        run: |
+          $scratch = Join-Path ([IO.Path]::GetTempPath()) "jason-ci-uninstall"
+          $install = Join-Path $scratch 'install'
+          $env:JASON_DATA_DIR = Join-Path $scratch 'data'
+          New-Item -ItemType Directory -Force $install, $env:JASON_DATA_DIR | Out-Null
+          $exe = Join-Path $install (Split-Path $env:EXECUTABLE -Leaf)
+          Copy-Item $env:EXECUTABLE $exe
+          Set-Content (Join-Path $env:JASON_DATA_DIR 'marker.txt') 'the operator''s own work'
+
+          # macOS resolves the temporary directory through /private, and the executable's own path comes back
+          # resolved; the two name one file.
+          function Same([string] $a, [string] $b) { ($a -replace '^/private', '') -eq ($b -replace '^/private', '') }
+
+          $plan = (& $exe uninstall --dry-run | Out-String | ConvertFrom-Json).plan
+          if ($LASTEXITCODE -ne 0) { throw "the dry run exited $LASTEXITCODE" }
+          if (-not (Same $plan.executable $exe)) { throw "the plan names '$($plan.executable)', not the file it runs as ('$exe')" }
+          if ($plan.path_entry.ours) { throw "a copy in a scratch directory was planned as this runner's PATH entry" }
+          Write-Host "unpacked libraries: $($plan.extracted_libraries)"
+
+          $said = & $exe uninstall --purge-data --yes 2>&1
+          $exit = $LASTEXITCODE
+          Write-Host ($said -join "`n")
+          if ($exit -ne 0) { throw "jason uninstall exited $exit" }
+          $report = ($said | Where-Object { $_ -is [string] -and $_.StartsWith('{') }) | ConvertFrom-Json
+          if (-not $report.completed) { throw "the report says it did not complete" }
+          foreach ($gone in $exe, $install, $env:JASON_DATA_DIR) { if (Test-Path -LiteralPath $gone) { throw "'$gone' is still there" } }
+          if ($plan.extracted_libraries -and (Test-Path -LiteralPath $plan.extracted_libraries)) { throw "what the build unpacked is still at '$($plan.extracted_libraries)'" }
+
+          # On Windows the running image is moved aside rather than deleted, and a cleanup removes the copy
+          # once the verb has exited. The report names the directory; it has to be gone shortly afterwards.
+          if ($IsWindows) {
+            $aside = [regex]::Match(($report.kept -join ' '), "removes '([^']+)'").Groups[1].Value
+            if (-not $aside) { throw "the report names no cleanup: $($report.kept -join ' | ')" }
+            for ($i = 0; $i -lt 40 -and (Test-Path -LiteralPath $aside); $i++) { Start-Sleep -Milliseconds 250 }
+            if (Test-Path -LiteralPath $aside) { throw "the moved copy is still at '$aside' ten seconds after the verb exited" }
+          }
+
+          Write-Host "the published executable took itself off this runner and left nothing behind"
+
   # The install scripts, run against the archives this run packaged, served from a local directory that holds
   # what a release would — assembled by the same script that assembles a release — with no network. Each job
   # installs three times: once told to leave the PATH alone, then twice more, so that the idempotent PATH edit
