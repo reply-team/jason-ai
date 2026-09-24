@@ -70,14 +70,69 @@ public class UninstallPathEntryTests
         Assert.Same(before, PathEntry.WithoutEntry(before, Directory));
     }
 
-    /// <summary>And a line somebody wrote themselves, with no marker, loses the line and nothing else.</summary>
+    /// <summary>
+    /// And a line somebody wrote themselves, with no marker above it, is theirs and stays. The installer and the
+    /// repair both write the marker; a bare line is neither's, and an uninstall that removed it would be taking
+    /// ~/.local/bin off somebody's PATH along with everything else in it.
+    /// </summary>
     [Fact]
-    public void A_hand_written_line_loses_the_line_and_no_neighbour()
+    public void A_hand_written_line_is_somebodys_own_and_stays()
     {
         const string before = "# mine\nexport PATH=\"/home/a/.local/bin:$PATH\"\nexport LANG=C\n";
 
-        Assert.Equal("# mine\nexport LANG=C\n", PathEntry.WithoutEntry(before, Directory));
+        Assert.Same(before, PathEntry.WithoutEntry(before, Directory));
     }
+
+    /// <summary>
+    /// A profile with one CRLF in it keeps every line ending as it was. It used to come back all CRLF, which puts a
+    /// carriage return at the end of every line a shell reads.
+    /// </summary>
+    [Fact]
+    public void A_profile_with_one_crlf_keeps_every_line_ending_as_it_was()
+    {
+        const string before = "# mine\r\nexport EDITOR=vim\n\n# added by jason install\nexport PATH=\"/home/a/.local/bin:$PATH\"\nexport LANG=C\n";
+
+        Assert.Equal("# mine\r\nexport EDITOR=vim\nexport LANG=C\n", PathEntry.WithoutEntry(before, Directory));
+    }
+
+    /// <summary>
+    /// And every byte that is not the block comes back as it was, whatever the file's encoding: read as UTF-8, a
+    /// byte that was not UTF-8 came back as U+FFFD.
+    /// </summary>
+    [Fact]
+    public void Every_byte_outside_the_block_comes_back_as_it_was()
+    {
+        byte[] mine = [.. "# caf"u8, 0xE9, .. "\n"u8];
+        byte[] block = [.. "\n# added by jason install\nexport PATH=\"/home/a/.local/bin:$PATH\"\n"u8];
+        byte[] after = [.. "export LANG=C\n"u8];
+
+        Assert.Equal([.. mine, .. after], PathEntry.WithoutEntry([.. mine, .. block, .. after], Directory));
+    }
+
+    /// <summary>A directory with non-ASCII in its name is found in the file's own bytes all the same.</summary>
+    [Fact]
+    public void A_directory_named_beyond_ascii_is_found_in_the_bytes()
+    {
+        const string directory = "/home/\u00e9l\u00e8ve/.local/bin";
+        var before = System.Text.Encoding.UTF8.GetBytes($"# mine\n\n{PathEntry.Marker}\n{PathEntry.ExportLine(directory)}\n");
+
+        Assert.Equal("# mine\n"u8.ToArray(), PathEntry.WithoutEntry(before, directory));
+        Assert.True(PathEntry.CarriesLine(before, directory));
+    }
+
+    /// <summary>
+    /// Whether a profile carries the line is a question about whole lines: a line commented out, or one that only
+    /// contains the text, does not put anything on a PATH.
+    /// </summary>
+    [Theory]
+    [InlineData("export PATH=\"/home/a/.local/bin:$PATH\"\n", true)]
+    [InlineData("export PATH=\"/home/a/.local/bin:$PATH\"   \r\n", true)]
+    [InlineData("# export PATH=\"/home/a/.local/bin:$PATH\"\n", false)]
+    [InlineData("#export PATH=\"/home/a/.local/bin:$PATH\"\n", false)]
+    [InlineData("[ -d x ] && export PATH=\"/home/a/.local/bin:$PATH\"\n", false)]
+    [InlineData("", false)]
+    public void A_profile_carries_the_line_only_as_a_whole_line(string profile, bool carries) =>
+        Assert.Equal(carries, PathEntry.CarriesLine(System.Text.Encoding.UTF8.GetBytes(profile), Directory));
 
     /// <summary>A profile written with Windows line endings keeps them.</summary>
     [Fact]
@@ -115,13 +170,15 @@ public class UninstallPathEntryTests
     public void A_directory_listed_twice_is_removed_twice() =>
         Assert.Equal(@"C:\other", PathEntry.WithoutDirectory(@"C:\d;C:\other;C:\d", @"C:\d"));
 
-    [Theory]
-    [InlineData("/bin/zsh", 2)]
-    [InlineData("/bin/bash", 1)]
-    [InlineData("", 1)]
-    [InlineData(null, 1)]
-    public void Zsh_gets_both_profiles_and_everything_else_gets_one(string? shell, int expected) =>
-        Assert.Equal(expected, PathEntry.ProfileFiles("/home/a", shell).Count);
+    /// <summary>
+    /// The removal looks in every profile the installer or a repair may have written into, whatever this account's
+    /// shell is now: the shell somebody uses today is not the one they installed under.
+    /// </summary>
+    [Fact]
+    public void The_removal_looks_in_every_profile_the_installer_may_have_written() =>
+        Assert.Equal(
+            [".profile", ".bash_profile", ".bash_login", ".zprofile"],
+            PathEntry.ProfileFiles("/home/a").Select(Path.GetFileName));
 
     /// <summary>
     /// The block at the end of the file, which is what <c>install.sh</c> leaves behind whenever nothing was
@@ -155,14 +212,135 @@ public class UninstallPathEntryTests
     /// The profile a repair writes into is the one the running shell reads at login — which for zsh is not
     /// <c>~/.profile</c> at all.
     /// </summary>
+    /// <remarks>
+    /// And bash does not read <c>~/.profile</c> when <c>~/.bash_profile</c> or <c>~/.bash_login</c> exists — the
+    /// skeleton of every Fedora, RHEL and Arch account, and a macOS account on bash. The rule said
+    /// <c>~/.profile</c> for bash, so the installer wrote there, the repair wrote there and the check read there,
+    /// and all three agreed about a file no login shell of that account opens.
+    /// </remarks>
     [Theory]
-    [InlineData("/bin/zsh", ".zprofile")]
-    [InlineData("/usr/bin/zsh", ".zprofile")]
-    [InlineData("/bin/bash", ".profile")]
-    [InlineData("/bin/sh", ".profile")]
-    [InlineData(null, ".profile")]
-    public void A_repair_writes_into_the_profile_this_shell_reads_at_login(string? shell, string expected) =>
-        Assert.Equal(expected, Path.GetFileName(PathEntry.LoginProfile("/home/a", shell)));
+    [MemberData(nameof(LoginProfiles))]
+    public void A_repair_writes_into_the_profile_this_shell_reads_at_login(string? shell, string[] existing, string expected) =>
+        Assert.Equal(expected, Path.GetFileName(PathEntry.LoginProfile("/home/a", shell, path => existing.Contains(Path.GetFileName(path)))));
+
+    public static TheoryData<string?, string[], string> LoginProfiles() => new()
+    {
+        { "/bin/zsh", [], ".zprofile" },
+        { "/usr/bin/zsh", [".profile"], ".zprofile" },
+        { "/bin/bash", [], ".profile" },
+        { "/bin/bash", [".profile"], ".profile" },
+        { "/bin/bash", [".bash_profile", ".profile"], ".bash_profile" },
+        { "/bin/bash", [".bash_login", ".profile"], ".bash_login" },
+        { "/bin/bash", [".bash_profile", ".bash_login"], ".bash_profile" },
+        { "/bin/sh", [".bash_profile"], ".profile" },
+        { "/bin/dash", [], ".profile" },
+        { "", [".bash_profile"], ".profile" },
+        { null, [], ".profile" },
+    };
+
+    /// <summary>
+    /// <c>install.sh</c> carries the rule as the function the C# spells, word for word — and runs it, so the
+    /// installer, the repair and the check cannot disagree about which file a login shell reads.
+    /// </summary>
+    [Fact]
+    public void The_installer_carries_the_login_profile_rule_word_for_word()
+    {
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains(PathEntry.LoginProfileFunction.Replace("\r\n", "\n", StringComparison.Ordinal), script, StringComparison.Ordinal);
+        Assert.Contains("add_to_profile \"$(login_profile)\"", script, StringComparison.Ordinal);
+    }
+
+    /// <summary>And the function, run in <c>sh</c> against real files, answers what the C# answers, case by case.</summary>
+    [Theory]
+    [MemberData(nameof(LoginProfiles))]
+    public void The_installers_function_answers_what_the_rule_answers(string? shell, string[] existing, string expected)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "install.sh runs in sh, on the platforms it installs on.");
+
+        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        var home = tree.NewDirectory("home");
+        foreach (var name in existing)
+        {
+            File.WriteAllText(Path.Combine(home, name), "# mine\n");
+        }
+
+        var start = new System.Diagnostics.ProcessStartInfo("/bin/sh")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add(PathEntry.LoginProfileFunction + "\nlogin_profile");
+        start.Environment["HOME"] = home;
+        start.Environment["SHELL"] = shell ?? string.Empty;
+
+        using var process = System.Diagnostics.Process.Start(start)!;
+        var said = process.StandardOutput.ReadToEnd().Trim();
+        process.WaitForExit();
+
+        Assert.Equal(Path.Combine(home, expected), said);
+        Assert.Equal(PathEntry.LoginProfile(home, shell), said);
+    }
+
+    /// <summary>
+    /// Read from real files under a home: the removal finds the installer's block in every profile it may have
+    /// written, and the check is answered by the one file a login shell reads — never by one it does not.
+    /// </summary>
+    [Fact]
+    public void A_block_in_a_profile_bash_does_not_read_is_ours_to_remove_and_no_answer_to_the_check()
+    {
+        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        var home = tree.NewDirectory("home");
+        File.WriteAllText(Path.Combine(home, ".bash_profile"), "# mine\n");
+        File.WriteAllText(Path.Combine(home, ".profile"), $"# mine\n\n{PathEntry.Marker}\n{PathEntry.ExportLine(Directory)}\n");
+
+        var plan = PathEntry.ReadProfiles(Directory, home, "/bin/bash");
+
+        Assert.True(plan.Ours);
+        Assert.Equal([Path.Combine(home, ".profile")], plan.Profiles);
+        Assert.Null(plan.Persisted);
+    }
+
+    /// <summary>And a line a login shell does read answers the check, marked or not — while only a marked one is ours.</summary>
+    [Fact]
+    public void A_hand_written_line_in_the_login_profile_answers_the_check_and_is_not_ours()
+    {
+        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        var home = tree.NewDirectory("home");
+        File.WriteAllText(Path.Combine(home, ".zprofile"), $"{PathEntry.ExportLine(Directory)}\n");
+
+        var plan = PathEntry.ReadProfiles(Directory, home, "/usr/bin/zsh");
+
+        Assert.False(plan.Ours);
+        Assert.Empty(plan.Profiles);
+        Assert.Equal(Path.Combine(home, ".zprofile"), plan.Persisted);
+    }
+
+    /// <summary>A commented-out line answers nothing.</summary>
+    [Fact]
+    public void A_commented_line_answers_nothing()
+    {
+        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        var home = tree.NewDirectory("home");
+        File.WriteAllText(Path.Combine(home, ".profile"), $"# {PathEntry.ExportLine(Directory)}\n");
+
+        Assert.Null(PathEntry.ReadProfiles(Directory, home, "/bin/sh").Persisted);
+    }
+
+    /// <summary>
+    /// On Windows a directory is Jason's own only where nothing is in it but what the installer writes there —
+    /// and only then is its entry on the Path Jason's to take off.
+    /// </summary>
+    [Theory]
+    [InlineData(new[] { "jason.exe" }, true)]
+    [InlineData(new[] { "JASON.EXE", "jason.previous.exe" }, true)]
+    [InlineData(new string[0], true)]
+    [InlineData(new[] { "jason.exe", "python.exe" }, false)]
+    [InlineData(new[] { "winget.exe", "jason.exe", "Microsoft.DesktopAppInstaller_8wekyb3d8bbwe" }, false)]
+    public void A_directory_is_jasons_own_only_where_it_holds_nothing_else(string[] entries, bool own) =>
+        Assert.Equal(own, PathEntry.OnlyInstallerFiles(entries.Select(entry => Path.Combine(@"C:\somewhere", entry))));
 
     /// <summary>
     /// The Unix repair appends the marked line to that profile <b>and</b> exports it for the shell it is

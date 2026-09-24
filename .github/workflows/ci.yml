@@ -463,6 +463,34 @@ jobs:
           # A login shell reads the line the script wrote and finds jason by name.
           sh -l -c 'jason --version'
 
+      - name: Install into the profile bash reads, and take it back out
+        shell: bash
+        env:
+          JASON_INSTALL_FEED: ${{ github.workspace }}/feed
+        run: |
+          # bash never reads ~/.profile once ~/.bash_profile exists, which is every Fedora, RHEL and Arch
+          # account's skeleton. The installer, `jason status` and the uninstall all have to mean that file.
+          export HOME="$RUNNER_TEMP/home-bash"
+          export SHELL=/bin/bash
+          mkdir -p "$HOME"
+          printf '# mine\n' > "$HOME/.bash_profile"
+
+          sh install/install.sh
+          [ "$(grep -c '# added by jason install' "$HOME/.bash_profile")" = "1" ]
+          if [ -f "$HOME/.profile" ]; then echo "the line went to ~/.profile, which this bash never reads"; exit 1; fi
+          bash -l -c 'jason --version'
+
+          # This shell predates the line, and a new login shell reads it: the path check says ok, and says where.
+          export JASON_DATA_DIR="$HOME/.jason"
+          "$HOME/.local/bin/jason" status > status.json || true
+          grep -q '"name":"path","required":true,"state":"ok"' status.json || { cat status.json; exit 1; }
+          grep -q '.bash_profile' status.json
+
+          # And the uninstall takes back exactly what the installer appended, and not one other byte.
+          "$HOME/.local/bin/jason" uninstall
+          printf '# mine\n' | cmp - "$HOME/.bash_profile"
+          [ ! -e "$HOME/.local/bin/jason" ]
+
   install-ps1:
     name: install.ps1 on windows
     needs: [version, build-test-publish]

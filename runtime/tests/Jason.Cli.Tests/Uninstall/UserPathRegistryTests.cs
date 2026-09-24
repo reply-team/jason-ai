@@ -38,10 +38,11 @@ public class UserPathRegistryTests
     public void The_removal_keeps_the_kind_and_the_variables_of_everything_it_does_not_take()
     {
         using var key = ScratchKey.Create();
-        key.SetPath(@"%USERPROFILE%\AppData\Local\Microsoft\WindowsApps;" + Directory + @";%USERPROFILE%\.dotnet\tools", RegistryValueKind.ExpandString);
+        var directory = key.Installed();
+        key.SetPath(@"%USERPROFILE%\AppData\Local\Microsoft\WindowsApps;" + directory + @";%USERPROFILE%\.dotnet\tools", RegistryValueKind.ExpandString);
         var remover = InstallationRemovers.ForThisMachine(key.SubKey);
 
-        var plan = remover.ReadPathEntry(Directory);
+        var plan = remover.ReadPathEntry(directory);
         var outcome = remover.RemovePathEntry(plan);
 
         Assert.True(plan.Ours);
@@ -55,10 +56,11 @@ public class UserPathRegistryTests
     public void A_plain_string_stays_a_plain_string()
     {
         using var key = ScratchKey.Create();
-        key.SetPath(@"C:\tools;" + Directory, RegistryValueKind.String);
+        var directory = key.Installed();
+        key.SetPath(@"C:\tools;" + directory, RegistryValueKind.String);
         var remover = InstallationRemovers.ForThisMachine(key.SubKey);
 
-        remover.RemovePathEntry(remover.ReadPathEntry(Directory));
+        remover.RemovePathEntry(remover.ReadPathEntry(directory));
 
         Assert.Equal((@"C:\tools", RegistryValueKind.String), key.ReadPath());
     }
@@ -71,12 +73,55 @@ public class UserPathRegistryTests
     public void A_path_holding_only_that_directory_is_removed_rather_than_left_empty()
     {
         using var key = ScratchKey.Create();
-        key.SetPath(Directory, RegistryValueKind.ExpandString);
+        var directory = key.Installed();
+        key.SetPath(directory, RegistryValueKind.ExpandString);
         var remover = InstallationRemovers.ForThisMachine(key.SubKey);
 
-        remover.RemovePathEntry(remover.ReadPathEntry(Directory));
+        remover.RemovePathEntry(remover.ReadPathEntry(directory));
 
         Assert.Null(key.ReadPath());
+    }
+
+    /// <summary>
+    /// An entry for a directory that holds more than this installer writes is not Jason's to take off, whoever
+    /// put Jason in it. A build copied "somewhere on your PATH" lands where everything else is on the Path through
+    /// the same entry — this account's <c>WindowsApps</c>, on every account's default Path — and
+    /// <c>install.ps1 -InstallDir</c> into a directory already on the Path writes nothing there. Taking the entry
+    /// off took everything else in the directory off with Jason.
+    /// </summary>
+    [Fact]
+    public void An_entry_for_a_directory_that_holds_more_than_jason_is_left_on_the_path()
+    {
+        using var key = ScratchKey.Create();
+        var shared = key.Installed();
+        File.WriteAllText(Path.Combine(shared, "winget.exe"), "somebody else's");
+        var value = @"%USERPROFILE%\.dotnet\tools;" + shared;
+        key.SetPath(value, RegistryValueKind.ExpandString);
+        var remover = InstallationRemovers.ForThisMachine(key.SubKey);
+
+        var plan = remover.ReadPathEntry(shared);
+        var outcome = remover.RemovePathEntry(plan);
+
+        Assert.False(plan.Ours);
+        Assert.NotNull(plan.Persisted);
+        Assert.False(outcome.Removed);
+        Assert.Contains("holds more than this installer writes there", outcome.Note, StringComparison.Ordinal);
+        Assert.Equal((value, RegistryValueKind.ExpandString), key.ReadPath());
+    }
+
+    /// <summary>
+    /// And the executable an upgrade replaced while it was running is the installer's own file: it does not make
+    /// the directory anybody else's.
+    /// </summary>
+    [Fact]
+    public void The_executable_an_upgrade_replaced_does_not_make_the_directory_somebody_elses()
+    {
+        using var key = ScratchKey.Create();
+        var directory = key.Installed();
+        File.WriteAllText(Path.Combine(directory, "jason.previous.exe"), "the one before");
+        key.SetPath(directory, RegistryValueKind.ExpandString);
+
+        Assert.True(InstallationRemovers.ForThisMachine(key.SubKey).ReadPathEntry(directory).Ours);
     }
 
     // --- the installer's line and the repair's, which are one text -------------------------------------------
@@ -233,6 +278,14 @@ public class UserPathRegistryTests
         }
 
         public string NewDirectory() => _tree.NewDirectory("jason");
+
+        /// <summary>A directory of its own holding what the installer writes there, and nothing else.</summary>
+        public string Installed()
+        {
+            var directory = NewDirectory();
+            File.WriteAllText(Path.Combine(directory, "jason.exe"), "not really a program");
+            return directory;
+        }
 
         public void SetPath(string raw, RegistryValueKind kind)
         {

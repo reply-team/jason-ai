@@ -15,7 +15,13 @@ namespace Jason.Cli.Uninstall;
 /// Whether the installer is what put it there. A directory that is on the PATH by somebody else's hand is
 /// reported and left alone: this verb removes what Jason wrote, and a PATH is a person's own document.
 /// </param>
-public sealed record PathEntryPlan(string Directory, IReadOnlyList<string> Profiles, string? RegistryValue, bool Ours);
+/// <param name="Persisted">
+/// Where this account keeps the directory on its PATH for shells not yet started — this account's Path value on
+/// Windows, the login profile its shell reads on Unix — or null where nothing does. Not the same question as
+/// <paramref name="Ours"/>: a directory can be on the PATH by somebody else's hand, and a new shell finds
+/// <c>jason</c> through it all the same, which is what <c>jason status</c> asks.
+/// </param>
+public sealed record PathEntryPlan(string Directory, IReadOnlyList<string> Profiles, string? RegistryValue, bool Ours, string? Persisted = null);
 
 /// <summary>What removing it came to, so the report says what really happened rather than what was intended.</summary>
 /// <param name="Removed">Whether anything was taken off the PATH at all.</param>
@@ -57,30 +63,126 @@ public static class PathEntry
     }
 
     /// <summary>
-    /// The login profiles the installer may have written into: <c>~/.profile</c>, which <c>sh</c> and
-    /// <c>bash</c> read at login, and <c>~/.zprofile</c> as well for somebody whose shell is zsh.
+    /// Every login profile the installer or the repair may have written into, whatever this account's shell is
+    /// now: the removal looks in all of them, because the shell somebody uses today is not the one they installed
+    /// under.
     /// </summary>
-    public static IReadOnlyList<string> ProfileFiles(string home, string? shell)
+    public static IReadOnlyList<string> ProfileFiles(string home)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(home);
-
-        var profiles = new List<string> { Path.Combine(home, ".profile") };
-        if (shell is { Length: > 0 } && Path.GetFileName(shell.TrimEnd('/')) == "zsh")
-        {
-            profiles.Add(Path.Combine(home, ".zprofile"));
-        }
-
-        return profiles;
+        return [.. new[] { ".profile", ".bash_profile", ".bash_login", ".zprofile" }.Select(name => Path.Combine(home, name))];
     }
 
-    /// <summary>The profile the running shell reads at login: the one file a repair may write into.</summary>
+    /// <summary>
+    /// The one file a login shell of this account reads, and so the one file the installer, a repair and the
+    /// <c>path</c> check all mean: zsh reads <c>~/.zprofile</c>; bash reads the first of <c>~/.bash_profile</c>,
+    /// <c>~/.bash_login</c> and <c>~/.profile</c> that exists; every other shell reads <c>~/.profile</c>.
+    /// </summary>
+    /// <param name="home">This account's home directory.</param>
+    /// <param name="shell">The account's shell, as <c>SHELL</c> names it.</param>
+    /// <param name="exists">Whether a file exists; the file system's own answer, except in a test.</param>
     /// <remarks>
-    /// The last of <see cref="ProfileFiles"/>, and telling the two apart is the whole point of them. A removal
-    /// has to look in every profile the installer may have written to; a repair has to write into the one this
-    /// shell will actually read, and zsh does not read <c>~/.profile</c> at all — so a repair that named it
-    /// for somebody on zsh would be advice that appeared to have worked.
+    /// <para>
+    /// This was "<c>~/.profile</c>, and <c>~/.zprofile</c> for zsh", and it is false for bash wherever
+    /// <c>~/.bash_profile</c> exists — every Fedora, RHEL and Arch account's skeleton, and a macOS account on
+    /// bash — because bash then never reads <c>~/.profile</c>. The installer wrote there, the repair wrote there,
+    /// and the check read there, so all three agreed about a file no login shell would open, and the check said
+    /// <c>ok</c> about it.
+    /// </para>
+    /// <para>
+    /// <c>install.sh</c> carries the same rule as <see cref="LoginProfileFunction"/>, and a test runs that
+    /// function against this one.
+    /// </para>
     /// </remarks>
-    public static string LoginProfile(string home, string? shell) => ProfileFiles(home, shell)[^1];
+    public static string LoginProfile(string home, string? shell, Func<string, bool>? exists = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(home);
+        exists ??= File.Exists;
+
+        switch (Path.GetFileName((shell ?? string.Empty).TrimEnd('/')))
+        {
+            case "zsh":
+                return Path.Combine(home, ".zprofile");
+            case "bash":
+                foreach (var candidate in new[] { ".bash_profile", ".bash_login" })
+                {
+                    if (exists(Path.Combine(home, candidate)))
+                    {
+                        return Path.Combine(home, candidate);
+                    }
+                }
+
+                return Path.Combine(home, ".profile");
+            default:
+                return Path.Combine(home, ".profile");
+        }
+    }
+
+    /// <summary>
+    /// How a Unix account's login profiles carry that directory, read from the files under its home.
+    /// </summary>
+    /// <param name="directory">The install directory.</param>
+    /// <param name="home">The account's home directory.</param>
+    /// <param name="shell">The account's shell, as <c>SHELL</c> names it.</param>
+    /// <remarks>
+    /// Two questions, answered separately. Which profiles carry the block this installer appends — every one it
+    /// or a repair may have written into, whatever the shell is now — is what the uninstall removes. Whether the
+    /// one file a login shell of this account reads carries the line at all is what the <c>path</c> check asks,
+    /// and a profile no login shell opens is not an answer to it.
+    /// </remarks>
+    public static PathEntryPlan ReadProfiles(string directory, string home, string? shell)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(home);
+
+        var profiles = ProfileFiles(home).Where(profile => Holds(profile, directory, marked: true)).ToList();
+        var login = LoginProfile(home, shell);
+        return new PathEntryPlan(directory, profiles, null, profiles.Count > 0, Holds(login, directory, marked: false) ? login : null);
+    }
+
+    /// <summary>
+    /// Whether a profile carries the line for that directory: as the installer's marked block, or — where
+    /// <paramref name="marked"/> is false — as a whole line of its own, however it got there.
+    /// </summary>
+    private static bool Holds(string profile, string directory, bool marked)
+    {
+        try
+        {
+            if (!File.Exists(profile))
+            {
+                return false;
+            }
+
+            var bytes = File.ReadAllBytes(profile);
+            return marked ? !ReferenceEquals(WithoutEntry(bytes, directory), bytes) : CarriesLine(bytes, directory);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// <see cref="LoginProfile"/>, as the function <c>install.sh</c> defines and calls. The script carries this text
+    /// verbatim, and a test runs it in <c>sh</c> against every case of the rule above.
+    /// </summary>
+    public const string LoginProfileFunction =
+        """
+        login_profile() {
+            case "${SHELL##*/}" in
+                zsh) echo "$HOME/.zprofile" ;;
+                bash)
+                    for candidate in .bash_profile .bash_login; do
+                        if [ -f "$HOME/$candidate" ]; then
+                            echo "$HOME/$candidate"
+                            return 0
+                        fi
+                    done
+                    echo "$HOME/.profile" ;;
+                *) echo "$HOME/.profile" ;;
+            esac
+        }
+        """;
 
     /// <summary>The <c>printf</c> format <c>install.sh</c> appends with, and therefore the one a repair uses.</summary>
     public const string AppendFormat = @"\n%s\n%s\n";
@@ -196,13 +298,27 @@ public static class PathEntry
     private static string Literal(string word) => "'" + word.Replace("'", "''", StringComparison.Ordinal) + "'";
 
     /// <summary>
-    /// A profile with the three lines the installer appended taken out, or <b>the same string</b> when it
-    /// carries none.
+    /// A profile with the blocks the installer appended taken out, or <b>the same string</b> when it carries
+    /// none.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The same instance on purpose: it lets the caller tell "nothing to do" from "rewritten identically" and
     /// never open the file for writing at all. A profile is somebody's own document with years of their work
     /// in it, and an uninstall that rewrote one would be remembered for that rather than for removing Jason.
+    /// </para>
+    /// <para>
+    /// <b>A block is the marker and the line under it</b> — with the blank line above them where there is one,
+    /// which is what both the installer and the repair append. A line nobody marked is somebody's own, written
+    /// by hand, and stays: this verb removes only what this installer wrote, on this platform as on the other,
+    /// where an entry the installer did not write is left on the Path too.
+    /// </para>
+    /// <para>
+    /// <b>Every other byte stays as it was.</b> The text is split on <c>\n</c> alone and each line keeps its own
+    /// <c>\r</c>: a profile with a single CRLF in it used to come back all CRLF, which puts a carriage return at
+    /// the end of every line a shell then reads. <see cref="WithoutEntry(byte[], string)"/> does this over the
+    /// file's own bytes.
+    /// </para>
     /// </remarks>
     public static string WithoutEntry(string profileText, string installDirectory)
     {
@@ -215,28 +331,23 @@ public static class PathEntry
             return profileText;
         }
 
-        var newline = profileText.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-        var lines = profileText.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').ToList();
+        var lines = profileText.Split('\n').ToList();
 
         var removed = false;
         for (var index = lines.Count - 1; index >= 0; index--)
         {
-            if (!string.Equals(lines[index].TrimEnd(), line, StringComparison.Ordinal))
+            if (!string.Equals(lines[index].TrimEnd(), line, StringComparison.Ordinal)
+                || index == 0
+                || !string.Equals(lines[index - 1].Trim(), Marker, StringComparison.Ordinal))
             {
                 continue;
             }
 
-            // Exactly what the script appended, and in that order: a blank line, the marker, the line. Each
-            // one is taken only if it is really there, so a hand-written line without a marker above it loses
-            // the line and nothing else.
-            var first = index;
-            if (first > 0 && string.Equals(lines[first - 1].Trim(), Marker, StringComparison.Ordinal))
+            // Exactly what the script appended, and in that order: a blank line, the marker, the line.
+            var first = index - 1;
+            if (first > 0 && lines[first - 1].Trim().Length == 0)
             {
                 first--;
-                if (first > 0 && lines[first - 1].Trim().Length == 0)
-                {
-                    first--;
-                }
             }
 
             lines.RemoveRange(first, index - first + 1);
@@ -250,7 +361,72 @@ public static class PathEntry
             index = first;
         }
 
-        return removed ? string.Join(newline, lines) : profileText;
+        return removed ? string.Join('\n', lines) : profileText;
+    }
+
+    /// <summary>
+    /// The same, over a profile's own bytes: every byte that is not part of a block comes back as it was,
+    /// whatever encoding the file is in — or <b>the same array</b> when it carries none.
+    /// </summary>
+    /// <remarks>
+    /// Read as UTF-8 and written back, a byte that was not UTF-8 came back as U+FFFD. Each byte is mapped to the
+    /// one character of the same value instead, and the line looked for is the directory's UTF-8 bytes mapped the
+    /// same way, so a directory with non-ASCII in its name is still found.
+    /// </remarks>
+    public static byte[] WithoutEntry(byte[] profile, string installDirectory)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        var text = System.Text.Encoding.Latin1.GetString(profile);
+        var without = WithoutEntry(text, AsBytes(installDirectory));
+        return ReferenceEquals(without, text) ? profile : System.Text.Encoding.Latin1.GetBytes(without);
+    }
+
+    /// <summary>
+    /// Whether a profile carries the line that puts that directory on the PATH, as a whole line of its own and
+    /// not commented out — marked or not, because a login shell runs it either way.
+    /// </summary>
+    /// <remarks>
+    /// Whole lines, by the rule <see cref="WithoutEntry(string, string)"/> keeps. This was a substring search, so
+    /// <c># export PATH=…</c> — a line somebody had commented out — made the <c>path</c> check say a new
+    /// login shell would find <c>jason</c>.
+    /// </remarks>
+    public static bool CarriesLine(byte[] profile, string installDirectory)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        var line = ExportLine(AsBytes(installDirectory));
+        return System.Text.Encoding.Latin1.GetString(profile).Split('\n').Any(candidate => string.Equals(candidate.TrimEnd(), line, StringComparison.Ordinal));
+    }
+
+    /// <summary>A directory as the characters its UTF-8 bytes map to one for one, which is how a profile is read here.</summary>
+    private static string AsBytes(string installDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(installDirectory);
+        return System.Text.Encoding.Latin1.GetString(System.Text.Encoding.UTF8.GetBytes(installDirectory));
+    }
+
+    /// <summary>
+    /// What <c>install.ps1</c> ever writes into an install directory: the executable, and the one an upgrade
+    /// replaced while it was running.
+    /// </summary>
+    public static IReadOnlyList<string> InstallerFiles { get; } = ["jason.exe", "jason.previous.exe"];
+
+    /// <summary>
+    /// Whether a directory holding those entries is Jason's own: nothing in it but what the installer writes.
+    /// </summary>
+    /// <remarks>
+    /// On Windows there is no marker — the Path is in the registry, "where a directory is its own mark" — so being
+    /// on the Path is not enough to make an entry Jason's. <c>install.ps1 -InstallDir</c> into a directory already
+    /// on the Path writes nothing there, and a build copied "somewhere on your PATH" lands in a directory
+    /// everything else is on the Path through: this account's <c>WindowsApps</c>, say, on every account's default
+    /// Path. Taking that entry off would take everything in it off with Jason. So the entry is Jason's only where
+    /// the directory is, by the same rule the install directory itself is removed by.
+    /// </remarks>
+    public static bool OnlyInstallerFiles(IEnumerable<string> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        return entries.All(entry => InstallerFiles.Contains(Path.GetFileName(entry), StringComparer.OrdinalIgnoreCase));
     }
 
     /// <summary>

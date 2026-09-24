@@ -403,14 +403,18 @@ internal static class StatusChecks
             return null;
         }
 
-        if (!entry.Ours)
+        // Whether a new shell finds it, which is not whether Jason put it there: a directory on the Path by
+        // somebody else's hand is found all the same. And on Unix the one file this account's login shell reads,
+        // matched as a whole line: any profile at all carrying the text anywhere used to be enough, so a line in
+        // ~/.profile that a bash with a ~/.bash_profile never reads -- or one commented out -- said `ok`.
+        if (entry.Persisted is not { } where)
         {
             return null;
         }
 
         return OperatingSystem.IsWindows()
-            ? ("this account's Path value", directory, "a shell", executable)
-            : (string.Join(" and ", entry.Profiles), directory, "a login shell", executable);
+            ? (where, directory, "a shell", executable)
+            : (where, directory, "a login shell", executable);
     }
 
     private static StatusCheck ProviderPlugin(SystemInfoResponse? info) =>

@@ -371,6 +371,22 @@ public partial class InstallScriptTests
         Assert.True(ci.IndexOf("the install turned the user Path from ExpandString", job, StringComparison.Ordinal) > job, "the install.ps1 job no longer asserts the kind of the account's Path.");
     }
 
+    /// <summary>
+    /// And CI holds install.sh, the path check and the uninstall to one login profile on a real machine: a home
+    /// with <c>~/.bash_profile</c>, where bash never reads <c>~/.profile</c>. All three used to mean
+    /// <c>~/.profile</c> there, and the check said <c>ok</c> about a file no login shell opens.
+    /// </summary>
+    [Fact]
+    public void Ci_holds_the_installer_the_check_and_the_uninstall_to_the_profile_bash_reads()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
+        var step = ci.IndexOf("name: Install into the profile bash reads, and take it back out", StringComparison.Ordinal);
+
+        Assert.True(step >= 0, "ci.yml no longer installs into a home where bash reads ~/.bash_profile.");
+        Assert.True(ci.IndexOf("bash -l -c 'jason --version'", step, StringComparison.Ordinal) > step, "the step no longer asks a login bash to find jason.");
+        Assert.True(ci.IndexOf("printf '# mine\\n' | cmp - \"$HOME/.bash_profile\"", step, StringComparison.Ordinal) > step, "the step no longer holds the uninstall to the profile's own bytes.");
+    }
+
     /// <summary>The real proof: CI runs each script against the archives the same run packaged, from a local directory.</summary>
     [Fact]
     public void Ci_runs_both_scripts_against_the_archives_it_built()

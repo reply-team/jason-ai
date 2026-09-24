@@ -461,19 +461,35 @@ public static class InstallationRemovers
                 // one the removal edits, so reading it expanded here is where a whole Path's entries turned
                 // into fixed strings.
                 var value = new UserPathValue(pathKey).Read()?.Raw ?? string.Empty;
+                var carried = PathEntry.Carries(value, directory);
 
-                // No marker here, and none is wanted: install.ps1 puts the directory on this account's own
-                // Path value, "where a directory is its own mark". So being there is what makes it ours.
-                return new PathEntryPlan(directory, [], value, PathEntry.Carries(value, directory));
+                // No marker here: install.ps1 puts the directory on this account's own Path value, "where a
+                // directory is its own mark". Being there used to be what made it ours, and it is not: the
+                // installer writes nothing into a Path that already names the directory, and a build copied
+                // "somewhere on your PATH" lands where everything else is on the Path through the same entry.
+                // So the entry is ours only where the directory is Jason's own.
+                return new PathEntryPlan(
+                    directory,
+                    [],
+                    value,
+                    carried && JasonsOwn(directory),
+                    carried ? "this account's Path value" : null);
             }
 
-            var line = PathEntry.ExportLine(directory);
-            var profiles = PathEntry
-                .ProfileFiles(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.GetEnvironmentVariable("SHELL"))
-                .Where(profile => Carries(profile, line))
-                .ToList();
+            return PathEntry.ReadProfiles(directory, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.GetEnvironmentVariable("SHELL"));
+        }
 
-            return new PathEntryPlan(directory, profiles, null, profiles.Count > 0);
+        /// <summary>Whether a directory holds nothing but what the installer writes there, and is there at all.</summary>
+        private static bool JasonsOwn(string directory)
+        {
+            try
+            {
+                return Directory.Exists(directory) && PathEntry.OnlyInstallerFiles(Directory.EnumerateFileSystemEntries(directory));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
         }
 
         public PathEntryOutcome RemovePathEntry(PathEntryPlan plan)
@@ -482,15 +498,17 @@ public static class InstallationRemovers
 
             if (!plan.Ours)
             {
-                // Said as what was found. "Did not put it there, so it was left there" read as though the
-                // directory were on the PATH, and on Windows -- where being on the Path value is what makes it
-                // ours -- it never is when this line is reached.
+                // Said as what was found, which is one of two things on each platform.
                 return new PathEntryOutcome(
                     false,
                     [],
-                    OperatingSystem.IsWindows()
-                        ? "That directory is not on this account's Path, so there was nothing to take off it."
-                        : "No login profile carries the line this installer writes for that directory, so nothing was taken off the PATH.");
+                    (OperatingSystem.IsWindows(), plan.Persisted is not null) switch
+                    {
+                        (true, true) => $"'{plan.Directory}' is on this account's Path, but it holds more than this installer writes there, so the entry is not Jason's to take off: whatever else is in it is on the Path through the same entry.",
+                        (true, false) => "That directory is not on this account's Path, so there was nothing to take off it.",
+                        (false, true) => "The line that puts that directory on the PATH is in a login profile without the mark this installer writes above it, so it is somebody's own and was left.",
+                        (false, false) => "No login profile carries the block this installer writes for that directory, so nothing was taken off the PATH.",
+                    });
             }
 
             if (OperatingSystem.IsWindows())
@@ -513,33 +531,24 @@ public static class InstallationRemovers
             var touched = new List<string>();
             foreach (var profile in plan.Profiles)
             {
-                var text = File.ReadAllText(profile);
-                var without = PathEntry.WithoutEntry(text, plan.Directory);
+                // Bytes in, bytes out: every byte of the file that is not the installer's block is written back
+                // as it was, whatever encoding or line endings the file is in.
+                var bytes = File.ReadAllBytes(profile);
+                var without = PathEntry.WithoutEntry(bytes, plan.Directory);
 
-                // The same instance back means the line is not in there, and the file is not opened for
+                // The same instance back means the block is not in there, and the file is not opened for
                 // writing at all. Rewriting a login profile identically is still rewriting it.
-                if (ReferenceEquals(without, text))
+                if (ReferenceEquals(without, bytes))
                 {
                     continue;
                 }
 
-                File.WriteAllText(profile, without);
+                File.WriteAllBytes(profile, without);
                 touched.Add(profile);
             }
 
-            return new PathEntryOutcome(touched.Count > 0, touched, touched.Count > 0 ? null : "That line is not in any login profile.");
+            return new PathEntryOutcome(touched.Count > 0, touched, touched.Count > 0 ? null : "That block is not in any login profile.");
         }
 
-        private static bool Carries(string profile, string line)
-        {
-            try
-            {
-                return File.Exists(profile) && File.ReadAllText(profile).Contains(line, StringComparison.Ordinal);
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                return false;
-            }
-        }
     }
 }

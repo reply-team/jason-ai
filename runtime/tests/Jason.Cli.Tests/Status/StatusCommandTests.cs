@@ -323,7 +323,7 @@ public class StatusCommandTests
         var installed = Path.Combine(dir.Paths.Root, "programs", "jason", OperatingSystem.IsWindows() ? "jason.exe" : "jason");
         var carried = new RecordingRemover
         {
-            PathEntry = new PathEntryPlan(Path.GetDirectoryName(installed)!, ["/home/a/.profile"], "carried", Ours: true),
+            PathEntry = new PathEntryPlan(Path.GetDirectoryName(installed)!, ["/home/a/.profile"], "carried", Ours: true, Persisted: "/home/a/.profile"),
         };
 
         await CliApp.RunAsync(["status"], Machine(dir, output, onPath: false, machine: carried, installPath: installed), Ct);
@@ -335,6 +335,53 @@ public class StatusCommandTests
         Assert.Contains(installed, check.Fact, StringComparison.Ordinal);
         Assert.Equal([Path.GetDirectoryName(installed)!], carried.Reads);
         Assert.Empty(carried.Calls);
+    }
+
+    /// <summary>
+    /// What a new shell finds is the question, not who put it there: a directory on this account's PATH by
+    /// somebody else's hand is found all the same.
+    /// </summary>
+    [Fact]
+    public async Task A_path_somebody_else_put_on_the_account_is_found_all_the_same()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(dir.Paths.Root, "programs", "jason", OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+        var carried = new RecordingRemover
+        {
+            PathEntry = new PathEntryPlan(Path.GetDirectoryName(installed)!, [], "carried", Ours: false, Persisted: "/home/a/.zprofile"),
+        };
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, onPath: false, machine: carried, installPath: installed), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Contains("/home/a/.zprofile", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And a block this installer wrote into a profile no login shell of this account reads answers nothing: bash
+    /// does not open <c>~/.profile</c> once <c>~/.bash_profile</c> exists, and the check said <c>ok</c> there.
+    /// </summary>
+    [Fact]
+    public async Task A_block_in_a_profile_no_login_shell_reads_is_not_a_path_a_new_shell_finds()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(dir.Paths.Root, "programs", "jason", OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+        var unread = new RecordingRemover
+        {
+            PathEntry = new PathEntryPlan(Path.GetDirectoryName(installed)!, ["/home/a/.profile"], null, Ours: true, Persisted: null),
+        };
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, onPath: false, machine: unread, installPath: installed), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.NotNull(check.Fix);
     }
 
     /// <summary>And where the account does not carry it either, it is the failure it always was, with the repair.</summary>
