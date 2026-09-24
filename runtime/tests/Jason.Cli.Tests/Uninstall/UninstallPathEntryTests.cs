@@ -260,9 +260,18 @@ public class UninstallPathEntryTests
     /// installer's own <c>set -eu</c>, and with no <c>SHELL</c> at all for the row that has none.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The null row used to set <c>SHELL</c> to the empty string and run without <c>set -eu</c>, so it tested a case
     /// the installer never meets: with <c>SHELL</c> unset — a container's build step — <c>${SHELL##*/}</c> under
     /// <c>set -u</c> ended the installer before it wrote a profile, while this rule answered <c>~/.profile</c>.
+    /// </para>
+    /// <para>
+    /// The rule is asked about the <c>SHELL</c> <c>sh</c> itself saw, which is not always the one it was given: macOS's
+    /// <c>sh</c> is bash, and bash fills in an unset <c>SHELL</c> from the account's own entry — so there the function
+    /// answers for the account's real shell, and the expected file is asserted only where <c>sh</c> left the row's
+    /// <c>SHELL</c> as it was. Linux's <c>sh</c>, dash, leaves it unset, and that is where the null row is the case
+    /// the installer met and died on.
+    /// </para>
     /// </remarks>
     [Theory]
     [MemberData(nameof(LoginProfiles))]
@@ -277,10 +286,14 @@ public class UninstallPathEntryTests
             File.WriteAllText(Path.Combine(home, name), "# mine\n");
         }
 
-        var (said, error) = LoginProfileInSh(home, shell);
+        var (said, saw, error) = LoginProfileInSh(home, shell);
 
-        Assert.True(Path.Combine(home, expected) == said, $"sh answered '{said}' ({error}), not '{Path.Combine(home, expected)}'.");
-        Assert.Equal(PathEntry.LoginProfile(home, shell), said);
+        Assert.True(said.Length > 0, $"sh answered nothing: {error}");
+        Assert.Equal(PathEntry.LoginProfile(home, saw), said);
+        if (saw == (shell ?? string.Empty))
+        {
+            Assert.Equal(Path.Combine(home, expected), said);
+        }
     }
 
     /// <summary>
@@ -311,8 +324,11 @@ public class UninstallPathEntryTests
         }
     }
 
-    /// <summary>What <c>install.sh</c>'s <c>login_profile</c> prints under the script's own <c>set -eu</c>.</summary>
-    private static (string Said, string Error) LoginProfileInSh(string home, string? shell)
+    /// <summary>
+    /// What <c>install.sh</c>'s <c>login_profile</c> prints under the script's own <c>set -eu</c>, and the
+    /// <c>SHELL</c> it saw — empty where it had none.
+    /// </summary>
+    private static (string Said, string Saw, string Error) LoginProfileInSh(string home, string? shell)
     {
         var start = new System.Diagnostics.ProcessStartInfo("/bin/sh")
         {
@@ -321,7 +337,7 @@ public class UninstallPathEntryTests
             UseShellExecute = false,
         };
         start.ArgumentList.Add("-c");
-        start.ArgumentList.Add("set -eu\n" + PathEntry.LoginProfileFunction + "\nlogin_profile");
+        start.ArgumentList.Add("set -eu\n" + PathEntry.LoginProfileFunction + "\nprintf '%s\\n' \"${SHELL:-}\"\nlogin_profile");
         start.Environment["HOME"] = home;
         if (shell is null)
         {
@@ -334,9 +350,9 @@ public class UninstallPathEntryTests
 
         using var process = System.Diagnostics.Process.Start(start)!;
         var error = process.StandardError.ReadToEndAsync();
-        var said = process.StandardOutput.ReadToEnd().Trim();
+        var lines = process.StandardOutput.ReadToEnd().Split('\n');
         process.WaitForExit();
-        return (said, error.GetAwaiter().GetResult().Trim());
+        return (lines.Length > 1 ? lines[1].Trim() : string.Empty, lines[0].Trim(), error.GetAwaiter().GetResult().Trim());
     }
 
     /// <summary>
