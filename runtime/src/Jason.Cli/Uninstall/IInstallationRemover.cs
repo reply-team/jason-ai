@@ -63,8 +63,9 @@ public interface IInstallationRemover
     bool RemoveDirectoryIfEmpty(string path);
 
     /// <summary>
-    /// Removes a directory and everything under it. Only ever the data directory, and only on the explicit
-    /// word — which is why it is a separate member rather than a flag on the one above.
+    /// Removes a directory and everything under it. Only ever one of the entries this product keeps in the data
+    /// directory — never the data directory itself, which is whatever <c>JASON_DATA_DIR</c> names — and only on
+    /// the explicit word, which is why it is a separate member rather than a flag on the one above.
     /// </summary>
     void RemoveTree(string path);
 

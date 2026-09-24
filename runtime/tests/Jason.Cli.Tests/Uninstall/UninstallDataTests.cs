@@ -83,27 +83,38 @@ public class UninstallDataTests
         Assert.True(Directory.Exists(dir.Paths.Root));
     }
 
-    /// <summary>The person's shape prints what will be deleted and asks; "n" keeps it and the rest is done.</summary>
+    /// <summary>
+    /// The person's shape prints what will be deleted and asks — and a no changes nothing at all, and says so
+    /// with exit 1.
+    /// </summary>
+    /// <remarks>
+    /// A no used to keep the data directory and remove everything else, exiting 0. The question was whether to
+    /// delete this installation's data along with the rest of it, and somebody who says no to that has not said
+    /// yes to the rest.
+    /// </remarks>
     [Fact]
-    public async Task The_human_shape_asks_before_purging_and_a_no_keeps_it()
+    public async Task The_human_shape_asks_before_purging_and_a_no_changes_nothing()
     {
         using var dir = new TempPaths();
         Plant(dir);
         var output = new StringWriter();
-        var env = Machine(dir, output, new RecordingRemover { ReallyRemoves = true }) with { In = new StringReader("n\n") };
+        var error = new StringWriter();
+        var remover = new RecordingRemover { ReallyRemoves = true };
+        var env = Machine(dir, output, remover) with { In = new StringReader("n\n"), Error = error };
 
         var exit = await UninstallCommand.RunAsync(
             env,
             new UninstallOptions(Human: true, DryRun: false, PurgeData: true, Yes: false, Force: false),
             Ct);
 
-        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(remover.Calls);
         Assert.True(Directory.Exists(dir.Paths.Root), "an unconfirmed purge deleted the data directory.");
 
         var printed = output.ToString();
-        Assert.Contains("About to delete", printed, StringComparison.Ordinal);
+        Assert.Contains("About to delete what Jason keeps in", printed, StringComparison.Ordinal);
         Assert.Contains("config/", printed, StringComparison.Ordinal);
-        Assert.Contains("you did not confirm", printed, StringComparison.Ordinal);
+        Assert.Contains("nothing at all was removed", error.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -169,12 +180,103 @@ public class UninstallDataTests
         Plant(dir);
         var env = Machine(dir, new StringWriter(), new RecordingRemover { ReallyRemoves = true }) with { In = new StringReader(string.Empty) };
 
-        await UninstallCommand.RunAsync(
+        var exit = await UninstallCommand.RunAsync(
             env,
             new UninstallOptions(Human: true, DryRun: false, PurgeData: true, Yes: false, Force: false),
             Ct);
 
+        Assert.Equal(ExitCodes.ApiError, exit);
         Assert.True(Directory.Exists(dir.Paths.Root));
+    }
+
+    /// <summary>
+    /// The purge removes what Jason keeps in the data directory, and nothing else. <c>JASON_DATA_DIR</c> may name
+    /// any directory, and the purge used to delete the one it named with everything in it; somebody's own file
+    /// beside Jason's is theirs, and the directory holding it stays and is named.
+    /// </summary>
+    [Fact]
+    public async Task The_purge_removes_what_jason_keeps_there_and_keeps_what_it_did_not_put_there()
+    {
+        using var dir = new TempPaths();
+        Plant(dir);
+        var notes = Path.Combine(dir.Paths.Root, "my-notes.txt");
+        File.WriteAllText(notes, "mine");
+        var photos = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "photos")).FullName;
+        File.WriteAllText(Path.Combine(photos, "one.jpg"), "mine too");
+
+        var (exit, report) = await RunAsync(dir, purgeData: true, yes: true);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.True(File.Exists(notes), "the purge removed a file Jason did not put there.");
+        Assert.True(File.Exists(Path.Combine(photos, "one.jpg")), "the purge removed a directory Jason did not put there.");
+        foreach (var own in Contracts.Discovery.JasonPaths.OwnEntries)
+        {
+            Assert.False(Path.Exists(Path.Combine(dir.Paths.Root, own)), $"'{own}' is still in the data directory.");
+        }
+
+        var line = Assert.Single(report.Kept, line => line.Contains("my-notes.txt", StringComparison.Ordinal));
+        Assert.Contains("photos", line, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A directory that is not a data directory is refused before anything is read, let alone removed: here, one
+    /// holding the installation. The rest of the belt's cases are <c>DataDirectoryBeltTests</c>.
+    /// </summary>
+    [Fact]
+    public async Task A_purge_of_a_directory_holding_the_installation_is_refused_before_anything_is_removed()
+    {
+        using var dir = new TempPaths();
+        Plant(dir);
+        var output = new StringWriter();
+        var remover = new RecordingRemover { ReallyRemoves = true };
+        var env = Machine(dir, output, remover) with { InstallPath = Path.Combine(dir.Paths.Root, "bin", "jason") };
+
+        var exit = await UninstallCommand.RunAsync(
+            env,
+            new UninstallOptions(Human: false, DryRun: false, PurgeData: true, Yes: true, Force: false),
+            Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains(CliErrors.UninstallRefused, output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("holds the installation", output.ToString(), StringComparison.Ordinal);
+        Assert.Empty(remover.Calls);
+        Assert.Empty(remover.Reads);
+        Assert.True(File.Exists(dir.Paths.UserSettingsFile));
+    }
+
+    /// <summary>
+    /// Every path this product composes under the data directory begins with one of the names the purge
+    /// removes. A directory added to the layout and not to that list would be left behind by every purge; this
+    /// is where that arrives instead.
+    /// </summary>
+    [Fact]
+    public void Every_path_the_product_composes_under_the_data_directory_is_one_of_its_own_entries()
+    {
+        var paths = new Contracts.Discovery.JasonPaths(Path.Combine(Path.GetTempPath(), "jason-own-entries"));
+        var composed = new List<string>();
+
+        foreach (var property in typeof(Contracts.Discovery.JasonPaths).GetProperties().Where(property => property.PropertyType == typeof(string) && property.Name != nameof(paths.Root)))
+        {
+            composed.Add((string)property.GetValue(paths)!);
+        }
+
+        composed.AddRange(paths.Layout);
+        composed.Add(paths.AttemptWorkDirectory("wi_X", "att_X"));
+        composed.Add(paths.PluginPackageDirectory("some.plugin"));
+        composed.Add(paths.PluginInvocationDirectory("inv_X"));
+        composed.Add(paths.SkillsStagedSourceDirectory("v0.1.0"));
+
+        var update = new Cli.Update.UpdatePaths(paths);
+        composed.AddRange(typeof(Cli.Update.UpdatePaths).GetProperties().Where(property => property.PropertyType == typeof(string)).Select(property => (string)property.GetValue(update)!));
+
+        composed.Add(Cli.Autostart.AutostartArtifacts.ArtifactPath(Cli.Autostart.AutostartPlatform.Windows, Path.GetTempPath(), paths.Root));
+
+        Assert.True(composed.Count > 20, "the reflection above found almost nothing, so it is asserting nothing.");
+        foreach (var path in composed)
+        {
+            var first = Path.GetRelativePath(paths.Root, path).Split(Path.DirectorySeparatorChar)[0];
+            Assert.Contains(first, Contracts.Discovery.JasonPaths.OwnEntries);
+        }
     }
 
     /// <summary>A file in each of the places the data directory is documented to hold the operator's own work.</summary>
@@ -206,6 +308,10 @@ public class UninstallDataTests
         ];
     }
 
+    /// <remarks>
+    /// The installation beside the data directory rather than in it: a data directory holding the installation
+    /// is one the purge refuses outright, which is a test of its own above.
+    /// </remarks>
     private static CliEnvironment Machine(TempPaths dir, TextWriter output, RecordingRemover remover) =>
         new(
             output,
@@ -213,7 +319,7 @@ public class UninstallDataTests
             dir.Paths,
             Autostart: new RecordingRegistrar(),
             Harnesses: HarnessLocators.At(Path.Combine(dir.Paths.Root, "harness")),
-            InstallPath: Path.Combine(dir.Paths.Root, "bin", "jason"),
+            InstallPath: Path.Combine(dir.Paths.Root + "-install", "jason"),
             Removes: remover);
 
     private static async Task<(int Exit, UninstallReport Report)> RunAsync(TempPaths dir, bool purgeData, bool yes = false)

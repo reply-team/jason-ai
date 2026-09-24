@@ -76,7 +76,22 @@ public static class UninstallRunner
         // machine already half uninstalled, and the answer had to be read by a process that no longer had its
         // own file to load anything from.
         var purge = options.PurgeData && (!options.Human || options.Yes || Confirmed(env, plan));
-        var declined = options.PurgeData && !purge;
+
+        // And a no refuses the whole verb. It used to keep the data directory and remove everything else, exiting
+        // 0 -- an answer to a question nobody asked. The question was whether to delete this installation's data
+        // along with the rest of it; somebody who says no to that has not said yes to the rest, and the verb
+        // without --purge-data is one line away.
+        if (options.PurgeData && !purge)
+        {
+            return new UninstallReport(
+                plan,
+                done,
+                kept,
+                problems,
+                CliErrors.UninstallRefused,
+                $"You did not confirm deleting what Jason keeps in '{plan.DataDirectory}', so nothing at all was removed. "
+                + "'jason uninstall' without --purge-data removes the installation and keeps the data directory.");
+        }
 
         // 1. The registration, first.
         if (Step1RemoveAutostart(env, plan, done, kept) is { } refusedAt1)
@@ -106,7 +121,7 @@ public static class UninstallRunner
             Step5RemoveExecutable(env, plan, done, kept, problems);
 
             // 6. And the data directory, only on the explicit word, after everything else.
-            Step6Data(env, plan, purge, declined, done, kept, problems);
+            Step6Data(env, plan, purge, done, kept, problems);
         }
         catch (Exception unexpected) when (unexpected is not OperationCanceledException)
         {
@@ -167,6 +182,13 @@ public static class UninstallRunner
     /// line that it kept it and where, because a person who wanted it gone needs to know it is still there.
     /// </para>
     /// <para>
+    /// <b>And on the word, only what Jason keeps there.</b> This removed the directory with everything in it, and
+    /// the directory is whatever <c>JASON_DATA_DIR</c> names. Each of this product's own entries goes, whole;
+    /// anything else in the directory stays and is named; the directory itself goes only once nothing is left
+    /// in it. A directory that is not a data directory at all is refused before any of this, by
+    /// <see cref="DataDirectoryBelt"/>.
+    /// </para>
+    /// <para>
     /// Last, after everything else, because everything else lives in it or writes to it while it runs.
     /// </para>
     /// </remarks>
@@ -174,17 +196,10 @@ public static class UninstallRunner
         CliEnvironment env,
         UninstallPlan plan,
         bool purge,
-        bool declined,
         List<string> done,
         List<string> kept,
         List<string> problems)
     {
-        if (declined)
-        {
-            kept.Add($"The data directory at '{plan.DataDirectory}' was kept: you did not confirm.");
-            return;
-        }
-
         if (!purge)
         {
             kept.Add(
@@ -193,10 +208,48 @@ public static class UninstallRunner
             return;
         }
 
+        var remover = env.Removes!;
+        var (own, others) = Entries(plan.DataDirectory);
+        var failed = false;
+        foreach (var entry in own)
+        {
+            try
+            {
+                if (Directory.Exists(entry))
+                {
+                    remover.RemoveTree(entry);
+                }
+                else
+                {
+                    remover.RemoveFile(entry);
+                }
+            }
+            catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+            {
+                problems.Add($"'{entry}' could not be removed: {exception.Message}");
+                failed = true;
+            }
+        }
+
+        if (others.Count > 0)
+        {
+            kept.Add(
+                $"Kept '{plan.DataDirectory}' and {string.Join(", ", others.Select(entry => $"'{Path.GetFileName(entry)}'"))} in it: "
+                + "Jason does not keep anything by that name in a data directory, so it is not Jason's to remove. "
+                + (own.Count > 0 ? "Everything Jason keeps there is gone." : "Nothing Jason keeps there was in it."));
+            return;
+        }
+
         try
         {
-            env.Removes!.RemoveTree(plan.DataDirectory);
-            done.Add($"Removed the data directory at '{plan.DataDirectory}'.");
+            if (remover.RemoveDirectoryIfEmpty(plan.DataDirectory) || !Directory.Exists(plan.DataDirectory))
+            {
+                done.Add($"Removed the data directory at '{plan.DataDirectory}'.");
+            }
+            else if (!failed)
+            {
+                problems.Add($"'{plan.DataDirectory}' could not be removed: something arrived in it while it was being emptied.");
+            }
         }
         catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
         {
@@ -205,39 +258,61 @@ public static class UninstallRunner
     }
 
     /// <summary>
-    /// Prints exactly what will be deleted and asks. Only in the shape a person is reading: a machine shape
-    /// that blocked on a question nobody could see would hang a script for ever, so it refuses up front
-    /// instead, before anything at all has been removed.
+    /// The data directory's entries, split into what this product keeps there — <see cref="Contracts.Discovery.JasonPaths.OwnEntries"/>
+    /// — and everything else, each ordered by name.
+    /// </summary>
+    private static (IReadOnlyList<string> Own, IReadOnlyList<string> Others) Entries(string dataDirectory)
+    {
+        if (!Directory.Exists(dataDirectory))
+        {
+            return ([], []);
+        }
+
+        var entries = Directory.EnumerateFileSystemEntries(dataDirectory).Order(StringComparer.Ordinal).ToList();
+        var own = entries.Where(entry => Contracts.Discovery.JasonPaths.OwnEntries.Contains(Path.GetFileName(entry), StringComparer.Ordinal)).ToList();
+        return (own, [.. entries.Except(own)]);
+    }
+
+    /// <summary>
+    /// Prints exactly what will be deleted and what will be kept, and asks. Only in the shape a person is
+    /// reading: a machine shape that blocked on a question nobody could see would hang a script for ever, so it
+    /// refuses up front instead, before anything at all has been removed.
     /// </summary>
     private static bool Confirmed(CliEnvironment env, UninstallPlan plan)
     {
-        env.Out.WriteLine();
-        env.Out.WriteLine($"About to delete {plan.DataDirectory} and everything in it:");
-        foreach (var entry in Contents(plan.DataDirectory))
+        IReadOnlyList<string> own;
+        IReadOnlyList<string> others;
+        try
         {
-            env.Out.WriteLine($"  {entry}");
+            (own, others) = Entries(plan.DataDirectory);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            env.Out.WriteLine();
+            env.Out.WriteLine($"{plan.DataDirectory} could not be listed ({exception.Message}), so nothing in it will be deleted.");
+            return false;
+        }
+
+        env.Out.WriteLine();
+        env.Out.WriteLine($"About to delete what Jason keeps in {plan.DataDirectory}:");
+        foreach (var entry in own)
+        {
+            env.Out.WriteLine($"  {Path.GetFileName(entry)}{(Directory.Exists(entry) ? "/" : string.Empty)}");
+        }
+
+        if (others.Count > 0)
+        {
+            env.Out.WriteLine("and to keep what Jason did not put there:");
+            foreach (var entry in others)
+            {
+                env.Out.WriteLine($"  {Path.GetFileName(entry)}{(Directory.Exists(entry) ? "/" : string.Empty)}");
+            }
         }
 
         env.Out.Write("Delete it? [y/N] ");
         var answer = (env.In ?? TextReader.Null).ReadLine();
         return answer is not null && (answer.Trim().Equals("y", StringComparison.OrdinalIgnoreCase)
             || answer.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <summary>What is in it, one line each, so the question is about something the person can see.</summary>
-    private static IEnumerable<string> Contents(string root)
-    {
-        IEnumerable<string> entries;
-        try
-        {
-            entries = Directory.Exists(root) ? Directory.EnumerateFileSystemEntries(root).Order(StringComparer.Ordinal) : [];
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            return [$"(could not be listed: {exception.Message})"];
-        }
-
-        return entries.Select(entry => Path.GetFileName(entry) + (Directory.Exists(entry) ? "/" : string.Empty));
     }
 
     /// <summary>

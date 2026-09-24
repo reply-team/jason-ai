@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Globalization;
 using System.Text.Json;
 using Jason.Cli.Commands;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 
 namespace Jason.Cli.Uninstall;
@@ -41,8 +42,11 @@ public static class UninstallCommand
           4. the PATH entry, only where this installer wrote it
           5. the executable, its install directory, and the native libraries it unpacked on first run
 
-        Kept unless --purge-data:  the data directory. --purge-data prints what will be deleted and asks
-                                   before anything at all is removed, unless --yes.
+        Kept unless --purge-data:  the data directory. --purge-data removes what Jason keeps there, and the
+                                   directory once nothing else is in it; it prints what will be deleted and
+                                   asks before anything at all is removed, unless --yes. A directory holding a
+                                   file-system root, your profile, the temporary directory or the installation
+                                   is refused.
         Never touched:             anything there is no receipt for, any other skill in an agent harness,
                                    any provider CLI, any model credential, anything outside the paths it names.
 
@@ -110,14 +114,32 @@ public static class UninstallCommand
         // in the shape a script reads, there is nobody to ask, and a verb that blocked on a question nobody
         // could see would hang for ever. So the word has to be said in advance, and this refuses with the
         // whole installation still in place rather than with everything but the data gone.
-        if (options.PurgeData && !options.Yes && !options.Human)
+        // A dry run is not asked: it deletes nothing, so there is nothing to have said in advance.
+        if (options.PurgeData && !options.Yes && !options.Human && !options.DryRun)
         {
             return Refuse(
                 env,
                 options.Human,
                 CliErrors.UninstallRefused,
-                $"--purge-data deletes '{env.Paths.Root}' and everything in it. Nothing has been removed. "
+                $"--purge-data deletes what Jason keeps in '{env.Paths.Root}'. Nothing has been removed. "
                 + "Add --yes to say so in advance, or run with --human to be asked.");
+        }
+
+        // And a data directory that is not one is refused before anything is read. JASON_DATA_DIR may name any
+        // directory at all, and the purge used to delete the one it named, recursively, whatever it was.
+        if (options.PurgeData
+            && DataDirectoryBelt.Refusal(
+                env.Paths.Root,
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                Path.GetTempPath(),
+                Path.GetDirectoryName(env.InstallPath ?? SelfExecutable.InstalledImage ?? string.Empty)) is { } refusal)
+        {
+            return Refuse(
+                env,
+                options.Human,
+                CliErrors.UninstallRefused,
+                $"--purge-data was refused and nothing has been removed: {refusal} Point JASON_DATA_DIR at the data "
+                + "directory itself, or run this without --purge-data to keep it.");
         }
 
         var plan = UninstallReader.Read(env, options.PurgeData);
@@ -285,7 +307,7 @@ public static class UninstallCommand
         }
 
         env.Out.WriteLine(plan.PurgesData
-            ? $"  the data directory at {plan.DataDirectory}, with everything in it"
+            ? $"  what Jason keeps in the data directory at {plan.DataDirectory}, and the directory once nothing else is in it"
             : $"The data directory at {plan.DataDirectory} is kept. --purge-data removes it.");
     }
 

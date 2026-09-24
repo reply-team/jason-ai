@@ -121,4 +121,16 @@ public sealed class JasonPaths
 
     /// <summary>The directories the runtime creates on start.</summary>
     public IEnumerable<string> Layout => [StateDirectory, ConfigDirectory, PluginsDirectory, RunDirectory, LogsDirectory, WorkDirectory];
+
+    /// <summary>
+    /// The name of every entry this product ever puts directly in the data directory: the runtime's layout, the
+    /// skills it deploys, what an update keeps and the document a Windows logon registration is made from.
+    /// </summary>
+    /// <remarks>
+    /// What <c>jason uninstall --purge-data</c> removes, and nothing else. <c>JASON_DATA_DIR</c> may name any
+    /// directory at all — a home directory, a shared folder, one somebody keeps their own files in — and a purge
+    /// that deleted the directory it names with everything in it would delete those as well. A test reads every
+    /// path this product composes under the data directory and holds each to a name on this list.
+    /// </remarks>
+    public static IReadOnlyList<string> OwnEntries { get; } = ["state", "config", "plugins", "run", "logs", "work", "skills", "update", "autostart"];
 }
