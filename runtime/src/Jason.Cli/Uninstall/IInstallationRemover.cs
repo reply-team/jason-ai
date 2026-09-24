@@ -473,24 +473,11 @@ public static class InstallationRemovers
                     directory,
                     [],
                     value,
-                    carried && JasonsOwn(directory),
+                    carried && PathEntry.JasonsOwn(directory, windows: true),
                     carried ? "this account's Path value" : null);
             }
 
             return PathEntry.ReadProfiles(directory, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.GetEnvironmentVariable("SHELL"));
-        }
-
-        /// <summary>Whether a directory holds nothing but what the installer writes there, and is there at all.</summary>
-        private static bool JasonsOwn(string directory)
-        {
-            try
-            {
-                return Directory.Exists(directory) && PathEntry.OnlyInstallerFiles(Directory.EnumerateFileSystemEntries(directory));
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                return false;
-            }
         }
 
         public PathEntryOutcome RemovePathEntry(PathEntryPlan plan)
@@ -499,17 +486,7 @@ public static class InstallationRemovers
 
             if (!plan.Ours)
             {
-                // Said as what was found, which is one of two things on each platform.
-                return new PathEntryOutcome(
-                    false,
-                    [],
-                    (OperatingSystem.IsWindows(), plan.Persisted is not null) switch
-                    {
-                        (true, true) => $"'{plan.Directory}' is on this account's Path, but it holds more than this installer writes there, so the entry is not Jason's to take off: whatever else is in it is on the Path through the same entry.",
-                        (true, false) => "That directory is not on this account's Path, so there was nothing to take off it.",
-                        (false, true) => "The line that puts that directory on the PATH is in a login profile without the mark this installer writes above it, so it is somebody's own and was left.",
-                        (false, false) => "No login profile carries the block this installer writes for that directory, so nothing was taken off the PATH.",
-                    });
+                return new PathEntryOutcome(false, [], PathEntry.WhyLeft(plan, OperatingSystem.IsWindows()));
             }
 
             if (OperatingSystem.IsWindows())

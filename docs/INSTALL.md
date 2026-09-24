@@ -269,11 +269,14 @@ skills; then the PATH entry, only where the installer wrote it; then the executa
 the native libraries a release unpacks the first time it runs — under the temporary directory on Windows, under
 `~/.net` on macOS and Linux.
 
-"Only where the installer wrote it" is a rule of its own on each platform. On macOS and Linux it is the block the
-installer appends to a login profile — a marker line and the `export` line under it; a line nobody marked is
-yours and stays. On Windows the Path carries no marker, so the entry goes only where its directory holds nothing
-but Jason — the executable, and the `jason.previous.exe` an upgrade can leave beside it; an entry for a directory
-other programs share stays, and the report says why.
+"Only where the installer wrote it" is one rule on both platforms: the entry goes only where the installer wrote
+it **and** its directory holds nothing but what the installer puts there, because other programs are on the PATH
+through the same entry. On macOS and Linux the entry is the block the installer appends to a login profile — a
+marker line and the `export` line under it; a line nobody marked is yours and stays, and so does the block where
+the directory holds more than `jason`: `~/.local/bin`, the installer's default, is where other tools install
+too. On Windows the Path carries no marker, so the entry goes only where its directory holds nothing but the
+executable and the `jason.previous.exe` an upgrade can leave beside it. An entry that stays is named in the
+report, with the reason.
 
 On Windows the executable is the file the uninstall is running from, and Windows does not delete the image of a
 running process. So it is moved out of the install directory, to a directory on the same volume — which then

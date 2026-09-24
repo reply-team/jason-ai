@@ -41,8 +41,8 @@ public static class UninstallCommand
           1. the logon registration, first, so a logon part-way through cannot start what is going
           2. the runtime — and if it will not stop, nothing further is removed
           3. every skill a deployment recorded, by the paths its record names
-          4. the PATH entry, only where the installer wrote it: the marked block in a login profile; on
-             Windows, only an entry for a directory that holds nothing but Jason
+          4. the PATH entry, only where the installer wrote it and its directory holds nothing but Jason:
+             the marked block in a login profile; on Windows, the entry in this account's Path
           5. the executable, its install directory, and the native libraries it unpacked on first run
 
         Kept unless --purge-data:  the data directory. --purge-data removes what Jason keeps there, and the

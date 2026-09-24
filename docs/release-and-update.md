@@ -514,7 +514,7 @@ The order is the order that makes a half-finished run safe:
 | the logon registration | first, so a logon part-way through cannot start what is going |
 | the runtime | and if it will not stop — or is running and does not answer — **nothing after this is removed** |
 | every recorded skill | by the paths its root's record names, digest by digest |
-| the PATH entry | only where the installer wrote it — a PATH is a person's own document. On macOS and Linux that is the marked block in a login profile; on Windows, whose Path carries no marker, only an entry for a directory that holds nothing but Jason |
+| the PATH entry | only where the installer wrote it and its directory holds nothing but Jason — a PATH is a person's own document, and other programs are on it through a directory they share. On macOS and Linux the entry is the marked block in a login profile; on Windows, whose Path carries no marker, the entry in this account's Path |
 | the executable, its install directory and what it unpacked | last, because everything above runs from it. On Windows the running image cannot be deleted, so it is moved out of the install directory, to a directory on its own volume, and a cleanup removes the copy once the verb has exited; the native libraries the build unpacked on its first run go too |
 
 A recorded file whose bytes have changed since is reported and kept, because the record says what Jason wrote

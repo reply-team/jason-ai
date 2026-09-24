@@ -223,8 +223,8 @@ there, and this verb removes those skills and nothing else — a skill you copie
 receipt, so it is removed by nobody, including this. The rest goes by rule, in a fixed order: the logon
 registration first, so a logon part-way through cannot start what is going; then the runtime, and if it will
 not stop, nothing after that is removed; then the recorded skills; then the PATH entry, only where the
-installer wrote it — on Windows, only where the directory holds nothing but Jason; then the executable, its
-install directory and the native libraries it unpacked. A recorded file whose bytes have changed since is
+installer wrote it and its directory holds nothing but Jason; then the executable, its install directory and
+the native libraries it unpacked. A recorded file whose bytes have changed since is
 reported and kept unless `--force` says otherwise.
 
 **The data directory is kept** — the database, the settings, the plugins, the logs and the work directories

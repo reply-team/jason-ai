@@ -12,8 +12,10 @@ namespace Jason.Cli.Uninstall;
 /// <param name="Profiles">The login profiles carrying the line, on Unix. Empty on Windows.</param>
 /// <param name="RegistryValue">This account's <c>Path</c> value, on Windows. Null elsewhere.</param>
 /// <param name="Ours">
-/// Whether the installer is what put it there. A directory that is on the PATH by somebody else's hand is
-/// reported and left alone: this verb removes what Jason wrote, and a PATH is a person's own document.
+/// Whether it is Jason's to take off: the installer put it there, and its directory holds nothing but what the
+/// installer writes. A directory that is on the PATH by somebody else's hand is reported and left alone, and so is
+/// one other programs are on the PATH through: this verb removes what Jason wrote, and a PATH is a person's own
+/// document.
 /// </param>
 /// <param name="Persisted">
 /// Where this account keeps the directory on its PATH for shells not yet started — this account's Path value on
@@ -125,10 +127,19 @@ public static class PathEntry
     /// <param name="home">The account's home directory.</param>
     /// <param name="shell">The account's shell, as <c>SHELL</c> names it.</param>
     /// <remarks>
+    /// <para>
     /// Two questions, answered separately. Which profiles carry the block this installer appends — every one it
     /// or a repair may have written into, whatever the shell is now — is what the uninstall removes. Whether the
     /// one file a login shell of this account reads carries the line at all is what the <c>path</c> check asks,
     /// and a profile no login shell opens is not an answer to it.
+    /// </para>
+    /// <para>
+    /// <b>And the block is Jason's only where its directory is</b> — holding nothing but what <c>install.sh</c>
+    /// writes there, the rule the Windows entry and the install directory itself are removed by. The marker made
+    /// the block ours on its own, and <c>install.sh</c>'s default is <c>~/.local/bin</c>, where Claude Code,
+    /// <c>uv</c> and <c>pipx</c> install as well: once the line was there they were found through it, and the
+    /// uninstall took them off the PATH along with Jason.
+    /// </para>
     /// </remarks>
     public static PathEntryPlan ReadProfiles(string directory, string home, string? shell)
     {
@@ -137,7 +148,12 @@ public static class PathEntry
 
         var profiles = ProfileFiles(home).Where(profile => Holds(profile, directory, marked: true)).ToList();
         var login = LoginProfile(home, shell);
-        return new PathEntryPlan(directory, profiles, null, profiles.Count > 0, Holds(login, directory, marked: false) ? login : null);
+        return new PathEntryPlan(
+            directory,
+            profiles,
+            null,
+            profiles.Count > 0 && JasonsOwn(directory, windows: false),
+            Holds(login, directory, marked: false) ? login : null);
     }
 
     /// <summary>
@@ -424,10 +440,53 @@ public static class PathEntry
     /// Path. Taking that entry off would take everything in it off with Jason. So the entry is Jason's only where
     /// the directory is, by the same rule the install directory itself is removed by.
     /// </remarks>
-    public static bool OnlyInstallerFiles(IEnumerable<string> entries)
+    public static bool OnlyInstallerFiles(IEnumerable<string> entries, bool windows)
     {
         ArgumentNullException.ThrowIfNull(entries);
-        return entries.All(entry => InstallerFiles.Contains(Path.GetFileName(entry), StringComparer.OrdinalIgnoreCase));
+
+        var (names, comparer) = windows ? (InstallerFiles, StringComparer.OrdinalIgnoreCase) : (UnixInstallerFiles, StringComparer.Ordinal);
+        return entries.All(entry => names.Contains(Path.GetFileName(entry), comparer));
+    }
+
+    /// <summary>Whether a directory is there and holds nothing but what that platform's installer writes.</summary>
+    public static bool JasonsOwn(string directory, bool windows)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+
+        try
+        {
+            return System.IO.Directory.Exists(directory) && OnlyInstallerFiles(System.IO.Directory.EnumerateFileSystemEntries(directory), windows);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Why an entry that is not Jason's was left, said as what was found: a directory that holds more than Jason,
+    /// a line nobody marked, or nothing there at all.
+    /// </summary>
+    public static string WhyLeft(PathEntryPlan plan, bool windows)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+
+        if (windows)
+        {
+            return plan.Persisted is not null
+                ? $"'{plan.Directory}' is on this account's Path, but it holds more than this installer writes there, so the entry is not Jason's to take off: whatever else is in it is on the Path through the same entry."
+                : "That directory is not on this account's Path, so there was nothing to take off it.";
+        }
+
+        if (plan.Profiles.Count > 0)
+        {
+            return $"'{plan.Directory}' holds more than this installer writes there, so the block it wrote in {string.Join(", ", plan.Profiles)} "
+                + "was left: whatever else is in that directory is on the PATH through the same line.";
+        }
+
+        return plan.Persisted is not null
+            ? "The line that puts that directory on the PATH is in a login profile without the mark this installer writes above it, so it is somebody's own and was left."
+            : "No login profile carries the block this installer writes for that directory, so nothing was taken off the PATH.";
     }
 
     /// <summary>
@@ -459,10 +518,18 @@ public static class PathEntry
         return kept.Count == entries.Length ? registryValue : string.Join(';', kept);
     }
 
+    /// <summary>What <c>install.sh</c> ever leaves in an install directory: the executable, and nothing else.</summary>
+    public static IReadOnlyList<string> UnixInstallerFiles { get; } = ["jason"];
+
     /// <summary>
     /// How the entries of a Path value of that kind are read by Windows: expanded where it is
     /// <c>REG_EXPAND_SZ</c>, and exactly as written where it is <c>REG_SZ</c>, which Windows never expands.
     /// </summary>
+    /// <param name="entries">What the directory holds.</param>
+    /// <param name="windows">
+    /// Whose installer: <c>install.ps1</c>'s names, compared as Windows compares them, or <c>install.sh</c>'s,
+    /// compared byte for byte.
+    /// </param>
     /// <remarks>
     /// Always expanding counted <c>%VARIABLE%\bin</c> in a <c>REG_SZ</c> Path as the directory it would expand to,
     /// so the check said a new shell would find <c>jason</c> through an entry no shell ever resolves.

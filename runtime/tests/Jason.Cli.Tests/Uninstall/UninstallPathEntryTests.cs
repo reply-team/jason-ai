@@ -293,14 +293,66 @@ public class UninstallPathEntryTests
     {
         using var tree = new Jason.Cli.Tests.Documentation.TempTree();
         var home = tree.NewDirectory("home");
+        var bin = Installed(home, "jason");
         File.WriteAllText(Path.Combine(home, ".bash_profile"), "# mine\n");
-        File.WriteAllText(Path.Combine(home, ".profile"), $"# mine\n\n{PathEntry.Marker}\n{PathEntry.ExportLine(Directory)}\n");
+        File.WriteAllText(Path.Combine(home, ".profile"), $"# mine\n\n{PathEntry.Marker}\n{PathEntry.ExportLine(bin)}\n");
 
-        var plan = PathEntry.ReadProfiles(Directory, home, "/bin/bash");
+        var plan = PathEntry.ReadProfiles(bin, home, "/bin/bash");
 
         Assert.True(plan.Ours);
         Assert.Equal([Path.Combine(home, ".profile")], plan.Profiles);
         Assert.Null(plan.Persisted);
+    }
+
+    /// <summary>
+    /// On macOS and Linux, as on Windows, the installer's block is Jason's to take off only where its directory
+    /// holds nothing but what the installer writes there.
+    /// </summary>
+    /// <remarks>
+    /// <c>install.sh</c>'s default is <c>~/.local/bin</c>, which other tools install into as well — Claude Code,
+    /// <c>uv</c>, <c>pipx</c> — and once the installer's line was there, they were found through it. The block was
+    /// Jason's whenever the marker was above it, so the uninstall took it away and took them off the PATH with it:
+    /// the same fault the Windows entry had, on the platform where the default directory is the shared one.
+    /// </remarks>
+    [Fact]
+    public void A_block_for_a_directory_other_tools_share_is_left_and_says_why()
+    {
+        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        var home = tree.NewDirectory("home");
+        var bin = Installed(home, "jason", "claude", "uv");
+        File.WriteAllText(Path.Combine(home, ".zprofile"), $"# mine\n\n{PathEntry.Marker}\n{PathEntry.ExportLine(bin)}\n");
+
+        var plan = PathEntry.ReadProfiles(bin, home, "/bin/zsh");
+
+        Assert.False(plan.Ours, "the block for a directory other tools are in was taken to be Jason's to remove.");
+        Assert.Equal([Path.Combine(home, ".zprofile")], plan.Profiles);
+        Assert.Equal(Path.Combine(home, ".zprofile"), plan.Persisted);
+
+        var note = PathEntry.WhyLeft(plan, windows: false);
+        Assert.Contains("holds more than this installer writes there", note, StringComparison.Ordinal);
+        Assert.Contains(Path.Combine(home, ".zprofile"), note, StringComparison.Ordinal);
+    }
+
+    /// <summary>What <c>install.sh</c> writes into an install directory is the executable, and nothing else.</summary>
+    [Theory]
+    [InlineData(new[] { "jason" }, true)]
+    [InlineData(new string[0], true)]
+    [InlineData(new[] { "jason", "claude", "uv" }, false)]
+    [InlineData(new[] { "jason", "jason.exe" }, false)]
+    [InlineData(new[] { "Jason" }, false)]
+    public void On_unix_a_directory_is_jasons_own_only_where_it_holds_nothing_but_jason(string[] entries, bool own) =>
+        Assert.Equal(own, PathEntry.OnlyInstallerFiles(entries.Select(entry => "/somewhere/" + entry), windows: false));
+
+    /// <summary>An install directory under a home, holding those files.</summary>
+    private static string Installed(string home, params string[] files)
+    {
+        var bin = System.IO.Directory.CreateDirectory(Path.Combine(home, ".local", "bin")).FullName;
+        foreach (var file in files)
+        {
+            File.WriteAllText(Path.Combine(bin, file), "#!/bin/sh\n");
+        }
+
+        return bin;
     }
 
     /// <summary>And a line a login shell does read answers the check, marked or not — while only a marked one is ours.</summary>
@@ -340,7 +392,7 @@ public class UninstallPathEntryTests
     [InlineData(new[] { "jason.exe", "python.exe" }, false)]
     [InlineData(new[] { "winget.exe", "jason.exe", "Microsoft.DesktopAppInstaller_8wekyb3d8bbwe" }, false)]
     public void A_directory_is_jasons_own_only_where_it_holds_nothing_else(string[] entries, bool own) =>
-        Assert.Equal(own, PathEntry.OnlyInstallerFiles(entries.Select(entry => Path.Combine(@"C:\somewhere", entry))));
+        Assert.Equal(own, PathEntry.OnlyInstallerFiles(entries.Select(entry => Path.Combine(@"C:\somewhere", entry)), windows: true));
 
     /// <summary>
     /// The Unix repair appends the marked line to that profile <b>and</b> exports it for the shell it is

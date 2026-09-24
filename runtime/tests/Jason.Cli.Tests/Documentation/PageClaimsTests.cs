@@ -110,6 +110,29 @@ public class PageClaimsTests
         Assert.Contains("every step that did happen is listed either way", skill, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The PATH entry goes only where its directory holds nothing but Jason, on every platform. The pages said so
+    /// of Windows alone — which is what the code did: on macOS and Linux the marker alone made the block Jason's,
+    /// and the installer's default directory there is the one other tools share.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md", "only where the installer wrote it and its directory holds nothing but Jason")]
+    [InlineData("docs/INSTALL.md", "is one rule on both platforms")]
+    [InlineData("docs/release-and-update.md", "only where the installer wrote it and its directory holds nothing but Jason")]
+    [InlineData("runtime/src/Jason.Cli/Uninstall/UninstallCommand.cs", "only where the installer wrote it and its directory holds nothing but Jason")]
+    public void The_pages_hold_every_platform_to_the_directory_rule(string page, string said)
+    {
+        var text = Flat(Page(page.Split('/')));
+
+        Assert.Contains(said, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("on Windows, only where the directory holds nothing but Jason", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("only an entry for a directory that holds nothing but Jason", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("is a rule of its own on each platform", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>A page with every run of white space made one space, so a sentence is found however it is wrapped.</summary>
+    private static string Flat(string text) => System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
+
     /// <summary>The README's paste-in prompt: the fenced block under its own heading.</summary>
     private static string Prompt()
     {
