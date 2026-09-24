@@ -72,9 +72,13 @@ public static class SkillsPlanner
     /// What would be written where. A refusal here is a refusal of the whole deployment: a half-written role
     /// root is worse than an empty one, because the launcher refuses what it cannot make sense of.
     /// </summary>
+    /// <param name="roleRoot">
+    /// The runtime's own role skills root, or null to leave it out: an update carries a root only where that
+    /// root's own record says what it came from.
+    /// </param>
     public static SkillsPlan Compose(
         StagedSource source,
-        string roleRoot,
+        string? roleRoot,
         IReadOnlyList<HarnessRoot> harnesses,
         int cap,
         bool capFromRuntime,
@@ -94,7 +98,7 @@ public static class SkillsPlanner
         if (Wanted(onlyPack, SkillPacks.Runtime))
         {
             var roles = Path.Combine(runtimePack, "roles");
-            if (Directory.Exists(roles))
+            if (roleRoot is not null && Directory.Exists(roles))
             {
                 packs.Add(new PlannedPack(SkillPacks.Runtime, roleRoot, [.. Units(roles, roleRoot, cap, isRole: true, refusals)]));
             }

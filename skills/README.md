@@ -39,8 +39,9 @@ These are the rules both verbs keep:
 
 - **Skills are pulled from git, never from the release bundle.** A release archive is frozen at a
   version; the business pack is refreshed on its own cadence, and a person who installed Jason in
-  March should be able to take this month's SDR knowledge without updating the runtime. It also means
-  installation works before any release exists, which today is the only way it can work at all.
+  March should be able to take this month's SDR knowledge without updating the runtime. And a build from
+  source takes them from its own working tree with `--source`, so its skills never depend on a release
+  existing at all.
 - **From a pinned ref, not a moving branch.** A floating default would mean two people installing on
   the same day could get different texts, and nothing could then say whether a deployment is current.
   The pin is derived from the build rather than written down — `v` and its own release version, through
@@ -63,8 +64,10 @@ These are the rules both verbs keep:
 - **So the first can be deployed on its own.** `--roles-only` writes into the runtime's own directory and
   into no agent harness, and it is what `jason status` prints as the repair for `role_skills`. The harness
   half is somebody's own agent configuration, and a required check whose only repair also wrote there could
-  not be repaired by anybody who would not allow that. `update` carries a harness only where its record
-  says a deployment was made, so an installation taught with `--roles-only` stays that way.
+  not be repaired by anybody who would not allow that. `update` carries a root only where its record says a
+  deployment was made, and each pack in it from the source and ref that record names — so an installation
+  taught with `--roles-only` stays that way, and a harness installed from one source is not updated from
+  another. A directory source is recorded as its full path, so `update` finds it from anywhere.
 - **Nothing is written until the whole tree is known to be deliverable.** The runtime refuses to launch
   a role whose skill names itself differently from its directory, or whose tree is over
   `Roles:MaxSkillBytes`. A deployment that wrote such a tree would turn a role with no skill — which
