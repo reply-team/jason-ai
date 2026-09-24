@@ -23,6 +23,12 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
     public HashSet<string> Refuses { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Paths on which the file system itself fails — a file somebody holds open, one marked read-only — the way
+    /// this machine's remover does: with the exception the operating system raises, not with a refusal.
+    /// </summary>
+    public HashSet<string> Locked { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Whether the file operations really happen. Off by default: most of these tests are about what was
     /// <em>asked</em>, and a test that wants the tree afterwards says so rather than every test risking it.
     /// </summary>
@@ -148,6 +154,11 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
         if (Refuses.Contains(path))
         {
             throw new RemovalRefused(CliErrors.UninstallRefused, $"'{path}' could not be removed.");
+        }
+
+        if (Locked.Contains(path))
+        {
+            throw new IOException($"The process cannot access the file '{path}' because it is being used by another process.");
         }
 
         Calls.Add($"{verb} {path}");

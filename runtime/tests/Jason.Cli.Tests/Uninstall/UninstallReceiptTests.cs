@@ -58,6 +58,51 @@ public class UninstallReceiptTests
             || line.Contains("operating-the-installation", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A recorded file the file system will not let go — held open, read-only — is one problem among the rest,
+    /// not the end of the verb. The machine's remover raises what the operating system raises, and step 3 used
+    /// to catch only its own refusals: the count of files already removed was lost, and the PATH entry and the
+    /// executable were never attempted.
+    /// </summary>
+    [Fact]
+    public async Task A_recorded_file_the_file_system_will_not_let_go_is_one_problem_among_the_rest()
+    {
+        using var dir = new TempPaths();
+        var root = Path.Combine(dir.Paths.Root, "harness");
+        var held = Deploy(root, "held-open");
+        var free = Deploy(root, "free");
+        Record(root, "runtime", held, free);
+        var remover = new RecordingRemover { ReallyRemoves = true };
+        remover.Locked.Add(held);
+
+        var (exit, report) = await RunAsync(dir, root, remover: remover);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.False(File.Exists(free), "the file after the held one was not removed.");
+        Assert.True(File.Exists(Path.Combine(root, SkillsRecord.FileName)), "the record went while it still names a file that is there.");
+        Assert.Contains(report.Done, line => line.StartsWith("Removed 1 file(s)", StringComparison.Ordinal));
+        Assert.Contains(report.Problems, problem => problem.Contains(held, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(remover.Calls, call => call.StartsWith("executable.remove", StringComparison.Ordinal));
+    }
+
+    /// <summary>And the same of a directory that will not go: named, and the verb goes on.</summary>
+    [Fact]
+    public async Task A_directory_the_file_system_will_not_let_go_is_one_problem_among_the_rest()
+    {
+        using var dir = new TempPaths();
+        var root = Path.Combine(dir.Paths.Root, "harness");
+        var ours = Deploy(root, "operating-the-installation");
+        Record(root, "runtime", ours);
+        var remover = new RecordingRemover { ReallyRemoves = true };
+        remover.Locked.Add(Path.GetDirectoryName(ours)!);
+
+        var (exit, report) = await RunAsync(dir, root, remover: remover);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains(report.Problems, problem => problem.Contains(Path.GetDirectoryName(ours)!, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(remover.Calls, call => call.StartsWith("executable.remove", StringComparison.Ordinal));
+    }
+
     /// <summary>And a directory nothing is left in goes, along with the record and the root itself.</summary>
     [Fact]
     public async Task An_empty_directory_goes_and_so_does_the_record()
@@ -173,7 +218,7 @@ public class UninstallReceiptTests
         Assert.False(report.Completed);
     }
 
-    private static async Task<(int Exit, UninstallReport Report)> RunAsync(TempPaths dir, string harnessRoot, bool force = false)
+    private static async Task<(int Exit, UninstallReport Report)> RunAsync(TempPaths dir, string harnessRoot, bool force = false, RecordingRemover? remover = null)
     {
         var output = new StringWriter();
         var env = new CliEnvironment(
@@ -183,7 +228,7 @@ public class UninstallReceiptTests
             Autostart: new RecordingRegistrar(),
             Harnesses: HarnessLocators.At(harnessRoot),
             InstallPath: Path.Combine(dir.Paths.Root, "bin", "jason"),
-            Removes: new RecordingRemover { ReallyRemoves = true });
+            Removes: remover ?? new RecordingRemover { ReallyRemoves = true });
 
         var exit = await UninstallCommand.RunAsync(
             env,

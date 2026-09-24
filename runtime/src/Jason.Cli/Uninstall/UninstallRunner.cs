@@ -551,9 +551,12 @@ public static class UninstallRunner
                         directories.Add(directory);
                     }
                 }
-                catch (RemovalRefused refusal)
+                catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
                 {
-                    problems.Add(refusal.Message);
+                    // One file at a time, as the steps after this one do. This caught only its own refusals, which
+                    // this machine's remover never raises: a file held open or marked read-only escaped to the
+                    // catch-all, the count of what had already gone was lost, and nothing after it was attempted.
+                    problems.Add(exception is RemovalRefused ? exception.Message : $"'{file.Path}' could not be removed: {exception.Message}");
                     remaining++;
                 }
             }
@@ -568,22 +571,30 @@ public static class UninstallRunner
                 continue;
             }
 
+            var record = Path.Combine(root.Root, SkillsRecord.FileName);
             try
             {
-                remover.RemoveFile(Path.Combine(root.Root, SkillsRecord.FileName));
+                remover.RemoveFile(record);
             }
-            catch (RemovalRefused refusal)
+            catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
             {
-                problems.Add(refusal.Message);
+                problems.Add(exception is RemovalRefused ? exception.Message : $"'{record}' could not be removed: {exception.Message}");
                 continue;
             }
 
             // Deepest first, so a skill's own directory is offered before the root that holds it.
             foreach (var directory in directories.Append(root.Root).OrderByDescending(path => path.Length))
             {
-                if (!remover.RemoveDirectoryIfEmpty(directory) && Directory.Exists(directory))
+                try
                 {
-                    kept.Add($"Kept '{directory}': something is in it that this installer did not write.");
+                    if (!remover.RemoveDirectoryIfEmpty(directory) && Directory.Exists(directory))
+                    {
+                        kept.Add($"Kept '{directory}': something is in it that this installer did not write.");
+                    }
+                }
+                catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+                {
+                    problems.Add($"'{directory}' could not be removed: {exception.Message}");
                 }
             }
         }
