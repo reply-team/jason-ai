@@ -140,6 +140,10 @@ jobs:
           New-Item -ItemType Directory -Force $install, $env:JASON_DATA_DIR | Out-Null
           $exe = Join-Path $install (Split-Path $env:EXECUTABLE -Leaf)
           Copy-Item $env:EXECUTABLE $exe
+          # Two things Jason keeps in a data directory, and one somebody else put there.
+          New-Item -ItemType Directory -Force (Join-Path $env:JASON_DATA_DIR 'config'), (Join-Path $env:JASON_DATA_DIR 'logs') | Out-Null
+          Set-Content (Join-Path $env:JASON_DATA_DIR 'config/settings.json') '{}'
+          Set-Content (Join-Path $env:JASON_DATA_DIR 'logs/jason.log') '{}'
           Set-Content (Join-Path $env:JASON_DATA_DIR 'marker.txt') 'the operator''s own work'
 
           # macOS resolves the temporary directory through /private, and the executable's own path comes back
@@ -163,7 +167,14 @@ jobs:
           if ($exit -ne 0) { throw "jason uninstall exited $exit" }
           $report = ($said | Where-Object { $_ -is [string] -and $_.StartsWith('{') }) | ConvertFrom-Json
           if (-not $report.completed) { throw "the report says it did not complete" }
-          foreach ($gone in $exe, $install, $env:JASON_DATA_DIR) { if (Test-Path -LiteralPath $gone) { throw "'$gone' is still there" } }
+          foreach ($gone in $exe, $install) { if (Test-Path -LiteralPath $gone) { throw "'$gone' is still there" } }
+
+          # The purge takes what Jason keeps in the data directory and keeps, byte for byte, what somebody else put
+          # there - so the directory stays, holding the operator's file and nothing else, and the report names it.
+          $left = @(Get-ChildItem -LiteralPath $env:JASON_DATA_DIR -Force | ForEach-Object Name)
+          if (($left -join ',') -ne 'marker.txt') { throw "after the purge the data directory holds '$($left -join ', ')'; only the operator's marker.txt should be left" }
+          if ((Get-Content (Join-Path $env:JASON_DATA_DIR 'marker.txt') -Raw).Trim() -ne "the operator's own work") { throw "the operator's marker was changed" }
+          if (($report.kept -join ' ') -notmatch 'marker\.txt') { throw "the report does not name the file it kept: $($report.kept -join ' | ')" }
           if ($plan.extracted_libraries -and (Test-Path -LiteralPath $plan.extracted_libraries)) { throw "what the build unpacked is still at '$($plan.extracted_libraries)'" }
 
           # On Windows the running image is moved aside rather than deleted, and a cleanup removes the copy
@@ -175,7 +186,7 @@ jobs:
             if (Test-Path -LiteralPath $aside) { throw "the moved copy is still at '$aside' ten seconds after the verb exited" }
           }
 
-          Write-Host "the published executable took itself off this runner and left nothing behind"
+          Write-Host "the published executable took itself off this runner and left nothing of its own behind"
 
   # The install scripts, run against the archives this run packaged, served from a local directory that holds
   # what a release would — assembled by the same script that assembles a release — with no network. Each job

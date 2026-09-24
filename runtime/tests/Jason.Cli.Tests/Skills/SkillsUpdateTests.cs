@@ -206,10 +206,15 @@ public class SkillsUpdateTests
     {
         using var dir = new TempPaths();
         var source = Source(dir);
-        var relative = Path.GetRelativePath(Environment.CurrentDirectory, source);
-        Assert.False(Path.IsPathRooted(relative), "the test's own premise: the source is named relative to where this runs.");
 
-        Assert.Equal(ExitCodes.Success, (await RunAsync(dir, ["skills", "install", "--source", relative, "--root", Harness(dir)])).Exit);
+        // Relative to where this runs, where there is such a path. On a machine whose checkout and temporary
+        // directory are on two drives there is none, and the source is spelled through `..` instead: a spelling
+        // that is not the full path either, and was recorded as typed all the same.
+        var relative = Path.GetRelativePath(Environment.CurrentDirectory, source);
+        var spelled = Path.IsPathRooted(relative) ? Path.Combine(source, "..", Path.GetFileName(source)) : relative;
+        Assert.NotEqual(source, spelled);
+
+        Assert.Equal(ExitCodes.Success, (await RunAsync(dir, ["skills", "install", "--source", spelled, "--root", Harness(dir)])).Exit);
 
         Assert.All(
             Jason.Contracts.Skills.SkillsRecord.Read(Harness(dir))!.Packs,
