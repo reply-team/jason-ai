@@ -193,6 +193,14 @@ public class UninstallReceiptTests
         return (exit, JsonSerializer.Deserialize<UninstallReport>(output.ToString(), JasonJson.Options)!);
     }
 
+    /// <summary>One skill in a root, and the record naming it: a deployment as the installer leaves one.</summary>
+    internal static string Recorded(string root, string skill)
+    {
+        var file = Deploy(root, skill);
+        Record(root, "jason-runtime-skills", file);
+        return file;
+    }
+
     private static string Deploy(string root, string skill) =>
         Write(Path.Combine(root, skill, "SKILL.md"), $"---\nname: {skill}\n---\n");
 

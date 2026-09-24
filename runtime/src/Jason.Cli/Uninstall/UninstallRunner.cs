@@ -1,6 +1,8 @@
 using System.Globalization;
 using Jason.Cli.Autostart;
 using Jason.Cli.Commands;
+using Jason.Cli.Discovery;
+using Jason.Cli.Process;
 using Jason.Contracts.Skills;
 
 namespace Jason.Cli.Uninstall;
@@ -526,19 +528,77 @@ public static class UninstallRunner
             .RunAsync(env with { Out = said }, human: false, cancellationToken, options.StopTimeout, options.StopPoll)
             .ConfigureAwait(false);
 
-        if (exit is ExitCodes.Success or ExitCodes.RuntimeUnavailable)
+        if (exit == ExitCodes.Success)
         {
-            // Unavailable means the descriptor went between the plan and here, which is a runtime that had
-            // already stopped rather than one that would not.
-            done.Add(exit == ExitCodes.Success ? "Stopped the runtime." : "The runtime had already stopped.");
+            done.Add("Stopped the runtime.");
+            return null;
+        }
+
+        // Exit 3 is not "it stopped". `runtime stop` answers 3 for a descriptor that went between the plan and
+        // here -- and just as much for a connection refused, a request that timed out and a token the runtime
+        // rejected, with the descriptor still on disk and the process still in the table. Reading every 3 as
+        // the first carried on and removed the executable and the data directory from under a runtime that was
+        // still running. So the process table decides, the way `runtime stop` itself decides "gone".
+        var left = exit == ExitCodes.RuntimeUnavailable ? Left(env, plan) : new Runtime(true, plan.RuntimePid, null);
+        if (!left.Running)
+        {
+            done.Add(left.Note ?? "The runtime had already stopped.");
             return null;
         }
 
         return new RemovalRefused(
             CliErrors.RuntimeStillRunning,
-            "The runtime did not stop, so nothing further was removed and this installation is as it was — "
+            (left.Pid is { } pid
+                ? string.Create(CultureInfo.InvariantCulture, $"The runtime, process {pid}, did not stop, ")
+                : "The runtime did not stop, ")
+            + "so nothing further was removed and this installation is as it was — "
             + "except the logon registration, which had already been taken away and which "
-            + "'jason runtime autostart enable' puts back. Stop the runtime with 'jason runtime stop' and run "
-            + $"this again. It said: {said.ToString().Trim()}");
+            + "'jason runtime autostart enable' puts back. Stop the runtime with 'jason runtime stop' — or, where "
+            + "it does not answer that either, end that process — and run this again. "
+            + (left.Note is { } note ? note + " " : string.Empty)
+            + $"It said: {said.ToString().Trim()}");
     }
+
+    /// <summary>
+    /// What is left of the runtime after <c>runtime stop</c> could not reach it: a process still in the table —
+    /// the one the plan saw, or one a descriptor on disk names now — or nothing.
+    /// </summary>
+    /// <remarks>
+    /// A descriptor whose process has gone is not a runtime — a crash, or a restart of the machine under it,
+    /// leaves one behind — and refusing on it would hold up every uninstall on a machine whose runtime once
+    /// died, saying it "did not stop" when nothing was running. A descriptor that cannot be read names nothing
+    /// that can be asked about, so it is refused on rather than guessed past.
+    /// </remarks>
+    private static Runtime Left(CliEnvironment env, UninstallPlan plan)
+    {
+        var processes = env.Processes ?? RuntimeProcessControl.Instance;
+        if (plan.RuntimePid is { } planned && processes.IsRunning(planned))
+        {
+            return new Runtime(true, planned, null);
+        }
+
+        if (!File.Exists(env.Paths.DescriptorFile))
+        {
+            return new Runtime(false, null, null);
+        }
+
+        if (new DescriptorReader(env.Paths).Read() is not { } descriptor)
+        {
+            return new Runtime(
+                true,
+                null,
+                $"The descriptor at '{env.Paths.DescriptorFile}' cannot be read, so whether a runtime is running "
+                + "cannot be told; where none is, delete that file.");
+        }
+
+        return processes.IsRunning(descriptor.Pid)
+            ? new Runtime(true, descriptor.Pid, null)
+            : new Runtime(
+                false,
+                null,
+                $"The runtime was not running: the descriptor at '{env.Paths.DescriptorFile}' was left by one whose process has gone.");
+    }
+
+    /// <summary>Whether a runtime is still there after the question, which process, and anything worth saying.</summary>
+    private sealed record Runtime(bool Running, int? Pid, string? Note);
 }

@@ -131,6 +131,9 @@ public static class UninstallCommand
             Describe(env, plan, options);
         }
 
+        // The warm-up below is the one line here no unit test holds: the suite runs in a test host whose
+        // assemblies never move, so taking it out stays green. CI's step that uninstalls the published executable
+        // from its own image is what fails without it -- measured, by taking it out.
         var report = options.DryRun
             ? new UninstallReport(plan, [], ["--dry-run: nothing was removed."], [], null, null)
             : await UninstallRunner

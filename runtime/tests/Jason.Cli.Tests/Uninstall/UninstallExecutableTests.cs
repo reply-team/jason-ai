@@ -228,7 +228,14 @@ public class UninstallExecutableTests
     /// from, and on Windows that path is gone once the running image is moved aside. A published build answered
     /// <c>--purge-data --yes</c> with nothing but "The type initializer for 'System.Text.Json.JsonSerializer'
     /// threw an exception." — after it had removed everything — because its report was the first JSON it wrote.
-    /// The published executable is where that is proved end to end; this holds the order.
+    /// <para>
+    /// This holds the runner's half only: that it calls back before the executable step. The command's half —
+    /// that what it passes really renders the report — <b>no test in this suite can hold</b>. The suite runs in a
+    /// test host whose assemblies stay where they are, so a command that passed nothing, or rendered nothing,
+    /// stays green here. What fails without it is CI's step that uninstalls the published executable from its
+    /// own image, on all three platforms; with the warm-up removed, a published build reproduced the defect
+    /// exactly.
+    /// </para>
     /// </remarks>
     [Fact]
     public async Task The_report_is_rendered_before_the_executable_goes()

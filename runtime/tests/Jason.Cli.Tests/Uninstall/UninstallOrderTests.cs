@@ -41,6 +41,11 @@ public class UninstallOrderTests
     /// A runtime that acknowledges and then does not go takes the verb with it: nothing further is removed,
     /// the exit code says refused, and the message names the runtime rather than blaming the operator.
     /// </summary>
+    /// <remarks>
+    /// With something planned at every step after it — a recorded skill, a PATH entry that is ours, the data
+    /// directory on the explicit word — because a refusal can only be seen to stop the steps after it when
+    /// there are steps after it to stop. Without them this passed whatever step 2 decided.
+    /// </remarks>
     [Fact]
     public async Task A_runtime_that_will_not_stop_refuses_the_whole_verb_and_removes_nothing_further()
     {
@@ -48,12 +53,141 @@ public class UninstallOrderTests
         dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_STUBBORN"));
         var log = new StepLog();
 
-        var (exit, output, remover) = await RunAsync(dir, log, AcknowledgesAndStays(log));
+        var (exit, output, remover) = await RunAsync(dir, log, AcknowledgesAndStays(log), everything: true);
 
         Assert.Equal(ExitCodes.ApiError, exit);
         Assert.Contains(CliErrors.RuntimeStillRunning, output.ToString(), StringComparison.Ordinal);
-        Assert.DoesNotContain(remover.Calls, call => call.StartsWith("file.remove", StringComparison.Ordinal));
-        Assert.DoesNotContain(remover.Calls, call => call.StartsWith("tree.remove", StringComparison.Ordinal));
+        Assert.Equal(["autostart.remove", "system.shutdown"], log.Steps);
+        Assert.Empty(remover.Calls);
+    }
+
+    /// <summary>
+    /// A runtime that is alive and does not answer is not a runtime that has stopped. <c>runtime stop</c> exits 3
+    /// for a refused connection, a request that timed out and a token the runtime rejected — all three with its
+    /// descriptor still on disk and its process still in the table — and this verb used to read every 3 as
+    /// "the descriptor went between the plan and here", carry on, and remove the executable and the data
+    /// directory from under a runtime that was still running.
+    /// </summary>
+    [Theory]
+    [InlineData("refused")]
+    [InlineData("unauthorized")]
+    [InlineData("slow")]
+    public async Task A_runtime_that_is_running_and_does_not_answer_ends_the_verb(string how)
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_SILENT"));
+        var log = new StepLog();
+
+        var (exit, output, remover) = await RunAsync(dir, log, DoesNotAnswer(how, log), everything: true);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains(CliErrors.RuntimeStillRunning, output.ToString(), StringComparison.Ordinal);
+        Assert.Contains(RuntimeVerbs.Pid.ToString(System.Globalization.CultureInfo.InvariantCulture), output.ToString(), StringComparison.Ordinal);
+        Assert.Equal(["autostart.remove", "system.shutdown"], log.Steps);
+        Assert.Empty(remover.Calls);
+        Assert.True(Directory.Exists(dir.Paths.Root), "the data directory of a running runtime was removed.");
+    }
+
+    /// <summary>
+    /// And a descriptor whose process has gone is not a runtime either: a runtime that crashed, or a machine that
+    /// restarted under it, leaves one behind. Refusing there would hold up every uninstall on a machine whose
+    /// runtime once died, with a message saying it "did not stop" when nothing was running at all.
+    /// </summary>
+    [Fact]
+    public async Task A_descriptor_whose_process_has_gone_does_not_hold_the_verb_up()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_GONE"));
+        var log = new StepLog();
+        var processes = new FakeProcessControl();
+
+        var (exit, output, _) = await RunAsync(dir, log, DoesNotAnswer("refused", log), processes: processes, running: false);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("was not running", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("path.remove", log.Steps);
+    }
+
+    /// <summary>
+    /// Nor is one that went between the plan and the question, with its process gone too — which is the one
+    /// case the old reading of exit 3 was written for, and still carries on.
+    /// </summary>
+    [Fact]
+    public async Task A_runtime_that_went_between_the_plan_and_the_question_does_not_hold_the_verb_up()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_WENT"));
+        var log = new StepLog();
+        var processes = new FakeProcessControl();
+
+        var handler = new FakeHandler(_ =>
+        {
+            log.Add("system.shutdown");
+            File.Delete(dir.Paths.DescriptorFile);
+            processes.RunningPids.Remove(RuntimeVerbs.Pid);
+            throw new HttpRequestException("Connection refused");
+        });
+
+        var (exit, _, _) = await RunAsync(dir, log, handler, processes: processes);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("path.remove", log.Steps);
+    }
+
+    /// <summary>
+    /// But a descriptor that went while the process it named is still in the table is a runtime on its way out
+    /// rather than gone, and the verb does not remove anything from under it.
+    /// </summary>
+    [Fact]
+    public async Task A_descriptor_that_went_while_its_process_stayed_ends_the_verb()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LEAVING"));
+        var log = new StepLog();
+
+        var handler = new FakeHandler(_ =>
+        {
+            log.Add("system.shutdown");
+            File.Delete(dir.Paths.DescriptorFile);
+            throw new HttpRequestException("Connection refused");
+        });
+
+        var (exit, output, remover) = await RunAsync(dir, log, handler, everything: true);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains(CliErrors.RuntimeStillRunning, output.ToString(), StringComparison.Ordinal);
+        Assert.Empty(remover.Calls);
+    }
+
+    /// <summary>
+    /// The whole order, with something to do at every step, so that a step moved — the receipts after the PATH,
+    /// the data directory before the executable — arrives in this diff rather than silently.
+    /// </summary>
+    [Fact]
+    public async Task Every_step_happens_in_its_place()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var log = new StepLog();
+        var processes = new FakeProcessControl();
+
+        var (exit, _, _) = await RunAsync(dir, log, StopsWhenAsked(dir, log, processes), processes: processes, everything: true);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(
+            [
+                "autostart.remove",
+                "system.shutdown",
+                "file.remove", // the recorded skill
+                "file.remove", // then its record
+                "directory.remove_if_empty", // the skill's directory
+                "directory.remove_if_empty", // and the root, each only if empty
+                "path.remove",
+                "executable.remove",
+                "directory.remove_if_empty", // the install directory
+                "tree.remove",
+            ],
+            log.Steps);
     }
 
     /// <summary>
@@ -137,18 +271,55 @@ public class UninstallOrderTests
         return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_STUBBORN"));
     });
 
+    /// <summary>
+    /// One that does not answer at all, in each of the three ways <c>runtime stop</c> reports as exit 3: nothing
+    /// listening, a token it rejects, and a request that never comes back.
+    /// </summary>
+    private static HttpMessageHandler DoesNotAnswer(string how, StepLog log) => new FakeHandler(request =>
+    {
+        log.Add("system.shutdown");
+        return how switch
+        {
+            "refused" => throw new HttpRequestException("Connection refused"),
+            "unauthorized" => RuntimeVerbs.Response(HttpStatusCode.Unauthorized, "{}"),
+            "slow" => throw new TaskCanceledException("The request timed out."),
+            _ => throw new ArgumentOutOfRangeException(nameof(how), how, null),
+        };
+    });
+
+    /// <param name="everything">
+    /// Something planned at every step after the runtime: a recorded skill in the harness root, a PATH entry
+    /// that is ours, and the data directory on the explicit word.
+    /// </param>
+    /// <param name="running">Whether the pid the descriptor names is in the process table.</param>
     private static async Task<(int Exit, StringWriter Output, RecordingRemover Remover)> RunAsync(
         TempPaths dir,
         StepLog log,
         HttpMessageHandler handler,
         RecordingRegistrar? registrar = null,
-        FakeProcessControl? processes = null)
+        FakeProcessControl? processes = null,
+        bool everything = false,
+        bool running = true)
     {
         var output = new StringWriter();
         var error = new StringWriter();
-        var remover = new RecordingRemover(log);
+        var install = Path.Combine(dir.Paths.Root + "-install", "jason");
+        var remover = new RecordingRemover(log)
+        {
+            PathEntry = everything ? new PathEntryPlan(Path.GetDirectoryName(install)!, [], "the value", Ours: true) : null,
+        };
+
         processes ??= new FakeProcessControl();
-        processes.RunningPids.Add(RuntimeVerbs.Pid);
+        if (running)
+        {
+            processes.RunningPids.Add(RuntimeVerbs.Pid);
+        }
+
+        var harness = Path.Combine(dir.Paths.Root, "harness");
+        if (everything)
+        {
+            UninstallReceiptTests.Recorded(harness, "operating-the-installation");
+        }
 
         var env = new CliEnvironment(
             output,
@@ -156,9 +327,11 @@ public class UninstallOrderTests
             dir.Paths,
             handler,
             Processes: processes,
-            InstallPath: Path.Combine(dir.Paths.Root, "bin", "jason"),
+            // Beside the data directory rather than in it: a data directory holding the installation is one the
+            // purge refuses, which is not what these tests are about.
+            InstallPath: install,
             Autostart: (Cli.Autostart.IAutostartRegistrar?)registrar ?? new LoggingRegistrar(log),
-            Harnesses: HarnessLocators.At(Path.Combine(dir.Paths.Root, "harness")),
+            Harnesses: HarnessLocators.At(harness),
             Removes: remover);
 
         var exit = await UninstallCommand.RunAsync(
@@ -166,7 +339,7 @@ public class UninstallOrderTests
             // The machine shape: one document carrying the steps, what was kept and the code a caller
             // branches on. The person's shape says the same things in prose, and a test asserting on prose
             // is a test about wording.
-            new UninstallOptions(Human: false, DryRun: false, PurgeData: false, Yes: true, Force: false, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll),
+            new UninstallOptions(Human: false, DryRun: false, PurgeData: everything, Yes: true, Force: false, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll),
             Ct);
 
         // Both writers, because a refusal is a diagnostic and the steps are not.
