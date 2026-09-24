@@ -526,6 +526,32 @@ public class StatusCommandTests
         Assert.Contains("--provider-cli", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// And the path check's rule as it now is, in the verb's own help: the old-shell <c>ok</c>, which profile a
+    /// login shell reads, and — the part a caller has to act on — that an agent host started before the install
+    /// keeps failing a bare <c>jason</c> while <c>ready</c> is true.
+    /// </summary>
+    /// <remarks>
+    /// The help still said only "'jason' resolves on PATH" after the check had learned to answer <c>ok</c> for a
+    /// shell older than the installation. An agent reading it would take <c>ready: true</c> to mean its own next
+    /// <c>jason</c> works.
+    /// </remarks>
+    [Fact]
+    public async Task Help_publishes_the_path_rule_as_it_is()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["status", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), Ct);
+
+        var text = string.Join(' ', output.ToString().Split((char[])[' ', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
+        Assert.Contains("in every shell started from now on", text, StringComparison.Ordinal);
+        Assert.Contains("~/.bash_profile", text, StringComparison.Ordinal);
+        Assert.Contains("an agent host started before the install", text, StringComparison.Ordinal);
+        Assert.Contains("while ready is true", text, StringComparison.Ordinal);
+        Assert.Contains("PowerShell on Windows", text, StringComparison.Ordinal);
+    }
+
     private static DeployedRoleSkill Taught(string role) => new(role, 4096, null);
 
     private static StatusReport Read(StringWriter output) =>

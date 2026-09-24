@@ -35,10 +35,20 @@ public static class StatusCommand
         Required — a failure exits 1:   the runtime answers · migrations are applied · the plugin registry is
                                         alive (zero plugins is alive) · role skills are present, named after
                                         their directories and within the runtime's live cap · 'jason' resolves
-                                        on PATH
+                                        on PATH, in this shell or in every shell started from now on
         Optional — absent never fails:  a provider plugin is installed · a route is configured · a binding
                                         names an account · a provider CLI you name answers · the skill packs
                                         are deployed to an agent harness · autostart is registered
+
+        The path check is ok in two cases. 'jason' resolves in this shell; or it does not, and this account
+        keeps its directory for shells not yet started — its Path value on Windows, on macOS and Linux the one
+        profile a login shell reads (~/.zprofile for zsh; for bash the first of ~/.bash_profile, ~/.bash_login
+        and ~/.profile that exists; ~/.profile otherwise). The second case says so, and names the full path to
+        type. It is an old shell, not a broken installation — but everything that shell started is as old:
+        an agent host started before the install, and every command it runs, still fails a bare 'jason' while
+        ready is true, until the host is restarted. Where neither holds the check fails, and its repair is a
+        line for this machine's own shell — PowerShell on Windows, sh elsewhere — the same line the installer
+        writes, which changes nothing when typed twice.
 
         The provider CLI is only checked when you name it: --provider-cli <program> runs '<program> --version'
         with a ten-second bound and reports whether it answered. Which provider you use is yours, so this build
