@@ -478,7 +478,7 @@ jobs:
           sh install/install.sh
           [ "$(grep -c '# added by jason install' "$HOME/.bash_profile")" = "1" ]
           if [ -f "$HOME/.profile" ]; then echo "the line went to ~/.profile, which this bash never reads"; exit 1; fi
-          bash -l -c 'jason --version'
+          [ "$(bash -l -c 'command -v jason')" = "$HOME/.local/bin/jason" ]
 
           # This shell predates the line, and a new login shell reads it: the path check says ok, and says where.
           export JASON_DATA_DIR="$HOME/.jason"

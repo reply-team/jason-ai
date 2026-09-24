@@ -502,29 +502,32 @@ jason uninstall
 jason uninstall --purge-data --yes
 ```
 
-The other end of §6. **It removes only what a receipt names**: every root a deployment wrote into carries a
-record listing each path written there, and this verb removes those and nothing else. A verb that deleted by
-pattern would eventually delete somebody's own file; a verb that deletes by receipt cannot.
+The other end of §6. **Skills go only by receipt**: every root a deployment wrote into carries a record listing
+each path written there, and this verb removes those skills and nothing else. A verb that deleted by pattern
+would eventually delete somebody's own file; a verb that deletes by receipt cannot. The rest of the installation
+goes by rule, one step at a time:
 
 The order is the order that makes a half-finished run safe:
 
 | Step | Why here |
 |---|---|
 | the logon registration | first, so a logon part-way through cannot start what is going |
-| the runtime | and if it will not stop, **nothing after this is removed** |
+| the runtime | and if it will not stop — or is running and does not answer — **nothing after this is removed** |
 | every recorded skill | by the paths its root's record names, digest by digest |
-| the PATH entry | only where this installer wrote it — a PATH is a person's own document |
-| the executable, its install directory and what it unpacked | last, because everything above runs from it. On Windows the running image cannot be deleted, so it is moved out of the install directory and a cleanup removes the copy once the verb has exited; the native libraries the build unpacked on its first run go too |
+| the PATH entry | only where the installer wrote it — a PATH is a person's own document. On macOS and Linux that is the marked block in a login profile; on Windows, whose Path carries no marker, only an entry for a directory that holds nothing but Jason |
+| the executable, its install directory and what it unpacked | last, because everything above runs from it. On Windows the running image cannot be deleted, so it is moved out of the install directory, to a directory on its own volume, and a cleanup removes the copy once the verb has exited; the native libraries the build unpacked on its first run go too |
 
 A recorded file whose bytes have changed since is reported and kept, because the record says what Jason wrote
 and a mismatch says somebody else wrote it afterwards. `--force` removes it anyway, and the containing
 directory is not empty until it does.
 
-**Never touched:** anything there is no receipt for, including a skill copied into a harness by hand; any
-other skill in that harness; any provider CLI; any model credential; anything outside the paths the receipts
-name. **The data directory is kept** — §10 below says what is in it — unless `--purge-data` says otherwise,
-and in the machine shape that word has to be said in advance with `--yes`, because there is nobody there to
-be asked and a verb that blocked on an invisible question would hang for ever.
+**Never touched:** a skill there is no receipt for, including one copied into a harness by hand; any other
+skill in that harness; any provider CLI; any model credential; a PATH entry the installer did not write.
+**The data directory is kept** — §10 below says what is in it — unless `--purge-data` says otherwise, and in
+the machine shape that word has to be said in advance with `--yes`, because there is nobody there to be asked
+and a verb that blocked on an invisible question would hang for ever. With it, what Jason keeps in the data
+directory goes and anything else stays; a data directory that holds a file system's root, the profile, the
+temporary directory or the installation is refused before anything is removed.
 
 It exits 0 when everything it set out to remove is gone, and 1 when it did not get there — it refused,
 something is still there, or it stopped part-way — and every step that did happen is listed either way.
@@ -555,8 +558,8 @@ Windows there is no such bit and neither does anything.
 
 There is a third place, which nothing here controls. The executable is a single file with the .NET runtime and
 its native libraries inside it, and the first run of each version unpacks those natives to a cache — 
-`%TEMP%\.net\jason\<hash>\` on Windows, `/tmp/.net/jason/<hash>/` elsewhere, or under
-`DOTNET_BUNDLE_EXTRACT_BASE_DIR` where that is set. It is per user and per build, it is why the first start of a
+`%TEMP%\.net\jason\<hash>\` on Windows, `~/.net/jason/<hash>/` in the home directory on macOS and Linux, or
+under `DOTNET_BUNDLE_EXTRACT_BASE_DIR` where that is set. It is per user and per build, it is why the first start of a
 new version is slower than the next, and it is safe to delete when nothing is running.
 
 ## 11. The code behind this page

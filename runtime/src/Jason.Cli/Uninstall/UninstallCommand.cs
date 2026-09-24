@@ -17,9 +17,11 @@ namespace Jason.Cli.Uninstall;
 /// files a deployment recorded — so <c>Operations</c> carries no <c>uninstall.*</c> and never will.
 /// </para>
 /// <para>
-/// <b>It removes only what a receipt names.</b> Each root a deployment wrote into carries a record listing
-/// every path written there; this verb removes those and nothing else. A verb that deleted by pattern would
-/// eventually delete somebody's own file, and a verb that deletes by receipt cannot.
+/// <b>Skills go only by receipt.</b> Each root a deployment wrote into carries a record listing every path
+/// written there; this verb removes those skills and nothing else. A verb that deleted by pattern would
+/// eventually delete somebody's own file, and a verb that deletes by receipt cannot. The rest of the
+/// installation — a registration, a PATH entry, an executable — has no receipt and goes by rule, each rule
+/// written where its step is.
 /// </para>
 /// <para>
 /// <b>And the data directory is the operator's.</b> It holds the database, the settings, the plugins, the logs
@@ -39,7 +41,8 @@ public static class UninstallCommand
           1. the logon registration, first, so a logon part-way through cannot start what is going
           2. the runtime — and if it will not stop, nothing further is removed
           3. every skill a deployment recorded, by the paths its record names
-          4. the PATH entry, only where this installer wrote it
+          4. the PATH entry, only where the installer wrote it: the marked block in a login profile; on
+             Windows, only an entry for a directory that holds nothing but Jason
           5. the executable, its install directory, and the native libraries it unpacked on first run
 
         Kept unless --purge-data:  the data directory. --purge-data removes what Jason keeps there, and the
@@ -47,8 +50,11 @@ public static class UninstallCommand
                                    asks before anything at all is removed, unless --yes. A directory holding a
                                    file-system root, your profile, the temporary directory or the installation
                                    is refused.
-        Never touched:             anything there is no receipt for, any other skill in an agent harness,
-                                   any provider CLI, any model credential, anything outside the paths it names.
+        Never touched:             a skill there is no receipt for, any other skill in an agent harness,
+                                   any provider CLI, any model credential, a PATH entry the installer did
+                                   not write.
+        This account's, not this installation's: the logon registration and the agent harnesses. Uninstalling
+        a second installation on one account takes the first one's registration and harness skills too.
 
         Exit codes: 0 when everything it set out to remove is gone. 1 when it did not get there: it refused
         (a runtime that would not stop), or something it set out to remove is still there (a record it cannot

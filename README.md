@@ -98,7 +98,8 @@ Each script works out your platform, verifies the download's SHA-256 before unpa
 executable under your own account — `~/.local/bin` on macOS and Linux, `%LOCALAPPDATA%\Programs\jason` on
 Windows — and puts that directory on your PATH unless you pass `--no-modify-path`. Nothing needs administrator
 rights. Both lines install the **latest release**, and a repository with no published release has no latest:
-if they answer 404 there is nothing to install from, and *Building from source* below is the way in.
+if they answer 404 there is nothing to install from, and [docs/INSTALL.md](docs/INSTALL.md) §3 — one file built
+from this checkout, put on your PATH — is the way in.
 
 **[docs/INSTALL.md](docs/INSTALL.md)** is the whole of it in order — what you need, from a release, from
 source, teaching it, asking whether it can work, starting it, and taking it off again — written to be
@@ -141,21 +142,25 @@ Follow docs/INSTALL.md in this repository, in order, from section 2.
    jason status
    Branch on "ready" in the JSON body, never on the exit code. This verb exits 0 or 1 and never
    3, and "the runtime did not answer" is one of its answers rather than an error.
-4. For each check that is not ok, run the repair it prints. A repair that is a jason command you
-   can run as it stands. The path check's repair is a line for this machine's own shell instead;
-   read section 3's note about login shells before you run it, because a profile you append to is
-   read by a login shell and not by your next non-interactive command.
+4. For each required check that is not ok, run the repair it prints. A repair that is a jason
+   command you can run as it stands. The path check's repair is a line for this machine's own
+   shell instead; read section 3's note about login shells before you run it, because a profile
+   you append to is read by a login shell and not by your next non-interactive command.
+   Optional checks are reported, not repaired: their repairs write what the rule below does not
+   allow, into your agent's configuration or into what starts at logon.
 5. Stop when ready is true, or when a required check still fails after you have run its repair.
    Report which checks failed, exactly what you ran, and what it changed.
 
 Change nothing on this machine except what these steps write: the executable and its install
 directory; this account's PATH entry for it; Jason's data directory, which is where the role
-skills go; the system's temporary directory, which the installer downloads into and the
-executable unpacks its native libraries into when it first runs; and, only if you build from
-source, the checkout's own build output and what the .NET SDK writes into this home directory
-as it builds — its package cache, and a first-run setup that may add its own tools directory to
-this account's PATH. Nothing in your own agent's configuration: jason skills install without
---roles-only would put skills there too, and that is mine to decide, so ask.
+skills go; the system's temporary directory, which the installer downloads into; the directory
+the executable unpacks its native libraries into when it first runs, which is under the
+temporary directory on Windows and under ~/.net in this home directory on macOS and Linux; and,
+only if you build from source, the checkout's own build output and what the .NET SDK writes
+into this home directory as it builds — its package cache, and a first-run setup that may add
+its own tools directory to this account's PATH. Nothing in your own agent's configuration:
+without --roles-only, jason skills install would put skills there too, and that is mine to
+decide, so ask.
 Do not install anything else. Do not leave a long-running process behind other than through
 jason runtime start.
 ```
@@ -178,8 +183,9 @@ to allow. Both print the target roots before they write anything, and both refus
 would later refuse to launch, rather than writing one.
 [`skills/README.md`](skills/README.md) is the contract both verbs keep.
 
-One question, answered check by check. It is the only command here that is not one-to-one with an API
-operation, and it cannot be: half of what it reports is not the runtime's to know — an executable on PATH,
+One question, answered check by check. It is one of four names in this CLI with no API operation behind
+it — `status` and `uninstall`, and the `skills` and `update` nouns — and it cannot be otherwise: half of what
+it reports is not the runtime's to know — an executable on PATH,
 another vendor's CLI and whether it answers, files in a folder in your home directory. No API operation can
 answer "am I ready to work?", because the runtime is not the authority on the machine it runs on.
 
@@ -212,19 +218,20 @@ jason uninstall
 jason uninstall --purge-data --yes
 ```
 
-**It removes only what a receipt names.** Every root a deployment wrote into carries a record listing each
-path written there, and this verb removes those and nothing else — a skill you copied into a harness by hand
-has no receipt, so it is removed by nobody, including this. The order is fixed: the logon registration first,
-so a logon part-way through cannot start what is going; then the runtime, and if it will not stop, nothing
-after that is removed; then the recorded skills; then the PATH entry, only where this installer wrote it;
-then the executable and its install directory. A recorded file whose bytes have changed since is reported and
-kept unless `--force` says otherwise.
+**Skills go only by receipt.** Every root a deployment wrote into carries a record listing each path written
+there, and this verb removes those skills and nothing else — a skill you copied into a harness by hand has no
+receipt, so it is removed by nobody, including this. The rest goes by rule, in a fixed order: the logon
+registration first, so a logon part-way through cannot start what is going; then the runtime, and if it will
+not stop, nothing after that is removed; then the recorded skills; then the PATH entry, only where the
+installer wrote it — on Windows, only where the directory holds nothing but Jason; then the executable, its
+install directory and the native libraries it unpacked. A recorded file whose bytes have changed since is
+reported and kept unless `--force` says otherwise.
 
 **The data directory is kept** — the database, the settings, the plugins, the logs and the work directories
 are the record of what you did — and the verb says in one line that it kept it and where. `--purge-data`
-removes it too, and in the machine shape the word has to be said in advance, because there is nobody there to
-be asked. This is the second of the two commands in this CLI that no API operation stands behind: removing
-Jason from a machine is not something the runtime performs or is asked about.
+removes what Jason keeps there, and the directory once nothing else is in it; in the machine shape the word
+has to be said in advance, because there is nobody there to be asked. Like `status`, this verb has no API
+operation behind it: removing Jason from a machine is not something the runtime performs or is asked about.
 [docs/INSTALL.md](docs/INSTALL.md) §7 is the fuller account.
 
 ## Building from source

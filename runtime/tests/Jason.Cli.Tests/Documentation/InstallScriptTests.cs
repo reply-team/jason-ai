@@ -383,7 +383,7 @@ public partial class InstallScriptTests
         var step = ci.IndexOf("name: Install into the profile bash reads, and take it back out", StringComparison.Ordinal);
 
         Assert.True(step >= 0, "ci.yml no longer installs into a home where bash reads ~/.bash_profile.");
-        Assert.True(ci.IndexOf("bash -l -c 'jason --version'", step, StringComparison.Ordinal) > step, "the step no longer asks a login bash to find jason.");
+        Assert.True(ci.IndexOf("bash -l -c 'command -v jason'", step, StringComparison.Ordinal) > step, "the step no longer asks a login bash to find jason.");
         Assert.True(ci.IndexOf("printf '# mine\\n' | cmp - \"$HOME/.bash_profile\"", step, StringComparison.Ordinal) > step, "the step no longer holds the uninstall to the profile's own bytes.");
     }
 

@@ -108,6 +108,11 @@ public class VerbMapTests
         var strangers = Nouns.Where(noun => !operations.Contains(Spoken(noun))).Order(StringComparer.Ordinal);
 
         Assert.Equal(WithoutAnOperation.Order(StringComparer.Ordinal), strangers);
+
+        // And the two verbs stand for none either. Each says it never will, and nothing held that: an
+        // `uninstall.*` or `status.*` operation arriving in the contracts would have kept this test green while
+        // the four declared exceptions quietly became three.
+        Assert.All(DeclaredExceptions, exception => Assert.DoesNotContain(exception, operations));
     }
 
     /// <summary>
