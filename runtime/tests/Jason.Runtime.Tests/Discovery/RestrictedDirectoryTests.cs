@@ -30,12 +30,11 @@ public class RestrictedDirectoryTests
     /// it before its logging was configured.
     /// </summary>
     [Fact]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public void A_directory_whose_rights_stop_short_of_taking_ownership_is_still_restricted()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
+        // Skipped, not passed: a test that returned off Windows reported a pass it had not earned.
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Ownership and DACLs are Windows's; elsewhere the directory's mode is the whole story.");
 
         using var tree = new TempTree();
         var directory = Directory.CreateDirectory(Path.Combine(tree.Root, "data", "run"));
@@ -51,12 +50,11 @@ public class RestrictedDirectoryTests
 
     /// <summary>And the same for a file, which is the descriptor the token is written into.</summary>
     [Fact]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public void A_file_in_such_a_directory_is_still_restricted()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
+        // Skipped, not passed: a test that returned off Windows reported a pass it had not earned.
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Ownership and DACLs are Windows's; elsewhere the directory's mode is the whole story.");
 
         using var tree = new TempTree();
         var directory = Directory.CreateDirectory(Path.Combine(tree.Root, "data", "run"));
@@ -95,12 +93,11 @@ public class RestrictedDirectoryTests
     /// the rule, held where the suite runs unelevated too.
     /// </remarks>
     [Fact]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public void An_object_owned_by_this_tokens_own_default_owner_is_not_taken()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
+        // Skipped, not passed: a test that returned off Windows reported a pass it had not earned.
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Ownership and DACLs are Windows's; elsewhere the directory's mode is the whole story.");
 
         var user = new SecurityIdentifier("S-1-5-21-1000-2000-3000-1001");
         var administrators = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
@@ -110,6 +107,11 @@ public class RestrictedDirectoryTests
         Assert.False(FilePermissions.TakesOwnership(user, user, tokenOwner: user), "the user's own directory was taken.");
         Assert.True(FilePermissions.TakesOwnership(somebodyElse, user, tokenOwner: user), "somebody else's directory was left with them.");
         Assert.True(FilePermissions.TakesOwnership(administrators, user, tokenOwner: user), "an unelevated account treated the group as itself.");
+
+        // And the case the rule was written for first: an elevated process -- whose token owner is the group --
+        // meeting a directory the user already owns. Nothing held it: taking the user's own clause away kept every
+        // test here green, and CI's elevated runner passes through the group's clause instead.
+        Assert.False(FilePermissions.TakesOwnership(user, user, tokenOwner: administrators), "an elevated process took a directory the user already owns.");
     }
 
     /// <summary>
