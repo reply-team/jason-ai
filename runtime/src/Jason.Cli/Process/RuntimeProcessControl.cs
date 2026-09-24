@@ -13,6 +13,12 @@ public interface IProcessHandle : IDisposable
     bool HasExited { get; }
 
     int ExitCode { get; }
+
+    /// <summary>
+    /// What the child wrote to its standard error before it let go of it, bounded — for a runtime that will not
+    /// start, the reason. Empty for a child that said nothing.
+    /// </summary>
+    string Said { get; }
 }
 
 /// <summary>
@@ -96,13 +102,17 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         process.StandardInput.Close();
 
         // The child redirects itself to the null device within milliseconds, but a runtime that fails before
-        // that point still writes to these pipes, and a full pipe would block it forever.
+        // that point still writes to these pipes, and a full pipe would block it forever. So both are read to
+        // the end -- and what arrives on standard error is kept, bounded: a runtime that refuses to start says
+        // why there, and that sentence was read and thrown away while `jason runtime start` pointed at an
+        // empty log directory.
+        var said = new StandardErrorLines();
         process.OutputDataReceived += Discard;
-        process.ErrorDataReceived += Discard;
+        process.ErrorDataReceived += (_, line) => said.Add(line.Data);
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
-        return new ProcessHandle(process);
+        return new ProcessHandle(process, said);
     }
 
     /// <summary>
@@ -153,7 +163,7 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         // The point is the reading, not the data.
     }
 
-    private sealed class ProcessHandle(OperatingSystemProcess process) : IProcessHandle
+    private sealed class ProcessHandle(OperatingSystemProcess process, StandardErrorLines said) : IProcessHandle
     {
         public int Id => process.Id;
 
@@ -161,6 +171,58 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
 
         public int ExitCode => process.ExitCode;
 
+        public string Said
+        {
+            get
+            {
+                // A child that has exited may still have lines in flight to the reader; they are waited for, and
+                // not for long, because a grandchild holding the pipe would otherwise hold this answer too.
+                if (process.HasExited)
+                {
+                    Task.Run(process.WaitForExit).Wait(TimeSpan.FromSeconds(2));
+                }
+
+                return said.Text;
+            }
+        }
+
         public void Dispose() => process.Dispose();
+    }
+
+    /// <summary>Lines from a child's standard error, kept up to a bound and no further.</summary>
+    private sealed class StandardErrorLines
+    {
+        private const int Bound = 4096;
+
+        private readonly System.Text.StringBuilder _text = new();
+
+        private readonly Lock _gate = new();
+
+        public string Text
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _text.ToString().Trim();
+                }
+            }
+        }
+
+        public void Add(string? line)
+        {
+            if (line is null)
+            {
+                return;
+            }
+
+            lock (_gate)
+            {
+                if (_text.Length < Bound)
+                {
+                    _text.Append(line.Length > Bound - _text.Length ? line[..(Bound - _text.Length)] : line).Append('\n');
+                }
+            }
+        }
     }
 }

@@ -119,7 +119,28 @@ public class RuntimeStartCommandTests
         Assert.DoesNotContain("See the log files", message, StringComparison.Ordinal);
         Assert.Contains("stopped before logging started", message, StringComparison.Ordinal);
         Assert.Contains(dir.Paths.Root, message, StringComparison.Ordinal);
-        Assert.Contains("jason runtime run", message, StringComparison.Ordinal);
+
+        // And not "run it in the foreground to see": `jason runtime run` does not return while the runtime runs,
+        // so an agent told to type it would wait for good.
+        Assert.DoesNotContain("jason runtime run", message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A child that says why it will not start is heard, in its own words: a runtime that refuses writes the
+    /// reason to the standard error it was started with, and this read that and threw it away.
+    /// </summary>
+    [Fact]
+    public async Task A_child_that_says_why_it_will_not_start_is_heard_in_its_own_words()
+    {
+        using var dir = new TempPaths();
+        const string reason = "The data directory '/nowhere' could not be prepared, so the runtime did not start.";
+        var processes = new FakeProcessControl { OnLaunch = _ => new FakeProcessHandle(4242) { HasExited = true, ExitCode = 1, Said = reason } };
+        var (env, output, _) = RuntimeVerbs.Environment(dir, RuntimeVerbs.EchoesTheDescriptor(dir), processes);
+
+        var exit = await RuntimeStartCommand.RunAsync(env, human: false, Ct, RuntimeVerbs.Timeout, RuntimeVerbs.Poll);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains($"It said: {reason}", RuntimeVerbs.Envelope(output.ToString()).Message, StringComparison.Ordinal);
     }
 
     /// <summary>And where there is one, it still sends them there.</summary>
@@ -137,6 +158,11 @@ public class RuntimeStartCommandTests
         Assert.Contains("See the log files", RuntimeVerbs.Envelope(output.ToString()).Message, StringComparison.Ordinal);
     }
 
+    /// <remarks>
+    /// And it says what is known: the child is still running, by its pid, and may yet publish. This said the
+    /// runtime "stopped before logging started" of a process nothing had ended, and sent the operator to run it
+    /// in the foreground.
+    /// </remarks>
     [Fact]
     public async Task A_child_that_never_publishes_a_descriptor_exits_1_after_the_wait()
     {
@@ -150,6 +176,10 @@ public class RuntimeStartCommandTests
         var envelope = RuntimeVerbs.Envelope(output.ToString());
         Assert.Equal(CliErrors.RuntimeStartFailed, envelope.Code);
         Assert.Contains(dir.Paths.LogsDirectory, envelope.Message, StringComparison.Ordinal);
+        Assert.Contains("process 4242", envelope.Message, StringComparison.Ordinal);
+        Assert.Contains("still running", envelope.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("stopped", envelope.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("jason runtime run", envelope.Message, StringComparison.Ordinal);
         Assert.Single(processes.Launches);
     }
 

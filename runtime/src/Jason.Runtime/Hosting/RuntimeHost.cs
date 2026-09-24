@@ -96,20 +96,26 @@ public static class RuntimeHost
     /// <summary>Foreground mode (<c>jason runtime run</c>): start, wait for Ctrl+C or a host shutdown, stop.</summary>
     public static async Task<int> RunAsync(JasonPaths paths, RuntimeHostOptions? options, CancellationToken cancellationToken)
     {
+        var refusals = options?.Refusals ?? Console.Error;
         RunningRuntime runtime;
         try
         {
             runtime = await StartAsync(paths, options, cancellationToken).ConfigureAwait(false);
         }
-        catch (RuntimeAlreadyRunningException ex)
+        catch (Exception refused) when (refused is RuntimeAlreadyRunningException or DataDirectoryUnusableException)
         {
-            await Console.Error.WriteLineAsync(ex.Message).ConfigureAwait(false);
+            // Said where whoever started this can hear it. A detached runtime's own standard error is the null
+            // device by now, and the reason it will not start used to go there.
+            await refusals.WriteLineAsync(refused.Message).ConfigureAwait(false);
+            await refusals.FlushAsync(cancellationToken).ConfigureAwait(false);
             return 1;
         }
-        catch (DataDirectoryUnusableException ex)
+        finally
         {
-            await Console.Error.WriteLineAsync(ex.Message).ConfigureAwait(false);
-            return 1;
+            if (options?.Refusals is { } handedIn)
+            {
+                await handedIn.DisposeAsync().ConfigureAwait(false);
+            }
         }
 
         await using (runtime.ConfigureAwait(false))

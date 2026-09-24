@@ -54,12 +54,29 @@ public static class RuntimeStartCommand
 
             if (child.HasExited)
             {
-                return Fail(env, $"The runtime process exited with code {child.ExitCode} before publishing an endpoint descriptor. {Evidence(env)}", retryable: false);
+                // In its own words where it said any: a runtime that refuses to start says why on the standard
+                // error it was started with, and that sentence is the one thing an operator can act on.
+                var said = child.Said;
+                return Fail(
+                    env,
+                    $"The runtime process exited with code {child.ExitCode} before publishing an endpoint descriptor. "
+                    + (said.Length > 0 ? $"It said: {said} " : string.Empty)
+                    + Evidence(env, exited: true),
+                    retryable: false);
             }
 
             if (elapsed.Elapsed >= waited)
             {
-                return Fail(env, $"The runtime did not publish an endpoint descriptor within {RuntimeStopCommand.Seconds(waited)} s. {Evidence(env)}", retryable: true);
+                // Not "it stopped": nothing here ended it, and it may yet publish -- a first start migrates the
+                // database after a backup. Said as what is known, with what to do about each outcome, and never
+                // `jason runtime run`, which keeps a runtime in the foreground and would block an agent for good.
+                return Fail(
+                    env,
+                    string.Create(
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        $"The runtime process {child.Id} did not publish an endpoint descriptor within {RuntimeStopCommand.Seconds(waited)} s and is still running: it may still be starting. 'jason runtime status' answers once it has; if it never does, end process {child.Id}. ")
+                    + Evidence(env, exited: false),
+                    retryable: true);
             }
 
             await Task.Delay(poll ?? DefaultPoll, cancellationToken).ConfigureAwait(false);
@@ -119,7 +136,12 @@ public static class RuntimeStartCommand
     /// <c>logs/</c> was, in the one case they most needed it, sending them to six empty directories on the
     /// first run of a new installation. Say which of the two happened instead.
     /// </remarks>
-    private static string Evidence(CliEnvironment env)
+    /// <param name="env">The environment the verb runs in.</param>
+    /// <param name="exited">
+    /// Whether the child has exited. Only then is "it stopped before logging started" something this knows: a
+    /// child still running when the wait ran out has not stopped at all.
+    /// </param>
+    private static string Evidence(CliEnvironment env, bool exited)
     {
         bool any;
         try
@@ -131,11 +153,15 @@ public static class RuntimeStartCommand
             any = false;
         }
 
-        return any
-            ? $"See the log files under '{env.Paths.LogsDirectory}'."
-            : $"There are no log files under '{env.Paths.LogsDirectory}', so it stopped before logging started — "
-                + $"which is what happens when the data directory at '{env.Paths.Root}' cannot be prepared. "
-                + "Run 'jason runtime run' to see what it says.";
+        if (any)
+        {
+            return $"See the log files under '{env.Paths.LogsDirectory}'.";
+        }
+
+        return exited
+            ? $"There are no log files under '{env.Paths.LogsDirectory}', so it stopped before logging started — "
+                + $"which is what happens when the data directory at '{env.Paths.Root}' cannot be prepared."
+            : $"There are no log files under '{env.Paths.LogsDirectory}' yet.";
     }
 
     private static int Fail(CliEnvironment env, string message, bool retryable)

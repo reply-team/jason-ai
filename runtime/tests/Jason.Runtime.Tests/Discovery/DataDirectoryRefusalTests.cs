@@ -33,12 +33,31 @@ public class DataDirectoryRefusalTests
             () => RuntimeHost.StartAsync(new JasonPaths(Path.Combine(blocker, "data")), null, Ct));
 
         Assert.Contains("did not start", refusal.Message, StringComparison.Ordinal);
-        Assert.Contains("data", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains(Path.Combine(blocker, "data"), refusal.Message, StringComparison.Ordinal);
         Assert.Contains("JASON_DATA_DIR", refusal.Message, StringComparison.Ordinal);
 
         // And it says not to go looking for a log file, because there is not going to be one.
         Assert.Contains("no log file exists", refusal.Message, StringComparison.Ordinal);
         Assert.NotNull(refusal.InnerException);
+    }
+
+    /// <summary>
+    /// And it does not say nothing was written, because by then something may have been: preparing the data
+    /// directory creates its directories one after another, and the one that fails can be the fourth.
+    /// </summary>
+    [Fact]
+    public async Task A_refusal_part_way_through_the_layout_does_not_say_nothing_was_written()
+    {
+        using var tree = new TempTree();
+        var data = new JasonPaths(Path.Combine(tree.Root, "data"));
+        Directory.CreateDirectory(data.Root);
+        await File.WriteAllTextAsync(data.RunDirectory, "a file where the run directory goes", Ct);
+
+        var refusal = await Assert.ThrowsAsync<DataDirectoryUnusableException>(() => RuntimeHost.StartAsync(data, null, Ct));
+
+        Assert.True(Directory.Exists(data.StateDirectory), "the test's own premise: the layout was begun before it failed.");
+        Assert.DoesNotContain("Nothing was written", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("may have been created", refusal.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

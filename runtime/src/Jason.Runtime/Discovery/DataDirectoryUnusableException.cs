@@ -21,6 +21,6 @@ public sealed class DataDirectoryUnusableException(string path, Exception cause)
     : Exception(
         $"The data directory '{path}' could not be prepared, so the runtime did not start: {cause?.Message} "
         + "This account needs full control of that directory. Point JASON_DATA_DIR at one it has, or grant it "
-        + "there. Nothing was written and no log file exists to read, because this happens before logging "
-        + "starts.",
+        + "there. Some of its directories may have been created before this; no file was written, and no log "
+        + "file exists to read, because this happens before logging starts.",
         cause);

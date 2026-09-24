@@ -12,6 +12,8 @@ public sealed class FakeProcessHandle(int id) : IProcessHandle
 
     public int ExitCode { get; set; }
 
+    public string Said { get; set; } = string.Empty;
+
     public bool Disposed { get; private set; }
 
     public void Dispose() => Disposed = true;
