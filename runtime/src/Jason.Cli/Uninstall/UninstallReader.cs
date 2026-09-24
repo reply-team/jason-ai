@@ -66,6 +66,7 @@ public static class UninstallReader
             directory is { Length: > 0 } ? env.Removes?.ReadPathEntry(directory) : null,
             executable,
             directory,
+            Previous(directory),
             Extracted(env, executable, directory),
             purgeData,
             env.Paths.Root);
@@ -101,6 +102,24 @@ public static class UninstallReader
             ? null
             : extracted;
     }
+
+    /// <summary>
+    /// The one other file the installer writes into an install directory: the executable an upgrade replaced
+    /// while it was running, which Windows would not let it delete.
+    /// </summary>
+    private static string? Previous(string? installDirectory)
+    {
+        if (installDirectory is not { Length: > 0 })
+        {
+            return null;
+        }
+
+        var previous = Path.Combine(installDirectory, PreviousExecutableName);
+        return File.Exists(previous) ? previous : null;
+    }
+
+    /// <summary>What <c>install.ps1</c> calls the executable it moved aside, spelled as it spells it.</summary>
+    public const string PreviousExecutableName = "jason.previous.exe";
 
     /// <summary>Whether <paramref name="directory"/> is <paramref name="path"/> or one of its ancestors.</summary>
     private static bool Holds(string directory, string path)

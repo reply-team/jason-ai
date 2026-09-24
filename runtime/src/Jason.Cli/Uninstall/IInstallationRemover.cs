@@ -31,8 +31,8 @@ public sealed class RemovalRefused(string code, string message) : Exception(mess
 /// </para>
 /// <para>
 /// So <see cref="CliEnvironment.Default"/> names this machine's remover and nothing else does: null is
-/// <c>remover_unsupported</c>, refused before anything at all is removed. That is the wrong answer to get by
-/// accident and a harmless one to get.
+/// <c>remover_unsupported</c>, refused by the verb before anything at all is read or removed. That is the
+/// wrong answer to get by accident and a harmless one to get.
 /// </para>
 /// </remarks>
 public interface IInstallationRemover
@@ -89,9 +89,9 @@ public interface IInstallationRemover
     /// <remarks>
     /// <para>
     /// A single-file build carries SQLite's native library inside itself and unpacks it, on first run, into a
-    /// directory of its own under the system's temporary directory: one per build, named for the bundle. The
-    /// executable went and that directory stayed, on every uninstall, and on a Windows that never clears its
-    /// temporary directory it stays for good.
+    /// directory of its own — under the system's temporary directory on Windows, under the home directory's
+    /// <c>.net</c> elsewhere: one per build, named for the bundle. The executable went and that directory stayed,
+    /// on every uninstall, and neither place is ever cleared by anything else.
     /// </para>
     /// <para>
     /// Only the running process can name its own, because only the host that unpacked it knows which it was.
@@ -113,17 +113,16 @@ public interface IInstallationRemover
 /// binary is somewhere else, and this verb names it rather than calling that a clean uninstall.
 /// </param>
 /// <param name="Note">What happened, in words, where that is not simply "it is gone".</param>
-public sealed record ExecutableOutcome(bool Removed, string? MovedTo, string? Note);
+/// <param name="LeftBehind">
+/// True when a copy is left that nothing will remove — no cleanup could be started for it. That is something
+/// this uninstall set out to remove and did not, so it is a problem and the verb exits 1, rather than a note
+/// beside a success.
+/// </param>
+public sealed record ExecutableOutcome(bool Removed, string? MovedTo, string? Note, bool LeftBehind = false);
 
 /// <summary>The removers this build knows how to make.</summary>
 public static class InstallationRemovers
 {
-    /// <summary>
-    /// What an environment that named none gets: every member refuses, so a forgotten seam cannot no-op its
-    /// way to a success report. Silence and success is the worst answer to a destructive verb.
-    /// </summary>
-    public static IInstallationRemover Unsupported { get; } = new RefusingRemover();
-
     /// <summary>
     /// This machine's. The file operations are what they look like; taking a directory off this account's
     /// PATH is the installer's own act read backwards and arrives with the rules that describe it.
@@ -133,6 +132,115 @@ public static class InstallationRemovers
     /// <c>Environment</c>, except in a test that points it at a key of its own.
     /// </param>
     public static IInstallationRemover ForThisMachine(string pathKey = UserPathValue.EnvironmentKey) => new MachineRemover(pathKey);
+
+    /// <summary>
+    /// Moves an executable out of its directory into <see cref="AsideDirectory"/>, having first started what
+    /// removes the copy, and says what became of it.
+    /// </summary>
+    /// <param name="path">The executable: on Windows, the image of the running process.</param>
+    /// <param name="temporaryDirectory">The system's temporary directory.</param>
+    /// <param name="move">How a file is moved. <see cref="File.Move(string, string)"/>, except in a test.</param>
+    /// <param name="startCleanup">
+    /// What starts the process that removes the directory the copy is in once this one has exited, answering its
+    /// id — or null where none could be started.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// Public, and handed the move and the cleanup, because both of its failures are the machine's to produce and
+    /// no test machine produces them: a move across volumes that copies a running image and leaves it in place,
+    /// and a cleanup that cannot be started.
+    /// </para>
+    /// <para>
+    /// <b>The cleanup is started before the move, never after.</b> A single-file build reads each assembly it has
+    /// not yet loaded out of its own file, by the path it started from; once that path is gone, the first type
+    /// from a new assembly fails to load, and starting a process can need assemblies nothing has loaded yet.
+    /// </para>
+    /// </remarks>
+    public static ExecutableOutcome MoveAside(string path, string temporaryDirectory, Action<string, string> move, Func<string, int?> startCleanup)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentNullException.ThrowIfNull(move);
+        ArgumentNullException.ThrowIfNull(startCleanup);
+
+        var aside = AsideDirectory(path, temporaryDirectory);
+        Directory.CreateDirectory(aside);
+        var moved = Path.Combine(aside, Path.GetFileName(path));
+
+        var cleanup = startCleanup(aside);
+        move(path, moved);
+
+        if (File.Exists(path))
+        {
+            // A move that copied. Across volumes Windows copies and then deletes the source, and where the source
+            // is the image of a running process the delete fails and the move still succeeds. The aside directory
+            // is chosen on the executable's own volume so that this does not happen; a volume mounted into a
+            // folder can still put two paths with one drive letter on two volumes, and then the executable is
+            // still here -- which is a problem, not a move.
+            try
+            {
+                File.Delete(moved);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // The cleanup started above removes the whole directory once this process has gone.
+            }
+
+            throw new RemovalRefused(
+                CliErrors.UninstallRefused,
+                $"It is the file this uninstall is running from, and it could not be moved out of its directory: '{aside}' "
+                + "is on another volume, where Windows copies a running image rather than moving it and leaves the "
+                + $"original in place. Remove '{path}' once this has exited.");
+        }
+
+        const string Why = "This is the file the uninstall is running from, and Windows does not delete the image of a "
+            + "running process. It was moved out of the install directory instead, so the installation is off "
+            + "this machine";
+
+        return cleanup is { } pid
+            ? new ExecutableOutcome(
+                false,
+                moved,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{Why}, to '{moved}'; a cleanup, process {pid}, removes '{aside}' as soon as this process has "
+                    + $"exited. If it is still there afterwards, `Remove-Item -Recurse '{aside}'` removes it."))
+            : new ExecutableOutcome(
+                false,
+                moved,
+                $"{Why}; but one copy of it is left at '{moved}', and no cleanup could be started to remove it. "
+                    + $"`Remove-Item -Recurse '{aside}'` removes it once this has exited.",
+                LeftBehind: true);
+    }
+
+    /// <summary>
+    /// Where the running image is moved to on Windows: a directory of its own on <b>the executable's own
+    /// volume</b> — the temporary directory where that is on it, and otherwise beside the install directory.
+    /// </summary>
+    /// <remarks>
+    /// Across volumes Windows does not move a file, it copies it and deletes the source — and where the source
+    /// cannot be deleted, which is exactly the image of a running process, the move <em>succeeds</em> and leaves
+    /// the source where it was. An installation on another drive than the temporary directory was reported as
+    /// "moved out", with its directory kept for holding "something this installer did not write": the
+    /// executable itself.
+    /// </remarks>
+    public static string AsideDirectory(string executable, string temporaryDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(executable);
+        ArgumentException.ThrowIfNullOrWhiteSpace(temporaryDirectory);
+
+        var name = $"jason-uninstall-{Guid.NewGuid():N}";
+        var image = Path.GetFullPath(executable);
+        var volume = Path.GetPathRoot(image);
+        if (string.Equals(volume, Path.GetPathRoot(Path.GetFullPath(temporaryDirectory)), StringComparison.OrdinalIgnoreCase))
+        {
+            return Path.Combine(temporaryDirectory, name);
+        }
+
+        // Beside the install directory rather than in it, because the install directory is about to be removed
+        // once it is empty; at the root of the volume where the executable sits at the root itself.
+        var installed = Path.GetDirectoryName(image)!;
+        return Path.Combine(Path.GetDirectoryName(installed) ?? installed, "." + name);
+    }
 
     private sealed class MachineRemover(string pathKey) : IInstallationRemover
     {
@@ -205,27 +313,7 @@ public static class InstallationRemovers
                 return new ExecutableOutcome(true, null, null);
             }
 
-            var aside = Path.Combine(Path.GetTempPath(), $"jason-uninstall-{Guid.NewGuid():N}");
-            Directory.CreateDirectory(aside);
-            var moved = Path.Combine(aside, Path.GetFileName(path));
-
-            var cleanup = StartCleanup(aside);
-            File.Move(path, moved);
-
-            const string Why = "This is the file the uninstall is running from, and Windows does not delete the image of a "
-                + "running process. It was moved out of the install directory instead, so the installation is off "
-                + "this machine";
-
-            return new ExecutableOutcome(
-                false,
-                moved,
-                cleanup is { } pid
-                    ? string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"{Why}, to '{moved}'; a cleanup, process {pid}, removes '{aside}' as soon as this process has "
-                        + $"exited. If it is still there afterwards, `Remove-Item -Recurse '{aside}'` removes it.")
-                    : $"{Why}; one copy of it is at '{moved}', and no cleanup could be started to remove it, so "
-                        + $"`Remove-Item -Recurse '{aside}'` removes it now.");
+            return InstallationRemovers.MoveAside(path, Path.GetTempPath(), (from, to) => File.Move(from, to), StartCleanup);
         }
 
         /// <summary>
@@ -453,32 +541,5 @@ public static class InstallationRemovers
                 return false;
             }
         }
-    }
-
-    private sealed class RefusingRemover : IInstallationRemover
-    {
-        public bool CanRemoveRunningImage => false;
-
-        public void RemoveFile(string path) => throw Refusal();
-
-        public ExecutableOutcome RemoveExecutable(string path) => throw Refusal();
-
-        public bool RemoveDirectoryIfEmpty(string path) => throw Refusal();
-
-        public void RemoveTree(string path) => throw Refusal();
-
-        public PathEntryPlan ReadPathEntry(string directory) => throw Refusal();
-
-        public PathEntryOutcome RemovePathEntry(PathEntryPlan plan) => throw Refusal();
-
-        public string? ReadExtractedLibraries(string executable) => throw Refusal();
-
-        public void RemoveExtractedLibraries(string directory) => throw Refusal();
-
-        private static RemovalRefused Refusal() => new(
-            CliErrors.RemoverUnsupported,
-            "This environment does not remove anything from this machine, so nothing was removed. "
-            + "That is deliberate: a removal is composed here and performed by one seam, and an environment "
-            + "that named none gets a refusal rather than the machine.");
     }
 }

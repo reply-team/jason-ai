@@ -36,6 +36,11 @@ public sealed record UnknownRoot(string Root, string Reason);
 /// <param name="PathEntry">How this account's PATH carries the install directory, or null where nothing does.</param>
 /// <param name="Executable">The file this Jason is installed as, or null where nothing named one.</param>
 /// <param name="InstallDirectory">The directory holding it, removed only if nothing else is left in it.</param>
+/// <param name="PreviousExecutable">
+/// The executable <c>install.ps1</c> leaves beside the new one when an upgrade found the old one running, or null
+/// where there is none. The installer wrote it, so it goes with the executable; left behind, it made the install
+/// directory "somebody else's".
+/// </param>
 /// <param name="ExtractedLibraries">
 /// Where this build unpacked the native libraries it carries, or null where it unpacked none or cannot say
 /// for certain which directory was its own.
@@ -51,6 +56,7 @@ public sealed record UninstallPlan(
     PathEntryPlan? PathEntry,
     string? Executable,
     string? InstallDirectory,
+    string? PreviousExecutable,
     string? ExtractedLibraries,
     bool PurgesData,
     string DataDirectory)

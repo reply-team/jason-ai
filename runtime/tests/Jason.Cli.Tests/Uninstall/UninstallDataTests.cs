@@ -84,6 +84,26 @@ public class UninstallDataTests
     }
 
     /// <summary>
+    /// A dry run is not asked for --yes: it deletes nothing, so there is nothing to have said in advance, and a
+    /// script that wants to look before it purges is exactly who runs one.
+    /// </summary>
+    [Fact]
+    public async Task A_dry_run_of_the_purge_needs_no_yes_and_removes_nothing()
+    {
+        using var dir = new TempPaths();
+        var planted = Plant(dir);
+        var output = new StringWriter();
+        var remover = new RecordingRemover { ReallyRemoves = true };
+
+        var exit = await CliApp.RunAsync(["uninstall", "--purge-data", "--dry-run"], Machine(dir, output, remover), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Empty(remover.Calls);
+        Assert.True(File.Exists(planted));
+        Assert.True(JsonSerializer.Deserialize<UninstallReport>(output.ToString(), JasonJson.Options)!.Plan.PurgesData);
+    }
+
+    /// <summary>
     /// The person's shape prints what will be deleted and asks — and a no changes nothing at all, and says so
     /// with exit 1.
     /// </summary>

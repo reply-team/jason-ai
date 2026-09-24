@@ -37,6 +37,9 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
         }
     }
 
+    /// <summary>Whether a moved image is pretended to have been left with no cleanup to remove it.</summary>
+    public bool LeavesACopy { get; init; }
+
     /// <summary>Where a running image is pretended to have been moved, when this platform cannot delete one.</summary>
     public string? MovesTo { get; set; }
 
@@ -66,7 +69,9 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
             File.Move(path, moved, overwrite: true);
         }
 
-        return new ExecutableOutcome(false, moved, $"It is the running image, so it was moved to '{moved}'.");
+        return LeavesACopy
+            ? new ExecutableOutcome(false, moved, $"It is the running image, so it was moved to '{moved}'; but no cleanup could be started to remove it.", LeftBehind: true)
+            : new ExecutableOutcome(false, moved, $"It is the running image, so it was moved to '{moved}'.");
     }
 
     public bool RemoveDirectoryIfEmpty(string path)

@@ -280,18 +280,25 @@ public static class UninstallCommand
         {
             env.Out.WriteLine($"  the executable at {executable}");
         }
+        else
+        {
+            // Said here as well as in the report, because a dry run never reaches the report: the plan is the
+            // whole of what a person sees, and a list with no executable in it reads as one that forgot. It sat
+            // under the unpacked libraries' branch, so a build that had unpacked none printed it beside the
+            // executable it had just named.
+            env.Out.WriteLine(
+                "  no executable: this Jason is not running as an installed single file, so there is no file to "
+                + "remove. The build it runs from is where it lives.");
+        }
+
+        if (plan.PreviousExecutable is { } previous)
+        {
+            env.Out.WriteLine($"  the executable an earlier install replaced, at {previous}");
+        }
 
         if (plan.ExtractedLibraries is { } extracted)
         {
             env.Out.WriteLine($"  the native libraries it unpacked, at {extracted}");
-        }
-        else
-        {
-            // Said here as well as in the report, because a dry run never reaches the report: the plan is the
-            // whole of what a person sees, and a list with no executable in it reads as one that forgot.
-            env.Out.WriteLine(
-                "  no executable: this Jason is running through `dotnet`, so there is no single file to "
-                + "remove. The build it runs from is where it lives.");
         }
 
         foreach (var unknown in plan.Unknown)

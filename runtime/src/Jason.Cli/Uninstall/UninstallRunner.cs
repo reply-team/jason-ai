@@ -351,15 +351,30 @@ public static class UninstallRunner
 
             if (outcome.Note is { } note)
             {
-                kept.Add(note);
+                // A copy nothing will remove is something this uninstall set out to remove and did not: a
+                // problem, and exit 1, rather than a note beside a success.
+                (outcome.LeftBehind ? problems : kept).Add(note);
             }
         }
         catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
         {
-            problems.Add(
-                $"'{executable}' could not be removed: {exception.Message} Everything else is gone; remove "
-                + "that one file yourself.");
+            problems.Add($"'{executable}' could not be removed: {exception.Message}");
             return;
+        }
+
+        if (plan.PreviousExecutable is { } previous)
+        {
+            try
+            {
+                env.Removes!.RemoveFile(previous);
+                done.Add($"Removed '{previous}', the executable an earlier install replaced while it was running.");
+            }
+            catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+            {
+                problems.Add(
+                    $"'{previous}' could not be removed: {exception.Message} It is the executable an earlier install "
+                    + "replaced while it was running, and something may be running it still.");
+            }
         }
 
         if (plan.InstallDirectory is { Length: > 0 } directory)

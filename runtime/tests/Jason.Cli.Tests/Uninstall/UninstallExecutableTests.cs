@@ -308,6 +308,152 @@ public class UninstallExecutableTests
         Assert.Contains($"done: Removed the executable at '{executable}'.", said, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The running image is moved to a directory on its own volume. Across volumes Windows copies a file rather
+    /// than moving it, and where the source is a running image the copy succeeds and the original stays: an
+    /// installation on another drive than the temporary directory was reported as moved out, with its directory
+    /// kept for holding "something this installer did not write" — the executable itself.
+    /// </summary>
+    [Fact]
+    public void The_running_image_is_moved_to_a_directory_on_its_own_volume()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Skip("Drive letters are how two volumes are told apart here; elsewhere the running image is deleted, not moved.");
+        }
+
+        var aside = InstallationRemovers.AsideDirectory(@"D:\apps\jason\jason.exe", @"C:\Users\someone\AppData\Local\Temp\");
+        Assert.StartsWith(@"D:\apps\.jason-uninstall-", aside, StringComparison.OrdinalIgnoreCase);
+
+        var atTheRoot = InstallationRemovers.AsideDirectory(@"D:\jason.exe", @"C:\Temp\");
+        Assert.StartsWith(@"D:\.jason-uninstall-", atTheRoot, StringComparison.OrdinalIgnoreCase);
+
+        var beside = InstallationRemovers.AsideDirectory(@"C:\Users\someone\AppData\Local\Programs\jason\jason.exe", @"C:\Users\someone\AppData\Local\Temp\");
+        Assert.StartsWith(@"C:\Users\someone\AppData\Local\Temp\jason-uninstall-", beside, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// And a move that copied is a problem, not a move: the executable is still where it was, so the verb does not
+    /// say it moved it out. What no machine with one volume can produce, reproduced: a move that copies and
+    /// leaves the source.
+    /// </summary>
+    [Fact]
+    public void A_move_that_left_the_executable_where_it_was_is_not_reported_as_one()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var temporary = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "tmp")).FullName;
+        string? copiedTo = null;
+
+        var refused = Assert.Throws<RemovalRefused>(() => InstallationRemovers.MoveAside(
+            executable,
+            temporary,
+            (from, to) =>
+            {
+                File.Copy(from, to);
+                copiedTo = to;
+            },
+            _ => 4242));
+
+        Assert.True(File.Exists(executable), "the test's own premise: the source stays where it was.");
+        Assert.Contains("could not be moved out of its directory", refused.Message, StringComparison.Ordinal);
+        Assert.NotNull(copiedTo);
+        Assert.False(File.Exists(copiedTo), "the copy the move left was not removed.");
+    }
+
+    [Fact]
+    public void A_moved_image_names_the_cleanup_that_removes_it()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var temporary = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "tmp")).FullName;
+        string? cleaned = null;
+
+        var outcome = InstallationRemovers.MoveAside(executable, temporary, (from, to) => File.Move(from, to), aside =>
+        {
+            // Started before the move, never after: see MoveAside.
+            Assert.True(File.Exists(executable), "the cleanup was started after the move.");
+            cleaned = aside;
+            return 4242;
+        });
+
+        Assert.False(File.Exists(executable));
+        Assert.False(outcome.LeftBehind);
+        Assert.True(File.Exists(outcome.MovedTo));
+        Assert.Equal(cleaned, Path.GetDirectoryName(outcome.MovedTo));
+        Assert.Contains("process 4242", outcome.Note, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Where no cleanup could be started, the copy is left for nobody to remove — which is something this
+    /// uninstall set out to remove and did not.
+    /// </summary>
+    [Fact]
+    public void A_moved_image_no_cleanup_could_be_started_for_is_left_behind()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var temporary = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "tmp")).FullName;
+
+        var outcome = InstallationRemovers.MoveAside(executable, temporary, (from, to) => File.Move(from, to), _ => null);
+
+        Assert.True(outcome.LeftBehind);
+        Assert.Contains("no cleanup could be started", outcome.Note, StringComparison.Ordinal);
+    }
+
+    /// <summary>And the verb exits 1 for it, with the copy named as a problem rather than as a note beside a success.</summary>
+    [Fact]
+    public async Task A_copy_left_for_nobody_to_remove_is_a_problem()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+
+        var (exit, report) = await RunAsync(dir, executable, new RecordingRemover { ReallyRemoves = true, CanRemoveRunningImage = false, LeavesACopy = true });
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains(report.Problems, problem => problem.Contains("no cleanup could be started", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The executable an upgrade replaced while it was running is the installer's, and goes with the rest. Left
+    /// behind, it made the install directory "somebody else's", and the directory stayed with it.
+    /// </summary>
+    [Fact]
+    public async Task The_executable_an_earlier_install_replaced_goes_too()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var previous = Path.Combine(Path.GetDirectoryName(executable)!, UninstallReader.PreviousExecutableName);
+        File.WriteAllText(previous, "the one before");
+
+        var (exit, report) = await RunAsync(dir, executable, new RecordingRemover { ReallyRemoves = true });
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(previous, report.Plan.PreviousExecutable);
+        Assert.False(File.Exists(previous));
+        Assert.False(Directory.Exists(Path.GetDirectoryName(executable)), "the install directory was kept for holding the installer's own file.");
+    }
+
+    /// <summary>
+    /// The plan names the executable and says nothing about "no executable" beside it. That line sat under the
+    /// unpacked libraries' branch, so a build that had unpacked none printed both.
+    /// </summary>
+    [Fact]
+    public async Task A_plan_that_names_the_executable_does_not_also_say_there_is_none()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var output = new StringWriter();
+
+        await UninstallCommand.RunAsync(
+            Environment(dir, executable, new RecordingRemover(), output),
+            new UninstallOptions(Human: true, DryRun: true, PurgeData: false, Yes: false, Force: false),
+            Ct);
+
+        Assert.Contains($"the executable at {executable}", output.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("no executable", output.ToString(), StringComparison.Ordinal);
+    }
+
     private static string Unpacked(TempPaths dir, string bundle)
     {
         var extracted = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "tmp", ".net", "jason", bundle)).FullName;
