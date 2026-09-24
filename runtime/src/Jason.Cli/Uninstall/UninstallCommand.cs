@@ -326,11 +326,25 @@ public static class UninstallCommand
     }
 
     /// <summary>
-    /// The one shape a refusal takes: the error envelope on stdout by default, a sentence under
+    /// The one shape a refusal takes: the error envelope on stdout by default, a sentence on stderr under
     /// <c>--human</c>, and exit 1 — understood, and declined.
     /// </summary>
-    private static int Refuse(CliEnvironment env, bool human, string code, string message)    {
-        env.Out.WriteLine(human ? message : CliErrors.Serialize(code, message, retryable: false));
+    /// <remarks>
+    /// On stderr for a person, as every other refusal and problem of this verb's report is: the up-front
+    /// refusals printed their sentence on stdout, so the same verb put a refusal in two places depending on how
+    /// early it came.
+    /// </remarks>
+    private static int Refuse(CliEnvironment env, bool human, string code, string message)
+    {
+        if (human)
+        {
+            env.Error.WriteLine(message);
+        }
+        else
+        {
+            env.Out.WriteLine(CliErrors.Serialize(code, message, retryable: false));
+        }
+
         return ExitCodes.ApiError;
     }
 }

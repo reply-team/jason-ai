@@ -93,20 +93,20 @@ public static class UninstallRunner
                 + "'jason uninstall' without --purge-data removes the installation and keeps the data directory.");
         }
 
-        // 1. The registration, first.
-        if (Step1RemoveAutostart(env, plan, done, kept) is { } refusedAt1)
-        {
-            return new UninstallReport(plan, done, kept, problems, refusedAt1.Code, refusedAt1.Message);
-        }
-
-        // 2. The runtime, and only then.
-        if (await Step2StopRuntimeAsync(env, plan, options, done, kept, cancellationToken).ConfigureAwait(false) is { } refusedAt2)
-        {
-            return new UninstallReport(plan, done, kept, problems, refusedAt2.Code, refusedAt2.Message);
-        }
-
         try
         {
+            // 1. The registration, first.
+            if (Step1RemoveAutostart(env, plan, done, kept) is { } refusedAt1)
+            {
+                return new UninstallReport(plan, done, kept, problems, refusedAt1.Code, refusedAt1.Message);
+            }
+
+            // 2. The runtime, and only then.
+            if (await Step2StopRuntimeAsync(env, plan, options, done, kept, cancellationToken).ConfigureAwait(false) is { } refusedAt2)
+            {
+                return new UninstallReport(plan, done, kept, problems, refusedAt2.Code, refusedAt2.Message);
+            }
+
             // 3. Everything a receipt names, and nothing else.
             Step3RemoveByReceipt(env, plan, options, done, kept, problems);
 
@@ -125,10 +125,11 @@ public static class UninstallRunner
         }
         catch (Exception unexpected) when (unexpected is not OperationCanceledException)
         {
-            // Never out of here. Everything above this point has already removed something, and an exception
-            // that left the verb took the list of what with it: a published build once answered with one line
-            // about a type initializer after it had deleted the data directory. So it becomes the last problem
-            // in a report that still names every step that did happen.
+            // Never out of here. Anything above this point may already have removed something -- the
+            // registration is gone before the runtime is even asked -- and an exception that left the verb took
+            // the list of what with it: a published build once answered with one line about a type initializer
+            // after it had deleted the data directory. So it becomes the last problem in a report that still
+            // names every step that did happen, whichever step it came from.
             problems.Add(
                 $"The uninstall stopped part-way, on something it did not expect: {Causes.Line(unexpected)} Every step "
                 + "listed as done did happen; nothing after the one that failed was attempted. Run it again to "

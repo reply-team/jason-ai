@@ -238,6 +238,44 @@ public class UninstallOrderTests
         Assert.Contains("No logon registration", output.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Something nobody planned for at the registration — before the runtime is even asked — is the last problem
+    /// of a report, not an exception out of the verb. The catch that turns one into the other covered steps 3 to
+    /// 6 only, and the registration may already be gone by the time step 1 or step 2 fails.
+    /// </summary>
+    [Fact]
+    public async Task Something_nobody_planned_for_at_the_registration_is_reported_rather_than_thrown()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        var env = new CliEnvironment(
+            output,
+            new StringWriter(),
+            dir.Paths,
+            Autostart: new BreaksOnRemove(),
+            Harnesses: HarnessLocators.At(Path.Combine(dir.Paths.Root, "harness")),
+            InstallPath: Path.Combine(dir.Paths.Root + "-install", "jason"),
+            Removes: new RecordingRemover());
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(Human: false, DryRun: false, PurgeData: false, Yes: true, Force: false), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var report = System.Text.Json.JsonSerializer.Deserialize<UninstallReport>(output.ToString(), Contracts.Json.JasonJson.Options)!;
+        Assert.Contains(report.Problems, problem => problem.Contains("stopped part-way", StringComparison.Ordinal));
+    }
+
+    /// <summary>A registrar that fails in a way nothing planned for.</summary>
+    private sealed class BreaksOnRemove : Cli.Autostart.IAutostartRegistrar
+    {
+        public Cli.Autostart.AutostartPlatform Platform => Cli.Autostart.AutostartPlatform.Windows;
+
+        public Cli.Autostart.AutostartState Read() => new(false, [], null);
+
+        public void Apply(Cli.Autostart.AutostartRegistration registration) => throw new NotSupportedException();
+
+        public void Remove(Cli.Autostart.AutostartRegistration registration) => throw new InvalidOperationException("the task scheduler said something new.");
+    }
+
     /// <summary>A machine with no way to register anything at logon has nothing to take away, and says so.</summary>
     [Fact]
     public async Task A_machine_that_registers_nothing_at_logon_has_nothing_to_remove()

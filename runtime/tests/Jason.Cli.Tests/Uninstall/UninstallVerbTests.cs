@@ -37,20 +37,26 @@ public class UninstallVerbTests
     /// And the refusal says what it left alone. "Nothing was removed" is only reassuring if the sentence names
     /// the thing a person is most afraid of losing.
     /// </summary>
+    /// <remarks>
+    /// On stderr for a person, where every other refusal and problem of this verb goes: the refusals that come
+    /// before anything is read were the one kind printed on stdout.
+    /// </remarks>
     [Fact]
     public async Task The_refusal_names_the_data_directory_it_did_not_touch()
     {
         using var dir = new TempPaths();
         var output = new StringWriter();
+        var error = new StringWriter();
 
         var exit = await CliApp.RunAsync(
             ["uninstall", "--human"],
-            new CliEnvironment(output, new StringWriter(), dir.Paths),
+            new CliEnvironment(output, error, dir.Paths),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(ExitCodes.ApiError, exit);
-        Assert.Contains("data directory", output.ToString(), StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(dir.Paths.Root, output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("data directory", error.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(dir.Paths.Root, error.ToString(), StringComparison.Ordinal);
+        Assert.Empty(output.ToString());
     }
 
     /// <summary>
