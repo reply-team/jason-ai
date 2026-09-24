@@ -137,6 +137,49 @@ public class UninstallDataTests
         Assert.Contains("nothing at all was removed", error.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// And nothing means nothing that is not a file either: the registration stays registered and the runtime is
+    /// never asked to stop.
+    /// </summary>
+    /// <remarks>
+    /// The test above counts the remover's calls, and steps 1 and 2 make none. A question moved to after them —
+    /// the registration taken and the runtime stopped before anybody said no — removed no file and stayed green.
+    /// </remarks>
+    [Fact]
+    public async Task A_no_leaves_the_registration_registered_and_the_runtime_running()
+    {
+        using var dir = new TempPaths();
+        Plant(dir);
+        dir.WriteDescriptor(Commands.RuntimeVerbs.Descriptor("rt_LIVE"));
+        var registrar = new RecordingRegistrar();
+        var asked = new List<string>();
+        var processes = new Process.FakeProcessControl();
+        processes.RunningPids.Add(Commands.RuntimeVerbs.Pid);
+        var remover = new RecordingRemover { ReallyRemoves = true };
+        var env = Machine(dir, new StringWriter(), remover) with
+        {
+            In = new StringReader("n\n"),
+            Autostart = registrar,
+            Processes = processes,
+            HttpHandler = new FakeHandler(request =>
+            {
+                asked.Add(request.RequestUri!.AbsolutePath);
+                return Commands.RuntimeVerbs.Response(System.Net.HttpStatusCode.OK, Commands.RuntimeVerbs.ShutdownJson("rt_LIVE"));
+            }),
+        };
+
+        var exit = await UninstallCommand.RunAsync(
+            env,
+            new UninstallOptions(Human: true, DryRun: false, PurgeData: true, Yes: false, Force: false),
+            Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(0, registrar.Removals);
+        Assert.Empty(asked);
+        Assert.Empty(remover.Calls);
+        Assert.True(File.Exists(dir.Paths.DescriptorFile), "the runtime's descriptor went, so something stopped it.");
+    }
+
     [Fact]
     public async Task And_a_yes_at_the_prompt_removes_it()
     {
