@@ -78,6 +78,64 @@ public class SkillsRecordTests
     }
 
     /// <summary>And so is one this build has no way to understand: a newer writer left it.</summary>
+    /// <summary>
+    /// A record whose shape is there and whose contents are not — a list that is null, a pack with no files, a
+    /// file with no path — is unreadable, and says which root, rather than throwing a NullReferenceException that
+    /// names nothing from inside every verb that reads it. An uninstall that met one could remove nothing at all.
+    /// </summary>
+    [Theory]
+    [InlineData("{\"version\":1,\"packs\":null}")]
+    [InlineData("{\"version\":1}")]
+    [InlineData("{\"version\":1,\"packs\":[null]}")]
+    [InlineData("{\"version\":1,\"packs\":[{\"pack\":\"p\",\"source\":\"s\",\"ref\":\"r\",\"ref_overridden\":false,\"installed_at\":\"2026-09-24T00:00:00Z\",\"files\":null}]}")]
+    [InlineData("{\"version\":1,\"packs\":[{\"pack\":null,\"source\":\"s\",\"ref\":\"r\",\"ref_overridden\":false,\"installed_at\":\"2026-09-24T00:00:00Z\",\"files\":[]}]}")]
+    [InlineData("{\"version\":1,\"packs\":[{\"pack\":\"p\",\"source\":\"s\",\"ref\":\"r\",\"ref_overridden\":false,\"installed_at\":\"2026-09-24T00:00:00Z\",\"files\":[null]}]}")]
+    [InlineData("{\"version\":1,\"packs\":[{\"pack\":\"p\",\"source\":\"s\",\"ref\":\"r\",\"ref_overridden\":false,\"installed_at\":\"2026-09-24T00:00:00Z\",\"files\":[{\"path\":null,\"sha256\":\"aa\"}]}]}")]
+    [InlineData("{\"version\":1,\"packs\":[{\"pack\":\"p\",\"source\":\"s\",\"ref\":\"r\",\"ref_overridden\":false,\"installed_at\":\"2026-09-24T00:00:00Z\",\"files\":[{\"path\":\"x/SKILL.md\",\"sha256\":null}]}]}")]
+    public void A_record_with_something_missing_is_unreadable_and_names_its_root(string document)
+    {
+        using var tree = new TempPaths();
+        File.WriteAllText(Path.Combine(tree.Paths.Root, SkillsRecord.FileName), document);
+
+        var unreadable = Assert.Throws<SkillsRecordUnreadable>(() => SkillsRecord.Read(tree.Paths.Root));
+
+        Assert.Contains(tree.Paths.Root, unreadable.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A path a record names is inside its root, or the record is unreadable. The uninstall removes what a record
+    /// names, and the installer compares against it: a record naming <c>../outside/SKILL.md</c> or a rooted path
+    /// had the uninstall remove a file outside the root, and empty the directories above it.
+    /// </summary>
+    [Theory]
+    [InlineData("../outside/SKILL.md")]
+    [InlineData("skill/../../outside/SKILL.md")]
+    [InlineData("..")]
+    [InlineData("")]
+    [InlineData("/etc/SKILL.md")]
+    [InlineData("C:/Windows/SKILL.md")]
+    [InlineData("C:SKILL.md")]
+    [InlineData("\\\\server\\share\\SKILL.md")]
+    public void A_record_naming_a_path_outside_its_root_is_unreadable(string path)
+    {
+        using var tree = new TempPaths();
+        SkillsRecord.Write(tree.Paths.Root, new SkillsRecord(SkillsRecord.CurrentVersion, [Deployment() with { Files = [new DeployedFile(path, new string('a', 64))] }]));
+
+        var unreadable = Assert.Throws<SkillsRecordUnreadable>(() => SkillsRecord.Read(tree.Paths.Root));
+
+        Assert.Contains("outside", unreadable.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>And a path that only looks like it climbs — a directory whose name begins with two dots — is fine.</summary>
+    [Fact]
+    public void A_path_that_stays_inside_its_root_is_read()
+    {
+        using var tree = new TempPaths();
+        SkillsRecord.Write(tree.Paths.Root, new SkillsRecord(SkillsRecord.CurrentVersion, [Deployment() with { Files = [new DeployedFile("..hidden/SKILL.md", new string('a', 64)), new DeployedFile("a/./b/SKILL.md", new string('a', 64))] }]));
+
+        Assert.Equal(2, Assert.Single(SkillsRecord.Read(tree.Paths.Root)!.Packs).Files.Count);
+    }
+
     [Fact]
     public void A_record_from_a_later_version_is_not_guessed_at()
     {

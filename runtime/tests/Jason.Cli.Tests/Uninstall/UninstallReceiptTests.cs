@@ -103,6 +103,30 @@ public class UninstallReceiptTests
         Assert.Contains(remover.Calls, call => call.StartsWith("executable.remove", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A record naming a file outside its root is not one this installer wrote, and nothing is removed by it —
+    /// neither that file nor the directories above it. The root is reported as one nothing may guess at.
+    /// </summary>
+    [Fact]
+    public async Task A_record_naming_a_file_outside_its_root_removes_nothing()
+    {
+        using var dir = new TempPaths();
+        var root = Path.Combine(dir.Paths.Root, "harness");
+        var ours = Deploy(root, "operating-the-installation");
+        var outside = Write(Path.Combine(dir.Paths.Root, "outside", "SKILL.md"), "somebody's");
+        SkillsRecord.Write(root, new SkillsRecord(
+            SkillsRecord.CurrentVersion,
+            [new SkillsDeployment("runtime", "/somewhere", "v0.1.0", false, null, DateTimeOffset.UtcNow,
+                [new DeployedFile("operating-the-installation/SKILL.md", SkillsRecord.Digest(ours)), new DeployedFile("../outside/SKILL.md", SkillsRecord.Digest(outside))])]));
+
+        var (exit, report) = await RunAsync(dir, root);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.True(File.Exists(outside), "a file outside the root was removed by a record inside it.");
+        Assert.True(File.Exists(ours), "a root whose record names a path outside it had something removed anyway.");
+        Assert.Contains(report.Plan.Unknown, unknown => string.Equals(unknown.Root, root, StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>And a directory nothing is left in goes, along with the record and the root itself.</summary>
     [Fact]
     public async Task An_empty_directory_goes_and_so_does_the_record()

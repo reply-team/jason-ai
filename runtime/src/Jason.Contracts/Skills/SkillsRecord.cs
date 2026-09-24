@@ -107,7 +107,76 @@ public sealed record SkillsRecord(int Version, IReadOnlyList<SkillsDeployment> P
                 string.Create(CultureInfo.InvariantCulture, $"it is version {record.Version} and this build reads up to {CurrentVersion}"));
         }
 
+        Validate(root, record);
         return record;
+    }
+
+    /// <summary>
+    /// Everything a record names is there, and every path it names is a file under the root it sits in.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The deserializer fills in what the document says, and a document can say <c>null</c> for a list: every
+    /// verb that read such a record then threw a NullReferenceException naming no file, and an uninstall that met
+    /// one could remove nothing at all. So a missing part is the same answer a record this build cannot parse
+    /// gets — unreadable, naming the root.
+    /// </para>
+    /// <para>
+    /// And the paths are held to the root. An uninstall removes what a record names, and the installer compares
+    /// what is on disk against it; a record naming <c>../outside/SKILL.md</c>, or a rooted path, had the
+    /// uninstall remove a file outside the root and empty the directories above it. This product writes a
+    /// record's paths relative, with forward slashes, and never with a colon or a backslash in them, so anything
+    /// else is not a record it wrote.
+    /// </para>
+    /// </remarks>
+    private static void Validate(string root, SkillsRecord record)
+    {
+        if (record.Packs is null)
+        {
+            throw new SkillsRecordUnreadable(root, "it names no packs");
+        }
+
+        foreach (var pack in record.Packs)
+        {
+            if (pack is null || string.IsNullOrWhiteSpace(pack.Pack) || pack.Source is null || pack.Ref is null)
+            {
+                throw new SkillsRecordUnreadable(root, "a pack in it has no name, source or ref");
+            }
+
+            if (pack.Files is null)
+            {
+                throw new SkillsRecordUnreadable(root, $"the pack '{pack.Pack}' in it names no files");
+            }
+
+            foreach (var file in pack.Files)
+            {
+                if (file is null || file.Path is null || string.IsNullOrWhiteSpace(file.Sha256))
+                {
+                    throw new SkillsRecordUnreadable(root, $"a file of the pack '{pack.Pack}' in it has no path or no digest");
+                }
+
+                if (!Inside(root, file.Path))
+                {
+                    throw new SkillsRecordUnreadable(
+                        root,
+                        $"it names '{file.Path}', which is not a file under that root, and nothing outside the root a record sits in is ever removed or compared by it");
+                }
+            }
+        }
+    }
+
+    /// <summary>Whether a path a record names is a file under its root, spelled the way this product spells one.</summary>
+    private static bool Inside(string root, string path)
+    {
+        if (path.Length == 0 || path.StartsWith('/') || path.Contains('\\', StringComparison.Ordinal) || path.Contains(':', StringComparison.Ordinal)
+            || path.Split('/').Any(segment => segment == ".."))
+        {
+            return false;
+        }
+
+        var outer = System.IO.Path.GetFullPath(root).TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar) + System.IO.Path.DirectorySeparatorChar;
+        var full = System.IO.Path.GetFullPath(System.IO.Path.Combine(root, path.Replace('/', System.IO.Path.DirectorySeparatorChar)));
+        return full.StartsWith(outer, StringComparison.Ordinal) && full.Length > outer.Length;
     }
 
     /// <summary>
