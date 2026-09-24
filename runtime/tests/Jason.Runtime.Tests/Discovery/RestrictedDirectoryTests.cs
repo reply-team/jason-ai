@@ -85,6 +85,34 @@ public class RestrictedDirectoryTests
     }
 
     /// <summary>
+    /// An object owned by the owner this token gives everything it creates is this account's already, and is
+    /// not taken: for an elevated administrator that owner is the Administrators group, not the user.
+    /// </summary>
+    /// <remarks>
+    /// The two tests above failed on the Windows CI runner, which runs as an elevated administrator, and passed
+    /// on every desk: there the directory a test had just created belonged to the group, was read as somebody
+    /// else's, and giving it to the user was refused. The runner is where that is proved end to end; this is
+    /// the rule, held where the suite runs unelevated too.
+    /// </remarks>
+    [Fact]
+    public void An_object_owned_by_this_tokens_own_default_owner_is_not_taken()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var user = new SecurityIdentifier("S-1-5-21-1000-2000-3000-1001");
+        var administrators = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+        var somebodyElse = new SecurityIdentifier("S-1-5-21-1000-2000-3000-1002");
+
+        Assert.False(FilePermissions.TakesOwnership(administrators, user, tokenOwner: administrators), "an elevated administrator's own directory was taken.");
+        Assert.False(FilePermissions.TakesOwnership(user, user, tokenOwner: user), "the user's own directory was taken.");
+        Assert.True(FilePermissions.TakesOwnership(somebodyElse, user, tokenOwner: user), "somebody else's directory was left with them.");
+        Assert.True(FilePermissions.TakesOwnership(administrators, user, tokenOwner: user), "an unelevated account treated the group as itself.");
+    }
+
+    /// <summary>
     /// Give ourselves a protected DACL of exactly <c>Modify</c>. We own it, so we hold <c>WRITE_DAC</c>
     /// implicitly and may do this; <c>Modify</c> does not carry <c>WRITE_OWNER</c>, so afterwards
     /// <c>SetOwner</c> is refused. That is the machine state a data directory outside the user profile is in.
