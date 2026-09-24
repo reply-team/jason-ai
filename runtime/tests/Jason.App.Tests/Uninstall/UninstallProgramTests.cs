@@ -26,7 +26,7 @@ public class UninstallProgramTests
     /// says to run from source.
     /// </para>
     /// <para>
-    /// <c>jason update apply</c> asked the same question in wave 13 and answered it properly: one element in
+    /// <c>jason update apply</c> asked the same question from the start and answered it properly: one element in
     /// <c>SelfExecutable.Command</c> is a published executable, two is <c>dotnet &lt;assembly&gt;</c> and there
     /// is no single file. This verb's own comment claimed it worked it out "the same way" and did not.
     /// </para>
@@ -53,6 +53,33 @@ public class UninstallProgramTests
             plan["install_directory"] is null,
             $"The plan names '{plan["install_directory"]}' as an install directory to remove and to take off "
             + "this account's PATH. It is the muxer's directory.");
+    }
+
+    /// <summary>
+    /// Nor does a build started from its own launcher, which is what <c>dotnet run --project runtime/src/Jason.App</c>
+    /// does — the README's own way to run from source.
+    /// </summary>
+    /// <remarks>
+    /// That process's path is the launcher in the build's output directory, not the muxer, so the rule that
+    /// caught <c>dotnet jason.dll</c> let it through: the plan named <c>bin/Debug/net10.0/jason</c> as the
+    /// executable and the build directory as the install directory. A dry run, so safe to fail.
+    /// </remarks>
+    [Fact]
+    public async Task A_build_running_from_its_own_launcher_names_no_executable_to_remove()
+    {
+        using var it = GoldenPath.Create("uninstall-launcher");
+
+        var result = await GoldenPath.LauncherAsync(it, "uninstall", "--dry-run");
+
+        var plan = JsonNode.Parse(result.Output)?["plan"]
+            ?? throw new InvalidOperationException($"uninstall --dry-run printed no plan: {result.Output}{result.Error}");
+
+        Assert.True(
+            plan["executable"] is null,
+            $"This build runs from its own launcher and the plan names '{plan["executable"]}' as the executable to remove.");
+        Assert.True(
+            plan["install_directory"] is null,
+            $"The plan names the build directory '{plan["install_directory"]}' as an install directory to remove.");
     }
 
     /// <summary>And it says so, rather than reporting a clean uninstall of a file it never found.</summary>

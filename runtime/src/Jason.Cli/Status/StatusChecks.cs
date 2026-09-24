@@ -100,7 +100,8 @@ internal static class StatusChecks
         public static string? OnPath(CliEnvironment env)
         {
             // Never `Environment.ProcessPath`: under `dotnet jason.dll` that is the muxer, and this would
-            // print "put C:\Program Files\dotnet on your PATH" as the way to make `jason` typeable.
+            // print "put C:\Program Files\dotnet on your PATH" as the way to make `jason` typeable -- and under
+            // `dotnet run` it is the build's own launcher, and this printed the build directory.
             var executable = env.InstallPath ?? SelfExecutable.InstalledImage;
             if (executable is null || System.IO.Path.GetDirectoryName(executable) is not { Length: > 0 } directory)
             {
@@ -385,7 +386,7 @@ internal static class StatusChecks
     private static (string Where, string Directory, string Reader, string Executable)? Persisted(CliEnvironment env)
     {
         // Never `Environment.ProcessPath`, for the reason the repair gives: under `dotnet jason.dll` that is
-        // the muxer.
+        // the muxer, and under `dotnet run` a build's launcher.
         var executable = env.InstallPath ?? SelfExecutable.InstalledImage;
         if (env.Removes is not { } machine || executable is null || System.IO.Path.GetDirectoryName(executable) is not { Length: > 0 } directory)
         {

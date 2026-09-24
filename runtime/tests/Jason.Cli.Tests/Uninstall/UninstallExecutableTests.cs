@@ -46,12 +46,30 @@ public class UninstallExecutableTests
             OperatingSystem.IsWindows() ? @"C:\Program Files\dotnet\dotnet.exe" : "/usr/share/dotnet/dotnet",
             Path.Combine("opt", "jason", "jason.dll"));
 
-        Assert.Null(SelfExecutable.Image(muxer));
+        Assert.Null(SelfExecutable.Image(muxer, singleFile: false));
 
         // And a published installation is exactly the file it is running, which is the file this verb removes.
         var published = Path.Combine("opt", "jason", "jason");
-        Assert.Equal(published, SelfExecutable.Image(SelfExecutable.Resolve(published, "jason.dll")));
+        Assert.Equal(published, SelfExecutable.Image(SelfExecutable.Resolve(published, "jason.dll"), singleFile: true));
     }
+
+    /// <summary>
+    /// And a build's own launcher is not one either. <c>dotnet run --project runtime/src/Jason.App</c> starts
+    /// <c>bin/Debug/net10.0/jason</c> rather than the muxer, so its process path is that launcher: read as the
+    /// installation, this verb planned to remove it, and its build directory as the install directory. Only a
+    /// single-file build carries everything in the one file, and only that is installed as a file.
+    /// </summary>
+    [Fact]
+    public void A_build_run_from_its_own_launcher_is_installed_as_no_file_at_all()
+    {
+        var launcher = Path.Combine("repo", "runtime", "src", "Jason.App", "bin", "Debug", "net10.0", "jason");
+
+        Assert.Null(SelfExecutable.Image(SelfExecutable.Resolve(launcher, "jason.dll"), singleFile: false));
+    }
+
+    /// <summary>The suite itself is not a single file, which is the fact the rule above reads.</summary>
+    [Fact]
+    public void This_suite_is_not_running_as_a_single_file() => Assert.False(SelfExecutable.IsSingleFile);
 
     [Fact]
     public async Task The_executable_and_its_directory_go()

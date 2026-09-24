@@ -51,6 +51,11 @@ public static class UninstallReader
         // deleted but can be renamed -- move it aside, which succeeds. Running from source through `dotnet` is
         // what this repository's own README tells a developer to do.
         //
+        // And that fix covered the muxer only, while this comment said it covered running from source. The
+        // README's way is `dotnet run`, which starts the build's own launcher rather than the muxer, and the
+        // launcher was planned as the executable and its build directory as the install directory. Only a
+        // single-file build is installed as a file, and SelfExecutable now says so.
+        //
         // The remover seam does not catch this. It is a decision taken before the seam is reached, which is
         // why every test that substitutes the seam stayed green.
         var executable = env.InstallPath ?? SelfExecutable.InstalledImage;

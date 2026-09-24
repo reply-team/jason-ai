@@ -150,7 +150,7 @@ public partial class StatusDisciplineTests
 
         Assert.NotEmpty(repair.Trim());
 
-        var directory = Path.GetDirectoryName(Environment.ProcessPath)!;
+        var directory = Path.GetDirectoryName(Installation(dir))!;
         Assert.True(Directory.Exists(directory), $"The repair names '{directory}', which is not a directory on this machine.");
         Assert.Contains(directory, repair, StringComparison.Ordinal);
 
@@ -457,16 +457,25 @@ public partial class StatusDisciplineTests
         return line;
     }
 
+    /// <remarks>
+    /// With an installation named, because this suite is not one: only a published single file is, and the test
+    /// host is one file of many. Without a file to name, the check has no directory to print a repair for.
+    /// </remarks>
     private static CliEnvironment Machine(TempPaths dir, IProgramRunner runner, StringWriter? output = null) =>
         new(
             output ?? new StringWriter(),
             new StringWriter(),
             dir.Paths,
             Processes: new FakeProcessControl(),
+            InstallPath: Installation(dir),
             Autostart: new RecordingRegistrar(),
             Harnesses: HarnessLocators.At(Path.Combine(dir.Paths.Root, "no-harness-here")),
             Programs: runner,
             SearchPath: Path.Combine(dir.Paths.Root, "nowhere"));
+
+    /// <summary>An installed executable of this test's own, in a directory that is really there.</summary>
+    private static string Installation(TempPaths dir) =>
+        Path.Combine(Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "install")).FullName, OperatingSystem.IsWindows() ? "jason.exe" : "jason");
 
     /// <summary>The checks' own directory, found from the repository root the way every guard here does.</summary>
     private static string StatusSources()

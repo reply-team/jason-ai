@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Jason.Contracts.Discovery;
 
 /// <summary>
@@ -37,17 +39,40 @@ public static class SelfExecutable
     /// worked it out "the same way" — so it planned to delete the muxer, take its directory off this account's
     /// PATH, and on Windows move it aside, which succeeds. Two copies of one rule is how that happens.
     /// </para>
+    /// <para>
+    /// <b>And only a single-file build is installed as a file at all.</b> <c>dotnet run --project
+    /// runtime/src/Jason.App</c> — the way this repository's README runs from source — does not go through the
+    /// muxer: it starts the build's own launcher, <c>bin/Debug/net10.0/jason</c>, whose process path is that
+    /// launcher. So the uninstall planned to remove the launcher and its build directory, and the path check
+    /// printed that build directory as the line to put on the PATH. A published release is one file with every
+    /// assembly inside it; a build's launcher is one file of many, and none of them is an installation.
+    /// </para>
     /// </remarks>
-    public static string? InstalledImage => Image(Command);
+    public static string? InstalledImage => Image(Command, IsSingleFile);
 
     /// <summary>
-    /// The same decision over the command it depends on, so what a muxed installation answers can be asked
-    /// without being one.
+    /// Whether this process is a single-file bundle: every assembly inside the one executable, so none has a
+    /// file of its own.
     /// </summary>
-    public static string? Image(IReadOnlyList<string> command)
+    public static bool IsSingleFile
+    {
+        [UnconditionalSuppressMessage(
+            "SingleFile",
+            "IL3000:Avoid accessing Assembly file path when publishing as a single file",
+            Justification = "The empty location a single-file bundle gives is the answer this asks for.")]
+        get => string.IsNullOrEmpty(typeof(SelfExecutable).Assembly.Location);
+    }
+
+    /// <summary>
+    /// The same decision over what it depends on, so what a muxed installation or a build's launcher answers can
+    /// be asked without being one.
+    /// </summary>
+    /// <param name="command">What runs this program again: one element for an executable, two for the muxer.</param>
+    /// <param name="singleFile">Whether that executable is a single-file bundle rather than a build's launcher.</param>
+    public static string? Image(IReadOnlyList<string> command, bool singleFile)
     {
         ArgumentNullException.ThrowIfNull(command);
-        return command.Count == 1 ? command[0] : null;
+        return command.Count == 1 && singleFile ? command[0] : null;
     }
 
     /// <summary>

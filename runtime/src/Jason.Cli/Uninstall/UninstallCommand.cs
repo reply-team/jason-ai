@@ -287,8 +287,9 @@ public static class UninstallCommand
             // under the unpacked libraries' branch, so a build that had unpacked none printed it beside the
             // executable it had just named.
             env.Out.WriteLine(
-                "  no executable: this Jason is not running as an installed single file, so there is no file to "
-                + "remove. The build it runs from is where it lives.");
+                "  no executable: this Jason is not a published single file - it is running through `dotnet`, or "
+                + "from a build's own output - so there is no one file to remove. The build it runs from is where "
+                + "it lives.");
         }
 
         if (plan.PreviousExecutable is { } previous)

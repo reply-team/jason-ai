@@ -286,14 +286,16 @@ public class StatusCommandTests
         var output = new StringWriter();
         Running(dir);
 
-        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, onPath: false), Ct);
+        // Named, because this suite is not an installation: only a published single file is, and the test host
+        // is one file of many.
+        var directory = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "install")).FullName;
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, onPath: false, installPath: Path.Combine(directory, "jason")), Ct);
 
         Assert.Equal(ExitCodes.ApiError, exit);
         var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
         Assert.Equal(CheckState.Failed, check.State);
         Assert.NotNull(check.Fix);
 
-        var directory = Path.GetDirectoryName(Environment.ProcessPath)!;
         Assert.Contains(
             OperatingSystem.IsWindows() ? "CreateSubKey('Environment')" : Jason.Cli.Uninstall.PathEntry.ExportLine(directory),
             check.Fix,

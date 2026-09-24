@@ -73,9 +73,18 @@ public class RoundTripTests
         Assert.True(Directory.Exists(installation.Root), "The data directory was removed without --purge-data.");
     }
 
-    /// <summary>And with the word said, the tree goes back to the snapshot exactly.</summary>
+    /// <summary>
+    /// And with the word said, everything Jason keeps in the data directory goes too — and nothing else does,
+    /// the canary somebody put there included.
+    /// </summary>
+    /// <remarks>
+    /// This used to assert that the canary went: the data directory "and everything in it" was the one place
+    /// the purge was allowed to take somebody's own file. The data directory is whatever <c>JASON_DATA_DIR</c>
+    /// names, so the purge now removes what Jason keeps there and names the rest; the directory stays, holding
+    /// exactly the file that was put there, byte for byte.
+    /// </remarks>
     [Fact]
-    public async Task And_purge_data_returns_the_tree_to_the_snapshot_exactly()
+    public async Task And_purge_data_removes_what_jason_keeps_and_nothing_else()
     {
         using var tree = new ScratchTree();
         var before = tree.Snapshot();
@@ -85,9 +94,10 @@ public class RoundTripTests
 
         Assert.True(report.Completed, $"{string.Join(" ", report.Problems)} {report.Refusal}");
 
-        // The data directory and everything in it, including the canary in it: the one place --purge-data is
-        // allowed to take somebody's own file, and the word is what allows it.
-        Assert.False(Directory.Exists(tree.Installation.Root), "--purge-data left the data directory behind.");
+        var left = Directory.EnumerateFileSystemEntries(tree.Installation.Root).ToList();
+        Assert.Equal([tree.DataCanary], left);
+        Assert.Equal(before[tree.DataCanary], tree.Snapshot()[tree.DataCanary]);
+        Assert.Contains(report.Kept, line => line.Contains(Path.GetFileName(tree.DataCanary), StringComparison.Ordinal));
         Assert.Equal(Without(Outside(before, tree), tree.Executable), Outside(tree.Snapshot(), tree));
     }
 
