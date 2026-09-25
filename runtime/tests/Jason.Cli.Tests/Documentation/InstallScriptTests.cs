@@ -590,8 +590,14 @@ public partial class InstallScriptTests
         var stderr = process.StandardError.ReadToEndAsync();
         if (!process.WaitForExit(TimeSpan.FromSeconds(120)))
         {
+            // What it had said before it stopped is the only evidence of where it stopped, so it goes into the
+            // failure rather than out with the process.
             process.Kill(entireProcessTree: true);
-            Assert.Fail("pwsh did not finish in two minutes.");
+            Task.WhenAny(Task.WhenAll(stdout, stderr), Task.Delay(TimeSpan.FromSeconds(10))).GetAwaiter().GetResult();
+            Assert.Fail(
+                $"{Path.GetFileName(executable)} did not finish in two minutes.\n"
+                + $"stdout so far: {(stdout.IsCompletedSuccessfully ? stdout.Result : "(not readable)")}\n"
+                + $"stderr so far: {(stderr.IsCompletedSuccessfully ? stderr.Result : "(not readable)")}");
         }
 
         return (process.ExitCode, stdout.Result, stderr.Result);
