@@ -1,8 +1,8 @@
 ---
 name: operating-the-installation
-description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which agent hosts are registered, and whether a newer version has been released.
+description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which agent hosts are registered, whether a newer version has been released, and installing Jason or taking it off again.
 metadata:
-  status: draft
+  status: verified
 ---
 
 # Operating the installation
@@ -11,10 +11,7 @@ This skill is about the installation, not about the work it performs. A person r
 Jason is up, why nothing is happening, what is installed, where work would go, or whether they are on the
 current version. Campaign work itself is `managed-campaign-work`.
 
-**Status: draft.** A host read an earlier text: the paragraph about releases below has been rewritten since,
-and a section on removing the installation has been added, so the reading no longer covers what is here. It
-returns to verified when a host has read *this* text. Everything in it is still current about this build --
-what a draft means is that nobody has done the job from it in this form.
+**Status: verified** against Claude Code 2.1.282. It covers what this build does and nothing else.
 
 Two things are true throughout and are easy to forget. **Nothing is registered until somebody asks**: Jason
 starts because you started it, or because somebody registered it to start at logon. And **no provider ships

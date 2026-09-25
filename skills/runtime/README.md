@@ -14,11 +14,6 @@ this runtime and the digest of what it read is recorded, so a text cannot gain t
 re-read by a host — which is why these still teach what this build did before those verbs existed, correctly
 and incompletely.
 
-`operating-the-installation` is a `draft` again: its text changed in this increment and the reading that made
-it `verified` was of the earlier one. Demoting it is what that guard is for. It returns to `verified` when a
-host has read what ships, with a new digest recorded below — never by recomputing the digest of a text nobody
-read.
-
 ## The skills a person's own session reads
 
 One per moment somebody asks for something, because a host chooses a skill by its description and a
@@ -30,9 +25,9 @@ description that promises everything matches nothing.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
   person to decide: the approvals parked at a claim and the questions a running role raised, presented in the
   person's own words and recorded as their decision.
-- [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft.** The installation itself:
+- [`operating-the-installation`](operating-the-installation/SKILL.md) — **verified.** The installation itself:
   whether the runtime is up, starting and stopping it, having it start at logon, the plugins and routes it
-  has, the hosts it can launch, and whether a newer version exists.
+  has, the hosts it can launch, whether a newer version exists, and installing it or taking it off again.
 - [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **verified.** Why work stopped: the runtime, the
   work item's error code and the chronicle; the states a person needs told apart, and the repairs that are
   safe.
@@ -140,5 +135,6 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 |---|---|---|---|
 | `managed-campaign-work` | Claude Code 2.1.278 | 0.1.0 | `sha256:01adfb08dec48564d6fef17639fd58cdac16deb7ddfbfea50ebcaa673989d855` |
 | `approvals-and-questions` | Claude Code 2.1.278 | 0.1.0 | `sha256:7ec45ac3fc2b72a01a289c27a3b4b59f9b10fb9c9f56abd6a45148f761bb8a74` |
+| `operating-the-installation` | Claude Code 2.1.282 (claude-opus-5) | 0.1.0 | `sha256:4b6a65ffcbb6dba670ab8a6846cdf44a520747234daf93ec1d228c3e10ac9d3a` |
 | `troubleshooting-jason` | Claude Code 2.1.278 | 0.1.0 | `sha256:fac60f6d04618c2d4d614592024de133144c563b8462cc9c4ca751786cf77a9f` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:9fb55ca5364ec65c9b629df5538ff26d7ce380e8d09017989e0d222fca4eb037` |
