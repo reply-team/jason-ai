@@ -97,8 +97,8 @@ public class PageClaimsTests
         Assert.DoesNotContain("the only way it can work at all", Page(page.Split('/')), StringComparison.Ordinal);
 
     /// <summary>
-    /// The skill T24-R reads says what the verb's exit code now means: 1 when it did not get there, with every step
-    /// listed either way — not "understood and refused", which predated the report written after a failure.
+    /// The operating-the-installation skill says what the verb's exit code now means: 1 when it did not get there, with
+    /// every step listed either way — not "understood and refused", which predated the report written after a failure.
     /// </summary>
     [Fact]
     public void The_operating_skill_states_the_uninstall_exit_code_as_it_is()
