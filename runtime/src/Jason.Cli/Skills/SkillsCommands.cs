@@ -56,7 +56,7 @@ public static class SkillsCommands
 
         update.SetAction((parse, cancellationToken) => UpdateAsync(
             env,
-            new InstallOptions(null, null, parse.GetValue(root), parse.GetValue(host), parse.GetValue(pack), parse.GetValue(dryRun), parse.GetValue(force)),
+            new InstallOptions(null, null, parse.GetValue(root), parse.GetValue(host), parse.GetValue(pack), parse.GetValue(dryRun), parse.GetValue(force), RolesOnly: false),
             cancellationToken));
 
         return update;
@@ -77,9 +77,15 @@ public static class SkillsCommands
 
         // The role root is Jason's own and is never detected, but it is a root a deployment wrote into and so
         // is one an update has to carry.
-        var roots = harnesses.Select(harness => harness.Directory).Append(env.Paths.RoleSkillsDirectory);
+        var roleRoot = env.Paths.RoleSkillsDirectory;
+        var roots = harnesses.Select(harness => harness.Directory).Append(roleRoot).Distinct(StringComparer.OrdinalIgnoreCase);
 
-        SkillsDeployment? newest = null;
+        // Each pack in each root, from that pack's own record in that root. This took the newest deployment
+        // anywhere and re-ran it everywhere: after a full install from one source and --roles-only from another,
+        // the harness was "updated" from the second and its record rewritten to say it had always come from
+        // there. And a root is carried only where its record says a deployment was made there, so an
+        // installation taught with --roles-only is never written into an agent's configuration by an update.
+        var groups = new SortedDictionary<(string Source, string Ref, string Pack), List<string>>();
         foreach (var root in roots)
         {
             SkillsRecord? record;
@@ -93,28 +99,51 @@ public static class SkillsCommands
                 return ExitCodes.ApiError;
             }
 
-            foreach (var deployment in record?.Packs ?? [])
+            foreach (var pack in (record?.Packs ?? []).GroupBy(deployment => deployment.Pack, StringComparer.Ordinal))
             {
-                if (newest is null || deployment.InstalledAt > newest.InstalledAt)
+                if (options.Pack is { } only && !string.Equals(only, pack.Key, StringComparison.OrdinalIgnoreCase))
                 {
-                    newest = deployment;
+                    continue;
                 }
+
+                var own = pack.MaxBy(deployment => deployment.InstalledAt)!;
+                var key = (own.Source, own.Ref, own.Pack);
+                if (!groups.TryGetValue(key, out var members))
+                {
+                    groups[key] = members = [];
+                }
+
+                members.Add(root);
             }
         }
 
-        if (newest is null)
+        if (groups.Count == 0)
         {
             env.Error.WriteLine("Nothing here was installed by Jason, so there is nothing to update. Run 'jason skills install' first.");
             return ExitCodes.ApiError;
         }
 
-        env.Out.WriteLine($"Updating from {newest.Source} at {newest.Ref}, as the record names it.");
-        // The record's ref, always. Passing null where the record did not override re-derived this build's
-        // own pin, so on a runtime upgraded since the install the line above said "at v0.1.0, as the record
-        // names it" and the plan underneath it described v0.2.0. Every update test used a directory source,
-        // where the ref never reaches staging at all.
-        return await RunAsync(env, options with { Source = newest.Source, Ref = newest.Ref }, cancellationToken)
-            .ConfigureAwait(false);
+        var exit = ExitCodes.Success;
+        foreach (var ((source, reference, pack), members) in groups)
+        {
+            env.Out.WriteLine($"Updating {pack} in {string.Join(", ", members)} from {source} at {reference}, as its record names it.");
+
+            // The record's ref, always. Passing null where the record did not override re-derived this build's
+            // own pin, so on a runtime upgraded since the install the line above said "at v0.1.0, as the record
+            // names it" and the plan underneath it described v0.2.0. Every update test used a directory source,
+            // where the ref never reaches staging at all.
+            var carried = await DeployAsync(
+                    env,
+                    options with { Source = source, Ref = reference, Pack = pack },
+                    [.. harnesses.Where(harness => members.Contains(harness.Directory, StringComparer.OrdinalIgnoreCase))],
+                    cancellationToken,
+                    members.Contains(roleRoot, StringComparer.OrdinalIgnoreCase))
+                .ConfigureAwait(false);
+
+            exit = exit == ExitCodes.Success ? carried : exit;
+        }
+
+        return exit;
     }
 
     private static Command Install(CliEnvironment env)
@@ -128,8 +157,9 @@ public static class SkillsCommands
         var pack = new Option<string?>("--pack") { Description = "Deploy only this pack." };
         var dryRun = new Option<bool>("--dry-run") { Description = "Print exactly what would be written where, and change nothing. A source not already on this machine is refused rather than fetched." };
         var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept." };
+        var rolesOnly = new Option<bool>("--roles-only") { Description = "Deploy only the role skills, into this runtime's own directory, and nothing into any agent harness. The role half is the one a runtime cannot work without; the harness half is yours to choose." };
 
-        foreach (var option in new Option[] { source, reference, root, host, pack, dryRun, force })
+        foreach (var option in new Option[] { source, reference, root, host, pack, dryRun, force, rolesOnly })
         {
             install.Options.Add(option);
         }
@@ -143,16 +173,44 @@ public static class SkillsCommands
                 parse.GetValue(host),
                 parse.GetValue(pack),
                 parse.GetValue(dryRun),
-                parse.GetValue(force)),
+                parse.GetValue(force),
+                parse.GetValue(rolesOnly)),
             cancellationToken));
 
         return install;
     }
 
-    private sealed record InstallOptions(string? Source, string? Ref, string? Root, string? Host, string? Pack, bool DryRun, bool Force);
+    /// <param name="RolesOnly">
+    /// The role skills alone, into the runtime's own directory. <c>role_skills</c> is a required check and the
+    /// harness half is not, yet the one command that repaired it also wrote the interactive and business packs
+    /// into the agent's own configuration: somebody who would not let Jason write there could not reach ready.
+    /// <c>--host</c> takes harness names only, <c>--pack</c> cannot tell the role half from the rest of its
+    /// pack, and <c>--root</c> moves only the harness half — so the way to deploy what a runtime needs, and
+    /// nothing else, did not exist.
+    /// </param>
+    private sealed record InstallOptions(string? Source, string? Ref, string? Root, string? Host, string? Pack, bool DryRun, bool Force, bool RolesOnly);
 
     private static async Task<int> RunAsync(CliEnvironment env, InstallOptions options, CancellationToken cancellationToken)
     {
+        if (options.RolesOnly)
+        {
+            // Said before anything is read, because each of these asks for a harness the flag rules out. A flag
+            // that quietly ignored --root would deploy somewhere other than where it was told to.
+            if (options.Root is not null || options.Host is not null)
+            {
+                env.Error.WriteLine("--roles-only deploys into no agent harness, so it takes neither --root nor --host.");
+                return ExitCodes.Usage;
+            }
+
+            if (options.Pack is { } named && !string.Equals(named, SkillPacks.Runtime, StringComparison.OrdinalIgnoreCase))
+            {
+                env.Error.WriteLine($"--roles-only deploys the role skills, which are part of {SkillPacks.Runtime}; '{named}' has none.");
+                return ExitCodes.Usage;
+            }
+
+            return await DeployAsync(env, options with { Pack = SkillPacks.Runtime }, [], cancellationToken).ConfigureAwait(false);
+        }
+
         IReadOnlyList<HarnessRoot> harnesses;
         try
         {
@@ -164,6 +222,19 @@ public static class SkillsCommands
             return ExitCodes.ApiError;
         }
 
+        return await DeployAsync(env, options, harnesses, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The deployment itself: into the runtime's own directory, and into exactly the harnesses it is handed —
+    /// none under <c>--roles-only</c>, the recorded ones for an update, the chosen or detected ones otherwise.
+    /// </summary>
+    /// <param name="withRoles">
+    /// Whether the runtime's own role root is deployed into. Always for an install; for an update, only where that
+    /// root's record names the source being deployed from.
+    /// </param>
+    private static async Task<int> DeployAsync(CliEnvironment env, InstallOptions options, IReadOnlyList<HarnessRoot> harnesses, CancellationToken cancellationToken, bool withRoles = true)
+    {
         StagedSource staged;
         try
         {
@@ -184,7 +255,7 @@ public static class SkillsCommands
         }
 
         var (cap, fromRuntime) = await CapAsync(env, cancellationToken).ConfigureAwait(false);
-        var plan = SkillsPlanner.Compose(staged, env.Paths.RoleSkillsDirectory, harnesses, cap, fromRuntime, options.Pack);
+        var plan = SkillsPlanner.Compose(staged, withRoles ? env.Paths.RoleSkillsDirectory : null, harnesses, cap, fromRuntime, options.Pack);
 
         // Printed before a byte is written, in every mode. Writing into somebody's home directory is not a
         // silent act, and a plan nobody saw is one nobody could have stopped.

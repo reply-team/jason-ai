@@ -35,7 +35,19 @@ public static class RuntimeHost
         ArgumentNullException.ThrowIfNull(paths);
         options ??= new RuntimeHostOptions();
 
-        DataDirectoryLayout.Ensure(paths);
+        try
+        {
+            DataDirectoryLayout.Ensure(paths);
+        }
+        catch (Exception cause) when (cause is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+        {
+            // The first thing this process does, and it runs before logging exists -- so an exception escaping
+            // here killed the runtime with nothing written anywhere and a CLI pointing at an empty log
+            // directory. A first run that cannot proceed owes a sentence, not a stack trace and six empty
+            // directories.
+            throw new DataDirectoryUnusableException(paths.Root, cause);
+        }
+
         var configuration = JasonConfiguration.Build(paths, options.ShippedSettingsDirectory);
         var settings = JasonConfiguration.Load(configuration);
 
@@ -84,15 +96,26 @@ public static class RuntimeHost
     /// <summary>Foreground mode (<c>jason runtime run</c>): start, wait for Ctrl+C or a host shutdown, stop.</summary>
     public static async Task<int> RunAsync(JasonPaths paths, RuntimeHostOptions? options, CancellationToken cancellationToken)
     {
+        var refusals = options?.Refusals ?? Console.Error;
         RunningRuntime runtime;
         try
         {
             runtime = await StartAsync(paths, options, cancellationToken).ConfigureAwait(false);
         }
-        catch (RuntimeAlreadyRunningException ex)
+        catch (Exception refused) when (refused is RuntimeAlreadyRunningException or DataDirectoryUnusableException)
         {
-            await Console.Error.WriteLineAsync(ex.Message).ConfigureAwait(false);
+            // Said where whoever started this can hear it. A detached runtime's own standard error is the null
+            // device by now, and the reason it will not start used to go there.
+            await refusals.WriteLineAsync(refused.Message).ConfigureAwait(false);
+            await refusals.FlushAsync(cancellationToken).ConfigureAwait(false);
             return 1;
+        }
+        finally
+        {
+            if (options?.Refusals is { } handedIn)
+            {
+                await handedIn.DisposeAsync().ConfigureAwait(false);
+            }
         }
 
         await using (runtime.ConfigureAwait(false))

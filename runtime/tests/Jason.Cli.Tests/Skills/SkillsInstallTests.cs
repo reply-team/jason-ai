@@ -106,7 +106,12 @@ public class SkillsInstallTests
         Assert.Equal(ExitCodes.Success, exit);
         Assert.False(Directory.Exists(dir.Paths.RoleSkillsDirectory));
         Assert.Empty(Directory.EnumerateFileSystemEntries(Harness(dir)));
-        Assert.Contains("Would write", output.ToString(), StringComparison.Ordinal);
+        // The plan is stated in the same words either way -- what differs between a dry run and a real one
+        // is what happens next -- and the dry run says so on a line of its own.
+        var printed = output.ToString();
+        Assert.Contains("Target:", printed, StringComparison.Ordinal);
+        Assert.Contains("Dry run: nothing will be written.", printed, StringComparison.Ordinal);
+        Assert.DoesNotContain("Writing", printed, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -254,6 +259,66 @@ public class SkillsInstallTests
         Assert.Equal(ExitCodes.ApiError, exit);
         Assert.Contains("harness_detection_unavailable", error.ToString(), StringComparison.Ordinal);
         Assert.False(Directory.Exists(dir.Paths.RoleSkillsDirectory));
+    }
+
+    /// <summary>
+    /// <c>--roles-only</c> deploys what a runtime cannot work without, into its own directory, and writes into
+    /// no agent harness — detection is not even asked.
+    /// </summary>
+    /// <remarks>
+    /// <c>role_skills</c> is required and the harness half is not, but the one command that repaired the first
+    /// also wrote the interactive and business packs into the agent's own configuration. An agent told to
+    /// change nothing outside the install and data directories stopped there rather than break the rule, in
+    /// both runs of the fresh-account check: right for an agent, and no way to reach ready.
+    /// </remarks>
+    [Fact]
+    public async Task Roles_only_deploys_the_role_skills_and_writes_into_no_harness()
+    {
+        using var dir = new TempPaths();
+        var source = Source(dir);
+        var locator = new CountingLocator(Harness(dir));
+        var (env, output, _) = Machine(dir, locator);
+
+        var exit = await CliApp.RunAsync(["skills", "install", "--source", source, "--roles-only"], env, Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.True(File.Exists(Path.Combine(dir.Paths.RoleSkillsDirectory, "researcher", "SKILL.md")));
+        Assert.True(File.Exists(Path.Combine(dir.Paths.RoleSkillsDirectory, "planner", "SKILL.md")));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Harness(dir)));
+        Assert.False(locator.WasAsked, "--roles-only asked where the agent harnesses are, which it has no use for.");
+
+        // The plan names the one root, and it is the runtime's own.
+        var targets = output.ToString().Split('\n').Where(line => line.StartsWith("Target:", StringComparison.Ordinal)).ToList();
+        var target = Assert.Single(targets);
+        Assert.Contains(dir.Paths.RoleSkillsDirectory, target, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And it refuses what would contradict it, before anything is read: a flag that quietly ignored
+    /// <c>--root</c> would deploy somewhere other than where it was told.
+    /// </summary>
+    [Theory]
+    [InlineData("--root")]
+    [InlineData("--host")]
+    [InlineData("--pack")]
+    public async Task Roles_only_refuses_a_harness_or_another_pack_as_a_usage_error(string contradiction)
+    {
+        using var dir = new TempPaths();
+        var source = Source(dir);
+        var (env, _, error) = Machine(dir, HarnessLocators.At(Harness(dir)));
+        var value = contradiction switch
+        {
+            "--root" => Harness(dir),
+            "--host" => "claude_code",
+            _ => SkillPacks.Business,
+        };
+
+        var exit = await CliApp.RunAsync(["skills", "install", "--source", source, "--roles-only", contradiction, value], env, Ct);
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Contains("--roles-only", error.ToString(), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(dir.Paths.RoleSkillsDirectory));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Harness(dir)));
     }
 
     private static string Harness(TempPaths dir) =>

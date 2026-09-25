@@ -187,8 +187,9 @@ The default install directories are `~/.local/bin/jason` on macOS and Linux, and
 `%LOCALAPPDATA%\Programs\jason\jason.exe` on Windows. Both are per-user: nothing here needs administrator
 rights, and nothing is installed for other people on the machine.
 
-**Until the first release exists, both one-liners answer 404.** They resolve to the latest release, and a
-repository with no releases has none.
+They resolve to the latest release, so where none has been published they answer 404 and there is nothing to
+install from — build from source until one has. [`docs/INSTALL.md`](INSTALL.md) is the whole path either way,
+in the order a stranger reads it.
 
 The workflow that builds a release has a button — a `workflow_dispatch` that produces a draft, for a dry run
 before any tag exists. GitHub offers that button only for a workflow that is already on the **default branch**,
@@ -210,12 +211,12 @@ downloads the release for your platform, proves its digest, drains and stops the
 executable where the old one was, starts it again and checks that what came up is what was installed. It is the
 same command whether a runtime is running or not.
 
-**There is nothing to apply until the first release exists** — the feed resolves to the latest release, and a
-repository with no releases has none, so until then `jason update apply` answers `update_feed_unreachable` and
-does nothing. A `0.1.0` installation has no `jason update apply` at all: the first tag is cut from a `main` that
-predates this work, so the executable that release publishes does not carry the applier. Such an installation
-moves forward by re-running the install one-liner in §6 until it is on a build that does carry it — after that,
-`jason update apply` is how it moves.
+Where the feed names no release, `jason update apply` answers `update_feed_unreachable` and does nothing;
+there is nothing to apply until one is published. The feed resolves to the latest release, and a repository
+with no releases has none.
+
+An installation whose executable carries no `jason update apply` moves forward by re-running the install
+one-liner in §6 until it is on a build that does; after that, `jason update apply` is how it moves.
 
 ### The steps, and the ledger that names them
 
@@ -493,7 +494,45 @@ Mac, and this page would rather say so than imply a check nobody ran.
 > version does not support. One thing that was checked and did *not* change: registering the task granted the
 > account no rights. The batch-logon rights on that machine were identical before and after.
 
-## 9. Where things live
+## 9. Taking an installation off the machine
+
+```sh
+jason uninstall --human --dry-run
+jason uninstall
+jason uninstall --purge-data --yes
+```
+
+The other end of §6. **Skills go only by receipt**: every root a deployment wrote into carries a record listing
+each path written there, and this verb removes those skills and nothing else. A verb that deleted by pattern
+would eventually delete somebody's own file; a verb that deletes by receipt cannot. The rest of the installation
+goes by rule, one step at a time:
+
+The order is the order that makes a half-finished run safe:
+
+| Step | Why here |
+|---|---|
+| the logon registration | first, so a logon part-way through cannot start what is going |
+| the runtime | and if it will not stop — or is running and does not answer — **nothing after this is removed** |
+| every recorded skill | by the paths its root's record names, digest by digest |
+| the PATH entry | only where the installer wrote it and its directory holds nothing but Jason — a PATH is a person's own document, and other programs are on it through a directory they share. On macOS and Linux the entry is the marked block in a login profile; on Windows, whose Path carries no marker, the entry in this account's Path |
+| the executable, its install directory and what it unpacked | last, because everything above runs from it. On Windows the running image cannot be deleted, so it is moved out of the install directory, to a directory on its own volume, and a cleanup removes the copy once the verb has exited; the native libraries the build unpacked on its first run go too |
+
+A recorded file whose bytes have changed since is reported and kept, because the record says what Jason wrote
+and a mismatch says somebody else wrote it afterwards. `--force` removes it anyway, and the containing
+directory is not empty until it does.
+
+**Never touched:** a skill there is no receipt for, including one copied into a harness by hand; any other
+skill in that harness; any provider CLI; any model credential; a PATH entry the installer did not write.
+**The data directory is kept** — §10 below says what is in it — unless `--purge-data` says otherwise, and in
+the machine shape that word has to be said in advance with `--yes`, because there is nobody there to be asked
+and a verb that blocked on an invisible question would hang for ever. With it, what Jason keeps in the data
+directory goes and anything else stays; a data directory that holds a file system's root, the profile, the
+temporary directory or the installation is refused before anything is removed.
+
+It exits 0 when everything it set out to remove is gone, and 1 when it did not get there — it refused,
+something is still there, or it stopped part-way — and every step that did happen is listed either way.
+
+## 10. Where things live
 
 The **data directory** is `~/.jason`, or whatever `JASON_DATA_DIR` names: the database, the configuration, the
 plugins, the skills, the logs and the work directories. The **install directory** is wherever the executable
@@ -519,11 +558,11 @@ Windows there is no such bit and neither does anything.
 
 There is a third place, which nothing here controls. The executable is a single file with the .NET runtime and
 its native libraries inside it, and the first run of each version unpacks those natives to a cache — 
-`%TEMP%\.net\jason\<hash>\` on Windows, `/tmp/.net/jason/<hash>/` elsewhere, or under
-`DOTNET_BUNDLE_EXTRACT_BASE_DIR` where that is set. It is per user and per build, it is why the first start of a
+`%TEMP%\.net\jason\<hash>\` on Windows, `~/.net/jason/<hash>/` in the home directory on macOS and Linux, or
+under `DOTNET_BUNDLE_EXTRACT_BASE_DIR` where that is set. It is per user and per build, it is why the first start of a
 new version is slower than the next, and it is safe to delete when nothing is running.
 
-## 10. The code behind this page
+## 11. The code behind this page
 
 `SemanticVersion`, `ReleaseAssets`, `UpdateManifest`, `UpdateFeed` and `UpdateLedger` live in `Jason.Contracts`,
 which is shared by the runtime and the CLI. `UpdateFeed` is the one type in that assembly that performs I/O,

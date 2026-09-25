@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Jason.Contracts.Discovery;
 using OperatingSystemProcess = System.Diagnostics.Process;
 
@@ -14,6 +13,12 @@ public interface IProcessHandle : IDisposable
     bool HasExited { get; }
 
     int ExitCode { get; }
+
+    /// <summary>
+    /// What the child wrote to its standard error before it let go of it, bounded — for a runtime that will not
+    /// start, the reason. Empty for a child that said nothing.
+    /// </summary>
+    string Said { get; }
 }
 
 /// <summary>
@@ -39,18 +44,21 @@ public interface IRuntimeProcessControl
     IProcessHandle Launch(JasonPaths paths, IReadOnlyList<string> executable);
 
     bool IsRunning(int pid);
+
+    /// <summary>
+    /// When the process with that id started, or null where this account may not ask — or it has gone.
+    /// </summary>
+    /// <remarks>
+    /// A pid names a process only while that process lives. After a restart the id a descriptor recorded belongs
+    /// to whatever the machine started next under it, and "is that pid running" answers yes about a stranger; the
+    /// start time is what tells the two apart.
+    /// </remarks>
+    DateTimeOffset? StartTime(int pid);
 }
 
 /// <inheritdoc />
 public sealed class RuntimeProcessControl : IRuntimeProcessControl
 {
-    private const int StandardInputHandle = -10;
-    private const int StandardOutputHandle = -11;
-    private const int StandardErrorHandle = -12;
-    private const int HandleFlagInherit = 0x00000001;
-
-    private static readonly IntPtr InvalidHandle = new(-1);
-
     public static RuntimeProcessControl Instance { get; } = new();
 
     /// <summary>
@@ -95,7 +103,7 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         // environment or from a default.
         startInfo.Environment[JasonPaths.DataDirectoryVariable] = paths.Root;
 
-        KeepOwnStandardStreamsOutOfTheChild();
+        StandardStreams.KeepOutOfChildren();
 
         var process = OperatingSystemProcess.Start(startInfo)
             ?? throw new IOException($"The runtime executable '{fileName}' could not be started.");
@@ -104,13 +112,17 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         process.StandardInput.Close();
 
         // The child redirects itself to the null device within milliseconds, but a runtime that fails before
-        // that point still writes to these pipes, and a full pipe would block it forever.
+        // that point still writes to these pipes, and a full pipe would block it forever. So both are read to
+        // the end -- and what arrives on standard error is kept, bounded: a runtime that refuses to start says
+        // why there, and that sentence was read and thrown away while `jason runtime start` pointed at an
+        // empty log directory.
+        var said = new StandardErrorLines();
         process.OutputDataReceived += Discard;
-        process.ErrorDataReceived += Discard;
+        process.ErrorDataReceived += (_, line) => said.Add(line.Data);
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
-        return new ProcessHandle(process);
+        return new ProcessHandle(process, said);
     }
 
     /// <summary>
@@ -156,47 +168,29 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         }
     }
 
+    public DateTimeOffset? StartTime(int pid)
+    {
+        try
+        {
+            using var process = OperatingSystemProcess.GetProcessById(pid);
+
+            // Through universal time, which keeps the hidden mark a local time carries in the hour a clock goes back
+            // and so says the one instant it was.
+            return new DateTimeOffset(process.StartTime.ToUniversalTime(), TimeSpan.Zero);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or Win32Exception or NotSupportedException)
+        {
+            // Gone, or in a session this prompt may not open -- the logon registration's runtime, on Windows.
+            return null;
+        }
+    }
+
     private static void Discard(object sender, DataReceivedEventArgs e)
     {
         // The point is the reading, not the data.
     }
 
-    /// <summary>
-    /// A new process on Windows is handed every handle its parent left inheritable, whether or not it is told
-    /// to use it. When the CLI itself runs under a redirect — a shell capturing its output, a build step, a
-    /// test — its own standard streams are such handles, so a runtime meant to outlive the CLI would hold them
-    /// open for as long as it runs and the caller would wait for an end of file that never comes. The CLI has
-    /// no child that should ever speak through its streams, so they stop being inheritable before one starts.
-    /// Unix needs none of this: the child's descriptors 0, 1 and 2 are replaced outright and everything else
-    /// the runtime might have inherited is closed on exec.
-    /// </summary>
-    private static void KeepOwnStandardStreamsOutOfTheChild()
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
-        foreach (var standardStream in new[] { StandardInputHandle, StandardOutputHandle, StandardErrorHandle })
-        {
-            var handle = GetStdHandle(standardStream);
-            if (handle != IntPtr.Zero && handle != InvalidHandle)
-            {
-                // A failure here costs the caller nothing but the wait this avoids; there is nothing to report
-                // it to, and the launch itself is unaffected.
-                SetHandleInformation(handle, HandleFlagInherit, 0);
-            }
-        }
-    }
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr GetStdHandle(int standardHandle);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetHandleInformation(IntPtr handle, int mask, int flags);
-
-    private sealed class ProcessHandle(OperatingSystemProcess process) : IProcessHandle
+    private sealed class ProcessHandle(OperatingSystemProcess process, StandardErrorLines said) : IProcessHandle
     {
         public int Id => process.Id;
 
@@ -204,6 +198,58 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
 
         public int ExitCode => process.ExitCode;
 
+        public string Said
+        {
+            get
+            {
+                // A child that has exited may still have lines in flight to the reader; they are waited for, and
+                // not for long, because a grandchild holding the pipe would otherwise hold this answer too.
+                if (process.HasExited)
+                {
+                    Task.Run(process.WaitForExit).Wait(TimeSpan.FromSeconds(2));
+                }
+
+                return said.Text;
+            }
+        }
+
         public void Dispose() => process.Dispose();
+    }
+
+    /// <summary>Lines from a child's standard error, kept up to a bound and no further.</summary>
+    private sealed class StandardErrorLines
+    {
+        private const int Bound = 4096;
+
+        private readonly System.Text.StringBuilder _text = new();
+
+        private readonly Lock _gate = new();
+
+        public string Text
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _text.ToString().Trim();
+                }
+            }
+        }
+
+        public void Add(string? line)
+        {
+            if (line is null)
+            {
+                return;
+            }
+
+            lock (_gate)
+            {
+                if (_text.Length < Bound)
+                {
+                    _text.Append(line.Length > Bound - _text.Length ? line[..(Bound - _text.Length)] : line).Append('\n');
+                }
+            }
+        }
     }
 }

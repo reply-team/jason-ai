@@ -9,11 +9,10 @@ Every command any of these skills prints is handed to this build's own argument 
 so a skill cannot drift from the program it ships beside.
 
 **What they do not teach yet.** None of the five mentions `jason skills install`, `jason skills update` or
-`jason status`. Each is marked `verified`, which in this repository means a named agent host read *that exact
-body* while driving this runtime and the digest of what it read is recorded — so the texts cannot gain the new
-verbs without being re-read by a host, and no host has read them since the verbs existed. They teach what this
-build did before them, correctly and incompletely. The re-reading is the first-run increment's, and until it
-happens this paragraph is the honest form of the gap.
+`jason status`. `verified` in this repository means a named agent host read *that exact body* while driving
+this runtime and the digest of what it read is recorded, so a text cannot gain the new verbs without being
+re-read by a host — which is why these still teach what this build did before those verbs existed, correctly
+and incompletely.
 
 ## The skills a person's own session reads
 
@@ -28,7 +27,7 @@ description that promises everything matches nothing.
   person's own words and recorded as their decision.
 - [`operating-the-installation`](operating-the-installation/SKILL.md) — **verified.** The installation itself:
   whether the runtime is up, starting and stopping it, having it start at logon, the plugins and routes it
-  has, the hosts it can launch, and whether a newer version exists.
+  has, the hosts it can launch, whether a newer version exists, and installing it or taking it off again.
 - [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **verified.** Why work stopped: the runtime, the
   work item's error code and the chronicle; the states a person needs told apart, and the repairs that are
   safe.
@@ -45,7 +44,12 @@ jason skills update --pack jason-runtime-skills
 
 That deploys the five interactive skills into the agent harnesses it finds, and the nine role skills below
 into the runtime's own data directory, where the runtime reads them at every launch. The second destination is
-not optional: a runtime with no role skills launches every role untaught.
+not optional: a runtime with no role skills launches every role untaught — which is why it can be deployed on
+its own, into nothing but the runtime's directory:
+
+```sh
+jason skills install --roles-only
+```
 [`skills/README.md`](../README.md) is the contract the verb keeps.
 
 A person without this build installs an interactive skill by copying its directory into wherever their own
@@ -131,6 +135,6 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 |---|---|---|---|
 | `managed-campaign-work` | Claude Code 2.1.278 | 0.1.0 | `sha256:01adfb08dec48564d6fef17639fd58cdac16deb7ddfbfea50ebcaa673989d855` |
 | `approvals-and-questions` | Claude Code 2.1.278 | 0.1.0 | `sha256:7ec45ac3fc2b72a01a289c27a3b4b59f9b10fb9c9f56abd6a45148f761bb8a74` |
-| `operating-the-installation` | Claude Code 2.1.278 | 0.1.0 | `sha256:47ac8082ae5a16fd7567adf11e7d698a3e0447eada201c9f35451845863496ef` |
+| `operating-the-installation` | Claude Code 2.1.282 (claude-opus-5) | 0.1.0 | `sha256:4b6a65ffcbb6dba670ab8a6846cdf44a520747234daf93ec1d228c3e10ac9d3a` |
 | `troubleshooting-jason` | Claude Code 2.1.278 | 0.1.0 | `sha256:fac60f6d04618c2d4d614592024de133144c563b8462cc9c4ca751786cf77a9f` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:9fb55ca5364ec65c9b629df5538ff26d7ce380e8d09017989e0d222fca4eb037` |
