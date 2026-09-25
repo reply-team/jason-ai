@@ -54,10 +54,39 @@ public class WorkDirectoryRaceTests : IDisposable
 
         var report = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024 * 1024);
 
-        Assert.Null(report.RefusalCode);
+        Assert.True(report.RefusalCode is null, $"The launch was refused: {report.RefusalCode}: {report.Message}");
         Assert.True(report.Rescued, "The launch was not rescued by a second read; it did not notice the rename.");
         Assert.Contains("NEW-BODY-AND-LONGER", File.ReadAllText(Taught), StringComparison.Ordinal);
         Assert.DoesNotContain("OLD", File.ReadAllText(Taught), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And a first read slower than the whole wait is read again all the same. The wait is for a deployment, so
+    /// it starts when the launch first sees one. Counted from before the first read, a read that a busy machine
+    /// held for the whole wait lost once and was refused without a second look — the tree that had arrived was
+    /// complete and never read.
+    /// </summary>
+    [Fact]
+    public void A_first_read_slower_than_the_whole_wait_is_still_read_again()
+    {
+        Deploy(Live, "OLD");
+        var staged = Path.Combine(_root, "staging", Role);
+        Deploy(staged, "NEW-BODY-AND-LONGER");
+
+        WorkDirectory.BetweenReadAndCopy.Value = () =>
+        {
+            WorkDirectory.BetweenReadAndCopy.Value = null;
+
+            // The busy machine: this read is held past the whole wait, and then it loses.
+            Thread.Sleep(WorkDirectory.ReadBudgetMs + 100);
+            Swap(staged);
+        };
+
+        var report = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024 * 1024);
+
+        Assert.True(report.RefusalCode is null, $"A read held past the wait lost once and was refused without reading again: {report.RefusalCode}: {report.Message}");
+        Assert.True(report.Rescued, "The launch was not rescued by a second read.");
+        Assert.Contains("NEW-BODY-AND-LONGER", File.ReadAllText(Taught), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -80,7 +109,7 @@ public class WorkDirectoryRaceTests : IDisposable
 
         var report = WorkDirectory.Prepare(WorkDir, [], Role, SkillsRoot, 1024 * 1024);
 
-        Assert.True(report.Rescued);
+        Assert.True(report.Rescued, $"The launch was not rescued by a second read: {report.RefusalCode}: {report.Message}");
         Assert.False(
             File.Exists(Path.Combine(WorkDir, ".claude", "skills", Role, "only-in-the-old-tree.md")),
             "A file from the tree that was replaced survived into the work directory, so the agent sees a blend.");
