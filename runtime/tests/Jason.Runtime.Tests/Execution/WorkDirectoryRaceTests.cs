@@ -14,7 +14,7 @@ namespace Jason.Runtime.Tests.Execution;
 /// happens at the one instant that matters, through the launcher's own hook.
 /// </para>
 /// <para>
-/// This is the whole reason <c>Jason.Runtime</c> carries the repository's only friend declaration.
+/// This is one of the two reasons <c>Jason.Runtime</c> carries the repository's only friend declaration.
 /// </para>
 /// </remarks>
 public class WorkDirectoryRaceTests : IDisposable
@@ -144,7 +144,7 @@ public class WorkDirectoryRaceTests : IDisposable
     }
 
     /// <summary>
-    /// Nothing outside a test ever arms the hook.
+    /// Nothing outside a test ever arms either of the product's test hooks: this one, or the plugin invoker's.
     /// </summary>
     /// <remarks>
     /// Read off the sources rather than off the value. Asserting the value is null proves nothing at all: an
@@ -152,8 +152,10 @@ public class WorkDirectoryRaceTests : IDisposable
     /// assertion could not see the thing its own summary claimed it held. This is what that fact was asked
     /// for, and a scan is the only shape that can fail.
     /// </remarks>
-    [Fact]
-    public void Nothing_in_the_product_arms_the_read_hook()
+    [Theory]
+    [InlineData(nameof(WorkDirectory.BetweenReadAndCopy))]
+    [InlineData(nameof(Jason.Runtime.Plugins.Invocation.PluginInvoker.EnvelopeWriteMissesTheCancellation))]
+    public void Nothing_in_the_product_arms_a_test_hook(string hook)
     {
         var sources = Directory
             .EnumerateFiles(ProductSources(), "*.cs", SearchOption.AllDirectories)
@@ -166,8 +168,8 @@ public class WorkDirectoryRaceTests : IDisposable
         foreach (var file in sources)
         {
             Assert.True(
-                !File.ReadAllText(file).Contains($"{nameof(WorkDirectory.BetweenReadAndCopy)}.Value =", StringComparison.Ordinal),
-                $"'{Path.GetFileName(file)}' arms the launcher's test hook. It exists so a race can be made "
+                !File.ReadAllText(file).Contains($"{hook}.Value =", StringComparison.Ordinal),
+                $"'{Path.GetFileName(file)}' arms the test hook {hook}. It exists so a race can be made "
                 + "deterministic in a test, and nothing that ships may set it.");
         }
     }

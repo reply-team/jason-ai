@@ -10,7 +10,7 @@ namespace Jason.Cli.Tests;
 /// <remarks>
 /// <para>
 /// Read from the program rather than from its internals. <c>BuildRootCommand</c> is internal and this assembly
-/// is not its friend; the repository has exactly one friend declaration and it is for a test that cannot be
+/// is not its friend; the repository has exactly one friend declaration and it is for tests that cannot be
 /// written any other way. This one can: the list comes from <c>--help</c>, which is the surface a person
 /// reads, and each name is then confirmed through the argument router — a noun this program knows does not
 /// come back "unrecognized".

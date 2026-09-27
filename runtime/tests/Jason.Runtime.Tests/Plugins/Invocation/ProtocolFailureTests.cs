@@ -207,6 +207,79 @@ public class ProtocolFailureTests
     }
 
     /// <summary>
+    /// A child that exits without reading its envelope, leaving behind a helper that holds stdin and reads
+    /// nothing: the write into that pipe can neither finish nor break, and on this path no deadline or kill has
+    /// told it to stop. The invocation stops waiting for it at the grace, as it does for every pipe, and answers
+    /// then. Letting go of the child's stdin may not throw out of the invocation — a writer with a write in flight
+    /// throws rather than close — and stdin is let go of when its write ends:
+    /// <list type="bullet">
+    /// <item>the invocation stops the write once the child has ended, so the helper, reading only once the answer
+    /// is in, finds the end of what the pipe held rather than the rest of the envelope;</item>
+    /// <item>where that cancellation misses — continuous integration once found a write still in flight after
+    /// it — the write is left to finish, and the helper reads all of it and then its end.</item>
+    /// </list>
+    /// </summary>
+    /// <remarks>
+    /// Staged, not raced. The helper exists before the child exits, because starting it is what hands it the
+    /// handles, and it reads only when this test creates the file it waits for. A missed cancellation is held by
+    /// the invoker's own hook, because the instant it happens in cannot be chosen from outside.
+    /// </remarks>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task An_envelope_left_unread_by_a_child_that_exited_is_let_go_of_rather_than_thrown_over(bool cancellationReachesTheWrite)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "jason-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var go = Path.Combine(directory, "go");
+        var read = Path.Combine(directory, "read");
+        await using var api = await StartAsync(
+            Child("leave-reader", go, read),
+            """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"KillGraceMs":500}}}""");
+
+        // Far larger than any pipe buffer, so the write is still in flight when the child has gone.
+        var input = new JsonObject { ["big"] = new string('x', PluginProtocol.MaxInputBytes - 1024) };
+
+        PluginInvocationResult result;
+        PluginInvoker.EnvelopeWriteMissesTheCancellation.Value = !cancellationReachesTheWrite;
+        try
+        {
+            result = await InvokeAsync(api, TimeSpan.FromSeconds(30), input).WaitAsync(TimeSpan.FromSeconds(20), Ct);
+        }
+        finally
+        {
+            PluginInvoker.EnvelopeWriteMissesTheCancellation.Value = false;
+
+            // Whatever happened, the helper is told to read and so to end, rather than outliving the test.
+            await File.WriteAllTextAsync(go, string.Empty, Ct);
+        }
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginNoOutcome, failure.Code);
+        Assert.Equal(0, failure.ExitCode);
+
+        var waited = Stopwatch.StartNew();
+        while (!File.Exists(read))
+        {
+            Assert.True(waited.Elapsed < TimeSpan.FromSeconds(30), "the helper never found the end of its stdin");
+            await Task.Delay(50, Ct);
+        }
+
+        var arrived = long.Parse(await File.ReadAllTextAsync(read, Ct), System.Globalization.CultureInfo.InvariantCulture);
+        if (cancellationReachesTheWrite)
+        {
+            Assert.True(
+                arrived < PluginProtocol.MaxInputBytes / 2,
+                $"the helper read {arrived} bytes: the envelope was still being written after the invocation had answered");
+        }
+        else
+        {
+            Assert.True(
+                arrived > PluginProtocol.MaxInputBytes - 1024,
+                $"the helper read {arrived} bytes and then the end: the write the cancellation missed was cut short rather than left to finish");
+        }
+    }
+    /// <summary>
     /// A child may leave a helper running that inherited its standard handles, and the read end of a pipe only
     /// ends once every writer has let go of it. Waiting for that would hold the invocation open long after the
     /// tree it started was killed, and in time hold a handler slot with it. Whatever was captured by the end of

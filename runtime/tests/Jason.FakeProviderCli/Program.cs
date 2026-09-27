@@ -1,11 +1,14 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text.Json;
+using Microsoft.Win32.SafeHandles;
 
 // A stand-in for a vendor CLI. The first argument names the behaviour; everything a plugin's host.exec has to
 // survive — output floods, slow programs, non-zero exits, an environment it cannot see — is one of these, so no
 // test has to install a real tool to prove the rules.
 const int UnknownBehaviour = 2;
+const int StandardInputHandle = -10;
 
 if (args.Length == 0)
 {
@@ -93,6 +96,51 @@ switch (args[0])
         await Task.Delay(Timeout.Infinite);
         return 0;
 
+    case "leave-reader" when args.Length > 2:
+        // Exits at once without reading its envelope, leaving behind a helper that holds stdin and reads nothing
+        // until a test says so. The helper exists before this exits — starting it is what hands it the handles —
+        // so whoever is still writing the envelope is writing into a pipe that neither breaks nor drains. On
+        // Windows the helper inherits this pipe without being given it as its own stdin, so it is told which
+        // handle it is: an inherited handle keeps its value.
+        StartSelf(
+            "late-reader",
+            args[1],
+            args[2],
+            OperatingSystem.IsWindows() ? GetStdHandle(StandardInputHandle).ToInt64().ToString(CultureInfo.InvariantCulture) : "stdin")?.Dispose();
+        return 0;
+
+    case "late-reader" when args.Length > 3:
+        {
+            // Nothing a test forgot may keep this alive: it holds the handles of whoever started the test.
+            _ = Task.Delay(TimeSpan.FromMinutes(2)).ContinueWith(_ => Environment.Exit(3), TaskScheduler.Default);
+
+            // Reads stdin only once the file named first exists, then says how much of it arrived before it
+            // ended: the part the pipe held when its writer let go, or the whole of a write that never stopped.
+            var waited = Stopwatch.StartNew();
+            while (!File.Exists(args[1]) && waited.Elapsed < TimeSpan.FromSeconds(60))
+            {
+                await Task.Delay(50);
+            }
+
+            long read = 0;
+            using (var stdin = args[3] == "stdin"
+                ? Console.OpenStandardInput()
+                : new FileStream(new SafeFileHandle(new IntPtr(long.Parse(args[3], CultureInfo.InvariantCulture)), ownsHandle: true), FileAccess.Read, 1))
+            {
+                var buffer = new byte[65536];
+                int count;
+                while ((count = await stdin.ReadAsync(buffer)) > 0)
+                {
+                    read += count;
+                }
+            }
+
+            // Whole or not at all, so that a reader never finds the file with nothing in it yet.
+            await File.WriteAllTextAsync(args[2] + ".partial", read.ToString(CultureInfo.InvariantCulture));
+            File.Move(args[2] + ".partial", args[2]);
+            return 0;
+        }
+
     case "spawn-orphan-inner" when args.Length > 1:
         StartSelf("hold", args[1])?.Dispose();
         return 0;
@@ -171,6 +219,10 @@ static Process? StartSelf(params string[] arguments)
 
     return Process.Start(info);
 }
+
+// This process's own standard input, as the operating system handed it over. Windows only.
+[DllImport("kernel32.dll", SetLastError = true)]
+static extern IntPtr GetStdHandle(int standardHandle);
 
 // A version check is the one thing this program does without being asked by a test: the reload runs it. Any
 // variable whose name starts with the prefix names a file the run is appended to, so a test can prove exactly

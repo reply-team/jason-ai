@@ -72,6 +72,18 @@ public sealed partial class PluginInvoker(
             "Plugin invocation {InvocationId} of {PluginId} {Operation} was refused before launch: {Code}");
 
     /// <summary>
+    /// A test's way to hold the envelope write where continuous integration once found it: still in flight when
+    /// the invocation let go of the child, although the deadline had cancelled it. Why the cancellation missed is
+    /// not known from that run — only that it can, and that a write it missed must still never be closed from
+    /// under. Nothing outside a test sets this.
+    /// </summary>
+    /// <remarks>
+    /// An <see cref="AsyncLocal{T}"/>, so it is set only for the flow that set it: a static a test set would
+    /// reach every invocation running beside it. It is the second reason this assembly has a friend.
+    /// </remarks>
+    internal static AsyncLocal<bool> EnvelopeWriteMissesTheCancellation { get; } = new();
+
+    /// <summary>
     /// Invokes <paramref name="request"/> and answers with the outcome, where it came from and how it was run.
     /// <paramref name="kill"/> ends the process tree and yields <see cref="ProtocolCodes.PluginKilled"/>.
     /// </summary>
@@ -286,8 +298,7 @@ public sealed partial class PluginInvoker(
             // The envelope is written alongside the wait, never before it. An envelope larger than a pipe buffer
             // only finishes being written once the child reads it, and a child that reads nothing would
             // otherwise hold this thread here with the deadline below not yet running — nothing able to kill it.
-            // The token ends a write that has not started; the kill ends one already in flight, by breaking the
-            // pipe the write is blocked on.
+            // The token is what stops the write once the child has ended, whichever way it ended (below).
             var envelope = WriteEnvelopeAsync(process, invocation, lifetime.Token);
 
             var timedOut = false;
@@ -306,6 +317,12 @@ public sealed partial class PluginInvoker(
                 // with nothing left to end it, so it is given the same grace as everything else that follows.
                 await ChildProcess.EndedWithinAsync(process, settings.Invoker.KillGraceMs).ConfigureAwait(false);
             }
+
+            // Whatever is still being written to the child is written to nobody now. A child that exited without
+            // reading its envelope ended the wait without cancelling anything, and whatever it left holding its
+            // stdin keeps the write from finishing or breaking for as long as it lives — so the write is told to
+            // stop here, on every path, rather than only when a deadline or a kill happened to end the wait.
+            await lifetime.CancelAsync().ConfigureAwait(false);
 
             // The wait for the pipes is bounded by the kill grace whichever way the child ended: after a kill —
             // the caller's, the deadline's, or this invoker's own when the child floods — and equally after a
@@ -370,30 +387,34 @@ public sealed partial class PluginInvoker(
             TaskScheduler.Default);
 
     /// <summary>
-    /// Lets go of the child's pipes. A stream the invoker asked for is not closed when the process is disposed,
-    /// because the caller could still be holding it, so an abandoned pump would otherwise keep both the handle
-    /// and the file it writes into alive for as long as anything the child left behind keeps the other end open.
+    /// Lets go of the child's output pipes. A stream the invoker asked for is not closed when the process is
+    /// disposed, because the caller could still be holding it, so an abandoned pump would otherwise keep both the
+    /// handle and the file it writes into alive for as long as anything the child left behind keeps the other end
+    /// open.
     /// </summary>
+    /// <remarks>
+    /// Stdin is not closed here: it is the envelope writer's, which closes it when its write ends. Closing it here
+    /// raced that write. A writer whose write is still in flight refuses to be disposed and throws, and that threw
+    /// out of the invocation with its answer already in hand, to be recorded as a failed launch of a child that
+    /// had run. The cancellation above is what makes the write end at once; a write it misses ends when the pipe
+    /// is read or breaks, and stdin is closed then.
+    /// </remarks>
     private static void Release(Process process)
     {
-        Close(process.StandardInput);
         Close(process.StandardOutput);
         Close(process.StandardError);
+    }
 
-        static void Close(IDisposable pipe)
+    /// <summary>Closes one of the child's pipes, whose other end may already be gone.</summary>
+    private static void Close(IDisposable pipe)
+    {
+        try
         {
-            try
-            {
-                pipe.Dispose();
-            }
-            catch (IOException)
-            {
-                // A pipe whose other end is already gone. There is nothing left to flush it to.
-            }
-            catch (ObjectDisposedException)
-            {
-                // Closed once already, by the envelope's own writer.
-            }
+            pipe.Dispose();
+        }
+        catch (IOException)
+        {
+            // A pipe whose other end is already gone. There is nothing left to flush it to.
         }
     }
 
@@ -530,25 +551,31 @@ public sealed partial class PluginInvoker(
             new LogLimits(settings.Invoker.LogLineBytes, settings.Invoker.StderrBytes));
 
     /// <summary>One JSON object, then end of file: the child reads until the stream ends rather than guessing.</summary>
+    /// <remarks>
+    /// This owns stdin from the first line to the last, and closes it however the write ends: that is the end of
+    /// file the child reads to, and, after a write that was stopped or failed, the pipe let go of. Taken once, here,
+    /// because the invocation may have finished with the process before this has finished with its pipe.
+    /// </remarks>
     private static async Task WriteEnvelopeAsync(Process process, PluginInvocation invocation, CancellationToken lifetime)
     {
+        var stdin = process.StandardInput;
         try
         {
             var json = JsonSerializer.Serialize(invocation, JasonJson.Options);
-            await process.StandardInput.WriteAsync(json.AsMemory(), lifetime).ConfigureAwait(false);
-            process.StandardInput.Close();
+            var stop = EnvelopeWriteMissesTheCancellation.Value ? CancellationToken.None : lifetime;
+            await stdin.WriteAsync(json.AsMemory(), stop).ConfigureAwait(false);
         }
         catch (IOException)
         {
             // The child exited before reading its envelope. That is its own answer, delivered as an exit code.
         }
-        catch (ObjectDisposedException)
-        {
-            // The same story, seen from the other side of an already-closed pipe.
-        }
         catch (OperationCanceledException)
         {
-            // The invocation's lifetime ended first. The child is being killed; there is nothing left to tell it.
+            // The child has ended, by itself or by the budget or a kill; there is nothing left to tell it.
+        }
+        finally
+        {
+            Close(stdin);
         }
     }
 

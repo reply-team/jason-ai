@@ -254,7 +254,7 @@ public static class WorkDirectory
     /// <para>
     /// It exists because the alternative is a probabilistic test of the one path that exists to make a
     /// probabilistic failure impossible — a guard that can pass without ever exercising what it guards. It is
-    /// why this assembly carries the repository's only friend declaration.
+    /// one of the two reasons this assembly carries the repository's only friend declaration.
     /// </para>
     /// </remarks>
     internal static AsyncLocal<Action?> BetweenReadAndCopy { get; } = new();
