@@ -29,7 +29,7 @@ public class ModeRouterTests
         {
             var exit = await ModeRouter.RunAsync(["--version"], TestContext.Current.CancellationToken);
             Assert.Equal(0, exit);
-            Assert.StartsWith("0.1.0", output.ToString().Trim(), StringComparison.Ordinal);
+            Assert.StartsWith("0.2.0", output.ToString().Trim(), StringComparison.Ordinal);
         }
         finally
         {

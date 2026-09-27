@@ -133,14 +133,19 @@ public class PageClaimsTests
     /// <summary>
     /// A build from source leaves debugging symbols beside the executable, and §3 says to copy the executable alone.
     /// A directory that holds the <c>.pdb</c> files as well is not one the uninstall takes for Jason's own, so a
-    /// reader who copied the whole publish folder would keep both its PATH entry and the directory.
+    /// reader who copied the whole publish folder would keep both its PATH entry and the directory. The golden path
+    /// builds from source too, and said to put the executable "somewhere on your PATH".
     /// </summary>
-    [Fact]
-    public void The_install_page_says_to_copy_the_executable_alone() =>
-        Assert.Contains(
-            "Copy that file alone: the `.pdb` files beside it are debugging symbols",
-            Flat(Page("docs", "INSTALL.md")),
-            StringComparison.Ordinal);
+    [Theory]
+    [InlineData("docs/INSTALL.md", "Copy that file alone: the `.pdb` files beside it are debugging symbols")]
+    [InlineData("docs/golden-path.md", "copy the single file it produces alone into a directory of its own")]
+    public void The_pages_say_to_copy_the_executable_alone(string page, string said)
+    {
+        var text = Flat(Page(page.Split('/')));
+
+        Assert.Contains(said, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("somewhere on your `PATH`", text, StringComparison.Ordinal);
+    }
 
     /// <summary>A page with every run of white space made one space, so a sentence is found however it is wrapped.</summary>
     private static string Flat(string text) => System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");

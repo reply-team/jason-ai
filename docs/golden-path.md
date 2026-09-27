@@ -12,9 +12,11 @@ different package and a different route, and the sequence is the same.
 ## What you need
 
 - **The `jason` executable.** Build it from this repository (`dotnet publish runtime/src/Jason.App -c Release -r
-  <rid> --self-contained -p:PublishSingleFile=true`) and put it somewhere on your `PATH`. Everything below then
-  reads as written. *(How a binary reaches your `PATH` is your platform's business, and the tests do not do it:
-  they run the same program as `dotnet jason.dll`, which is the repository's own development command.)*
+  <rid> --self-contained -p:PublishSingleFile=true`), copy the single file it produces alone into a directory of
+  its own, and put that directory on your `PATH`: `jason status`, run by its full path, prints the line that does
+  it for your platform. [`docs/INSTALL.md`](INSTALL.md) §3 says why the directory must hold nothing else.
+  Everything below then reads as written. *(The tests put nothing on a `PATH`: they run the same program as
+  `dotnet jason.dll`, which is the repository's own development command.)*
 - **The Reply CLI**, installed and signed in, if you are following this against a real account. It owns the
   credential; Jason never sees one. *(The tests run against a stand-in that answers like it, so nothing in CI
   touches a real account.)*

@@ -18,5 +18,5 @@ public class ApiVersionTests
 
     [Fact]
     public void Build_version_starts_with_the_wave_baseline() =>
-        Assert.StartsWith("0.1.0", JasonVersion.Current, StringComparison.Ordinal);
+        Assert.StartsWith("0.2.0", JasonVersion.Current, StringComparison.Ordinal);
 }

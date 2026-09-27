@@ -34,7 +34,7 @@ jobs:
       - id: version
         shell: pwsh
         run: |
-          # MSBuild's own answer — VersionPrefix and VersionSuffix from Directory.Build.props, 0.1.0-dev today —
+          # MSBuild's own answer — VersionPrefix and VersionSuffix from Directory.Build.props, a -dev version —
           # so a pull request is stamped with the number the tree already carries rather than with a second copy
           # kept here. Every job below is told this one value; release.yml decides the same input from the tag.
           $version = (dotnet msbuild runtime/src/Jason.App/Jason.App.csproj -getProperty:Version).Trim()

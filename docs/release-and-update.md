@@ -124,7 +124,9 @@ rewrite, and the digest inside it would then be the attacker's digest for the at
 ```
 
 It is `null` before the first successful check, and `available` is `false` when the release is not newer than
-what is running. `0.1.0-dev` is *older* than `0.1.0`, so a development build advertises the first release.
+what is running. A development build carries the number of the release it is on the way to with `-dev` after it,
+which is *older* than that release and newer than every release before it: it advertises that release once it is
+published, and none that came before.
 
 ### And what it says about the skills it will teach from
 

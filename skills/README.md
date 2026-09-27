@@ -45,8 +45,8 @@ These are the rules both verbs keep:
 - **From a pinned ref, not a moving branch.** A floating default would mean two people installing on
   the same day could get different texts, and nothing could then say whether a deployment is current.
   The pin is derived from the build rather than written down — `v` and its own release version, through
-  the same rule that decides `0.1.0-dev` is older than `0.1.0` — so a development build points at the
-  release it is on the way to and no literal goes stale. `--ref` overrides it, and a deployment made
+  the same rule that puts a `-dev` build before the release of its number — so a development build points
+  at the release it is on the way to and no literal goes stale. `--ref` overrides it, and a deployment made
   with an override says so in its record. **Until a release publishes that tag the default cannot
   resolve**, and the verb says so in those words rather than passing on a git error: install from a
   directory with `--source` until then.

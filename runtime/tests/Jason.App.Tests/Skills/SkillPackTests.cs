@@ -129,7 +129,7 @@ public class SkillPackTests
 
     /// <summary>
     /// The build the pack ships with, named in the catalog. What is compared is the release prefix and not the
-    /// stamp: the stamp is <c>0.1.0-dev+&lt;sha&gt;</c> on every commit, so a catalog quoting it verbatim would
+    /// stamp: the stamp ends <c>-dev+&lt;sha&gt;</c> on every commit, so a catalog quoting it verbatim would
     /// be red at every push or would have to carry a commit sha.
     /// </summary>
     [Fact]

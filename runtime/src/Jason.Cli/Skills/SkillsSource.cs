@@ -52,7 +52,7 @@ public static class SkillsSource
     /// <remarks>
     /// Derived rather than written down, because a literal goes stale one release after somebody stops thinking
     /// about it. Through <see cref="SemanticVersion"/>, which is the rule this reuses rather than restates: it
-    /// is what already decides that <c>0.1.0-dev</c> is older than <c>0.1.0</c>, and the pre-release it parses
+    /// is what already puts a <c>-dev</c> build before the release of its number, and the pre-release it parses
     /// off is the same suffix dropped here — so a development build points at the release it is on the way to.
     /// </remarks>
     public static string DefaultRef(string runtimeVersion) =>
