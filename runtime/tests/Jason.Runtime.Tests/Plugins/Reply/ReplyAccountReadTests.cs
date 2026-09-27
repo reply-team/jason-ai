@@ -24,25 +24,44 @@ public class ReplyAccountReadTests
         }
     }
 
+    /// <summary>
+    /// The read that lands between the rewrite's truncation and its last byte finds an empty file, and reads again
+    /// until the whole of it has arrived.
+    /// </summary>
+    /// <remarks>
+    /// The rest of the rewrite is written from a thread of its own. The read waits by blocking, as reads elsewhere
+    /// in the suite do, and a writer that needed the thread pool to finish could be starved of it for longer than
+    /// the read waits: on a loaded Windows runner it was, and the read gave up on a file that was still empty. In
+    /// the golden path the writer is another process, which no pool in this one can starve.
+    /// </remarks>
     [Fact]
-    public async Task A_file_caught_between_its_truncation_and_its_last_byte_is_read_again()
+    public void A_file_caught_between_its_truncation_and_its_last_byte_is_read_again()
     {
-        var cancel = TestContext.Current.CancellationToken;
         using var account = new ReplyAccount().WithEnrollment(sequence: 7, contact: 42);
         var file = Path.Combine(account.Root, ReplyAccount.EnrollmentsFile);
-        var whole = await File.ReadAllBytesAsync(file, cancel);
+        var whole = File.ReadAllBytes(file);
 
         // The stand-in's rewrite, stopped after its truncation: the file is empty and held for writing until the
         // rest arrives a moment later.
         var writer = new FileStream(file, FileMode.Create, FileAccess.Write, FileShare.Read);
-        var finishing = Task.Run(
-            async () =>
+        Exception? failed = null;
+        var finishing = new Thread(() =>
+        {
+            try
             {
-                await Task.Delay(200, cancel);
-                await writer.WriteAsync(whole, cancel);
-                await writer.DisposeAsync();
-            },
-            cancel);
+                using (writer)
+                {
+                    Thread.Sleep(200);
+                    writer.Write(whole);
+                }
+            }
+            catch (Exception exception)
+            {
+                // Kept for the test to report: thrown here, it would end the test run rather than this test.
+                failed = exception;
+            }
+        });
+        finishing.Start();
 
         try
         {
@@ -50,7 +69,9 @@ public class ReplyAccountReadTests
         }
         finally
         {
-            await finishing;
+            finishing.Join();
         }
+
+        Assert.Null(failed);
     }
 }
