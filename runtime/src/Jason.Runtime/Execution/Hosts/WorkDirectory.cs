@@ -98,7 +98,7 @@ public static class WorkDirectory
         }
 
         var lost = Path.Combine(host, SkillsDirectory, role);
-        var started = Environment.TickCount64;
+        long? waiting = null;
         RoleSkillTreeChanged? last = null;
 
         for (var read = 0; ; read++)
@@ -117,7 +117,12 @@ public static class WorkDirectory
             catch (RoleSkillTreeChanged changed)
             {
                 last = changed;
-                if (Environment.TickCount64 - started >= ReadBudgetMs)
+
+                // The wait is for a deployment, so it starts at the first sign of one. Started before the first
+                // read, it was spent by a read that a busy machine held for that long, and the launch was refused
+                // having never looked at the tree that had arrived.
+                waiting ??= Environment.TickCount64;
+                if (Environment.TickCount64 - waiting >= ReadBudgetMs)
                 {
                     break;
                 }
@@ -136,7 +141,8 @@ public static class WorkDirectory
     }
 
     /// <summary>
-    /// How long a launch keeps trying to read a role's tree while a deployment is replacing it.
+    /// How long a launch keeps trying to read a role's tree while a deployment is replacing it, counted from the
+    /// first read that lost — so a launch that loses always reads again at least once.
     /// </summary>
     /// <remarks>
     /// Generous against what it is waiting for, which is two renames of one directory, and short against what
@@ -144,7 +150,7 @@ public static class WorkDirectory
     /// enough: the window a real deployment opens is between its two renames, and a second read taken
     /// immediately is still inside it far more often than not.
     /// </remarks>
-    private const int ReadBudgetMs = 2_000;
+    internal const int ReadBudgetMs = 2_000;
 
     private const int ReadPauseMs = 15;
 

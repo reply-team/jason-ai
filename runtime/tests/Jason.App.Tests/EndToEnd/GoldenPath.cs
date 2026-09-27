@@ -386,12 +386,23 @@ internal static class GoldenPath
     }
 
     /// <summary>One CLI step: the shipped program, this installation's data directory, and everything it said.</summary>
-    public static async Task<CliResult> JasonAsync(Installation it, params string[] args)
+    public static Task<CliResult> JasonAsync(Installation it, params string[] args) => RunAsync(it, "dotnet", [Assembly, .. args]);
+
+    /// <summary>
+    /// The build's own launcher beside the assembly, which is what <c>dotnet run --project runtime/src/Jason.App</c>
+    /// starts: a process whose path is that launcher rather than the muxer.
+    /// </summary>
+    public static string Launcher => Path.Combine(TestTree, OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+
+    /// <summary>The same step, started from the build's own launcher rather than through the muxer.</summary>
+    public static Task<CliResult> LauncherAsync(Installation it, params string[] args) => RunAsync(it, Launcher, args);
+
+    private static async Task<CliResult> RunAsync(Installation it, string program, IReadOnlyList<string> arguments)
     {
         ArgumentNullException.ThrowIfNull(it);
-        ArgumentNullException.ThrowIfNull(args);
+        var args = arguments.SkipWhile(argument => argument == Assembly).ToArray();
 
-        var start = new ProcessStartInfo("dotnet")
+        var start = new ProcessStartInfo(program)
         {
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -402,8 +413,7 @@ internal static class GoldenPath
             StandardErrorEncoding = Encoding.UTF8,
         };
 
-        start.ArgumentList.Add(Assembly);
-        foreach (var argument in args)
+        foreach (var argument in arguments)
         {
             start.ArgumentList.Add(argument);
         }

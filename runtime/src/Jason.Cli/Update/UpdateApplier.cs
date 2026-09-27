@@ -178,24 +178,25 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// was changed for: the applier runs from a copy of itself under the data directory, so "where am I?" is
     /// exactly the question it must not ask about the file it is replacing.
     /// </remarks>
-    public static string ResolveInstallPath() => ResolveInstallPath(SelfExecutable.Command);
+    public static string ResolveInstallPath() => ResolveInstallPath(SelfExecutable.Command, SelfExecutable.IsSingleFile);
 
     /// <summary>
-    /// The same decision over the command it depends on, so that what a muxed installation refuses can be
-    /// asked without being one: the answer is about the shape of the command, and nothing else.
+    /// The same decision over what it depends on, so that what a muxed installation or a build's launcher
+    /// refuses can be asked without being one: the answer is about the shape of the program, and nothing else.
     /// </summary>
-    public static string ResolveInstallPath(IReadOnlyList<string> self)
+    public static string ResolveInstallPath(IReadOnlyList<string> self, bool singleFile)
     {
         ArgumentNullException.ThrowIfNull(self);
-        if (self.Count != 1)
-        {
-            throw new UpdateException(
-                UpdateCodes.NotUpdatable,
-                "This Jason is running through `dotnet`, so there is no single executable to replace. "
-                + "Update the build you run it from, or install a published release with the one-liner on the release page.");
-        }
 
-        return self[0];
+        // The rule itself is SelfExecutable's, so that the verb which removes this installation and the verb
+        // which replaces it cannot disagree about what "this installation" is. The code and the sentence stay
+        // here, because what an update does about it is an update's business.
+        return SelfExecutable.Image(self, singleFile)
+            ?? throw new UpdateException(
+                UpdateCodes.NotUpdatable,
+                "This Jason is not a published single file - it is running through `dotnet`, or from a build's own "
+                + "output - so there is no one executable to replace. Update the build you run it from, or install a "
+                + "published release with the one-liner on the release page.");
     }
 
     private async Task<UpdateManifest> ReadFeedAsync(UpdateRequest request, CancellationToken cancellationToken)

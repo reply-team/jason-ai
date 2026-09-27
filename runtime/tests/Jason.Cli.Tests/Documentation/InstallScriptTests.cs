@@ -25,7 +25,12 @@ namespace Jason.Cli.Tests.Documentation;
 /// </summary>
 public partial class InstallScriptTests
 {
-    private const string Marker = "# added by jason install";
+    /// <summary>
+    /// Read from the product rather than restated here. <c>jason uninstall</c> undoes what this script wrote,
+    /// so the marker has one definition -- <see cref="Jason.Cli.Uninstall.PathEntry.Marker"/> -- and this is
+    /// the assertion that the script still spells it that way.
+    /// </summary>
+    private const string Marker = Jason.Cli.Uninstall.PathEntry.Marker;
 
     [Fact]
     public void Both_scripts_exist()
@@ -121,6 +126,88 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// And the repair <c>jason status</c> prints appends with the same <c>printf</c> the script appends with.
+    /// </summary>
+    /// <remarks>
+    /// Two spellings of "how a line goes into a profile" is how the verb that undoes an installer drifts away
+    /// from it, and a repair is not allowed to be a paraphrase of the script: it is the script's own format,
+    /// its own marker and its own line. The repair used to be the bare export line, which lasts one shell.
+    /// </remarks>
+    [Fact]
+    public void The_status_repair_appends_with_the_format_the_script_appends_with()
+    {
+        var format = Jason.Cli.Uninstall.PathEntry.AppendFormat;
+
+        Assert.Contains($"printf '{format}' \"$MARKER\" \"$LINE\"", Code("install.sh"), StringComparison.Ordinal);
+        var repair = Jason.Cli.Uninstall.PathEntry.AppendCommand("/opt/jason/bin", "/home/a/.profile");
+        var looked = repair.IndexOf("grep -qxF ", StringComparison.Ordinal);
+        var appended = repair.IndexOf($"printf '{format}' ", StringComparison.Ordinal);
+
+        // And, like the script, it looks for the whole line before it appends: typed twice, it adds nothing.
+        Assert.True(looked >= 0 && looked < appended, "The repair appends without looking for the line the script would have written.");
+    }
+
+    /// <summary>
+    /// The Unix repair, typed twice, leaves one block in the profile and the directory once on the PATH.
+    /// </summary>
+    /// <remarks>
+    /// Typed after the installer is the ordinary case rather than the unusual one: an agent standing in the
+    /// shell the installer ran in reads <c>path</c> as failed and types what it is told. It appended a second
+    /// block, and the export half put the directory on the running PATH twice.
+    /// </remarks>
+    [Fact]
+    public void The_unix_repair_typed_twice_changes_nothing_the_second_time()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The Unix repair is written for sh, on the platforms that print it.");
+
+        using var tree = new TempTree();
+        var profile = Path.Combine(tree.NewDirectory("home"), ".profile");
+        File.WriteAllText(profile, "# mine\n");
+        var command = Jason.Cli.Uninstall.PathEntry.AppendCommand("/opt/jason bin", profile);
+
+        var (exit, stdout, stderr) = Run(
+            "/bin/sh",
+            new Dictionary<string, string>(),
+            "-c", $"{command}; {command}; echo \"$PATH\" | tr ':' '\\n' | grep -cxF '/opt/jason bin'");
+
+        Assert.True(exit == 0, stderr);
+        Assert.Equal("1", stdout.Trim());
+        Assert.Equal(
+            "# mine\n\n" + Marker + "\n" + Jason.Cli.Uninstall.PathEntry.ExportLine("/opt/jason bin") + "\n",
+            File.ReadAllText(profile));
+    }
+
+    /// <summary>
+    /// <c>install.ps1</c> runs the statements the Windows repair prints: one definition of how Jason goes on a
+    /// Windows PATH, held to the script line by line and in order.
+    /// </summary>
+    /// <remarks>
+    /// Two spellings of it are how the kind of an account's Path was lost in three places at once. What the
+    /// statements do is run, against a registry key of the test's own, in <c>UserPathRegistryTests</c>.
+    /// </remarks>
+    [Fact]
+    public void The_installer_runs_the_statements_the_repair_prints()
+    {
+        var script = Code("install.ps1").Split('\n').Select(line => line.Trim()).ToList();
+
+        // One block, line after line, rather than each statement somewhere after the one before it: a line
+        // between two of them — an edit to the value, a second SetValue — would have kept an order-only match
+        // green while the installer ran something the repair does not print.
+        var statements = Jason.Cli.Uninstall.PathEntry.RegistryStatements("$directory", $"'{Jason.Cli.Uninstall.UserPathValue.EnvironmentKey}'");
+        var at = script.IndexOf(statements[0]);
+        Assert.True(at >= 0, $"install.ps1 does not run: {statements[0]}");
+        for (var index = 1; index < statements.Count; index++)
+        {
+            Assert.True(
+                at + index < script.Count && script[at + index] == statements[index],
+                $"install.ps1 does not run, on the line after the one before it: {statements[index]}");
+        }
+
+        Assert.DoesNotContain(script, line => line.Contains("GetEnvironmentVariable('Path'", StringComparison.Ordinal));
+        Assert.DoesNotContain(script, line => line.Contains("SetEnvironmentVariable('Path'", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// <c>--version X</c> names a release, and the manifest that comes back has to be that release's. Neither
     /// script looked: a feed that answered with another version — a stale mirror, a directory holding the wrong
     /// release, a download URL that resolved to something else — was installed anyway, under the version that
@@ -166,7 +253,7 @@ public partial class InstallScriptTests
     public void Install_ps1_adds_the_directory_to_the_user_path_only_when_it_is_not_there()
     {
         var text = Script("install.ps1");
-        Assert.Contains("'User'", text, StringComparison.Ordinal);
+        Assert.Contains("CurrentUser.CreateSubKey('Environment')", text, StringComparison.Ordinal);
         Assert.Contains("-split ';'", text, StringComparison.Ordinal);
         Assert.DoesNotContain("$PROFILE", text, StringComparison.Ordinal);
     }
@@ -220,6 +307,110 @@ public partial class InstallScriptTests
 
         var started = code.LastIndexOf("--version", installed, StringComparison.Ordinal);
         Assert.True(started > unpacked, $"{script} does not run the unpacked executable before installing it.");
+    }
+
+    /// <summary>
+    /// And CI runs the published executable's own uninstall, from the file it removes, on every platform it
+    /// packages for.
+    /// </summary>
+    /// <remarks>
+    /// The one shape the suite cannot reach: it runs as a test host, not as a single-file build, and only a
+    /// single-file build loses the ability to load a new assembly once its own file has been moved or deleted.
+    /// A published build removed everything and then answered with one line about a type initializer; every
+    /// test of this verb was green.
+    /// </remarks>
+    [Fact]
+    public void Ci_uninstalls_the_published_executable_from_its_own_image()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
+        var step = ci.IndexOf("- name: Uninstall the published executable, from its own image", StringComparison.Ordinal);
+
+        Assert.True(step >= 0, "ci.yml no longer uninstalls the published executable.");
+        Assert.True(ci.IndexOf("steps.package.outputs.executable", step, StringComparison.Ordinal) > step, "the uninstall step does not run the executable the job packaged.");
+        Assert.True(ci.IndexOf("uninstall --purge-data --yes", step, StringComparison.Ordinal) > step, "the uninstall step does not purge, which is the shape that failed.");
+
+        // And it refuses, before anything is removed, wherever the account has something of its own: the logon
+        // registration and the harnesses are the account's, and this step is rehearsed on developer machines.
+        var guard = ci.IndexOf("$plan.autostart_registered -or @($plan.roots).Count -gt 0 -or $plan.path_entry.ours", step, StringComparison.Ordinal);
+        Assert.True(guard > step && guard < ci.IndexOf("uninstall --purge-data --yes", step, StringComparison.Ordinal), "the uninstall step no longer refuses on an account with a registration, recorded skills or a PATH entry.");
+    }
+
+    /// <summary>
+    /// No artifact in CI but the three platform ones is named so that the install jobs' download takes it.
+    /// </summary>
+    /// <remarks>
+    /// They download <c>jason-*</c> and merge what they get into one directory. The update job's second version
+    /// was uploaded as <c>jason-&lt;rid&gt;-next</c>, carrying an archive with the same file name as the real
+    /// one; when it landed before an install job's download — which it did once the platform jobs grew a step —
+    /// its archive went over the real one beside the other artifact's fragment, and the feed refused itself.
+    /// </remarks>
+    [Fact]
+    public void Only_the_platform_artifacts_are_named_like_the_ones_the_install_jobs_download()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
+        Assert.Contains("pattern: jason-*", ci, StringComparison.Ordinal);
+
+        var named = ci.Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith("artifact:", StringComparison.Ordinal))
+            .Select(line => line["artifact:".Length..].Trim())
+            .ToList();
+
+        Assert.NotEmpty(named);
+        Assert.All(named, name => Assert.False(
+            name.StartsWith("jason-", StringComparison.Ordinal),
+            $"ci.yml uploads '{name}', which the install jobs' `jason-*` download would merge over a platform archive."));
+    }
+
+    /// <summary>
+    /// And CI holds the Windows installer to the kind of the account's Path on a real machine: the one proof of
+    /// that installer's PATH edit which is not against a registry key a test made for itself.
+    /// </summary>
+    /// <remarks>
+    /// The agent run on a fresh account cannot give it: the prompt's one-liner fetches the installer from
+    /// <c>main</c>, so a branch that changes the installer is installed there with the old one.
+    /// </remarks>
+    [Fact]
+    public void Ci_holds_the_installer_to_the_kind_of_the_accounts_path()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
+        var job = ci.IndexOf("name: install.ps1 on windows", StringComparison.Ordinal);
+
+        Assert.True(job >= 0, "ci.yml no longer runs install.ps1 on Windows.");
+        Assert.True(ci.IndexOf("'DoNotExpandEnvironmentNames'", job, StringComparison.Ordinal) > job, "the install.ps1 job no longer reads the account's Path as the registry holds it.");
+        Assert.True(ci.IndexOf("the install turned the user Path from ExpandString", job, StringComparison.Ordinal) > job, "the install.ps1 job no longer asserts the kind of the account's Path.");
+    }
+
+    /// <summary>
+    /// And CI holds install.sh, the path check and the uninstall to one login profile on a real machine: a home
+    /// with <c>~/.bash_profile</c>, where bash never reads <c>~/.profile</c>. All three used to mean
+    /// <c>~/.profile</c> there, and the check said <c>ok</c> about a file no login shell opens.
+    /// </summary>
+    [Fact]
+    public void Ci_holds_the_installer_the_check_and_the_uninstall_to_the_profile_bash_reads()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
+        var step = ci.IndexOf("name: Install into the profile bash reads, and take it back out", StringComparison.Ordinal);
+
+        Assert.True(step >= 0, "ci.yml no longer installs into a home where bash reads ~/.bash_profile.");
+        Assert.True(ci.IndexOf("bash -l -c 'command -v jason'", step, StringComparison.Ordinal) > step, "the step no longer asks a login bash to find jason.");
+        Assert.True(ci.IndexOf("printf '# mine\\n' | cmp - \"$HOME/.bash_profile\"", step, StringComparison.Ordinal) > step, "the step no longer holds the uninstall to the profile's own bytes.");
+    }
+
+    /// <summary>
+    /// And CI holds the uninstall to the directory rule on a real machine: installed into a <c>~/.local/bin</c> that
+    /// another tool is in, the line it is found through stays — and the installer, run with no <c>SHELL</c> under
+    /// its own <c>set -eu</c>, writes the profile rather than dying before it.
+    /// </summary>
+    [Fact]
+    public void Ci_holds_the_uninstall_to_a_directory_other_tools_share_and_the_installer_to_no_shell()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
+        var step = ci.IndexOf("name: Install beside another tool with no SHELL set, and leave the line it is found through", StringComparison.Ordinal);
+
+        Assert.True(step >= 0, "ci.yml no longer installs into a directory another tool shares.");
+        Assert.True(ci.IndexOf("env -u SHELL sh install/install.sh", step, StringComparison.Ordinal) > step, "the step no longer runs the installer with no SHELL.");
+        Assert.True(ci.IndexOf("the uninstall took away the line another tool is found through", step, StringComparison.Ordinal) > step, "the step no longer asserts the line stays.");
     }
 
     /// <summary>The real proof: CI runs each script against the archives the same run packaged, from a local directory.</summary>
@@ -381,6 +572,9 @@ public partial class InstallScriptTests
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
+        // PowerShell reports telemetry over the network unless told not to, and no test in this repository
+        // reaches the network.
+        start.Environment["POWERSHELL_TELEMETRY_OPTOUT"] = "1";
         foreach (var argument in arguments)
         {
             start.ArgumentList.Add(argument);
@@ -396,8 +590,14 @@ public partial class InstallScriptTests
         var stderr = process.StandardError.ReadToEndAsync();
         if (!process.WaitForExit(TimeSpan.FromSeconds(120)))
         {
+            // What it had said before it stopped is the only evidence of where it stopped, so it goes into the
+            // failure rather than out with the process.
             process.Kill(entireProcessTree: true);
-            Assert.Fail("pwsh did not finish in two minutes.");
+            Task.WhenAny(Task.WhenAll(stdout, stderr), Task.Delay(TimeSpan.FromSeconds(10))).GetAwaiter().GetResult();
+            Assert.Fail(
+                $"{Path.GetFileName(executable)} did not finish in two minutes.\n"
+                + $"stdout so far: {(stdout.IsCompletedSuccessfully ? stdout.Result : "(not readable)")}\n"
+                + $"stderr so far: {(stderr.IsCompletedSuccessfully ? stderr.Result : "(not readable)")}");
         }
 
         return (process.ExitCode, stdout.Result, stderr.Result);

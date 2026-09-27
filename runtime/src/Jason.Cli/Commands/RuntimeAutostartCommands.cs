@@ -121,9 +121,14 @@ public static class RuntimeAutostartCommands
     /// implementation acts on the machine whatever data directory it was pointed at, so an environment that
     /// forgot to name one must not get it by accident.
     /// </summary>
-    private static IAutostartRegistrar Registrar(CliEnvironment env) => env.Autostart ?? AutostartRegistrars.Unsupported;
+    /// <summary>
+    /// The registrar this environment names, or the one that refuses. Internal because <c>jason uninstall</c>
+    /// takes a registration away as its first step and must do it the same way <c>disable</c> does: a second
+    /// place that knows how this machine registers things is a second place to be wrong about it.
+    /// </summary>
+    internal static IAutostartRegistrar Registrar(CliEnvironment env) => env.Autostart ?? AutostartRegistrars.Unsupported;
 
-    private static AutostartRegistration Registration(CliEnvironment env, AutostartPlatform platform) =>
+    internal static AutostartRegistration Registration(CliEnvironment env, AutostartPlatform platform) =>
         AutostartArtifacts.Compose(
             platform,
             env.InstallPath is { } installed ? [installed] : SelfExecutable.Command,

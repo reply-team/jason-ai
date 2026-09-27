@@ -11,6 +11,8 @@ using Jason.Cli.Tests.Commands;
 using Jason.Cli.Tests.Process;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Cli.Tests.Uninstall;
+using Jason.Cli.Uninstall;
 
 namespace Jason.Cli.Tests.Status;
 
@@ -118,7 +120,11 @@ public class StatusCommandTests
         Assert.Equal(CheckState.Failed, skills.State);
         Assert.Contains("1 of 2 seeded roles have no skill", skills.Fact, StringComparison.Ordinal);
         Assert.Contains("planner", skills.Fact, StringComparison.Ordinal);
-        Assert.Equal("jason skills install", skills.Fix);
+
+        // The role half alone. A required check whose one repair also wrote the interactive and business packs
+        // into the agent's own configuration could not be repaired by somebody who would not allow that — an
+        // agent told to change nothing outside the install and data directories stopped here, twice.
+        Assert.Equal("jason skills install --roles-only", skills.Fix);
     }
 
     /// <summary>
@@ -145,8 +151,9 @@ public class StatusCommandTests
 
         // A plain install, not --force. Overwriting is not what repairs a directory missing its SKILL.md,
         // and --force overwrites every edited file in every root of the plan — so printing it here would
-        // cost an operator unrelated work for a problem that never needed it.
-        Assert.Equal("jason skills install", skills.Fix);
+        // cost an operator unrelated work for a problem that never needed it. And the role half alone, for
+        // the reason the check above gives.
+        Assert.Equal("jason skills install --roles-only", skills.Fix);
     }
 
     /// <summary>
@@ -215,6 +222,229 @@ public class StatusCommandTests
 
         var check = Assert.Single(Read(output).Checks, check => check.Name == "harness_skills");
         Assert.Equal(CheckState.Unknown, check.State);
+    }
+
+    /// <summary>
+    /// One check, one subject. With the packs deployed into the runtime's own role root and a detected
+    /// harness holding nothing, the harness check is <c>absent</c> — because nothing is deployed into a
+    /// harness.
+    /// </summary>
+    /// <remarks>
+    /// It used to answer <c>ok</c> here, on the strength of the role root's record, naming a directory that
+    /// is not a harness while the harness it had detected went unmentioned. The README prompt tells an agent
+    /// to branch on this body, and that is a body it would read wrongly.
+    /// </remarks>
+    [Fact]
+    public async Task The_harness_check_is_about_harnesses_and_not_about_the_role_root()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        Deploy(dir.Paths.RoleSkillsDirectory);
+        var harness = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, harnesses: HarnessLocators.At(harness)), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "harness_skills");
+        Assert.Equal(CheckState.Absent, check.State);
+        Assert.DoesNotContain("skills", check.Fact.Replace(harness, string.Empty, StringComparison.Ordinal).Replace("skill packs", string.Empty, StringComparison.Ordinal), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>And what the record in the role root says is reported by the check whose subject it is.</summary>
+    [Fact]
+    public async Task The_role_check_names_the_pack_and_ref_its_own_record_carries()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        // The root the *runtime* reports, not the one this CLI would compose. They are the same on an
+        // ordinary machine and the runtime's is the truth where they differ: it is the directory it reads at
+        // every launch, whatever data directory this client thinks it is talking about.
+        Running(dir, skills: new SkillsInfo(dir.Paths.RoleSkillsDirectory, 1048576, [Taught("researcher")]));
+        Deploy(dir.Paths.RoleSkillsDirectory);
+
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Contains("jason-runtime-skills at v0.1.0", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A required check that failed prints the line that repairs it — and that line is the one this
+    /// product's own installer writes, so the repair and the installer cannot drift apart.
+    /// </summary>
+    /// <remarks>
+    /// This is the check a from-source installation fails, and it failed with no repair at all: the verdict
+    /// was "Not ready." and the whole repair list was an optional check's line. A required failure with
+    /// nothing to do about it tells a person the tool is broken at the moment they most need it not to be.
+    /// </remarks>
+    [Fact]
+    public async Task A_failing_path_check_carries_the_line_this_products_own_installer_writes()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+
+        // Named, because this suite is not an installation: only a published single file is, and the test host
+        // is one file of many.
+        var directory = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "install")).FullName;
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, onPath: false, installPath: Path.Combine(directory, "jason")), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.NotNull(check.Fix);
+
+        Assert.Contains(
+            OperatingSystem.IsWindows() ? "CreateSubKey('Environment')" : Jason.Cli.Uninstall.PathEntry.ExportLine(directory),
+            check.Fix,
+            StringComparison.Ordinal);
+        Assert.Contains(directory, check.Fix, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A shell older than the installation is not a broken installation: when this account's PATH carries the
+    /// directory and this shell's does not, the check is ok and says which case it is — and how to reach the
+    /// executable from here.
+    /// </summary>
+    /// <remarks>
+    /// The shell an installer ran in is exactly this case, and it is the one an agent is standing in. The check
+    /// read only the PATH this process inherited, so it said <c>failed</c> there although every new shell
+    /// found <c>jason</c>, and its repair, typed as told, appended the directory to the account's Path a second
+    /// time.
+    /// </remarks>
+    [Fact]
+    public async Task A_path_this_account_carries_and_this_shell_does_not_is_ok_and_says_so()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(dir.Paths.Root, "programs", "jason", OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+        var carried = new RecordingRemover
+        {
+            PathEntry = new PathEntryPlan(Path.GetDirectoryName(installed)!, ["/home/a/.profile"], "carried", Ours: true, Persisted: "/home/a/.profile"),
+        };
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, onPath: false, machine: carried, installPath: installed), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Null(check.Fix);
+        Assert.Contains("started before it was put there", check.Fact, StringComparison.Ordinal);
+        Assert.Contains(installed, check.Fact, StringComparison.Ordinal);
+        Assert.Equal([Path.GetDirectoryName(installed)!], carried.Reads);
+        Assert.Empty(carried.Calls);
+    }
+
+    /// <summary>
+    /// What a new shell finds is the question, not who put it there: a directory on this account's PATH by
+    /// somebody else's hand is found all the same.
+    /// </summary>
+    [Fact]
+    public async Task A_path_somebody_else_put_on_the_account_is_found_all_the_same()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(dir.Paths.Root, "programs", "jason", OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+        var carried = new RecordingRemover
+        {
+            PathEntry = new PathEntryPlan(Path.GetDirectoryName(installed)!, [], "carried", Ours: false, Persisted: "/home/a/.zprofile"),
+        };
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, onPath: false, machine: carried, installPath: installed), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Contains("/home/a/.zprofile", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And a block this installer wrote into a profile no login shell of this account reads answers nothing: bash
+    /// does not open <c>~/.profile</c> once <c>~/.bash_profile</c> exists, and the check said <c>ok</c> there.
+    /// </summary>
+    [Fact]
+    public async Task A_block_in_a_profile_no_login_shell_reads_is_not_a_path_a_new_shell_finds()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(dir.Paths.Root, "programs", "jason", OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+        var unread = new RecordingRemover
+        {
+            PathEntry = new PathEntryPlan(Path.GetDirectoryName(installed)!, ["/home/a/.profile"], null, Ours: true, Persisted: null),
+        };
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, onPath: false, machine: unread, installPath: installed), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.NotNull(check.Fix);
+    }
+
+    /// <summary>And where the account does not carry it either, it is the failure it always was, with the repair.</summary>
+    [Fact]
+    public async Task A_path_neither_this_shell_nor_this_account_carries_still_fails_with_its_repair()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(dir.Paths.Root, "programs", "jason", OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, onPath: false, machine: new RecordingRemover(), installPath: installed), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Contains(Path.GetDirectoryName(installed)!, check.Fix, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Each repair once, in the order it was first called for.
+    /// </summary>
+    /// <remarks>
+    /// With no runtime, four required checks all want one started, and this printed
+    /// <c>jason runtime start</c> four times — the first thing a new installation said to whoever had just
+    /// installed it. The old guard asserted only that the heading was there, which is why it never noticed.
+    /// </remarks>
+    [Fact]
+    public async Task Each_repair_is_printed_once_in_the_order_it_was_first_called_for()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["status", "--human"], Machine(dir, output), Ct);
+
+        var lines = output.ToString().Split(Environment.NewLine, StringSplitOptions.None);
+        var heading = Array.FindIndex(lines, line => line.Trim() == "To repair:");
+        Assert.True(heading >= 0, output.ToString());
+
+        var repairs = lines.Skip(heading + 1).Where(line => line.StartsWith("  ", StringComparison.Ordinal)).Select(line => line.Trim()).ToList();
+
+        Assert.NotEmpty(repairs);
+        Assert.Equal(repairs.Distinct(StringComparer.Ordinal), repairs);
+        Assert.Contains("jason runtime start", repairs);
+
+        // And the checks really did ask for it more than once, so this is not passing because there was
+        // nothing to de-duplicate. Asked of the machine shape, since the prose above is not a document.
+        var machine = new StringWriter();
+        await CliApp.RunAsync(["status"], Machine(dir, machine), Ct);
+        var asked = Read(machine).Checks.Count(check => check.Fix == "jason runtime start");
+        Assert.True(asked > 1, $"only {asked} check asked for a runtime to be started, so nothing was de-duplicated.");
+    }
+
+    /// <summary>A deployment record in a root, as `jason skills install` leaves one.</summary>
+    private static void Deploy(string root)
+    {
+        var skill = Path.Combine(root, "researcher", "SKILL.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(skill)!);
+        File.WriteAllText(skill, "---" + Environment.NewLine + "name: researcher" + Environment.NewLine + "---" + Environment.NewLine);
+        SkillsRecord.Write(root, new SkillsRecord(
+            SkillsRecord.CurrentVersion,
+            [new SkillsDeployment("jason-runtime-skills", "/somewhere", "v0.1.0", false, null, DateTimeOffset.UnixEpoch,
+                [new DeployedFile("researcher/SKILL.md", SkillsRecord.Digest(skill))])]));
     }
 
     /// <summary>The human shape says the same thing, and prints the repairs under their own heading.</summary>
@@ -296,6 +526,32 @@ public class StatusCommandTests
         Assert.Contains("--provider-cli", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// And the path check's rule as it now is, in the verb's own help: the old-shell <c>ok</c>, which profile a
+    /// login shell reads, and — the part a caller has to act on — that an agent host started before the install
+    /// keeps failing a bare <c>jason</c> while <c>ready</c> is true.
+    /// </summary>
+    /// <remarks>
+    /// The help still said only "'jason' resolves on PATH" after the check had learned to answer <c>ok</c> for a
+    /// shell older than the installation. An agent reading it would take <c>ready: true</c> to mean its own next
+    /// <c>jason</c> works.
+    /// </remarks>
+    [Fact]
+    public async Task Help_publishes_the_path_rule_as_it_is()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["status", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), Ct);
+
+        var text = string.Join(' ', output.ToString().Split((char[])[' ', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
+        Assert.Contains("in every shell started from now on", text, StringComparison.Ordinal);
+        Assert.Contains("~/.bash_profile", text, StringComparison.Ordinal);
+        Assert.Contains("an agent host started before the install", text, StringComparison.Ordinal);
+        Assert.Contains("while ready is true", text, StringComparison.Ordinal);
+        Assert.Contains("PowerShell on Windows", text, StringComparison.Ordinal);
+    }
+
     private static DeployedRoleSkill Taught(string role) => new(role, 4096, null);
 
     private static StatusReport Read(StringWriter output) =>
@@ -328,17 +584,21 @@ public class StatusCommandTests
         StringWriter output,
         IProgramRunner? programs = null,
         IHarnessLocator? harnesses = null,
-        bool onPath = true) =>
+        bool onPath = true,
+        IInstallationRemover? machine = null,
+        string? installPath = null) =>
         new(
             output,
             new StringWriter(),
             dir.Paths,
             new FakeHandler(request => Answer(dir, request)),
             Processes: new FakeProcessControl(),
+            InstallPath: installPath,
             Autostart: new RecordingRegistrar(),
             Harnesses: harnesses ?? HarnessLocators.At(Path.Combine(dir.Paths.Root, "no-harness-here")),
             Programs: programs ?? new FakeProgramRunner(_ => new ProgramResult(-1, string.Empty, "not found", false)),
-            SearchPath: onPath ? Installed(dir) : Path.Combine(dir.Paths.Root, "nowhere"));
+            SearchPath: onPath ? Installed(dir) : Path.Combine(dir.Paths.Root, "nowhere"),
+            Removes: machine);
 
     /// <summary>A directory on this test's PATH with a file in it that a bare `jason` would resolve to.</summary>
     private static string Installed(TempPaths dir)

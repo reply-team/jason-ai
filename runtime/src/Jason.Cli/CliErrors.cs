@@ -17,6 +17,15 @@ public static class CliErrors
     public const string ShutdownTimeout = "shutdown_timeout";
     public const string RuntimeStartFailed = "runtime_start_failed";
 
+    /// <summary>No remover was named for this environment, so <c>jason uninstall</c> touched nothing.</summary>
+    public const string RemoverUnsupported = "remover_unsupported";
+
+    /// <summary>The runtime acknowledged the shutdown and did not go, so nothing further was removed.</summary>
+    public const string RuntimeStillRunning = "runtime_still_running";
+
+    /// <summary>An uninstall understood the command and declined to perform it.</summary>
+    public const string UninstallRefused = "uninstall_refused";
+
     public static string Serialize(string code, string message, bool retryable) =>
         JsonSerializer.Serialize(new ErrorResponse(new ErrorBody(code, message, retryable)), JasonJson.Options);
 }

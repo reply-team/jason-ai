@@ -1,0 +1,777 @@
+using System.Globalization;
+using Jason.Cli.Autostart;
+using Jason.Cli.Commands;
+using Jason.Cli.Discovery;
+using Jason.Cli.Process;
+using Jason.Contracts.Skills;
+
+namespace Jason.Cli.Uninstall;
+
+/// <summary>What an uninstall did, and — where it stopped early — what stopped it.</summary>
+/// <param name="Done">Each step that really happened, in the order it happened.</param>
+/// <param name="Kept">Things deliberately left alone, so the report says so rather than staying silent.</param>
+/// <param name="Problems">
+/// What could not be removed, where that did not stop the rest. A root whose record cannot be read is not a
+/// reason to leave an executable behind, but it is a reason this uninstall is not finished — so the steps
+/// carry on and the verb still exits 1, naming what is left.
+/// </param>
+/// <param name="RefusalCode">The snake_case code a caller branches on, or null where nothing refused.</param>
+/// <param name="Refusal">The same in words, with the command that repairs it where there is one.</param>
+public sealed record UninstallReport(
+    UninstallPlan Plan,
+    IReadOnlyList<string> Done,
+    IReadOnlyList<string> Kept,
+    IReadOnlyList<string> Problems,
+    string? RefusalCode,
+    string? Refusal)
+{
+    /// <summary>Whether everything it set out to remove is gone.</summary>
+    public bool Completed => RefusalCode is null && Problems.Count == 0;
+}
+
+/// <summary>
+/// The order of an uninstall, and the refusals between its steps.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The order is the safety property rather than a tidiness one. The logon registration goes <b>first</b>, so
+/// that a logon part-way through cannot start the thing being removed. The runtime goes second, and a runtime
+/// that will not stop ends the whole verb: deleting a binary out from under a live process is how a machine
+/// ends up with neither a working installation nor a clean one.
+/// </para>
+/// <para>
+/// Each step reports. A step that refuses stops the steps after it rather than pressing on and leaving a
+/// machine in a state nobody has described.
+/// </para>
+/// </remarks>
+public static class UninstallRunner
+{
+    /// <param name="env">The environment the verb runs in.</param>
+    /// <param name="plan">What was read, and shown, before anything is removed.</param>
+    /// <param name="options">What was asked.</param>
+    /// <param name="cancellationToken">Stops a wait for the runtime; nothing after that point is cancellable.</param>
+    /// <param name="beforeTheImageGoes">
+    /// Called with the report so far, immediately before the executable step: the caller renders its report
+    /// there once and throws it away. After that step a single-file build may no longer be able to load an
+    /// assembly it has not loaded yet — see <see cref="IInstallationRemover.RemoveExecutable"/> — and the
+    /// report is the one thing still to be written.
+    /// </param>
+    public static async Task<UninstallReport> RunAsync(
+        CliEnvironment env,
+        UninstallPlan plan,
+        UninstallOptions options,
+        CancellationToken cancellationToken,
+        Action<UninstallReport>? beforeTheImageGoes = null)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var done = new List<string>();
+        var kept = new List<string>();
+        var problems = new List<string>();
+
+        // The one question this verb asks, asked before anything at all is removed. It used to be asked last,
+        // after the executable had gone -- so a person who stopped to think at the prompt was looking at a
+        // machine already half uninstalled, and the answer had to be read by a process that no longer had its
+        // own file to load anything from.
+        var purge = options.PurgeData && (!options.Human || options.Yes || Confirmed(env, plan));
+
+        // And a no refuses the whole verb. It used to keep the data directory and remove everything else, exiting
+        // 0 -- an answer to a question nobody asked. The question was whether to delete this installation's data
+        // along with the rest of it; somebody who says no to that has not said yes to the rest, and the verb
+        // without --purge-data is one line away.
+        if (options.PurgeData && !purge)
+        {
+            return new UninstallReport(
+                plan,
+                done,
+                kept,
+                problems,
+                CliErrors.UninstallRefused,
+                $"You did not confirm deleting what Jason keeps in '{plan.DataDirectory}', so nothing at all was removed. "
+                + "'jason uninstall' without --purge-data removes the installation and keeps the data directory.");
+        }
+
+        try
+        {
+            // 1. The registration, first.
+            if (Step1RemoveAutostart(env, plan, done, kept) is { } refusedAt1)
+            {
+                return new UninstallReport(plan, done, kept, problems, refusedAt1.Code, refusedAt1.Message);
+            }
+
+            // 2. The runtime, and only then.
+            if (await Step2StopRuntimeAsync(env, plan, options, done, kept, cancellationToken).ConfigureAwait(false) is { } refusedAt2)
+            {
+                return new UninstallReport(plan, done, kept, problems, refusedAt2.Code, refusedAt2.Message);
+            }
+
+            // 3. Everything a receipt names, and nothing else.
+            Step3RemoveByReceipt(env, plan, options, done, kept, problems);
+
+            // 4. The PATH entry, only where this installer wrote it.
+            Step4RemovePathEntry(env, plan, done, kept, problems);
+
+            // Rendered once and thrown away, while this process can still load whatever rendering it needs.
+            beforeTheImageGoes?.Invoke(new UninstallReport(plan, [.. done], [.. kept], [.. problems], null, null));
+
+            // 5. The executable, its install directory and what it unpacked, last, because everything above is
+            //    run from it.
+            Step5RemoveExecutable(env, plan, done, kept, problems);
+
+            // 6. And the data directory, only on the explicit word, after everything else.
+            Step6Data(env, plan, purge, done, kept, problems);
+        }
+        catch (Exception unexpected) when (unexpected is not OperationCanceledException)
+        {
+            // Never out of here. Anything above this point may already have removed something -- the
+            // registration is gone before the runtime is even asked -- and an exception that left the verb took
+            // the list of what with it: a published build once answered with one line about a type initializer
+            // after it had deleted the data directory. So it becomes the last problem in a report that still
+            // names every step that did happen, whichever step it came from.
+            problems.Add(
+                $"The uninstall stopped part-way, on something it did not expect: {Causes.Line(unexpected)} Every step "
+                + "listed as done did happen; nothing after the one that failed was attempted. Run it again to "
+                + "finish: what is already gone is not an error the second time.");
+        }
+
+        return new UninstallReport(plan, done, kept, problems, null, null);
+    }
+
+    /// <summary>
+    /// Takes the logon registration away. Removing one that is not there is not an error, and a machine that
+    /// has no way to register anything has nothing to take away either.
+    /// </summary>
+    private static RemovalRefused? Step1RemoveAutostart(CliEnvironment env, UninstallPlan plan, List<string> done, List<string> kept)
+    {
+        var registrar = RuntimeAutostartCommands.Registrar(env);
+        if (registrar.Platform is AutostartPlatform.Unsupported)
+        {
+            kept.Add("This machine has no way of starting anything at logon, so there was no registration to remove.");
+            return null;
+        }
+
+        try
+        {
+            // Composed the one way this product composes it. A second place that knew how this machine
+            // registers things would be a second place to be wrong about how it unregisters them.
+            registrar.Remove(RuntimeAutostartCommands.Registration(env, registrar.Platform));
+        }
+        catch (AutostartException refusal)
+        {
+            return new RemovalRefused(
+                CliErrors.UninstallRefused,
+                $"The logon registration could not be removed, so nothing further was: {refusal.Message} "
+                + "Remove it with 'jason runtime autostart disable' and run this again.");
+        }
+
+        done.Add(plan.AutostartRegistered
+            ? "Removed the logon registration."
+            : "No logon registration was registered for this account.");
+
+        return null;
+    }
+
+    /// <summary>
+    /// The data directory: kept unless the word was said, and the word asks first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>~/.jason</c> holds the database, the settings, the plugins, the logs and the work directories — the
+    /// record of what the operator did, which is theirs. So it is kept by default and the verb says in one
+    /// line that it kept it and where, because a person who wanted it gone needs to know it is still there.
+    /// </para>
+    /// <para>
+    /// <b>And on the word, only what Jason keeps there.</b> This removed the directory with everything in it, and
+    /// the directory is whatever <c>JASON_DATA_DIR</c> names. Each of this product's own entries goes, whole;
+    /// anything else in the directory stays and is named; the directory itself goes only once nothing is left
+    /// in it. A directory that is not a data directory at all is refused before any of this, by
+    /// <see cref="DataDirectoryBelt"/>.
+    /// </para>
+    /// <para>
+    /// Last, after everything else, because everything else lives in it or writes to it while it runs.
+    /// </para>
+    /// </remarks>
+    private static void Step6Data(
+        CliEnvironment env,
+        UninstallPlan plan,
+        bool purge,
+        List<string> done,
+        List<string> kept,
+        List<string> problems)
+    {
+        if (!purge)
+        {
+            kept.Add(
+                $"The data directory at '{plan.DataDirectory}' is kept: it holds your database, settings, "
+                + "plugins, logs and any source this build fetched. --purge-data removes it.");
+            return;
+        }
+
+        var remover = env.Removes!;
+        var (own, others) = Entries(plan.DataDirectory);
+        var failed = false;
+        foreach (var entry in own)
+        {
+            try
+            {
+                if (Directory.Exists(entry))
+                {
+                    remover.RemoveTree(entry);
+                }
+                else
+                {
+                    remover.RemoveFile(entry);
+                }
+            }
+            catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+            {
+                problems.Add($"'{entry}' could not be removed: {exception.Message}");
+                failed = true;
+            }
+        }
+
+        if (others.Count > 0)
+        {
+            kept.Add(
+                $"Kept '{plan.DataDirectory}' and {string.Join(", ", others.Select(entry => $"'{Path.GetFileName(entry)}'"))} in it: "
+                + "Jason does not keep anything by that name in a data directory, so it is not Jason's to remove. "
+                + (own.Count == 0 ? "Nothing Jason keeps there was in it."
+                    : failed ? "Not everything Jason keeps there could be removed; what is left is named among the problems."
+                    : "Everything Jason keeps there is gone."));
+            return;
+        }
+
+        try
+        {
+            if (remover.RemoveDirectoryIfEmpty(plan.DataDirectory) || !Directory.Exists(plan.DataDirectory))
+            {
+                done.Add($"Removed the data directory at '{plan.DataDirectory}'.");
+            }
+            else if (!failed)
+            {
+                problems.Add($"'{plan.DataDirectory}' could not be removed: something arrived in it while it was being emptied.");
+            }
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+        {
+            problems.Add($"'{plan.DataDirectory}' could not be removed: {exception.Message}");
+        }
+    }
+
+    /// <summary>
+    /// The data directory's entries, split into what this product keeps there — <see cref="Contracts.Discovery.JasonPaths.OwnEntries"/>
+    /// — and everything else, each ordered by name.
+    /// </summary>
+    private static (IReadOnlyList<string> Own, IReadOnlyList<string> Others) Entries(string dataDirectory)
+    {
+        if (!Directory.Exists(dataDirectory))
+        {
+            return ([], []);
+        }
+
+        var entries = Directory.EnumerateFileSystemEntries(dataDirectory).Order(StringComparer.Ordinal).ToList();
+        var own = entries.Where(entry => Contracts.Discovery.JasonPaths.OwnEntries.Contains(Path.GetFileName(entry), StringComparer.Ordinal)).ToList();
+        return (own, [.. entries.Except(own)]);
+    }
+
+    /// <summary>
+    /// Prints exactly what will be deleted and what will be kept, and asks. Only in the shape a person is
+    /// reading: a machine shape that blocked on a question nobody could see would hang a script for ever, so it
+    /// refuses up front instead, before anything at all has been removed.
+    /// </summary>
+    private static bool Confirmed(CliEnvironment env, UninstallPlan plan)
+    {
+        IReadOnlyList<string> own;
+        IReadOnlyList<string> others;
+        try
+        {
+            (own, others) = Entries(plan.DataDirectory);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            env.Out.WriteLine();
+            env.Out.WriteLine($"{plan.DataDirectory} could not be listed ({exception.Message}), so nothing in it will be deleted.");
+            return false;
+        }
+
+        env.Out.WriteLine();
+        env.Out.WriteLine($"About to delete what Jason keeps in {plan.DataDirectory}:");
+        foreach (var entry in own)
+        {
+            env.Out.WriteLine($"  {Path.GetFileName(entry)}{(Directory.Exists(entry) ? "/" : string.Empty)}");
+        }
+
+        if (others.Count > 0)
+        {
+            env.Out.WriteLine("and to keep what Jason did not put there:");
+            foreach (var entry in others)
+            {
+                env.Out.WriteLine($"  {Path.GetFileName(entry)}{(Directory.Exists(entry) ? "/" : string.Empty)}");
+            }
+        }
+
+        env.Out.Write("Delete it? [y/N] ");
+        var answer = (env.In ?? TextReader.Null).ReadLine();
+        return answer is not null && (answer.Trim().Equals("y", StringComparison.OrdinalIgnoreCase)
+            || answer.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// The executable and the directory holding it, last of all.
+    /// </summary>
+    /// <remarks>
+    /// Last because every step above it is run from this file. And the one step that can honestly half
+    /// succeed: where the file is the image of this very process it is moved aside rather than deleted, and
+    /// the report names where it went and the line that removes it. It does not claim a clean uninstall it
+    /// did not perform.
+    /// </remarks>
+    private static void Step5RemoveExecutable(
+        CliEnvironment env,
+        UninstallPlan plan,
+        List<string> done,
+        List<string> kept,
+        List<string> problems)
+    {
+        if (plan.Executable is not { } executable)
+        {
+            // Not a bare "nothing named one". This is a build run from source -- `dotnet jason.dll`, or the
+            // build's own launcher, which is what `dotnet run` starts -- and a person reading silence here would
+            // read it as a clean uninstall of a file that is still on the machine.
+            kept.Add(
+                "This Jason is not a published single file - it is running through `dotnet`, or from a build's "
+                + "own output - so there is no one executable to remove and none was: the build it runs from is "
+                + "where it lives, and neither the muxer nor a build's launcher is an installation of Jason. A "
+                + "published release is one file, and this verb removes that one.");
+            return;
+        }
+
+        try
+        {
+            var outcome = env.Removes!.RemoveExecutable(executable);
+            done.Add(outcome.Removed ? $"Removed the executable at '{executable}'." : $"Moved the executable out of '{executable}'.");
+
+            if (outcome.Note is { } note)
+            {
+                // A copy nothing will remove is something this uninstall set out to remove and did not: a
+                // problem, and exit 1, rather than a note beside a success.
+                (outcome.LeftBehind ? problems : kept).Add(note);
+            }
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+        {
+            problems.Add($"'{executable}' could not be removed: {exception.Message}");
+            return;
+        }
+
+        string? previousLeft = null;
+        if (plan.PreviousExecutable is { } previous)
+        {
+            try
+            {
+                env.Removes!.RemoveFile(previous);
+                done.Add($"Removed '{previous}', the executable an earlier install replaced while it was running.");
+            }
+            catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+            {
+                previousLeft = previous;
+                problems.Add(
+                    $"'{previous}' could not be removed: {exception.Message} It is the executable an earlier install "
+                    + "replaced while it was running, and something may be running it still.");
+            }
+        }
+
+        if (plan.InstallDirectory is { Length: > 0 } directory)
+        {
+            try
+            {
+                if (!env.Removes!.RemoveDirectoryIfEmpty(directory) && Directory.Exists(directory))
+                {
+                    // Not "something this installer did not write" where what is left is the installer's own file,
+                    // named among the problems just above.
+                    kept.Add(previousLeft is null
+                        ? $"Kept '{directory}': something is in it that this installer did not write."
+                        : $"Kept '{directory}': '{previousLeft}' is still in it.");
+                }
+            }
+            catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+            {
+                problems.Add($"'{directory}' could not be removed: {exception.Message}");
+            }
+        }
+
+        RemoveExtractedLibraries(env, plan, done, kept, problems);
+    }
+
+    /// <summary>
+    /// What a single-file build unpacked on its first run, and the directory holding it if that is now empty.
+    /// </summary>
+    /// <remarks>
+    /// The parent is where every build of this program unpacks, one directory each: earlier versions of this
+    /// installation left theirs there, and so would another installation. None of those is this build's to
+    /// remove, so the parent goes only if nothing is left in it, and the report says why when it stays.
+    /// </remarks>
+    private static void RemoveExtractedLibraries(
+        CliEnvironment env,
+        UninstallPlan plan,
+        List<string> done,
+        List<string> kept,
+        List<string> problems)
+    {
+        if (plan.ExtractedLibraries is not { } extracted)
+        {
+            return;
+        }
+
+        try
+        {
+            env.Removes!.RemoveExtractedLibraries(extracted);
+            done.Add($"Removed the native libraries this build unpacked, at '{extracted}'.");
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+        {
+            problems.Add(
+                $"'{extracted}' could not be removed: {exception.Message} It holds only native libraries this "
+                + "build unpacked; another copy of this build still running would be holding one of them.");
+            return;
+        }
+
+        if (Path.GetDirectoryName(extracted) is not { Length: > 0 } parent)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!env.Removes!.RemoveDirectoryIfEmpty(parent) && Directory.Exists(parent))
+            {
+                kept.Add(
+                    $"Kept '{parent}': other builds of this program unpacked their libraries there too — earlier "
+                    + "versions of this installation, or another one. Nothing of this build's is left in it.");
+            }
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+        {
+            problems.Add($"'{parent}' could not be removed: {exception.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Takes the install directory off this account's PATH, in the way the installer put it on.
+    /// </summary>
+    /// <remarks>
+    /// Only where this installer wrote it. A directory somebody put on their own PATH is their line in their
+    /// own document, and a verb that removed it would be editing something it was never asked to touch.
+    /// </remarks>
+    private static void Step4RemovePathEntry(
+        CliEnvironment env,
+        UninstallPlan plan,
+        List<string> done,
+        List<string> kept,
+        List<string> problems)
+    {
+        if (plan.PathEntry is not { } entry)
+        {
+            kept.Add("Nothing named an install directory, so no PATH entry was looked for.");
+            return;
+        }
+
+        try
+        {
+            var outcome = env.Removes!.RemovePathEntry(entry);
+            if (outcome.Removed)
+            {
+                done.Add($"Took '{entry.Directory}' off the PATH in {string.Join(", ", outcome.Touched)}.");
+                return;
+            }
+
+            kept.Add(outcome.Note ?? $"'{entry.Directory}' was left on the PATH.");
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+        {
+            // Not "nothing else was left behind": this is step 4, and the executable and the data directory have not
+            // been tried yet. Whatever they come to is listed on its own.
+            problems.Add(
+                $"'{entry.Directory}' could not be taken off the PATH: {exception.Message} "
+                + "Take it off by hand; the steps after this one still ran, and each is listed.");
+        }
+    }
+
+    /// <summary>
+    /// Removes what the receipts name, root by root, and nothing else.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The record file goes <b>after</b> the files it names, and only when none of them is left. It is the one
+    /// thing that says what Jason put here, so removing it while a recorded file is still on disk would leave
+    /// a file nothing can ever account for again.
+    /// </para>
+    /// <para>
+    /// Then the directories, deepest first, and each only if nothing is left in it. A directory holding a file
+    /// the operator added stays, whole, and is reported — which is the difference between this verb and a
+    /// pattern.
+    /// </para>
+    /// </remarks>
+    private static void Step3RemoveByReceipt(
+        CliEnvironment env,
+        UninstallPlan plan,
+        UninstallOptions options,
+        List<string> done,
+        List<string> kept,
+        List<string> problems)
+    {
+        var remover = env.Removes!;
+
+        foreach (var unknown in plan.Unknown)
+        {
+            // Never guessed at. This is the file that says what Jason put here and this build cannot read it;
+            // removing what it recognises and reporting a clean uninstall is how the paths it does not
+            // recognise become nobody's.
+            problems.Add(
+                $"Nothing was removed from '{unknown.Root}': {unknown.Reason} Read the record there and "
+                + "remove what it names by hand, or leave it.");
+        }
+
+        foreach (var root in plan.Roots)
+        {
+            var removed = 0;
+            var remaining = 0;
+            var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var file in root.Files)
+            {
+                if (!file.Present)
+                {
+                    continue;
+                }
+
+                if (file.Edited && !options.Force)
+                {
+                    kept.Add($"Kept '{file.Path}': its contents are not what was installed. --force removes it.");
+                    remaining++;
+                    continue;
+                }
+
+                try
+                {
+                    remover.RemoveFile(file.Path);
+                    removed++;
+                    if (Path.GetDirectoryName(file.Path) is { Length: > 0 } directory)
+                    {
+                        directories.Add(directory);
+                    }
+                }
+                catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+                {
+                    // One file at a time, as the steps after this one do. This caught only its own refusals, which
+                    // this machine's remover never raises: a file held open or marked read-only escaped to the
+                    // catch-all, the count of what had already gone was lost, and nothing after it was attempted.
+                    problems.Add(exception is RemovalRefused ? exception.Message : $"'{file.Path}' could not be removed: {exception.Message}");
+                    remaining++;
+                }
+            }
+
+            done.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Removed {removed} file(s) of {string.Join(", ", root.Packs)} from '{root.Root}'."));
+
+            if (remaining > 0)
+            {
+                kept.Add($"Kept the record in '{root.Root}': it still names files that are there.");
+                continue;
+            }
+
+            var record = Path.Combine(root.Root, SkillsRecord.FileName);
+            try
+            {
+                remover.RemoveFile(record);
+            }
+            catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+            {
+                problems.Add(exception is RemovalRefused ? exception.Message : $"'{record}' could not be removed: {exception.Message}");
+                continue;
+            }
+
+            // Deepest first, so a skill's own directory is offered before the root that holds it.
+            foreach (var directory in directories.Append(root.Root).OrderByDescending(path => path.Length))
+            {
+                try
+                {
+                    if (!remover.RemoveDirectoryIfEmpty(directory) && Directory.Exists(directory))
+                    {
+                        kept.Add($"Kept '{directory}': something is in it that this installer did not write.");
+                    }
+                }
+                catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+                {
+                    problems.Add($"'{directory}' could not be removed: {exception.Message}");
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Stops the runtime and waits until it really is gone.
+    /// </summary>
+    /// <remarks>
+    /// Through <c>jason runtime stop</c> rather than beside it. That verb already asks <c>system.shutdown</c>
+    /// and waits for both signs of life — the descriptor and the pid — and a second implementation of "is it
+    /// really gone" is a second thing to be wrong about at the one moment being wrong is expensive. Its
+    /// output goes to a writer of this command's own, because it prints an acknowledgement meant for somebody
+    /// who typed <c>stop</c>, and what reaches this verb's caller is this verb's own report.
+    /// </remarks>
+    private static async Task<RemovalRefused?> Step2StopRuntimeAsync(
+        CliEnvironment env,
+        UninstallPlan plan,
+        UninstallOptions options,
+        List<string> done,
+        List<string> kept,
+        CancellationToken cancellationToken)
+    {
+        if (plan.RuntimePid is null && !File.Exists(env.Paths.DescriptorFile))
+        {
+            kept.Add("No runtime was running.");
+            return null;
+        }
+
+        var said = new StringWriter();
+        var exit = await RuntimeStopCommand
+            .RunAsync(env with { Out = said }, human: false, cancellationToken, options.StopTimeout, options.StopPoll)
+            .ConfigureAwait(false);
+
+        if (exit == ExitCodes.Success)
+        {
+            done.Add("Stopped the runtime.");
+            return null;
+        }
+
+        // Exit 3 is not "it stopped". `runtime stop` answers 3 for a descriptor that went between the plan and
+        // here -- and just as much for a connection refused, a request that timed out and a token the runtime
+        // rejected, with the descriptor still on disk and the process still in the table. Reading every 3 as
+        // the first carried on and removed the executable and the data directory from under a runtime that was
+        // still running. So the process table decides, the way `runtime stop` itself decides "gone".
+        var left = exit == ExitCodes.RuntimeUnavailable ? Left(env, plan) : new Runtime(true, plan.RuntimePid, null);
+        if (!left.Running)
+        {
+            done.Add(left.Note ?? "The runtime had already stopped.");
+            return null;
+        }
+
+        // A process is named for ending only once it is shown to be the runtime. One whose start could not be read
+        // may be a stranger with the runtime's old id, and ending it on this verb's word could end anything.
+        return new RemovalRefused(
+            CliErrors.RuntimeStillRunning,
+            (left.Pid, left.Identified) switch
+            {
+                ({ } pid, true) => string.Create(CultureInfo.InvariantCulture, $"The runtime, process {pid}, did not stop, "),
+                ({ } pid, false) => string.Create(CultureInfo.InvariantCulture, $"The runtime may still be running — process {pid}, which its descriptor names, is — "),
+                _ => "The runtime did not stop, ",
+            }
+            + "so nothing further was removed and this installation is as it was — "
+            + "except the logon registration, which had already been taken away and which "
+            + "'jason runtime autostart enable' puts back. "
+            + (left.Identified
+                ? "Stop the runtime with 'jason runtime stop' — or, where it does not answer that either, end that process — and run this again. "
+                : "Stop the runtime with 'jason runtime stop' and run this again. ")
+            + (left.Note is { } note ? note + " " : string.Empty)
+            + $"It said: {said.ToString().Trim()}");
+    }
+
+    /// <summary>
+    /// What is left of the runtime after <c>runtime stop</c> could not reach it: a process still in the table —
+    /// the one the plan saw, or one a descriptor on disk names now — or nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A descriptor whose process has gone is not a runtime — a crash, or a restart of the machine under it,
+    /// leaves one behind — and refusing on it would hold up every uninstall on a machine whose runtime once
+    /// died, saying it "did not stop" when nothing was running. A descriptor that cannot be read names nothing
+    /// that can be asked about, so it is refused on rather than guessed past.
+    /// </para>
+    /// <para>
+    /// <b>Nor is a process that merely has its id.</b> After a restart the id a stale descriptor recorded belongs
+    /// to whatever the machine started next under it, so "that pid is running" was answered yes about a stranger,
+    /// the verb refused, and it told the operator to end that process. The descriptor carries the moment the
+    /// runtime started; a process that started after it is somebody else's.
+    /// </para>
+    /// </remarks>
+    private static Runtime Left(CliEnvironment env, UninstallPlan plan)
+    {
+        var processes = env.Processes ?? RuntimeProcessControl.Instance;
+        if (plan.RuntimePid is { } planned && Identify(processes, planned, plan.RuntimeStartedAt, env.Paths.DescriptorFile) is { Running: true } running)
+        {
+            return running;
+        }
+
+        if (!File.Exists(env.Paths.DescriptorFile))
+        {
+            return new Runtime(false, null, null);
+        }
+
+        if (new DescriptorReader(env.Paths).Read() is not { } descriptor)
+        {
+            return new Runtime(
+                true,
+                null,
+                $"The descriptor at '{env.Paths.DescriptorFile}' cannot be read, so whether a runtime is running "
+                + "cannot be told; where none is, delete that file.",
+                Identified: false);
+        }
+
+        return Identify(processes, descriptor.Pid, descriptor.StartedAt, env.Paths.DescriptorFile);
+    }
+
+    /// <summary>
+    /// How far after the moment a runtime records as its start its own process may be read to have started, and
+    /// still be it.
+    /// </summary>
+    /// <remarks>
+    /// The process always starts first — the runtime takes the time once it is running — so this is not a window
+    /// for the order to be wrong in. It covers how coarsely a platform reports a process's start: Linux derives it
+    /// from the time since boot, to the clock tick.
+    /// </remarks>
+    private static readonly TimeSpan StartAllowance = TimeSpan.FromSeconds(5);
+
+    /// <summary>Whether the process with that id is the runtime a descriptor describes — started when it said it did.</summary>
+    private static Runtime Identify(IRuntimeProcessControl processes, int pid, DateTimeOffset? startedAt, string descriptor)
+    {
+        if (!processes.IsRunning(pid))
+        {
+            return new Runtime(false, null, $"The runtime was not running: the descriptor at '{descriptor}' was left by one whose process has gone.");
+        }
+
+        if (startedAt is not { } recorded || processes.StartTime(pid) is not { } started)
+        {
+            // Running, and not shown to be the runtime or not to be: refused on, as the runtime it may be, and never
+            // named as a process to end.
+            return processes.IsRunning(pid)
+                ? new Runtime(
+                    true,
+                    pid,
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"When process {pid} started cannot be read from here, so whether it is that runtime cannot be told; "
+                        + $"if no runtime is running, it is another program that now has the runtime's old id, and deleting "
+                        + $"the descriptor at '{descriptor}' lets this run."),
+                    Identified: false)
+                : new Runtime(false, null, $"The runtime was not running: the descriptor at '{descriptor}' was left by one whose process has gone.");
+        }
+
+        return started <= recorded + StartAllowance
+            ? new Runtime(true, pid, null)
+            : new Runtime(
+                false,
+                null,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The runtime was not running: the descriptor at '{descriptor}' was left by one that has gone, and process "
+                    + $"{pid}, which has its id now, started after it did — another program, left alone."));
+    }
+
+    /// <summary>
+    /// Whether a runtime is still there after the question, which process, anything worth saying, and whether that
+    /// process is shown to be the runtime rather than only to have its id.
+    /// </summary>
+    private sealed record Runtime(bool Running, int? Pid, string? Note, bool Identified = true);
+}

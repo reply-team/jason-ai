@@ -12,6 +12,12 @@ concurrency:
 permissions:
   contents: read
 
+# Neither the .NET SDK nor PowerShell reports telemetry from this workflow: nothing here but the checkout, the
+# toolchain and the package restore reaches the network.
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  POWERSHELL_TELEMETRY_OPTOUT: '1'
+
 jobs:
   version:
     name: The version this tree carries
@@ -117,6 +123,71 @@ jobs:
           # own exit code. Everything asserted above passed, so the step succeeded.
           exit 0
 
+      # The published executable's own uninstall, run from the file it removes, with no runtime running: the one
+      # shape the test suite cannot reach, because the suite runs as a test host and not as a single-file build.
+      # Such a build reads each assembly it has not loaded yet out of its own file, by the path it started from;
+      # once the verb has moved or deleted that file, the first new assembly fails to load. A published build
+      # once removed everything and then answered with one line about a type initializer, because its report was
+      # the first JSON it wrote. A copy is uninstalled, so the executable this job packaged stays where it is.
+      - name: Uninstall the published executable, from its own image
+        shell: pwsh
+        env:
+          EXECUTABLE: ${{ steps.package.outputs.executable }}
+        run: |
+          $scratch = Join-Path ([IO.Path]::GetTempPath()) "jason-ci-uninstall"
+          $install = Join-Path $scratch 'install'
+          $env:JASON_DATA_DIR = Join-Path $scratch 'data'
+          New-Item -ItemType Directory -Force $install, $env:JASON_DATA_DIR | Out-Null
+          $exe = Join-Path $install (Split-Path $env:EXECUTABLE -Leaf)
+          Copy-Item $env:EXECUTABLE $exe
+          # Two things Jason keeps in a data directory, and one somebody else put there.
+          New-Item -ItemType Directory -Force (Join-Path $env:JASON_DATA_DIR 'config'), (Join-Path $env:JASON_DATA_DIR 'logs') | Out-Null
+          Set-Content (Join-Path $env:JASON_DATA_DIR 'config/settings.json') '{}'
+          Set-Content (Join-Path $env:JASON_DATA_DIR 'logs/jason.log') '{}'
+          Set-Content (Join-Path $env:JASON_DATA_DIR 'marker.txt') 'the operator''s own work'
+
+          # macOS resolves the temporary directory through /private, and the executable's own path comes back
+          # resolved; the two name one file.
+          function Same([string] $a, [string] $b) { ($a -replace '^/private', '') -eq ($b -replace '^/private', '') }
+
+          $plan = (& $exe uninstall --dry-run | Out-String | ConvertFrom-Json).plan
+          if ($LASTEXITCODE -ne 0) { throw "the dry run exited $LASTEXITCODE" }
+          if (-not (Same $plan.executable $exe)) { throw "the plan names '$($plan.executable)', not the file it runs as ('$exe')" }
+          # The logon registration and the agent harnesses are this account's, not this scratch data directory's,
+          # so the uninstall below would take them too. On a fresh runner there are none; anywhere else - a
+          # developer rehearsing this step on their own machine - it refuses before anything is removed.
+          if ($plan.autostart_registered -or @($plan.roots).Count -gt 0 -or $plan.path_entry.ours) {
+              throw "this account has a logon registration, recorded skills or a PATH entry of its own; this step uninstalls a scratch copy only, and refuses here"
+          }
+          Write-Host "unpacked libraries: $($plan.extracted_libraries)"
+
+          $said = & $exe uninstall --purge-data --yes 2>&1
+          $exit = $LASTEXITCODE
+          Write-Host ($said -join "`n")
+          if ($exit -ne 0) { throw "jason uninstall exited $exit" }
+          $report = ($said | Where-Object { $_ -is [string] -and $_.StartsWith('{') }) | ConvertFrom-Json
+          if (-not $report.completed) { throw "the report says it did not complete" }
+          foreach ($gone in $exe, $install) { if (Test-Path -LiteralPath $gone) { throw "'$gone' is still there" } }
+
+          # The purge takes what Jason keeps in the data directory and keeps, byte for byte, what somebody else put
+          # there - so the directory stays, holding the operator's file and nothing else, and the report names it.
+          $left = @(Get-ChildItem -LiteralPath $env:JASON_DATA_DIR -Force | ForEach-Object Name)
+          if (($left -join ',') -ne 'marker.txt') { throw "after the purge the data directory holds '$($left -join ', ')'; only the operator's marker.txt should be left" }
+          if ((Get-Content (Join-Path $env:JASON_DATA_DIR 'marker.txt') -Raw).Trim() -ne "the operator's own work") { throw "the operator's marker was changed" }
+          if (($report.kept -join ' ') -notmatch 'marker\.txt') { throw "the report does not name the file it kept: $($report.kept -join ' | ')" }
+          if ($plan.extracted_libraries -and (Test-Path -LiteralPath $plan.extracted_libraries)) { throw "what the build unpacked is still at '$($plan.extracted_libraries)'" }
+
+          # On Windows the running image is moved aside rather than deleted, and a cleanup removes the copy
+          # once the verb has exited. The report names the directory; it has to be gone shortly afterwards.
+          if ($IsWindows) {
+            $aside = [regex]::Match(($report.kept -join ' '), "removes '([^']+)'").Groups[1].Value
+            if (-not $aside) { throw "the report names no cleanup: $($report.kept -join ' | ')" }
+            for ($i = 0; $i -lt 40 -and (Test-Path -LiteralPath $aside); $i++) { Start-Sleep -Milliseconds 250 }
+            if (Test-Path -LiteralPath $aside) { throw "the moved copy is still at '$aside' ten seconds after the verb exited" }
+          }
+
+          Write-Host "the published executable took itself off this runner and left nothing of its own behind"
+
   # The install scripts, run against the archives this run packaged, served from a local directory that holds
   # what a release would — assembled by the same script that assembles a release — with no network. Each job
   # installs three times: once told to leave the PATH alone, then twice more, so that the idempotent PATH edit
@@ -161,14 +232,17 @@ jobs:
 
       # Packaged by the action a release packages with, so what this job installs is an archive of the same
       # shape, with the same licence in it and the same digest written beside it. Only the artifact's name
-      # differs: two uploads in one run cannot share one.
+      # differs: two uploads in one run cannot share one. And it does not begin with `jason-`: the install
+      # jobs download `jason-*` and merge what they get into one directory, so an upload named like the
+      # platform ones that landed before their download put this version's archive over the real one — the
+      # file names inside are the same — beside the other artifact's fragment, and the feed refused itself.
       - name: Package the next version
         id: package
         uses: ./.github/actions/package
         with:
           rid: ${{ matrix.rid }}
           version: ${{ steps.next.outputs.next }}
-          artifact: jason-${{ matrix.rid }}-next
+          artifact: next-jason-${{ matrix.rid }}
 
       - name: Serve that version from a feed on this machine
         shell: pwsh
@@ -411,6 +485,58 @@ jobs:
           # A login shell reads the line the script wrote and finds jason by name.
           sh -l -c 'jason --version'
 
+      - name: Install into the profile bash reads, and take it back out
+        shell: bash
+        env:
+          JASON_INSTALL_FEED: ${{ github.workspace }}/feed
+        run: |
+          # bash never reads ~/.profile once ~/.bash_profile exists, which is every Fedora, RHEL and Arch
+          # account's skeleton. The installer, `jason status` and the uninstall all have to mean that file.
+          export HOME="$RUNNER_TEMP/home-bash"
+          export SHELL=/bin/bash
+          mkdir -p "$HOME"
+          printf '# mine\n' > "$HOME/.bash_profile"
+
+          sh install/install.sh
+          [ "$(grep -c '# added by jason install' "$HOME/.bash_profile")" = "1" ]
+          if [ -f "$HOME/.profile" ]; then echo "the line went to ~/.profile, which this bash never reads"; exit 1; fi
+          [ "$(bash -l -c 'command -v jason')" = "$HOME/.local/bin/jason" ]
+
+          # This shell predates the line, and a new login shell reads it: the path check says ok, and says where.
+          export JASON_DATA_DIR="$HOME/.jason"
+          "$HOME/.local/bin/jason" status > status.json || true
+          grep -q '"name":"path","required":true,"state":"ok"' status.json || { cat status.json; exit 1; }
+          grep -q '.bash_profile' status.json
+
+          # And the uninstall takes back exactly what the installer appended, and not one other byte.
+          "$HOME/.local/bin/jason" uninstall
+          printf '# mine\n' | cmp - "$HOME/.bash_profile"
+          [ ! -e "$HOME/.local/bin/jason" ]
+
+      - name: Install beside another tool with no SHELL set, and leave the line it is found through
+        shell: bash
+        env:
+          JASON_INSTALL_FEED: ${{ github.workspace }}/feed
+        run: |
+          # ~/.local/bin is where other tools install too, and once the installer's line is there they are found
+          # through it; the uninstall takes the line back only where the directory holds nothing but jason. And no
+          # SHELL at all, as in a container's build step: the installer runs under set -eu and still writes the
+          # profile every other shell reads.
+          export HOME="$RUNNER_TEMP/home-shared"
+          mkdir -p "$HOME/.local/bin"
+          printf '#!/bin/sh\necho another tool\n' > "$HOME/.local/bin/another-tool"
+          chmod 755 "$HOME/.local/bin/another-tool"
+
+          env -u SHELL sh install/install.sh
+          [ "$(grep -c '# added by jason install' "$HOME/.profile")" = "1" ]
+
+          export JASON_DATA_DIR="$HOME/.jason"
+          "$HOME/.local/bin/jason" uninstall > uninstall.json || { cat uninstall.json; exit 1; }
+          [ ! -e "$HOME/.local/bin/jason" ]
+          [ "$("$HOME/.local/bin/another-tool")" = "another tool" ]
+          [ "$(grep -c '# added by jason install' "$HOME/.profile")" = "1" ] || { echo "the uninstall took away the line another tool is found through"; exit 1; }
+          grep -q 'holds more than this installer writes there' uninstall.json || { cat uninstall.json; exit 1; }
+
   install-ps1:
     name: install.ps1 on windows
     needs: [version, build-test-publish]
@@ -455,6 +581,16 @@ jobs:
           Remove-Item Env:\JASON_DATA_DIR
           if ((UserPathEntries).Count -ne 0) { throw "-NoModifyPath edited the user PATH" }
 
+          # The account's Path as an ordinary account has it: REG_EXPAND_SZ, with an entry spelled through a variable.
+          # Through [Environment]'s pair the script expanded every such entry and wrote the whole value back as
+          # REG_SZ, which a fresh account's install turned out to do. This runner's own value is whatever the image
+          # left, so the job gives it the shape to be kept rather than hoping for one; everything already in it stays.
+          $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+          $kept = '%USERPROFILE%\jason-ci-kept'
+          $storedBefore = ((@(([string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')) -split ';' | Where-Object { $_ })) + $kept) -join ';'
+          $key.SetValue('Path', $storedBefore, [Microsoft.Win32.RegistryValueKind]::ExpandString)
+          $key.Dispose()
+
           # The same version again: nothing is downloaded, the script says so, and this time the PATH gains the directory.
           # 6>&1 because the script talks to the person in front of it with Write-Host, which goes to the
           # information stream: an assignment on its own captures nothing, and the check below would be reading
@@ -463,6 +599,16 @@ jobs:
           Write-Host $again
           if ($again -notmatch 'already installed') { throw "the second run did not say the version was already installed" }
           if ((UserPathEntries).Count -ne 1) { throw "the user PATH does not hold the directory exactly once" }
+
+          # And it kept the value's kind and every entry as it was written, variables unexpanded.
+          $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
+          $kindAfter = $key.GetValueKind('Path')
+          $storedAfter = [string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+          $key.Dispose()
+          Write-Host "user Path before: ExpandString  $storedBefore"
+          Write-Host "user Path after:  $kindAfter  $storedAfter"
+          if ($kindAfter -ne [Microsoft.Win32.RegistryValueKind]::ExpandString) { throw "the install turned the user Path from ExpandString into $kindAfter" }
+          foreach ($entry in @($storedBefore -split ';')) { if (@($storedAfter -split ';') -cnotcontains $entry) { throw "the install rewrote the user Path entry '$entry'" } }
 
           # A third run adds no second entry.
           ./install/install.ps1

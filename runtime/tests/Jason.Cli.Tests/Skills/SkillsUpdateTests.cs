@@ -134,6 +134,96 @@ public class SkillsUpdateTests
         Assert.Equal(ExitCodes.Usage, refused.Exit);
     }
 
+    /// <summary>
+    /// An update carries a harness only where a record says a deployment was made there, so an installation
+    /// made with <c>--roles-only</c> stays one.
+    /// </summary>
+    /// <remarks>
+    /// Before, it wrote the interactive and business packs into every harness it could find: the first update
+    /// after a roles-only install put into the agent's configuration exactly what the operator had declined.
+    /// </remarks>
+    [Fact]
+    public async Task An_update_after_a_roles_only_install_writes_into_no_harness()
+    {
+        using var dir = new TempPaths();
+        var source = Source(dir);
+        var install = await RunAsync(dir, ["skills", "install", "--source", source, "--roles-only"]);
+        Assert.Equal(ExitCodes.Success, install.Exit);
+
+        Change(source, "roles/researcher", "a newer body");
+        var update = await RunAsync(dir, ["skills", "update", "--root", Harness(dir)]);
+
+        Assert.Equal(ExitCodes.Success, update.Exit);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Harness(dir)));
+        Assert.Contains(
+            "a newer body",
+            await File.ReadAllTextAsync(Path.Combine(dir.Paths.RoleSkillsDirectory, "researcher", "SKILL.md"), Ct),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Each root is updated from its own record. After a full install from one source and a roles-only install
+    /// from another, the harness still comes from the first and the role root from the second.
+    /// </summary>
+    /// <remarks>
+    /// The update took the newest deployment anywhere and re-ran it everywhere: the harness was "updated" from the
+    /// roles-only source, and its record rewritten to say it had always come from there.
+    /// </remarks>
+    [Fact]
+    public async Task Each_root_is_updated_from_its_own_record()
+    {
+        using var dir = new TempPaths();
+        var first = Source(dir, "first");
+        var second = Source(dir, "second");
+        Assert.Equal(ExitCodes.Success, (await RunAsync(dir, ["skills", "install", "--source", first, "--root", Harness(dir)])).Exit);
+        Assert.Equal(ExitCodes.Success, (await RunAsync(dir, ["skills", "install", "--source", second, "--roles-only"])).Exit);
+
+        Change(first, "operating", "the first source, moved on");
+        Change(second, "operating", "the second source, which the harness never came from");
+        Change(second, "roles/researcher", "the second source's role, moved on");
+        var update = await RunAsync(dir, ["skills", "update", "--root", Harness(dir)]);
+
+        Assert.Equal(ExitCodes.Success, update.Exit);
+        Assert.Contains(
+            "the first source, moved on",
+            await File.ReadAllTextAsync(Path.Combine(Harness(dir), "operating", "SKILL.md"), Ct),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "the second source's role, moved on",
+            await File.ReadAllTextAsync(Path.Combine(dir.Paths.RoleSkillsDirectory, "researcher", "SKILL.md"), Ct),
+            StringComparison.Ordinal);
+        Assert.All(
+            Jason.Contracts.Skills.SkillsRecord.Read(Harness(dir))!.Packs,
+            deployment => Assert.Equal(first, deployment.Source));
+    }
+
+    /// <summary>
+    /// A directory source is recorded as the full path, so an update finds it from anywhere. <c>--source .</c>
+    /// was recorded as <c>.</c>, and the update worked only from the directory the install had been run in.
+    /// </summary>
+    [Fact]
+    public async Task A_directory_source_is_recorded_as_a_full_path()
+    {
+        using var dir = new TempPaths();
+        var source = Source(dir);
+
+        // Relative to where this runs, where there is such a path. On a machine whose checkout and temporary
+        // directory are on two drives there is none, and the source is spelled through `..` instead: a spelling
+        // that is not the full path either, and was recorded as typed all the same.
+        var relative = Path.GetRelativePath(Environment.CurrentDirectory, source);
+        var spelled = Path.IsPathRooted(relative) ? Path.Combine(source, "..", Path.GetFileName(source)) : relative;
+        Assert.NotEqual(source, spelled);
+
+        Assert.Equal(ExitCodes.Success, (await RunAsync(dir, ["skills", "install", "--source", spelled, "--root", Harness(dir)])).Exit);
+
+        Assert.All(
+            Jason.Contracts.Skills.SkillsRecord.Read(Harness(dir))!.Packs,
+            deployment => Assert.Equal(source, deployment.Source));
+        Assert.All(
+            Jason.Contracts.Skills.SkillsRecord.Read(dir.Paths.RoleSkillsDirectory)!.Packs,
+            deployment => Assert.Equal(source, deployment.Source));
+    }
+
     private static string Harness(TempPaths dir) =>
         Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
 
@@ -155,9 +245,9 @@ public class SkillsUpdateTests
         return (exit, output.ToString(), error.ToString());
     }
 
-    private static string Source(TempPaths dir)
+    private static string Source(TempPaths dir, string name = "source")
     {
-        var root = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "source")).FullName;
+        var root = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, name)).FullName;
         Skill(Path.Combine(root, "skills", "runtime", "operating"), "operating", "body");
         Skill(Path.Combine(root, "skills", "runtime", "roles", "researcher"), "researcher", "body");
         Skill(Path.Combine(root, "skills", "business", "campaign-planning"), "campaign-planning", "body");

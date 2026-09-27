@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Jason.Runtime.Tests.Plugins.Reply;
@@ -489,10 +490,31 @@ public sealed class ReplyAccount : IDisposable
         return this;
     }
 
+    /// <summary>
+    /// One of the account's files, read while the stand-in — another process — may be rewriting it. A plain read
+    /// refuses a file another process holds open for writing, and a read that lands between the rewrite's truncation
+    /// and its last byte parses nothing whole. Both are the write in progress, so the file is read again.
+    /// </summary>
     private JsonNode? Read(string fileName)
     {
         var file = Path.Combine(Root, fileName);
-        return File.Exists(file) ? JsonNode.Parse(File.ReadAllText(file)) : null;
+        for (var attempt = 1; ; attempt++)
+        {
+            if (!File.Exists(file))
+            {
+                return null;
+            }
+
+            try
+            {
+                using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                return JsonNode.Parse(stream);
+            }
+            catch (Exception exception) when (attempt < 200 && exception is IOException or JsonException)
+            {
+                Thread.Sleep(25);
+            }
+        }
     }
 
     private JsonArray ReadArray(string fileName) => Read(fileName) as JsonArray ?? [];

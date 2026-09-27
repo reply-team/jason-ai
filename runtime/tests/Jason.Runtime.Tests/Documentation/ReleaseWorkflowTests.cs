@@ -825,6 +825,9 @@ public class ReleaseWorkflowTests
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
+        // PowerShell reports telemetry over the network unless told not to, and no test in this repository
+        // reaches the network.
+        start.Environment["POWERSHELL_TELEMETRY_OPTOUT"] = "1";
         start.ArgumentList.Add("-NoProfile");
         start.ArgumentList.Add("-NonInteractive");
         foreach (var argument in args)

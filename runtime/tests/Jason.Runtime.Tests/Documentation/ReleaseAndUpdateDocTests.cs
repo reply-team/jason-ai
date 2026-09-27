@@ -233,21 +233,33 @@ public class ReleaseAndUpdateDocTests
     }
 
     /// <summary>
-    /// The applier ships before there is anything for it to apply, and the very first release cannot carry it
-    /// at all — the first tag is cut from a <c>main</c> that predates this work. Both sentences are for the
-    /// same reader: the one who installed Jason today and typed <c>jason update apply</c>.
+    /// What somebody who typed <c>jason update apply</c> on a fresh installation needs to know, stated as the
+    /// rule rather than as today's state: where the feed names no release there is nothing to apply.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sentence that used to be here said the first release could not carry the applier <em>at all</em>,
+    /// because the first tag was expected from a <c>main</c> that predated it. That stopped being true four
+    /// merges ago, and this guard is what kept the sentence alive: a false claim with a green test behind it
+    /// is the sharpest form of this defect class, because the test is the reason nobody reread the sentence.
+    /// </para>
+    /// <para>
+    /// The negative assertion is deliberate and is the one retraction here. A scan for an absent phrase is
+    /// only the right shape because the positive assertion above it is what carries the claim; on its own it
+    /// would pass on an empty page.
+    /// </para>
+    /// </remarks>
     [Fact]
-    public void The_page_says_the_applier_has_nothing_to_apply_until_the_first_release()
+    public void The_page_says_what_an_applier_does_where_the_feed_names_no_release()
     {
         var page = Read();
 
         var nothing = Assert.Single(
             Paragraphs(),
-            paragraph => paragraph.Contains("nothing to apply until the first release", StringComparison.Ordinal));
+            paragraph => paragraph.Contains("nothing to apply until one is published", StringComparison.Ordinal));
 
-        Assert.Contains("0.1.0` installation has no `jason update apply", nothing, StringComparison.Ordinal);
-        Assert.Contains("install one-liner", nothing, StringComparison.Ordinal);
+        Assert.Contains("update_feed_unreachable", nothing, StringComparison.Ordinal);
+        Assert.DoesNotContain("predates this work", page, StringComparison.Ordinal);
 
         // And why the one-liner itself answers nothing until then, which is the same fact from the other end.
         Assert.Contains("404", page, StringComparison.Ordinal);
@@ -512,7 +524,7 @@ public class ReleaseAndUpdateDocTests
     public void The_page_says_where_the_autostart_document_lives_among_the_others()
     {
         var page = Read();
-        var directories = page[page.IndexOf("## 9. Where things live", StringComparison.Ordinal)..];
+        var directories = page[page.IndexOf("## 10. Where things live", StringComparison.Ordinal)..];
 
         Assert.Contains("autostart", directories, StringComparison.Ordinal);
         Assert.Contains("LaunchAgents", directories, StringComparison.Ordinal);

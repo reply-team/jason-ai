@@ -73,7 +73,7 @@ public class UpdateRefusalTests
             OperatingSystem.IsWindows() ? @"C:\Program Files\dotnet\dotnet.exe" : "/usr/share/dotnet/dotnet",
             Path.Combine("opt", "jason", "jason.dll"));
 
-        var refused = Assert.Throws<UpdateException>(() => UpdateApplier.ResolveInstallPath(muxer));
+        var refused = Assert.Throws<UpdateException>(() => UpdateApplier.ResolveInstallPath(muxer, singleFile: false));
 
         Assert.Equal(UpdateCodes.NotUpdatable, refused.Code);
         Assert.False(refused.Retryable, "the same installation will be the same installation next time");
@@ -82,7 +82,22 @@ public class UpdateRefusalTests
 
         // And a published installation is exactly the file it is running, which is the file an update replaces.
         var published = Path.Combine("opt", "jason", ReleaseAssets.ExecutableName);
-        Assert.Equal(published, UpdateApplier.ResolveInstallPath(SelfExecutable.Resolve(published, "jason.dll")));
+        Assert.Equal(published, UpdateApplier.ResolveInstallPath(SelfExecutable.Resolve(published, "jason.dll"), singleFile: true));
+    }
+
+    /// <summary>
+    /// Nor is a build's own launcher one file: <c>dotnet run --project runtime/src/Jason.App</c> starts
+    /// <c>bin/Debug/net10.0/jason</c>, one file of many, whose process path is that launcher. An update that
+    /// replaced it would be replacing a build output.
+    /// </summary>
+    [Fact]
+    public void A_build_run_from_its_own_launcher_says_so_rather_than_replacing_it()
+    {
+        var launcher = SelfExecutable.Resolve(Path.Combine("repo", "runtime", "src", "Jason.App", "bin", "Debug", "net10.0", ReleaseAssets.ExecutableName), "jason.dll");
+
+        var refused = Assert.Throws<UpdateException>(() => UpdateApplier.ResolveInstallPath(launcher, singleFile: false));
+
+        Assert.Equal(UpdateCodes.NotUpdatable, refused.Code);
     }
 
     /// <summary>

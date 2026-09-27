@@ -26,8 +26,27 @@ public class DocumentedPageCommandsTests
     private static readonly string[] Nouns =
     [
         "jason profile ", "jason rolenote ", "jason campaign ", "jason workitem ", "jason decision ", "jason update ",
-        "jason runtime autostart ", "jason status", "jason skills ",
+        // Two lists called Nouns, two different questions. VerbMapTests.Nouns is "top-level names that are
+        // nouns", and `uninstall` is not one -- it is declared there beside `status`, as a name no operation
+        // stands behind. This list is "command prefixes whose printed lines this guard types", where the
+        // prefix is only how a line is recognised in a page.
+        "jason runtime autostart ", "jason status", "jason skills ", "jason uninstall",
     ];
+
+    /// <summary>
+    /// Lines typed whole rather than by prefix. <c>docs/INSTALL.md</c> prints eighteen <c>jason</c> lines and
+    /// these four went untyped while the commit and the pull request said every line was; a prefix would also
+    /// catch prose, such as the README prompt's "…other than through jason runtime start." at the end of a
+    /// sentence.
+    /// </summary>
+    /// <remarks>
+    /// Safe to type, all four: <c>--version</c> prints a string, <c>status</c> and <c>stop</c> find no
+    /// descriptor in this test's data directory, and <c>start</c> launches through the recording process table
+    /// below, whose child has already exited — nothing is started. What stays untyped on these pages, and why:
+    /// <c>jason runtime run</c>, which keeps a runtime in the foreground of this very process and does not
+    /// return, and <c>jason runtime restart</c>, which starts one; neither is printed as a line here today.
+    /// </remarks>
+    private static readonly string[] Lines = ["jason --version", "jason runtime start", "jason runtime status", "jason runtime stop"];
 
     /// <summary>The pages whose printed commands are guarded.</summary>
     private static readonly string[] Pages =
@@ -39,6 +58,7 @@ public class DocumentedPageCommandsTests
         Path.Combine("docs", "execution-profiles.md"),
         Path.Combine("docs", "campaign-manager.md"),
         Path.Combine("docs", "release-and-update.md"),
+        Path.Combine("docs", "INSTALL.md"),
     ];
 
     public static TheoryData<string, string> DocumentedCommands()
@@ -84,7 +104,35 @@ public class DocumentedPageCommandsTests
     public void Every_guarded_noun_is_printed_by_a_page(string noun) =>
         Assert.Contains(Printed(), printed => printed.Command.StartsWith(noun, StringComparison.Ordinal));
 
-    public static TheoryData<string> GuardedNouns() => [.. Nouns];
+    public static TheoryData<string> GuardedNouns() => [.. Nouns, .. Lines];
+
+    /// <summary>
+    /// Every <c>jason</c> line the install page prints in a code block is typed — all of them, so that the
+    /// sentence saying so is a fact this test keeps rather than a claim in a commit message.
+    /// </summary>
+    [Fact]
+    public void Every_jason_line_the_install_page_prints_is_typed()
+    {
+        var printed = Printed().Where(line => line.Page == Path.Combine("docs", "INSTALL.md")).Select(line => line.Command).ToHashSet(StringComparer.Ordinal);
+        var inBlocks = new List<string>();
+        var fenced = false;
+        foreach (var line in File.ReadAllText(Path.Combine(RepositoryRoot(), "docs", "INSTALL.md")).Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        {
+            if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
+            {
+                fenced = !fenced;
+                continue;
+            }
+
+            if (fenced && line.Trim().StartsWith("jason ", StringComparison.Ordinal))
+            {
+                inBlocks.Add(line.Trim());
+            }
+        }
+
+        Assert.True(inBlocks.Count >= 18, $"the install page printed {inBlocks.Count} jason lines; the reading above has stopped finding them.");
+        Assert.All(inBlocks, line => Assert.Contains(line, printed));
+    }
 
     /// <summary>
     /// The machine every printed line is typed against: a data directory of this test's own, no network, and a
@@ -102,10 +150,18 @@ public class DocumentedPageCommandsTests
             error,
             dir.Paths,
             new Unreachable(),
-            Processes: new Process.FakeProcessControl(),
+            // A child that has already exited: `jason runtime start` is one of the lines typed, and a launch
+            // must start nothing and must not wait out the verb's thirty seconds for a descriptor.
+            Processes: new Process.FakeProcessControl { OnLaunch = _ => new Process.FakeProcessHandle(4242) { HasExited = true, ExitCode = 1 } },
             Autostart: new Autostart.RecordingRegistrar(),
             Harnesses: Jason.Cli.Skills.HarnessLocators.At(dir.Paths.Root),
-            Programs: new Process.FakeProgramRunner());
+            Programs: new Process.FakeProgramRunner(),
+            // The fourth seam this guard has to supply, for the same reason as the third. These lines are
+            // typed for real, and one of the nouns above now removes files, edits this account's PATH and
+            // deletes an executable it resolves for itself -- which, with no InstallPath given, is the test
+            // host. A remover that records rather than removes is the only safe one here, and forgetting it
+            // costs a refusal rather than a developer's PATH.
+            Removes: new Uninstall.RecordingRemover());
 
     /// <summary>
     /// Every request refused before it leaves the process. Most of these commands never get this far — there is
@@ -160,7 +216,7 @@ public class DocumentedPageCommandsTests
         foreach (var line in joined.Split('\n'))
         {
             var trimmed = line.Trim();
-            if (Nouns.Any(noun => trimmed.StartsWith(noun, StringComparison.Ordinal)))
+            if (Nouns.Any(noun => trimmed.StartsWith(noun, StringComparison.Ordinal)) || Lines.Contains(trimmed, StringComparer.Ordinal))
             {
                 yield return trimmed;
             }

@@ -30,8 +30,8 @@ public sealed record StagedSource(string Directory, string Source, string Ref, b
 /// <para>
 /// A release archive is frozen at a version, and the business pack is refreshed on a cadence that has nothing
 /// to do with runtime releases — a person who installed in March should be able to take this month's practice
-/// without updating the runtime. Pulling from git is also what makes installation work before any release
-/// exists, which today is the only way it can work at all.
+/// without updating the runtime. And a build from source has a working tree of its own to take them from, so
+/// its skills never depend on a release existing at all: <c>--source</c> names that tree.
 /// </para>
 /// <para>
 /// From a pinned ref and never a moving branch, so that two people installing on the same day get the same
@@ -86,9 +86,12 @@ public static class SkillsSource
 
         if (Directory.Exists(where))
         {
+            // Recorded as the full path, never as typed. `--source .` was recorded as ".", so `jason skills
+            // update` -- which re-runs against the record's source -- worked only from the directory the install
+            // had been run in, and anywhere else answered that "." held no skills.
             var local = Path.GetFullPath(where);
             RequirePacks(local, where);
-            return new StagedSource(local, where, overridden ? pin : "(a directory, read where it stands)", overridden, null);
+            return new StagedSource(local, local, overridden ? pin : "(a directory, read where it stands)", overridden, null);
         }
 
         if (env.Programs is not { } runner)

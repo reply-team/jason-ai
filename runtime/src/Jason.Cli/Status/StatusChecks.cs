@@ -4,7 +4,9 @@ using Jason.Cli.Autostart;
 using Jason.Cli.Discovery;
 using Jason.Cli.Http;
 using Jason.Cli.Skills;
+using Jason.Cli.Uninstall;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
 
@@ -28,17 +30,34 @@ namespace Jason.Cli.Status;
 internal static class StatusChecks
 {
     /// <summary>
-    /// The repairs a check can print, named in one place.
+    /// Every repair a check can print, composed in one place — and there are two kinds of them.
     /// </summary>
     /// <remarks>
-    /// They were null until the verb existed, deliberately: a check whose repair is a command this build does
-    /// not answer teaches a person the tool is broken at the moment they most need it not to be. The guard
-    /// beside this one types every repair printed here, so the commit that shipped the verb is the commit that
-    /// turned these on and proved them.
+    /// <para>
+    /// Most are <c>jason</c> commands, and a guard types every one: a check whose repair is a command this
+    /// build does not answer teaches a person the tool is broken at the moment they most need it not to be.
+    /// They were null until the verb existed, deliberately, so that the commit shipping a verb is the commit
+    /// that turns its repairs on and proves them.
+    /// </para>
+    /// <para>
+    /// One of them is not a <c>jason</c> command and cannot be. Putting this executable on the PATH is the
+    /// shell's own act and no verb of this product's performs it; inventing <c>jason path add</c> so that a
+    /// guard's sentence could stay short would be a verb that exists for a test. So a repair may also be a
+    /// line for this machine's own shell, and the guard checks that kind by rules of its own: it is not
+    /// empty, it names a directory that is really there, and it is written for the platform it was composed
+    /// on.
+    /// </para>
+    /// <para>
+    /// What holds of both kinds is that every repair is composed <em>here</em>. That sentence was written
+    /// before it was true: the PATH repair arrived as a method further down this file, outside the class the
+    /// guard slices, and three checks were passing their line as a literal that happened to duplicate a
+    /// constant beside it. Neither was visible to a guard claiming to reach every repair, which is the defect
+    /// that guard exists to prevent — so a second guard now reads every <c>new StatusCheck</c> in these
+    /// sources and refuses a repair spelled anywhere but here.
+    /// </para>
     /// </remarks>
     private static class Repair
     {
-        /// <summary>Every repair this verb can print lives here, and a guard types all of them.</summary>
         public const string Start = "jason runtime start";
 
         public const string Restart = "jason runtime restart";
@@ -47,15 +66,61 @@ internal static class StatusChecks
 
         public const string EnableAutostart = "jason runtime autostart enable";
 
+        /// <summary>The harness half as well as the role half: the repair for an agent harness nothing was deployed to.</summary>
         public const string Install = "jason skills install";
 
         /// <summary>
-        /// Deliberately the same as <see cref="Install"/>. Overwriting is not what repairs a role whose
+        /// The role skills alone, into the runtime's own directory — the repair for the required check, which
+        /// must never cost the optional half.
+        /// </summary>
+        /// <remarks>
+        /// It was <see cref="Install"/>, which also writes the interactive and business packs into the agent's
+        /// own configuration. So an operator who would not let Jason write there — an agent told to change
+        /// nothing outside the install and data directories, which is what the README's prompt tells it —
+        /// could not repair a required check without breaking that rule, and stopped rather than reach ready.
+        /// </remarks>
+        public const string InstallRoles = "jason skills install --roles-only";
+
+        /// <summary>
+        /// Deliberately the same as <see cref="InstallRoles"/>. Overwriting is not what repairs a role whose
         /// directory is missing a SKILL.md or is over the cap -- a plain install replaces it -- and --force
         /// overwrites every edited file in every root of the plan, so printing it as the repair for any role
         /// problem would cost an operator unrelated work for a problem that did not need it.
         /// </summary>
-        public const string Reinstall = Install;
+        public const string Reinstall = InstallRoles;
+
+        /// <summary>
+        /// The repair that is not a <c>jason</c> command: the line putting this executable's directory on
+        /// this account's PATH, spelled as this product's own installer spells it.
+        /// </summary>
+        /// <remarks>
+        /// Null where nothing named an executable, or where this account has no home to write into. There is
+        /// then no directory to name, and a repair reading "add  to your PATH" is worse than none.
+        /// </remarks>
+        public static string? OnPath(CliEnvironment env)
+        {
+            // Never `Environment.ProcessPath`: under `dotnet jason.dll` that is the muxer, and this would
+            // print "put C:\Program Files\dotnet on your PATH" as the way to make `jason` typeable -- and under
+            // `dotnet run` it is the build's own launcher, and this printed the build directory.
+            var executable = env.InstallPath ?? SelfExecutable.InstalledImage;
+            if (executable is null || System.IO.Path.GetDirectoryName(executable) is not { Length: > 0 } directory)
+            {
+                return null;
+            }
+
+            if (OperatingSystem.IsWindows())
+            {
+                return PathEntry.RegistryCommand(directory);
+            }
+
+            // Into the profile this shell reads at login, and exported for the shell it is typed in. The bare
+            // export line lasts exactly one shell: printed as a repair it is advice that appears to have
+            // worked, and it left the two platforms' repairs differing in kind with neither saying so.
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            return home.Length == 0
+                ? null
+                : PathEntry.AppendCommand(directory, PathEntry.LoginProfile(home, Environment.GetEnvironmentVariable("SHELL")));
+        }
     }
 
     /// <summary>
@@ -116,7 +181,7 @@ internal static class StatusChecks
         }
 
         return info is null
-            ? new StatusCheck("runtime", true, CheckState.Failed, $"A descriptor names {descriptor.BaseUrl} and nothing answered there.", "jason runtime start")
+            ? new StatusCheck("runtime", true, CheckState.Failed, $"A descriptor names {descriptor.BaseUrl} and nothing answered there.", Repair.Start)
             : new StatusCheck("runtime", true, CheckState.Ok, $"Running: version {info.RuntimeVersion}, pid {info.Pid.ToString(CultureInfo.InvariantCulture)}, data directory {info.DataDir}.", null);
     }
 
@@ -129,7 +194,7 @@ internal static class StatusChecks
 
         var applied = info.Database.AppliedMigrations.Count;
         return applied == 0
-            ? new StatusCheck("migrations", true, CheckState.Failed, "The database has no migrations applied.", "jason runtime restart")
+            ? new StatusCheck("migrations", true, CheckState.Failed, "The database has no migrations applied.", Repair.Restart)
             : new StatusCheck("migrations", true, CheckState.Ok, string.Create(CultureInfo.InvariantCulture, $"{applied} migrations applied."), null);
     }
 
@@ -143,7 +208,7 @@ internal static class StatusChecks
         // Zero plugins is alive. A registry that refused its last load is not, and that is the state worth
         // telling apart: nothing is loaded, on purpose, and nothing will run until somebody looks at why.
         return info.Plugins.LastReloadActivated == false
-            ? new StatusCheck("plugin_registry", true, CheckState.Failed, "The last plugin load was rejected, so nothing is active.", "jason plugin reload")
+            ? new StatusCheck("plugin_registry", true, CheckState.Failed, "The last plugin load was rejected, so nothing is active.", Repair.ReloadPlugins)
             : new StatusCheck(
                 "plugin_registry",
                 true,
@@ -207,7 +272,7 @@ internal static class StatusChecks
                 string.Create(
                     CultureInfo.InvariantCulture,
                     $"{untaught.Count} of {seeded.Count} seeded roles have no skill, so they would launch untaught: {string.Join(", ", untaught)}."),
-                Repair.Install);
+                Repair.InstallRoles);
         }
 
         var stranger = deployed.Except(seeded).Order(StringComparer.Ordinal).ToList();
@@ -219,20 +284,79 @@ internal static class StatusChecks
             "role_skills",
             true,
             CheckState.Ok,
-            string.Create(CultureInfo.InvariantCulture, $"{deployed.Count} roles taught, all within the {skills.MaxSkillBytes}-byte cap.{note}"),
+            string.Create(CultureInfo.InvariantCulture, $"{deployed.Count} roles taught, all within the {skills.MaxSkillBytes}-byte cap.{note}{Deployment(skills.RoleSkillsDirectory)}"),
             null);
+    }
+
+    /// <summary>
+    /// What the record in the role root says was put there: which pack, from which ref.
+    /// </summary>
+    /// <remarks>
+    /// Here, because this is the check whose subject that root is. It used to be reported by the harness
+    /// check, which is about the person's own harnesses and was answering about a directory that is not one.
+    /// A root with no record is not a problem for this check to raise -- the roles are on disk, which is what
+    /// it asks -- so it simply says nothing.
+    /// </remarks>
+    private static string Deployment(string roleSkillsRoot)
+    {
+        try
+        {
+            var record = SkillsRecord.Read(roleSkillsRoot);
+            var packs = record?.Packs ?? [];
+            return packs.Count == 0
+                ? string.Empty
+                : " Deployed: " + string.Join(", ", packs.Select(pack => $"{pack.Pack} at {pack.Ref}")) + ".";
+        }
+        catch (SkillsRecordUnreadable unreadable)
+        {
+            return $" The record there could not be read: {unreadable.Message}";
+        }
     }
 
     /// <summary>
     /// Whether the product can be typed by name, and which file answers when it is. Both halves matter: a
     /// second installation earlier on PATH is why a person's <c>jason</c> is a version they did not install.
     /// </summary>
+    /// <remarks>
+    /// It stays <b>required</b>. Everything this product documents for an agent -- the README prompt,
+    /// <c>docs/INSTALL.md</c> -- tells it to type <c>jason</c>, and an installation where that name resolves
+    /// to nothing cannot do the work, whatever else is true. What was missing was the repair, not the
+    /// requirement.
+    /// </remarks>
     private static StatusCheck Path(CliEnvironment env)
     {
         var resolved = Executables.OnPath("jason", env.SearchPath);
+        if (resolved is null && Persisted(env) is { } persisted)
+        {
+            // Two different facts had one answer. The PATH this process inherited is the shell's, fixed when
+            // that shell started; the one this account keeps is what every shell started afterwards reads. In
+            // the shell the installer ran in, the first does not carry Jason and the second does -- and this
+            // check said `failed` there, beside a repair that appended the directory a second time. The
+            // installation is right and the shell is old, so the check says so, and says how to reach it here.
+            return new StatusCheck(
+                "path",
+                true,
+                CheckState.Ok,
+                $"'jason' does not resolve in this shell, but {persisted.Where} carries {persisted.Directory}, so {persisted.Reader} started from now on finds it: this one started before it was put there. Here, type it by its full path, {persisted.Executable}.",
+                null);
+        }
+
         if (resolved is null)
         {
-            return new StatusCheck("path", true, CheckState.Failed, "'jason' does not resolve on PATH, so nothing can be typed by name.", null);
+            // Required, and now with the line that fixes it. This check is the one a from-source
+            // installation fails, and it failed with `Fix: null` -- so the verdict was "not ready" and the
+            // whole repair list was somebody else's optional check. A required failure with nothing to do
+            // about it tells a person the tool is broken at the moment they most need it not to be.
+            //
+            // The line is not invented here: it is the one this product's own installer writes, composed by
+            // the same rule `jason uninstall` reads backwards. One definition of "how Jason goes on a PATH"
+            // serves the installer, this repair and the removal.
+            return new StatusCheck(
+                "path",
+                true,
+                CheckState.Failed,
+                "'jason' does not resolve on PATH, so nothing can be typed by name.",
+                Repair.OnPath(env));
         }
 
         var running = env.InstallPath;
@@ -247,6 +371,50 @@ internal static class StatusChecks
         }
 
         return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
+    }
+
+    /// <summary>
+    /// Where this account keeps the directory of the file answering here on its PATH for shells not yet
+    /// started, or null where it does not — or where that cannot be read, which leaves the check as it was.
+    /// </summary>
+    /// <remarks>
+    /// Read through the seam that owns the machine, the same read <c>jason uninstall</c> plans by: this
+    /// account's registry on Windows, its login profiles on Unix. A reader that worked it out here would be a
+    /// second definition of "how Jason is on a PATH", and this file already had to be taught once that there
+    /// is only one.
+    /// </remarks>
+    private static (string Where, string Directory, string Reader, string Executable)? Persisted(CliEnvironment env)
+    {
+        // Never `Environment.ProcessPath`, for the reason the repair gives: under `dotnet jason.dll` that is
+        // the muxer, and under `dotnet run` a build's launcher.
+        var executable = env.InstallPath ?? SelfExecutable.InstalledImage;
+        if (env.Removes is not { } machine || executable is null || System.IO.Path.GetDirectoryName(executable) is not { Length: > 0 } directory)
+        {
+            return null;
+        }
+
+        PathEntryPlan entry;
+        try
+        {
+            entry = machine.ReadPathEntry(directory);
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return null;
+        }
+
+        // Whether a new shell finds it, which is not whether Jason put it there: a directory on the Path by
+        // somebody else's hand is found all the same. And on Unix the one file this account's login shell reads,
+        // matched as a whole line: any profile at all carrying the text anywhere used to be enough, so a line in
+        // ~/.profile that a bash with a ~/.bash_profile never reads -- or one commented out -- said `ok`.
+        if (entry.Persisted is not { } where)
+        {
+            return null;
+        }
+
+        return OperatingSystem.IsWindows()
+            ? (where, directory, "a shell", executable)
+            : (where, directory, "a login shell", executable);
     }
 
     private static StatusCheck ProviderPlugin(SystemInfoResponse? info) =>
@@ -362,9 +530,13 @@ internal static class StatusChecks
             return new StatusCheck("harness_skills", false, CheckState.Unknown, "This environment does not detect agent harnesses.", null);
         }
 
-        // The runtime's own root as well as the person's. A deployment writes a record into both, and the
-        // one the documents call not optional was the one nothing read -- so "jason status reports it" was
-        // true of half of what the installer records.
+        // The harness roots, and only them. Appending the runtime's own role root here made this check answer
+        // `ok` on the strength of a root that is not a harness -- naming it, while the harness it had
+        // detected held nothing and the skills that really landed went unmentioned. The `absent` branch named
+        // only the detected harnesses, so the two branches disagreed about what the check was even about.
+        //
+        // Nothing is lost by taking it out: `role_skills` is required, its subject is that root, and it now
+        // reports the pack and ref the record there names.
         var roots = locator.Detect();
         if (roots.Count == 0)
         {
@@ -372,7 +544,7 @@ internal static class StatusChecks
         }
 
         var deployed = new List<string>();
-        foreach (var root in roots.Select(root => root.Directory).Append(env.Paths.RoleSkillsDirectory).Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var root in roots.Select(root => root.Directory).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             try
             {

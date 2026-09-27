@@ -21,6 +21,7 @@ text and they are meant to stay that way.
 ```sh
 jason skills install --dry-run
 jason skills install
+jason skills install --roles-only
 jason skills update
 ```
 
@@ -38,8 +39,9 @@ These are the rules both verbs keep:
 
 - **Skills are pulled from git, never from the release bundle.** A release archive is frozen at a
   version; the business pack is refreshed on its own cadence, and a person who installed Jason in
-  March should be able to take this month's SDR knowledge without updating the runtime. It also means
-  installation works before any release exists, which today is the only way it can work at all.
+  March should be able to take this month's SDR knowledge without updating the runtime. And a build from
+  source takes them from its own working tree with `--source`, so its skills never depend on a release
+  existing at all.
 - **From a pinned ref, not a moving branch.** A floating default would mean two people installing on
   the same day could get different texts, and nothing could then say whether a deployment is current.
   The pin is derived from the build rather than written down — `v` and its own release version, through
@@ -59,6 +61,13 @@ These are the rules both verbs keep:
   directory, where the runtime reads them at every launch to teach a role its job; the interactive
   and business packs go to the agent harnesses a person actually uses. The first is not optional: a
   runtime with no role skills launches every role untaught.
+- **So the first can be deployed on its own.** `--roles-only` writes into the runtime's own directory and
+  into no agent harness, and it is what `jason status` prints as the repair for `role_skills`. The harness
+  half is somebody's own agent configuration, and a required check whose only repair also wrote there could
+  not be repaired by anybody who would not allow that. `update` carries a root only where its record says a
+  deployment was made, and each pack in it from the source and ref that record names — so an installation
+  taught with `--roles-only` stays that way, and a harness installed from one source is not updated from
+  another. A directory source is recorded as its full path, so `update` finds it from anywhere.
 - **Nothing is written until the whole tree is known to be deliverable.** The runtime refuses to launch
   a role whose skill names itself differently from its directory, or whose tree is over
   `Roles:MaxSkillBytes`. A deployment that wrote such a tree would turn a role with no skill — which
@@ -87,6 +96,12 @@ These are the rules both verbs keep:
   half of them is worse: you would have to work out which half. `--force` is the word that says
   otherwise. A file that merely differs from the source while still matching the record is out of date
   rather than edited, and is simply written — which is what the digest per file is for.
+- **And an uninstall removes by that record, or keeps what it cannot account for.** `jason uninstall`
+  removes the paths the record names and nothing else, then the record, then each directory only if
+  nothing is left in it — so a skill you put in the same root, and a file you added inside one of Jason's,
+  both stay. A recorded file whose bytes are no longer the bytes the record names is your edit, and it is
+  reported and kept unless `--force`; the record stays with it, because a receipt removed while the file
+  it names is still there leaves a file nothing can account for again.
 - **A deployment whose record never landed is completed rather than trusted**, and says so. The record is
   written last, so a crash half-way through reads as incomplete next time; a root that silently repaired
   itself would hide that something went wrong once.

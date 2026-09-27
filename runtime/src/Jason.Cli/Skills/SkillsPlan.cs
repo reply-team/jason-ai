@@ -72,9 +72,13 @@ public static class SkillsPlanner
     /// What would be written where. A refusal here is a refusal of the whole deployment: a half-written role
     /// root is worse than an empty one, because the launcher refuses what it cannot make sense of.
     /// </summary>
+    /// <param name="roleRoot">
+    /// The runtime's own role skills root, or null to leave it out: an update carries a root only where that
+    /// root's own record says what it came from.
+    /// </param>
     public static SkillsPlan Compose(
         StagedSource source,
-        string roleRoot,
+        string? roleRoot,
         IReadOnlyList<HarnessRoot> harnesses,
         int cap,
         bool capFromRuntime,
@@ -94,7 +98,7 @@ public static class SkillsPlanner
         if (Wanted(onlyPack, SkillPacks.Runtime))
         {
             var roles = Path.Combine(runtimePack, "roles");
-            if (Directory.Exists(roles))
+            if (roleRoot is not null && Directory.Exists(roles))
             {
                 packs.Add(new PlannedPack(SkillPacks.Runtime, roleRoot, [.. Units(roles, roleRoot, cap, isRole: true, refusals)]));
             }
@@ -132,6 +136,20 @@ public static class SkillsPlanner
             if (!isRole && string.Equals(name, "roles", StringComparison.Ordinal))
             {
                 // The roles directory is a pack of its own with a different destination, not a skill.
+                continue;
+            }
+
+            // A directory whose name begins with a dot is metadata beside the skills rather than one of them.
+            // A host discovers a skill at `<root>/<name>/SKILL.md` and offers it under `<name>`, which nobody
+            // publishes as `.claude-plugin` -- and both packs here carry exactly such a directory, the skills
+            // marketplace manifest. Refusing them refused the whole deployment on this repository's own tree:
+            // the one source `docs/INSTALL.md` tells a stranger to install from.
+            //
+            // By the shape rather than by the name. A list holding `.claude-plugin` would be a rule against
+            // the one spelling somebody had thought of, which is how `--ref ..` got through a filter that
+            // kept dots.
+            if (name.StartsWith('.'))
+            {
                 continue;
             }
 
@@ -173,11 +191,21 @@ public static class SkillsPlanner
 
         // Before anything is written, in every mode and not only under --dry-run. Writing into somebody's home
         // directory is not a silent act.
+        //
+        // And in the same words either way. This printed "Writing:" before validation had finished, so a run
+        // that then refused read "Writing: ... Writing: ... Nothing was written." -- the present tense for a
+        // decision not yet taken. What differs between a dry run and a real one is what happens next, not
+        // what the plan is, so the plan is stated and the tense is left to the line below it.
         foreach (var pack in plan.Packs)
         {
             output.WriteLine(string.Create(
                 CultureInfo.InvariantCulture,
-                $"{(dryRun ? "Would write" : "Writing")}: {pack.Units.Count} skills of {pack.Pack} into {pack.Root}"));
+                $"Target:  {pack.Units.Count} skills of {pack.Pack} into {pack.Root}"));
+        }
+
+        if (dryRun)
+        {
+            output.WriteLine("Dry run: nothing will be written.");
         }
     }
 }
