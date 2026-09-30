@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
 using Jint;
 using Jint.Native;
@@ -109,15 +110,11 @@ public sealed partial class ExecService(HostServices services)
         TimeSpan timeout)
     {
         var watch = Stopwatch.StartNew();
-        var startInfo = new ProcessStartInfo(executable.Path)
-        {
-            WorkingDirectory = services.WorkingDirectory,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
+        var startInfo = ChildProcess.StartInfo(executable.Path);
+        startInfo.WorkingDirectory = services.WorkingDirectory;
+        startInfo.RedirectStandardInput = true;
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
 
         // What the runtime resolved this name to, ahead of anything the plugin asked for. A plugin never sees
         // these and can never set them: they are how a program the user granted is actually started — node and

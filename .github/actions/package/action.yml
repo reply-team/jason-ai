@@ -78,6 +78,15 @@ runs:
 
         "executable=$publish/$env:EXECUTABLE" >> $env:GITHUB_OUTPUT
 
+    # The runtime a logon task starts has no console window only because the executable declares so. So the file
+    # about to be archived is read for that declaration, rather than the project that asked for it.
+    - name: Read the application manifest out of the packaged executable
+      if: startsWith(inputs.rid, 'win-')
+      shell: pwsh
+      env:
+        EXECUTABLE: ${{ steps.publish.outputs.executable }}
+      run: ./.github/scripts/Assert-ApplicationManifest.ps1 -Executable $env:EXECUTABLE
+
     - name: Put LICENSE beside the executable
       shell: pwsh
       env:

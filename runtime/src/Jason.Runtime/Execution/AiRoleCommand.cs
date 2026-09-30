@@ -76,15 +76,11 @@ public sealed class AiRoleCommand(
             logger.LogWarning("Attempt {AttemptId} of work item {WorkItemId}: {Note}", context.AttemptId, context.WorkItemId, note);
         }
 
-        var startInfo = new ProcessStartInfo(context.EntryCommand[0])
-        {
-            WorkingDirectory = context.WorkDir,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
+        var startInfo = ChildProcess.StartInfo(context.EntryCommand[0]);
+        startInfo.WorkingDirectory = context.WorkDir;
+        startInfo.RedirectStandardInput = true;
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
 
         // The first element is the program; the rest are arguments, passed one by one so nothing has to be
         // quoted and no shell ever sees them.

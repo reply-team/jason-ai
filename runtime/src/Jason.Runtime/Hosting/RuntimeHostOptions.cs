@@ -16,10 +16,16 @@ namespace Jason.Runtime.Hosting;
 /// only way <c>jason runtime start</c> hears the reason. <see cref="RuntimeHost.RunAsync"/> closes it once the
 /// runtime has started or refused, so nothing of the process that started it is held for longer than that.
 /// </param>
+/// <param name="ConsoleAtStart">
+/// What <see cref="ProcessDetacher.Detach"/> found attached to this process; null for a runtime nobody detached,
+/// and off Windows. The runtime writes it into its log at start, so which Windows honoured the executable's
+/// <c>consoleAllocationPolicy</c> can be read afterwards rather than watched for.
+/// </param>
 public sealed record RuntimeHostOptions(
     string? ShippedSettingsDirectory = null,
     bool ConsoleLogging = true,
     TimeProvider? Clock = null,
     HttpMessageHandler? FeedHandler = null,
     Action<IServiceCollection>? ConfigureServices = null,
-    TextWriter? Refusals = null);
+    TextWriter? Refusals = null,
+    ConsoleAtStart? ConsoleAtStart = null);

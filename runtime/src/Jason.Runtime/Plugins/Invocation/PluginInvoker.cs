@@ -490,18 +490,15 @@ public sealed partial class PluginInvoker(
 
     private static ProcessStartInfo StartInfo(IReadOnlyList<string> command, string workDir, InvocationGrants grants)
     {
-        var startInfo = new ProcessStartInfo(command[0])
-        {
-            WorkingDirectory = workDir,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardInputEncoding = Utf8,
-            StandardOutputEncoding = Utf8,
-            StandardErrorEncoding = Utf8,
-        };
+        // Qualified: this namespace has a ChildProcess of its own, the one that waits for a child to end.
+        var startInfo = Jason.Contracts.Discovery.ChildProcess.StartInfo(command[0]);
+        startInfo.WorkingDirectory = workDir;
+        startInfo.RedirectStandardInput = true;
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+        startInfo.StandardInputEncoding = Utf8;
+        startInfo.StandardOutputEncoding = Utf8;
+        startInfo.StandardErrorEncoding = Utf8;
 
         // One argument at a time, so nothing has to be quoted and no shell ever sees any of it.
         for (var index = 1; index < command.Count; index++)

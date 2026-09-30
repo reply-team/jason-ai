@@ -85,14 +85,10 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         ArgumentNullException.ThrowIfNull(paths);
 
         var (fileName, arguments) = Resolve(executable);
-        var startInfo = new ProcessStartInfo(fileName)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
+        var startInfo = ChildProcess.StartInfo(fileName);
+        startInfo.RedirectStandardInput = true;
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
 
         foreach (var argument in arguments)
         {
@@ -130,13 +126,14 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
     /// and only two of them are a bool, which is what the last clause is about.
     /// </summary>
     /// <remarks>
-    /// A runtime registered to start at logon runs in <b>another logon session</b> — session 0, with an S4U
-    /// logon on Windows — and an ordinary prompt may not open such a process to ask it anything.
-    /// <c>GetProcessById</c> still returns, because finding a pid in the table needs no handle;
+    /// A runtime <b>a 0.1.0 installation</b> registered to start at logon runs in <b>another logon session</b> —
+    /// session 0, with an S4U logon on Windows — and an ordinary prompt may not open such a process to ask it
+    /// anything. <c>GetProcessById</c> still returns, because finding a pid in the table needs no handle;
     /// <c>HasExited</c> then throws <see cref="Win32Exception"/> rather than answering. Measured on a real
     /// machine, and before it was caught it left `jason runtime stop` altogether: the runtime shut down, the
     /// verb printed <c>Access is denied.</c> and exited 1, and the shutdown it had just completed looked like
-    /// a failure.
+    /// a failure. A runtime this version registers runs in the account's own session and answers like any
+    /// other; the clause stays for the registrations 0.1.0 left behind.
     /// <para>
     /// The answer in that case is <b>running</b>, and not because it is the safer-sounding one: the pid is in
     /// the table, which is precisely what <c>GetProcessById</c> returning says. Saying "gone" would let `stop`
@@ -180,7 +177,7 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or Win32Exception or NotSupportedException)
         {
-            // Gone, or in a session this prompt may not open -- the logon registration's runtime, on Windows.
+            // Gone, or in a session this prompt may not open -- a runtime a 0.1.0 logon registration started, on Windows.
             return null;
         }
     }

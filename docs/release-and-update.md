@@ -5,9 +5,9 @@ contract for it: what a release is, what it publishes, how a running runtime lea
 how a person asks the same question by hand, and what `jason update apply` does to this machine when they say
 yes.
 
-**What is not here yet.** Jason registers nothing with the machine to start itself — no service unit, no
-scheduled task, no login item — and an update therefore has none to keep working. Whatever you wrote yourself
-keeps working, for the reason §7 gives.
+**Nothing starts itself unless you asked.** Nothing is registered with the machine until
+`jason runtime autostart enable` registers the runtime to start at logon (§8). An update keeps that
+registration working, and whatever you wrote yourself, for the reason §7 gives.
 
 **Nothing in a release is signed or notarized.** Integrity is a SHA-256 you can check yourself, published beside
 the files and inside the manifest. Signing and notarization are their own story, before 1.0.0.
@@ -395,13 +395,13 @@ jason runtime autostart status
 jason runtime autostart disable
 ```
 
-One registration per operating system and per account, in the account's own scope. **On Windows, `enable` and
-`disable` have to be run from an elevated prompt**, for the reason in the section below; on macOS and Linux the
-document is a file in the account's own home and no elevation is involved:
+One registration per operating system and per account, in the account's own scope, and **none of the three needs
+elevation**. On Windows it is a task the Task Scheduler accepts from an ordinary prompt; on macOS and Linux it is
+a file in the account's own home:
 
 | platform | what is registered | where the document lives |
 | --- | --- | --- |
-| Windows | a logon task called `Jason`, registered from a task document with `schtasks /Create /XML` | `<data>/autostart/jason-task.xml`; the task itself is the Task Scheduler's |
+| Windows | a logon task called `Jason-<SID>`, one per account and named for its SID, with an interactive logon for that account (`InteractiveToken`), registered from a task document with `schtasks /Create /XML` | `<data>/autostart/jason-task.xml`; the task itself is the Task Scheduler's |
 | macOS | a LaunchAgent labelled `ai.jason.runtime`, `RunAtLoad` and no `KeepAlive` | `~/Library/LaunchAgents/ai.jason.runtime.plist` |
 | Linux | a `systemd --user` unit, enabled into your default target | `~/.config/systemd/user/jason.service` |
 
@@ -425,39 +425,85 @@ plist path, same unit name — and `status` shows which directory the one that i
 rots: an update that moved the binary, or a directory somebody deleted, leaves something that fails at every
 logon without saying anything to anybody.
 
-### Windows: an elevated prompt, no window, and the logon right that costs
+### Windows: an ordinary prompt, no window, and what it costs
 
-**`enable` and `disable` are elevated acts.** Being signed in as an administrator is not enough: an unelevated
-prompt on an administrator account is refused too. The Task Scheduler will not take this task from a process
-running at medium integrity, and it says so plainly — `ERROR: Access is denied.`, exit `0x80070005`, with
-nothing registered. Jason repeats the tool's own line and says what to do about it. It does **not** check your
-integrity level before asking: the Task Scheduler's answer is the only thing that really knows, and a guess
-made in advance would be wrong on exactly the machines where it mattered.
+**`enable`, `disable` and `status` all run from an ordinary prompt**, on an administrator's account or a
+standard account. The task is registered for the account that asks, by its SID, and named for it,
+`Jason-<SID>`: the Task Scheduler's root folder is one namespace for the whole machine, so every account on it
+has its own task there, and another account's ordinary prompt can neither read nor change it. It runs with an
+**interactive logon** (`InteractiveToken`) at `LeastPrivilege`: when that account signs in, the Task Scheduler
+starts the runtime in the account's own session, with the rights the account already has. Microsoft's
+[reference for the logon type](https://learn.microsoft.com/en-us/windows/win32/taskschd/principal-logontype) says of it: "User must already be logged on. The task will be run only in
+an existing interactive session."
+Jason does not check your integrity level before asking: the Task Scheduler's answer is the only thing that
+really knows, and Jason repeats the tool's own line when it refuses. Every refusal names the task it is about and its
+case: the task named for this account, `Jason-<SID>`, out of this prompt's reach; the task `\Jason` an earlier version left,
+below; or a machine that will not register a logon task for this account, where `jason runtime start` still starts
+the runtime by hand.
 
-**`status` needs no elevation.** Reading the registration works from an ordinary prompt — the Task
-Scheduler lets this account query its own task — so a script, an agent or a person can ask what is registered
-without asking for anything. Only the two verbs that change something need the elevated prompt.
+**No window, on Windows 11 24H2 and later.** `jason.exe` is a console program, started in a session with a
+desktop. What keeps a console window off that desktop is the executable itself: its application manifest
+declares `consoleAllocationPolicy` `detached`, which Windows 11 24H2 (build 26100) and later, and
+Windows Server 2025, read. Microsoft's [Console Allocation Policy](https://learn.microsoft.com/en-us/windows/console/console-allocation-policy)
+says that such a manifest "informs the operating system to skip allocating a console". A program that declares it
+still inherits a console it is started in: typed in a terminal, `jason` uses the terminal's and behaves as it
+always has; started at logon it has none.
+Every program the runtime starts in turn is started with no console window of its own.
 
-What costs the elevation is the shape of the task, not the folder it goes in — the Task Scheduler's root folder
-is writable by ordinary accounts. The task runs with an **S4U logon**: the account, with no stored password, at
-`LeastPrivilege`, in a non-interactive session that has no desktop. That is what keeps a console window off
-your screen at every logon — `jason runtime run` is a console application, and a task in the interactive
-session would show one, while `--detached` does not help with that: it redirects the runtime's standard streams
-and never frees a console. Registering an S4U task is the part an ordinary prompt may not do.
+**Before 24H2, a window opens at logon and closes by itself.** Windows 10, and Windows 11 before 24H2, ignore
+the setting and hand the runtime a console. `--detached` frees it as soon as the runtime starts, and the console
+window closes with it. That window is conhost, or Windows Terminal where that is the default terminal. It was
+measured on Windows 11 24H2 with a test program built the way Jason is built but without the setting, which
+freed its console first thing: a Windows Terminal window, visible for about a tenth of a second. Jason frees its
+console once it has started, so its window lasts as long as that takes. Jason itself has not been started at logon
+on an older Windows. What has been run on one is the packaged `jason.exe`, on every pull request, on Windows
+Server 2022 (build 20348), which ignores the setting: it starts there, and a runtime started with
+`jason runtime start` logs `"Console":"freed_hidden"`, as it does on 24H2. The check fails without that line.
 
-An S4U task logs on as a **batch** logon, so the account must hold the *Log on as a batch job* right
-(`SeBatchLogonRight`). On a workstation, Administrators, Backup Operators and Performance Log Users hold it by
-default; the Task Scheduler grants it only for a task registered with a password, which this is not. If it is
-missing, the task registers cleanly and then fails at every logon with *the user has not been granted the
-requested logon type at this computer*, and the right has to be granted to the account (`secpol.msc` → Local
-Policies → User Rights Assignment → Log on as a batch job, or `secedit`).
+The runtime's log says what it found, at every start from a logon task or from `jason runtime start`. The log
+under `<data>/logs/` is JSON Lines, one object per line, with the message template and its value as separate
+properties, so the line to look for is the one whose `"@mt"` is `"Console at start: {Console}"`:
 
-**Standard accounts are unsupported in this version.** Elevating from one does not help, and is worse than
-refusing: the elevated prompt runs as the *administrator* whose credentials were given, and the registration
-names whoever is running it — so it would register a logon task for the administrator's account rather than for
-the person who asked. Such an account can still run the runtime with `jason runtime start`, which registers
-nothing; making it start at logon would need a task registered against that account's own SID by somebody who
-can elevate, which these verbs do not offer.
+```json
+{"@t":"2026-09-28T20:05:31.0856506Z","@mt":"Console at start: {Console}","Console":"freed_hidden"}
+```
+
+Its `"Console"` is one of four values:
+
+- `"Console":"none"`: it had no console.
+- `"Console":"freed"`: it had a console with a visible window and let go of it. That is the window above.
+- `"Console":"freed_hidden"`: it had a console with no visible window, which nobody saw, and let go of it.
+  `jason runtime start` hands the runtime such a console, so this is what a runtime started that way says.
+- `"Console":"not_freed"`: it had a console and Windows would not let it go, so any window that console has
+  stays open while the runtime runs.
+
+**What it costs: the runtime ends when you sign out, without a chance to say so.** Registered this way, the runtime
+is a program in your session like any other, and so are the programs it started. Microsoft's
+[documentation of the console's control signals](https://learn.microsoft.com/en-us/windows/console/handlerroutine)
+says of such programs: "Interactive applications are terminated at logoff". Its log ends at whatever it was doing
+last, with no line saying that it stopped. Work in flight is left the way a crash leaves it, and the
+next runtime takes it up as [`work-execution.md`](work-execution.md) says under "Stopping and restarting"; your
+next sign-in starts that runtime. What the runtime starts — an agent host, a vendor's command-line tool — runs on
+your desktop too, so anything it opens, a browser window for a sign-in included, opens there. That has always
+been true of a runtime started with `jason runtime start`.
+
+**0.1.0 registered this task differently**: one task called `\Jason` for the whole machine, with an **S4U**
+logon, which only an elevated prompt may register. 0.1.0's `enable` and `disable` had to be run from one, and a
+standard account could not use them. Microsoft's [reference for the logon type](https://learn.microsoft.com/en-us/windows/win32/taskschd/principal-logontype) says of S4U that "no
+password is stored by the system and there is no access to either the network or encrypted files". `enable`, `disable` and
+`jason uninstall` ask after `\Jason` once, and take it away only where it is this account's 0.1.0 task, the one that runs
+the runtime: another account's, or a task of that name that runs anything else, is never touched.
+**If one of them answers `ERROR: Access is denied.` about the task named `Jason`**, an earlier version may have
+registered it from an elevated prompt, and only an elevated prompt can take such a task away. On an administrator's
+own account, run `jason runtime autostart disable` from an elevated prompt once, which removes it and this version's
+task alike, then `jason runtime autostart enable` from an ordinary one if you want autostart back; if it was
+`jason uninstall` that stopped there, run the same elevated `disable`, then `jason uninstall` again. But on a
+standard account an elevated prompt runs as somebody else, the administrator whose password is typed, and a
+`disable` there would take that administrator's tasks away and leave yours: ask an administrator to delete the task
+by the name the message gives, and never run `jason` under another account. The same holds for this version's own
+task, `Jason-<SID>`, where one was registered from an elevated prompt. `status`
+reads this account's task from an ordinary prompt; it does not ask after `\Jason`, so after an upgrade from
+0.1.0 run `enable` or `disable` once.
 
 ### The environment an autostarted runtime has
 
@@ -478,23 +524,36 @@ So registering for real can only be checked **by hand**, on a real machine, and 
 project has one of: Windows and Linux. **macOS is composed and asserted only** — nobody working on this has a
 Mac, and this page would rather say so than imply a check nobody ran.
 
-> **Checked by hand so far:** Windows and Linux, on 2026-09-20, on one machine each.
+> **Checked by hand so far:** Linux, on 2026-09-20, on one machine, and Windows, on 2026-09-29, on one machine.
 >
-> **Windows**, on an administrator account. From an ordinary prompt `enable` is **refused** and registers
-> nothing — the Task Scheduler will not take this task from a medium-integrity process. From an elevated prompt
-> it registers; a second `enable` leaves one task rather than two; `status` answers from an ordinary prompt.
-> The account then **signed out and back in**, and a runtime was running because of it: session 0, no window on
-> the desktop, its endpoint descriptor three seconds after the logon, on the data directory the registration
-> carried. `disable` took it away, a second `disable` on the now-empty machine still succeeded, and nothing was
-> left behind — no task, no process, no document.
+> **Windows, on 2026-09-29, on a standard account**, on Windows 11 24H2 (build 26100), installed from this version's
+> own archive by `install.ps1`. `enable` from an ordinary prompt registered the task `Jason-<SID>` with an
+> interactive logon (`InteractiveToken`), and `status` read it back from the Task Scheduler's own copy. The account
+> **signed out and back in**, and a runtime was running because of it: in the account's own session, at medium
+> integrity, with no console (its log carried `"@mt":"Console at start: {Console}"` with `"Console":"none"`) and no
+> window from it, or from the program it started to check a plugin's executable, which had no console window
+> either; nor when a plugin reload started that program again later. It **ended when the account signed out**,
+> without writing a line about stopping, and the next sign-in started a new one on the same data: no migration left
+> to apply, a campaign made before the sign-out still there, and again no console and no window. `status` named the
+> data directory, and `jason status` said the runtime is registered to start at logon. `disable` took the task
+> away, a second `disable` still succeeded, and neither stopped the runtime; stopped and started again with
+> `jason runtime start`, the runtime logged `"Console":"freed_hidden"` and had no console afterwards.
+> `jason uninstall` put the logon registration first in its plan, took it away and left nothing behind: no task,
+> process, data or install directory, unpacked library or Path entry. "No window" is about Jason's processes: other
+> software opened windows of its own during the same logons, among them the shell, Start, Search and a VPN client.
+>
+> **On an administrator's account, from an ordinary prompt**, `enable`, `status` and `disable` did the same for that
+> account's own task, while the standard account's task stood registered beside it: the administrator's prompt could
+> not read the standard account's task, before or after (access denied), and the standard account then read its task
+> back exactly as it had registered it.
 >
 > **Linux**, unprivileged, under a `systemd --user` manager. The unit registered and enabled; the machine was
 > restarted; a runtime was running before anything asked for it. `disable` removed the unit and the link in the
 > default target.
 >
-> **Not checked:** macOS, which is composed and asserted only, and standard accounts on Windows, which this
-> version does not support. One thing that was checked and did *not* change: registering the task granted the
-> account no rights. The batch-logon rights on that machine were identical before and after.
+> **Not checked:** macOS, which is composed and asserted only; and Windows before 24H2, whose logon window was
+> measured with a test program built like Jason but without the setting, not with Jason itself, and not on an
+> older Windows.
 
 ## 9. Taking an installation off the machine
 
@@ -513,7 +572,7 @@ The order is the order that makes a half-finished run safe:
 
 | Step | Why here |
 |---|---|
-| the logon registration | first, so a logon part-way through cannot start what is going |
+| this account's logon registration, on Windows including the task `\Jason` an earlier version registered for it | first, so a logon part-way through cannot start what is going |
 | the runtime | and if it will not stop — or is running and does not answer — **nothing after this is removed** |
 | every recorded skill | by the paths its root's record names, digest by digest |
 | the PATH entry | only where the installer wrote it and its directory holds nothing but Jason — a PATH is a person's own document, and other programs are on it through a directory they share. On macOS and Linux the entry is the marked block in a login profile; on Windows, whose Path carries no marker, the entry in this account's Path |
@@ -524,7 +583,8 @@ and a mismatch says somebody else wrote it afterwards. `--force` removes it anyw
 directory is not empty until it does.
 
 **Never touched:** a skill there is no receipt for, including one copied into a harness by hand; any other
-skill in that harness; any provider CLI; any model credential; a PATH entry the installer did not write.
+skill in that harness; any provider CLI; any model credential; a PATH entry the installer did not write; another
+account's logon registration.
 **The data directory is kept** — §10 below says what is in it — unless `--purge-data` says otherwise, and in
 the machine shape that word has to be said in advance with `--yes`, because there is nobody there to be asked
 and a verb that blocked on an invisible question would hang for ever. With it, what Jason keeps in the data
@@ -579,9 +639,10 @@ a code renamed in the code turns this page red rather than quietly disagreeing w
 opens the database: it renames files, asks the runtime questions and reads the backups directory.
 
 Autostart is the CLI's too, under `Jason.Cli/Autostart/`. `AutostartArtifacts` composes each platform's document
-and reads a command line back out of one, both as pure functions of what they are given; `IAutostartRegistrar`
-is the one place a process is started or a document written, and `AutostartCodes` holds the two refusals §8 can
-raise:
+and reads a command line back out of one, both as pure functions of what they are given; `WindowsTasks` decides,
+one `schtasks` answer at a time, what happens to this account's task and to a `\Jason` 0.1.0 left, and what each
+denial says; `IAutostartRegistrar` is the one place a process is started or a document written, and
+`AutostartCodes` holds the two refusals §8 can raise:
 
 | code | what it means |
 | --- | --- |

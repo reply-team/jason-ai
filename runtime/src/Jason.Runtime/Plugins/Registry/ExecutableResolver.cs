@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Plugins.Manifest;
 
@@ -146,16 +147,11 @@ public sealed partial class ExecutableResolver(ISearchPath searchPath)
         var home = resolved.Launch.Count > 0
             ? Path.GetDirectoryName(resolved.Launch[0])!
             : Path.GetDirectoryName(resolved.Path)!;
-        var start = new ProcessStartInfo
-        {
-            FileName = resolved.Path,
-            WorkingDirectory = home,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+        var start = ChildProcess.StartInfo(resolved.Path);
+        start.WorkingDirectory = home;
+        start.RedirectStandardInput = true;
+        start.RedirectStandardOutput = true;
+        start.RedirectStandardError = true;
 
         // The pair the runtime resolved, then the version command: what is checked has to be what will be
         // started, or the check is about a different program than the one a plugin will reach.

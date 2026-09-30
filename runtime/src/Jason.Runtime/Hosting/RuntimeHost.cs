@@ -61,6 +61,12 @@ public static class RuntimeHost
             logger = JasonLogging.Create(paths, settings.Logging, options.ConsoleLogging);
             var info = RuntimeInfo.Create();
             logger.Information("Jason runtime {Version} starting as {InstanceId} (pid {Pid}) with data directory {DataDir}", info.RuntimeVersion, info.InstanceId, info.Pid, paths.Root);
+            if (options.ConsoleAtStart is { } console)
+            {
+                // Written down once there is somewhere to write it: whether this Windows honoured the executable's
+                // consoleAllocationPolicy, which nobody can otherwise tell after the fact.
+                logger.Information(ProcessDetacher.LogTemplate, ProcessDetacher.Word(console));
+            }
 
             var migration = new DatabaseMigrator(paths).Migrate();
             logger.Information("Database ready: {Applied} migrations applied, {New} newly applied, backup {Backup}", migration.AppliedMigrations.Count, migration.NewlyApplied.Count, migration.BackupFile ?? "none");
@@ -106,15 +112,31 @@ public static class RuntimeHost
         {
             // Said where whoever started this can hear it. A detached runtime's own standard error is the null
             // device by now, and the reason it will not start used to go there.
-            await refusals.WriteLineAsync(refused.Message).ConfigureAwait(false);
-            await refusals.FlushAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await refusals.WriteLineAsync(refused.Message).ConfigureAwait(false);
+                await refusals.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (IOException)
+            {
+                // Nobody can hear it: on a Windows that ignored the executable's policy this was a console, and the
+                // detacher has let go of it. The refusal is still the answer.
+            }
+
             return 1;
         }
         finally
         {
             if (options?.Refusals is { } handedIn)
             {
-                await handedIn.DisposeAsync().ConfigureAwait(false);
+                try
+                {
+                    await handedIn.DisposeAsync().ConfigureAwait(false);
+                }
+                catch (IOException)
+                {
+                    // The same console, closed from under a writer that still meant to flush into it.
+                }
             }
         }
 

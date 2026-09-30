@@ -245,7 +245,7 @@ public class AutostartCommandTests
         using var machine = new Machine();
         machine.Registrar.Refuses = new AutostartException(
             AutostartCodes.Refused,
-            "registering or removing the logon task needs an elevated prompt: run the command as administrator.");
+            "this machine's Task Scheduler refused to register a logon task for this account. Nothing was registered or removed.");
 
         Assert.Equal(ExitCodes.ApiError, await machine.RunAsync(["runtime", "autostart", "enable"], Ct));
 

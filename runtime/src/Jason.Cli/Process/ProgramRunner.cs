@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using Jason.Contracts.Discovery;
 using OperatingSystemProcess = System.Diagnostics.Process;
 
 namespace Jason.Cli.Process;
@@ -56,14 +57,10 @@ public static class ProgramRunners
             ArgumentException.ThrowIfNullOrWhiteSpace(program);
             ArgumentNullException.ThrowIfNull(arguments);
 
-            var startInfo = new ProcessStartInfo(program)
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                WorkingDirectory = workingDirectory ?? string.Empty,
-            };
+            var startInfo = ChildProcess.StartInfo(program);
+            startInfo.RedirectStandardOutput = true;
+            startInfo.RedirectStandardError = true;
+            startInfo.WorkingDirectory = workingDirectory ?? string.Empty;
 
             // One by one, so nothing has to be quoted and no shell ever sees them.
             foreach (var argument in arguments)

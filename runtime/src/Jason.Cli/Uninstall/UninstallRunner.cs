@@ -139,6 +139,10 @@ public static class UninstallRunner
         return new UninstallReport(plan, done, kept, problems, null, null);
     }
 
+    /// <summary>What the report says when step 1 took away the Windows task 0.1.0 registered for this account.</summary>
+    private static readonly string LegacyRemovedLine =
+        $"Removed the logon task named {AutostartArtifacts.LegacyTaskName} that an earlier version registered for this account.";
+
     /// <summary>
     /// Takes the logon registration away. Removing one that is not there is not an error, and a machine that
     /// has no way to register anything has nothing to take away either.
@@ -152,23 +156,49 @@ public static class UninstallRunner
             return null;
         }
 
+        AutostartRemoval removed;
         try
         {
             // Composed the one way this product composes it. A second place that knew how this machine
             // registers things would be a second place to be wrong about how it unregisters them.
-            registrar.Remove(RuntimeAutostartCommands.Registration(env, registrar.Platform));
+            removed = registrar.Remove(RuntimeAutostartCommands.Registration(env, registrar.Platform));
         }
         catch (AutostartException refusal)
         {
+            // What went before the refusal is reported first: the report never says less than what happened.
+            if (refusal.LegacyRemoved)
+            {
+                done.Add(LegacyRemovedLine);
+            }
+
+            // A denial carries its case, and is said for this verb, by both of its routes: on an administrator's own
+            // account the elevated `disable`, on a standard account an administrator deleting the named task, and
+            // either way this verb again. Wrapping `disable`'s own advice in a second instruction gave a person two
+            // that disagreed.
             return new RemovalRefused(
                 CliErrors.UninstallRefused,
-                $"The logon registration could not be removed, so nothing further was: {refusal.Message} "
-                + "Remove it with 'jason runtime autostart disable' and run this again.");
+                refusal.Denial is { } denial
+                    ? $"The logon registration could not be removed, so nothing further was: {WindowsTasks.Denied(AutostartAct.Uninstall, denial)}"
+                    : $"The logon registration could not be removed, so nothing further was: {refusal.Message} "
+                      + "Remove the logon registration with 'jason runtime autostart disable' and run this again.");
         }
 
-        done.Add(plan.AutostartRegistered
-            ? "Removed the logon registration."
-            : "No logon registration was registered for this account.");
+        // What the removal says it took away, not what the plan expected: the plan cannot see the task 0.1.0
+        // registered, and saying "none" after removing it would be the one false line in the report.
+        if (removed.Registration)
+        {
+            done.Add("Removed the logon registration.");
+        }
+
+        if (removed.Legacy)
+        {
+            done.Add(LegacyRemovedLine);
+        }
+
+        if (!removed.Registration && !removed.Legacy)
+        {
+            done.Add("No logon registration was registered for this account.");
+        }
 
         return null;
     }

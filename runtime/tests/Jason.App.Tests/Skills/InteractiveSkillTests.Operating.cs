@@ -7,20 +7,72 @@ public partial class InteractiveSkillTests
     {
         var skill = Flattened("operating-the-installation");
 
-        // On Windows the two verbs that change a logon registration are refused outright from a
-        // medium-integrity process. A skill that did not name the elevated prompt would have a session
-        // report the Task Scheduler's "Access is denied" as a broken installation, and a person would go
-        // looking for a fault that is not there.
-        Assert.Contains("elevated prompt", skill, StringComparison.Ordinal);
+        // On Windows the verbs that change a logon registration run from an ordinary prompt on every account now,
+        // so a session runs them itself. A skill that still sent people to elevate would have a session hand a
+        // standard-account user a command they cannot run, for something the session could have done.
+        Assert.Contains("Run `enable` and `disable` yourself", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("Standard Windows accounts are unsupported", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("S4U", skill, StringComparison.Ordinal);
 
-        // And naming it is not enough: the session has to know the limit is its own. Without this sentence
-        // the obvious next move is to try to elevate - relaunching, guessing at a runas, retrying the same
-        // refused command - instead of handing the person the line and asking what it said.
+        // The one case left for an elevated prompt, worded on the refusal having happened - it was never
+        // measured - and the session's own limit inside it: without this sentence the obvious next move is to
+        // try to elevate, relaunching, guessing at a runas, retrying the same refused command, instead of
+        // handing the person the line and asking what it said.
+        Assert.Contains("If `enable` or `disable` answers `ERROR: Access is denied.`", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("One case is refused", skill, StringComparison.Ordinal);
         Assert.Contains("you cannot open one", skill, StringComparison.Ordinal);
 
-        // The other half of the same fact. A session that believed every logon verb was out of reach
-        // would refuse to answer "is Jason set to start at logon?", which it can always answer.
-        Assert.Contains("needs no elevation", skill, StringComparison.Ordinal);
+        // One task per account, and the old shared one taken away only where it is the person's own. And uninstall
+        // gets the order it needs - the elevated disable, then uninstall again - rather than enable's.
+        Assert.Contains("Each account has its own task", skill, StringComparison.Ordinal);
+        Assert.Contains("never touch anybody else's", skill, StringComparison.Ordinal);
+        Assert.Contains("only where it is the person's own 0.1.0 task, the one that runs the runtime", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("take the person's own away", skill, StringComparison.Ordinal);
+        Assert.Contains("then `jason uninstall` again", skill, StringComparison.Ordinal);
+        Assert.Contains("the machine refused to register a logon task for this account", skill, StringComparison.Ordinal);
+
+        // Enable again only where enable was refused. After a refused disable the elevated removal was the whole
+        // job, and a session that then ran enable would register the very thing the person asked to have removed.
+        Assert.Contains("Run `jason runtime autostart enable` yourself afterwards only if it was `enable` that was refused", skill, StringComparison.Ordinal);
+        Assert.Contains("after a refused `disable`, the removal was the whole job", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("ask what it said, and then run `jason runtime autostart enable` yourself", skill, StringComparison.Ordinal);
+
+        // And the elevated remedy is an administrator's act on their own account. On a standard account an elevated
+        // prompt runs as the administrator, whose disable would take the administrator's tasks and not this person's.
+        Assert.Contains("On an administrator's own account", skill, StringComparison.Ordinal);
+        Assert.Contains("On a standard account an elevated prompt runs as somebody else", skill, StringComparison.Ordinal);
+        Assert.Contains("ask an administrator to delete the task by the name the message gives", skill, StringComparison.Ordinal);
+        Assert.Contains("never run `jason` under another account", skill, StringComparison.Ordinal);
+        Assert.Contains("or by this version, run from an elevated prompt", skill, StringComparison.Ordinal);
+
+        // And how the registration is checked, and by whom it is touched. In a gated reading a session enabled it and
+        // read it back with status, then guessed the task's name, listed the machine's tasks to find it, and ran it by
+        // hand "to prove the registered command works" - which started a runtime now, when the person had asked for
+        // one at the next logon. status is the check; the operating system's own tools are not the session's to use on
+        // the registration; and a runtime now is a different verb, offered rather than done.
+        Assert.Contains(
+            "**`status` is how you check it.** It reads back what the operating system holds for this account.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Leave the registration to `enable`, `disable` and `status`: do not run, change or delete it with the " +
+            "operating system's own tools (`schtasks` or the Task Scheduler, `launchctl`, `systemctl`), not even to test it.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("Running it by hand starts a runtime now, which is not what the person asked for.", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "If they want the runtime running now as well, that is `jason runtime start`: say so, or ask.",
+            skill,
+            StringComparison.Ordinal);
+
+        // And the one cost, said when the registration is made rather than discovered at the next sign-out.
+        Assert.Contains("ends when they sign out", skill, StringComparison.Ordinal);
+
+        // And what signing out does to work in flight, as the work-execution contract says it: not "taken up by
+        // the next runtime", which a provider operation that may already have acted never is. It waits for a
+        // person, and a session that promised otherwise would tell someone their send would simply resume.
+        Assert.DoesNotContain("Work that was in flight is taken up by the next runtime", skill, StringComparison.Ordinal);
+        Assert.Contains("a provider operation that may already have acted waits for a person", skill, StringComparison.Ordinal);
 
         // The install one-liners resolve to the latest release. A skill that printed them without this would
         // have a person paste a line, get a 404 and conclude the product does not install - when a repository

@@ -75,6 +75,7 @@ public static class ModeRouter
         }
 
         TextWriter? refusals = null;
+        ConsoleAtStart? console = null;
         if (arguments.Detached)
         {
             // The one thing a detached runtime may still say to whoever started it: why it will not start. Kept
@@ -83,13 +84,18 @@ public static class ModeRouter
             // rather than an exit code and an empty log directory.
             refusals = new StreamWriter(Console.OpenStandardError()) { AutoFlush = true };
 
-            // Before anything opens a log file or a socket: from here on the process owns no console.
-            ProcessDetacher.Detach();
+            // Before anything opens a log file or a socket: from here on the process owns no console. What it found
+            // is handed to the host, which writes it into the log once there is one.
+            console = ProcessDetacher.Detach();
         }
 
         return RuntimeHost.RunAsync(
             PathsFor(arguments),
-            new RuntimeHostOptions(ShippedSettingsDirectory: AppContext.BaseDirectory, ConsoleLogging: !arguments.Detached, Refusals: refusals),
+            new RuntimeHostOptions(
+                ShippedSettingsDirectory: AppContext.BaseDirectory,
+                ConsoleLogging: !arguments.Detached,
+                Refusals: refusals,
+                ConsoleAtStart: console),
             cancellationToken);
     }
 

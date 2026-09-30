@@ -38,6 +38,10 @@ covered here.
   `Jason.PluginHost` never references `Jason.Runtime`; manifests are read with YamlDotNet in
   `Jason.Runtime` only, so the contracts, the CLI and the host stay YAML-free.
 - The dispatcher is deterministic runtime code; it never reads the meaning of a work item's context.
+- Every child process is made by `ChildProcess.StartInfo`, with no console window of its own and no shell; a
+  guard reads the compiled IL of every production assembly and refuses a `ProcessStartInfo` made anywhere else,
+  a write to `CreateNoWindow` or `UseShellExecute`, `Process.Start` from a file name, and a read of a
+  process's `StartInfo`. Reflection, expression trees and `new T()` are beyond what it reads.
 - Package versions live in `runtime/Directory.Packages.props` only.
 - Warnings are errors. Every test runs offline and uses an isolated temporary data directory.
 

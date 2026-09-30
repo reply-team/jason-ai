@@ -17,25 +17,29 @@ public class AutostartArtifactsTests
     private const string Executable = @"C:\Users\ada\AppData\Local\Programs\jason\jason.exe";
     private const string Windows = @"C:\Users\ada\.jason";
     private const string Sid = "S-1-5-21-1004336348-1177238915-682003330-1001";
+    private const string Task = "Jason-" + Sid;
     private const string Unix = "/home/ada/.jason";
     private const string Home = "/home/ada";
 
     /// <summary>
-    /// The Windows registration is a task document, not a command line. <c>/TR</c> would carry the whole
-    /// invocation as one string with a documented length limit, and it cannot say what kind of logon this is —
-    /// which is the one thing this task has to say.
+    /// The Windows registration is a task document, not a command line: <c>/TR</c> carries the invocation as one
+    /// string with a documented length limit and cannot say what kind of logon this is. The kind is interactive —
+    /// the account's own session, with the token it already has — which an ordinary prompt may register on any
+    /// account, a standard one included.
     /// </summary>
     [Fact]
-    public void The_windows_task_runs_at_logon_in_a_session_with_no_desktop()
+    public void The_windows_task_runs_at_logon_in_the_account_s_own_session()
     {
         var task = AutostartArtifacts.Compose(AutostartPlatform.Windows, [Executable], Windows, @"C:\Users\ada", Sid);
 
         Assert.Equal(AutostartPlatform.Windows, task.Platform);
-        Assert.Equal("Jason", task.Name);
+        Assert.Equal(Task, task.Name);
         Assert.Equal(Path.Combine(Windows, "autostart", "jason-task.xml"), task.ArtifactPath);
 
-        // The whole of the no-window guarantee: an S4U logon has no desktop to put a console window on.
-        Assert.Contains("<LogonType>S4U</LogonType>", task.Artifact, StringComparison.Ordinal);
+        // Interactive, not S4U: S4U is what an ordinary prompt may not register, and a standard account cannot.
+        // What keeps a window off that session's desktop is the executable's manifest, not the task.
+        Assert.Contains("<LogonType>InteractiveToken</LogonType>", task.Artifact, StringComparison.Ordinal);
+        Assert.DoesNotContain("S4U", task.Artifact, StringComparison.Ordinal);
         Assert.Contains("<RunLevel>LeastPrivilege</RunLevel>", task.Artifact, StringComparison.Ordinal);
 
         // Whose logon, said as the account's SID in both places the document names an account.
@@ -53,9 +57,159 @@ public class AutostartArtifactsTests
         // sentence in the language Windows happens to be installed in. The query had it from the start; the two
         // that act got it after a real machine refused one of them and the code could not say why.
         // AutostartInterpretationTests is where what the codes mean is asserted.
-        Assert.Equal([["schtasks", "/Create", "/XML", task.ArtifactPath, "/TN", "Jason", "/F", "/HRESULT"]], task.Apply);
-        Assert.Equal([["schtasks", "/Delete", "/TN", "Jason", "/F", "/HRESULT"]], task.Remove);
-        Assert.Equal(["schtasks", "/Query", "/TN", "Jason", "/XML", "ONE", "/HRESULT"], task.Query);
+        Assert.Equal([["schtasks", "/Create", "/XML", task.ArtifactPath, "/TN", Task, "/F", "/HRESULT"]], task.Apply);
+        Assert.Equal([["schtasks", "/Delete", "/TN", Task, "/F", "/HRESULT"]], task.Remove);
+        Assert.Equal([AutostartArtifacts.TaskDelete(Task)], task.Remove);
+        Assert.Equal(["schtasks", "/Query", "/TN", Task, "/XML", "ONE", "/HRESULT"], task.Query);
+    }
+
+    /// <summary>
+    /// The task is named for the account it belongs to. The Task Scheduler's root folder is one namespace for the
+    /// whole machine, and another account's task in it answers an ordinary prompt with access denied — measured —
+    /// so a fixed name let the first account that ran <c>enable</c> lock every other account out of its own
+    /// autostart, and out of <c>jason uninstall</c>. The SID in the name is how other programs on the same machine
+    /// avoid it: <c>OneDrive Reporting Task-&lt;SID&gt;</c>, <c>ZoomUpdateTaskUser-&lt;SID&gt;</c>.
+    /// </summary>
+    [Fact]
+    public void Each_account_s_task_carries_its_own_name()
+    {
+        const string Other = "S-1-5-21-1004336348-1177238915-682003330-1002";
+
+        var mine = AutostartArtifacts.Compose(AutostartPlatform.Windows, [Executable], Windows, @"C:\Users\ada", Sid);
+        var theirs = AutostartArtifacts.Compose(AutostartPlatform.Windows, [Executable], @"C:\Users\bob\.jason", @"C:\Users\bob", Other);
+
+        Assert.Equal($"Jason-{Sid}", mine.Name);
+        Assert.Equal($"Jason-{Other}", theirs.Name);
+        Assert.Contains($@"<URI>\Jason-{Sid}</URI>", mine.Artifact, StringComparison.Ordinal);
+
+        // The name 0.1.0 registered under is its own constant, because it is still asked after: see WindowsTasks.
+        Assert.Equal("Jason", AutostartArtifacts.LegacyTaskName);
+        Assert.NotEqual(AutostartArtifacts.LegacyTaskName, mine.Name);
+    }
+
+    /// <summary>
+    /// A task is deleted by name, without being asked. Without <c>/F</c> schtasks asks "(Y/N)?" on the standard input
+    /// it inherited and waits there, so the verb would hang without a word; and without <c>/HRESULT</c> its answer is a
+    /// sentence in the language Windows was installed in. Both the removal a registration carries and the removal of
+    /// the task 0.1.0 left use this one command.
+    /// </summary>
+    [Fact]
+    public void A_task_is_deleted_by_name_without_being_asked() =>
+        Assert.Equal(["schtasks", "/Delete", "/TN", "Jason", "/F", "/HRESULT"], AutostartArtifacts.TaskDelete("Jason"));
+
+    /// <summary>
+    /// The whole document, for fixed inputs. Two things changed from what 0.1.0 registered, and only two: the
+    /// logon type (<c>S4U</c> became <c>InteractiveToken</c>) and the task's name in <c>URI</c>. Every other field
+    /// is what 0.1.0 had — a trigger that is enabled, a second instance ignored, no battery rule, no time limit —
+    /// and until this test only a reader said so.
+    /// </summary>
+    [Fact]
+    public void The_windows_document_is_0_1_0_s_but_for_the_logon_type_and_the_name()
+    {
+        var task = AutostartArtifacts.Compose(
+            AutostartPlatform.Windows, [@"C:\Program Files\Jason & Co\jason.exe"], Windows, @"C:\Users\ada", Sid);
+
+        const string Expected = $$"""
+            <?xml version="1.0" encoding="UTF-16"?>
+            <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+              <RegistrationInfo>
+                <Description>Starts the Jason runtime when this account logs on. Nothing supervises it: a runtime that stops stays stopped until somebody starts it.</Description>
+                <URI>\Jason-{{Sid}}</URI>
+              </RegistrationInfo>
+              <Triggers>
+                <LogonTrigger>
+                  <Enabled>true</Enabled>
+                  <UserId>{{Sid}}</UserId>
+                </LogonTrigger>
+              </Triggers>
+              <Principals>
+                <Principal id="Author">
+                  <UserId>{{Sid}}</UserId>
+                  <LogonType>InteractiveToken</LogonType>
+                  <RunLevel>LeastPrivilege</RunLevel>
+                </Principal>
+              </Principals>
+              <Settings>
+                <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+                <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+                <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+                <AllowHardTerminate>true</AllowHardTerminate>
+                <StartWhenAvailable>false</StartWhenAvailable>
+                <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+                <AllowStartOnDemand>true</AllowStartOnDemand>
+                <Enabled>true</Enabled>
+                <Hidden>false</Hidden>
+                <RunOnlyIfIdle>false</RunOnlyIfIdle>
+                <WakeToRun>false</WakeToRun>
+                <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+                <Priority>7</Priority>
+              </Settings>
+              <Actions Context="Author">
+                <Exec>
+                  <Command>C:\Program Files\Jason &amp; Co\jason.exe</Command>
+                  <Arguments>runtime run --detached --data-dir C:\Users\ada\.jason</Arguments>
+                </Exec>
+              </Actions>
+            </Task>
+            """;
+
+        // Line by line, so the test says nothing about how this file's own lines end on a given checkout.
+        Assert.Equal(Expected.ReplaceLineEndings("\n"), task.Artifact.ReplaceLineEndings("\n"));
+    }
+
+    /// <summary>
+    /// What the Task Scheduler hands back is not what it was handed. Measured on Windows 11 24H2 (build 26100)
+    /// with a task registered from this document's shape: the principal keeps the SID while the trigger's account
+    /// comes back as a <c>MACHINE\name</c>; the defaults (<c>RunLevel</c>, <c>Priority</c>, the <c>Enabled</c>
+    /// flags) are left out; <c>IdleSettings</c> and <c>UseUnifiedSchedulingEngine</c> appear; the order changes;
+    /// and every line ends in CR CR LF, which an editor shows as a blank line after every element. Whatever reads a registration back — <c>autostart status</c>,
+    /// <c>jason status</c>, <c>jason uninstall</c> — reads the command and nothing else, so none of that may
+    /// matter.
+    /// </summary>
+    [Fact]
+    public void A_task_read_back_in_the_task_scheduler_s_own_words_names_the_same_command()
+    {
+        var stored = $"""
+            <?xml version="1.0" encoding="UTF-16"?>
+            <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+              <RegistrationInfo>
+                <Description>Starts the Jason runtime when this account logs on.</Description>
+                <URI>\{Task}</URI>
+              </RegistrationInfo>
+              <Principals>
+                <Principal id="Author">
+                  <UserId>{Sid}</UserId>
+                  <LogonType>InteractiveToken</LogonType>
+                </Principal>
+              </Principals>
+              <Settings>
+                <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+                <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+                <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+                <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+                <IdleSettings>
+                  <StopOnIdleEnd>true</StopOnIdleEnd>
+                  <RestartOnIdle>false</RestartOnIdle>
+                </IdleSettings>
+                <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
+              </Settings>
+              <Triggers>
+                <LogonTrigger>
+                  <UserId>ADA-PC\ada</UserId>
+                </LogonTrigger>
+              </Triggers>
+              <Actions Context="Author">
+                <Exec>
+                  <Command>{Executable}</Command>
+                  <Arguments>runtime run --detached --data-dir {Windows}</Arguments>
+                </Exec>
+              </Actions>
+            </Task>
+            """.ReplaceLineEndings("\r\r\n");
+
+        Assert.Equal(
+            [Executable, "runtime", "run", "--detached", "--data-dir", Windows],
+            AutostartArtifacts.Read(AutostartPlatform.Windows, stored));
     }
 
     /// <summary>
@@ -209,7 +363,8 @@ public class AutostartArtifactsTests
     /// <summary>
     /// The question a registrar asks is the one the registration carries. A registrar has to ask before it
     /// knows what this installation would register — what is there may have been put there by another one — so
-    /// the question is composed from the platform alone, and this is what keeps the two from drifting apart.
+    /// the question is composed from the platform and, on Windows, the account the task is named for; this is what
+    /// keeps the two from drifting apart.
     /// </summary>
     [Theory]
     [InlineData(AutostartPlatform.Windows)]
@@ -218,12 +373,12 @@ public class AutostartArtifactsTests
     public void The_question_a_registrar_asks_is_the_one_the_registration_carries(AutostartPlatform platform) =>
         Assert.Equal(
             AutostartArtifacts.Compose(platform, [Executable], Windows, Home, Sid).Query,
-            AutostartArtifacts.QueryFor(platform));
+            AutostartArtifacts.QueryFor(platform, Sid));
 
     /// <summary>And a machine that registers nothing is asked nothing.</summary>
     [Fact]
     public void A_platform_that_registers_nothing_is_asked_nothing() =>
-        Assert.Empty(AutostartArtifacts.QueryFor(AutostartPlatform.Unsupported));
+        Assert.Empty(AutostartArtifacts.QueryFor(AutostartPlatform.Unsupported, Sid));
 
     /// <summary>There is nothing to compose for a platform that cannot register anything; the verb says so first.</summary>
     [Fact]

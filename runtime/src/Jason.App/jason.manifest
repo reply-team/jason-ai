@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  The application manifest of jason.exe. It replaces the compiler's default one, which carried only an identity
+  and the trustInfo below, so the trustInfo stays: asInvoker keeps every mode of this program running with the
+  rights of whoever started it, and never asks for more.
+
+  consoleAllocationPolicy "detached" is Microsoft's documented setting (the "Console Allocation Policy" page). It
+  is read by Windows 11 24H2 (build 26100) and later and by Windows Server 2025, and ignored before. A console
+  program that declares it gets a console only by inheriting one. Typed in a terminal, jason inherits the
+  terminal's and behaves as it always has; started by a logon task, or by any program with no console, it gets
+  none, which keeps a window off the desktop when the runtime starts at logon. On an older Windows the runtime
+  frees the console it was handed instead (ProcessDetacher).
+-->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <assemblyIdentity version="1.0.0.0" name="Jason.App"/>
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+  <application>
+    <windowsSettings>
+      <consoleAllocationPolicy xmlns="http://schemas.microsoft.com/SMI/2024/WindowsSettings">detached</consoleAllocationPolicy>
+    </windowsSettings>
+  </application>
+</assembly>

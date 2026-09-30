@@ -67,6 +67,8 @@ public class UninstallVerbTests
     [InlineData("by receipt")]
     [InlineData("--purge-data")]
     [InlineData("Never touched")]
+    [InlineData("another account's logon registration")]
+    [InlineData("including the task an earlier version registered as Jason")]
     public async Task The_help_page_publishes_what_it_removes_and_what_it_never_touches(string published)
     {
         using var dir = new TempPaths();

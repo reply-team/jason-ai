@@ -5,10 +5,22 @@
     <RootNamespace>Jason.App</RootNamespace>
     <!-- A single-file publish leaves native libraries (SQLite's, the IIS module's) beside the executable unless it is told to bundle them. A release ships one executable and nothing else, so it is; they are extracted to the user's own cache on first run. -->
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- The application manifest: asInvoker, as the compiler's default one had it, and consoleAllocationPolicy detached. jason.manifest says why. -->
+    <ApplicationManifest>jason.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Jason.Cli/Jason.Cli.csproj" />
     <ProjectReference Include="../Jason.Runtime/Jason.Runtime.csproj" />
     <ProjectReference Include="../Jason.PluginHost/Jason.PluginHost.csproj" />
   </ItemGroup>
+
+  <!-- Whether the SDK writes the application manifest into a Windows executable it builds on another host has not
+       been measured for this project (earlier SDKs warned, NETSDK1074, that they did not), and an executable
+       without it would open a console window at every logon. So a win-x64 build elsewhere is refused; both
+       workflows package win-x64 on windows-latest, where the package action reads the manifest out of the file. -->
+  <Target Name="RefuseWindowsExecutableElsewhere"
+          BeforeTargets="PrepareForBuild"
+          Condition="$(RuntimeIdentifier.StartsWith('win')) and !$([MSBuild]::IsOSPlatform('Windows'))">
+    <Error Text="A Windows executable of jason is built on Windows only: whether the SDK writes its application manifest (consoleAllocationPolicy) on another host has not been measured, and without it the runtime would open a console window at every logon." />
+  </Target>
 </Project>

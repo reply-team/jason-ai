@@ -5,12 +5,19 @@ namespace Jason.Runtime.Hosting;
 
 /// <summary>
 /// Turns this process into a background service process before hosting starts: nothing of it stays attached to
-/// the terminal that launched it. The parent already spawned it with all three standard streams redirected, so
-/// no console handle was inherited; this closes the other half of the arrangement by pointing descriptors 0, 1
-/// and 2 at the null device, so a stray write from any library cannot block on a pipe nobody reads. On Unix the
-/// process also leaves its parent's session, because the terminal's SIGHUP would otherwise end a runtime that
-/// has to outlive the shell (macOS ships no <c>setsid</c> binary, so the process does it itself).
+/// the terminal that launched it. <c>jason runtime start</c> spawned it with all three standard streams
+/// redirected, so no console handle was inherited; this closes the other half of the arrangement by pointing
+/// descriptors 0, 1 and 2 at the null device, so a stray write from any library cannot block on a pipe nobody
+/// reads. On Unix the process also leaves its parent's session, because the terminal's SIGHUP would otherwise end
+/// a runtime that has to outlive the shell (macOS ships no <c>setsid</c> binary, so the process does it itself).
 /// </summary>
+/// <remarks>
+/// On Windows the parent may also have handed it a console. A logon task does, on a Windows that ignores the
+/// executable's <c>consoleAllocationPolicy</c>, and that console has a window on the person's desktop.
+/// <c>jason runtime start</c> does on every Windows: it starts the runtime with no console window, which still
+/// leaves it a console, one nobody can see. This lets go of either, and says which it found
+/// (<see cref="ConsoleAtStart"/>), so the runtime can write that down once it has a log.
+/// </remarks>
 public static class ProcessDetacher
 {
     private const string LibC = "libc";
@@ -37,7 +44,8 @@ public static class ProcessDetacher
     /// <summary>Held for the life of the process: disposing the registration would restore the default action.</summary>
     private static PosixSignalRegistration? _hangUp;
 
-    public static void Detach()
+    /// <summary>Lets go of the terminal, and on Windows says what console was attached; null elsewhere.</summary>
+    public static ConsoleAtStart? Detach()
     {
         // Managed writes go nowhere even before the handles move, so nothing races the reopening below.
         Console.SetIn(TextReader.Null);
@@ -46,28 +54,64 @@ public static class ProcessDetacher
 
         if (OperatingSystem.IsWindows())
         {
-            DetachOnWindows();
+            return DetachOnWindows();
         }
-        else
-        {
-            DetachOnUnix();
-        }
+
+        DetachOnUnix();
+        return null;
     }
 
-    private static void DetachOnWindows()
+    /// <summary>What was attached, whether it showed, and whether it was let go of: the whole of the answer.</summary>
+    internal static ConsoleAtStart Outcome(bool attached, bool visible, bool freed) =>
+        !attached ? ConsoleAtStart.None
+        : !freed ? ConsoleAtStart.NotFreed
+        : visible ? ConsoleAtStart.Freed
+        : ConsoleAtStart.FreedHidden;
+
+    /// <summary>
+    /// The runtime log's template for the line that says what console was found. One constant, because the log
+    /// file carries the template and the value as separate properties (<c>"@mt"</c> and <c>"Console"</c>), and
+    /// the page, its guard and the tests all look for the line by this template.
+    /// </summary>
+    public const string LogTemplate = "Console at start: {Console}";
+
+    /// <summary>The word the runtime's log says it with.</summary>
+    public static string Word(ConsoleAtStart console) => console switch
+    {
+        ConsoleAtStart.None => "none",
+        ConsoleAtStart.Freed => "freed",
+        ConsoleAtStart.FreedHidden => "freed_hidden",
+        _ => "not_freed",
+    };
+
+    private static ConsoleAtStart DetachOnWindows()
     {
         var nullDevice = OpenNullDevice();
-        if (nullDevice == IntPtr.Zero || nullDevice == new IntPtr(-1))
+        if (nullDevice != IntPtr.Zero && nullDevice != new IntPtr(-1))
         {
-            // Without a null device the inherited handles stay as the parent left them: already redirected
-            // pipes that nobody reads. That is survivable, and the runtime log records nothing about it
-            // because logging is not configured yet.
-            return;
+            SetStdHandle(StandardInputHandle, nullDevice);
+            SetStdHandle(StandardOutputHandle, nullDevice);
+            SetStdHandle(StandardErrorHandle, nullDevice);
         }
 
-        SetStdHandle(StandardInputHandle, nullDevice);
-        SetStdHandle(StandardOutputHandle, nullDevice);
-        SetStdHandle(StandardErrorHandle, nullDevice);
+        // Without a null device the inherited handles stay as the parent left them: already redirected pipes that
+        // nobody reads. That is survivable, and nothing is logged about it because logging is not configured yet.
+        // The console is let go of either way: a window on the desktop is not survivable in the same sense.
+        return LetGoOfTheConsole();
+    }
+
+    /// <summary>
+    /// A console with no window is still a console — measured: a shell's hidden console answers
+    /// <c>GetConsoleWindow</c> with 0 while three processes share it — so "attached" is asked of both. Whether it
+    /// showed is asked of the window: the Windows Terminal window a logon task's console had on 24H2, with the
+    /// setting missing, answered <c>IsWindowVisible</c> with true.
+    /// </summary>
+    private static ConsoleAtStart LetGoOfTheConsole()
+    {
+        var window = GetConsoleWindow();
+        var attached = window != IntPtr.Zero || GetConsoleProcessList(new uint[1], 1) != 0;
+        var visible = window != IntPtr.Zero && IsWindowVisible(window);
+        return Outcome(attached, visible, attached && FreeConsole());
     }
 
     private static IntPtr OpenNullDevice()
@@ -152,6 +196,20 @@ public static class ProcessDetacher
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetStdHandle(int standardHandle, IntPtr handle);
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetConsoleWindow();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint GetConsoleProcessList(uint[] processList, uint processCount);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool FreeConsole();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr window);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr CreateFileW(string fileName, uint desiredAccess, uint shareMode, IntPtr securityAttributes, uint creationDisposition, uint flagsAndAttributes, IntPtr templateFile);

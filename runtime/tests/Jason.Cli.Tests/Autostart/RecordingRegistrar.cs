@@ -21,6 +21,9 @@ public sealed class RecordingRegistrar(AutostartPlatform platform = AutostartPla
     /// <summary>Something for the next call to throw, for the tests about a tool that refuses.</summary>
     public AutostartException? Refuses { get; set; }
 
+    /// <summary>What a removal reports taking away, where a test says; otherwise whatever this machine held.</summary>
+    public AutostartRemoval? Removes { get; set; }
+
     public AutostartPlatform Platform => platform;
 
     public AutostartState Read() => Refuses is null ? State : throw Refuses;
@@ -39,7 +42,7 @@ public sealed class RecordingRegistrar(AutostartPlatform platform = AutostartPla
         State = new AutostartState(true, registration.Run, registration.ArtifactPath);
     }
 
-    public void Remove(AutostartRegistration registration)
+    public AutostartRemoval Remove(AutostartRegistration registration)
     {
         if (Refuses is not null)
         {
@@ -47,6 +50,8 @@ public sealed class RecordingRegistrar(AutostartPlatform platform = AutostartPla
         }
 
         Removals++;
+        var removed = Removes ?? new AutostartRemoval(State.Registered, Legacy: false);
         State = new AutostartState(false, [], null);
+        return removed;
     }
 }

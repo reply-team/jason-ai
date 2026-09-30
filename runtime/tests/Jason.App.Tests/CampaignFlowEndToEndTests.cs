@@ -85,6 +85,22 @@ public class CampaignFlowEndToEndTests
 
             var logs = string.Concat(await Task.WhenAll(Directory.GetFiles(paths.LogsDirectory).Select(file => ReadSharedAsync(file, Ct))));
             Assert.Contains("Shutdown requested through the API", logs, StringComparison.Ordinal);
+
+            // What each runtime found attached to it, read from the file as the file carries it. `runtime start`
+            // launches the runtime with no console window, which on Windows still hands it a console: the
+            // detached runtime lets go of it and says freed_hidden, once per start. This is what holds both the
+            // hand-over from the mode router and the half of "attached" that a windowless console answers to.
+            // Without the hand-over no line is written at all; without that half, a runtime started this way said
+            // "none" and kept its console. Elsewhere nothing is said, because there is no console to speak of.
+            var consoles = logs
+                .Split('\n')
+                .Where(line => line.TrimStart().StartsWith('{'))
+                .Select(line => JsonNode.Parse(line)!)
+                .Where(line => (string?)line["@mt"] == Jason.Runtime.Hosting.ProcessDetacher.LogTemplate)
+                .Select(line => (string?)line["Console"])
+                .ToList();
+            string?[] expected = OperatingSystem.IsWindows() ? ["freed_hidden", "freed_hidden"] : [];
+            Assert.Equal(expected, consoles);
         }
         finally
         {

@@ -38,7 +38,8 @@ public static class UninstallCommand
     private const string Boundaries =
         """
         Removed, in this order, each step reported:
-          1. the logon registration, first, so a logon part-way through cannot start what is going
+          1. the logon registration, first, so a logon part-way through cannot start what is going: this
+             account's, on Windows including the task an earlier version registered as Jason
           2. the runtime — and if it will not stop, nothing further is removed
           3. every skill a deployment recorded, by the paths its record names
           4. the PATH entry, only where the installer wrote it and its directory holds nothing but Jason:
@@ -52,7 +53,7 @@ public static class UninstallCommand
                                    is refused.
         Never touched:             a skill there is no receipt for, any other skill in an agent harness,
                                    any provider CLI, any model credential, a PATH entry the installer did
-                                   not write.
+                                   not write, another account's logon registration.
         This account's, not this installation's: the logon registration and the agent harnesses. Uninstalling
         a second installation on one account takes the first one's registration and harness skills too.
 
@@ -263,6 +264,12 @@ public static class UninstallCommand
         if (plan.AutostartRegistered)
         {
             env.Out.WriteLine("  the logon registration" + (plan.AutostartArtifact is { } document ? $" ({document})" : string.Empty));
+        }
+
+        // Nothing reads the task 0.1.0 registered before the removal does, so the plan names it conditionally.
+        if (RuntimeAutostartCommands.Registrar(env).Platform is Autostart.AutostartPlatform.Windows)
+        {
+            env.Out.WriteLine($"  a logon task named {Autostart.AutostartArtifacts.LegacyTaskName}, if an earlier version registered one for this account");
         }
 
         if (plan.RuntimePid is { } pid)

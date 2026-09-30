@@ -252,9 +252,10 @@ foreground instead, and `jason runtime status` asks it for `system.info` through
 
 To have the runtime start when you log on, register it once. It carries the data directory it was
 registered under, and nothing supervises it afterwards — a runtime that stops stays stopped until
-somebody starts it. On Windows `enable` and `disable` have to be run from an elevated prompt, and
-standard accounts are unsupported in this version. `docs/release-and-update.md` §8 says what each
-platform registers, what it costs, and what only a hand check can prove.
+somebody starts it. It needs no administrator rights: on Windows it registers from an ordinary
+prompt, on a standard account too, one task per account, and the runtime then runs in your session
+and ends when you sign out. `docs/release-and-update.md` §8 says what each platform registers, what it costs, and what only a
+hand check can prove.
 
 ```sh
 jason runtime autostart enable

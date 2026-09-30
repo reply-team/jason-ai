@@ -3,6 +3,7 @@ using Jason.Cli.Update;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Update;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Hosting;
 using Jason.Runtime.Plugins.Registry;
 
 namespace Jason.Runtime.Tests.Documentation;
@@ -395,7 +396,8 @@ public class ReleaseAndUpdateDocTests
         var page = Read();
 
         Assert.Contains("schtasks", page, StringComparison.Ordinal);
-        Assert.Contains(AutostartArtifacts.TaskName, page, StringComparison.Ordinal);
+        // The task's name, the way the page has to spell it: one per account, named for the account's SID.
+        Assert.Contains($"`{AutostartArtifacts.TaskName("<SID>")}`", page, StringComparison.Ordinal);
         Assert.Contains(AutostartArtifacts.Label, page, StringComparison.Ordinal);
         Assert.Contains(AutostartArtifacts.UnitName, page, StringComparison.Ordinal);
         Assert.Contains("Library/LaunchAgents", page, StringComparison.Ordinal);
@@ -468,19 +470,114 @@ public class ReleaseAndUpdateDocTests
     }
 
     /// <summary>
-    /// Which accounts a logon task really works for. An S4U task logs on as a batch logon, and an account
-    /// without that right registers cleanly and then fails at every logon with nothing to show for it — the
-    /// kind of thing a page has to say because no `status` line can.
+    /// Which accounts a logon task works for, now that it is an interactive logon: every account, from the prompt
+    /// it already has. The batch-logon right the old S4U task needed, and the standard accounts it could not
+    /// serve, are gone from the page with it.
     /// </summary>
     [Fact]
-    public void The_page_says_which_accounts_a_logon_task_works_for()
+    public void The_page_says_every_account_registers_from_an_ordinary_prompt()
     {
         var page = Read();
 
-        Assert.Contains("S4U", page, StringComparison.Ordinal);
-        Assert.Contains("SeBatchLogonRight", page, StringComparison.Ordinal);
-        Assert.Contains("Log on as a batch job", page, StringComparison.Ordinal);
-        Assert.Contains("Administrators", page, StringComparison.Ordinal);
+        Assert.Contains("from an ordinary prompt", page, StringComparison.Ordinal);
+        Assert.Contains("standard account", page, StringComparison.Ordinal);
+        Assert.Contains("`InteractiveToken`", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("SeBatchLogonRight", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("Log on as a batch job", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("unsupported in this version", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The page quotes Microsoft, and says so wherever it does: a sentence from the Task Scheduler's reference or
+    /// the console documentation is Microsoft's claim, not one this project measured, and a reader should be able
+    /// to tell which is which without leaving the paragraph — and to open the page it came from.
+    /// </summary>
+    [Theory]
+    [InlineData("\"no password is stored by the system and there is no access to either the network or encrypted files\"", "https://learn.microsoft.com/en-us/windows/win32/taskschd/principal-logontype")]
+    [InlineData("\"User must already be logged on. The task will be run only in an existing interactive session.\"", "https://learn.microsoft.com/en-us/windows/win32/taskschd/principal-logontype")]
+    [InlineData("\"Interactive applications are terminated at logoff\"", "https://learn.microsoft.com/en-us/windows/console/handlerroutine")]
+    [InlineData("\"informs the operating system to skip allocating a console\"", "https://learn.microsoft.com/en-us/windows/console/console-allocation-policy")]
+    public void The_page_quotes_microsoft_as_microsoft(string quotation, string source)
+    {
+        var paragraph = Assert.Single(
+            Read().ReplaceLineEndings("\n").Split("\n\n"),
+            candidate => candidate.ReplaceLineEndings(" ").Contains(quotation, StringComparison.Ordinal));
+
+        Assert.Contains("Microsoft", paragraph, StringComparison.Ordinal);
+        Assert.Contains($"]({source})", paragraph, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And nothing that is not Microsoft's is put in quotation marks beside Microsoft's name. The page once quoted
+    /// its own reading of the console setting as if it were the setting's documentation.
+    /// </summary>
+    [Fact]
+    public void The_page_puts_no_paraphrase_in_microsoft_s_mouth() =>
+        Assert.DoesNotContain(
+            "\"give this program a console only if it inherits one\"",
+            Read().ReplaceLineEndings(" "),
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// The one cost of an interactive logon, said where the registration is described rather than discovered at
+    /// the next sign-out, with where the work that was in flight goes.
+    /// </summary>
+    [Fact]
+    public void The_page_says_what_signing_out_costs()
+    {
+        var page = Read();
+
+        Assert.Contains("ends when you sign out", page, StringComparison.Ordinal);
+        Assert.Contains("Stopping and restarting", page, StringComparison.Ordinal);
+
+        // Measured: a runtime ended by a sign-out wrote neither the line it writes when it begins to stop nor the one
+        // it writes when it has stopped.
+        Assert.Contains("ends when you sign out, without a chance to say so", page.ReplaceLineEndings(" "), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Where "no window" stops being true: the setting is read by 24H2 and later and ignored before, and what is
+    /// said about the older builds was measured with a test program lacking the setting, on 24H2, not on an older
+    /// Windows. The page says both.
+    /// </summary>
+    [Fact]
+    public void The_page_says_where_the_window_guarantee_ends()
+    {
+        var page = Read();
+
+        Assert.Contains("`consoleAllocationPolicy`", page, StringComparison.Ordinal);
+        Assert.Contains("24H2", page, StringComparison.Ordinal);
+        Assert.Contains("26100", page, StringComparison.Ordinal);
+        Assert.Contains("Windows Server 2025", page, StringComparison.Ordinal);
+        Assert.Contains("closes by itself", page, StringComparison.Ordinal);
+
+        // What has and has not been run on an older Windows: never at logon; the packaged executable, on every pull
+        // request, on the build the CI job names, where a runtime `jason runtime start` launched says freed_hidden.
+        var words = page.ReplaceLineEndings(" ");
+        Assert.Contains("has not been started at logon on an older Windows", words, StringComparison.Ordinal);
+        Assert.DoesNotContain("It has not been run on an older Windows", words, StringComparison.Ordinal);
+        Assert.Contains("on Windows Server 2022 (build 20348)", words, StringComparison.Ordinal);
+        Assert.Contains("runs-on: windows-2022", Source(".github/workflows/ci.yml"), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The log line the page tells a person to read is the one the runtime's file carries, as the file carries it.
+    /// The log is JSON Lines: the template and the value are separate properties, so the rendered sentence the page
+    /// used to quote appears in no log anywhere, and a person searching for it found nothing. The page's text is
+    /// computed from the code here, so neither can be renamed without the other.
+    /// </summary>
+    [Theory]
+    [InlineData(ConsoleAtStart.None)]
+    [InlineData(ConsoleAtStart.Freed)]
+    [InlineData(ConsoleAtStart.FreedHidden)]
+    [InlineData(ConsoleAtStart.NotFreed)]
+    public void The_log_line_the_page_quotes_is_the_one_the_runtime_writes(ConsoleAtStart console)
+    {
+        var page = Read();
+
+        Assert.Contains($"\"@mt\":\"{ProcessDetacher.LogTemplate}\"", page, StringComparison.Ordinal);
+        Assert.Contains($"`\"Console\":\"{ProcessDetacher.Word(console)}\"`", page, StringComparison.Ordinal);
+        Assert.DoesNotContain($"`Console at start: {ProcessDetacher.Word(console)}`", page, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -505,15 +602,36 @@ public class ReleaseAndUpdateDocTests
         // The line that carries the outcome, whatever the outcome is.
         Assert.Contains("Checked by hand so far:", page, StringComparison.Ordinal);
 
-        // And it has an outcome now. The check ran on Windows and on Linux, on one machine each; the paragraph
-        // says what held there and stops. "nothing" was true for exactly as long as it was true.
+        // And it has an outcome. The check ran on Linux; the paragraph says what held there and stops. "nothing"
+        // was true for exactly as long as it was true.
         Assert.DoesNotContain("Checked by hand so far:** nothing", page, StringComparison.Ordinal);
-        Assert.Contains("signed out and back in", page, StringComparison.Ordinal);
         Assert.Contains("systemd --user", page, StringComparison.Ordinal);
 
-        // Including the part that did not: an ordinary prompt cannot register on Windows, which is the first
-        // thing a person meets and the last thing a page should leave them to discover.
-        Assert.Contains("refused", page, StringComparison.Ordinal);
+        // Windows was checked by hand in the shape this version registers, on a standard account, through a real
+        // sign-out and sign-in. The record says what held, with the log line in the form the file carries it, and
+        // what the runtime said when `jason runtime start` started it instead.
+        Assert.DoesNotContain("not yet checked by hand in the shape this version registers", page, StringComparison.Ordinal);
+        var record = HandCheckRecord(page);
+        Assert.Contains("Windows, on 2026-09-29, on a standard account", record, StringComparison.Ordinal);
+        Assert.Contains("signed out and back in", record, StringComparison.Ordinal);
+        Assert.Contains("ended when the account signed out", record, StringComparison.Ordinal);
+        Assert.Contains($"`\"@mt\":\"{ProcessDetacher.LogTemplate}\"` with `\"Console\":\"{ProcessDetacher.Word(ConsoleAtStart.None)}\"`", record, StringComparison.Ordinal);
+        Assert.Contains($"`\"Console\":\"{ProcessDetacher.Word(ConsoleAtStart.FreedHidden)}\"`", record, StringComparison.Ordinal);
+
+        // The administrator's half of "an administrator's account or a standard account" was measured too, while the
+        // standard account's task stood registered, so the two accounts' tasks were shown side by side.
+        Assert.Contains("On an administrator's account, from an ordinary prompt", record, StringComparison.Ordinal);
+        Assert.Contains("while the standard account's task stood registered beside it", record, StringComparison.Ordinal);
+    }
+
+    /// <summary>The hand-check block, read as one line: from the line that names what was checked to what was not.</summary>
+    private static string HandCheckRecord(string page)
+    {
+        var from = page.IndexOf("Checked by hand so far:", StringComparison.Ordinal);
+        var to = page.IndexOf("**Not checked:**", from, StringComparison.Ordinal);
+        Assert.True(from >= 0 && to > from, "The page has no hand-check block.");
+
+        return string.Join(' ', page[from..to].ReplaceLineEndings("\n").Split('\n').Select(line => line.TrimStart('>', ' ').TrimEnd()));
     }
 
     /// <summary>
@@ -547,49 +665,172 @@ public class ReleaseAndUpdateDocTests
     }
 
     /// <summary>
-    /// That registering on Windows is an elevated act. The page said the opposite — "nothing is elevated", in
-    /// the page and in the README — until a hand check typed `enable` at an ordinary prompt on a real machine
-    /// and the Task Scheduler answered <c>ERROR: Access is denied.</c> with <c>0x80070005</c>. The account was
-    /// an administrator; the prompt was not elevated, and that is the half that decides.
+    /// The one case an elevated prompt is still for: a task an earlier version registered from one. It is worded
+    /// on the refusal having happened, because it was never measured — the task's own security may well let the
+    /// same account remove it from an ordinary prompt — so the page says what to do if it happens, and never that
+    /// it will.
     /// </summary>
-    /// <remarks>
-    /// The claim is cheap to make and expensive to leave wrong: it is the first thing a person does with these
-    /// verbs, and a page that promises no elevation sends them to read their own error message as a bug.
-    /// </remarks>
     [Fact]
-    public void The_page_says_that_registering_on_windows_needs_an_elevated_prompt()
+    public void The_page_says_the_one_case_an_elevated_prompt_is_for()
     {
-        var page = Read();
+        // Read as one line, so where the page happens to wrap decides nothing.
+        var page = Read().ReplaceLineEndings(" ");
 
-        Assert.Contains("elevated prompt", page, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "**If one of them answers `ERROR: Access is denied.` about the task named `Jason`**, an earlier version may have registered it from an elevated prompt",
+            page,
+            StringComparison.Ordinal);
+        Assert.Contains("`jason runtime autostart disable` from an elevated prompt once", page, StringComparison.Ordinal);
 
-        // And says what it costs the accounts that cannot get one, rather than leaving them to find out.
-        Assert.Contains("standard account", page, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("unsupported", page, StringComparison.OrdinalIgnoreCase);
+        // Named: the task 0.1.0 left is `\Jason`, the one name every account shared, and only this account's goes.
+        Assert.Contains($"called `\\{AutostartArtifacts.LegacyTaskName}` for the whole machine", page, StringComparison.Ordinal);
+        Assert.Contains("take it away only where it is this account's 0.1.0 task, the one that runs the runtime", page, StringComparison.Ordinal);
+        Assert.Contains("another account's, or a task of that name that runs anything else, is never touched", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("this account's is taken away, and another account's is never touched", page, StringComparison.Ordinal);
+
+        // The elevated remedy is an administrator's act on their own account; a standard account asks an administrator.
+        Assert.Contains("On an administrator's own account", page, StringComparison.Ordinal);
+        Assert.Contains("on a standard account an elevated prompt runs as somebody else", page, StringComparison.Ordinal);
+        Assert.Contains("ask an administrator to delete the task by the name the message gives", page, StringComparison.Ordinal);
+        Assert.Contains("never run `jason` under another account", page, StringComparison.Ordinal);
+
+        // And uninstall gets its own remedy. "The same remedy applies" handed it the one that ends by enabling again.
+        Assert.Contains("run the same elevated `disable`, then `jason uninstall` again", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("the same remedy applies", page, StringComparison.Ordinal);
+
+        // The unconditional claims about the unmeasured case, gone.
+        Assert.DoesNotContain("are refused (`ERROR: Access is denied.`", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("and so is the first step of `jason uninstall`", page, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// And which half of the feature that costs. Reading is not an elevated act — measured on the machine the
-    /// hand check ran on, with the task registered — so a page that said "autostart needs administrator" flatly
-    /// would send people to elevate a prompt for `status`, which needs nothing.
+    /// Reading the registration needs nothing, and reads this account's task only: <c>status</c> never asks after
+    /// the name 0.1.0 registered, so the page says which verb does.
     /// </summary>
     [Fact]
-    public void The_page_says_that_reading_the_registration_is_not_an_elevated_act()
+    public void The_page_says_that_reading_the_registration_needs_nothing()
     {
-        var page = Read();
+        var page = Read().ReplaceLineEndings(" ");
 
-        Assert.Contains("`status` needs no elevation", page, StringComparison.Ordinal);
+        Assert.Contains("`status` reads this account's task from an ordinary prompt", page, StringComparison.Ordinal);
+        Assert.Contains("it does not ask after `\\Jason`, so after an upgrade from 0.1.0 run `enable` or `disable` once", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("reads either kind", page, StringComparison.Ordinal);
     }
 
-    /// <summary>And the sentence it replaced is gone from both places that carried it.</summary>
+    /// <summary>
+    /// The row that says what Windows registers names the task as the code names it. The name appears elsewhere on the
+    /// page too, so only the row itself can hold the row: a row reverted to the old single name stayed green before.
+    /// </summary>
     [Fact]
-    public void Nothing_promises_that_autostart_is_never_elevated()
+    public void The_windows_row_names_the_task_as_the_code_names_it()
     {
-        foreach (var text in new[] { Read(), Source("README.md") })
+        var row = Assert.Single(Read().Split('\n'), line => line.TrimStart().StartsWith("| Windows |", StringComparison.Ordinal));
+
+        Assert.Contains($"a logon task called `{AutostartArtifacts.TaskName("<SID>")}`, one per account", row, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Every refusal names its task and its case, and the page says so for all three, not only for the task 0.1.0
+    /// left: this account's own task out of this prompt's reach, and a machine that will not register one.
+    /// </summary>
+    [Fact]
+    public void The_page_names_every_case_a_refusal_can_be()
+    {
+        var page = Read().ReplaceLineEndings(" ");
+
+        Assert.Contains("Every refusal names the task it is about and its case", page, StringComparison.Ordinal);
+        Assert.Contains("the task named for this account, `Jason-<SID>`, out of this prompt's reach", page, StringComparison.Ordinal);
+
+        // Named, not owned: a task this prompt could not read cannot be shown to be this account's, and its denial never
+        // calls it that. The page's list of cases does not either.
+        Assert.DoesNotContain("this account's own task, `Jason-<SID>`, out of this prompt's reach", page, StringComparison.Ordinal);
+        Assert.Contains("a machine that will not register a logon task for this account", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What taking an installation off the machine removes and never touches, on the page and in the install guide,
+    /// as the verb's own help says it: this account's registration, the task 0.1.0 left included, and never another
+    /// account's.
+    /// </summary>
+    [Fact]
+    public void The_pages_say_whose_logon_registration_uninstall_removes_as_its_help_does()
+    {
+        var page = Read().ReplaceLineEndings(" ");
+        var install = Source("docs/INSTALL.md").ReplaceLineEndings(" ");
+
+        Assert.Contains("| this account's logon registration, on Windows including the task `\\Jason` an earlier version registered for it |", page, StringComparison.Ordinal);
+        Assert.Contains("a PATH entry the installer did not write; another account's logon registration.", page, StringComparison.Ordinal);
+        Assert.Contains("this account's logon registration first — on Windows including the task `\\Jason` an earlier version registered for it", install, StringComparison.Ordinal);
+        Assert.Contains("no PATH entry the installer did not write, no other account's logon registration.", install, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// One task per account, said where a person reading about a shared machine would look: the task's name is the
+    /// account's, and another account's is out of reach. A page that said one registration per account while the
+    /// code registered one per machine is how this was found.
+    /// </summary>
+    [Fact]
+    public void The_page_says_each_account_has_its_own_task()
+    {
+        var page = Read().ReplaceLineEndings(" ");
+
+        Assert.Contains("every account on it has its own task there", page, StringComparison.Ordinal);
+        Assert.Contains("another account's ordinary prompt can neither read nor change it", page, StringComparison.Ordinal);
+        Assert.Contains("each registers their own", Source("docs/INSTALL.md").ReplaceLineEndings(" "), StringComparison.Ordinal);
+        Assert.Contains("one task per account", Source("README.md").ReplaceLineEndings(" "), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Nothing sends anybody to elevate for autostart any more: not the page, not the install guide, not the
+    /// README, and not the skill an agent reads before it acts. A copy that still did would have somebody on a
+    /// standard account handed a command they cannot run, for something they can do from the prompt they have.
+    /// </summary>
+    [Fact]
+    public void Nothing_sends_anybody_to_elevate_for_autostart()
+    {
+        string[] places =
+        [
+            "README.md",
+            "docs/INSTALL.md",
+            "docs/release-and-update.md",
+            "skills/runtime/operating-the-installation/SKILL.md",
+        ];
+
+        foreach (var place in places)
         {
-            Assert.DoesNotContain("nothing is elevated", text, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("and nothing is elevated", text, StringComparison.OrdinalIgnoreCase);
+            var text = Source(place).ReplaceLineEndings(" ");
+            Assert.DoesNotContain("have to be run from an elevated prompt", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("must be run from an elevated prompt", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("unsupported in this version", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("SeBatchLogonRight", text, StringComparison.Ordinal);
         }
+    }
+
+    /// <summary>
+    /// What the guard over child processes holds is exactly this: no <c>ProcessStartInfo</c> made outside the door,
+    /// no write to <c>CreateNoWindow</c> or <c>UseShellExecute</c>, no <c>Process.Start</c> from a file name and no
+    /// read of a process's <c>StartInfo</c>. The flag it protects keeps a console child from getting a console
+    /// window of its own; it says nothing about a graphical program's windows or a grandchild's. The words say no
+    /// more than that, wherever they are said.
+    /// </summary>
+    [Fact]
+    public void The_words_about_a_child_s_window_claim_what_the_guard_holds()
+    {
+        // As words: a list item's continuation lines are indented, and where it wraps decides nothing.
+        var instructions = string.Join(' ', Source("CLAUDE.md").Split((char[])[' ', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
+        Assert.DoesNotContain("refuses any other way to start one", instructions, StringComparison.Ordinal);
+        Assert.Contains("with no console window of its own and no shell", instructions, StringComparison.Ordinal);
+        Assert.Contains("Reflection, expression trees and `new T()` are beyond what it reads", instructions, StringComparison.Ordinal);
+        foreach (var shape in (string[])["a `ProcessStartInfo` made anywhere else", "`CreateNoWindow`", "`UseShellExecute`", "`Process.Start` from a file name", "a process's `StartInfo`"])
+        {
+            Assert.Contains(shape, instructions, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("started with no console window of its own", Read().ReplaceLineEndings(" "), StringComparison.Ordinal);
+        Assert.Contains(
+            "No child this product starts gets a console window of its own",
+            Source("runtime/tests/Jason.App.Tests/Processes/NoChildGetsAWindowTests.cs").ReplaceLineEndings(" "),
+            StringComparison.Ordinal);
     }
 
     /// <summary>

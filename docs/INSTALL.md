@@ -3,9 +3,8 @@
 This page takes a machine with nothing on it to an installation that can start work, and then takes it off
 again. It is written to be followed by a person or by an agent, in order, without reading anything else first.
 
-Everything here is per-user. Nothing needs administrator rights, nothing is installed for other people on the
-machine, and the one exception — registering the runtime to start at logon on Windows — is called out where it
-happens.
+Everything here is per-user. Nothing needs administrator rights, and nothing is installed for other people on
+the machine.
 
 ---
 
@@ -242,10 +241,11 @@ jason runtime autostart status
 ```
 
 The registration carries the data directory it was made under, and nothing supervises it afterwards: a
-runtime that stops stays stopped until somebody starts it. **On Windows, `enable` and `disable` must be run
-from an elevated prompt**, and standard accounts are unsupported in this version.
-[`docs/release-and-update.md`](release-and-update.md) §8 says what each platform registers and what only a
-hand check can prove.
+runtime that stops stays stopped until somebody starts it. It needs no administrator rights anywhere, and it
+is this account's alone: on a machine several people sign in to, each registers their own. On Windows the
+runtime then runs in your own session when you sign in, shows no window on Windows 11 24H2 and later, and ends
+when you sign out. [`docs/release-and-update.md`](release-and-update.md) §8 says what each
+platform registers and what only a hand check can prove.
 
 ---
 
@@ -264,10 +264,11 @@ jason uninstall
 **Skills go only by receipt.** Every root a deployment wrote into carries a record listing each path written
 there, and this verb removes those skills and nothing else. A skill you copied into a harness by hand has no
 receipt, so it is removed by nobody — including this. The rest of the installation goes by rule, in a fixed
-order: the logon registration first, so a logon part-way through cannot start what is going; then the runtime,
-and if it will not stop — or is running and does not answer — nothing after that is removed; then the recorded
-skills; then the PATH entry, only where the installer wrote it; then the executable, its install directory, and
-the native libraries a release unpacks the first time it runs — under the temporary directory on Windows, under
+order: this account's logon registration first — on Windows including the task `\Jason` an earlier version
+registered for it — so a logon part-way through cannot start what is going; then the runtime, and if it will not
+stop — or is running and does not answer — nothing after that is removed; then the recorded skills; then the
+PATH entry, only where the installer wrote it; then the executable, its install directory, and the native
+libraries a release unpacks the first time it runs — under the temporary directory on Windows, under
 `~/.net` on macOS and Linux.
 
 "Only where the installer wrote it" is one rule on both platforms: the entry goes only where the installer wrote
@@ -311,8 +312,8 @@ holding your profile, the temporary directory or the installation, which a stray
 refused before anything is removed.
 
 Nothing else is touched: no skill without a receipt, no other skill in an agent harness, no provider CLI, no
-model credential, no PATH entry the installer did not write. It exits 0 when everything it set out to remove is
-gone, and 1 when it did not get there — it refused (a runtime that would not stop, a purge you did not confirm),
-something it set out to remove is still there (a record it could not read, a file it could not remove, a moved
-copy nothing will remove), or it stopped part-way. Every step that did happen is listed either way: in the
-report on stdout, or on stderr where the report itself could not be written.
+model credential, no PATH entry the installer did not write, no other account's logon registration. It exits 0
+when everything it set out to remove is gone, and 1 when it did not get there — it refused (a runtime that would
+not stop, a purge you did not confirm), something it set out to remove is still there (a record it could not
+read, a file it could not remove, a moved copy nothing will remove), or it stopped part-way. Every step that did
+happen is listed either way: in the report on stdout, or on stderr where the report itself could not be written.

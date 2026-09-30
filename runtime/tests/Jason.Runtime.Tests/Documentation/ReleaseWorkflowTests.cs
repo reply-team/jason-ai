@@ -137,6 +137,120 @@ public class ReleaseWorkflowTests
         Assert.True(again.Exit == 0, $"A warm runner packages a second time and: {again.Stderr}");
     }
 
+    /// <summary>
+    /// The Windows executable a release archives is read for its application manifest first: the policy that keeps
+    /// a console window off the desktop when the runtime starts at logon, and <c>asInvoker</c>, both read out of
+    /// the file about to be archived rather than out of the project that built it. <c>ci.yml</c> and
+    /// <c>release.yml</c> both package through this action, so both get the check.
+    /// </summary>
+    [Fact]
+    public void The_packaged_windows_executable_is_read_for_its_manifest_before_it_is_archived()
+    {
+        var steps = Assert.IsType<YamlSequenceNode>(Node(Mapping(Parse(Read(Action)), "runs"), "steps")).Children.Cast<YamlMappingNode>().ToList();
+
+        var reading = steps.FindIndex(step => Scalar(step, "name") == "Read the application manifest out of the packaged executable");
+        Assert.True(reading >= 0, "No step reads the packaged executable's application manifest.");
+        Assert.Equal("startsWith(inputs.rid, 'win-')", Scalar(steps[reading], "if"));
+
+        // Exactly this, and nothing after it. The check refuses with exit 1, which fails a pwsh step only as the
+        // step's last command: a command appended after it would end the step with its own exit code instead, and
+        // a refused executable would be archived.
+        Assert.Equal(
+            "./.github/scripts/Assert-ApplicationManifest.ps1 -Executable $env:EXECUTABLE",
+            Scalar(steps[reading], "run")!.Trim());
+        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), ".github", "scripts", "Assert-ApplicationManifest.ps1")));
+
+        // And nothing lets the refusal through: continue-on-error on this step, or on a workflow step that packages
+        // through this action, would turn a refused executable into a warning and archive it anyway.
+        Assert.Null(Node(steps[reading], "continue-on-error"));
+        foreach (var workflow in (string[][])[Ci, Release])
+        {
+            var jobs = Mapping(Parse(Read(workflow)), "jobs").Children.Values.Cast<YamlMappingNode>();
+            var packaging = jobs
+                .SelectMany(job => Node(job, "steps") is YamlSequenceNode sequence ? sequence.Children.Cast<YamlMappingNode>() : [])
+                .Where(step => Scalar(step, "uses") == "./.github/actions/package")
+                .ToList();
+            Assert.NotEmpty(packaging);
+            Assert.All(packaging, step => Assert.Null(Node(step, "continue-on-error")));
+        }
+
+        var published = steps.FindIndex(step => Scalar(step, "id") == "publish");
+        var archived = steps.FindIndex(step => Scalar(step, "name")?.StartsWith("Archive as", StringComparison.Ordinal) == true);
+        Assert.True(published >= 0 && reading > published, "The manifest is read before there is an executable to read.");
+        Assert.True(archived > reading, "The manifest is read after the executable was archived.");
+    }
+
+    /// <summary>
+    /// Whether the SDK writes a Windows executable's resources when it builds on another host has not been
+    /// measured for this project, and an executable without its manifest would open a console window at every
+    /// logon. So the project refuses that build, and every CI leg asks the refusal by name: on Windows it must let a
+    /// win-x64 build through, elsewhere refuse it.
+    /// </summary>
+    [Fact]
+    public void Ci_proves_a_windows_executable_is_built_on_windows_or_not_at_all()
+    {
+        var jobs = Mapping(Parse(Read(Ci)), "jobs");
+        var steps = Assert.IsType<YamlSequenceNode>(Node(Mapping(jobs, "build-test-publish"), "steps")).Children.Cast<YamlMappingNode>();
+
+        var proving = Assert.Single(steps, step => Scalar(step, "run")?.Contains("-t:RefuseWindowsExecutableElsewhere", StringComparison.Ordinal) == true);
+        Assert.Contains("-p:RuntimeIdentifier=win-x64", Scalar(proving, "run"), StringComparison.Ordinal);
+
+        // A pwsh step ends with the last native command's exit code, and on Linux and macOS that is the refusal's own
+        // 1: the step printed "refused", which is the pass, and then failed on it. It says how it ended itself.
+        Assert.EndsWith("exit 0", Scalar(proving, "run")!.TrimEnd(), StringComparison.Ordinal);
+
+        var project = File.ReadAllText(Path.Combine(RepositoryRoot(), "runtime", "src", "Jason.App", "Jason.App.csproj"));
+        Assert.Contains("<Target Name=\"RefuseWindowsExecutableElsewhere\"", project, StringComparison.Ordinal);
+
+        // The refusal is a precaution, and says so: that the SDK cannot write the manifest elsewhere is what an older
+        // SDK's warning said, not something measured with the one this repository pins.
+        Assert.Contains("has not been measured", project, StringComparison.Ordinal);
+        Assert.DoesNotContain("cannot write", project, StringComparison.Ordinal);
+        Assert.DoesNotContain("only on Windows", Read(Ci) + Read(Action), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A Windows older than 24H2 has to accept the manifest, and nothing on the page's word alone says it does. The
+    /// setting is in a namespace such a loader does not know, and one that rejected it would not start
+    /// <c>jason.exe</c> at all. So a job on an older image starts the executable the build packaged, from the build's
+    /// own artifact: <c>--version</c>, then a runtime started and stopped. It refuses to count a runner that is 24H2
+    /// or later, where the check would pass without proving anything.
+    /// </summary>
+    [Fact]
+    public void Ci_starts_the_packaged_executable_on_a_windows_older_than_its_manifest_s_setting()
+    {
+        var jobs = Mapping(Parse(Read(Ci)), "jobs");
+        var older = Mapping(jobs, "older-windows");
+
+        Assert.Equal("windows-2022", Scalar(older, "runs-on"));
+        Assert.Contains(
+            "build-test-publish",
+            Assert.IsType<YamlSequenceNode>(Node(older, "needs")).Children.Select(need => need.ToString()));
+
+        var steps = Assert.IsType<YamlSequenceNode>(Node(older, "steps")).Children.Cast<YamlMappingNode>().ToList();
+
+        // The executable the build packaged, not one this job builds for itself.
+        var download = Assert.Single(steps, step => Scalar(step, "uses")?.StartsWith("actions/download-artifact@", StringComparison.Ordinal) == true);
+        Assert.Equal("jason-win-x64", Scalar(Mapping(download, "with"), "name"));
+        Assert.DoesNotContain(steps, step => Scalar(step, "run")?.Contains("dotnet ", StringComparison.Ordinal) == true);
+
+        var starting = Assert.Single(steps, step => Scalar(step, "run")?.Contains("--version", StringComparison.Ordinal) == true);
+        var run = Scalar(starting, "run")!;
+        Assert.Contains("-ge 26100", run, StringComparison.Ordinal);
+        Assert.Contains("runtime start", run, StringComparison.Ordinal);
+        Assert.Contains("runtime stop", run, StringComparison.Ordinal);
+        Assert.Contains("JASON_DATA_DIR", run, StringComparison.Ordinal);
+        Assert.EndsWith("exit 0", run.TrimEnd(), StringComparison.Ordinal);
+
+        // It reaches no network because it is told not to, not because the runtime stops before its first check.
+        Assert.Equal("false", Scalar(Mapping(starting, "env"), "JASON_Update__CheckEnabled"));
+
+        // And what runtime start hands the runtime on a second build: a console with no window, let go of. One start,
+        // so exactly one such line, and that line says it: a second line, or none, fails the step before the match.
+        Assert.Contains("$console.Count -ne 1", run, StringComparison.Ordinal);
+        Assert.Contains("$console[0] -notmatch '\"Console\":\"freed_hidden\"'", run, StringComparison.Ordinal);
+    }
+
     // --- release.yml -------------------------------------------------------------------------------------
 
     [Fact]

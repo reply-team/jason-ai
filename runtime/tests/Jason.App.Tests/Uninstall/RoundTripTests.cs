@@ -263,9 +263,7 @@ public class RoundTripTests
 
         public void Apply(AutostartRegistration registration) => Assert.Fail("nothing here registers anything.");
 
-        public void Remove(AutostartRegistration registration)
-        {
-        }
+        public AutostartRemoval Remove(AutostartRegistration registration) => new(Registration: false, Legacy: false);
     }
 
     /// <summary>

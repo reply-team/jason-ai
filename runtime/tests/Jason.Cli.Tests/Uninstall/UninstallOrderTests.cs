@@ -349,6 +349,159 @@ public class UninstallOrderTests
         Assert.Contains(report.Problems, problem => problem.Contains("stopped part-way", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A denial <c>disable</c> would have explained is explained for this verb instead: the elevated
+    /// <c>disable</c>, then <c>jason uninstall</c> again. Wrapping <c>disable</c>'s own advice put two instructions
+    /// side by side — enable again, and remove it with an ordinary <c>disable</c> — and neither was what a person
+    /// uninstalling should do.
+    /// </summary>
+    [Theory]
+    [InlineData(Cli.Autostart.AutostartDenialKind.Legacy, "Jason")]
+    [InlineData(Cli.Autostart.AutostartDenialKind.Own, "Jason-S-1-5-21-1-2-3-1001")]
+    public async Task A_denied_registration_tells_the_uninstall_what_to_run_next(Cli.Autostart.AutostartDenialKind kind, string task)
+    {
+        using var dir = new TempPaths();
+        var denial = new Cli.Autostart.AutostartDenial(kind, task, false, "ERROR: Access is denied.");
+        var registrar = new RecordingRegistrar
+        {
+            Refuses = new Cli.Autostart.AutostartException(
+                Cli.Autostart.AutostartCodes.Refused,
+                Cli.Autostart.WindowsTasks.Denied(Cli.Autostart.AutostartAct.Disable, denial)) { Denial = denial },
+        };
+
+        var report = await RefusedAtTheRegistrationAsync(dir, registrar);
+
+        Assert.Equal(
+            "The logon registration could not be removed, so nothing further was: "
+            + Cli.Autostart.WindowsTasks.Denied(Cli.Autostart.AutostartAct.Uninstall, denial),
+            report.Refusal);
+        Assert.EndsWith("never run `jason` under another account. Then run `jason uninstall` again. schtasks said: ERROR: Access is denied.", report.Refusal, StringComparison.Ordinal);
+        Assert.DoesNotContain("Remove the logon registration with", report.Refusal, StringComparison.Ordinal);
+        Assert.DoesNotContain("autostart enable", report.Refusal, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The report says what step 1 really took away. An account that upgraded from 0.1.0 has only the old task, which
+    /// the plan cannot see; the report said "No logon registration was registered for this account" right after
+    /// removing it.
+    /// </summary>
+    [Theory]
+    [InlineData(false, false, "No logon registration was registered for this account.")]
+    [InlineData(true, false, "Removed the logon registration.")]
+    [InlineData(false, true, "Removed the logon task named Jason that an earlier version registered for this account.")]
+    [InlineData(true, true, "Removed the logon task named Jason that an earlier version registered for this account.")]
+    public async Task The_report_says_what_the_first_step_took_away(bool registration, bool legacy, string said)
+    {
+        using var dir = new TempPaths();
+        var registrar = new RecordingRegistrar { Removes = new Cli.Autostart.AutostartRemoval(registration, legacy) };
+
+        var (exit, output, _) = await RunAsync(dir, new StepLog(), RuntimeVerbs.NeverCalled(), registrar, running: false);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains(said, output.ToString(), StringComparison.Ordinal);
+        if (legacy && registration)
+        {
+            Assert.Contains("Removed the logon registration.", output.ToString(), StringComparison.Ordinal);
+        }
+
+        if (legacy || registration)
+        {
+            Assert.DoesNotContain("No logon registration was registered", output.ToString(), StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// And the plan says, on Windows, that the old task goes too where there is one: a dry run that left out the one
+    /// thing a real run removes would not be a dry run of it. The plan does not ask after it — only the removal does —
+    /// so it says so conditionally.
+    /// </summary>
+    [Theory]
+    [InlineData(Cli.Autostart.AutostartPlatform.Windows, true)]
+    [InlineData(Cli.Autostart.AutostartPlatform.Linux, false)]
+    public async Task A_windows_plan_names_the_task_an_earlier_version_left(Cli.Autostart.AutostartPlatform platform, bool named)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        var env = new CliEnvironment(
+            output,
+            new StringWriter(),
+            dir.Paths,
+            Autostart: new RecordingRegistrar(platform),
+            Harnesses: HarnessLocators.At(Path.Combine(dir.Paths.Root, "harness")),
+            InstallPath: Path.Combine(dir.Paths.Root + "-install", "jason"),
+            Removes: new RecordingRemover());
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(Human: true, DryRun: true, PurgeData: false, Yes: true, Force: false), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(
+            named,
+            output.ToString().Contains("  a logon task named Jason, if an earlier version registered one for this account", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A refusal that came after this account's 0.1.0 task was removed still leaves that removal in the report's done
+    /// list, whether the refusal was a denial or not: the report never says less than what happened.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_refusal_after_the_legacy_task_went_still_reports_that_it_went(bool denial)
+    {
+        using var dir = new TempPaths();
+        var denied = new Cli.Autostart.AutostartDenial(Cli.Autostart.AutostartDenialKind.Own, "Jason-S-1-5-21-1-2-3-1001", true, "ERROR: Access is denied.");
+        var refusal = denial
+            ? new Cli.Autostart.AutostartException(Cli.Autostart.AutostartCodes.Refused, Cli.Autostart.WindowsTasks.Denied(Cli.Autostart.AutostartAct.Disable, denied)) { Denial = denied, LegacyRemoved = true }
+            : new Cli.Autostart.AutostartException(Cli.Autostart.AutostartCodes.Refused, "schtasks refused: ERROR: something else.") { LegacyRemoved = true };
+
+        var report = await RefusedAtTheRegistrationAsync(dir, new RecordingRegistrar { Refuses = refusal });
+
+        Assert.Contains("Removed the logon task named Jason that an earlier version registered for this account.", report.Done);
+        Assert.NotNull(report.Refusal);
+    }
+
+    /// <summary>
+    /// Any other refusal keeps the one instruction it always had, and says what to remove: after the tool's own line,
+    /// "it" was whatever that line had named last.
+    /// </summary>
+    [Fact]
+    public async Task Any_other_refusal_at_the_registration_says_to_disable_and_run_again()
+    {
+        using var dir = new TempPaths();
+        var registrar = new RecordingRegistrar
+        {
+            Refuses = new Cli.Autostart.AutostartException(Cli.Autostart.AutostartCodes.Refused, "schtasks refused: ERROR: The Task Scheduler service is not running."),
+        };
+
+        var report = await RefusedAtTheRegistrationAsync(dir, registrar);
+
+        Assert.Equal(
+            "The logon registration could not be removed, so nothing further was: schtasks refused: ERROR: The Task "
+            + "Scheduler service is not running. Remove the logon registration with 'jason runtime autostart disable' and "
+            + "run this again.",
+            report.Refusal);
+    }
+
+    private static async Task<UninstallReport> RefusedAtTheRegistrationAsync(TempPaths dir, RecordingRegistrar registrar)
+    {
+        var output = new StringWriter();
+        var env = new CliEnvironment(
+            output,
+            new StringWriter(),
+            dir.Paths,
+            Autostart: registrar,
+            Harnesses: HarnessLocators.At(Path.Combine(dir.Paths.Root, "harness")),
+            InstallPath: Path.Combine(dir.Paths.Root + "-install", "jason"),
+            Removes: new RecordingRemover());
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(Human: false, DryRun: false, PurgeData: false, Yes: true, Force: false), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var report = System.Text.Json.JsonSerializer.Deserialize<UninstallReport>(output.ToString(), Contracts.Json.JasonJson.Options)!;
+        Assert.Equal(CliErrors.UninstallRefused, report.RefusalCode);
+        return report;
+    }
+
     /// <summary>A registrar that fails in a way nothing planned for.</summary>
     private sealed class BreaksOnRemove : Cli.Autostart.IAutostartRegistrar
     {
@@ -358,7 +511,7 @@ public class UninstallOrderTests
 
         public void Apply(Cli.Autostart.AutostartRegistration registration) => throw new NotSupportedException();
 
-        public void Remove(Cli.Autostart.AutostartRegistration registration) => throw new InvalidOperationException("the task scheduler said something new.");
+        public Cli.Autostart.AutostartRemoval Remove(Cli.Autostart.AutostartRegistration registration) => throw new InvalidOperationException("the task scheduler said something new.");
     }
 
     /// <summary>A machine with no way to register anything at logon has nothing to take away, and says so.</summary>
@@ -480,10 +633,11 @@ public class UninstallOrderTests
 
         public void Apply(Cli.Autostart.AutostartRegistration registration) => throw new NotSupportedException();
 
-        public void Remove(Cli.Autostart.AutostartRegistration registration)
+        public Cli.Autostart.AutostartRemoval Remove(Cli.Autostart.AutostartRegistration registration)
         {
             Removals++;
             log.Add("autostart.remove");
+            return new Cli.Autostart.AutostartRemoval(Registration: false, Legacy: false);
         }
     }
 }

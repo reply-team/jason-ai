@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using Jason.Cli.Process;
+using Jason.Contracts.Discovery;
 
 namespace Jason.Cli.Uninstall;
 
@@ -341,14 +342,10 @@ public static class InstallationRemovers
                 + $"for ($attempt = 0; $attempt -lt 40 -and (Test-Path -LiteralPath {target}); $attempt++) "
                 + $"{{ Remove-Item -LiteralPath {target} -Recurse -Force; if (Test-Path -LiteralPath {target}) {{ Start-Sleep -Milliseconds 250 }} }}");
 
-            var start = new ProcessStartInfo(powershell)
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
+            var start = ChildProcess.StartInfo(powershell);
+            start.RedirectStandardInput = true;
+            start.RedirectStandardOutput = true;
+            start.RedirectStandardError = true;
             foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-Command", script })
             {
                 start.ArgumentList.Add(argument);

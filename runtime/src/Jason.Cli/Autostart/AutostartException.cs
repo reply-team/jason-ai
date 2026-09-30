@@ -49,4 +49,16 @@ public sealed class AutostartException : Exception
 
     /// <summary>Lowercase snake_case, as every error code in this product is.</summary>
     public string Code { get; } = AutostartCodes.Refused;
+
+    /// <summary>
+    /// The case behind a denial a person can act on, where there is one: what <c>jason uninstall</c> reads to say
+    /// the same thing in its own terms rather than wrap <c>disable</c>'s advice in a second instruction.
+    /// </summary>
+    public AutostartDenial? Denial { get; init; }
+
+    /// <summary>
+    /// Whether the command that refused had already taken this account's 0.1.0 task away. Whatever failed afterwards,
+    /// that removal happened, and <c>jason uninstall</c> reads this to report it.
+    /// </summary>
+    public bool LegacyRemoved { get; init; }
 }

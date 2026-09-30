@@ -11,7 +11,7 @@ This skill is about the installation, not about the work it performs. A person r
 Jason is up, why nothing is happening, what is installed, where work would go, or whether they are on the
 current version. Campaign work itself is `managed-campaign-work`.
 
-**Status: verified** against Claude Code 2.1.282. It covers what this build does and nothing else.
+**Status: verified** against Claude Code 2.1.285. It covers what this build does and nothing else.
 
 Two things are true throughout and are easy to forget. **Nothing is registered until somebody asks**: Jason
 starts because you started it, or because somebody registered it to start at logon. And **no provider ships
@@ -82,24 +82,43 @@ different directory replaces the registration rather than adding one.
 `enable` starts nothing now and `disable` stops nothing now; they change what happens at the *next* logon.
 Starting and stopping the runtime today is still `jason runtime start` and `jason runtime stop`.
 
-### On Windows, enable and disable are elevated acts
+**`status` is how you check it.** It reads back what the operating system holds for this account. Leave the
+registration to `enable`, `disable` and `status`: do not run, change or delete it with the operating system's own
+tools (`schtasks` or the Task Scheduler, `launchctl`, `systemctl`), not even to test it. Running it by hand starts a
+runtime now, which is not what the person asked for. If they want the runtime running now as well, that is
+`jason runtime start`: say so, or ask.
 
-**`jason runtime autostart enable` and `jason runtime autostart disable` have to be run from an elevated
-prompt.** Being signed in as an administrator is not enough — an unelevated prompt on an administrator account
-is refused too, because the Task Scheduler will not accept this task's S4U logon from a medium-integrity
-process. It answers `ERROR: Access is denied.` and registers nothing.
+### On Windows: from an ordinary prompt, and what it costs
 
-An elevated prompt is something a person opens, and **you cannot open one**. So when somebody on Windows asks
-for autostart, do not try it and report the refusal as a fault: tell them it needs an elevated prompt, give them
-the exact line to run there, and ask them what it said.
+**Run `enable` and `disable` yourself.** On Windows they work from an ordinary prompt, which is the one you
+have, on an administrator's account and on a standard one, so there is nothing to hand the person. `status`
+works from there too.
 
-**Reading the registration needs no elevation.** `jason runtime autostart status` answers from an ordinary
-prompt, so you can always find out what is registered — only the two verbs that change something need more.
+At their next sign-in the runtime starts in their own session, with their own account's rights. It shows no
+window on Windows 11 24H2 and later; on an older Windows a console window opens at sign-in and closes by itself.
+Tell them the one cost when you set it up: the runtime **ends when they sign out**, like any program left open,
+and the next sign-in starts it again. Work that was in flight is left the way a crash leaves it: what had not
+started is handed out again by the next runtime, and a provider operation that may already have acted waits for a
+person to decide rather than being repeated, as `docs/work-execution.md` says under "Stopping and restarting".
 
-**Standard Windows accounts are unsupported in this version.** Elevating from one does not help: the elevated
-prompt runs as the administrator whose credentials were given, so it would register a logon task for that
-account rather than for the person who asked. Such an account can still run the runtime with
-`jason runtime start`, which registers nothing.
+Each account has its own task, named for it, so several people on one machine never meet each other's. What
+0.1.0 registered was one task called `Jason` for the whole machine; `enable` and `disable` take it away only where it
+is the person's own 0.1.0 task, the one that runs the runtime, and never touch anybody else's, or a task of that name
+that runs anything else.
+
+**If `enable` or `disable` answers `ERROR: Access is denied.`**, read the rest of its message to the person. It
+names the task and the likely case: that task was registered from an elevated prompt — by an earlier version of
+Jason, for a task named `Jason`, or by this version, run from an elevated prompt — and only an elevated prompt can
+take such a task away. An elevated prompt is something a person opens, and **you cannot open one**, so do not retry
+and do not try to elevate. On an administrator's own account, give them `jason runtime autostart disable` to run
+once from an elevated prompt, and ask what it said. On a standard account an elevated prompt runs as somebody else,
+the administrator whose password is typed, and a `disable` there removes that administrator's tasks, not theirs:
+tell them to ask an administrator to delete the task by the name the message gives, and never run `jason` under
+another account. Run `jason runtime autostart enable` yourself afterwards only if it was `enable` that was refused;
+after a refused `disable`, the removal was the whole job. If `jason uninstall` stopped there, the same removal comes
+first, then `jason uninstall` again. If the message says instead that the machine refused to register a logon task
+for this account, their machine does not let their account register one, and `jason runtime start` still starts
+the runtime by hand.
 
 ## The plugins it has loaded and where work goes
 

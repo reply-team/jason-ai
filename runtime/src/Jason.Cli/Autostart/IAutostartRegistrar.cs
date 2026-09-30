@@ -23,6 +23,14 @@ public interface IAutostartRegistrar
     /// <summary>Puts the registration in place, replacing whatever this account had registered before.</summary>
     void Apply(AutostartRegistration registration);
 
-    /// <summary>Takes it away. Removing what is not there is not an error.</summary>
-    void Remove(AutostartRegistration registration);
+    /// <summary>Takes it away, and says what went. Removing what is not there is not an error.</summary>
+    AutostartRemoval Remove(AutostartRegistration registration);
 }
+
+/// <summary>What a removal took away, so that whatever reports it says what really happened.</summary>
+/// <param name="Registration">Whether this account's registration was there and was removed by this call.</param>
+/// <param name="Legacy">
+/// Whether this call removed the Windows task 0.1.0 registered for this account, which nothing reads beforehand: a
+/// plan that could not see it is followed by a report that must still say it went.
+/// </param>
+public sealed record AutostartRemoval(bool Registration, bool Legacy);

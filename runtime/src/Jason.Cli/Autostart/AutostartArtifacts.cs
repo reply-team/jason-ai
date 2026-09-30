@@ -19,8 +19,12 @@ namespace Jason.Cli.Autostart;
 /// </remarks>
 public static class AutostartArtifacts
 {
-    /// <summary>The Windows task's name, under the Task Scheduler's root folder.</summary>
-    public const string TaskName = "Jason";
+    /// <summary>
+    /// The name 0.1.0 registered its Windows task under, in the Task Scheduler's root folder. It is still asked
+    /// after — <c>enable</c>, <c>disable</c> and <c>jason uninstall</c> take this account's task of that name away —
+    /// and never registered again.
+    /// </summary>
+    public const string LegacyTaskName = "Jason";
 
     /// <summary>The LaunchAgent's label, which is also its file name.</summary>
     public const string Label = "ai.jason.runtime";
@@ -31,7 +35,49 @@ public static class AutostartArtifacts
     /// <summary>Where a Windows task document is written before <c>schtasks</c> is asked to register it.</summary>
     public const string TaskDocument = "jason-task.xml";
 
-    private static readonly XNamespace TaskSchema = "http://schemas.microsoft.com/windows/2004/02/mit/task";
+    /// <summary>The Task Scheduler's task document namespace, which every element of one is in.</summary>
+    internal static readonly XNamespace TaskSchema = "http://schemas.microsoft.com/windows/2004/02/mit/task";
+
+    /// <summary>
+    /// The Windows task's name for one account: <c>Jason-&lt;SID&gt;</c>, in the Task Scheduler's root folder.
+    /// </summary>
+    /// <remarks>
+    /// That folder is one namespace for the whole machine, and a task in it answers any other account's ordinary
+    /// prompt with access denied. One fixed name would let the first account to register lock every other account
+    /// out of its own autostart and out of <c>jason uninstall</c>. The SID in the name is how other programs keep
+    /// one task per account in the same folder: <c>OneDrive Reporting Task-&lt;SID&gt;</c>,
+    /// <c>ZoomUpdateTaskUser-&lt;SID&gt;</c>.
+    /// </remarks>
+    public static string TaskName(string account) => $"Jason-{account}";
+
+    /// <summary>The query for one task by its name, asking for a code rather than a sentence (see <see cref="QueryFor"/>).</summary>
+    public static IReadOnlyList<string> TaskQuery(string name) => ["schtasks", "/Query", "/TN", name, "/XML", "ONE", "/HRESULT"];
+
+    /// <summary>
+    /// The deletion of one task by its name. <c>/F</c> because without it schtasks asks "(Y/N)?" on the standard input
+    /// it inherited and waits there, and a verb would hang without a word; <c>/HRESULT</c> for the same reason the
+    /// query asks for it.
+    /// </summary>
+    public static IReadOnlyList<string> TaskDelete(string name) => ["schtasks", "/Delete", "/TN", name, "/F", "/HRESULT"];
+
+    /// <summary>
+    /// Whether a registered command line is the one this product registers: the runtime itself, detached, on a data
+    /// directory, and nothing after it — through the executable, or through the muxer and an assembly. 0.1.0
+    /// registered exactly this shape too, which is how a task it left is told from somebody else's of the same name.
+    /// </summary>
+    public static bool RunsTheRuntime(IReadOnlyList<string> line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+
+        // The last five words are the runtime's; before them, the executable (one word) or the muxer and assembly (two).
+        var at = line.Count - 5;
+        return at is 1 or 2
+            && line[at] == "runtime"
+            && line[at + 1] == "run"
+            && line[at + 2] == "--detached"
+            && line[at + 3] == "--data-dir"
+            && line[at + 4].Length > 0;
+    }
 
     /// <summary>
     /// The registration this installation would make.
@@ -72,9 +118,10 @@ public static class AutostartArtifacts
     }
 
     /// <summary>
-    /// The command that asks a machine whether anything is registered. It depends on the platform and on
-    /// nothing else — not on the data directory, not on the account — which is what lets a registrar ask
-    /// before it knows either: what it is about to read may have been registered by another installation.
+    /// The command that asks a machine whether this account has anything registered. It depends on the platform
+    /// and, on Windows, on the account the task is named for — never on the data directory, which is what lets a
+    /// registrar ask before it knows one: what it is about to read may have been registered by another
+    /// installation.
     /// </summary>
     /// <remarks>
     /// <c>/HRESULT</c> is not decoration. Without it <c>schtasks</c> exits 1 for a task that is not there and 1
@@ -82,11 +129,13 @@ public static class AutostartArtifacts
     /// in the language Windows is installed in. With it, a missing task exits <c>0x80070002</c> and access
     /// denied exits <c>0x80070005</c>, in every language, and the words are never consulted again. The two
     /// commands that act ask for it too, for the same reason and one found the hard way: see
-    /// <see cref="AutostartRegistrars.Acted"/>.
+    /// <see cref="WindowsTasks"/>.
     /// </remarks>
-    public static IReadOnlyList<string> QueryFor(AutostartPlatform platform) => platform switch
+    /// <param name="platform">Which of the three shapes to ask after.</param>
+    /// <param name="account">Whose task, on Windows: the SID <see cref="TaskName"/> names it for. The other two ignore it.</param>
+    public static IReadOnlyList<string> QueryFor(AutostartPlatform platform, string account) => platform switch
     {
-        AutostartPlatform.Windows => ["schtasks", "/Query", "/TN", TaskName, "/XML", "ONE", "/HRESULT"],
+        AutostartPlatform.Windows => TaskQuery(TaskName(account)),
         AutostartPlatform.MacOs => ["launchctl", "list", Label],
         AutostartPlatform.Linux => ["systemctl", "--user", "is-enabled", UnitName],
         _ => [],
@@ -135,11 +184,18 @@ public static class AutostartArtifacts
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <c>S4U</c> is the logon type, and it is the whole of the no-window guarantee. A console application
-    /// started by a task in the interactive session gets a console window on the desktop at every logon, and
-    /// <c>--detached</c> does not close it: the detacher points the standard handles at the null device, and it
-    /// never frees a console because nothing that starts a runtime has ever given it one. An S4U logon has no
-    /// desktop to put a window on.
+    /// <c>InteractiveToken</c> is the logon type: the task runs in this account's own session when it signs in,
+    /// with the token it already has, and a medium-integrity process may register it — on a standard account as
+    /// much as an administrator's. The Task Scheduler's reference says of it: "User must already be logged on.
+    /// The task will be run only in an existing interactive session." What keeps a console window off that
+    /// session's desktop is the executable, not this document: <c>jason.manifest</c> declares
+    /// <c>consoleAllocationPolicy</c> <c>detached</c>, so on Windows 11 24H2 and later a runtime started with no
+    /// console to inherit gets none, and <c>--detached</c> frees the one an older Windows hands it.
+    /// </para>
+    /// <para>
+    /// 0.1.0 registered an <c>S4U</c> logon here, which kept the runtime in a session with no desktop and which
+    /// only an elevated prompt could register, under the name <see cref="LegacyTaskName"/>. <see cref="WindowsTasks"/>
+    /// says what this version does about such a task.
     /// </para>
     /// <para>
     /// <c>ExecutionTimeLimit</c> is <c>PT0S</c>, which means none. The Task Scheduler's own default is three
@@ -150,6 +206,7 @@ public static class AutostartArtifacts
     private static AutostartRegistration Windows(IReadOnlyList<string> line, string dataDirectory, string account)
     {
         var document = ArtifactPath(AutostartPlatform.Windows, string.Empty, dataDirectory);
+        var name = TaskName(account);
         var xml = string.Create(
             CultureInfo.InvariantCulture,
             $"""
@@ -157,7 +214,7 @@ public static class AutostartArtifacts
             <Task version="1.4" xmlns="{TaskSchema}">
               <RegistrationInfo>
                 <Description>Starts the Jason runtime when this account logs on. Nothing supervises it: a runtime that stops stays stopped until somebody starts it.</Description>
-                <URI>\{TaskName}</URI>
+                <URI>\{Xml(name)}</URI>
               </RegistrationInfo>
               <Triggers>
                 <LogonTrigger>
@@ -168,7 +225,7 @@ public static class AutostartArtifacts
               <Principals>
                 <Principal id="Author">
                   <UserId>{Xml(account)}</UserId>
-                  <LogonType>S4U</LogonType>
+                  <LogonType>InteractiveToken</LogonType>
                   <RunLevel>LeastPrivilege</RunLevel>
                 </Principal>
               </Principals>
@@ -198,12 +255,12 @@ public static class AutostartArtifacts
 
         return new AutostartRegistration(
             AutostartPlatform.Windows,
-            TaskName,
+            name,
             document,
             xml,
-            [["schtasks", "/Create", "/XML", document, "/TN", TaskName, "/F", "/HRESULT"]],
-            [["schtasks", "/Delete", "/TN", TaskName, "/F", "/HRESULT"]],
-            QueryFor(AutostartPlatform.Windows),
+            [["schtasks", "/Create", "/XML", document, "/TN", name, "/F", "/HRESULT"]],
+            [TaskDelete(name)],
+            QueryFor(AutostartPlatform.Windows, account),
             line);
     }
 
@@ -239,7 +296,7 @@ public static class AutostartArtifacts
             plist,
             [["launchctl", "load", "-w", plistPath]],
             [["launchctl", "unload", "-w", plistPath]],
-            QueryFor(AutostartPlatform.MacOs),
+            QueryFor(AutostartPlatform.MacOs, string.Empty),
             line);
     }
 
@@ -279,7 +336,7 @@ public static class AutostartArtifacts
                 ["systemctl", "--user", "disable", UnitName],
                 ["systemctl", "--user", "daemon-reload"],
             ],
-            QueryFor(AutostartPlatform.Linux),
+            QueryFor(AutostartPlatform.Linux, string.Empty),
             line);
     }
 

@@ -69,6 +69,21 @@ jobs:
       - name: Build (warnings are errors)
         run: dotnet build runtime/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.version }}
 
+      # Whether the SDK writes the application manifest into a Windows executable built on another host has not
+      # been measured, so the project refuses to build one anywhere but Windows. The target is asked for by name
+      # and nothing is restored, so this reaches no network: on Windows it must let a win-x64 build through, and
+      # on Linux and macOS refuse it.
+      - name: A Windows executable is built on Windows or not at all
+        shell: pwsh
+        run: |
+          $said = dotnet msbuild runtime/src/Jason.App/Jason.App.csproj -t:RefuseWindowsExecutableElsewhere -p:RuntimeIdentifier=win-x64 -nologo -nodeReuse:false 2>&1 | Out-String
+          $refused = $LASTEXITCODE -ne 0
+          if ($refused -eq $IsWindows) { throw "on this host a win-x64 build should have been $(if ($IsWindows) { 'let through' } else { 'refused' }): $said" }
+          if ($refused -and $said -notmatch 'consoleAllocationPolicy') { throw "it was refused for another reason: $said" }
+          Write-Host "win-x64 on this host: $(if ($refused) { 'refused' } else { 'let through' })"
+          # A pwsh step ends with the last native command's exit code, which here is the refusal's own.
+          exit 0
+
       - name: Test (offline)
         run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.version }}
 
@@ -188,10 +203,56 @@ jobs:
 
           Write-Host "the published executable took itself off this runner and left nothing of its own behind"
 
-  # The install scripts, run against the archives this run packaged, served from a local directory that holds
-  # what a release would — assembled by the same script that assembles a release — with no network. Each job
-  # installs three times: once told to leave the PATH alone, then twice more, so that the idempotent PATH edit
-  # and the "already installed" no-op are exercised and not only described.
+  # The manifest declares consoleAllocationPolicy, which Windows 11 24H2 (build 26100) introduced. A loader that
+  # rejected a manifest carrying a setting it does not know would not start jason.exe at all, and every other Windows
+  # job here runs on 26100 or later. windows-2022 is build 20348: it starts the executable the build packaged.
+  older-windows:
+    name: jason.exe on a Windows older than 24H2
+    needs: [version, build-test-publish]
+    runs-on: windows-2022
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: jason-win-x64
+          path: artifact
+
+      - name: Start the packaged executable on a loader that predates its manifest's setting
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          # Nothing here reaches the network: the runtime is told not to ask the release feed, rather than stopped
+          # before its first check would have come due.
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $build = [Environment]::OSVersion.Version.Build
+          if ($build -ge 26100) { throw "this runner is build $build, which reads consoleAllocationPolicy: the check needs an older Windows" }
+
+          Expand-Archive -Path artifact/jason-win-x64.zip -DestinationPath jason
+          $exe = Join-Path $PWD 'jason\jason.exe'
+
+          $said = & $exe --version
+          if ($LASTEXITCODE -ne 0) { throw "jason.exe --version exited $LASTEXITCODE on build $build" }
+          if (($said -split '\+')[0] -ne $env:VERSION) { throw "jason.exe --version said '$said', expected $env:VERSION" }
+
+          # And a runtime, which is what a logon task starts: detached, on a data directory of its own, on loopback only.
+          $env:JASON_DATA_DIR = Join-Path $env:RUNNER_TEMP 'older-windows-data'
+          & $exe runtime start | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "jason.exe could not start a runtime on build $build ($LASTEXITCODE)" }
+          # One string, so the match is a yes or a no even if the answer ever spans lines.
+          $running = & $exe runtime status | Out-String
+          if ($LASTEXITCODE -ne 0 -or $running -notmatch '"applied_migrations":\["') { throw "the runtime on build $build did not migrate: $running" }
+          & $exe runtime stop | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "jason.exe could not stop its runtime on build $build ($LASTEXITCODE)" }
+
+          # runtime start hands the runtime a console with no window, which a Windows that ignores the setting hands it
+          # too, and the detached runtime lets go of it: freed_hidden, as on 26100. One start, so exactly one such line.
+          $console = @(Get-Content (Join-Path $env:JASON_DATA_DIR 'logs\*.jsonl') | Where-Object { $_ -like '*"@mt":"Console at start: {Console}"*' })
+          if ($console.Count -ne 1) { throw "the runtime on build $build wrote $($console.Count) console lines, not one: $($console -join ' | ')" }
+          if ($console[0] -notmatch '"Console":"freed_hidden"') { throw "the runtime on build $build did not say freed_hidden: $($console[0])" }
+          "build ${build}: $said; the runtime's console line: $($console[0])"
+          exit 0
+
   update-end-to-end:
     name: an update on ${{ matrix.rid }}
     needs: [version, build-test-publish]
@@ -433,6 +494,10 @@ jobs:
         run: |
           if ($env:server) { Stop-Process -Id $env:server -Force -ErrorAction SilentlyContinue }
 
+  # The install scripts, run against the archives this run packaged, served from a local directory that holds
+  # what a release would — assembled by the same script that assembles a release — with no network. Each job
+  # installs three times: once told to leave the PATH alone, then twice more, so that the idempotent PATH edit
+  # and the "already installed" no-op are exercised and not only described.
   install-sh:
     name: install.sh on ubuntu
     needs: [version, build-test-publish]

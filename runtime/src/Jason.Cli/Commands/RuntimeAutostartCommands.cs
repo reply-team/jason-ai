@@ -1,6 +1,5 @@
 using System.CommandLine;
 using System.Globalization;
-using System.Security.Principal;
 using System.Text.Json;
 using Jason.Cli.Autostart;
 using Jason.Contracts.Api;
@@ -134,17 +133,7 @@ public static class RuntimeAutostartCommands
             env.InstallPath is { } installed ? [installed] : SelfExecutable.Command,
             env.Paths.Root,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            Account());
-
-    /// <summary>
-    /// Who the registration runs as. On Windows that is this account's SID: a Microsoft account's display name
-    /// is not what the Task Scheduler stores, and a name with a domain in front of it is not what it compares.
-    /// Everywhere else a document under the account's own home directory says whose it is by being there.
-    /// </summary>
-    private static string Account() =>
-        OperatingSystem.IsWindows()
-            ? WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName
-            : Environment.UserName;
+            AutostartRegistrars.ThisAccount());
 
     private static int Print(CliEnvironment env, bool human, IAutostartRegistrar registrar)
     {
