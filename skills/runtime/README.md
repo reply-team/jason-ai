@@ -135,6 +135,6 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 |---|---|---|---|
 | `managed-campaign-work` | Claude Code 2.1.278 | 0.1.0 | `sha256:01adfb08dec48564d6fef17639fd58cdac16deb7ddfbfea50ebcaa673989d855` |
 | `approvals-and-questions` | Claude Code 2.1.278 | 0.1.0 | `sha256:7ec45ac3fc2b72a01a289c27a3b4b59f9b10fb9c9f56abd6a45148f761bb8a74` |
-| `operating-the-installation` | Claude Code 2.1.282 (claude-opus-5) | 0.1.0 | `sha256:4b6a65ffcbb6dba670ab8a6846cdf44a520747234daf93ec1d228c3e10ac9d3a` |
+| `operating-the-installation` | Claude Code 2.1.285 (claude-opus-5) | 0.2.0 | `sha256:56516cce912107f050a450b347441910ceb7fc89a989de540d81ec9ece78b83b` |
 | `troubleshooting-jason` | Claude Code 2.1.278 | 0.1.0 | `sha256:fac60f6d04618c2d4d614592024de133144c563b8462cc9c4ca751786cf77a9f` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:9fb55ca5364ec65c9b629df5538ff26d7ce380e8d09017989e0d222fca4eb037` |
