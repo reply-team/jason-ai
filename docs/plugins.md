@@ -21,7 +21,7 @@ and exits**: globals do not survive, there is no plugin-local state and no warm 
 Jint, embedded in that host, so there is no Node, no npm install step and no native module — a
 package is the JavaScript you ship in it. Official and community plugins use exactly this mechanism;
 there is no private extension path. What is **not** here yet: `plugin install|update|remove`
-(installing is copying a directory); signing and trust; invoking `kind: notification` plugins.
+(installing is copying a directory); signing and trust.
 
 ## 2. The package
 
@@ -153,8 +153,7 @@ with `plugin_memory_exceeded`. A package that needs more asks for it in its own 
 (`limits.memory_mb`, up to `Plugins:Limits:MaxMemoryMb` — 512 MiB by default); a package that can
 read less should, because a smaller answer is cheaper than a larger ceiling.
 
-`kind: notification` is accepted, validated, listed and granted like any other plugin, and refused by
-the invoker with `plugin_kind_not_invocable`; its operation contract is not written yet.
+`kind: notification` plugins are invoked for the delivery contract, never for a canonical operation: §14.
 
 **Why `version_command` is a fixed list.** A reload runs that command on the user's machine. If the
 manifest could name the arguments, a version check would be a way to run anything.
@@ -744,7 +743,7 @@ may already have run.
 | `plugin_not_loaded` | permanent | no plugin of that id is in the active snapshot |
 | `plugin_unavailable` | permanent | the plugin is loaded but its environment is not usable |
 | `plugin_operation_unsupported` | permanent | the plugin does not implement the operation |
-| `plugin_kind_not_invocable` | permanent | a `notification` plugin was asked for an operation |
+| `plugin_kind_not_invocable` | permanent | a `notification` plugin was asked for a canonical operation, or a provider for a delivery |
 | `plugin_invocation_rejected` | permanent | the child refused before any JavaScript ran (exit 2 or 3) |
 | `plugin_input_too_large` | permanent | the input is over 1 MiB, so nothing was started |
 | `plugin_binding_too_large` | permanent | the binding is over 64 KiB, so nothing was started |
@@ -1026,9 +1025,8 @@ are the operations' own examples; §7 says how to drive one through the host by 
 - **One installed version per id**, because the id is the directory name. Two plugins may implement
   the same operation; which one a campaign uses is a routing question, answered in
   [docs/routing.md](routing.md).
-- **`kind: notification` is reserved**: such a plugin loads, lists and is granted like any other, a
-  route to it is refused at activation with `route_plugin_kind_not_invocable`, and the invoker refuses
-  it with `plugin_kind_not_invocable`.
+- **Notification plugins are not routed**: a route to one is refused at activation with
+  `route_plugin_kind_not_invocable`; they are reached through the `Notifications` settings instead (§14).
 - **No install verbs, no signing, no trust model.** Installing is copying a directory.
 
 The design behind all of this — the plugin model, the trust boundary, and what is deliberately left
@@ -1037,3 +1035,64 @@ their schemas, fixtures and the dialect they are written in, are in
 [docs/contracts/](contracts/README.md). How work items reach an executor is in
 [docs/work-execution.md](work-execution.md); which plugin a campaign's work is sent to, and which
 account of it, is in [docs/routing.md](routing.md).
+
+## 14. Writing a notification plugin
+
+A notification plugin carries Jason's pointer — how many approvals and questions are waiting, and where to look — to
+a service a person reads. It is invoked for one thing, the delivery contract
+[`notification.send`](contracts/notifications/notification.send.md), by the runtime's own notifier, and only when an
+operator has named it under `Notifications:Plugins:<id>` ([docs/notifications.md](notifications.md) §8). No work item
+names it and no route reaches it. [`plugins/ntfy`](../plugins/ntfy/README.md) is the reference.
+
+**The manifest.** `kind: notification`; `contracts.operations` lists the versions of the delivery contract it speaks,
+which this build reads as `[1]`; and no `operations` list, because it implements no canonical operation:
+
+```yaml
+manifest_version: 1
+id: my-notifier
+version: 1.0.0
+kind: notification
+contracts:
+  protocol: [1]
+  operations: [1]          # the delivery contract notification.send, version 1
+capabilities:
+  http:
+    hosts: [notify.example.com]
+  env:
+    variables: [MY_NOTIFIER_TOKEN]
+binding:
+  type: object
+  properties:
+    channel: { type: string, minLength: 1, maxLength: 64 }
+  required: [channel]
+  additionalProperties: false
+```
+
+A notification plugin that declares no version of the delivery contract is recorded as `not_attempted`,
+`not_declared` — listed, never invoked, and never left out silently.
+
+**What it is handed.** `operation` is `notification.send`; `input` is `{ title, message, counts: { approvals,
+decisions } }`, where `message` is one line ready to send; `context.binding` is the operator's binding; the context
+names no campaign, work item or attempt. **What it answers:** `{ result: { receipt } }` with the service's own id for
+the message, or `{ result: {} }`; a result outside the contract is recorded as an ambiguous failure, because the
+pointer may have arrived. A failure is one of three codes — `notification_unreachable` (transient: the runtime tries
+once more, thirty seconds later), `notification_refused` and `notification_unauthorized` (permanent) — thrown with
+`host.fail`.
+
+**The binding names an account, never a credential.** A field named like a credential at any depth is refused before
+anything starts, as `binding_invalid`, and so is a binding the manifest's own `binding` schema refuses. A secret is
+read with `host.env` from a variable the manifest declares under `capabilities.env` and the operator grants; it is sent
+in a header, and never logged or returned.
+
+**A self-hosted service.** `capabilities.http.hosts` names the hosts the package may reach, and a grant can only
+narrow it. A plugin for a service people also run themselves names the public host; an operator who runs their own
+edits `hosts` in their copy, grants the same host, and names the server in the binding. The edit changes the
+package's `sha256:` digest, so their copy is a package of its own.
+
+**The outcomes a person sees** are the `notification_sent` line's: `delivered` with the receipt, `failed` with the
+code and class, or `not_attempted` with `unavailable`, `not_declared` or `binding_invalid` — in `jason runtime status
+--human`, and in `jason status`'s `notifications` check.
+
+**Testing it.** A loopback server stands in for the service: grant `127.0.0.1:<port>`, put that host in a copy of the
+manifest, and invoke the package through the plugin host the way §12 describes, with an input like the one above. The
+ntfy package's own tests are this, end to end.

@@ -1,4 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- For one file: the toast's WinRT interop calls COM vtables through function pointers, with no projection and no
+       Windows-only target framework. It runs only in the short-lived toast-host child, never in the runtime. -->
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>

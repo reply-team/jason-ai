@@ -116,13 +116,15 @@ public class RoutesOptionsTests
         Assert.Contains(expected, result.Failures!);
     }
 
-    [Fact]
-    public void An_operation_this_build_does_not_publish_is_named_with_its_line()
+    [Theory]
+    [InlineData("not.an.operation")]
+    [InlineData("notification.send")]
+    public void An_operation_this_build_does_not_publish_is_named_with_its_line(string operation)
     {
-        var result = new RoutesOptionsValidator().Validate(null, Read("""{"Routes":{"Operations":{"not.an.operation":{"Plugin":"fake-provider"}}}}"""));
+        var result = new RoutesOptionsValidator().Validate(null, Read("""{"Routes":{"Operations":{"OPERATION":{"Plugin":"fake-provider"}}}}""".Replace("OPERATION", operation, StringComparison.Ordinal)));
 
         Assert.True(result.Failed);
-        Assert.Contains("Routes:Operations:not.an.operation must name a published operation; got 'not.an.operation'.", result.Failures!);
+        Assert.Contains($"Routes:Operations:{operation} must name a published operation; got '{operation}'.", result.Failures!);
     }
 
     [Theory]

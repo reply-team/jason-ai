@@ -316,7 +316,7 @@ message names the pinned value.
 | Code | When |
 |---|---|
 | `route_plugin_unknown` | the route names a plugin the candidate set does not contain |
-| `route_plugin_kind_not_invocable` | the plugin is a notification plugin, which performs no canonical operation |
+| `route_plugin_kind_not_invocable` | the plugin is a notification plugin, which performs no canonical operation; it is reached through the `Notifications` settings instead |
 | `route_operation_unknown` | a *campaign* route names an operation this build does not publish. A global override keyed by such a name never reaches this check: the section validator refuses it first, as the eighth code below |
 | `route_operation_unsupported` | the plugin does not list the operation the route sends it |
 | `route_contract_incompatible` | the plugin speaks no version of that operation's contract |
@@ -335,7 +335,7 @@ answer — and never a 500, which would say the runtime broke rather than the ed
 
 - **A notification plugin is reported as not invocable, not as not supporting the operation.** Such a
   plugin lists no operation at all, so asking "does it implement this one?" first would answer with what
-  is missing rather than with what it is.
+  is missing rather than with what it is; it is reached through the `Notifications` settings instead.
 - **A credential-shaped binding is refused before a binding that merely fails the schema.** A plugin's
   own schema will usually refuse an unexpected field too, and `additional_properties` is not the sentence
   whoever pasted a credential into a settings file needs to read.

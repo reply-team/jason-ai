@@ -39,4 +39,15 @@ public sealed record PluginInvocationRequest(
     string? WorkItemId = null,
     string? CampaignId = null,
     TimeSpan? Timeout = null,
-    PinnedPlugin? Pinned = null);
+    PinnedPlugin? Pinned = null,
+    InvocationPurpose Purpose = InvocationPurpose.CanonicalOperation);
+
+/// <summary>
+/// What a plugin is invoked for, which decides the kind of plugin that may answer: a provider performs a canonical
+/// operation, and a notification plugin performs the delivery contract. Neither is ever invoked for the other.
+/// </summary>
+public enum InvocationPurpose
+{
+    CanonicalOperation,
+    Delivery,
+}

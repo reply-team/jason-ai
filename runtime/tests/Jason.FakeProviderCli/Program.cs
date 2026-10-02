@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Win32.SafeHandles;
 
@@ -170,6 +171,19 @@ switch (args[0])
                 """
                 {"protocol_version":1,"invocation_id":"INVOCATION","status":"succeeded","result":{"ok":true},"external_ids":null,"error":null,"diagnostics":{"duration_ms":1,"exec_calls":0,"http_calls":0,"log_lines":0}}
                 """.Replace("INVOCATION", invocationId, StringComparison.Ordinal));
+            await Console.Out.FlushAsync();
+            return 0;
+        }
+
+    case "stdin-codepoints":
+        {
+            // The bytes that arrived on stdin, decoded here as UTF-8 and said back as code points in ASCII: this console's
+            // code page decides nothing, and bytes that are not UTF-8 end the program instead of reading as something.
+            using var input = Console.OpenStandardInput();
+            using var bytes = new MemoryStream();
+            await input.CopyToAsync(bytes);
+            var text = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes.ToArray());
+            await Console.Out.WriteAsync(string.Join(' ', text.EnumerateRunes().Select(rune => rune.Value.ToString("X4", CultureInfo.InvariantCulture))));
             await Console.Out.FlushAsync();
             return 0;
         }

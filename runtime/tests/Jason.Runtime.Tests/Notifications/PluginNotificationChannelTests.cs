@@ -1,0 +1,252 @@
+using System.Text.Json.Nodes;
+using Jason.Contracts.Notifications;
+using Jason.Contracts.Plugins;
+using Jason.Runtime.Notifications;
+using Jason.Runtime.Notifications.Plugins;
+using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Tests.Plugins;
+using Jason.Runtime.Tests.Plugins.Invocation;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Jason.Runtime.Tests.Notifications;
+
+/// <summary>
+/// A notification plugin an operator named, as a channel: decided step by step before any child starts — is it
+/// loaded, does it speak the delivery contract, does the binding satisfy its own schema — and then invoked through
+/// the real plugin host. A channel that cannot reach anybody is recorded with its reason, never skipped in silence.
+/// </summary>
+public sealed class PluginNotificationChannelTests
+{
+    private static readonly NotificationMessage Message = NotificationComposer.Compose(3, 1);
+
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    private const string Speaks = """
+        manifest_version: 1
+        id: ID
+        version: 1.0.0
+        kind: notification
+        contracts:
+          protocol: [1]
+          operations: [1]
+        binding:
+          type: object
+          properties:
+            topic: { type: string, minLength: 1 }
+          required: [topic]
+          additionalProperties: false
+        """;
+
+    private static void Package(Jason.Contracts.Discovery.JasonPaths paths, string id, string mainJs, string manifest = Speaks) =>
+        TestPlugins.Write(paths, id, manifest.Replace("ID", id, StringComparison.Ordinal), mainJs);
+
+    private static PluginNotificationChannel Channel(RuntimeApiFixture api, string id, JsonObject? binding) =>
+        new(id, new NotificationPluginEntry { Binding = binding }, api.Resolve<PluginRegistry>(), api.Resolve<IServiceScopeFactory>());
+
+    private static JsonObject Topic(string topic = "walk") => new() { ["topic"] = topic };
+
+    /// <summary>Nothing was started: no invocation has a directory of its own.</summary>
+    private static void NothingStarted(RuntimeApiFixture api)
+    {
+        var work = api.Resolve<Jason.Contracts.Discovery.JasonPaths>().PluginWorkDirectory;
+        Assert.True(!Directory.Exists(work) || !Directory.EnumerateDirectories(work).Any(), "an invocation was started");
+    }
+
+    private static void NotAttempted(ChannelOutcome outcome, string id, string reason)
+    {
+        Assert.Equal((id, ChannelKinds.Plugin, ChannelResult.NotAttempted, reason), (outcome.Channel, outcome.Kind, outcome.Result, outcome.Reason));
+    }
+
+    [Fact]
+    public async Task A_plugin_that_is_not_loaded_is_unavailable()
+    {
+        await using var api = await PluginInvokerTests.StartAsync();
+
+        var outcome = await Channel(api, "nobody-has-this", Topic()).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        NotAttempted(outcome, "nobody-has-this", NotAttemptedReasons.Unavailable);
+        Assert.Equal("not loaded", outcome.Detail);
+        NothingStarted(api);
+    }
+
+    [Fact]
+    public async Task A_plugin_that_cannot_run_on_this_machine_is_unavailable()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(
+            paths,
+            "stranded",
+            "export function invoke() { return { result: {} }; }",
+            Speaks + "\ncapabilities:\n  exec:\n    executables:\n      - name: jason-no-such-program-anywhere\n"));
+
+        var outcome = await Channel(api, "stranded", Topic()).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        NotAttempted(outcome, "stranded", NotAttemptedReasons.Unavailable);
+        Assert.Contains("executable_missing", outcome.Detail, StringComparison.Ordinal);
+        NothingStarted(api);
+    }
+
+    /// <summary>A provider named as a notification plugin is recorded, never quietly left out.</summary>
+    [Fact]
+    public async Task A_provider_named_as_a_notification_plugin_does_not_declare_the_contract()
+    {
+        await using var api = await PluginInvokerTests.StartAsync();
+
+        var outcome = await Channel(api, TestPlugins.FakeProviderId, Topic()).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        NotAttempted(outcome, TestPlugins.FakeProviderId, NotAttemptedReasons.NotDeclared);
+        NothingStarted(api);
+    }
+
+    [Fact]
+    public async Task A_notification_plugin_that_speaks_no_delivery_contract_does_not_declare_it()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(
+            paths,
+            "mute",
+            "export function invoke() { return { result: {} }; }",
+            "manifest_version: 1\nid: mute\nversion: 1.0.0\nkind: notification\ncontracts:\n  protocol: [1]\n"));
+
+        var outcome = await Channel(api, "mute", null).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        NotAttempted(outcome, "mute", NotAttemptedReasons.NotDeclared);
+        NothingStarted(api);
+    }
+
+    /// <summary>A binding names an account and never a credential: a credential's place is the plugin's environment.</summary>
+    [Fact]
+    public async Task A_binding_that_names_a_credential_is_invalid()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(paths, "carrier", "export function invoke() { return { result: {} }; }"));
+
+        var outcome = await Channel(api, "carrier", new JsonObject { ["topic"] = "walk", ["auth"] = new JsonObject { ["api_key"] = "k" } })
+            .DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        NotAttempted(outcome, "carrier", NotAttemptedReasons.BindingInvalid);
+        Assert.Contains("/auth/api_key", outcome.Detail, StringComparison.Ordinal);
+        NothingStarted(api);
+    }
+
+    /// <summary>A binding that is not an object is refused by name, never read as an empty one.</summary>
+    [Fact]
+    public async Task A_binding_that_is_not_an_object_is_invalid()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(paths, "carrier", "export function invoke() { return { result: { receipt: 'x' } }; }"));
+        var channel = new PluginNotificationChannel(
+            "carrier",
+            new NotificationPluginEntry { Binding = JsonValue.Create("walk") },
+            api.Resolve<PluginRegistry>(),
+            api.Resolve<IServiceScopeFactory>());
+
+        var outcome = await channel.DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        NotAttempted(outcome, "carrier", NotAttemptedReasons.BindingInvalid);
+        Assert.Equal("the binding is an object; this one is a string", outcome.Detail);
+        NothingStarted(api);
+    }
+
+    /// <summary>
+    /// The pointer is checked against the delivery contract's input schema before anything starts: an input outside it
+    /// is the runtime's own failure, final, and no plugin is asked to deliver it.
+    /// </summary>
+    [Fact]
+    public async Task An_input_outside_the_contract_is_refused_before_anything_starts()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(paths, "carrier", "export function invoke() { return { result: { receipt: 'x' } }; }"));
+        var tooLong = new NotificationMessage(new string('J', 65), Message.Summary, Message.Look, Message.Approvals, Message.Decisions);
+
+        var outcome = await Channel(api, "carrier", Topic()).DeliverAsync(tooLong, "ntf_01K0test", Ct);
+
+        Assert.Equal((ChannelResult.Failed, "input_invalid", (FailureClass?)FailureClass.Validation), (outcome.Result, outcome.Code, outcome.Class));
+        NothingStarted(api);
+    }
+
+    [Fact]
+    public async Task A_binding_over_64_kib_is_invalid()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(paths, "carrier", "export function invoke() { return { result: {} }; }"));
+
+        var outcome = await Channel(api, "carrier", Topic(new string('t', 70_000))).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        NotAttempted(outcome, "carrier", NotAttemptedReasons.BindingInvalid);
+        NothingStarted(api);
+    }
+
+    [Fact]
+    public async Task A_binding_its_own_schema_refuses_is_invalid()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(paths, "carrier", "export function invoke() { return { result: {} }; }"));
+
+        var outcome = await Channel(api, "carrier", new JsonObject { ["channel"] = "walk" }).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        NotAttempted(outcome, "carrier", NotAttemptedReasons.BindingInvalid);
+        Assert.Contains("/channel", outcome.Detail, StringComparison.Ordinal);
+        NothingStarted(api);
+    }
+
+    [Fact]
+    public async Task A_delivery_the_plugin_answers_is_delivered_with_its_receipt()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(
+            paths,
+            "carrier",
+            "export function invoke(operation, input, context) { return { result: { receipt: context.binding.topic + ':' + input.counts.approvals + ':' + input.counts.decisions } }; }"));
+
+        var outcome = await Channel(api, "carrier", Topic()).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        Assert.Equal((ChannelResult.Delivered, "walk:3:1"), (outcome.Result, outcome.Receipt));
+    }
+
+    /// <summary>An answer the contract's result schema refuses is a pointer that may have arrived: ambiguous, never repeated.</summary>
+    [Fact]
+    public async Task An_answer_outside_the_contract_is_an_ambiguous_failure()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(
+            paths,
+            "carrier",
+            "export function invoke() { return { result: { receipt: 'x', said: 'more' } }; }"));
+
+        var outcome = await Channel(api, "carrier", Topic()).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        Assert.Equal((ChannelResult.Failed, "result_invalid", (FailureClass?)FailureClass.Ambiguous), (outcome.Result, outcome.Code, outcome.Class));
+    }
+
+    [Fact]
+    public async Task An_unreachable_service_is_a_transient_failure()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(
+            paths,
+            "carrier",
+            "export function invoke() { throw host.fail({ class: 'transient', code: 'notification_unreachable', message: 'the server did not answer' }); }"));
+
+        var outcome = await Channel(api, "carrier", Topic()).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        Assert.Equal((ChannelResult.Failed, "notification_unreachable", (FailureClass?)FailureClass.Transient), (outcome.Result, outcome.Code, outcome.Class));
+    }
+
+    [Fact]
+    public async Task A_plugin_that_throws_is_the_host_s_failure_recorded_with_its_class()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(
+            paths,
+            "carrier",
+            "export function invoke() { throw new Error('something broke'); }"));
+
+        var outcome = await Channel(api, "carrier", Topic()).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        Assert.Equal((ChannelResult.Failed, "plugin_exception", (FailureClass?)FailureClass.Permanent), (outcome.Result, outcome.Code, outcome.Class));
+    }
+
+    /// <summary>Each enabled named plugin joins the channels; one turned off does not.</summary>
+    [Fact]
+    public async Task Each_enabled_named_plugin_is_a_channel()
+    {
+        await using var api = await PluginInvokerTests.StartAsync();
+        var options = new NotificationsOptions();
+        options.Plugins["one"] = new NotificationPluginEntry { Binding = Topic() };
+        options.Plugins["two"] = new NotificationPluginEntry { Enabled = false };
+
+        var channels = api.Resolve<INotificationChannels>().Resolve(options);
+
+        Assert.Equal(["toast", "one"], channels.Select(channel => channel.Name));
+    }
+}

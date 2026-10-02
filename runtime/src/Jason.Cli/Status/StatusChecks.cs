@@ -8,6 +8,7 @@ using Jason.Cli.Uninstall;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Notifications;
 using Jason.Contracts.Skills;
 
 namespace Jason.Cli.Status;
@@ -164,6 +165,7 @@ internal static class StatusChecks
             checks.Add(await ProviderCliAsync(env, providerCli, cancellationToken).ConfigureAwait(false));
             checks.Add(Harnesses(env));
             checks.Add(Autostart(env));
+            checks.Add(Notifications(info));
         }
         finally
         {
@@ -586,6 +588,135 @@ internal static class StatusChecks
         return state.Registered
             ? new StatusCheck("autostart", false, CheckState.Ok, "The runtime is registered to start at logon.", null)
             : new StatusCheck("autostart", false, CheckState.Absent, "The runtime is not registered to start at logon.", Repair.EnableAutostart);
+    }
+
+    /// <summary>
+    /// Whether anything tells a person when Jason starts waiting for them, read from what <c>system.info</c> says each
+    /// channel did last — and, for the toast before it has been sent at all, from whether the runtime has a desktop,
+    /// which it decides when it starts. Optional: notifications are a convenience, never a condition of working.
+    /// </summary>
+    /// <remarks>
+    /// A person's own choice is never a failure: notifications switched off, or a machine with no desktop by design.
+    /// A runtime in session 0 is: a service or an SSH session runs there, but on a desktop it is most likely a runtime a
+    /// 0.1.0 logon task left running, and for that one the fact names the acts in the order docs/release-and-update.md
+    /// §8 gives them — the registration, the stop, a start — never the stop alone, which would leave the old task to
+    /// start another runtime at the next sign-in.
+    /// </remarks>
+    private static StatusCheck Notifications(SystemInfoResponse? info)
+    {
+        const string Name = "notifications";
+        if (info is null)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "The runtime did not answer, so whether its notifications reach anybody is not known.", null);
+        }
+
+        if (info.Notifications is not { } notifications)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "This runtime does not say what its notifications did.", null);
+        }
+
+        var on = notifications.Channels.Where(channel => channel.On).ToList();
+        if (!notifications.Enabled || on.Count == 0)
+        {
+            return new StatusCheck(Name, false, CheckState.Absent, "Notifications are off: nothing tells anybody when Jason starts waiting for them.", null);
+        }
+
+        var failures = new List<string>();
+        var asides = new List<string>();
+        var reaching = new List<string>();
+        var onAgain = new List<string>();
+        var hidden = false;
+        DateTimeOffset? lastDelivered = null;
+        foreach (var channel in on)
+        {
+            // Whether there is a desktop is this runtime's own fact, decided when it started and found again by its own
+            // sends: a toast outcome a line from an earlier runtime carried never outweighs it.
+            var noDesktop = NotificationReading.NoDesktop(channel, info.StartedAt);
+            var outcome = NotificationReading.Outcome(channel, info.StartedAt);
+
+            if (noDesktop == ChannelPresence.SessionZero)
+            {
+                // Failed, though the check is optional: on a desktop the likely cause is a runtime 0.1.0's logon task
+                // started, and the remedy is three acts in order. A service or an SSH session runs there by design.
+                failures.Insert(0, "This runtime runs in session 0, where nothing it shows reaches a desktop. A service or an SSH session runs there, "
+                    + "and so does a runtime that 0.1.0's logon task started. If 0.1.0's task started it: from an ordinary prompt, run "
+                    + "`jason runtime autostart enable` (or `disable`) once — if that answers Access is denied, follow its message first — "
+                    + "then `jason runtime stop` once, then `jason runtime start` (or sign in again, with autostart enabled). "
+                    + "docs/release-and-update.md §8 says why.");
+            }
+            else if (noDesktop is not null)
+            {
+                asides.Add($"No desktop for this runtime to show a notification on ({noDesktop}). `Notifications:Toast` set to `false` turns the toast off.");
+            }
+            else if (outcome == ChannelResults.Silenced)
+            {
+                asides.Add(channel.Reason switch
+                {
+                    SilencedReasons.DisabledForApplication => "Windows has Jason's notifications switched off (Settings → System → Notifications → Jason).",
+                    SilencedReasons.DisabledByGroupPolicy => "A group policy on this machine switches Windows' notifications off; an administrator sets it.",
+                    SilencedReasons.DisabledByManifest => "Windows says this program's own manifest switches its notifications off.",
+                    _ => "Windows has notifications switched off for every app.",
+                });
+            }
+            else if (outcome == ChannelResults.Failed)
+            {
+                failures.Add($"{channel.Channel}: {channel.Code} ({channel.Class}) at {When(channel.At)}{Detail(channel.Detail)}.");
+            }
+            else if (outcome == ChannelResults.NotAttempted)
+            {
+                failures.Add($"{channel.Channel} was not attempted at {When(channel.At)}: {channel.Reason}{Detail(channel.Detail)}.");
+            }
+            else
+            {
+                reaching.Add(channel.Channel);
+                if (NotificationReading.OnAgain(channel))
+                {
+                    onAgain.Add(channel.Kind == ChannelKinds.Toast ? "the toast" : channel.Channel);
+                }
+
+                hidden |= NotificationReading.Hidden(channel, info.StartedAt, notifications.LastAt);
+
+                if (outcome == ChannelResults.Delivered && channel.At is { } at && (lastDelivered is null || at > lastDelivered))
+                {
+                    lastDelivered = at;
+                }
+            }
+        }
+
+        if (failures.Count > 0)
+        {
+            return new StatusCheck(Name, false, CheckState.Failed, string.Join(" ", failures), null);
+        }
+
+        if (reaching.Count == 0)
+        {
+            return new StatusCheck(Name, false, CheckState.Absent, string.Join(" ", asides), null);
+        }
+
+        // When a channel that reaches the person last delivered — not when anything was last tried. "Yet" is said only
+        // where the last notification, if any, is this runtime's own: a channel the person turned off and on again has
+        // sent nothing since; and one whose last outcome an earlier runtime wrote, or one with no outcome at all beside a
+        // last notification older than this runtime — which is what a restart hands the toast — has sent nothing since
+        // this runtime started; either may have reached them before. The plural is defensive and unreachable today: only
+        // the toast is ever written as off (ToastChannel.Off), and a plugin turned off is not a channel at all, so at most
+        // one channel is on again.
+        var last = lastDelivered is { } delivered
+            ? $"the last one was delivered at {When(delivered)}."
+            : notifications.LastNotificationId is null ? "nothing has needed one yet."
+            : onAgain.Count > 0 ? $"none has reached you since {string.Join(" and ", onAgain)} {(onAgain.Count == 1 ? "was" : "were")} turned on again."
+            : hidden ? "none has reached you since this runtime started."
+            : "none has reached you yet.";
+        return new StatusCheck(
+            Name,
+            false,
+            CheckState.Ok,
+            string.Join(" ", [$"Notifications reach you by {string.Join(" and ", reaching)}; {last}", .. asides]),
+            null);
+
+        static string When(DateTimeOffset? at) =>
+            at?.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture) ?? "an unknown time";
+
+        static string Detail(string? detail) => detail is null ? string.Empty : ": " + detail;
     }
 
     private static async Task<T?> ReadAsync<T>(RuntimeClient client, string operation, CancellationToken cancellationToken)

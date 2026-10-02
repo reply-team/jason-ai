@@ -104,6 +104,16 @@ public interface IInstallationRemover
 
     /// <summary>Removes that directory and everything this build unpacked into it.</summary>
     void RemoveExtractedLibraries(string directory);
+
+    /// <summary>
+    /// The keys of the toast's registration present in this account's registry, in the order they are removed: the
+    /// AppUserModelID key the runtime's toast host wrote, and the two entries Windows made for it at the first toast.
+    /// None elsewhere than Windows.
+    /// </summary>
+    IReadOnlyList<string> ReadNotificationRegistration();
+
+    /// <summary>Removes one of those keys, and everything under it, from this account's registry.</summary>
+    void RemoveNotificationKey(string key);
 }
 
 /// <summary>What became of the executable, which is the one step that can honestly half-succeed.</summary>
@@ -404,6 +414,45 @@ public static class InstallationRemovers
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// By rule: the three keys a toast under Jason's AppUserModelID leaves in an account, measured on Windows 11
+        /// 24H2. All three are under the current user and go from an ordinary prompt. The notification center's own
+        /// entries are not cleared: they hold counts only, and they are the person's to dismiss.
+        /// </summary>
+        public IReadOnlyList<string> ReadNotificationRegistration()
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return [];
+            }
+
+            var present = new List<string>();
+            foreach (var key in Jason.Contracts.Notifications.ToastRegistration.Keys)
+            {
+                using var opened = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(key, writable: false);
+                if (opened is not null)
+                {
+                    present.Add(key);
+                }
+            }
+
+            return present;
+        }
+
+        public void RemoveNotificationKey(string key)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(key);
+            if (!Jason.Contracts.Notifications.ToastRegistration.Keys.Contains(key, StringComparer.Ordinal))
+            {
+                throw new RemovalRefused(CliErrors.UninstallRefused, $"'{key}' is not part of the notification registration, so it is not this verb's to remove.");
+            }
+
+            if (OperatingSystem.IsWindows())
+            {
+                Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(key, throwOnMissingSubKey: false);
+            }
         }
 
         public void RemoveExtractedLibraries(string directory)

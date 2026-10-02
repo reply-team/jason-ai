@@ -177,13 +177,43 @@ public class ContractsShapeTests
 
         Assert.EndsWith(
             "\"skills\":{\"role_skills_directory\":\"/data/skills/roles\",\"max_skill_bytes\":1048576,"
-                + "\"roles\":[{\"role\":\"researcher\",\"bytes\":4096,\"problem\":null}],\"problem\":null}}",
+                + "\"roles\":[{\"role\":\"researcher\",\"bytes\":4096,\"problem\":null}],\"problem\":null},\"notifications\":null}",
             JsonSerializer.Serialize(info, JasonJson.Options),
             StringComparison.Ordinal);
 
         // A runtime older than this section reports none at all, which every other section here also does and
         // which the CLI renders as "unknown" rather than as an empty deployment.
-        Assert.EndsWith("\"skills\":null}", JsonSerializer.Serialize(info with { Skills = null }, JasonJson.Options), StringComparison.Ordinal);
+        Assert.EndsWith("\"skills\":null,\"notifications\":null}", JsonSerializer.Serialize(info with { Skills = null }, JasonJson.Options), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What each notification channel did last rides on <c>system.info</c> as a section of its own, after every
+    /// section that came before it: whether notifications are on, each channel with its last outcome — or nulls
+    /// before anything was sent — and, for the toast, whether this runtime has a desktop to show one on at all.
+    /// </summary>
+    [Fact]
+    public void System_info_says_what_each_notification_channel_did_last()
+    {
+        var at = new DateTimeOffset(2026, 10, 1, 9, 6, 0, TimeSpan.Zero);
+        var info = SystemInfo() with
+        {
+            Notifications = new NotificationsInfo(
+                true,
+                [new NotificationChannelInfo("toast", "toast", true, "silenced", "disabled_for_application", null, null, null, at, "available", null)],
+                "ntf_01K",
+                at),
+        };
+
+        Assert.EndsWith(
+            "\"notifications\":{\"enabled\":true,\"channels\":[{\"channel\":\"toast\",\"kind\":\"toast\",\"on\":true,"
+                + "\"outcome\":\"silenced\",\"reason\":\"disabled_for_application\",\"code\":null,\"class\":null,\"detail\":null,"
+                + "\"at\":\"2026-10-01T09:06:00.000Z\",\"presence\":\"available\",\"presence_detail\":null}],"
+                + "\"last_notification_id\":\"ntf_01K\",\"last_at\":\"2026-10-01T09:06:00.000Z\"}}",
+            JsonSerializer.Serialize(info, JasonJson.Options),
+            StringComparison.Ordinal);
+
+        // A runtime older than this section reports none, which the CLI renders as "unknown".
+        Assert.EndsWith("\"notifications\":null}", JsonSerializer.Serialize(info with { Notifications = null }, JasonJson.Options), StringComparison.Ordinal);
     }
 
     /// <summary>A role the walk could not measure says so, rather than reporting a skill of no bytes.</summary>

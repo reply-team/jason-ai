@@ -228,10 +228,10 @@ public class UpdateCheckerTests
     /// <summary>
     /// The shared options with the check deliberately left on and a stub where the network would be. Every
     /// other test in this suite starts from options that turn it off; these are the tests it is for, so they
-    /// say so in one place rather than each quietly dropping the hook that turns it off.
+    /// say so in one place rather than each quietly dropping the hook that turns it off. Notifications stay off.
     /// </summary>
     private static RuntimeHostOptions Checking(FixedClock clock, HttpMessageHandler feed) =>
-        TestRuntimeOptions.Quiet with { Clock = clock, FeedHandler = feed, ConfigureServices = null };
+        TestRuntimeOptions.Quiet with { Clock = clock, FeedHandler = feed, ConfigureServices = TestRuntimeOptions.TurnNotificationsOff };
 
     private static async Task<int> ArmedAsync(FixedClock clock, int atLeast)
     {

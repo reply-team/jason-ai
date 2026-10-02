@@ -2,10 +2,40 @@ namespace Jason.App.Tests.Skills;
 
 public partial class InteractiveSkillTests
 {
+    /// <summary>
+    /// The two skills that teach notifications are verified by the host that read them as they ship: the catalog's row
+    /// for each names that host, and the pack's own rule holds the row's digest to the text.
+    /// </summary>
+    [Theory]
+    [InlineData("approvals-and-questions")]
+    [InlineData("operating-the-installation")]
+    public void The_skills_that_teach_notifications_are_verified_by_the_host_that_read_them(string name)
+    {
+        Assert.Equal("verified", SkillFrontMatter.Read(SkillPack.Find(name).File).Metadata.GetValueOrDefault("status"));
+        var catalog = File.ReadAllText(SkillPack.Catalog());
+        Assert.Contains($"| `{name}` | Claude Code 2.1.287 (claude-opus-5) | 0.2.0 | `{SkillPack.BodyDigest(SkillPack.Find(name).File)}` |", catalog, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A host chooses a skill by its description, so a person brought by a notification, or asking whether
+    /// notifications reach them, finds the skill only if its description says so.
+    /// </summary>
+    [Theory]
+    [InlineData("approvals-and-questions", "or arrives because a notification said approvals or questions are waiting")]
+    [InlineData("operating-the-installation", "whether notifications reach the person and turning them off")]
+    public void The_skills_that_teach_notifications_say_so_in_their_description(string name, string words) =>
+        Assert.Contains(words, SkillFrontMatter.Read(SkillPack.Find(name).File).Top["description"], StringComparison.Ordinal);
+
     [Fact]
     public void The_approvals_skill_never_decides_and_never_invents_the_person()
     {
         var skill = Flattened("approvals-and-questions");
+
+        // A notification brought them here: it says only how many wait, so both lists are read, and reacting to the
+        // notification approves nothing. A session that treated "you have 3 approvals" as the request would be
+        // deciding on a count.
+        Assert.Contains("A notification says only how many approvals and questions wait. When a person arrives because of one, list both — `jason approval list` and `jason decision list` — and present them as this skill says.", skill, StringComparison.Ordinal);
+        Assert.Contains("Nothing is approved by reacting to a notification: an approval is a person's decision, recorded as theirs.", skill, StringComparison.Ordinal);
 
         // The whole reason an approval exists is that a session is not entitled to answer it. A skill that
         // stopped saying so would be read by a session that finds an obvious-looking approval, approves it

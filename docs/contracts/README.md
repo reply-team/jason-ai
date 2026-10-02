@@ -28,7 +28,21 @@ docs/contracts/
   operations/<name>.md             the same contract explained, with a generated properties block
   fixtures/<name>/input-*.json     argument vectors, valid and invalid, with the pointer and reason of each failure
   fixtures/<name>/outcome-*.json   answer vectors, with the status, class and retriability each implies
+  notifications/<name>.json        the delivery contract, a family of its own, embedded the same way
+  notifications/<name>.md          the same contract explained, with a generated block
 ```
+
+## The delivery contract
+
+One more document is published here, and it is not a canonical operation:
+[`notifications/notification.send.json`](notifications/notification.send.md), what a notification plugin is invoked
+for — put a pointer in front of a person, how many approvals and questions wait and where to look. It is a family of
+its own, under `notifications/` rather than `operations/`, read by its own catalog. The operation catalog has no notion
+of kind: a document dropped among the operations would become a provider operation a work item could name, a route
+could carry and a lease would be sized for. So it has none of an operation's level-one fields — no reach, no approval,
+no preflight, no repeat rule — because a delivery is not SDR work, and only its input, its result, three failure codes,
+its timeout and its conformance list. Its fixtures live beside the operations' under
+[`fixtures/notification.send/`](fixtures/notification.send) and are run by the same tests.
 
 ## What a document states
 

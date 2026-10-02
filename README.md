@@ -87,11 +87,11 @@ design — lives in **[docs/architecture.md](docs/architecture.md)**.
 ## Installing
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.sh | sh
+curl -fsSL https://github.com/reply-team/jason-ai/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
-irm https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.ps1 | iex
+irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
 ```
 
 Each script works out your platform, verifies the download's SHA-256 before unpacking it, installs the
@@ -119,6 +119,10 @@ that dies half-way is finished or put back by the next run. `status` says where 
 ledger without needing a runtime.
 
 ### Ask an agent to do it
+
+Start the agent session for the install without external connectors: the prompt below needs none.
+On Claude Code that is `--strict-mcp-config`. This is about installing only. Connectors in your agent's SDR work
+are yours to use.
 
 Paste this into an agent that has a shell on the machine you want Jason on. It is the whole prompt — no
 preamble, no repository tour:
@@ -197,6 +201,7 @@ answer "am I ready to work?", because the runtime is not the authority on the ma
 | role skills are present, named after their directories and within the runtime's live cap | a provider CLI **you name** answers |
 | `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | the skill packs are deployed to an agent harness |
 | | autostart is registered |
+| | notifications reach you |
 
 **It exits 0 or 1 and never 3.** Exit 3 means "I could not ask the runtime", and this is the verb whose whole
 job is to answer when the runtime cannot be asked — so a runtime that is down is a failed check rather than an

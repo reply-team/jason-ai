@@ -46,8 +46,13 @@ public class DispatcherLoggingTests
                 Clock = new FixedClock(Noon),
 
                 // Replacing the hook rather than adding to it, which is why the transport that refuses the
-                // release feed is a property of its own: this line cannot take it away.
-                ConfigureServices = services => services.AddSingleton<ICommand>(command),
+                // release feed is a property of its own: this line cannot take it away. What the hook turns off
+                // is turned off again here, so the command is the only thing this test adds.
+                ConfigureServices = services =>
+                {
+                    TestRuntimeOptions.TurnTheOutsideOff(services);
+                    services.AddSingleton<ICommand>(command);
+                },
             },
             Ct);
 

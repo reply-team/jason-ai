@@ -61,16 +61,18 @@ public class RouteActivationTests
         Assert.All(after.LastReload.Candidates, candidate => Assert.NotEqual("routes", candidate.Directory));
     }
 
-    [Fact]
-    public async Task A_campaign_route_for_an_operation_no_build_publishes_refuses_the_reload()
+    [Theory]
+    [InlineData("not.an.operation")]
+    [InlineData("notification.send")]
+    public async Task A_campaign_route_for_an_operation_no_build_publishes_refuses_the_reload(string operation)
     {
         await using var api = await StartAsync(prepare: paths => TestPlugins.InstallFakeProvider(paths));
         var campaign = await CampaignAsync(api);
-        await WriteRouteAsync(api, campaign, "not.an.operation", TestPlugins.FakeProviderId, Workspace());
+        await WriteRouteAsync(api, campaign, operation, TestPlugins.FakeProviderId, Workspace());
 
         var detail = await RefusedAsync(api);
 
-        Assert.Equal($"campaign:{campaign}/routes/not.an.operation", detail.Field);
+        Assert.Equal($"campaign:{campaign}/routes/{operation}", detail.Field);
         Assert.Equal(RouteProblemCodes.OperationUnknown, detail.Code);
     }
 

@@ -59,6 +59,8 @@ public class DocumentedPageCommandsTests
         Path.Combine("docs", "campaign-manager.md"),
         Path.Combine("docs", "release-and-update.md"),
         Path.Combine("docs", "INSTALL.md"),
+        Path.Combine("docs", "notifications.md"),
+        Path.Combine("plugins", "ntfy", "README.md"),
     ];
 
     public static TheoryData<string, string> DocumentedCommands()

@@ -19,6 +19,8 @@ from the tag `v{{version}}` by the tests that passed at it.
 | `jason-osx-arm64.tar.gz` | macOS on Apple silicon |
 | `manifest.json` | what a running Jason reads to learn that this release exists |
 | `checksums.txt` | the SHA-256 of each archive, in `sha256sum` format |
+| `install.sh` | macOS and Linux: the install script this release was published with |
+| `install.ps1` | Windows: the install script this release was published with |
 
 Each archive holds the executable and `LICENSE`, nothing else. Plugins are installed from the repository as
 before: a package is copied into `~/.jason/plugins/`. On Linux the executable needs the ICU library
@@ -30,13 +32,13 @@ runtime's own message, rather than install a program that does not start.
 One line, on macOS and Linux:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.sh | sh
+curl -fsSL https://github.com/reply-team/jason-ai/releases/latest/download/install.sh | sh
 ```
 
 and on Windows, in PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.ps1 | iex
+irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
 ```
 
 Both find this machine's archive, check it against `checksums.txt` before unpacking, and put `jason` on the
@@ -44,12 +46,21 @@ PATH — in `~/.local/bin`, or `%LOCALAPPDATA%\Programs\jason`. Running the line
 the same version changes nothing and says so. Two options, for a script that must be told:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.sh | sh -s -- --version {{version}} --no-modify-path
+curl -fsSL https://github.com/reply-team/jason-ai/releases/download/v{{version}}/install.sh | sh -s -- --version {{version}} --no-modify-path
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.ps1))) -Version {{version}} -NoModifyPath
+& ([scriptblock]::Create((irm https://github.com/reply-team/jason-ai/releases/download/v{{version}}/install.ps1))) -Version {{version}} -NoModifyPath
 ```
+
+## Upgrading from 0.1.0
+
+If this machine ran 0.1.0 with autostart enabled, run `jason runtime autostart enable` or `disable` once from an
+ordinary prompt — if that answers Access is denied, follow its message first — then `jason runtime stop` once, then
+`jason runtime start` (or sign in again, with autostart enabled). 0.1.0's logon task started a runtime that outlives a
+sign-out and holds the data directory; until it stops, the runtime this version starts at sign-in finds the directory
+taken and exits. [`docs/release-and-update.md`](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md)
+§8 says why.
 
 ## Checking a download by hand
 

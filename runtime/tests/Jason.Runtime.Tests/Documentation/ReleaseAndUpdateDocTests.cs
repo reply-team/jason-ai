@@ -759,9 +759,9 @@ public class ReleaseAndUpdateDocTests
         var install = Source("docs/INSTALL.md").ReplaceLineEndings(" ");
 
         Assert.Contains("| this account's logon registration, on Windows including the task `\\Jason` an earlier version registered for it |", page, StringComparison.Ordinal);
-        Assert.Contains("a PATH entry the installer did not write; another account's logon registration.", page, StringComparison.Ordinal);
+        Assert.Contains("a PATH entry the installer did not write; another account's logon registration; the notifications already in the notification center", page, StringComparison.Ordinal);
         Assert.Contains("this account's logon registration first — on Windows including the task `\\Jason` an earlier version registered for it", install, StringComparison.Ordinal);
-        Assert.Contains("no PATH entry the installer did not write, no other account's logon registration.", install, StringComparison.Ordinal);
+        Assert.Contains("no PATH entry the installer did not write, no other account's logon registration, and none of the notifications already in the notification center.", install, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -831,6 +831,14 @@ public class ReleaseAndUpdateDocTests
             "No child this product starts gets a console window of its own",
             Source("runtime/tests/Jason.App.Tests/Processes/NoChildGetsAWindowTests.cs").ReplaceLineEndings(" "),
             StringComparison.Ordinal);
+
+        // And the register names the door, with what holds it: a guard over compiled IL, whose limits CLAUDE.md
+        // states above.
+        var register = Source("docs/architecture.md");
+        Assert.Contains(
+            "| INV-PROC-001 | Every child process the product starts is made at one door, `ChildProcess.StartInfo`, with no shell and no console window of its own, held by a guard over the compiled IL of the production assemblies. |",
+            register,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -856,6 +864,59 @@ public class ReleaseAndUpdateDocTests
             Assert.Contains("until you ask", text, StringComparison.OrdinalIgnoreCase);
         }
     }
+
+    /// <summary>
+    /// The one thing a fresh installation sends on its own is said where the person installs it: when, what, and the
+    /// switch — each read from the code that decides it, so a changed default fails here rather than on a page.
+    /// </summary>
+    [Fact]
+    public void The_install_page_says_beside_the_install_step_what_a_started_runtime_asks_and_how_to_turn_it_off()
+    {
+        var defaults = new UpdateOptions();
+        var section = Flat(Section(Source("docs/INSTALL.md"), "## 2. Install from a release"));
+        var minutes = defaults.InitialDelayMinutes switch { 5 => "five minutes", var other => $"{other} minutes" };
+        var interval = defaults.IntervalHours switch { 24 => "once a day", var other => $"every {other} hours" };
+
+        Assert.True(defaults.CheckEnabled);
+        Assert.Contains($"asks the release feed whether a newer version exists {minutes} after it starts, and {interval} after that", section, StringComparison.Ordinal);
+        Assert.Contains("one `GET`, carrying nothing about you or your work", section, StringComparison.Ordinal);
+        Assert.Contains($"`{UpdateOptions.Section}:{nameof(UpdateOptions.CheckEnabled)}` set to `false`", section, StringComparison.Ordinal);
+        Assert.Contains("[`release-and-update.md`](release-and-update.md) §4", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// After an upgrade from 0.1.0, `enable` or `disable` once takes the old task away and stops nothing: the runtime
+    /// that task started outlives a sign-out and holds the data directory, and the runtime this version starts at
+    /// sign-in then finds the directory taken and exits before it can say so. The page says to stop it, in the same
+    /// paragraph that says to run `enable` or `disable` once.
+    /// </summary>
+    [Fact]
+    public void After_an_upgrade_from_0_1_0_the_page_says_to_stop_the_runtime_its_task_started()
+    {
+        var paragraph = Flat(Assert.Single(Paragraphs(), p => Flat(p).Contains("after an upgrade from 0.1.0 run `enable` or `disable` once", StringComparison.Ordinal)));
+
+        Assert.Contains("If that answers `ERROR: Access is denied.`, do what the paragraph above says first.", paragraph, StringComparison.Ordinal);
+        Assert.Contains("And stop the runtime 0.1.0's task started, once: `jason runtime stop`, or restart the machine. Then start one: `jason runtime start`, or sign in again with autostart enabled.", paragraph, StringComparison.Ordinal);
+        var enable = paragraph.IndexOf("run `enable` or `disable` once", StringComparison.Ordinal);
+        var denied = paragraph.IndexOf("Access is denied.`, do what", StringComparison.Ordinal);
+        var stop = paragraph.IndexOf("`jason runtime stop`, or restart", StringComparison.Ordinal);
+        var start = paragraph.IndexOf("`jason runtime start`, or sign in again", StringComparison.Ordinal);
+        Assert.True(enable >= 0 && denied > enable && stop > denied && start > stop, $"the acts are not named in order: {paragraph}");
+        Assert.Contains("While it holds the data directory, the task this version registers starts a runtime at every sign-in that finds the directory taken and exits without a word.", paragraph, StringComparison.Ordinal);
+    }
+
+    /// <summary>A page's text from a heading to the next heading of the same level, or to its end.</summary>
+    private static string Section(string page, string heading)
+    {
+        var start = page.IndexOf(heading + "\n", StringComparison.Ordinal);
+        Assert.True(start >= 0, $"the page has no heading '{heading}'.");
+
+        var next = page.IndexOf("\n## ", start + heading.Length, StringComparison.Ordinal);
+        return next < 0 ? page[start..] : page[start..next];
+    }
+
+    /// <summary>A text with every run of white space made one space, so a sentence is found however it is wrapped.</summary>
+    private static string Flat(string text) => System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
 
     private static string Read() =>
         File.ReadAllText(Path.Combine(DocumentsDirectory(), "release-and-update.md"));

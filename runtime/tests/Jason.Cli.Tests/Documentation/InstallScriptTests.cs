@@ -39,6 +39,19 @@ public partial class InstallScriptTests
         Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "install", "install.ps1")));
     }
 
+    /// <summary>
+    /// A release asset is served as <c>application/octet-stream</c>, and <c>irm</c> decodes such a body as text
+    /// byte for byte only because every byte is ASCII: a dash or a quote above 0x7E would reach <c>iex</c> as two
+    /// characters of nonsense, and the one-liner would fail on a line nobody wrote.
+    /// </summary>
+    [Fact]
+    public void Install_ps1_is_ascii_because_a_release_serves_it_as_bytes()
+    {
+        var bytes = File.ReadAllBytes(Path.Combine(RepositoryRoot(), "install", "install.ps1"));
+        var above = bytes.Index().Where(pair => pair.Item > 0x7E).Select(pair => pair.Index).ToList();
+        Assert.True(above.Count == 0, $"install.ps1 has {above.Count} bytes above 0x7E, the first at offset {above.FirstOrDefault()}.");
+    }
+
     /// <summary>The one-liner pipes into <c>sh</c>, so the script has to be one for <c>sh</c> and not for bash.</summary>
     [Fact]
     public void The_shell_script_is_written_for_sh() =>

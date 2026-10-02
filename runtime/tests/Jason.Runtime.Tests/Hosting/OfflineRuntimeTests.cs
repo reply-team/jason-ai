@@ -1,5 +1,7 @@
+using System.Text.RegularExpressions;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Hosting;
+using Jason.Runtime.Notifications;
 using Jason.Runtime.Tests.Dispatch;
 using Jason.Runtime.Update;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,7 +19,7 @@ namespace Jason.Runtime.Tests.Hosting;
 /// This is written the way <c>ArchitectureTests</c> is, and for the same reason: the rule is about every call
 /// site, including the ones not written yet, and a rule like that cannot be asserted from inside one test.
 /// </remarks>
-public class OfflineRuntimeTests
+public partial class OfflineRuntimeTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -90,11 +92,11 @@ public class OfflineRuntimeTests
         var clock = new FixedClock(new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.Zero));
         var before = TestRuntimeOptions.Refusals;
 
-        // The hook is what turns the check off, so this test drops it — and keeps the transport, which is the
-        // whole point: one `with` cannot take away the other layer.
+        // The hook is what turns the check off, so this test replaces it with the half that keeps notifications
+        // off — and keeps the transport, which is the whole point: one `with` cannot take away the other layer.
         await using var runtime = await RuntimeHost.StartAsync(
             dir.Paths,
-            TestRuntimeOptions.Quiet with { Clock = clock, ConfigureServices = null },
+            TestRuntimeOptions.Quiet with { Clock = clock, ConfigureServices = TestRuntimeOptions.TurnNotificationsOff },
             Ct);
 
         Assert.True(
@@ -135,6 +137,94 @@ public class OfflineRuntimeTests
         await using var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
 
         Assert.False(runtime.Services.GetRequiredService<IOptionsMonitor<UpdateOptions>>().CurrentValue.CheckEnabled);
+    }
+
+    /// <summary>
+    /// And the same layer for notifications: a runtime started from the shared options notifies nobody, whatever
+    /// its settings file says. No test shows a toast or sends anything; one that means to exercise the notifier
+    /// turns it on itself, with channels of its own.
+    /// </summary>
+    [Fact]
+    public async Task The_shared_options_turn_notifications_off_whatever_the_settings_say()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(
+            dir.Paths.UserSettingsFile,
+            """{"Dispatcher":{"Enabled":false},"Notifications":{"Enabled":true,"Toast":true}}""");
+
+        await using var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
+
+        Assert.False(runtime.Services.GetRequiredService<IOptionsMonitor<NotificationsOptions>>().CurrentValue.Enabled);
+    }
+
+    /// <summary>
+    /// The hook that keeps a test runtime from notifying anybody is replaced, never added to, wherever a test sets its
+    /// own, so every replacement turns the outside off again before it does anything else. A replacement that did not
+    /// would be a test runtime free to show a toast or send to a notification plugin.
+    /// </summary>
+    [Fact]
+    public void Every_replacement_of_the_services_hook_keeps_notifications_off()
+    {
+        var unguarded = Unguarded(Sources()
+            .Where(file => !Path.GetFileName(file).Equals("TestRuntimeOptions.cs", StringComparison.Ordinal))
+            .Select(file => (file, File.ReadAllLines(file))))
+            .ToList();
+        Assert.True(unguarded.Count == 0, $"the services hook is replaced without turning notifications off at: {string.Join(", ", unguarded)}");
+
+        // The rule's positive controls: a replacement that only adds a service is found, however it is spaced, across a
+        // line break too, and a comparison is not a replacement.
+        Assert.Equal(
+            ["Control.cs(1)", "Tight.cs(1)", "Split.cs(2)"],
+            Unguarded(
+            [
+                ("Control.cs", ["ConfigureServices = services =>", "{", "    // a comment first", "    services.AddSingleton<object>(new object());", "},"]),
+                ("Tight.cs", ["ConfigureServices=services =>", "{", "    services.AddSingleton<object>(new object());", "},"]),
+                ("Split.cs", ["var options = new TestRuntimeOptions {", "    ConfigureServices", "        = services =>", "    {", "        services.AddSingleton<object>(new object());", "    },", "};"]),
+                ("Compared.cs", ["if (options.ConfigureServices == null)", "{", "    return;", "}"]),
+            ]));
+    }
+
+    /// <summary>An assignment to the hook, however it is spaced, across a line break too; a comparison with it is not one.</summary>
+    [GeneratedRegex(@"\bConfigureServices\s*=(?!=)")]
+    private static partial Regex Replacement();
+
+    /// <summary>
+    /// Each <c>ConfigureServices =</c> — matched over the whole text, so a line break inside it hides nothing — whose own
+    /// lines, or whose first statement after its opening brace and comments, is not a call that turns notifications
+    /// off. Each is named by the line it starts on.
+    /// </summary>
+    private static IEnumerable<string> Unguarded(IEnumerable<(string File, string[] Lines)> sources)
+    {
+        static bool TurnsOff(string text) =>
+            text.Contains("TurnTheOutsideOff", StringComparison.Ordinal) || text.Contains("TurnNotificationsOff", StringComparison.Ordinal);
+
+        static int LineOf(string text, int index) => text.AsSpan(0, index).Count('\n');
+
+        foreach (var (file, lines) in sources)
+        {
+            var text = string.Join('\n', lines);
+            foreach (Match match in Replacement().Matches(text))
+            {
+                var first = LineOf(text, match.Index);
+                var last = LineOf(text, match.Index + match.Length - 1);
+                if (TurnsOff(string.Join('\n', lines[first..(last + 1)])))
+                {
+                    continue;
+                }
+
+                var next = last + 1;
+                while (next < lines.Length && (lines[next].Trim() is "" or "{" || lines[next].TrimStart().StartsWith("//", StringComparison.Ordinal)))
+                {
+                    next++;
+                }
+
+                if (next >= lines.Length || !TurnsOff(lines[next]))
+                {
+                    yield return $"{Path.GetFileName(file)}({first + 1})";
+                }
+            }
+        }
     }
 
     /// <summary>Every line of every test source but this one, with where it is.</summary>

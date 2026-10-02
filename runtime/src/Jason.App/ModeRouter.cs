@@ -4,6 +4,7 @@ using Jason.Contracts;
 using Jason.Contracts.Discovery;
 using Jason.PluginHost;
 using Jason.Runtime.Hosting;
+using Jason.Runtime.Notifications.Desktop;
 
 namespace Jason.App;
 
@@ -12,6 +13,7 @@ public enum Mode
     Version,
     RuntimeService,
     PluginHost,
+    ToastHost,
     Cli,
 }
 
@@ -29,6 +31,7 @@ public static class ModeRouter
             ["--version"] => Mode.Version,
             ["runtime", "run", ..] => Mode.RuntimeService,
             ["plugin-host", ..] => Mode.PluginHost,
+            ["toast-host", ..] => Mode.ToastHost,
             _ => Mode.Cli,
         };
     }
@@ -38,6 +41,7 @@ public static class ModeRouter
         Mode.Version => RunVersion(),
         Mode.RuntimeService => RunRuntimeService(args, cancellationToken),
         Mode.PluginHost => RunPluginHost(args, cancellationToken),
+        Mode.ToastHost => RunToastHost(args, cancellationToken),
         _ => RunCli(args, cancellationToken),
     };
 
@@ -102,6 +106,14 @@ public static class ModeRouter
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Task<int> RunPluginHost(string[] args, CancellationToken cancellationToken) =>
         PluginHostMode.RunAsync(args[1..], Console.In, Console.Out, Console.Error, cancellationToken);
+
+    /// <summary>
+    /// The short-lived child that shows one toast on Windows: its payload on stdin, one outcome on stdout, and the
+    /// interop it calls inside this child rather than inside the runtime.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static Task<int> RunToastHost(string[] args, CancellationToken cancellationToken) =>
+        ToastHost.RunAsync(args[1..], Console.In, Console.Out, Console.Error, cancellationToken);
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Task<int> RunCli(string[] args, CancellationToken cancellationToken) =>

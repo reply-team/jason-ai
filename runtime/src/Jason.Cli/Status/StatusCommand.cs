@@ -38,7 +38,8 @@ public static class StatusCommand
                                         on PATH, in this shell or in every shell started from now on
         Optional — absent never fails:  a provider plugin is installed · a route is configured · a binding
                                         names an account · a provider CLI you name answers · the skill packs
-                                        are deployed to an agent harness · autostart is registered
+                                        are deployed to an agent harness · autostart is registered ·
+                                        notifications reach you
 
         The path check is ok in two cases. 'jason' resolves in this shell; or it does not, and this account
         keeps its directory for shells not yet started — its Path value on Windows, on macOS and Linux the one

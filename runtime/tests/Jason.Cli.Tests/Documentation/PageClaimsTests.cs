@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace Jason.Cli.Tests.Documentation;
 
 /// <summary>
@@ -145,6 +148,88 @@ public class PageClaimsTests
 
         Assert.Contains(said, text, StringComparison.Ordinal);
         Assert.DoesNotContain("somewhere on your `PATH`", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The prompt needs no connector, and a session started with the account's connectors offers tools the install
+    /// never asked for. That is said to the person who starts the session, above the prompt, so the prompt itself —
+    /// the text real hosts were measured reading — does not change by a byte.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_to_start_the_install_session_without_connectors_above_the_prompt()
+    {
+        var readme = Page("README.md");
+        var fence = readme.IndexOf("```text\nInstall Jason on this machine", StringComparison.Ordinal);
+        var sentence = readme.IndexOf("Start the agent session for the install without external connectors: the prompt below needs none.", StringComparison.Ordinal);
+
+        Assert.True(fence > 0, "the prompt's fence is where the page has it");
+        Assert.InRange(sentence, 0, fence);
+
+        // Said before the line that hands over the prompt, so "Paste this … :" is followed by the prompt itself.
+        var paste = readme.IndexOf("Paste this into an agent", StringComparison.Ordinal);
+        Assert.InRange(sentence, 0, paste);
+        Assert.Contains("On Claude Code that is `--strict-mcp-config`.", Flat(readme[..fence]), StringComparison.Ordinal);
+        Assert.Contains("Connectors in your agent's SDR work are yours to use.", Flat(readme[..fence]), StringComparison.Ordinal);
+    }
+
+    /// <summary>The prompt, byte for byte, is the one the real-host runs read; its digest is held here.</summary>
+    [Fact]
+    public void The_install_prompt_is_the_text_the_hosts_read_and_names_no_connector()
+    {
+        var prompt = Fenced(Page("README.md"), "```text\nInstall Jason on this machine");
+        Assert.DoesNotContain("connector", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(PromptDigest, "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(prompt))));
+    }
+
+    /// <summary>
+    /// The optional checks `jason status` prints in its help, and the two pages that copy them by hand: the README's
+    /// table and INSTALL's. A check added to one and not the others is a drift nobody held before.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md")]
+    [InlineData("docs/INSTALL.md")]
+    public async Task The_pages_list_the_optional_checks_status_prints_in_its_help(string page)
+    {
+        var output = new StringWriter();
+        using (var dir = new TempPaths())
+        {
+            await CliApp.RunAsync(["status", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
+        }
+
+        var help = Flat(output.ToString());
+        var start = help.IndexOf("Optional — absent never fails:", StringComparison.Ordinal) + "Optional — absent never fails:".Length;
+        var end = help.IndexOf("The path check", start, StringComparison.Ordinal);
+        var printed = help[start..end].Split(" · ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        var rows = Page(page.Split('/'))
+            .Split('\n')
+            .SkipWhile(line => !line.StartsWith("| Required — a failure exits 1 | Optional — absent never fails |", StringComparison.Ordinal))
+            .Skip(2)
+            .TakeWhile(line => line.StartsWith('|'))
+            .Select(line => line.Split('|', StringSplitOptions.TrimEntries)[2].Replace("**", string.Empty, StringComparison.Ordinal))
+            .Where(cell => cell.Length > 0)
+            .ToList();
+
+        Assert.Equal(printed, rows);
+        Assert.Contains("notifications reach you", rows);
+    }
+
+    /// <summary>The digest of the README's prompt as the real-host runs read it.</summary>
+    private const string PromptDigest = "sha256:725e55a1b19d56e258aeb3ad16402c60521b36bbea8ea50b0b2230ef71850b7c";
+
+    /// <summary>
+    /// The text between the line that opens a fence and the next line that is exactly three backticks, each line
+    /// ending in a newline.
+    /// </summary>
+    private static string Fenced(string page, string opener)
+    {
+        var open = page.IndexOf(opener, StringComparison.Ordinal);
+        Assert.True(open >= 0, $"the page has no fence opening with '{opener}'.");
+
+        var start = page.IndexOf('\n', open) + 1;
+        var close = page.IndexOf("\n```\n", start - 1, StringComparison.Ordinal);
+        Assert.True(close >= start, "the fence is never closed.");
+        return page[start..(close + 1)];
     }
 
     /// <summary>A page with every run of white space made one space, so a sentence is found however it is wrapped.</summary>

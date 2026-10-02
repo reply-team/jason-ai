@@ -554,20 +554,22 @@ public class StatusCommandTests
 
     private static DeployedRoleSkill Taught(string role) => new(role, 4096, null);
 
-    private static StatusReport Read(StringWriter output) =>
+    internal static StatusReport Read(StringWriter output) =>
         JsonSerializer.Deserialize<StatusReport>(output.ToString(), JasonJson.Options)!;
 
     /// <summary>A descriptor on disk and a runtime behind it answering the three operations status asks.</summary>
     /// <summary>A descriptor and a runtime behind it. <paramref name="roles"/> null makes role.list fail.</summary>
-    private static void Running(TempPaths dir, IReadOnlyList<string>? roles = null, SkillsInfo? skills = null, bool rosterFails = false)
+    internal static void Running(TempPaths dir, IReadOnlyList<string>? roles = null, SkillsInfo? skills = null, bool rosterFails = false, NotificationsInfo? notifications = null, DateTimeOffset? startedAt = null)
     {
         dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_01J"));
         Answers[dir.Paths.Root] = (
             rosterFails ? null : roles ?? ["researcher"],
-            skills ?? new SkillsInfo("/data/skills/roles", 1048576, [Taught("researcher")]));
+            skills ?? new SkillsInfo("/data/skills/roles", 1048576, [Taught("researcher")]),
+            notifications,
+            startedAt ?? DateTimeOffset.UnixEpoch);
     }
 
-    private static readonly Dictionary<string, (IReadOnlyList<string>? Roles, SkillsInfo Skills)> Answers = [];
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (IReadOnlyList<string>? Roles, SkillsInfo Skills, NotificationsInfo? Notifications, DateTimeOffset StartedAt)> Answers = [];
 
     /// <summary>
     /// The machine these run against: this test's own data directory, a runtime that exists only in a handler,
@@ -579,7 +581,7 @@ public class StatusCommandTests
     /// the real PATH would make this suite report the developer's machine rather than the installation under
     /// test: green where somebody has Jason installed and red on every CI runner, for the same code.
     /// </remarks>
-    private static CliEnvironment Machine(
+    internal static CliEnvironment Machine(
         TempPaths dir,
         StringWriter output,
         IProgramRunner? programs = null,
@@ -618,7 +620,7 @@ public class StatusCommandTests
         var route = request.RequestUri!.AbsolutePath;
         if (route.EndsWith(Operations.SystemInfo, StringComparison.Ordinal))
         {
-            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills), JasonJson.Options));
+            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills) with { Notifications = answers.Notifications, StartedAt = answers.StartedAt }, JasonJson.Options));
         }
 
         if (route.EndsWith(Operations.RoleList, StringComparison.Ordinal))

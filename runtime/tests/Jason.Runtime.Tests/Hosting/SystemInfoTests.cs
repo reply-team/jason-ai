@@ -245,6 +245,58 @@ public class SystemInfoTests
     }
 
     /// <summary>
+    /// Every test runtime has notifications off, and says so: off, and the toast not on, with nothing sent. Whether
+    /// it has a desktop is said all the same, because that is decided when the runtime starts, not when it sends.
+    /// </summary>
+    [Fact]
+    public async Task System_info_says_notifications_are_off_in_a_runtime_that_has_them_off()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        Assert.NotNull(info.Notifications);
+        Assert.False(info.Notifications.Enabled);
+        var toast = Assert.Single(info.Notifications.Channels);
+        Assert.Equal(("toast", "toast", false, (string?)null), (toast.Channel, toast.Kind, toast.On, toast.Outcome));
+        Assert.Contains(toast.Presence, (string[])["available", "no_desktop"]);
+        Assert.Null(info.Notifications.LastNotificationId);
+    }
+
+    /// <summary>What the last notification did, per channel, as the sender recorded it.</summary>
+    [Fact]
+    public async Task System_info_says_what_each_channel_did_with_the_last_notification()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths => File.WriteAllText(
+                paths.UserSettingsFile,
+                """{"Dispatcher":{"Enabled":false},"Notifications":{"Plugins":{"ntfy":{"Binding":{"topic":"walk"}}}}}"""));
+        var at = new DateTimeOffset(2026, 10, 1, 9, 6, 0, TimeSpan.Zero);
+        fixture.Resolve<Jason.Runtime.Notifications.NotificationStatus>().Record(
+            new Jason.Runtime.Notifications.NotificationLine(
+                "ntf_01Kstatus",
+                2,
+                0,
+                "jrn_covered",
+                [
+                    Jason.Runtime.Notifications.ChannelOutcome.Delivered("toast", "toast"),
+                    Jason.Runtime.Notifications.ChannelOutcome.Failed("ntfy", "plugin", "notification_unreachable", Jason.Contracts.Plugins.FailureClass.Transient, "the server did not answer") with { Attempts = 2 },
+                ],
+                at.UtcDateTime),
+            at);
+
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        Assert.Equal("ntf_01Kstatus", info.Notifications!.LastNotificationId);
+        Assert.Equal(at, info.Notifications.LastAt);
+        Assert.Equal(
+            [("toast", "delivered", (string?)null, (string?)null), ("ntfy", "failed", "notification_unreachable", "transient")],
+            info.Notifications.Channels.Select(channel => (channel.Channel, channel.Outcome, channel.Code, channel.Class)));
+        Assert.Equal(at, info.Notifications.Channels[1].At);
+    }
+
+    /// <summary>
     /// What the runtime will teach its roles from: the directory it owns, the cap it will enforce, and every
     /// directory in it with what would stop a launch being taught it. The cap is reported because it is a
     /// live setting, and an installer that guessed it would validate against the wrong number.

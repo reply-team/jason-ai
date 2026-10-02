@@ -6,7 +6,9 @@ using Jason.Runtime.Contacts;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Hosting.Modules;
+using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Notifications;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins;
 using Jason.Runtime.Plugins.Registry;
@@ -78,8 +80,16 @@ internal sealed class DispatchHarness : IDisposable
         services.AddDbContext<JasonDbContext>(o =>
         {
             JasonDbContext.Configure(o, _database.File);
-            o.AddInterceptors(new SaveHook(() => Interlocked.Exchange(ref _interfere, null)));
+            o.AddInterceptors(new SaveHook(() => Interlocked.Exchange(ref _interfere, null)), Commands);
         });
+
+        // The notifier's half of the scan: off unless a test turns it on, a state that lives as long as this
+        // "runtime" does, and a queue that keeps what it was handed instead of sending anything.
+        services.AddSingleton<IOptionsMonitor<NotificationsOptions>>(Notifications);
+        services.AddSingleton(DispatcherModule.Seam<NotificationsOptions>(NotificationsOptions.Section));
+        services.AddSingleton(NotifierState);
+        services.AddSingleton<INotificationQueue>(Queue);
+        services.AddSingleton(NotificationStatus);
         services.AddScoped<JournalWriter>();
         services.AddScoped<AttemptOutcomes>();
 
@@ -100,6 +110,63 @@ internal sealed class DispatchHarness : IDisposable
     }
 
     public FixedClock Clock { get; }
+
+    /// <summary>The notification settings the scan reads. Off until a test turns them on.</summary>
+    public TestOptionsMonitor<NotificationsOptions> Notifications { get; } = new(new NotificationsOptions { Enabled = false });
+
+    /// <summary>What the notifier knows between scans, as the runtime's singleton holds it.</summary>
+    public NotifierState NotifierState { get; } = new();
+
+    /// <summary>What the last notifications did, as <c>system.info</c> reads it.</summary>
+    public NotificationStatus NotificationStatus { get; } = new();
+
+    /// <summary>A service the harness composed, for a test that builds one of the runtime's parts by hand.</summary>
+    public T Resolve<T>()
+        where T : notnull => _provider.GetRequiredService<T>();
+
+    /// <summary>Where the notifier hands what it decided to send.</summary>
+    public RecordingQueue Queue { get; } = new();
+
+    /// <summary>Every command the harness's contexts sent, and a way to make the next journal read fail.</summary>
+    public CommandLog Commands { get; } = new();
+
+    /// <summary>Turns the notifier on with the shipped defaults, adjusted by the test, and dates this runtime's start.</summary>
+    public void NotificationsOn(Action<NotificationsOptions>? configure = null)
+    {
+        var options = new NotificationsOptions();
+        configure?.Invoke(options);
+        Notifications.CurrentValue = options;
+        Status.RuntimeStartedAt ??= Clock.Now.UtcDateTime;
+    }
+
+    /// <summary>
+    /// The notifier run once over a state the test holds, the way a runtime that has just started runs it: the same
+    /// services, the same contexts, a state that has read nothing yet.
+    /// </summary>
+    public async Task<int> NotifyAsync(NotifierState state, CancellationToken ct)
+    {
+        await using var scope = _provider.CreateAsyncScope();
+        var services = scope.ServiceProvider;
+        var notifier = new Notifier(
+            state,
+            Queue,
+            NotificationStatus,
+            services.GetRequiredService<LiveSettings<NotificationsOptions>>(),
+            services.GetRequiredService<LiveSettings<DispatcherOptions>>(),
+            Status,
+            Clock,
+            services.GetRequiredService<ILogger<Notifier>>());
+        return await notifier.NotifyAsync(services.GetRequiredService<JasonDbContext>(), ct);
+    }
+
+    /// <summary>One journal line, written by the runtime at the harness clock's time, as a step of the runtime would.</summary>
+    public async Task<JournalEntry> WriteLineAsync(string kind, CancellationToken ct, System.Text.Json.Nodes.JsonObject? updated = null)
+    {
+        await using var db = Open();
+        var entry = new JournalWriter(Clock).Append(db, Actors.Runtime, kind, campaign: null, updated: updated);
+        await db.SaveChangesAsync(ct);
+        return entry;
+    }
 
     /// <summary>What these services logged, for the decisions whose only trace is a diagnostic.</summary>
     public RecordingLogs Logs { get; } = new();
@@ -224,6 +291,72 @@ internal sealed class DispatchHarness : IDisposable
         _provider.Dispose();
         _database.Dispose();
         _dir.Dispose();
+    }
+
+    /// <summary>
+    /// A queue that keeps every request it was handed, with the time it was handed over, and can be told to refuse
+    /// the next ones. It never releases: the test plays the sender's part with <see cref="NotifierState.Release"/>.
+    /// </summary>
+    internal sealed class RecordingQueue : INotificationQueue
+    {
+        private readonly ConcurrentQueue<NotificationRequest> _requests = new();
+
+        public IReadOnlyList<NotificationRequest> Requests => [.. _requests];
+
+        public bool Refuse { get; set; }
+
+        public void Enqueue(NotificationRequest request)
+        {
+            if (Refuse)
+            {
+                throw new InvalidOperationException("The queue was told to refuse.");
+            }
+
+            _requests.Enqueue(request);
+        }
+    }
+
+    /// <summary>Every command text the harness's contexts sent, and a read of the journal made to fail on request.</summary>
+    internal sealed class CommandLog : DbCommandInterceptor
+    {
+        private readonly ConcurrentQueue<string> _texts = new();
+        private int _failNextJournalRead;
+
+        public IReadOnlyList<string> Texts => [.. _texts];
+
+        public void Clear() => _texts.Clear();
+
+        /// <summary>The next query that reads the journal throws, as a database that went away would.</summary>
+        public void FailNextJournalRead() => Interlocked.Exchange(ref _failNextJournalRead, 1);
+
+        public override InterceptionResult<System.Data.Common.DbDataReader> ReaderExecuting(
+            System.Data.Common.DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<System.Data.Common.DbDataReader> result)
+        {
+            Record(command);
+            return base.ReaderExecuting(command, eventData, result);
+        }
+
+        public override ValueTask<InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(
+            System.Data.Common.DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<System.Data.Common.DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            Record(command);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        private void Record(System.Data.Common.DbCommand command)
+        {
+            _texts.Enqueue(command.CommandText);
+            if (command.CommandText.Contains("FROM \"journal\"", StringComparison.Ordinal)
+                && Interlocked.Exchange(ref _failNextJournalRead, 0) == 1)
+            {
+                throw new InvalidOperationException("The journal could not be read.");
+            }
+        }
     }
 
     /// <summary>Lets the test act in the instant between a service reading a row and writing it back.</summary>

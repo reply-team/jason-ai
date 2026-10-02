@@ -1,0 +1,41 @@
+{
+  "id": "notification.send",
+  "version": 1,
+  "intent": "Put a pointer in front of a person: how many approvals and questions are waiting in Jason, and where to look. Nothing about the work itself travels.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "title": { "type": "string", "minLength": 1, "maxLength": 64 },
+      "message": { "type": "string", "minLength": 1, "maxLength": 400 },
+      "counts": {
+        "type": "object",
+        "properties": {
+          "approvals": { "type": "integer", "minimum": 0 },
+          "decisions": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["approvals", "decisions"],
+        "additionalProperties": false
+      }
+    },
+    "required": ["title", "message", "counts"],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": { "receipt": { "type": "string", "minLength": 1, "maxLength": 256 } },
+    "additionalProperties": false
+  },
+  "failure_codes": [
+    { "code": "notification_unreachable", "class": "transient", "when": "the service did not answer, or answered that it cannot take messages for now" },
+    { "code": "notification_refused", "class": "permanent", "when": "the service answered that it will not take this message" },
+    { "code": "notification_unauthorized", "class": "permanent", "when": "the service refused the credential, or needs one and none was granted" }
+  ],
+  "timeout_ms": 15000,
+  "conformance": [
+    "Sends what it is given and nothing more: the title, the message and the counts, never a field of its own making.",
+    "Answers notification_unreachable for a service that did not answer or is unavailable for now, so the runtime tries once more.",
+    "Answers notification_refused or notification_unauthorized for an answer that will not change by trying again.",
+    "Returns at most a receipt: the service's own identifier for the message, at most 256 characters.",
+    "Keeps its credential out of the binding, out of what it logs and out of what it returns: it reads it with host.env."
+  ]
+}

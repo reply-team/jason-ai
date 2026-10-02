@@ -1,4 +1,5 @@
 using Jason.Contracts.Discovery;
+using Jason.Runtime.Notifications;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -72,12 +73,21 @@ public static class JasonConfiguration
         services.AddSingleton<IValidateOptions<PluginsOptions>, PluginsOptionsValidator>();
         services.AddSingleton<IValidateOptions<RoutesOptions>, RoutesOptionsValidator>();
         services.AddSingleton<IValidateOptions<UpdateOptions>, UpdateOptionsValidator>();
+        services.AddSingleton<IValidateOptions<NotificationsOptions>, NotificationsOptionsValidator>();
 
         services.AddOptions<RuntimeOptions>().Bind(configuration.GetSection(RuntimeOptions.Section)).ValidateOnStart();
         services.AddOptions<LoggingOptions>().Bind(configuration.GetSection(LoggingOptions.Section)).ValidateOnStart();
         services.AddOptions<DispatcherOptions>().Bind(configuration.GetSection(DispatcherOptions.Section)).ValidateOnStart();
         services.AddOptions<RolesOptions>().Bind(configuration.GetSection(RolesOptions.Section)).ValidateOnStart();
         services.AddOptions<UpdateOptions>().Bind(configuration.GetSection(UpdateOptions.Section)).ValidateOnStart();
+
+        // The scalars and each named plugin's Enabled are bound; each binding is JSON, which the binder cannot make,
+        // so it is read afterwards from the same section, the way a route's binding is.
+        var notifications = configuration.GetSection(NotificationsOptions.Section);
+        services.AddOptions<NotificationsOptions>()
+            .Bind(notifications)
+            .PostConfigure(options => NotificationsOptions.FillBindings(notifications, options))
+            .ValidateOnStart();
 
         // Bound by hand for the reason ManagerOptions.Fill gives: a list the binder appends to would turn a
         // narrowed set of triggers into a widened one.

@@ -12,6 +12,10 @@ public class ModeRouterTests
     [InlineData(new[] { "runtime", "run", "--detached" }, Mode.RuntimeService)]
     [InlineData(new[] { "plugin-host" }, Mode.PluginHost)]
     [InlineData(new[] { "plugin-host", "fake-provider" }, Mode.PluginHost)]
+    // The mode follows the first argument whatever comes after it; no test names the protocol the host answers.
+    [InlineData(new[] { "toast-host", "--protocol", "2" }, Mode.ToastHost)]
+    [InlineData(new[] { "toast-host" }, Mode.ToastHost)]
+    [InlineData(new[] { "runtime", "toast-host" }, Mode.Cli)]
     [InlineData(new[] { "runtime", "status" }, Mode.Cli)]
     [InlineData(new[] { "--help" }, Mode.Cli)]
     [InlineData(new string[0], Mode.Cli)]

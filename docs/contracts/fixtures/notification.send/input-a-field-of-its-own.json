@@ -1,0 +1,12 @@
+{
+  "operation": "notification.send",
+  "version": 1,
+  "case": "a field the contract does not name: nothing but the pointer travels, so where it came from is not sent",
+  "input": {
+    "title": "Jason",
+    "message": "3 approvals and 1 question are waiting in Jason. Ask your agent what Jason is waiting for, or run jason approval list and jason decision list.",
+    "counts": { "approvals": 3, "decisions": 1 },
+    "where": "Acme Renewal Q4"
+  },
+  "expect": { "invalid": [{ "pointer": "/where", "reason": "additional_properties" }] }
+}

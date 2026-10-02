@@ -120,6 +120,41 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
         return new PathEntryOutcome(plan.Ours, plan.Ours ? [.. plan.Profiles] : [], plan.Ours ? null : "not ours");
     }
 
+    /// <summary>The keys of the toast's registration this fake says are present; none unless a test says so.</summary>
+    public List<string> NotificationKeys { get; init; } = [];
+
+    /// <summary>Keys a toast writes after the first read: what a runtime still running when the plan was read leaves.</summary>
+    public List<string> KeysWrittenAfterTheFirstRead { get; init; } = [];
+
+    /// <summary>Whether reading the registry fails, as a registry this account cannot read would.</summary>
+    public bool RegistryUnreadable { get; init; }
+
+    private int _registryReads;
+
+    public IReadOnlyList<string> ReadNotificationRegistration()
+    {
+        if (RegistryUnreadable)
+        {
+            throw new IOException("the registry refused to be read");
+        }
+
+        if (++_registryReads == 2)
+        {
+            NotificationKeys.AddRange(KeysWrittenAfterTheFirstRead);
+        }
+
+        return [.. NotificationKeys];
+    }
+
+    public void RemoveNotificationKey(string key)
+    {
+        Record("notifications.remove", key);
+        if (ReallyRemoves)
+        {
+            NotificationKeys.Remove(key);
+        }
+    }
+
     /// <summary>Where this pretend build unpacked its native libraries. A test that cares sets it.</summary>
     public string? ExtractedLibraries { get; set; }
 

@@ -1,0 +1,233 @@
+using System.Threading.Channels;
+using Jason.Contracts.Api;
+using Jason.Contracts.Plugins;
+using Jason.Runtime.Configuration;
+using Jason.Runtime.Domain;
+using Jason.Runtime.Journal;
+using Jason.Runtime.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+namespace Jason.Runtime.Notifications;
+
+/// <summary>
+/// Delivers one notification at a time, off the scan: a slow channel delays no scan, and a parked item, an approval or
+/// a decision has committed long before anything here runs. Each channel is bounded by its own budget and they run side
+/// by side; a transient failure is tried once more after thirty seconds — best effort, because a runtime that ends
+/// meanwhile has written nothing and its successor sends again. One journal line records what happened, and that line
+/// is also where the notifier's watermark lives.
+/// </summary>
+/// <remarks>
+/// Three cases write no line: every channel off (the notifier never hands anything over), nothing waiting by the time
+/// it is sent, and a runtime that stops while it sends. One case writes a line though nothing reached anybody: channels
+/// exist and none of them could, which moves the watermark so the same lines are not said again.
+/// </remarks>
+public sealed class NotificationSender(
+    IServiceScopeFactory scopes,
+    INotificationChannels channels,
+    NotifierState state,
+    NotificationStatus status,
+    LiveSettings<NotificationsOptions> settings,
+    TimeProvider clock,
+    ILogger<NotificationSender> logger) : BackgroundService, INotificationQueue
+{
+    /// <summary>How long a channel that failed transiently waits before its one more try.</summary>
+    public static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(30);
+
+    /// <summary>What a channel that threw is recorded as: a defect in that channel, whose effect nobody can know.</summary>
+    public const string ChannelFault = "notification_channel_fault";
+
+    private static readonly Action<ILogger, Exception?> Off = LoggerMessage.Define(
+        LogLevel.Information,
+        new EventId(1, nameof(Off)),
+        "Notifications are off by configuration; nothing will be sent");
+
+    /// <summary>
+    /// The message template of the line a failed channel writes. The log file is compact JSON, so this is what its
+    /// <c>"@mt"</c> holds, with <c>Channel</c>, <c>Code</c> and <c>Class</c> beside it; the page shows it in that form.
+    /// </summary>
+    public const string ChannelFailedTemplate = "Notification channel {Channel} failed ({Code}, {Class})";
+
+    /// <summary>The event that line carries as <c>"EventId"</c>, beside the logger's name as <c>"SourceContext"</c>.</summary>
+    public static readonly EventId ChannelFailedEvent = new(2, nameof(ChannelFailed));
+
+    private static readonly Action<ILogger, string, string, string, Exception?> ChannelFailed = LoggerMessage.Define<string, string, string>(
+        LogLevel.Warning,
+        ChannelFailedEvent,
+        ChannelFailedTemplate);
+
+    private static readonly Action<ILogger, string, Exception?> SendFailed = LoggerMessage.Define<string>(
+        LogLevel.Warning,
+        new EventId(3, nameof(SendFailed)),
+        "Notification {NotificationId} could not be sent; the next one will say what waits");
+
+    private readonly Channel<NotificationRequest> _queue = Channel.CreateBounded<NotificationRequest>(1);
+
+    /// <exception cref="InvalidOperationException">A notification is already waiting to be sent.</exception>
+    public void Enqueue(NotificationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!_queue.Writer.TryWrite(request))
+        {
+            throw new InvalidOperationException("A notification is already waiting to be sent.");
+        }
+    }
+
+    public override Task StartAsync(CancellationToken cancellationToken)
+    {
+        if (!settings.Current.AnyChannel)
+        {
+            Off(logger, null);
+        }
+
+        return base.StartAsync(cancellationToken);
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            await foreach (var request in _queue.Reader.ReadAllAsync(stoppingToken).ConfigureAwait(false))
+            {
+                var progress = new SendProgress();
+                try
+                {
+                    await SendAsync(request, stoppingToken, progress).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    // A stopping runtime writes no line: the next start reads these triggers again and sends once.
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    SendFailed(logger, request.NotificationId, ex);
+
+                    // Nobody was told, and nothing recorded it: the burst goes back, and the next scan hands it over
+                    // again. Where somebody was told, the floor was already kept, and the pointer is not repeated.
+                    if (!progress.Reached)
+                    {
+                        state.Return(request);
+                    }
+                }
+                finally
+                {
+                    state.Release(request.NotificationId);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Stopped while waiting for the next one: nothing was being sent.
+        }
+    }
+
+    /// <summary>Sends one notification and writes its line; null when nothing was waiting by then, and nothing was said.</summary>
+    internal Task<NotificationLine?> SendAsync(NotificationRequest request, CancellationToken ct) => SendAsync(request, ct, new SendProgress());
+
+    /// <summary>How far one send got: whether any channel reached anybody, which decides what a failure afterwards owes.</summary>
+    internal sealed class SendProgress
+    {
+        public bool Reached { get; set; }
+    }
+
+    private async Task<NotificationLine?> SendAsync(NotificationRequest request, CancellationToken ct, SendProgress progress)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        // Every channel turned off since the hand-over: nothing is said and no line is written, and the burst goes back
+        // to be said once a channel is on again.
+        if (!settings.Current.AnyChannel)
+        {
+            state.Return(request);
+            return null;
+        }
+
+        var (approvals, decisions) = await PendingAsync(ct).ConfigureAwait(false);
+        if (approvals == 0 && decisions == 0)
+        {
+            status.NothingWaited(clock.GetUtcNow());
+            return null;
+        }
+
+        var message = NotificationComposer.Compose(approvals, decisions);
+        var outcomes = await Task.WhenAll(channels.Resolve(settings.Current).Select(channel => DeliverAsync(channel, message, request.NotificationId, ct))).ConfigureAwait(false);
+        var now = clock.GetUtcNow();
+
+        // Kept before the line is written: somebody was told, and a line that then fails to write must not let the next
+        // pointer follow at once.
+        if (outcomes.Any(outcome => outcome.Result == ChannelResult.Delivered))
+        {
+            progress.Reached = true;
+            state.Delivered(now.UtcDateTime);
+        }
+
+        var line = new NotificationLine(
+            request.NotificationId,
+            approvals,
+            decisions,
+            request.CoveredThrough,
+            outcomes,
+            outcomes.Any(outcome => outcome.Result == ChannelResult.Delivered) ? now.UtcDateTime : request.LastDeliveredAt);
+
+        await using (var scope = scopes.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            scope.ServiceProvider.GetRequiredService<JournalWriter>()
+                .Append(db, Actors.Dispatcher, JournalKinds.NotificationSent, campaign: null, key: "notification", updated: line.ToJson());
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+
+        // The line carries the last delivery forward, so the state holds it whichever process last delivered.
+        if (line.LastDeliveredAt is { } delivered)
+        {
+            state.Delivered(delivered);
+        }
+
+        status.Record(line, now);
+        foreach (var failed in outcomes.Where(outcome => outcome.Result == ChannelResult.Failed))
+        {
+            ChannelFailed(logger, failed.Channel, failed.Code ?? ChannelFault, Word(failed.Class), null);
+        }
+
+        return line;
+    }
+
+    private async Task<(int Approvals, int Decisions)> PendingAsync(CancellationToken ct)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var approvals = await db.Approvals.AsNoTracking().CountAsync(a => a.Status == ApprovalStatus.Pending, ct).ConfigureAwait(false);
+        var decisions = await db.Decisions.AsNoTracking().CountAsync(d => d.Status == DecisionStatus.Pending, ct).ConfigureAwait(false);
+        return (approvals, decisions);
+    }
+
+    private async Task<ChannelOutcome> DeliverAsync(INotificationChannel channel, NotificationMessage message, string notificationId, CancellationToken ct)
+    {
+        var first = await AttemptAsync(channel, message, notificationId, ct).ConfigureAwait(false);
+        if (first is not { Result: ChannelResult.Failed, Class: FailureClass.Transient })
+        {
+            return first;
+        }
+
+        await Task.Delay(RetryDelay, clock, ct).ConfigureAwait(false);
+        return (await AttemptAsync(channel, message, notificationId, ct).ConfigureAwait(false)) with { Attempts = 2 };
+    }
+
+    /// <summary>One try. A channel that throws is a defect in that channel, and cannot take the others' outcomes down.</summary>
+    private static async Task<ChannelOutcome> AttemptAsync(INotificationChannel channel, NotificationMessage message, string notificationId, CancellationToken ct)
+    {
+        try
+        {
+            return await channel.DeliverAsync(message, notificationId, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            return ChannelOutcome.Failed(channel.Name, channel.Kind, ChannelFault, FailureClass.Ambiguous, ex.GetType().Name);
+        }
+    }
+
+    private static string Word(FailureClass? failure) => failure?.ToString().ToLowerInvariant() ?? "unknown";
+}

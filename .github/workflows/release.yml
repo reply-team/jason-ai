@@ -91,6 +91,7 @@ jobs:
         env:
           EXECUTABLE: ${{ steps.package.outputs.executable }}
           VERSION: ${{ needs.version.outputs.version }}
+          JASON_Update__CheckEnabled: 'false'
         run: |
           $exe = $env:EXECUTABLE
           $env:JASON_DATA_DIR = Join-Path ([IO.Path]::GetTempPath()) "jason-release-smoke"
@@ -210,6 +211,8 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "gh release delete exited with $LASTEXITCODE" }
           }
 
-          $assets = 'jason-win-x64.zip', 'jason-linux-x64.tar.gz', 'jason-osx-arm64.tar.gz', 'manifest.json', 'checksums.txt' | ForEach-Object { "artifacts/release/$_" }
+          # gh names an asset by its file name. The archives and the feed were assembled under artifacts/release; the
+          # install scripts are the tag's own, so a one-liner pinned to this release runs the script it was published with.
+          $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1')
           gh release create "v$env:VERSION" @how --title "Jason $env:VERSION" --notes-file artifacts/release/notes.md @assets
           if ($LASTEXITCODE -ne 0) { throw "gh release create exited with $LASTEXITCODE" }

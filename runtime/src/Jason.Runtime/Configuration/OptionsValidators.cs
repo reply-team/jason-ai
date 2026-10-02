@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Update;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Notifications;
 using Jason.Runtime.Plugins.Manifest;
 using Microsoft.Extensions.Options;
 
@@ -359,6 +360,45 @@ public sealed class UpdateOptionsValidator : IValidateOptions<UpdateOptions>
             options.IntervalHours,
             UpdateOptions.MinimumIntervalHours,
             UpdateOptions.MaximumIntervalHours);
+
+        return OptionRules.Result(failures);
+    }
+}
+
+/// <summary>
+/// The notification settings, refused on start where a number is outside the range the coalescing rule can honour,
+/// a plugin is named by something no package could be called, or a binding is not an object a plugin could read.
+/// </summary>
+public sealed class NotificationsOptionsValidator : IValidateOptions<NotificationsOptions>
+{
+    public ValidateOptionsResult Validate(string? name, NotificationsOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var failures = new List<string>();
+
+        OptionRules.Range(failures, "Notifications:QuietSeconds", options.QuietSeconds, NotificationsOptions.QuietSecondsMin, NotificationsOptions.QuietSecondsMax);
+        OptionRules.Range(failures, "Notifications:MaxWaitSeconds", options.MaxWaitSeconds, Math.Max(NotificationsOptions.QuietSecondsMin, options.QuietSeconds), NotificationsOptions.MaxWaitSecondsMax);
+        OptionRules.Range(failures, "Notifications:MinIntervalMinutes", options.MinIntervalMinutes, NotificationsOptions.MinIntervalMinutesMin, NotificationsOptions.MinIntervalMinutesMax);
+
+        foreach (var (id, entry) in options.Plugins)
+        {
+            if (!ManifestRules.IsPluginId(id))
+            {
+                failures.Add($"Notifications:Plugins must name each plugin by its id: a lowercase letter, then lowercase letters, digits or dashes; got '{id}'.");
+                continue;
+            }
+
+            if (string.Equals(id, "toast", StringComparison.Ordinal))
+            {
+                failures.Add("Notifications:Plugins cannot name a plugin 'toast': that is the operating system's notification, the channel Notifications:Toast turns on and off.");
+                continue;
+            }
+
+            if (entry.Binding is not null and not JsonObject)
+            {
+                failures.Add($"Notifications:Plugins:{id}:Binding must be an object; got {entry.Binding.GetValueKind().ToString().ToLowerInvariant()}.");
+            }
+        }
 
         return OptionRules.Result(failures);
     }

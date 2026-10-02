@@ -434,6 +434,39 @@ public class ManifestReaderTests : IDisposable
         Assert.Equal("operations", Assert.Single(refused.Problems).Path);
     }
 
+    /// <summary>
+    /// A notification plugin says which version of the delivery contract it speaks where a provider says which
+    /// operation contract it speaks: version 1 loads, and a version this runtime does not speak is refused as before.
+    /// </summary>
+    [Fact]
+    public void A_notification_plugin_declares_the_delivery_contract_it_speaks()
+    {
+        var speaks = Read("""
+            manifest_version: 1
+            id: fake
+            version: 1.0.0
+            kind: notification
+            contracts:
+              protocol: [1]
+              operations: [1]
+            """);
+
+        Assert.True(speaks.IsValid, string.Join("; ", speaks.Problems.Select(p => $"{p.Path}: {p.Code}: {p.Message}")));
+        Assert.Equal([1], speaks.Manifest!.Contracts.Operations);
+
+        var unknown = Read("""
+            manifest_version: 1
+            id: fake
+            version: 1.0.0
+            kind: notification
+            contracts:
+              protocol: [1]
+              operations: [2]
+            """);
+
+        Assert.Equal("contract_unsupported", Assert.Single(unknown.Problems).Code);
+    }
+
     [Fact]
     public void A_document_that_is_not_a_mapping_of_fields_is_not_a_manifest()
     {

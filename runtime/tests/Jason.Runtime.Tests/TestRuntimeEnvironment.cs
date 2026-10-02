@@ -1,5 +1,6 @@
 using Jason.Contracts.Discovery;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Notifications;
 
 namespace Jason.Runtime.Tests;
 
@@ -21,10 +22,15 @@ public static class TestRuntimeEnvironment
     public static readonly string CheckEnabledVariable =
         JasonConfiguration.EnvironmentPrefix + UpdateOptions.Section + "__" + nameof(UpdateOptions.CheckEnabled);
 
+    /// <summary>The notifications switch, built the same way: a spawned test runtime notifies nobody.</summary>
+    public static readonly string NotificationsVariable =
+        JasonConfiguration.EnvironmentPrefix + NotificationsOptions.Section + "__" + nameof(NotificationsOptions.Enabled);
+
     public static void Offline(IDictionary<string, string?> environment, string dataDirectory)
     {
         ArgumentNullException.ThrowIfNull(environment);
         environment[JasonPaths.DataDirectoryVariable] = dataDirectory;
         environment[CheckEnabledVariable] = "false";
+        environment[NotificationsVariable] = "false";
     }
 }

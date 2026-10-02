@@ -41,10 +41,12 @@ public static class UninstallCommand
           1. the logon registration, first, so a logon part-way through cannot start what is going: this
              account's, on Windows including the task an earlier version registered as Jason
           2. the runtime — and if it will not stop, nothing further is removed
-          3. every skill a deployment recorded, by the paths its record names
-          4. the PATH entry, only where the installer wrote it and its directory holds nothing but Jason:
+          3. on Windows, the notification registration: the AppUserModelID key the toast was shown under, and
+             the two entries Windows made for it
+          4. every skill a deployment recorded, by the paths its record names
+          5. the PATH entry, only where the installer wrote it and its directory holds nothing but Jason:
              the marked block in a login profile; on Windows, the entry in this account's Path
-          5. the executable, its install directory, and the native libraries it unpacked on first run
+          6. the executable, its install directory, and the native libraries it unpacked on first run
 
         Kept unless --purge-data:  the data directory. --purge-data removes what Jason keeps there, and the
                                    directory once nothing else is in it; it prints what will be deleted and
@@ -53,9 +55,11 @@ public static class UninstallCommand
                                    is refused.
         Never touched:             a skill there is no receipt for, any other skill in an agent harness,
                                    any provider CLI, any model credential, a PATH entry the installer did
-                                   not write, another account's logon registration.
-        This account's, not this installation's: the logon registration and the agent harnesses. Uninstalling
-        a second installation on one account takes the first one's registration and harness skills too.
+                                   not write, another account's logon registration, the notifications
+                                   already in the notification center, which are the person's to dismiss.
+        This account's, not this installation's: the logon registration, the notification registration and the
+        agent harnesses. Uninstalling a second installation on one account takes the first one's registrations
+        and harness skills too.
 
         Exit codes: 0 when everything it set out to remove is gone. 1 when it did not get there: it refused
         (a runtime that would not stop), or something it set out to remove is still there (a record it cannot
@@ -275,6 +279,16 @@ public static class UninstallCommand
         if (plan.RuntimePid is { } pid)
         {
             env.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  the running runtime, pid {pid}"));
+        }
+
+        foreach (var key in plan.NotificationKeys ?? [])
+        {
+            env.Out.WriteLine($@"  the notification registration at HKCU\{key}");
+        }
+
+        if (plan.NotificationKeysUnreadable is { } unreadable)
+        {
+            env.Out.WriteLine($"  the notification registration, which could not be read: {unreadable}");
         }
 
         foreach (var root in plan.Roots)

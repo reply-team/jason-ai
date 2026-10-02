@@ -1,5 +1,6 @@
 using System.Net;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Notifications;
 using Jason.Runtime.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -42,10 +43,30 @@ public static class TestRuntimeOptions
     public static RuntimeHostOptions Quiet { get; } = new(
         ShippedSettingsDirectory: null,
         ConsoleLogging: false,
-        ConfigureServices: TurnTheUpdateCheckOff)
+        ConfigureServices: TurnTheOutsideOff)
     {
         FeedHandler = new NoNetworkInTests(),
     };
+
+    /// <summary>
+    /// Both things a runtime does on its own toward somebody outside the test: it asks the release feed, and it
+    /// notifies a person. A test runtime does neither unless the test turns one back on.
+    /// </summary>
+    public static void TurnTheOutsideOff(IServiceCollection services)
+    {
+        TurnTheUpdateCheckOff(services);
+        TurnNotificationsOff(services);
+    }
+
+    /// <summary>
+    /// After binding, so that it beats whatever a test's own settings file says. A test that means to exercise
+    /// the notifier turns it on explicitly, with channels of its own: no test shows a toast or sends anything.
+    /// </summary>
+    public static void TurnNotificationsOff(IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.PostConfigure<NotificationsOptions>(notifications => notifications.Enabled = false);
+    }
 
     /// <summary>
     /// After binding, so that it beats whatever a test's own settings file says. A test that means to exercise

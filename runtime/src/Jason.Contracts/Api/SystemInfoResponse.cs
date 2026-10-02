@@ -18,7 +18,37 @@ public sealed record SystemInfoResponse(
     PluginsInfo Plugins,
     RoutesInfo Routes,
     UpdateInfo? Update = null,
-    SkillsInfo? Skills = null);
+    SkillsInfo? Skills = null,
+    NotificationsInfo? Notifications = null);
+
+/// <summary>
+/// Whether this runtime tells a person when work starts waiting for them, and what each channel did with the last
+/// notification. Null from a runtime older than notifications.
+/// </summary>
+public sealed record NotificationsInfo(
+    bool Enabled,
+    IReadOnlyList<NotificationChannelInfo> Channels,
+    string? LastNotificationId,
+    DateTimeOffset? LastAt);
+
+/// <summary>
+/// One channel: whether it is on, and its last outcome — one of <c>delivered</c>, <c>silenced</c>, <c>failed</c> and
+/// <c>not_attempted</c>, or null before anything was sent. For the toast, <see cref="Presence"/> says whether this
+/// runtime has a desktop to show one on at all, decided when it started: <c>available</c>, or <c>no_desktop</c> with
+/// <see cref="PresenceDetail"/> saying why.
+/// </summary>
+public sealed record NotificationChannelInfo(
+    string Channel,
+    string Kind,
+    bool On,
+    string? Outcome,
+    string? Reason,
+    string? Code,
+    string? Class,
+    string? Detail,
+    DateTimeOffset? At,
+    string? Presence = null,
+    string? PresenceDetail = null);
 
 /// <summary>
 /// The role skills this runtime will teach from, as they are on disk at the moment it is asked, and the cap

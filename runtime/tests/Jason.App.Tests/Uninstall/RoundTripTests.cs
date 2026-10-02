@@ -295,6 +295,12 @@ public class RoundTripTests
         public PathEntryOutcome RemovePathEntry(PathEntryPlan plan) =>
             new(false, [], "this round trip does not edit the PATH of whoever ran it.");
 
+        // Never the registry of whoever ran the suite: no test shows a toast, so there is nothing of a test's there.
+        public IReadOnlyList<string> ReadNotificationRegistration() => [];
+
+        public void RemoveNotificationKey(string key) =>
+            throw new InvalidOperationException("this round trip removes nothing from the registry of whoever ran it.");
+
         // The test host is no single-file build, so the machine's answer is null; asked anyway, so that a
         // change which made it name something outside the scratch tree fails here rather than deleting it.
         public string? ReadExtractedLibraries(string executable) =>

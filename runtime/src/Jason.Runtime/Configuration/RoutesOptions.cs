@@ -77,7 +77,7 @@ public sealed partial class RoutesOptions
         Binding = Json(section.GetSection(nameof(RouteEntry.Binding))),
     };
 
-    private static JsonNode? Json(IConfigurationSection section)
+    internal static JsonNode? Json(IConfigurationSection section)
     {
         // Bounded by the configuration system itself: its JSON parser refuses a document nested deeper than 64.
         var children = section.GetChildren().ToList();

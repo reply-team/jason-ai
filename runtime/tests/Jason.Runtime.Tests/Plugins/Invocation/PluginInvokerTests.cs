@@ -287,7 +287,7 @@ public class PluginInvokerTests
     }
 
     [Fact]
-    public async Task A_plugin_of_a_kind_nothing_invokes_is_refused()
+    public async Task A_notification_plugin_is_not_invoked_for_a_canonical_operation()
     {
         await using var api = await StartAsync(paths => TestPlugins.Write(
             paths,
@@ -304,9 +304,92 @@ public class PluginInvokerTests
 
         var result = await InvokeAsync(api, Request("echo.run", new JsonObject(), plugin: "notifier"), Ct);
 
-        Assert.Equal(ProtocolCodes.PluginKindNotInvocable, Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome).Code);
+        var refused = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginKindNotInvocable, refused.Code);
+        Assert.Equal("A plugin of kind 'notification' is not invoked for a canonical operation.", refused.Message);
         Assert.Null(result.Launch);
     }
+
+    [Fact]
+    public async Task A_provider_is_not_invoked_for_a_delivery()
+    {
+        await using var api = await StartAsync();
+
+        var result = await InvokeAsync(api, Delivery(TestPlugins.FakeProviderId), Ct);
+
+        var refused = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginKindNotInvocable, refused.Code);
+        Assert.Equal("A plugin of kind 'provider' is not invoked for a delivery.", refused.Message);
+        Assert.Null(result.Launch);
+    }
+
+    /// <summary>A notification plugin that declares no version of the delivery contract is not invoked for one.</summary>
+    [Fact]
+    public async Task A_notification_plugin_that_declares_no_delivery_contract_is_not_invoked_for_one()
+    {
+        await using var api = await StartAsync(paths => TestPlugins.Write(
+            paths,
+            "silent",
+            """
+            manifest_version: 1
+            id: silent
+            version: 1.0.0
+            kind: notification
+            contracts:
+              protocol: [1]
+            """,
+            "export function invoke() { return { result: {} }; }"));
+
+        var result = await InvokeAsync(api, Delivery("silent"), Ct);
+
+        var refused = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginOperationUnsupported, refused.Code);
+        Assert.Contains("declares no version of the delivery contract", refused.Message, StringComparison.Ordinal);
+        Assert.Null(result.Launch);
+    }
+
+    [Fact]
+    public async Task A_notification_plugin_is_invoked_for_notification_send()
+    {
+        await using var api = await StartAsync(paths => TestPlugins.Write(
+            paths,
+            "notifier",
+            """
+            manifest_version: 1
+            id: notifier
+            version: 1.0.0
+            kind: notification
+            contracts:
+              protocol: [1]
+              operations: [1]
+            """,
+            "export function invoke(operation, input, context) { return { result: { receipt: context.binding.topic + ':' + input.counts.approvals } }; }"));
+
+        var result = await InvokeAsync(api, Delivery("notifier", new JsonObject { ["topic"] = "walk" }), Ct);
+
+        var succeeded = Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
+        Assert.Equal("walk:3", succeeded.Result!["receipt"]!.GetValue<string>());
+        Assert.Equal(Jason.Contracts.Notifications.DeliveryContract.CurrentVersion, result.Provenance.OperationContractVersion);
+
+        // The delivery contract and the canonical operations are both at version 1 today, so the value alone cannot say
+        // which the invoker read. The day either moves this fails, and the expectation above becomes the delivery's own.
+        Assert.Equal(PluginProtocol.OperationContractVersion, Jason.Contracts.Notifications.DeliveryContract.CurrentVersion);
+        Assert.NotNull(result.Launch);
+    }
+
+    /// <summary>What the runtime's notifier hands a notification plugin, for the delivery contract.</summary>
+    private static PluginInvocationRequest Delivery(string plugin, JsonObject? binding = null) => new(
+        plugin,
+        "notification.send",
+        new JsonObject
+        {
+            ["title"] = "Jason",
+            ["message"] = "3 approvals are waiting in Jason.",
+            ["counts"] = new JsonObject { ["approvals"] = 3, ["decisions"] = 0 },
+        },
+        binding,
+        "ntf_01K0test",
+        Purpose: InvocationPurpose.Delivery);
 
     [Fact]
     public async Task An_operation_the_plugin_does_not_implement_is_refused()

@@ -10,6 +10,8 @@ using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Update;
+using Jason.Runtime.Notifications;
+using Jason.Runtime.Notifications.Desktop;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -44,7 +46,10 @@ public static class SystemModule
              RunningAttemptRegistry running,
              PluginRegistry plugins,
              RouteRegistry routes,
-             UpdateAdvertisement update) =>
+             UpdateAdvertisement update,
+             NotificationStatus notifications,
+             LiveSettings<NotificationsOptions> notificationSettings,
+             Presence presence) =>
                 TypedResults.Ok(new SystemInfoResponse(
                     runtimeInfo.RuntimeVersion,
                     ApiVersion.Current,
@@ -73,7 +78,10 @@ public static class SystemModule
                     // Read at the moment it is asked, because the directory is the runtime's own input and is
                     // read again at every launch. Nothing is cached: a deployment that landed a second ago is
                     // what the next launch will be taught.
-                    Skills(dataPaths, roleSettings.Current.MaxSkillBytes))));
+                    Skills(dataPaths, roleSettings.Current.MaxSkillBytes),
+                    // Last, as every section that arrived later was. Whether there is a desktop is decided when the
+                    // runtime starts, so it is said before anything has been sent.
+                    notifications.Info(notificationSettings.Current, presence))));
 
         app.MapOperation<ShutdownCoordinator, ShutdownRequest, ShutdownResponse>(
             Operations.SystemShutdown,

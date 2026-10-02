@@ -129,6 +129,27 @@ public class GeneratedBlockTests
         Assert.True(found == expected, $"{ContractFiles.Relative(path)} is out of step with its document. The block should read:\n\n{expected}\n");
     }
 
+    /// <summary>The delivery contract's page carries a block rendered from its own document, as an operation's does.</summary>
+    [Fact]
+    public void The_delivery_page_s_generated_block_is_what_its_document_says()
+    {
+        var contract = Jason.Contracts.Notifications.DeliveryCatalog.Find("notification.send")!;
+        var path = Path.Combine(ContractFiles.Package, "notifications", "notification.send.md");
+
+        Assert.True(File.Exists(path), $"{ContractFiles.Relative(path)} explains the delivery contract for a plugin author, and is missing.");
+
+        var page = File.ReadAllText(path).ReplaceLineEndings("\n");
+        var start = page.IndexOf(Begin, StringComparison.Ordinal);
+        var finish = page.IndexOf(End, StringComparison.Ordinal);
+
+        Assert.True(start >= 0 && finish > start, $"{ContractFiles.Relative(path)} carries no generated block.");
+
+        var found = page[start..(finish + End.Length)];
+        var expected = Render(contract);
+
+        Assert.True(found == expected, $"{ContractFiles.Relative(path)} is out of step with its document. The block should read:\n\n{expected}\n");
+    }
+
     [Fact]
     public void The_readme_publishes_the_keywords_the_validator_holds_and_no_others()
     {
@@ -238,6 +259,31 @@ public class GeneratedBlockTests
 
         return block.ToString();
     }
+
+    private static string Render(Jason.Contracts.Notifications.DeliveryContract contract)
+    {
+        var block = new StringBuilder();
+        block.Append(Begin).Append('\n');
+        block.Append("<!-- Rendered from ").Append(contract.Id).Append(".json. Edit the document; this block follows it. -->\n\n");
+        block.Append("| What it is | Value |\n|---|---|\n");
+        Row(block, "version", contract.Version.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Row(block, "input", string.Join(", ", Names(contract.InputSchema)));
+        Row(block, "output", string.Join(", ", Names(contract.OutputSchema)) + ", or nothing");
+        Row(block, "timeout", contract.TimeoutMs.ToString(System.Globalization.CultureInfo.InvariantCulture) + " ms");
+        block.Append('\n');
+
+        block.Append("| Failure code | Class | When |\n|---|---|---|\n");
+        foreach (var code in contract.FailureCodes)
+        {
+            block.Append("| `").Append(code.Code).Append("` | `").Append(Name(code.Class)).Append("` | ").Append(code.When).Append(" |\n");
+        }
+
+        block.Append('\n').Append(End);
+        return block.ToString();
+    }
+
+    private static IEnumerable<string> Names(JsonObject schema) =>
+        ((JsonObject?)schema["properties"] ?? []).Select(property => "`" + property.Key + "`");
 
     private static void Property(StringBuilder block, string name, ContractProperty property) =>
         block.Append("| `").Append(name).Append("` | ").Append(Value(property))

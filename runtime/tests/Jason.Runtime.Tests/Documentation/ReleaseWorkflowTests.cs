@@ -209,6 +209,41 @@ public class ReleaseWorkflowTests
         Assert.DoesNotContain("only on Windows", Read(Ci) + Read(Action), StringComparison.Ordinal);
     }
 
+    /// <summary>The fixture's README says what CI fills it over: every archive a release carries, each by its platform.</summary>
+    [Fact]
+    public void The_schema_1_fixture_says_it_is_filled_over_all_three_archives()
+    {
+        var readme = Regex.Replace(Read(["install", "feeds", "schema-1", "README.md"]), @"\s+", " ");
+        Assert.Contains("CI fills it over the three archives it has just built", readme, StringComparison.Ordinal);
+        Assert.All(ReleaseAssets.Rids, rid => Assert.Contains($"`{rid}`", readme, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Every step of either workflow that starts a runtime tells it not to ask the release feed: it reaches no network
+    /// because it is told not to, not because the step stops the runtime before its first check. <c>update apply</c>
+    /// and <c>update rollback</c> start one too, the version they put in place.
+    /// </summary>
+    [Fact]
+    public void Every_workflow_step_that_starts_a_runtime_turns_the_update_check_off()
+    {
+        string[] starts = ["runtime start", "update apply", "update rollback"];
+        var steps = new[] { Ci, Release }
+            .SelectMany(workflow => Mapping(Parse(Read(workflow)), "jobs").Children.Values.Cast<YamlMappingNode>()
+                .Where(job => Node(job, "steps") is YamlSequenceNode)
+                .SelectMany(job => ((YamlSequenceNode)Node(job, "steps")!).Children.Cast<YamlMappingNode>())
+                .Select(step => (Workflow: workflow[^1], Step: step)))
+            .Where(found => Scalar(found.Step, "run") is { } run && starts.Any(start => run.Contains(start, StringComparison.Ordinal)))
+            .ToList();
+
+        Assert.True(steps.Count >= 3, $"only {steps.Count} step(s) start a runtime; the rule would hold of almost nothing");
+        Assert.Contains(steps, found => found.Workflow == Release[^1]);
+        var unguarded = steps
+            .Where(found => (Node(found.Step, "env") is YamlMappingNode env ? Scalar(env, "JASON_Update__CheckEnabled") : null) != "false")
+            .Select(found => $"{found.Workflow}: {Scalar(found.Step, "name")}")
+            .ToList();
+        Assert.True(unguarded.Count == 0, $"these steps start a runtime that may ask the release feed: {string.Join("; ", unguarded)}");
+    }
+
     /// <summary>
     /// A Windows older than 24H2 has to accept the manifest, and nothing on the page's word alone says it does. The
     /// setting is in a namespace such a loader does not know, and one that rejected it would not start
@@ -324,6 +359,13 @@ public class ReleaseWorkflowTests
         Assert.Contains(eventName == "push" ? "--verify-tag" : "--draft", created.Item, StringComparison.Ordinal);
         Assert.Contains("--latest", created.Item, StringComparison.Ordinal);
         Assert.DoesNotContain("- -", created.Item, StringComparison.Ordinal);
+
+        // And every file a release publishes reaches gh as an asset, each a path of its own.
+        foreach (var name in ReleaseAssets.Published)
+        {
+            Assert.Matches($@"(^| )\S*/{Regex.Escape(name)}( |$)", created.Item);
+        }
+
         var deletions = calls.Index().Where(call => call.Item.StartsWith("release delete", StringComparison.Ordinal)).ToList();
 
         if (!deleted)
@@ -613,6 +655,31 @@ public class ReleaseWorkflowTests
 
         Assert.True(exit == 0, stderr);
         return File.ReadAllText(Path.Combine(tree.Root, "artifacts", "release", "notes.md"));
+    }
+
+    /// <summary>
+    /// The upgrade note is conditional, and its condition is held: only a machine that ran 0.1.0 with autostart
+    /// enabled has the runtime its logon task started still holding the data directory. The notes a release
+    /// really writes carry it with the version filled in.
+    /// </summary>
+    [Fact]
+    public void The_notes_say_what_an_upgrade_from_0_1_0_with_autostart_needs_and_only_then()
+    {
+        var notes = WriteTheNotes(Read(Notes));
+        var start = notes.IndexOf("## Upgrading from 0.1.0\n", StringComparison.Ordinal);
+        Assert.True(start >= 0, "the notes have no section 'Upgrading from 0.1.0'.");
+        var end = notes.IndexOf("\n## ", start + 1, StringComparison.Ordinal);
+        var note = Regex.Replace(notes[(start + "## Upgrading from 0.1.0".Length)..(end < 0 ? notes.Length : end)], @"\s+", " ").Trim();
+
+        Assert.StartsWith("If this machine ran 0.1.0 with autostart enabled,", note, StringComparison.Ordinal);
+        Assert.Contains("`jason runtime autostart enable` or `disable` once from an ordinary prompt", note, StringComparison.Ordinal);
+        var enable = note.IndexOf("`jason runtime autostart enable`", StringComparison.Ordinal);
+        var denied = note.IndexOf("if that answers Access is denied, follow its message first", StringComparison.Ordinal);
+        var stop = note.IndexOf("`jason runtime stop` once", StringComparison.Ordinal);
+        var started = note.IndexOf("then `jason runtime start` (or sign in again, with autostart enabled)", StringComparison.Ordinal);
+        Assert.True(enable >= 0 && denied > enable && stop > denied && started > stop, $"the acts are not named in order: {note}");
+        Assert.Contains("https://github.com/reply-team/jason-ai/blob/v0.2.0/docs/release-and-update.md", note, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{", note, StringComparison.Ordinal);
     }
 
     [Fact]

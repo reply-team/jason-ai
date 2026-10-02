@@ -63,12 +63,13 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
             Clock = clock,
             ConfigureServices = services =>
             {
-                // Whatever settings the test wrote, a fixture's runtime never asks the release feed: the check
-                // is the one thing a runtime does that reaches past the machine without being asked, and a
-                // test suite is no place to be asking from. An override after binding rather than a line in
-                // the settings file, because the file is the test's to write — and the same call the shared
-                // options make, so the rule is written once.
-                TestRuntimeOptions.TurnTheUpdateCheckOff(services);
+                // Whatever settings the test wrote, a fixture's runtime never asks the release feed and never
+                // notifies anybody, unless the test's own registration below turns one back on: those are the two
+                // things a runtime does toward somebody outside the machine without being asked, and a test suite
+                // is no place to do either from. An override after binding rather than a line in the settings
+                // file, because the file is the test's to write — and the same call the shared options make, so
+                // the rule is written once.
+                TestRuntimeOptions.TurnTheOutsideOff(services);
                 configureServices?.Invoke(services);
             },
         };

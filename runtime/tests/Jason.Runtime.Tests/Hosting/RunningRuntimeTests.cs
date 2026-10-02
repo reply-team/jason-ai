@@ -15,7 +15,14 @@ public class RunningRuntimeTests
         using var dir = new TempDataDir();
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
         await File.WriteAllTextAsync(dir.Paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff, Ct);
-        var options = TestRuntimeOptions.Quiet with { ConfigureServices = services => services.AddHostedService<RefusesToStop>() };
+        var options = TestRuntimeOptions.Quiet with
+        {
+            ConfigureServices = services =>
+            {
+                TestRuntimeOptions.TurnTheOutsideOff(services);
+                services.AddHostedService<RefusesToStop>();
+            },
+        };
 
         var runtime = await RuntimeHost.StartAsync(dir.Paths, options, Ct);
         Assert.True(File.Exists(dir.Paths.DescriptorFile));

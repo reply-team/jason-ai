@@ -5,6 +5,7 @@ using Jason.Runtime.Execution;
 using Jason.Runtime.WorkItems;
 using Jason.Runtime.Execution.Hosts;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Notifications;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -29,6 +30,7 @@ public static class DispatcherModule
             .AddScoped<AgentLaunchPlanner>()
             .AddScoped<Summoner>()
             .AddScoped<Claimer>()
+            .AddScoped<Notifier>()
             .AddScoped<StartupRecovery>();
 
         // One implementation per host and no fallback, so a profile naming a host this build cannot start is a

@@ -109,6 +109,12 @@ public static partial class JournalKinds
     /// <summary>The campaign the question was about is archived, so there is nothing left to decide.</summary>
     public const string DecisionCancelled = "decision_cancelled";
 
+    /// <summary>
+    /// What happened to one notification: the counts it carried, the line it covers through, and each channel's
+    /// outcome. It names no campaign, so it never wakes a manager.
+    /// </summary>
+    public const string NotificationSent = "notification_sent";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -156,6 +162,7 @@ public static partial class JournalKinds
         DecisionRaised,
         DecisionAnswered,
         DecisionCancelled,
+        NotificationSent,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);

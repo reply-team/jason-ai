@@ -1,0 +1,3 @@
+{{sha256:win-x64}}  jason-win-x64.zip
+{{sha256:linux-x64}}  jason-linux-x64.tar.gz
+{{sha256:osx-arm64}}  jason-osx-arm64.tar.gz

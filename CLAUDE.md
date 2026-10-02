@@ -72,7 +72,8 @@ covered here.
   reserved work-item context key carrying an operation's arguments: it is validated at
   `workitem.create`, and again at `workitem.update` whenever a patch names the key. The fixtures
   under `docs/contracts/fixtures/` are executed by tests, so a document and the code cannot drift
-  apart. `docs/contracts/README.md` is the contract.
+  apart. `docs/contracts/README.md` is the contract. The delivery contract, `notification.send`, is a family of its
+  own under `docs/contracts/notifications/`, embedded the same way and never in the operation catalog.
 - Routing: which plugin performs an operation for a campaign is a route, resolved by a pure function
   over an immutable snapshot — campaign operation override, campaign default, global operation
   override, global default, with exact masking and no fallback to another plugin. Routes are frozen
@@ -98,6 +99,9 @@ covered here.
   declares that repeating it is safe or that a recovery read makes it safe. An activated load journals
   `plugins_reloaded`; there is no `plugin.invoke` operation.
   `docs/plugins.md` is the contract.
+- Notifications: a parked approval and a raised question are notified as a pointer — counts and where to look —
+  by a scan step after the dispatch, delivered off the scan and recorded in a reserved `notification_sent` line.
+  `docs/notifications.md` is the contract.
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for
   people, stderr is diagnostics only. Exit codes: 0 success, 1 understood and refused (an API
   business error, or a local act the CLI refused to perform), 2 usage error, 3 runtime unreachable

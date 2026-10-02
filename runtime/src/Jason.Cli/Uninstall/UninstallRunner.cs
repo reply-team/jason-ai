@@ -107,20 +107,23 @@ public static class UninstallRunner
                 return new UninstallReport(plan, done, kept, problems, refusedAt2.Code, refusedAt2.Message);
             }
 
-            // 3. Everything a receipt names, and nothing else.
+            // 3. The notification registration, after the runtime that could write it back has stopped.
+            StepRemoveNotificationRegistration(env, plan, done, problems);
+
+            // 4. Everything a receipt names, and nothing else.
             Step3RemoveByReceipt(env, plan, options, done, kept, problems);
 
-            // 4. The PATH entry, only where this installer wrote it.
+            // 5. The PATH entry, only where this installer wrote it.
             Step4RemovePathEntry(env, plan, done, kept, problems);
 
             // Rendered once and thrown away, while this process can still load whatever rendering it needs.
             beforeTheImageGoes?.Invoke(new UninstallReport(plan, [.. done], [.. kept], [.. problems], null, null));
 
-            // 5. The executable, its install directory and what it unpacked, last, because everything above is
+            // 6. The executable, its install directory and what it unpacked, last, because everything above is
             //    run from it.
             Step5RemoveExecutable(env, plan, done, kept, problems);
 
-            // 6. And the data directory, only on the explicit word, after everything else.
+            // 7. And the data directory, only on the explicit word, after everything else.
             Step6Data(env, plan, purge, done, kept, problems);
         }
         catch (Exception unexpected) when (unexpected is not OperationCanceledException)
@@ -484,6 +487,44 @@ public static class UninstallRunner
         catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
         {
             problems.Add($"'{parent}' could not be removed: {exception.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Removes what a toast left in this account: the AppUserModelID key the toast was shown under, and the two entries
+    /// Windows made for it at the first toast. Each key that was there is reported; one that is not was never
+    /// mentioned, and one that would not go is a problem.
+    /// </summary>
+    /// <remarks>
+    /// After the runtime has stopped, because a running runtime's next toast would write the key back; and the keys are
+    /// read again here rather than taken from the plan, which was read while that runtime could still show one more. A
+    /// registry that cannot be read is a problem, never an account with nothing to remove. The notification center's
+    /// own entries are not cleared: they hold counts only, and they are the person's to dismiss.
+    /// </remarks>
+    private static void StepRemoveNotificationRegistration(CliEnvironment env, UninstallPlan plan, List<string> done, List<string> problems)
+    {
+        IReadOnlyList<string> keys;
+        try
+        {
+            keys = env.Removes!.ReadNotificationRegistration();
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            problems.Add($@"The notification registration could not be read: {exception.Message} Remove HKCU\{Jason.Contracts.Notifications.ToastRegistration.Key} and the two entries Windows made for it by hand; the steps after this one still ran, and each is listed.");
+            return;
+        }
+
+        foreach (var key in keys)
+        {
+            try
+            {
+                env.Removes!.RemoveNotificationKey(key);
+                done.Add($@"Removed the notification registration at HKCU\{key}.");
+            }
+            catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException or System.Security.SecurityException)
+            {
+                problems.Add($@"'HKCU\{key}' could not be removed: {exception.Message} Remove it by hand; the steps after this one still ran, and each is listed.");
+            }
         }
     }
 

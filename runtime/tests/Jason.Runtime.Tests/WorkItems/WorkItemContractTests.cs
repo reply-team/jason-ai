@@ -18,8 +18,14 @@ public class WorkItemContractTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    [Fact]
-    public async Task An_operation_this_build_publishes_no_contract_for_is_refused()
+    /// <summary>
+    /// An operation nobody publishes, and the delivery contract: a notification is a family of its own, never a
+    /// provider operation a work item could ask a plugin to perform.
+    /// </summary>
+    [Theory]
+    [InlineData("contacts.enroll")]
+    [InlineData("notification.send")]
+    public async Task An_operation_this_build_publishes_no_contract_for_is_refused(string operation)
     {
         using var database = new TestDatabase();
         using var db = database.Open();
@@ -27,7 +33,7 @@ public class WorkItemContractTests
         var service = NewService(db);
 
         var error = await Assert.ThrowsAsync<ValidationException>(
-            () => service.CreateAsync(ProviderOp(campaign.PublicId, "contacts.enroll"), Ct));
+            () => service.CreateAsync(ProviderOp(campaign.PublicId, operation), Ct));
 
         var detail = Assert.Single(error.Details!);
         Assert.Equal("operation", detail.Field);
@@ -35,7 +41,7 @@ public class WorkItemContractTests
         Assert.Contains("campaign.get", detail.Message, StringComparison.Ordinal);
         Assert.Contains("list_membership.add", detail.Message, StringComparison.Ordinal);
         Assert.Contains("campaign.enroll", detail.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("contacts.enroll", detail.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(operation, detail.Message, StringComparison.Ordinal);
     }
 
     [Fact]

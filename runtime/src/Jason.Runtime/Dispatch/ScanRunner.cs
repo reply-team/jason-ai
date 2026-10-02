@@ -1,5 +1,6 @@
 using Jason.Contracts.Api;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Notifications;
 using Jason.Runtime.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -7,12 +8,13 @@ using Microsoft.Extensions.Logging;
 namespace Jason.Runtime.Dispatch;
 
 /// <summary>What one scan did. Zeros are the normal answer: most ticks find nothing to do.</summary>
-public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed);
+public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0);
 
 /// <summary>
 /// One pass of the dispatcher: give up what is overdue, take back what is lost, summon a manager where a
-/// campaign wants one, and hand out what is ready — in that order and in short transactions, so no step holds
-/// the writer while another thinks. The summon is third because a check-in created now should be claimable now,
+/// campaign wants one, hand out what is ready, and, last, say once that something waits for a person: after the
+/// dispatch, so nothing the notifier does can strand work already claimed. In that order and in short
+/// transactions, so no step holds the writer while another thinks. The summon is third because a check-in created now should be claimable now,
 /// and because a review of a lost attempt is summoned by the line that lost it. The scan hands
 /// claims to the pool and returns; waiting for a handler is what would turn a dispatcher into a queue of one.
 /// Scans run one at a time: the free slots are read before anything is handed out, so two scans in flight would
@@ -89,6 +91,10 @@ public sealed class ScanRunner(
             pool.Dispatch(work);
         }
 
+        // Running and draining alike: a notification claims nothing, and a drain is when a person most needs to
+        // know that something waits for them.
+        var notified = await InScopeAsync<Notifier, int>((step, db) => step.NotifyAsync(db, ct)).ConfigureAwait(false);
+
         status.LastScanAt = clock.GetUtcNow();
         status.Scans++;
         status.Summons += summoned;
@@ -103,7 +109,7 @@ public sealed class ScanRunner(
         }
 
         Scanned(logger, status.Scans, expired, lost, summoned, claimed.Count, null);
-        return new ScanReport(expired, lost, summoned, claimed.Count);
+        return new ScanReport(expired, lost, summoned, claimed.Count, notified);
     }
 
     private async Task<TResult> InScopeAsync<TStep, TResult>(Func<TStep, JasonDbContext, Task<TResult>> step)

@@ -25,6 +25,20 @@ public static class ReleaseAssets
 
     public const string Checksums = "checksums.txt";
 
+    /// <summary>
+    /// The install scripts, published with every release beside its archives.
+    /// </summary>
+    /// <remarks>
+    /// The one-liners fetch the script from a release rather than from the default branch: a script on the branch
+    /// can be ahead of every release, and a pinned install has to run the script the release it installs was
+    /// published with. As assets, the one-liner is a release's own file.
+    /// </remarks>
+    public static IReadOnlyList<string> InstallScripts { get; } = ["install.sh", "install.ps1"];
+
+    /// <summary>Every file a release carries, in the order the release workflow attaches them.</summary>
+    public static IReadOnlyList<string> Published { get; } =
+        [.. Rids.Select(For), Manifest, Checksums, .. InstallScripts];
+
     /// <summary>The archive a platform's release is published as.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The platform is not one this build publishes for.</exception>
     public static string For(string rid) => rid switch

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Json;
+using Jason.Contracts.Notifications;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 
@@ -37,11 +38,12 @@ public class FixtureTests
         var outcomes = ContractFiles.FixtureFiles("outcome").Select(Read).ToList();
 
         Assert.NotEmpty(OperationCatalog.All);
-        Assert.All(OperationCatalog.All, contract =>
+        Assert.NotEmpty(DeliveryCatalog.All);
+        foreach (var id in OperationCatalog.All.Select(contract => contract.Id).Concat(DeliveryCatalog.All.Select(contract => contract.Id)))
         {
-            Assert.Contains(inputs, fixture => (string?)fixture["operation"] == contract.Id);
-            Assert.Contains(outcomes, fixture => (string?)fixture["operation"] == contract.Id);
-        });
+            Assert.Contains(inputs, fixture => (string?)fixture["operation"] == id);
+            Assert.Contains(outcomes, fixture => (string?)fixture["operation"] == id);
+        }
     }
 
     [Theory]
@@ -49,9 +51,7 @@ public class FixtureTests
     public void An_input_fixture_says_what_the_validator_will_say(string relative)
     {
         var fixture = Read(relative);
-        var contract = Operation(fixture, relative);
-
-        var problems = SchemaValidator.Validate(fixture["input"], contract.InputSchema);
+        var problems = SchemaValidator.Validate(fixture["input"], InputSchema(fixture, relative));
 
         if (fixture["expect"] is JsonValue)
         {
@@ -68,10 +68,17 @@ public class FixtureTests
     public void An_outcome_fixture_says_what_the_runtime_will_make_of_that_answer(string relative)
     {
         var fixture = Read(relative);
-        var contract = Operation(fixture, relative);
         var outcome = JsonSerializer.Deserialize<PluginOutcome>(fixture["outcome"]!.ToJsonString(), JasonJson.Options)!;
         var expected = (JsonObject)fixture["expect"]!;
         var status = (string)expected["status"]!;
+
+        if (Delivery(fixture, relative) is { } delivery)
+        {
+            ADeliveryOutcome(relative, delivery, outcome, expected, status);
+            return;
+        }
+
+        var contract = Operation(fixture, relative);
 
         var resultProblems = outcome.Status == OutcomeStatus.Succeeded
             ? [.. OutcomeContract.CheckResult(contract, outcome.Result), .. OutcomeContract.CheckExternalIds(contract, outcome.ExternalIds)]
@@ -214,6 +221,66 @@ public class FixtureTests
 
     private static string Listed(IReadOnlyList<string> reasons) =>
         reasons.Count == 0 ? "nothing" : string.Join(", ", reasons.Select(reason => "`" + reason + "`"));
+
+    /// <summary>
+    /// What a delivery outcome means: a success is a result the output schema accepts and no identifiers, because a
+    /// delivery pins nothing; a failure is one the contract declares under its class; and a delivery is repeated only
+    /// where it failed transiently, once.
+    /// </summary>
+    private static void ADeliveryOutcome(string relative, DeliveryContract contract, PluginOutcome outcome, JsonObject expected, string status)
+    {
+        var resultProblems = outcome.Status == OutcomeStatus.Succeeded
+            ? [.. contract.CheckResult(outcome.Result), .. DeliveryContract.CheckExternalIds(outcome.ExternalIds)]
+            : new List<SchemaProblem>();
+
+        switch (status)
+        {
+            case "succeeded":
+                Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+                Assert.Empty(resultProblems);
+                Assert.False((bool)expected["retriable"]!, "A delivered pointer is never sent again.");
+                break;
+
+            case "failed":
+                Assert.Equal(OutcomeStatus.Failed, outcome.Status);
+                Assert.NotNull(outcome.Error);
+                Assert.Equal(Class(expected), outcome.Error.Class);
+                var declared = contract.FailureCodes.SingleOrDefault(code => string.Equals(code.Code, outcome.Error.Code, StringComparison.Ordinal));
+                Assert.True(declared is not null, $"{relative} reports `{outcome.Error.Code}`, which {contract.Id} does not declare.");
+                Assert.Equal(declared.Class, outcome.Error.Class);
+                Assert.Equal(DeliveryContract.Retriable(outcome.Error.Class), (bool)expected["retriable"]!);
+                break;
+
+            case "result_invalid":
+                Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+                TheStatedProblemsAndNoOthers(relative, expected, resultProblems);
+                Assert.Equal(FailureClass.Ambiguous, Class(expected));
+                Assert.False((bool)expected["retriable"]!, "A pointer that may have arrived is not sent twice.");
+                break;
+
+            default:
+                Assert.Fail($"{relative} expects the unknown status `{status}`.");
+                break;
+        }
+    }
+
+    /// <summary>The schema an input fixture is checked against, in whichever family publishes its contract.</summary>
+    private static JsonObject InputSchema(JsonObject fixture, string relative) =>
+        Delivery(fixture, relative)?.InputSchema ?? Operation(fixture, relative).InputSchema;
+
+    /// <summary>The delivery contract a fixture names, or null where it names a canonical operation.</summary>
+    private static DeliveryContract? Delivery(JsonObject fixture, string relative)
+    {
+        var id = (string?)fixture["operation"];
+        if (id is null || DeliveryCatalog.Find(id) is not { } contract)
+        {
+            return null;
+        }
+
+        Assert.Equal(contract.Version, (int)fixture["version"]!);
+        Assert.False(string.IsNullOrWhiteSpace((string?)fixture["case"]), $"{relative} does not say which case it is.");
+        return contract;
+    }
 
     private static OperationContract Operation(JsonObject fixture, string relative)
     {

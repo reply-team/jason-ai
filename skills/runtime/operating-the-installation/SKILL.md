@@ -1,6 +1,6 @@
 ---
 name: operating-the-installation
-description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which agent hosts are registered, whether a newer version has been released, and installing Jason or taking it off again.
+description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, and installing Jason or taking it off again.
 metadata:
   status: verified
 ---
@@ -11,7 +11,7 @@ This skill is about the installation, not about the work it performs. A person r
 Jason is up, why nothing is happening, what is installed, where work would go, or whether they are on the
 current version. Campaign work itself is `managed-campaign-work`.
 
-**Status: verified** against Claude Code 2.1.285. It covers what this build does and nothing else.
+**Status: verified** against Claude Code 2.1.287. It covers what this build does and nothing else.
 
 Two things are true throughout and are easy to forget. **Nothing is registered until somebody asks**: Jason
 starts because you started it, or because somebody registered it to start at logon. And **no provider ships
@@ -106,6 +106,12 @@ Each account has its own task, named for it, so several people on one machine ne
 is the person's own 0.1.0 task, the one that runs the runtime, and never touch anybody else's, or a task of that name
 that runs anything else.
 
+Only when `jason status` says the runtime runs in session 0, or the person tells you 0.1.0 had autostart enabled,
+is the runtime that 0.1.0's task started likely to be holding the data directory. If `enable` or `disable` answers
+`ERROR: Access is denied.`, follow its message first, as below. After `enable` or `disable` once, `jason runtime stop`
+once ends it, but ask before you run `jason runtime stop`: it stops work in flight. Then `jason runtime start` starts
+the runtime this version runs, or the person signs in again with autostart enabled.
+
 **If `enable` or `disable` answers `ERROR: Access is denied.`**, read the rest of its message to the person. It
 names the task and the likely case: that task was registered from an elevated prompt — by an earlier version of
 Jason, for a task named `Jason`, or by this version, run from an elevated prompt — and only an elevated prompt can
@@ -119,6 +125,37 @@ after a refused `disable`, the removal was the whole job. If `jason uninstall` s
 first, then `jason uninstall` again. If the message says instead that the machine refused to register a logon task
 for this account, their machine does not let their account register one, and `jason runtime start` still starts
 the runtime by hand.
+
+## Notifications
+
+When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — it tells them
+once, with a pointer: how many wait, and where to look. The toast, the operating system's own notification, is on by
+default and needs nothing set up; `jason runtime status --human` says on its `Notify:` line what each channel did last.
+`Notifications:Enabled` set to `false` in `~/.jason/config/settings.json` turns all of it off, and
+`Notifications:Toast` set to `false` turns off the toast alone. `docs/notifications.md` says when a burst is said, and
+what a pointer never carries.
+
+Naming a notification plugin in `settings.json` sends a pointer to a third party's server. Do it only when the person
+asks, with the topic they choose. On the public ntfy server a topic is readable by anyone who knows its name, so tell
+them that before they pick one; the plugin's own README is the procedure.
+
+When someone says nothing ever tells them anything, read `jason status`'s `notifications` check and say what it found
+rather than guessing. Its states mean:
+
+- **`absent`, notifications off or no channel on** — say how to turn them on, and leave it to them.
+- **`absent`, a toast switched off** — Windows has Jason's notifications switched off in Settings → System →
+  Notifications. That is the person's own switch; tell them where it is.
+- **`absent`, no desktop** — a machine with no session bus or no notification program shows no toast by design; a
+  plugin still reaches them, if they want one.
+- **`failed`, session 0** — the runtime has no desktop: a service or an SSH session runs there, and so does the runtime
+  0.1.0's logon task started. For that one, the check names the acts that end it, in order; ask before you run
+  `jason runtime stop`.
+- **`failed`, a channel or a plugin** — the fact names the code or the reason; a plugin that was not attempted is a
+  settings or grant problem the plugin's README explains.
+
+Do not send a test notification through the operating system's own tools, and do not edit the registry: what Jason
+shows, and what it leaves in the account, is the runtime's to write and `jason uninstall`'s to remove. Do not disturb
+is invisible to Jason: a toast sent then goes to the notification center without a banner, and is recorded delivered.
 
 ## The plugins it has loaded and where work goes
 
@@ -201,11 +238,11 @@ Installing Jason is a person's job at a terminal rather than something to perfor
 belongs here is the two lines to hand them and the one fact that decides whether those lines work at all.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.sh | sh
+curl -fsSL https://github.com/reply-team/jason-ai/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
-irm https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.ps1 | iex
+irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
 ```
 
 Each script works out the platform, verifies the download's SHA-256 before unpacking it, installs the executable

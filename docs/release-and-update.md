@@ -30,6 +30,12 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 | `jason-osx-arm64.tar.gz` | the macOS (Apple silicon) executable and `LICENSE` |
 | `checksums.txt` | one `sha256sum` line per archive |
 | `manifest.json` | what the updater reads |
+| `install.sh` | the macOS and Linux install script, as this release was published with it |
+| `install.ps1` | the Windows install script, as this release was published with it |
+
+**The install scripts are a release's own files.** The one-liners fetch them from a release rather than from the
+default branch: a script on the branch can be ahead of every release, and a pinned install runs the script the
+release it installs was published with.
 
 **The names carry no version, on purpose.** That is what makes
 
@@ -83,6 +89,9 @@ download from could name anywhere, and the digest it also carries would then be 
 its own hash.
 
 A manifest that breaks any rule above is refused whole (`update_feed_invalid`); nothing is half-read.
+
+The schema changes only with a change of layout — the asset names, `checksums.txt`, the manifest's fields — and
+an install script keeps reading every schema published under a tag it can be pointed at.
 
 ## 4. What the runtime sends, and when
 
@@ -174,11 +183,11 @@ what answered was not a manifest, `update_feed_insecure` when the feed is not an
 ## 6. Installing
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.sh | sh
+curl -fsSL https://github.com/reply-team/jason-ai/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
-irm https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.ps1 | iex
+irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
 ```
 
 Each script works out your platform, downloads the archive for it, **verifies the SHA-256 before unpacking**,
@@ -503,7 +512,16 @@ standard account an elevated prompt runs as somebody else, the administrator who
 by the name the message gives, and never run `jason` under another account. The same holds for this version's own
 task, `Jason-<SID>`, where one was registered from an elevated prompt. `status`
 reads this account's task from an ordinary prompt; it does not ask after `\Jason`, so after an upgrade from
-0.1.0 run `enable` or `disable` once.
+0.1.0 run `enable` or `disable` once. If that answers `ERROR: Access is denied.`, do what the paragraph above says
+first. And stop the runtime 0.1.0's task started, once: `jason runtime stop`, or restart the machine. Then start one:
+`jason runtime start`, or sign in again with autostart enabled. That runtime runs with no desktop and outlives a
+sign-out, and `enable` and `disable` stop nothing. While it holds the data directory, the task this version registers starts a runtime at every sign-in that
+finds the directory taken and exits without a word.
+
+A toast comes only from a runtime in the person's own session: the one this task starts at sign-in, or one started
+with `jason runtime start` in that session. It has no desktop otherwise, so a runtime that 0.1.0's logon task started
+in session 0 shows none — `jason status` says so in its `notifications` check ([notifications.md](notifications.md)
+§4).
 
 ### The environment an autostarted runtime has
 
@@ -574,6 +592,7 @@ The order is the order that makes a half-finished run safe:
 |---|---|
 | this account's logon registration, on Windows including the task `\Jason` an earlier version registered for it | first, so a logon part-way through cannot start what is going |
 | the runtime | and if it will not stop — or is running and does not answer — **nothing after this is removed** |
+| on Windows, the notification registration | after the runtime, so its next toast cannot write it back: the AppUserModelID key the toast was shown under, and the two entries Windows made for it at the first toast. All three are this account's, under `HKEY_CURRENT_USER` |
 | every recorded skill | by the paths its root's record names, digest by digest |
 | the PATH entry | only where the installer wrote it and its directory holds nothing but Jason — a PATH is a person's own document, and other programs are on it through a directory they share. On macOS and Linux the entry is the marked block in a login profile; on Windows, whose Path carries no marker, the entry in this account's Path |
 | the executable, its install directory and what it unpacked | last, because everything above runs from it. On Windows the running image cannot be deleted, so it is moved out of the install directory, to a directory on its own volume, and a cleanup removes the copy once the verb has exited; the native libraries the build unpacked on its first run go too |
@@ -584,7 +603,8 @@ directory is not empty until it does.
 
 **Never touched:** a skill there is no receipt for, including one copied into a harness by hand; any other
 skill in that harness; any provider CLI; any model credential; a PATH entry the installer did not write; another
-account's logon registration.
+account's logon registration; the notifications already in the notification center, which hold counts only and
+are the person's to dismiss.
 **The data directory is kept** — §10 below says what is in it — unless `--purge-data` says otherwise, and in
 the machine shape that word has to be said in advance with `--yes`, because there is nobody there to be asked
 and a verb that blocked on an invisible question would hang for ever. With it, what Jason keeps in the data

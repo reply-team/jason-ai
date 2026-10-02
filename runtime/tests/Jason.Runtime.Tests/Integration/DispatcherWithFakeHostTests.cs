@@ -422,7 +422,7 @@ public class DispatcherWithFakeHostTests
             await FakeHostRuntime.EventuallyAsync(
                 async () => (await ReadAsync(http, created.Id, Ct)).Status == WorkItemStatus.Succeeded,
                 Ct,
-                timeoutMilliseconds: 30_000));
+                timeoutMilliseconds: SurvivorFinishesWithinMs));
     }
 
     [Fact]
@@ -467,13 +467,22 @@ public class DispatcherWithFakeHostTests
             await FakeHostRuntime.EventuallyAsync(
                 async () => (await ReadAsync(http, created.Id, Ct)).Status == WorkItemStatus.Succeeded,
                 Ct,
-                timeoutMilliseconds: 30_000));
+                timeoutMilliseconds: SurvivorFinishesWithinMs));
 
         var finished = await ReadAsync(http, created.Id, Ct);
         Assert.Equal("done", (string?)finished.Result!["summary"]);
         Assert.Equal(0, finished.AttemptCount);
         Assert.NotNull(finished.Attempts![0].LastHeartbeatAt);
     }
+
+    /// <summary>
+    /// How long a surviving child is given to finish its sixty beats against the next runtime. Two hundred
+    /// milliseconds apart they take twelve seconds on an idle machine; with the whole suite running, each beat's
+    /// call took up to two seconds more, and a child seen alive and still beating had made 55 of its 60 when a
+    /// thirty-second bound gave up on it. The wait ends as soon as the work is done, so a longer bound costs a
+    /// passing run nothing.
+    /// </summary>
+    private const int SurvivorFinishesWithinMs = 90_000;
 
     private static Task<WorkItemDto> ReadAsync(HttpClient http, string workItemId, CancellationToken ct) =>
         PostAsync<WorkItemDto>(http, Operations.WorkItemGet, new { work_item_id = workItemId }, ct);

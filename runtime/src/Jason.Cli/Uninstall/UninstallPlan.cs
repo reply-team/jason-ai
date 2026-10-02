@@ -64,7 +64,9 @@ public sealed record UninstallPlan(
     string? PreviousExecutable,
     string? ExtractedLibraries,
     bool PurgesData,
-    string DataDirectory)
+    string DataDirectory,
+    IReadOnlyList<string>? NotificationKeys = null,
+    string? NotificationKeysUnreadable = null)
 {
     /// <summary>How many files the receipts name that are still there and still ours.</summary>
     public int Removable => Roots.Sum(root => root.Files.Count(file => file.Present && !file.Edited));

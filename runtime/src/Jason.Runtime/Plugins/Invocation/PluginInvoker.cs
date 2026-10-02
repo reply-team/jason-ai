@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
+using Jason.Contracts.Notifications;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
@@ -116,7 +117,7 @@ public sealed partial class PluginInvoker(
             plugin?.Manifest.Version,
             plugin?.Digest,
             PluginProtocol.CurrentVersion,
-            PluginProtocol.OperationContractVersion,
+            ContractVersion(request.Purpose),
             invocationId,
             request.CorrelationId,
             snapshotId);
@@ -147,22 +148,9 @@ public sealed partial class PluginInvoker(
                 $"The plugin '{request.PluginId}' is not usable on this machine: {Codes(plugin.Problems)}.");
         }
 
-        if (plugin.Manifest.Kind != PluginKind.Provider)
+        if (Unsuited(request, plugin) is { } unsuited)
         {
-            return Refuse(
-                provenance,
-                request,
-                ProtocolCodes.PluginKindNotInvocable,
-                $"A plugin of kind '{plugin.Manifest.Kind.ToString().ToLowerInvariant()}' is not invoked for an operation.");
-        }
-
-        if (!plugin.Supports(request.Operation))
-        {
-            return Refuse(
-                provenance,
-                request,
-                ProtocolCodes.PluginOperationUnsupported,
-                $"The plugin '{request.PluginId}' does not implement '{request.Operation}'.");
+            return Refuse(provenance, request, unsuited.Code, unsuited.Message);
         }
 
         // A malformed correlation id is the caller's bug, not an answer about the plugin: it would travel on
@@ -197,6 +185,45 @@ public sealed partial class PluginInvoker(
         return await RunAsync(request, plugin, provenance, kill).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Why this plugin may not answer this request, or null where it may. A provider performs canonical operations it
+    /// implements, and nothing else; a notification plugin performs the delivery contract, in a version it declares,
+    /// and nothing else.
+    /// </summary>
+    private static (string Code, string Message)? Unsuited(PluginInvocationRequest request, LoadedPlugin plugin)
+    {
+        var kind = plugin.Manifest.Kind.ToString().ToLowerInvariant();
+        if (request.Purpose == InvocationPurpose.Delivery)
+        {
+            if (!DeliveryCatalog.Knows(request.Operation))
+            {
+                return (ProtocolCodes.PluginOperationUnsupported, $"'{request.Operation}' is not a delivery contract this build publishes.");
+            }
+
+            if (plugin.Manifest.Kind != PluginKind.Notification)
+            {
+                return (ProtocolCodes.PluginKindNotInvocable, $"A plugin of kind '{kind}' is not invoked for a delivery.");
+            }
+
+            return plugin.Manifest.Contracts.Operations.Contains(DeliveryContract.CurrentVersion)
+                ? null
+                : (ProtocolCodes.PluginOperationUnsupported, $"The plugin '{request.PluginId}' declares no version of the delivery contract this build speaks.");
+        }
+
+        if (plugin.Manifest.Kind != PluginKind.Provider)
+        {
+            return (ProtocolCodes.PluginKindNotInvocable, $"A plugin of kind '{kind}' is not invoked for a canonical operation.");
+        }
+
+        return plugin.Supports(request.Operation)
+            ? null
+            : (ProtocolCodes.PluginOperationUnsupported, $"The plugin '{request.PluginId}' does not implement '{request.Operation}'.");
+    }
+
+    /// <summary>The contract version an envelope and its provenance carry: the operation contract's, or the delivery contract's.</summary>
+    private static int ContractVersion(InvocationPurpose purpose) =>
+        purpose == InvocationPurpose.Delivery ? DeliveryContract.CurrentVersion : PluginProtocol.OperationContractVersion;
+
     private async Task<PluginInvocationResult> RunAsync(
         PluginInvocationRequest request,
         LoadedPlugin plugin,
@@ -224,7 +251,7 @@ public sealed partial class PluginInvoker(
                 plugin.Digest,
                 plugin.Manifest.Entry),
             request.Operation,
-            PluginProtocol.OperationContractVersion,
+            ContractVersion(request.Purpose),
             request.Input,
             new InvocationContext(
                 request.Binding,

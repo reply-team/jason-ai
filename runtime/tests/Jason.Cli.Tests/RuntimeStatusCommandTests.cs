@@ -253,6 +253,72 @@ public class RuntimeStatusCommandTests
         Assert.Equal(envelope + System.Environment.NewLine, output.ToString());
     }
 
+    /// <summary>The defaults of the chain above, with only the notifications section chosen by the test.</summary>
+    private static string InfoJson(NotificationsInfo? notifications, DateTimeOffset? startedAt = null)
+    {
+        var info = JsonSerializer.Deserialize<SystemInfoResponse>(InfoJson("rt_LIVE"), JasonJson.Options)!;
+        return JsonSerializer.Serialize(info with { Notifications = notifications, StartedAt = startedAt ?? info.StartedAt }, JasonJson.Options);
+    }
+
+    private static readonly DateTimeOffset NineOhSix = new(2026, 10, 1, 9, 6, 0, TimeSpan.Zero);
+
+    private static NotificationChannelInfo Toast(string? outcome = null, string? reason = null, string? detail = null, bool on = true, string presence = "available", string? presenceDetail = null) =>
+        new("toast", "toast", on, outcome, reason, null, null, detail, outcome is null ? null : NineOhSix, presence, presenceDetail);
+
+    /// <summary>What each notification channel did last, one line for a person, in every state a runtime can be in.</summary>
+    [Theory]
+    [MemberData(nameof(NotificationLines))]
+    public async Task Human_mode_says_what_each_notification_channel_did_last(string json, string expected)
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, json)));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains($"Notify:     {expected}{System.Environment.NewLine}", output.ToString(), StringComparison.Ordinal);
+    }
+
+    public static TheoryData<string, string> NotificationLines() => new()
+    {
+        { InfoJson(new NotificationsInfo(false, [Toast(on: false)], null, null)), "off" },
+        { InfoJson(new NotificationsInfo(true, [Toast()], null, null)), "toast on, nothing sent yet" },
+        {
+            InfoJson(new NotificationsInfo(
+                true,
+                [Toast("delivered"), new NotificationChannelInfo("ntfy", "plugin", true, "failed", null, "notification_unreachable", "transient", null, NineOhSix)],
+                "ntf_01K",
+                NineOhSix)),
+            "toast delivered at 09:06 UTC · ntfy failed (notification_unreachable) at 09:06 UTC"
+        },
+        { InfoJson(new NotificationsInfo(true, [Toast("not_attempted", "no_desktop", "session 0", presence: "no_desktop", presenceDetail: "session 0")], "ntf_01K", NineOhSix)), "toast has no desktop (session 0)" },
+
+        // Whether there is a desktop is this runtime's own fact, decided when it started. An outcome a line from an
+        // earlier runtime carried — one in session 0, or one in the person's session — never outweighs it.
+        { InfoJson(new NotificationsInfo(true, [Toast("not_attempted", "no_desktop", "session 0")], "ntf_01K", NineOhSix), NineOhSix.AddHours(1)), "toast on, nothing sent since this runtime started" },
+
+        // What a restart actually hands over: no outcome at all, since the runtime does not carry an earlier one's "no
+        // desktop", beside a last notification older than this runtime. Nothing sent since it started, which is not "yet"
+        // — with a desktop, and without one.
+        { InfoJson(new NotificationsInfo(true, [Toast()], "ntf_01K", NineOhSix), NineOhSix.AddHours(1)), "toast on, nothing sent since this runtime started" },
+        { InfoJson(new NotificationsInfo(true, [Toast(presence: "no_desktop", presenceDetail: "session 0")], "ntf_01K", NineOhSix), NineOhSix.AddHours(1)), "toast has no desktop (session 0), nothing sent since this runtime started" },
+
+        // This runtime's own send that found none — a Linux bus with no notification daemon — is said as it is.
+        { InfoJson(new NotificationsInfo(true, [Toast("not_attempted", "no_desktop", "no notification daemon")], "ntf_01K", NineOhSix)), "toast has no desktop (no notification daemon)" },
+
+        // The person's own earlier "off", on a toast that is on again, is not a failure: nothing was sent since, which
+        // is not "yet" — toasts may have been sent before it was turned off.
+        { InfoJson(new NotificationsInfo(true, [Toast("not_attempted", "off")], "ntf_01K", NineOhSix)), "toast on again, nothing sent since" },
+        { InfoJson(new NotificationsInfo(true, [Toast("delivered", presence: "no_desktop", presenceDetail: "session 0")], "ntf_01K", NineOhSix)), "toast has no desktop (session 0)" },
+        { InfoJson(new NotificationsInfo(true, [Toast("silenced", "disabled_for_application")], "ntf_01K", NineOhSix)), "toast silenced (disabled_for_application) at 09:06 UTC" },
+
+        // Decided when the runtime started, so it is said before anything has been sent: the one visible sign of a
+        // runtime running where nothing it shows reaches a desktop.
+        { InfoJson(new NotificationsInfo(true, [Toast(presence: "no_desktop", presenceDetail: "session 0")], null, null)), "toast has no desktop (session 0), nothing sent yet" },
+        { InfoJson(notifications: null), "unknown" },
+    };
+
     [Fact]
     public async Task Human_mode_renders_lines_for_people()
     {

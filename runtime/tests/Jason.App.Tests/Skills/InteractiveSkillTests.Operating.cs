@@ -7,6 +7,14 @@ public partial class InteractiveSkillTests
     {
         var skill = Flattened("operating-the-installation");
 
+        // Notifications: the toast needs nothing; a plugin sends a pointer to somebody else's server, so it is the
+        // person's to ask for; a session reads the check rather than guessing; and it never sends a test
+        // notification with the operating system's own tools or edits the registry.
+        Assert.Contains("Naming a notification plugin in `settings.json` sends a pointer to a third party's server. Do it only when the person asks, with the topic they choose.", skill, StringComparison.Ordinal);
+        Assert.Contains("Do not send a test notification through the operating system's own tools", skill, StringComparison.Ordinal);
+        Assert.Contains("`jason status`'s `notifications` check", skill, StringComparison.Ordinal);
+        Assert.Contains("Do not disturb is invisible to Jason", skill, StringComparison.Ordinal);
+
         // On Windows the verbs that change a logon registration run from an ordinary prompt on every account now,
         // so a session runs them itself. A skill that still sent people to elevate would have a session hand a
         // standard-account user a command they cannot run, for something the session could have done.
@@ -64,6 +72,20 @@ public partial class InteractiveSkillTests
             "If they want the runtime running now as well, that is `jason runtime start`: say so, or ask.",
             skill,
             StringComparison.Ordinal);
+
+        // After an upgrade from 0.1.0 the runtime that 0.1.0's task started may still hold the data directory. The
+        // sentence is keyed to evidence a session can have, and the stop waits for the person's word, because a stop
+        // ends work in flight.
+        Assert.Contains("Only when `jason status` says the runtime runs in session 0, or the person tells you 0.1.0 had autostart enabled", skill, StringComparison.Ordinal);
+        Assert.Contains("ask before you run `jason runtime stop`: it stops work in flight", skill, StringComparison.Ordinal);
+        Assert.Contains("If `enable` or `disable` answers `ERROR: Access is denied.`, follow its message first, as below.", skill, StringComparison.Ordinal);
+        Assert.Contains("Then `jason runtime start` starts the runtime this version runs, or the person signs in again with autostart enabled.", skill, StringComparison.Ordinal);
+        var stopAt = skill.IndexOf("`jason runtime stop` once ends it", StringComparison.Ordinal);
+        Assert.True(
+            skill.IndexOf("After `enable` or `disable` once", StringComparison.Ordinal) is var enableAt and >= 0
+                && stopAt > enableAt
+                && skill.IndexOf("Then `jason runtime start` starts the runtime", StringComparison.Ordinal) > stopAt,
+            "the skill does not name the acts in order");
 
         // And the one cost, said when the registration is made rather than discovered at the next sign-out.
         Assert.Contains("ends when they sign out", skill, StringComparison.Ordinal);

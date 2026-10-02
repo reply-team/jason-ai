@@ -1,0 +1,15 @@
+{
+  "operation": "notification.send",
+  "version": 1,
+  "case": "the service did not answer; a transient failure is tried once more",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": { "class": "transient", "code": "notification_unreachable", "message": "The server did not answer.", "details": null, "external_ids": null },
+    "diagnostics": { "duration_ms": 140, "exec_calls": 0, "http_calls": 1, "log_lines": 1 }
+  },
+  "expect": { "status": "failed", "class": "transient", "retriable": true }
+}

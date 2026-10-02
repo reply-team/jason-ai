@@ -62,6 +62,7 @@ public static class UninstallReader
 
         var directory = executable is null ? null : Path.GetDirectoryName(executable);
         var descriptor = new DescriptorReader(env.Paths).Read();
+        var (notificationKeys, registryUnreadable) = NotificationKeys(env);
 
         return new UninstallPlan(
             autostart.Registered,
@@ -76,7 +77,25 @@ public static class UninstallReader
             Previous(directory),
             Extracted(env, executable, directory),
             purgeData,
-            env.Paths.Root);
+            env.Paths.Root,
+            notificationKeys,
+            registryUnreadable);
+    }
+
+    /// <summary>
+    /// The keys of the toast's registration present in this account; where the registry cannot be read, none and why —
+    /// never taken for an account with nothing to remove.
+    /// </summary>
+    private static (IReadOnlyList<string> Keys, string? Unreadable) NotificationKeys(CliEnvironment env)
+    {
+        try
+        {
+            return (env.Removes?.ReadNotificationRegistration() ?? [], null);
+        }
+        catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return ([], exception.Message);
+        }
     }
 
     /// <summary>

@@ -263,6 +263,9 @@ public class UninstallOrderTests
             [
                 "autostart.remove",
                 "system.shutdown",
+                "notifications.remove", // the toast's registration, after the runtime that could write it back stopped
+                "notifications.remove", // and the two entries Windows made for it at the first toast
+                "notifications.remove",
                 "file.remove", // the recorded skill
                 "file.remove", // then its record
                 "directory.remove_if_empty", // the skill's directory
@@ -583,6 +586,7 @@ public class UninstallOrderTests
         var remover = new RecordingRemover(log)
         {
             PathEntry = everything ? new PathEntryPlan(Path.GetDirectoryName(install)!, [], "the value", Ours: true) : null,
+            NotificationKeys = everything ? [.. Jason.Contracts.Notifications.ToastRegistration.Keys] : [],
         };
 
         processes ??= new FakeProcessControl();

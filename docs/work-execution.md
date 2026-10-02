@@ -572,8 +572,9 @@ a review caused by a line that names neither, which a report about a campaign ra
 item is. [docs/campaign-manager.md](campaign-manager.md) §7 has the three cases.
 
 - **Approvals beyond one decision about one item.** There are no standing approvals, no bulk
-  decisions, no expiry windows and no anomaly rules; nothing notifies anybody, so a person finds out
-  what is waiting by asking (`jason approval list`). What exists is the gate itself, below.
+  decisions, no expiry windows and no anomaly rules. A parked approval and a raised question are notified
+  as a pointer ([notifications.md](notifications.md)); pull is still the floor: a person finds out what is
+  waiting, and decides, by asking (`jason approval list`). What exists is the gate itself, below.
 - **Session resume.** A host that is interrupted is retried from the start, not nudged to continue.
   The session id is minted per attempt and recorded, which is what a nudge would need, but nothing
   uses it yet.

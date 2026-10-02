@@ -8,8 +8,8 @@ checksums.txt before unpacking, puts jason.exe in %LOCALAPPDATA%\Programs\jason,
 the user's PATH unless -NoModifyPath says otherwise. Running it again over the same version downloads nothing
 and says so.
 
-    irm https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.ps1 | iex
-    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.ps1))) -Version 0.2.0 -NoModifyPath
+    irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
+    & ([scriptblock]::Create((irm https://github.com/reply-team/jason-ai/releases/download/v0.2.0/install.ps1))) -Version 0.2.0 -NoModifyPath
 
 -Feed (or JASON_INSTALL_FEED) points it at a directory or a base URL holding the same files a release holds
 - the archives, manifest.json and checksums.txt - which is how CI runs it against the archives it has just

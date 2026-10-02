@@ -149,6 +149,9 @@ public class EndToEndTests
         var written = string.Join('\n', logs.Select(File.ReadAllText));
 
         Assert.Contains("Update check is disabled by configuration", written, StringComparison.Ordinal);
+
+        // And it notifies nobody: the notifications switch travels the same way and says so in the same log.
+        Assert.Contains("Notifications are off by configuration; nothing will be sent", written, StringComparison.Ordinal);
         Assert.DoesNotContain("Update check failed", written, StringComparison.Ordinal);
         Assert.DoesNotContain("releases/latest/download", written, StringComparison.Ordinal);
     }

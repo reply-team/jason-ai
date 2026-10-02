@@ -15,6 +15,12 @@ internal sealed class RecordingLogs : ILoggerProvider
     public IReadOnlyList<string> Warnings =>
         [.. _lines.Where(line => line.Level >= LogLevel.Warning).Select(line => line.Message)];
 
+    /// <summary>Every line, at every level.</summary>
+    public IReadOnlyList<string> All => [.. _lines.Select(line => line.Message)];
+
+    /// <summary>How many lines said exactly this, at any level.</summary>
+    public int Count(string message) => _lines.Count(line => line.Message == message);
+
     public ILogger CreateLogger(string categoryName) => new Recorder(_lines);
 
     public void Dispose()

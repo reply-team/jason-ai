@@ -5,6 +5,7 @@ using Jason.Cli.Http;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Notifications;
 
 namespace Jason.Cli.Commands;
 
@@ -98,6 +99,62 @@ public static class RuntimeStatusCommand
         output.WriteLine($"Routes:     {Routes(info.Routes)}");
         output.WriteLine($"Skills:     {Skills(info.Skills)}");
         output.WriteLine($"Update:     {Update(info.Update)}");
+        output.WriteLine($"Notify:     {Notifications(info.Notifications, info.StartedAt)}");
+    }
+
+    /// <summary>
+    /// What each notification channel did last. Off is said as off; a channel that has sent nothing yet says so; and a
+    /// toast with no desktop says it before anything has been sent, because that is decided when the runtime starts —
+    /// a runtime in session 0 is the one place nothing it shows can reach a person — and says it again when one of this
+    /// runtime's own sends found none.
+    /// </summary>
+    private static string Notifications(NotificationsInfo? notifications, DateTimeOffset startedAt)
+    {
+        if (notifications is null)
+        {
+            return "unknown";
+        }
+
+        var on = notifications.Channels.Where(channel => channel.On).ToList();
+        if (!notifications.Enabled || on.Count == 0)
+        {
+            return "off";
+        }
+
+        return string.Join(" · ", on.Select(channel => Channel(channel, startedAt, notifications.LastAt)));
+
+        static string Channel(NotificationChannelInfo channel, DateTimeOffset startedAt, DateTimeOffset? lastAt)
+        {
+            var at = channel.At is { } when ? " at " + when.ToUniversalTime().ToString("HH:mm 'UTC'", CultureInfo.InvariantCulture) : string.Empty;
+            var hidden = Status.NotificationReading.Hidden(channel, startedAt, lastAt);
+
+            // This runtime's own desktop, before any outcome a line from an earlier one carried.
+            if (Status.NotificationReading.NoDesktop(channel, startedAt) is { } noDesktop)
+            {
+                return channel.Outcome is not null ? $"{channel.Channel} has no desktop ({noDesktop})"
+                    : hidden ? $"{channel.Channel} has no desktop ({noDesktop}), nothing sent since this runtime started"
+                    : $"{channel.Channel} has no desktop ({noDesktop}), nothing sent yet";
+            }
+
+            // The person's own earlier "off" on a channel that is on again: nothing sent since, which is not "yet".
+            if (Status.NotificationReading.OnAgain(channel))
+            {
+                return $"{channel.Channel} on again, nothing sent since";
+            }
+
+            return Status.NotificationReading.Outcome(channel, startedAt) switch
+            {
+                null when hidden => $"{channel.Channel} on, nothing sent since this runtime started",
+                null => $"{channel.Channel} on, nothing sent yet",
+                ChannelResults.Delivered => $"{channel.Channel} delivered{at}",
+                ChannelResults.Silenced => $"{channel.Channel} silenced ({channel.Reason}){at}",
+                ChannelResults.Failed => $"{channel.Channel} failed ({channel.Code}){at}",
+                ChannelResults.NotAttempted => channel.Detail is { } detail
+                    ? $"{channel.Channel} not attempted ({channel.Reason}: {detail})"
+                    : $"{channel.Channel} not attempted ({channel.Reason})",
+                var other => $"{channel.Channel} {other}{at}",
+            };
+        }
     }
 
     /// <summary>

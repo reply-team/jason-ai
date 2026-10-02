@@ -1,0 +1,15 @@
+{
+  "operation": "notification.send",
+  "version": 1,
+  "case": "the service took the message and named nothing, which is an answer too",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {},
+    "external_ids": null,
+    "error": null,
+    "diagnostics": { "duration_ms": 140, "exec_calls": 0, "http_calls": 1, "log_lines": 1 }
+  },
+  "expect": { "status": "succeeded", "retriable": false }
+}

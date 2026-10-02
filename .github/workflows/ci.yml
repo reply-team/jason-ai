@@ -99,6 +99,7 @@ jobs:
       - name: Smoke-test the published executable
         shell: pwsh
         env:
+          JASON_Update__CheckEnabled: 'false'
           EXECUTABLE: ${{ steps.package.outputs.executable }}
           VERSION: ${{ needs.version.outputs.version }}
         run: |
@@ -383,6 +384,7 @@ jobs:
         env:
           NEXT: ${{ steps.next.outputs.next }}
           VERSION: ${{ needs.version.outputs.version }}
+          JASON_Update__CheckEnabled: 'false'
         run: |
           # What the swap has to move, measured before it happens: an update that copied instead of renaming,
           # or did nothing at all, cannot produce these three afterwards.
@@ -441,6 +443,7 @@ jobs:
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
+          JASON_Update__CheckEnabled: 'false'
         run: |
           # The case no unit test in this repository can reach. `jason update rollback` typed from the PATH runs
           # the executable the update installed, so the file the rollback has to replace is the process doing the
@@ -518,6 +521,7 @@ jobs:
       - name: Install, twice over, and once more without touching the PATH
         shell: bash
         env:
+          JASON_Update__CheckEnabled: 'false'
           JASON_INSTALL_FEED: ${{ github.workspace }}/feed
           VERSION: ${{ needs.version.outputs.version }}
         run: |
@@ -549,6 +553,29 @@ jobs:
 
           # A login shell reads the line the script wrote and finds jason by name.
           sh -l -c 'jason --version'
+
+      - name: Install from the schema-1 fixture, the feed layout 0.1.0 published
+        shell: bash
+        env:
+          JASON_Update__CheckEnabled: 'false'
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # A published tag can point today's script at a feed in the layout it was published with. The fixture is
+          # 0.1.0's two files with the values taken out; filled over this run's archives, it is a feed in that layout.
+          feed="$RUNNER_TEMP/schema-1-feed"
+          pwsh -NoProfile -File ./.github/scripts/Fill-FeedFixture.ps1 -Fixture install/feeds/schema-1 -Archives feed -Version "$VERSION" -Out "$feed"
+
+          export HOME="$RUNNER_TEMP/home-schema-1"
+          mkdir -p "$HOME"
+          sh install/install.sh --feed "$feed" --version "$VERSION" --install-dir "$RUNNER_TEMP/schema-1-bin" --no-modify-path
+          installed="$("$RUNNER_TEMP/schema-1-bin/jason" --version)"
+          [ "${installed%%+*}" = "$VERSION" ] || { echo "installed '$installed' from the schema-1 fixture, expected $VERSION"; exit 1; }
+
+          # And what it installed opens its database, the half of "it runs" that --version cannot see.
+          export JASON_DATA_DIR="$RUNNER_TEMP/schema-1-data"
+          "$RUNNER_TEMP/schema-1-bin/jason" runtime start
+          "$RUNNER_TEMP/schema-1-bin/jason" runtime status | grep -q '"applied_migrations":\["'
+          "$RUNNER_TEMP/schema-1-bin/jason" runtime stop
 
       - name: Install into the profile bash reads, and take it back out
         shell: bash
@@ -623,6 +650,7 @@ jobs:
       - name: Install, twice over, and once more without touching the PATH
         shell: powershell
         env:
+          JASON_Update__CheckEnabled: 'false'
           JASON_INSTALL_FEED: ${{ github.workspace }}\feed
           VERSION: ${{ needs.version.outputs.version }}
         run: |
@@ -684,3 +712,31 @@ jobs:
           # above cannot see that - a script run as a file gets a scope of its own.
           Invoke-Expression (Get-Content ./install/install.ps1 -Raw)
           if (Get-Command Install-Jason -ErrorAction SilentlyContinue) { throw "install.ps1 left Install-Jason defined in the session that ran it" }
+
+      - name: Install from the schema-1 fixture, the feed layout 0.1.0 published
+        shell: powershell
+        env:
+          JASON_Update__CheckEnabled: 'false'
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # A published tag can point today's script at a feed in the layout it was published with. The fixture is
+          # 0.1.0's two files with the values taken out; filled over this run's archives, it is a feed in that layout.
+          $ErrorActionPreference = 'Stop'
+          $feed = Join-Path $env:RUNNER_TEMP 'schema-1-feed'
+          pwsh -NoProfile -File ./.github/scripts/Fill-FeedFixture.ps1 -Fixture install/feeds/schema-1 -Archives feed -Version $env:VERSION -Out $feed
+          if ($LASTEXITCODE -ne 0) { throw "filling the schema-1 fixture exited with $LASTEXITCODE" }
+
+          $dir = Join-Path $env:RUNNER_TEMP 'schema-1-bin'
+          ./install/install.ps1 -Feed $feed -Version $env:VERSION -InstallDir $dir -NoModifyPath
+          $installed = & (Join-Path $dir 'jason.exe') --version
+          if (($installed -split '\+')[0] -ne $env:VERSION) { throw "installed '$installed' from the schema-1 fixture, expected $env:VERSION" }
+
+          # And what it installed opens its database, the half of "it runs" that --version cannot see.
+          $env:JASON_DATA_DIR = Join-Path $env:RUNNER_TEMP 'schema-1-data'
+          & (Join-Path $dir 'jason.exe') runtime start | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "the jason installed from the schema-1 fixture could not start a runtime ($LASTEXITCODE)" }
+          $running = & (Join-Path $dir 'jason.exe') runtime status
+          if ($LASTEXITCODE -ne 0 -or $running -notmatch '"applied_migrations":\["') { throw "the jason installed from the schema-1 fixture did not migrate: $running" }
+          & (Join-Path $dir 'jason.exe') runtime stop | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "the jason installed from the schema-1 fixture could not stop its runtime ($LASTEXITCODE)" }
+          Remove-Item Env:\JASON_DATA_DIR
