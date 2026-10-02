@@ -25,6 +25,13 @@ public class UpdateCheckerTests
     /// <summary>Long enough that a wait on a completed check never expires by accident under a full run.</summary>
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// The release after this build, worked out from the build's own version. A number written here stops being
+    /// newer at the release it names: a pull request builds <c>-dev</c>, which is older than that release, but the
+    /// release itself is built with the bare version, and its tests are the ones that must pass.
+    /// </summary>
+    private static readonly string Newer = new SemanticVersion(SemanticVersion.Current.Major, SemanticVersion.Current.Minor + 1, 0, null).ToString();
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -36,7 +43,7 @@ public class UpdateCheckerTests
         // The dispatcher's tick is on this clock as well, and a day of ticks is not what is under test.
         File.WriteAllText(dir.Paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
         var clock = new FixedClock(Noon);
-        var feed = new StubFeed(_ => Ok(Manifest("0.2.0")));
+        var feed = new StubFeed(_ => Ok(Manifest(Newer)));
         await using var runtime = await RuntimeHost.StartAsync(dir.Paths, Checking(clock, feed), Ct);
         var armed = await ArmedAsync(clock, atLeast: 1);
 
@@ -56,7 +63,7 @@ public class UpdateCheckerTests
         var current = runtime.Services.GetRequiredService<UpdateAdvertisement>().Current;
         Assert.NotNull(current);
         Assert.True(current.Available);
-        Assert.Equal("0.2.0", current.Version);
+        Assert.Equal(Newer, current.Version);
         Assert.Equal(Noon.AddMinutes(5).AddHours(24), current.CheckedAt);
     }
 
@@ -111,7 +118,7 @@ public class UpdateCheckerTests
     public async Task A_checker_reads_its_settings_before_every_wait()
     {
         var clock = new FixedClock(Noon);
-        var feed = new StubFeed(_ => Ok(Manifest("0.2.0")));
+        var feed = new StubFeed(_ => Ok(Manifest(Newer)));
         var options = new TestOptionsMonitor<UpdateOptions>(new UpdateOptions());
         using var checker = Checker(clock, feed, new UpdateAdvertisement(), options: options);
         await checker.StartAsync(Ct);
@@ -150,7 +157,7 @@ public class UpdateCheckerTests
         var logs = new RecordingLogs();
         var answers = new Queue<Func<HttpResponseMessage>>(
         [
-            () => Ok(Manifest("0.2.0")),
+            () => Ok(Manifest(Newer)),
             () => Ok("this is not a manifest"),
             () => new HttpResponseMessage(HttpStatusCode.InternalServerError),
             () => throw new HttpRequestException("connection refused"),
@@ -165,7 +172,7 @@ public class UpdateCheckerTests
         await feed.Asked(1).WaitAsync(Patience, Ct);
         Assert.True(await DispatchHarness.EventuallyAsync(() => advertisement.Current is not null && clock.Armed == 1, Ct));
         var good = advertisement.Current!;
-        Assert.Equal("0.2.0", good.Version);
+        Assert.Equal(Newer, good.Version);
 
         clock.Advance(TimeSpan.FromHours(24));
         await feed.Asked(2).WaitAsync(Patience, Ct);

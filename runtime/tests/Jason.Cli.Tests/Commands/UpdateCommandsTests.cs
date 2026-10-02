@@ -16,6 +16,13 @@ namespace Jason.Cli.Tests.Commands;
 /// </summary>
 public class UpdateCommandsTests
 {
+    /// <summary>
+    /// The release after this build, worked out from the build's own version. A number written here stops being
+    /// newer at the release it names: a pull request builds <c>-dev</c>, which is older than that release, but the
+    /// release itself is built with the bare version, and its tests are the ones that must pass.
+    /// </summary>
+    private static readonly string Newer = new SemanticVersion(SemanticVersion.Current.Major, SemanticVersion.Current.Minor + 1, 0, null).ToString();
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -26,7 +33,7 @@ public class UpdateCommandsTests
         // A runtime is right there to be asked, and is not.
         dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
         var asked = new List<Uri>();
-        var (env, stdout, stderr) = RuntimeVerbs.Environment(dir, FeedOnly(asked, () => Ok(Manifest("0.2.0"))), new FakeProcessControl());
+        var (env, stdout, stderr) = RuntimeVerbs.Environment(dir, FeedOnly(asked, () => Ok(Manifest(Newer))), new FakeProcessControl());
 
         var exit = await CliApp.RunAsync(["update", "check"], env, Ct);
 
@@ -34,7 +41,7 @@ public class UpdateCommandsTests
         Assert.Equal(string.Empty, stderr.ToString());
         var answer = JsonSerializer.Deserialize<UpdateCheckResponse>(stdout.ToString(), JasonJson.Options)!;
         Assert.True(answer.Available);
-        Assert.Equal("0.2.0", answer.Latest);
+        Assert.Equal(Newer, answer.Latest);
         Assert.Equal(SemanticVersion.Current.ToString(), answer.Current);
         Assert.Equal("https://example.test/notes", answer.ReleaseNotesUrl);
         Assert.Equal([UpdateFeed.Default], asked);
@@ -93,7 +100,7 @@ public class UpdateCommandsTests
         using var dir = new TempPaths();
         var asked = new List<Uri>();
         var local = new Uri("http://127.0.0.1:9/manifest.json");
-        var (env, stdout, _) = RuntimeVerbs.Environment(dir, FeedOnly(asked, () => Ok(Manifest("0.2.0")), local), new FakeProcessControl());
+        var (env, stdout, _) = RuntimeVerbs.Environment(dir, FeedOnly(asked, () => Ok(Manifest(Newer)), local), new FakeProcessControl());
 
         Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check", "--feed", local.ToString()], env, Ct));
         Assert.Equal([local], asked);
@@ -121,13 +128,13 @@ public class UpdateCommandsTests
     public async Task Human_mode_says_in_a_sentence_that_something_newer_exists()
     {
         using var dir = new TempPaths();
-        var (env, stdout, _) = RuntimeVerbs.Environment(dir, FeedOnly([], () => Ok(Manifest("0.2.0"))), new FakeProcessControl());
+        var (env, stdout, _) = RuntimeVerbs.Environment(dir, FeedOnly([], () => Ok(Manifest(Newer))), new FakeProcessControl());
 
         var exit = await CliApp.RunAsync(["update", "check", "--human"], env, Ct);
 
         Assert.Equal(ExitCodes.Success, exit);
         var text = stdout.ToString();
-        Assert.Contains("0.2.0", text, StringComparison.Ordinal);
+        Assert.Contains(Newer, text, StringComparison.Ordinal);
         Assert.Contains(SemanticVersion.Current.ToString(), text, StringComparison.Ordinal);
         Assert.Contains("available", text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("https://example.test/notes", text, StringComparison.Ordinal);
