@@ -29,5 +29,7 @@
          that runs nothing: this is the only project that may hold both sides at once. -->
     <Compile Include="../Jason.Cli.Tests/Process/FakeProgramRunner.cs" Link="Skills/FakeProgramRunner.cs" />
     <Compile Include="../Jason.Runtime.Tests/TempDataDir.cs" Link="Skills/TempDataDir.cs" />
+    <!-- The version this tree carries, read from the one file that says it, for the test that checks the version the executable prints. -->
+    <Compile Include="../Jason.Runtime.Tests/TreeVersion.cs" Link="TreeVersion.cs" />
   </ItemGroup>
 </Project>

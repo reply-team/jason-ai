@@ -1,5 +1,6 @@
 using Jason.Contracts;
 using Jason.Contracts.Api;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests;
 
@@ -17,6 +18,6 @@ public class ApiVersionTests
         Assert.Equal("/v1/system.info", Operations.Route(Operations.SystemInfo));
 
     [Fact]
-    public void Build_version_starts_with_the_wave_baseline() =>
-        Assert.StartsWith("0.2.0", JasonVersion.Current, StringComparison.Ordinal);
+    public void Build_version_starts_with_the_version_this_tree_carries() =>
+        Assert.StartsWith(TreeVersion.Prefix(), JasonVersion.Current, StringComparison.Ordinal);
 }

@@ -1670,6 +1670,7 @@ original chat session.
 | DEC-AI-005 | Execution-profile resolution is explicit override → campaign/role policy → causal lineage → global default. |
 | DEC-AI-006 | Causal execution lineage can cross deterministic work and must not be inferred magically from a caller process. |
 | DEC-EXEC-001 | Runtime has separate deterministic internal, deterministic provider, AI-role, and human-decision execution classes. |
+| DEC-NOTIFY-001 | A notification is a pointer (counts and where to look), never a decision surface; made by a deterministic scan step with no work item and no AI in the path; recorded as the reserved journal line `notification_sent` with no campaign; a channel that cannot reach anybody is recorded and skipped, never a failure of the parked item. |
 | DEC-EXT-001 | AI agents may call external CLI/MCP/API tools directly during semantic work. |
 | DEC-EXT-002 | Campaign side effects should use managed canonical operations, but out-of-band effects remain possible. |
 | DEC-EXT-003 | Out-of-band side effects may enter Runtime through provenance-bearing post-factum reports that preserve asserted/observed status and uncertainty. |

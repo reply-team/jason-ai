@@ -5,5 +5,8 @@
     <!-- One disposable temporary directory for the whole suite: a second copy is a second thing to forget to
          delete, and this suite has paid for that once already. -->
     <Compile Include="../Jason.Runtime.Tests/TempTree.cs" Link="TempTree.cs" />
+
+    <!-- The version this tree carries, read from the one file that says it, for the test that checks the stamp. -->
+    <Compile Include="../Jason.Runtime.Tests/TreeVersion.cs" Link="TreeVersion.cs" />
   </ItemGroup>
 </Project>

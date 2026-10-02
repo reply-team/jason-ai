@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
     steps:
       - uses: actions/checkout@v7
 
@@ -36,11 +37,54 @@ jobs:
         run: |
           # MSBuild's own answer — VersionPrefix and VersionSuffix from Directory.Build.props, a -dev version —
           # so a pull request is stamped with the number the tree already carries rather than with a second copy
-          # kept here. Every job below is told this one value; release.yml decides the same input from the tag.
+          # kept here. Every job below but one is told this value; release.yml decides the same input from the tag.
           $version = (dotnet msbuild runtime/src/Jason.App/Jason.App.csproj -getProperty:Version).Trim()
           if ($LASTEXITCODE -ne 0 -or -not $version) { throw "MSBuild did not answer with a version." }
           Write-Host "version -> $version"
           "version=$version" >> $env:GITHUB_OUTPUT
+
+          # And the version a release of this tree would carry: VersionPrefix alone, the number its tag would name.
+          # The one job that is told it runs the whole suite under it.
+          $release = (dotnet msbuild runtime/src/Jason.App/Jason.App.csproj -getProperty:VersionPrefix).Trim()
+          if ($LASTEXITCODE -ne 0 -or -not $release) { throw "MSBuild did not answer with a VersionPrefix." }
+          Write-Host "release -> $release"
+          "release=$release" >> $env:GITHUB_OUTPUT
+
+  # A pull request is stamped with -dev after the version and a release with the bare version, and a test can pass
+  # under one and fail under the other: three update tests once advertised the release this tree was on its way to
+  # as the newer one, which a -dev build is older than and the release is not, so every pull request passed and the
+  # release's own test step failed. So the whole suite runs once more, here, stamped as a release of this tree would
+  # be. One Linux runner is enough to catch a test tied to a number; every other job keeps the -dev version.
+  release-stamp:
+    name: The suite under a release's version
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore runtime/Jason.slnx
+
+      - name: Build (warnings are errors)
+        run: dotnet build runtime/Jason.slnx --configuration Release --no-restore -p:Version=${{ needs.version.outputs.release }}
+
+      # The tests below prove nothing about a release's version unless the build carries it, so it is read back out
+      # of what was built: the assembly the build reports its version from.
+      - name: The build carries a release's version
+        shell: pwsh
+        env:
+          RELEASE: ${{ needs.version.outputs.release }}
+        run: |
+          $stamped = [Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path runtime/src/Jason.Contracts/bin/Release/net10.0/Jason.Contracts.dll)).ProductVersion
+          if (($stamped -split '\+')[0] -ne $env:RELEASE) { throw "the build is stamped '$stamped', and a release of this tree would carry $env:RELEASE" }
+          Write-Host "stamped $stamped"
+
+      - name: Test (offline)
+        run: dotnet test --solution runtime/Jason.slnx --configuration Release --no-build -p:Version=${{ needs.version.outputs.release }}
 
   build-test-publish:
     name: ${{ matrix.rid }}

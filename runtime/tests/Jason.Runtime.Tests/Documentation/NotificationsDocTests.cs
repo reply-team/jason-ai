@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Notifications;
+using Jason.Runtime.Journal;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Notifications.Desktop;
 
@@ -99,6 +100,25 @@ public sealed partial class NotificationsDocTests
     [InlineData("CLAUDE.md", "The delivery contract, `notification.send`, is a family of its own under `docs/contracts/notifications/`, embedded the same way and never in the operation catalog.")]
     public void The_pages_around_it_say_what_is_true_now(string page, string sentence) =>
         Assert.Contains(sentence, Flat(Source(page)), StringComparison.Ordinal);
+
+    /// <summary>
+    /// The architecture's register of accepted decisions records what a notification is. The journal kind the row
+    /// names is the one the sender writes, and it is reserved: only the runtime writes it.
+    /// </summary>
+    [Fact]
+    public void The_decision_register_records_what_a_notification_is()
+    {
+        var architecture = Source("docs/architecture.md");
+        var start = architecture.IndexOf("\n## 18. Accepted decision register", StringComparison.Ordinal);
+        var end = architecture.IndexOf("\n## 19. ", StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start, "docs/architecture.md no longer has §18 followed by §19.");
+
+        Assert.Contains(
+            $"| DEC-NOTIFY-001 | A notification is a pointer (counts and where to look), never a decision surface; made by a deterministic scan step with no work item and no AI in the path; recorded as the reserved journal line `{JournalKinds.NotificationSent}` with no campaign; a channel that cannot reach anybody is recorded and skipped, never a failure of the parked item. |",
+            architecture[start..end],
+            StringComparison.Ordinal);
+        Assert.Contains(JournalKinds.NotificationSent, JournalKinds.Reserved);
+    }
 
     /// <summary>What a page claims has to be as narrow as what the code does.</summary>
     [Theory]

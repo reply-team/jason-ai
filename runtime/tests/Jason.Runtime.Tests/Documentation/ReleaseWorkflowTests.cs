@@ -286,6 +286,61 @@ public class ReleaseWorkflowTests
         Assert.Contains("$console[0] -notmatch '\"Console\":\"freed_hidden\"'", run, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A pull request is stamped with <c>-dev</c> after the version and a release with the bare version, and a test
+    /// can pass under one and fail under the other: three update tests advertised the release the tree was on its
+    /// way to as the newer one, which a <c>-dev</c> build is older than and the release is not, so every pull request
+    /// passed and the release's own test step failed. So the whole suite runs once more on every pull request, on
+    /// one Linux runner, stamped with what a release of this tree would carry: <c>VersionPrefix</c> as MSBuild
+    /// answers it, not a second copy of the number. Every other job keeps the <c>-dev</c> version.
+    /// </summary>
+    [Fact]
+    public void Ci_runs_the_whole_suite_under_the_version_a_release_would_carry()
+    {
+        var ci = Read(Ci);
+        var jobs = Mapping(Parse(ci), "jobs");
+        static List<YamlMappingNode> Steps(YamlMappingNode job) =>
+            [.. Assert.IsType<YamlSequenceNode>(Node(job, "steps")).Children.Cast<YamlMappingNode>()];
+
+        var version = Mapping(jobs, "version");
+        Assert.Equal("${{ steps.version.outputs.release }}", Scalar(Mapping(version, "outputs"), "release"));
+        var asking = Scalar(Assert.Single(Steps(version), step => Scalar(step, "id") == "version"), "run")!;
+        Assert.Contains("dotnet msbuild runtime/src/Jason.App/Jason.App.csproj -getProperty:VersionPrefix", asking, StringComparison.Ordinal);
+        Assert.Contains("\"release=$release\" >> $env:GITHUB_OUTPUT", asking, StringComparison.Ordinal);
+
+        // One job, on Linux and nowhere else, that is stamped with it for the build and the tests alike.
+        var stamped = Mapping(jobs, "release-stamp");
+        Assert.Equal("ubuntu-latest", Scalar(stamped, "runs-on"));
+        Assert.Null(Node(stamped, "strategy"));
+        Assert.Equal("version", Scalar(stamped, "needs"));
+        var steps = Steps(stamped);
+        var runs = steps.Select(step => Scalar(step, "run")).OfType<string>().ToList();
+        Assert.Single(runs, run => run.StartsWith("dotnet build runtime/Jason.slnx --configuration Release", StringComparison.Ordinal)
+            && run.Contains("-p:Version=${{ needs.version.outputs.release }}", StringComparison.Ordinal));
+        var test = Assert.Single(runs, run => run.StartsWith("dotnet test", StringComparison.Ordinal));
+        Assert.StartsWith("dotnet test --solution runtime/Jason.slnx --configuration Release --no-build", test, StringComparison.Ordinal);
+        Assert.Contains("-p:Version=${{ needs.version.outputs.release }}", test, StringComparison.Ordinal);
+
+        // The whole suite, not a part of it: the three tests that failed were not where anybody would have looked.
+        Assert.DoesNotContain("filter", test, StringComparison.Ordinal);
+
+        // And it proves it was stamped, from what was built: a job that quietly lost the stamp would pass as -dev.
+        var check = Assert.Single(steps, step => Scalar(step, "run")?.Contains("FileVersionInfo", StringComparison.Ordinal) == true);
+        Assert.Equal("${{ needs.version.outputs.release }}", Scalar(Mapping(check, "env"), "RELEASE"));
+        Assert.Contains("throw", Scalar(check, "run"), StringComparison.Ordinal);
+        Assert.True(
+            steps.IndexOf(check) < steps.FindIndex(step => Scalar(step, "run") == test),
+            "The stamp is checked after the tests have already run under it.");
+
+        // Every other job keeps the -dev version, and nothing stamps VersionPrefix itself: that would leave the suffix behind.
+        foreach (var name in jobs.Children.Keys.Select(key => key.ToString()).Where(name => name is not "version" and not "release-stamp"))
+        {
+            Assert.DoesNotContain("outputs.release", Job(ci, name), StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("-p:VersionPrefix", ci, StringComparison.Ordinal);
+    }
+
     // --- release.yml -------------------------------------------------------------------------------------
 
     [Fact]

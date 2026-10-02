@@ -1,5 +1,6 @@
 using Jason.App;
 using Jason.Contracts.Discovery;
+using Jason.Runtime.Tests;
 
 namespace Jason.App.Tests;
 
@@ -33,7 +34,7 @@ public class ModeRouterTests
         {
             var exit = await ModeRouter.RunAsync(["--version"], TestContext.Current.CancellationToken);
             Assert.Equal(0, exit);
-            Assert.StartsWith("0.2.0", output.ToString().Trim(), StringComparison.Ordinal);
+            Assert.StartsWith(TreeVersion.Prefix(), output.ToString().Trim(), StringComparison.Ordinal);
         }
         finally
         {

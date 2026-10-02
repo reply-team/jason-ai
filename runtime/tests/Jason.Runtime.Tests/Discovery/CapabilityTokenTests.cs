@@ -32,7 +32,7 @@ public class CapabilityTokenTests
         var info = RuntimeInfo.Create();
         Assert.StartsWith("rt_", info.InstanceId, StringComparison.Ordinal);
         Assert.Equal(Environment.ProcessId, info.Pid);
-        Assert.StartsWith("0.2.0", info.RuntimeVersion, StringComparison.Ordinal);
+        Assert.StartsWith(TreeVersion.Prefix(), info.RuntimeVersion, StringComparison.Ordinal);
         Assert.InRange(info.StartedAt, DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddMinutes(1));
     }
 }
