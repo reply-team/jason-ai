@@ -1,0 +1,10 @@
+{
+  "operation": "notification.send",
+  "version": 1,
+  "case": "a message with no counts beside it, which a plugin that shows them would have to make up",
+  "input": {
+    "title": "Jason",
+    "message": "3 approvals and 1 question are waiting in Jason. Ask your agent what Jason is waiting for, or run jason approval list and jason decision list."
+  },
+  "expect": { "invalid": [{ "pointer": "/counts", "reason": "required" }] }
+}

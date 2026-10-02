@@ -1,14 +1,16 @@
 # Plugins
 
 Plugins are JavaScript packages that execute Jason's canonical provider operations against a real
-vendor tool — and, later, deliver notifications — inside a short-lived plugin-host process that the
+vendor tool — and deliver notifications — inside a short-lived plugin-host process that the
 runtime starts from its own executable. Official and community plugins use the same mechanism.
 
-**A plugin here is reached because a route sends work to it.** A `provider_op` work item is routed at
-the claim to the plugin an operator named for that campaign and operation, and to the account their
-binding names; without a route it fails at the claim with `no_route`, and nothing falls back to
-whichever other plugin happens to implement the operation. [docs/routing.md](../docs/routing.md) is
-that side of it; [docs/plugins.md](../docs/plugins.md) §13 lists what is still missing.
+**A provider plugin here is reached because a route sends work to it.** A `provider_op` work item is
+routed at the claim to the plugin an operator named for that campaign and operation, and to the
+account their binding names; without a route it fails at the claim with `no_route`, and nothing falls
+back to whichever other plugin happens to implement the operation. [docs/routing.md](../docs/routing.md)
+is that side of it; [docs/plugins.md](../docs/plugins.md) §13 lists what is still missing. A
+notification plugin is reached because the `Notifications` settings name it, never by a route
+([docs/notifications.md](../docs/notifications.md)).
 
 This directory is the plugin marketplace of the repository. Each plugin lives in its own folder:
 
@@ -24,8 +26,7 @@ The index so far:
 | Plugin | What it implements |
 |---|---|
 | [`reply/`](reply/README.md) | `campaign.get`, `list_membership.add` and `campaign.enroll` against a Reply account, performed through the Reply CLI, which owns the credential. Its README is the operator's page: what it needs, how it is installed today, the account a route names, every failure it reports, and what it cannot do. |
-
-A reference notification plugin will land beside it.
+| [`ntfy/`](ntfy/README.md) | the delivery contract `notification.send`: Jason's pointer — how many approvals and questions wait, and where to look — published to an ntfy topic. Its README says what a topic on the public server means, the settings that name it, the token, a self-hosted server, and every outcome it reports. |
 
 **Writing one?** [docs/plugins.md](../docs/plugins.md) is the author's guide — package layout, every
 manifest rule and its problem code, the Host SDK with every limit, capabilities and grants, the

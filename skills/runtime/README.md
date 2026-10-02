@@ -8,11 +8,11 @@ this pack ships with Jason **0.2.0**.
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
 
-**What they do not teach yet.** None of the five mentions `jason skills install`, `jason skills update` or
-`jason status`. `verified` in this repository means a named agent host read *that exact body* while driving
-this runtime and the digest of what it read is recorded, so a text cannot gain the new verbs without being
-re-read by a host — which is why these still teach what this build did before those verbs existed, correctly
-and incompletely.
+**What they do not teach yet.** None of the five mentions `jason skills install` or `jason skills update`, and
+`jason status` is mentioned only by `operating-the-installation`. `verified` in
+this repository means a named agent host read *that exact body* while driving this runtime and the digest of what
+it read is recorded, so a verified text cannot gain the new verbs without being re-read by a host — which is why
+the ones verified before 0.2.0 still teach what this build did before those verbs existed, correctly and incompletely.
 
 ## The skills a person's own session reads
 
@@ -23,11 +23,12 @@ description that promises everything matches nothing.
   campaign work and following it: the provider check, the campaign, the people it is about, provider
   operations and AI role work, and what the runtime does with them afterwards.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
-  person to decide: the approvals parked at a claim and the questions a running role raised, presented in the
-  person's own words and recorded as their decision.
+  person to decide: the approvals parked at a claim and the questions a running role raised — including when a
+  notification brought the person — presented in their own words and recorded as their decision.
 - [`operating-the-installation`](operating-the-installation/SKILL.md) — **verified.** The installation itself:
   whether the runtime is up, starting and stopping it, having it start at logon, the plugins and routes it
-  has, the hosts it can launch, whether a newer version exists, and installing it or taking it off again.
+  has, the hosts it can launch, whether notifications reach the person and turning them off, whether a newer
+  version exists, and installing it or taking it off again.
 - [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **verified.** Why work stopped: the runtime, the
   work item's error code and the chronicle; the states a person needs told apart, and the repairs that are
   safe.
@@ -134,7 +135,7 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
 | `managed-campaign-work` | Claude Code 2.1.278 | 0.1.0 | `sha256:01adfb08dec48564d6fef17639fd58cdac16deb7ddfbfea50ebcaa673989d855` |
-| `approvals-and-questions` | Claude Code 2.1.278 | 0.1.0 | `sha256:7ec45ac3fc2b72a01a289c27a3b4b59f9b10fb9c9f56abd6a45148f761bb8a74` |
-| `operating-the-installation` | Claude Code 2.1.285 (claude-opus-5) | 0.2.0 | `sha256:56516cce912107f050a450b347441910ceb7fc89a989de540d81ec9ece78b83b` |
+| `approvals-and-questions` | Claude Code 2.1.287 (claude-opus-5) | 0.2.0 | `sha256:e62e64c4dfd809c0096f6b31b3c9c49bb8809c11b890a62cac6b08082921d6db` |
+| `operating-the-installation` | Claude Code 2.1.287 (claude-opus-5) | 0.2.0 | `sha256:c3b655a1066b51c8298237c3d90afd7e96784235e080a271dee77cc66ea54924` |
 | `troubleshooting-jason` | Claude Code 2.1.278 | 0.1.0 | `sha256:fac60f6d04618c2d4d614592024de133144c563b8462cc9c4ca751786cf77a9f` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:9fb55ca5364ec65c9b629df5538ff26d7ce380e8d09017989e0d222fca4eb037` |

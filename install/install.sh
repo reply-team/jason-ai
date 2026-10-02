@@ -4,8 +4,8 @@
 # and that directory added to the PATH behind a marker line unless --no-modify-path says otherwise. Running
 # it again over the same version downloads nothing and says so.
 #
-#   curl -fsSL https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.sh | sh -s -- --version 0.2.0 --no-modify-path
+#   curl -fsSL https://github.com/reply-team/jason-ai/releases/latest/download/install.sh | sh
+#   curl -fsSL https://github.com/reply-team/jason-ai/releases/download/v0.2.0/install.sh | sh -s -- --version 0.2.0 --no-modify-path
 #
 # JASON_INSTALL_FEED (or --feed) points it at a directory or a base URL holding the same files a release holds
 # — the archives, manifest.json and checksums.txt — which is how CI runs it against the archives it has just

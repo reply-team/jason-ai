@@ -26,12 +26,16 @@ harness installed, so §4 has somewhere to deploy.
 ## 2. Install from a release
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.sh | sh
+curl -fsSL https://github.com/reply-team/jason-ai/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
-irm https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.ps1 | iex
+irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
 ```
+
+Both lines install the **latest release**. A repository with no published release has no latest, so if they
+answer 404 there is nothing to install from and §3 is the way in. That is a fact about the repository, not a
+failure of the tool or of your machine, and it is worth saying that way to whoever asked you to install it.
 
 Each script works out your platform, downloads the archive for it, **verifies its SHA-256 before unpacking**,
 installs the executable under your own account, and puts that directory on your PATH.
@@ -54,16 +58,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.sh | sh -s -- --version 0.1.0
+curl -fsSL https://github.com/reply-team/jason-ai/releases/download/v0.1.0/install.sh | sh -s -- --version 0.1.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/reply-team/jason-ai/main/install/install.ps1))) -Version 0.1.0
+& ([scriptblock]::Create((irm https://github.com/reply-team/jason-ai/releases/download/v0.1.0/install.ps1))) -Version 0.1.0
 ```
 
-Both lines install the **latest release**. A repository with no published release has no latest, so if they
-answer 404 there is nothing to install from and §3 is the way in. That is a fact about the repository, not a
-failure of the tool or of your machine, and it is worth saying that way to whoever asked you to install it.
+These install 0.1.0 with 0.1.0's own script: a pinned install fetches the script from the release it installs.
 
 Confirm what landed:
 
@@ -74,6 +76,11 @@ jason --version
 On Windows the PowerShell you installed from is told about the new PATH entry. On macOS and Linux the script ran
 in a shell of its own, so the one you typed it into has not heard: open a new terminal, or type it by its full
 path — `~/.local/bin/jason --version`.
+
+A started runtime asks the release feed whether a newer version exists five minutes after it starts, and once a
+day after that: one `GET`, carrying nothing about you or your work
+([`release-and-update.md`](release-and-update.md) §4). `Update:CheckEnabled` set to `false` in
+`~/.jason/config/settings.json` turns that off.
 
 ---
 
@@ -189,6 +196,7 @@ it cannot be otherwise: half of what it reports is not the runtime's to know.
 | role skills are present, named after their directories and within the runtime's live cap | a provider CLI **you name** answers |
 | `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | the skill packs are deployed to an agent harness |
 | | autostart is registered |
+| | notifications reach you |
 
 **It exits 0 or 1 and never 3.** Exit 3 means "I could not ask the runtime", and this is the verb whose whole
 job is to answer when the runtime cannot be asked. The JSON body carries `ready` and a state per check, so
@@ -266,7 +274,9 @@ there, and this verb removes those skills and nothing else. A skill you copied i
 receipt, so it is removed by nobody — including this. The rest of the installation goes by rule, in a fixed
 order: this account's logon registration first — on Windows including the task `\Jason` an earlier version
 registered for it — so a logon part-way through cannot start what is going; then the runtime, and if it will not
-stop — or is running and does not answer — nothing after that is removed; then the recorded skills; then the
+stop — or is running and does not answer — nothing after that is removed; then, on Windows, the notification
+registration — the AppUserModelID key the toast was shown under, and the two entries Windows made for it at the
+first toast — after the runtime, so its next toast cannot write them back; then the recorded skills; then the
 PATH entry, only where the installer wrote it; then the executable, its install directory, and the native
 libraries a release unpacks the first time it runs — under the temporary directory on Windows, under
 `~/.net` on macOS and Linux.
@@ -286,9 +296,10 @@ goes, before the verb returns — and a cleanup it starts removes the moved copy
 The report names both, and the line that removes the copy by hand should it still be there; where no cleanup
 could be started, that copy is a problem and the verb exits 1.
 
-**Two things are this account's rather than this installation's**: the logon registration and the agent
-harnesses. An uninstall of a second installation on the same account — a build from source beside a release, a
-copy — takes the registration and the harness skills the first one made as well. Look at the dry run first.
+**Three things are this account's rather than this installation's**: the logon registration, the notification
+registration on Windows, and the agent harnesses. An uninstall of a second installation on the same account — a build from
+source beside a release, a copy — takes the registrations and the harness skills the first one made as well. Look
+at the dry run first. The notifications already in the notification center stay: they are yours to dismiss.
 
 A recorded file whose bytes have changed since is reported and kept, because the record says what Jason
 wrote and a mismatch says somebody else wrote it afterwards. `--force` removes it anyway:
@@ -312,7 +323,8 @@ holding your profile, the temporary directory or the installation, which a stray
 refused before anything is removed.
 
 Nothing else is touched: no skill without a receipt, no other skill in an agent harness, no provider CLI, no
-model credential, no PATH entry the installer did not write, no other account's logon registration. It exits 0
+model credential, no PATH entry the installer did not write, no other account's logon registration, and none of
+the notifications already in the notification center. It exits 0
 when everything it set out to remove is gone, and 1 when it did not get there — it refused (a runtime that would
 not stop, a purge you did not confirm), something it set out to remove is still there (a record it could not
 read, a file it could not remove, a moved copy nothing will remove), or it stopped part-way. Every step that did

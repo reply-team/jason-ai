@@ -1,0 +1,34 @@
+manifest_version: 1
+id: ntfy
+version: 1.0.0
+kind: notification
+name: ntfy
+description: Delivers Jason's notifications to an ntfy topic - how many approvals and questions wait, and where to look, nothing else.
+homepage: https://github.com/reply-team/jason-ai/tree/main/plugins/ntfy
+contracts:
+  protocol: [1]
+  # The delivery contract this package performs, notification.send version 1. A notification plugin implements no
+  # canonical operation, so this manifest has no `operations` list.
+  operations: [1]
+capabilities:
+  http:
+    # The public server. A self-hosted server is named here instead, which is an owner's edit of this file: the
+    # package's digest changes with it, and the grant must name the same host (see README.md).
+    hosts: [ntfy.sh]
+  env:
+    # An access token for a server that requires one, read with host.env and sent as a bearer header. It is never
+    # part of the binding.
+    variables: [NTFY_TOKEN]
+binding:
+  type: object
+  properties:
+    server:
+      type: string
+      pattern: "^https?://[^/?#]+$"
+    topic:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: "^[A-Za-z0-9_-]+$"
+  required: [topic]
+  additionalProperties: false

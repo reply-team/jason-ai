@@ -1,0 +1,11 @@
+{
+  "operation": "notification.send",
+  "version": 1,
+  "case": "a count below zero, which nothing that waits can be",
+  "input": {
+    "title": "Jason",
+    "message": "3 approvals and 1 question are waiting in Jason. Ask your agent what Jason is waiting for, or run jason approval list and jason decision list.",
+    "counts": { "approvals": -1, "decisions": 1 }
+  },
+  "expect": { "invalid": [{ "pointer": "/counts/approvals", "reason": "minimum" }] }
+}
