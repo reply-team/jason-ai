@@ -1,3 +1,8 @@
+Scope. This licence covers this repository except the runtime/ directory,
+whose contents are licensed separately (see runtime/LICENSE). The runtime
+binaries attached to each release are licensed under the terms shipped inside
+the archive.
+
 MIT License
 
 Copyright (c) 2026 Reply.io
