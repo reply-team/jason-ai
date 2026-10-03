@@ -49,7 +49,7 @@ internal sealed class DispatchHarness : IDisposable
     private readonly TestDatabase _database = new();
     private readonly TempDataDir _dir = new();
     private readonly ServiceProvider _provider;
-    private Action? _interfere;
+    private Interference? _interfere;
 
     public DispatchHarness(
         DateTime now,
@@ -80,7 +80,7 @@ internal sealed class DispatchHarness : IDisposable
         services.AddDbContext<JasonDbContext>(o =>
         {
             JasonDbContext.Configure(o, _database.File);
-            o.AddInterceptors(new SaveHook(() => Interlocked.Exchange(ref _interfere, null)), Commands);
+            o.AddInterceptors(new SaveHook(Take), Commands);
         });
 
         // The notifier's half of the scan: off unless a test turns it on, a state that lives as long as this
@@ -192,7 +192,14 @@ internal sealed class DispatchHarness : IDisposable
     /// race it could otherwise only hope for. Fires once, on the next save, and only for contexts the harness
     /// composed — a context the test opens itself is unaffected, so the interference can use one.
     /// </summary>
-    public void InterfereOnceBeforeSaving(Action action) => _interfere = action;
+    public void InterfereOnceBeforeSaving(Action action) => InterfereOnceBeforeSaving(_ => true, action);
+
+    /// <summary>
+    /// The same, for the first save whose context <paramref name="when"/> recognises. A race between two writers
+    /// that both save is staged on one of them, and which one reaches its save first is the very thing the race
+    /// is about, so the interference has to be able to say whose save it is waiting for.
+    /// </summary>
+    public void InterfereOnceBeforeSaving(Func<DbContext, bool> when, Action action) => _interfere = new Interference(when, action);
 
     /// <summary>One active campaign holding one claimable ai_role item.</summary>
     public async Task<WorkItem> SeedClaimableAsync(CancellationToken ct, Action<WorkItem>? configure = null)
@@ -360,11 +367,22 @@ internal sealed class DispatchHarness : IDisposable
     }
 
     /// <summary>Lets the test act in the instant between a service reading a row and writing it back.</summary>
-    private sealed class SaveHook(Func<Action?> take) : SaveChangesInterceptor
+    /// <summary>The pending interference, taken by the first save it recognises and by no other.</summary>
+    private Action? Take(DbContext context)
+    {
+        var pending = Volatile.Read(ref _interfere);
+        return pending is not null && pending.When(context) && Interlocked.CompareExchange(ref _interfere, null, pending) == pending
+            ? pending.Action
+            : null;
+    }
+
+    private sealed record Interference(Func<DbContext, bool> When, Action Action);
+
+    private sealed class SaveHook(Func<DbContext, Action?> take) : SaveChangesInterceptor
     {
         public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
         {
-            take()?.Invoke();
+            Take(eventData)?.Invoke();
             return base.SavingChanges(eventData, result);
         }
 
@@ -373,8 +391,10 @@ internal sealed class DispatchHarness : IDisposable
             InterceptionResult<int> result,
             CancellationToken cancellationToken = default)
         {
-            take()?.Invoke();
+            Take(eventData)?.Invoke();
             return base.SavingChangesAsync(eventData, result, cancellationToken);
         }
+
+        private Action? Take(DbContextEventData eventData) => eventData.Context is { } context ? take(context) : null;
     }
 }

@@ -445,6 +445,7 @@ public sealed class WorkItemService(
             NormalizeReason(request.Reason),
             await ApprovalGate.LiveAsync(db, item.Id, cancellationToken).ConfigureAwait(false));
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        canceller.StopCancelled();
         return WorkItemMapper.ToDto(item, now, item.Attempts, includeSnapshots: false);
     }
 

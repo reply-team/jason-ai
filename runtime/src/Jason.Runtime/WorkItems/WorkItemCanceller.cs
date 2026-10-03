@@ -14,12 +14,16 @@ namespace Jason.Runtime.WorkItems;
 /// The one way work stops on purpose. A caller cancelling a single item, an archived campaign and a contact
 /// nobody may touch any more all arrive here, so a cancelled item always looks the same: its live attempt ended,
 /// whatever was running asked to stop, and one line in the chronicle saying who ended it and why. Nothing here
-/// saves — the cancellation commits with the change that caused it.
+/// saves — the cancellation commits with the change that caused it, and only then does the caller stop the
+/// children, through <see cref="StopCancelled"/>.
 /// </summary>
 public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock, AttemptOutcomes outcomes, RunningAttemptRegistry registry)
 {
     /// <summary>Everything that is not finished for good, derived from the transition table so the two can never drift.</summary>
     private static readonly WorkItemStatus[] Finished = [.. WorkItemTransitions.Final];
+
+    /// <summary>The attempts this scope has cancelled whose children are still to be stopped.</summary>
+    private readonly List<string> _toStop = [];
 
     /// <summary>
     /// The caller has already established that the item may still be cancelled. A decision this item was waiting
@@ -42,7 +46,12 @@ public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock,
 
             // The database only says the attempt is over; the child process is stopped by whoever owns it, and
             // only in this runtime — a stale executor elsewhere learns the same thing from its next fenced call.
-            registry.TryKill(attempt.PublicId);
+            // Not yet, though: a child stopped before this cancellation commits exits while the attempt is still
+            // running in the database, and the handler watching it records that exit as how the attempt ended
+            // and gives the work back to the queue. The cancellation then finds the item moved, answers
+            // Conflict, and the work somebody stopped is handed out again. So the caller stops it once the
+            // change has committed, as the lease enforcer does after its own verdict.
+            _toStop.Add(attempt.PublicId);
         }
 
         var previous = item.Status;
@@ -58,6 +67,22 @@ public sealed class WorkItemCanceller(JournalWriter journal, TimeProvider clock,
             reason: reason,
             workItem: item,
             attempt: attempt);
+    }
+
+    /// <summary>
+    /// Stops the child of every attempt this scope cancelled. Called once the change that cancelled them has
+    /// committed, and never before it; a cancellation whose change failed to commit stopped nothing, because it
+    /// never happened. A child nobody stops here still learns from its next fenced call that its attempt is over,
+    /// and the lease enforcer stops one that outlives its attempt.
+    /// </summary>
+    public void StopCancelled()
+    {
+        foreach (var attemptId in _toStop)
+        {
+            registry.TryKill(attemptId);
+        }
+
+        _toStop.Clear();
     }
 
     /// <summary>Everything a campaign still has open, or — with a contact — everything it still has open about that person.</summary>

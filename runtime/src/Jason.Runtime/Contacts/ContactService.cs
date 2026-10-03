@@ -170,6 +170,7 @@ public sealed class ContactService(JasonDbContext db, JournalWriter journal, Tim
         // wherever it lives rather than running one last time.
         await canceller.CancelOpenForContactAsync(db, contact.Id, actor, "contact archived", cancellationToken).ConfigureAwait(false);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        canceller.StopCancelled();
 
         return ContactMapper.ToDto(contact);
     }

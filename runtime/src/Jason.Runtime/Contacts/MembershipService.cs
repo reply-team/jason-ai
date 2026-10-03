@@ -223,6 +223,7 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
 
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            canceller.StopCancelled();
 
             return new RemoveContactsResult(campaign.PublicId, new RemoveContactsSummary(removed, notMember, alreadyExcluded, rejected), results);
         }

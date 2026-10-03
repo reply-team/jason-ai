@@ -341,6 +341,7 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        canceller.StopCancelled();
         return CampaignMapper.ToDto(campaign);
     }
 

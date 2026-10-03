@@ -234,6 +234,65 @@ public class AttemptHandlerTests
         }
     }
 
+    /// <summary>
+    /// <c>workitem.cancel</c>, the whole of it: the cancellation is committed before the child is told to stop. A
+    /// child stopped first exits while no cancellation exists yet, so the handler watching it records the exit as
+    /// how the attempt ended and hands the work back to the queue; the cancellation then finds the item no longer
+    /// where it read it, and answers Conflict — the person is refused, and the work they stopped runs again. On a
+    /// busy machine the handler is sometimes the faster writer. Here it always is: if the child has been told to
+    /// stop by the time the cancellation saves, that save waits until the handler has written what it will.
+    /// </summary>
+    [Fact]
+    public async Task A_cancellation_is_committed_before_the_child_it_stops_can_answer_for_the_attempt()
+    {
+        var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var command = new FakeCommand(WorkItemKind.AiRole, async context =>
+        {
+            running.SetResult();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, context.Kill);
+            }
+            catch (OperationCanceledException)
+            {
+                stopped.SetResult();
+            }
+
+            return new CommandOutcome.Killed(null);
+        });
+
+        using var harness = new DispatchHarness(Noon, commands: command);
+        var seeded = await harness.SeedClaimableAsync(Ct);
+        var work = Assert.Single(await harness.ClaimAsync(Ct));
+        var handler = RunAsync(harness, work);
+        await running.Task.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+
+        harness.InterfereOnceBeforeSaving(
+            context => context.ChangeTracker.Entries<WorkItem>().Any(entry => entry.Entity.Status == WorkItemStatus.Cancelled),
+            () =>
+            {
+                if (stopped.Task.IsCompleted)
+                {
+                    handler.Wait(TimeSpan.FromSeconds(5), Ct);
+                }
+            });
+
+        await using (var scope = harness.Scopes.CreateAsyncScope())
+        {
+            var cancelled = await scope.ServiceProvider.GetRequiredService<WorkItemService>()
+                .CancelAsync(new WorkItemCancelRequest(seeded.PublicId, null, "not this quarter"), Ct);
+            Assert.Equal(WorkItemStatus.Cancelled, cancelled.Status);
+        }
+
+        // And the child is still stopped, now that the cancellation stands.
+        await stopped.Task.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+        await handler.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+        var item = await harness.ReadItemAsync(seeded.PublicId, Ct);
+        Assert.Equal(WorkItemStatus.Cancelled, item.Status);
+        Assert.Equal(AttemptStatus.Cancelled, Assert.Single(item.Attempts).Status);
+    }
+
     [Fact]
     public async Task An_attempt_decided_while_its_verdict_is_being_written_still_records_how_it_ran()
     {

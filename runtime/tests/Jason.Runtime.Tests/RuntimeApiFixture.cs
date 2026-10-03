@@ -94,19 +94,29 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
         return (response.StatusCode, await response.Content.ReadAsStringAsync(cancellationToken));
     }
 
+    /// <summary>
+    /// A call that must succeed. When it does not, the failure carries what the runtime answered — the error's code
+    /// says why, and a status alone does not.
+    /// </summary>
     public async Task<T> PostOkAsync<T>(string operation, object? body, CancellationToken cancellationToken)
     {
         var (status, text) = await PostAsync(operation, body, cancellationToken);
-        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.True(status == HttpStatusCode.OK, Unexpected(operation, status, HttpStatusCode.OK, text));
         return JsonSerializer.Deserialize<T>(text, JasonJson.Options)!;
     }
 
+    /// <summary>A call that must be refused with one status; any other answer is reported whole.</summary>
     public async Task<ErrorBody> PostErrorAsync(string operation, object? body, HttpStatusCode expected, CancellationToken cancellationToken)
     {
         var (status, text) = await PostAsync(operation, body, cancellationToken);
-        Assert.Equal(expected, status);
+        Assert.True(status == expected, Unexpected(operation, status, expected, text));
         return JsonSerializer.Deserialize<ErrorResponse>(text, JasonJson.Options)!.Error;
     }
+
+    private static string Unexpected(string operation, HttpStatusCode status, HttpStatusCode expected, string body) =>
+        string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"{operation} answered {(int)status} {status} where {(int)expected} {expected} was expected: {body}");
 
     public async ValueTask DisposeAsync()
     {
