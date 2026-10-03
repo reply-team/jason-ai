@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Cli;
@@ -20,13 +22,34 @@ public class WorkFlowEndToEndTests
     /// <summary>Generous: a cold CLI process on a loaded machine is still far quicker than this.</summary>
     private static readonly TimeSpan StepTimeout = TimeSpan.FromSeconds(60);
 
-    /// <summary>How long a real child process may take to be launched, do its work and report back.</summary>
-    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
+    /// <summary>
+    /// How long a real child process may take to be launched, do its work and report back. Longer than the
+    /// heartbeat window below, so that an attempt the runtime gives up on is still seen ending, with its reason.
+    /// </summary>
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(60);
 
-    /// <summary>A tick a second, no retry delay, and short budgets: the loop has to be visibly alive.</summary>
+    /// <summary>
+    /// A tick a second, no retry delay, and short budgets: the loop has to be visibly alive. The heartbeat window
+    /// (two intervals, 40 seconds) stays inside the 60-second lease, so a missed heartbeat and a spent lease remain
+    /// different endings. The window is wide because this test is about a crash being retried, and a missed
+    /// heartbeat has tests of its own: once, on a loaded Windows runner, 20 seconds passed between an attempt's
+    /// start and the runtime recording its child's exit, and the crash was recorded as a missed heartbeat.
+    /// </summary>
     private const string Settings = """
-        {"Dispatcher":{"TickSeconds":1,"RetryDelaySeconds":0,"AiRole":{"TimeoutSeconds":60,"HeartbeatSeconds":10,"MaxAttempts":3}}}
+        {"Dispatcher":{"TickSeconds":1,"RetryDelaySeconds":0,"AiRole":{"TimeoutSeconds":60,"HeartbeatSeconds":20,"MaxAttempts":3}}}
         """;
+
+    /// <summary>
+    /// Past this between an attempt's start and the child's last call, the attempt is slow enough to explain. By
+    /// hand the launch and the first call take about a fifth of a second.
+    /// </summary>
+    private static readonly TimeSpan SlowToLastCall = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Past this between the child's last call and the attempt ending, the same. The runtime's own bound there is
+    /// the five-second output grace plus one write.
+    /// </summary>
+    private static readonly TimeSpan SlowToEnd = TimeSpan.FromSeconds(7);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -140,12 +163,27 @@ public class WorkFlowEndToEndTests
             workItems.Add(retried);
 
             var failedOnce = await PollAsync(root, retried, item => (int)item["attempt_count"]! >= 1);
-            Assert.Equal("executor_exited", (string?)failedOnce["attempts"]!.AsArray()[^1]!["error"]!["code"]);
+            var ending = (string?)failedOnce["attempts"]!.AsArray()[^1]!["error"]!["code"];
+            if (ending != "executor_exited")
+            {
+                Assert.Fail($"The crash ended as {ending}, not executor_exited.{Environment.NewLine}{await PhasesAsync(root, retried)}");
+            }
+
             await File.WriteAllTextAsync(behaviour, "succeed", Ct);
 
             var recovered = await PollAsync(root, retried, item => (string?)item["status"] == "succeeded");
             Assert.True(recovered["attempts"]!.AsArray().Count >= 2, "The work succeeded without ever being retried.");
             Assert.Equal("done", (string?)recovered["result"]!["summary"]);
+
+            // An attempt that ended as expected but slowly is the same stall caught early. It is reported with the
+            // results rather than left for the wide heartbeat window to swallow.
+            foreach (var id in workItems)
+            {
+                if (await SlowAttemptsAsync(root, id) is { } slow)
+                {
+                    Report(slow);
+                }
+            }
 
             var status = await Ok(JasonAsync(root, "runtime", "status", "--human"));
             Assert.Contains("Dispatcher: running", status.Output, StringComparison.Ordinal);
@@ -207,9 +245,145 @@ public class WorkFlowEndToEndTests
         }
         while (DateTime.UtcNow < deadline);
 
-        Assert.Fail($"Work item {workItemId} never got where it was going: {item.ToJsonString()}");
+        Assert.Fail($"Work item {workItemId} never got where it was going: {item.ToJsonString()}{Environment.NewLine}{LogLines(root, null)}");
         return item;
     }
+
+    /// <summary>
+    /// Says that an attempt was slow where a person will see it although the test passed: in the test's own results,
+    /// and in the job's summary on a GitHub runner, whose log shows nothing a passing test writes.
+    /// </summary>
+    private static void Report(string slow)
+    {
+        TestContext.Current.AddWarning(slow);
+        TestContext.Current.TestOutputHelper?.WriteLine(slow);
+        if (Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY") is { Length: > 0 } summary)
+        {
+            File.AppendAllText(summary, $"### {nameof(WorkFlowEndToEndTests)}: a slow attempt{Environment.NewLine}```{Environment.NewLine}{slow}{Environment.NewLine}```{Environment.NewLine}");
+        }
+    }
+
+    /// <summary>
+    /// The phases of an item's attempts when any of them was slow (<see cref="SlowToLastCall"/>,
+    /// <see cref="SlowToEnd"/>), or null when every one kept to the times a hand run shows.
+    /// </summary>
+    private static async Task<string?> SlowAttemptsAsync(string root, string workItemId)
+    {
+        var result = await JasonAsync(root, "workitem", "get", workItemId);
+        if (result.ExitCode != ExitCodes.Success)
+        {
+            return null;
+        }
+
+        var slow = Json(result)["attempts"]!.AsArray().Any(attempt =>
+        {
+            var started = Moment(attempt!["started_at"]);
+            var lastCall = Moment(attempt["last_heartbeat_at"]) ?? started;
+            var finished = Moment(attempt["finished_at"]);
+            return started is not null
+                && ((lastCall - started > SlowToLastCall) || (finished - lastCall > SlowToEnd));
+        });
+        return slow ? $"A slow attempt of {workItemId}:{Environment.NewLine}{await PhasesAsync(root, workItemId)}" : null;
+    }
+
+    /// <summary>
+    /// What each attempt of an item spent its time on — the claim, the start, the child's last call and the end —
+    /// and what the runtime logged meanwhile. With this a stalled attempt names its own phase, where the error code
+    /// alone can only say that time ran out.
+    /// </summary>
+    private static async Task<string> PhasesAsync(string root, string workItemId)
+    {
+        var result = await JasonAsync(root, "workitem", "get", workItemId);
+        if (result.ExitCode != ExitCodes.Success)
+        {
+            return $"'jason workitem get {workItemId}' exited with {result.ExitCode}: {result.Error}";
+        }
+
+        var report = new StringBuilder();
+        DateTimeOffset? from = null;
+        DateTimeOffset? to = null;
+        foreach (var attempt in Json(result)["attempts"]!.AsArray().OrderBy(attempt => (int)attempt!["number"]!))
+        {
+            var claimed = Moment(attempt!["claimed_at"]);
+            var end = Moment(attempt["finished_at"]) ?? DateTimeOffset.UtcNow;
+            if (claimed is not null && (from is null || claimed < from))
+            {
+                from = claimed;
+            }
+
+            if (to is null || end > to)
+            {
+                to = end;
+            }
+
+            report.AppendLine(CultureInfo.InvariantCulture, $"attempt {attempt["number"]} ({attempt["status"]}, {attempt["error"]?["code"] ?? "no error"}): claimed {claimed:HH:mm:ss.fff}, started {Since(claimed, attempt["started_at"])}, last call {Since(claimed, attempt["last_heartbeat_at"])}, finished {Since(claimed, attempt["finished_at"])}; pid {attempt["launch"]?["pid"]}, exit code {attempt["launch"]?["exit_code"]}, output abandoned {attempt["launch"]?["output_abandoned"] ?? false}");
+        }
+
+        report.Append(LogLines(root, from is { } first && to is { } last ? (first.AddSeconds(-1), last.AddSeconds(1)) : null));
+        return report.ToString();
+    }
+
+    /// <summary>
+    /// The runtime's log lines within a window (or its last lines, without one), each cut short. The log holds
+    /// requests' methods, paths, statuses and timings, ids and pids, and never a body, a context or the token.
+    /// </summary>
+    private static string LogLines(string root, (DateTimeOffset From, DateTimeOffset To)? window)
+    {
+        const int MostLines = 80;
+        const int LongestLine = 400;
+        var logs = new JasonPaths(root).LogsDirectory;
+        if (!Directory.Exists(logs))
+        {
+            return "The runtime left no log.";
+        }
+
+        var lines = new List<string>();
+        foreach (var file in Directory.GetFiles(logs, "runtime-*.jsonl").Order(StringComparer.Ordinal))
+        {
+            // The runtime may still hold the file open for writing.
+            using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            while (reader.ReadLine() is { } line)
+            {
+                // The test's own polling, five reads a second, would crowd the runtime's own lines out of a long stall.
+                if (line.Contains("\"RequestPath\":\"/v1/workitem.get\"", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (window is not { } within || (InWindow(line, within.From, within.To) ?? true))
+                {
+                    lines.Add(line.Length > LongestLine ? line[..LongestLine] + "…" : line);
+                }
+            }
+        }
+
+        var shown = lines.TakeLast(MostLines).ToList();
+        return $"The runtime's log, {shown.Count} of {lines.Count} lines:{Environment.NewLine}{string.Join(Environment.NewLine, shown)}";
+    }
+
+    /// <summary>Whether a log line's own timestamp falls between two moments; null when it carries none to read.</summary>
+    private static bool? InWindow(string line, DateTimeOffset from, DateTimeOffset to)
+    {
+        try
+        {
+            return JsonNode.Parse(line)?["@t"] is { } stamp && Moment(stamp) is { } at ? at >= from && at <= to : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static DateTimeOffset? Moment(JsonNode? node) =>
+        node is not null && DateTimeOffset.TryParse(node.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var moment)
+            ? moment
+            : null;
+
+    private static string Since(DateTimeOffset? claimed, JsonNode? node) =>
+        Moment(node) is { } at && claimed is { } start
+            ? string.Create(CultureInfo.InvariantCulture, $"{(at - start).TotalSeconds:+0.000;-0.000} s")
+            : "never";
 
     /// <summary>Every process the runtime recorded as having run an attempt of this item.</summary>
     private static async Task<IEnumerable<int>> PidsOfAsync(string root, string workItemId)
