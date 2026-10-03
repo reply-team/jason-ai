@@ -1,6 +1,6 @@
 // `campaign.enroll`: put one person into a Reply sequence, which is what a campaign is at this provider.
 //
-// This is the most careful of the three operations, and the reason is in the document: an enrollment into a live
+// This is the most careful of the operations this package performs, and the reason is in the document: an enrollment into a live
 // campaign **is a send**, so a blind repeat sends the same person twice and is billed twice. Everything below is
 // arranged around that.
 //
@@ -28,6 +28,7 @@
 import { call } from "./cli.js";
 import { callOf, describe, fail, lostAnswerRow, observe, refusalRow, statusRow } from "./errors.js";
 import { ADDRESS_FIELD, ensureContact, refuseIfSuppressed } from "./contacts.js";
+import { lookup } from "./reading.js";
 
 const OPERATION = "campaign.enroll";
 
@@ -164,7 +165,7 @@ function sequencePath(sequence) {
 function participates(context, sequence, contactId, learned) {
   const path = sequencePath(sequence) + "/contacts/" + contactId;
   const known = callOf("GET", path);
-  const answer = call(context, "GET", path, undefined, learned);
+  const answer = call(context, "GET", path, undefined, learned, OPERATION);
 
   if (answer.code === 404) {
     const said = businessCode(answer);
@@ -205,7 +206,7 @@ function participates(context, sequence, contactId, learned) {
 function liveState(context, sequence, learned) {
   const path = sequencePath(sequence);
   const known = callOf("GET", path);
-  const answer = call(context, "GET", path, undefined, learned);
+  const answer = call(context, "GET", path, undefined, learned, OPERATION);
 
   if (answer.code === 404) {
     // The provider has just denied the link, so the identifier does not travel out as a pin: recording one it
@@ -236,7 +237,7 @@ function isLive(read) {
 function enrol(context, sequence, request, contactId, collision, learned) {
   const path = sequencePath(sequence) + "/contact-links/bulk";
   const known = callOf("POST", path);
-  const answer = call(context, "POST", path, request, learned);
+  const answer = call(context, "POST", path, request, learned, OPERATION);
 
   if (answer.code === 404) {
     // The path names the sequence and the body names the contact, and the contact was resolved before this, so
@@ -266,7 +267,7 @@ function enrol(context, sequence, request, contactId, collision, learned) {
     refuse(known, answer, "collision_refused", refused, learned);
   }
 
-  refuse(known, answer, NOT_PROCESSED[word] || "refusal_this_version_has_no_word_for", refused, learned);
+  refuse(known, answer, lookup(NOT_PROCESSED, word) || "refusal_this_version_has_no_word_for", refused, learned);
 }
 
 // What the bulk answer said about this one person, or `undefined` when it said nothing — which is what a person

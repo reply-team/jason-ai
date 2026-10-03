@@ -303,7 +303,7 @@ in `message`, and treat `details` as something a developer reads from the attemp
 structure anything will parse. The class is a
 judgement only you can make, and `ambiguous` is the expensive one — it ends the work item and waits
 for a person (§8), so spend it only where the effect really may have landed. In the snippet above
-`provider_answer_lost` is a code the three published contracts declare; `provider_call_failed` is
+`provider_answer_lost` is a code every published contract declares; `provider_call_failed` is
 that plugin's own word for a call that never became work, and a contract expecting it would list it
 among its `failure_codes` (§7).
 
@@ -564,10 +564,12 @@ The runtime composes it from the work item; a plugin never sees a work item's co
 
 - **`args`** is what the caller wrote under the work item's `context.input`, and nothing else from
   that context. It is always present — `{}` when the operation takes no arguments.
-- **`contacts`** appears only when the operation's pre-flight says a contact is `required`, carries
-  exactly one person in this version, and is cut to the **declared projection**: the fields the
-  document names, and only the one channel the operation consumes. The rest of a person's
-  reachability is not yours to see, and widening that is a change to the document.
+- **`contacts`** appears when the operation's pre-flight says a contact is `required`, or when it says
+  `optional` and the work item names one. It carries exactly one person, and is cut to the **declared
+  projection**: the fields the document names, and only the one channel the operation consumes, or none.
+  The rest of a person's reachability is not yours to see, and widening that is a change to the
+  document. An operation whose contact is `optional` runs with a person or without one, so look for
+  `contacts` before reading it.
 - **`campaign`** is Jason's own record of the campaign the work item belongs to.
 - **`idempotency_key`** is the *work item's* own identifier, present when the operation requires one.
   It is stable across every attempt, which is what makes "what did the prior run under this key do"
@@ -626,6 +628,25 @@ knows which of those a given provider state is. Where nothing fits, answer with 
 catch-all — `other` — rather than the closest-looking word, and let the provider's own word travel
 untranslated in the free-form `vendor` object beside the neutral result. Nothing is lost that way, and
 nobody downstream reasons over a word you guessed.
+
+### Pages
+
+A read that answers a page — `enrollment.list`, `conversation.list`, `conversation.get` — is handed
+`args.limit` and `args.offset` and answers at most `limit` items from `offset`, with `has_more`. Ask the
+provider for that page, map what comes back, and **stop adding items before the result would pass
+768 KiB**, counted the way the runtime counts a result: six bytes for DEL, for every character outside
+ASCII and for each of `<`, `>`, `&`, `'`, `"`, `+` and the backtick, twelve for one outside the Basic
+Multilingual Plane. Then say `has_more: true`. The runtime refuses a result above 1 MiB however few items
+it holds, and a page of long text in a non-Latin script passes that well below `limit`. The caller asks
+for the next page at `offset` plus the number of items you returned. Always return at least one item when
+the provider returned any: the documents bound every output string so that one fits.
+`plugins/reply/modules/page.js` is a count that only ever errs short.
+
+**An answer you could not read whole.** `host.exec` reads a program's stdout up to
+`Plugins:Exec:OutputBytes` and says so in `truncated.stdout`. On a read, report
+`provider_answer_too_large`, permanent, which every read declares: asking again would be cut at the same
+place, and the remedy is a smaller page or a larger setting. On a write, a cut answer is a lost answer —
+the write may have happened — and its class is the write's own.
 
 ### The `binding`
 
@@ -693,16 +714,16 @@ recorded rather than the one it disputes.
 
 ### The worked example
 
-`plugins/reply/` is the one to read: a marketplace package that implements all three published
+`plugins/reply/` is the one to read: a marketplace package that implements all seven published
 operations against a real provider by driving that provider's own command-line program. Its README
 says what each operation maps onto, what the provider will not answer, and which of its claims were
 checked against a live account; its `modules/errors.js` is the whole error table written as data, so
 the mapping can be read rather than traced through code.
 
-`runtime/tests/fixtures/plugins/fake-provider/` is the shorter one: the same three operations against
-a stand-in vendor program, with no provider to understand first — the provider-contact precondition,
+`runtime/tests/fixtures/plugins/fake-provider/` is the shorter one: the first three published operations
+against a stand-in vendor program, with no provider to understand first — the provider-contact precondition,
 the recovery read, the neutral-to-vendor mapping, and a binding that names the account it acts in. It
-is a test fixture rather than a marketplace package. `other-provider/` beside it implements two of the
+is a test fixture rather than a marketplace package. `other-provider/` beside it implements two of those
 three, because a provider that covers part of the catalog is the ordinary case rather than an error.
 
 ## 8. Failure classes
@@ -971,8 +992,8 @@ completed.
 
 **The shape to copy.** `runtime/tests/fixtures/plugins/fake-provider/` in this repository is a
 complete, valid package — manifest, `main.js`, and a local module under `modules/` — that exercises
-every SDK function, every kind of failure, and all three published operations against a stand-in
-vendor program. It is a test fixture rather than a marketplace plugin, and it is the fastest way to
+every SDK function, every kind of failure, and the first three published operations against a
+stand-in vendor program. It is a test fixture rather than a marketplace plugin, and it is the fastest way to
 see a working one.
 
 **Against the published vectors.** The argument and answer fixtures under `docs/contracts/fixtures/`

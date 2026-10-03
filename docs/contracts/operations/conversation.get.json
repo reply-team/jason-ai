@@ -1,0 +1,271 @@
+{
+  "id": "conversation.get",
+  "version": 1,
+  "l1": { "name": "conversation.get", "contract_version": "2.0.0", "family": 9, "core": true },
+  "intent": "\"Read me the thread before I answer\" — every message in order, who is on it, what we have decided it means, and what it is attached to",
+
+  "reach": "read",
+  "reversibility": "reversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "nothing at stake",
+  "idempotency_key": "none",
+  "per_item_results": "not_applicable",
+  "accepts_collection": false,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": ["H3", "H5"],
+
+  "preflight": { "contact": "not_used", "channel": "none" },
+  "contact_projection": null,
+  "precondition": "none",
+  "preview": null,
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:conversation.get:1:input",
+    "title": "conversation.get input",
+    "description": "One page of one thread's messages. The thread names itself; the campaign is the work item's, carried for context.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "campaign"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["thread", "limit", "offset"],
+        "properties": {
+          "thread": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["external_id"],
+            "properties": {
+              "external_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The provider's identifier for the thread, as `conversation.list` returned it."
+              }
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "description": "At most this many messages on the page. Required: absence is not a default, and a page may come back shorter."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Where the page starts in the provider's own order: 0 for the first page, then the previous page's `offset` plus the number of items it returned."
+          }
+        }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" }
+    },
+    "$defs": {
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it, so another provider's identifier is never visible here."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:conversation.get:1:output",
+    "title": "conversation.get result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["thread", "messages", "has_more", "vendor"],
+    "properties": {
+      "thread": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["external_id", "channel", "subject", "contact", "campaign_external_id", "unread", "vendor"],
+        "properties": {
+          "external_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "channel": { "type": "string", "enum": ["email", "linkedin", "other"] },
+          "subject": {
+            "type": ["string", "null"],
+            "maxLength": 1000,
+            "description": "The subject the thread's messages carry, or null where the channel has none."
+          },
+          "contact": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["external_id", "name"],
+            "description": "The person on the thread as the provider names them, or null when it names nobody.",
+            "properties": {
+              "external_id": { "type": ["string", "null"], "maxLength": 256 },
+              "name": { "type": ["string", "null"], "maxLength": 200 }
+            }
+          },
+          "campaign_external_id": { "type": ["string", "null"], "maxLength": 256 },
+          "unread": { "type": "boolean" },
+          "vendor": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["category", "has_ai_draft"],
+            "properties": {
+              "category": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": ["id", "name"],
+                "properties": {
+                  "id": { "type": "string", "maxLength": 64 },
+                  "name": { "type": "string", "maxLength": 100 }
+                }
+              },
+              "has_ai_draft": {
+                "type": "boolean",
+                "description": "Whether the provider holds a drafted answer. The draft itself is never returned."
+              }
+            }
+          }
+        }
+      },
+      "messages": {
+        "type": "array",
+        "maxItems": 20,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "external_id",
+            "direction",
+            "sent_at",
+            "from",
+            "to",
+            "cc",
+            "bcc",
+            "subject",
+            "body",
+            "truncated",
+            "vendor"
+          ],
+          "properties": {
+            "external_id": {
+              "type": ["string", "null"],
+              "maxLength": 998,
+              "description": "The provider's identifier for the message, or null when it gives none."
+            },
+            "direction": {
+              "type": "string",
+              "enum": ["inbound", "outbound", "unknown"],
+              "description": "`inbound` the other side wrote it, `outbound` this account did, `unknown` when the provider does not say."
+            },
+            "sent_at": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "maxLength": 64,
+              "description": "When it was sent, in UTC."
+            },
+            "from": {
+              "type": ["string", "null"],
+              "maxLength": 320,
+              "description": "Who wrote it: an address, or a display name where the channel has no address."
+            },
+            "to": {
+              "type": ["array", "null"],
+              "maxItems": 10,
+              "items": { "type": "string", "maxLength": 320 },
+              "description": "The recipients as the provider lists them, at most ten; null when it lists none."
+            },
+            "cc": {
+              "type": ["array", "null"],
+              "maxItems": 10,
+              "items": { "type": "string", "maxLength": 320 },
+              "description": "The copied recipients as the provider lists them, at most ten; null when it lists none."
+            },
+            "bcc": {
+              "type": ["array", "null"],
+              "maxItems": 10,
+              "items": { "type": "string", "maxLength": 320 },
+              "description": "The blind-copied recipients as the provider lists them, at most ten; null when it lists none."
+            },
+            "subject": { "type": ["string", "null"], "maxLength": 1000 },
+            "body": {
+              "type": ["string", "null"],
+              "maxLength": 12000,
+              "description": "The message as the provider holds it, markup included, at most 12000 characters; null when it holds none."
+            },
+            "truncated": { "type": "boolean", "description": "Whether `body` was cut at its 12000 characters." },
+            "vendor": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["state", "status_code", "ai_sent_type"],
+              "properties": {
+                "state": { "type": ["string", "null"], "enum": ["ok", "needs_attention", null] },
+                "status_code": { "type": ["string", "null"], "maxLength": 64 },
+                "ai_sent_type": {
+                  "type": ["string", "null"],
+                  "enum": ["ai_generated", "ai_generated_edited", "auto_sent", null]
+                }
+              }
+            }
+          }
+        }
+      },
+      "has_more": { "type": "boolean", "description": "Whether the thread holds more messages after this page." },
+      "vendor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ordering"],
+        "properties": {
+          "ordering": {
+            "const": "oldest_first",
+            "description": "The order `offset` counts in: the first message first."
+          }
+        }
+      }
+    }
+  },
+
+  "external_ids": {},
+
+  "recovery_read": null,
+  "repeat_after_ambiguous": "safe",
+
+  "failure_codes": [
+    { "code": "conversation_not_found", "class": "permanent", "when": "The provider holds no thread under this identifier, or not one this account may see." },
+    { "code": "feature_unavailable", "class": "permanent", "when": "The provider account's plan or role does not include this capability, so no call by this account can answer it." },
+    { "code": "provider_answer_too_large", "class": "permanent", "when": "The provider's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off; asking again would cut it the same way." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it read conversations for this account." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the read for now and it may be asked again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived. A read changes nothing and costs nothing, so the next attempt simply asks again." }
+  ],
+
+  "timeout_ms": 60000,
+
+  "conformance": [
+    "Messages come oldest first, which `vendor.ordering` states.",
+    "A page holds at most `limit` messages, starting at `offset` in the provider's own order, and `has_more` says whether more follow.",
+    "A page may come back short of `limit` with `has_more: true`: the plugin stops before the result would pass 768 KiB, counted as the runtime counts it (six bytes for DEL, for every character outside ASCII and for each of `<`, `>`, `&`, `'`, `\"`, `+` and the backtick, twelve for one outside the Basic Multilingual Plane).",
+    "The next page starts at `offset` plus the number of items this page returned, never at `offset + limit`.",
+    "A body longer than 12000 characters is cut where a character ends, and that message says `truncated: true`.",
+    "A thread whose whole history is more than the plugin may read from the provider in one answer fails `provider_answer_too_large`, permanently: asking again would cut it the same way.",
+    "A thread the provider does not hold, or one this account may not see, fails `conversation_not_found` as permanent.",
+    "A drafted answer the provider holds is reported as `vendor.has_ai_draft` and never returned.",
+    "A read pins nothing."
+  ]
+}

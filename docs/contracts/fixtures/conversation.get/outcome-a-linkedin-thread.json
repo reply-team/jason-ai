@@ -1,0 +1,42 @@
+{
+  "operation": "conversation.get",
+  "version": 1,
+  "case": "a channel with no subject and no address: the writer is a display name, and a drafted answer is reported, never returned",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "thread": {
+        "external_id": "t_99790",
+        "channel": "linkedin",
+        "subject": null,
+        "contact": { "external_id": "48211", "name": "Marta Alvarez" },
+        "campaign_external_id": "c_7714",
+        "unread": false,
+        "vendor": { "category": null, "has_ai_draft": true }
+      },
+      "messages": [
+        {
+          "external_id": null,
+          "direction": "inbound",
+          "sent_at": "2026-10-02T18:02:44.000Z",
+          "from": "Marta Alvarez",
+          "to": null,
+          "cc": null,
+          "bcc": null,
+          "subject": null,
+          "body": "Happy to connect.",
+          "truncated": false,
+          "vendor": { "state": "ok", "status_code": null, "ai_sent_type": null }
+        }
+      ],
+      "has_more": false,
+      "vendor": { "ordering": "oldest_first" }
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": { "duration_ms": 380, "exec_calls": 2, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "succeeded", "retriable": false }
+}

@@ -4,6 +4,12 @@ A **canonical operation** is one unit of SDR work named in the practitioner's la
 it: `campaign.get`, `list_membership.add`, `campaign.enroll`. A plugin implements operations; a planner composes
 them; the runtime enforces them. Nothing in this package names a vendor, and nothing in it depends on one.
 
+**Two namespaces, the same words.** A canonical operation's name reads like one of Jason's own verbs —
+`campaign.get` beside `jason campaign get` — and the two are different things. The operation is work a provider
+performs through a plugin, named by a `provider_op` work item's `--operation`; the verb asks Jason's own runtime about
+Jason's own records. Nothing in one namespace reaches the other: `jason campaign get` never calls a provider, and no
+work item can name `campaign.get` to read Jason's record.
+
 Each operation has exactly one source of truth: the JSON document under [`operations/`](operations). That file is
 **embedded into `Jason.Contracts`** as a resource, so the contract the runtime applies is the very file you are
 reading — there is no second copy to drift. The `.md` page beside it explains the operation for a person; the
@@ -28,6 +34,7 @@ docs/contracts/
   operations/<name>.md             the same contract explained, with a generated properties block
   fixtures/<name>/input-*.json     argument vectors, valid and invalid, with the pointer and reason of each failure
   fixtures/<name>/outcome-*.json   answer vectors, with the status, class and retriability each implies
+  fixtures/<name>/preview-*.json   what a person deciding reads, rendered from an input: the summary and its highlights
   notifications/<name>.json        the delivery contract, a family of its own, embedded the same way
   notifications/<name>.md          the same contract explained, with a generated block
 ```
@@ -49,8 +56,11 @@ its timeout and its conformance list. Its fixtures live beside the operations' u
 The first group of fields is the **vendor-neutral contract**, copied word for word from the SDR operations
 contract this catalog is seeded from — recorded in each document under `l1`, for the first level: the business
 layer that sits above any provider (see "Where these come from"): `reach`, `reversibility`, `approval`,
-`approval_artefact`, `approval_departs`, `before_repeating`, `idempotency_key`, `per_item_results`,
-`accepts_collection`, `cost`, `cost_basis`, `meter`, and the `invariants` that name the operation. Four of them —
+`approval_artefact`, `approval_departs`, `protective_floor`, `approval_reason`, `before_repeating`,
+`idempotency_key`, `per_item_results`, `accepts_collection`, `cost`, `cost_basis`, `meter`, and the `invariants` that
+name the operation. `approval_departs` and `protective_floor` say whether the operation raises its approval above the
+catalogue's derivation or lowers it as the one protective floor, and `approval_reason` says why; an operation that
+does neither states `false`, `false` and `null`. Four of them —
 `reach`, `reversibility`, `approval` and `cost` — may be a plain value or a **conditional block** of
 `{value, conditional, detail}`, where `value` is always the *dangerous* reading. Every gate reads `value`, so a
 condition can never soften one, and `detail` is what an agent reads to decide.
@@ -59,9 +69,10 @@ The second group is Jason's own, and it is about execution:
 
 | Field | What it says |
 |---|---|
-| `preflight` | whether the work item's contact is needed (`required` / `not_used`) and where the channel comes from (`from_args` / `none`) |
-| `contact_projection` | exactly which contact fields, and which channels, the plugin receives — declared so that widening it is a visible change |
+| `preflight` | whether the work item's contact is needed (`required` / `not_used`, or `optional`: taken when the work item names one) and where the channel comes from (`from_args` / `none`); an `optional` contact never takes its channel from the arguments |
+| `contact_projection` | exactly which contact fields, and which channels, the plugin receives — `consumed`, the one channel the arguments name, or `none` — declared so that widening it is a visible change |
 | `precondition` | what must be true at the provider before the operation can act, in one sentence |
+| `preview` | what a person deciding on the operation reads first — a one-line summary rendered from the composed input, and the values in that input it highlights — or `null` where nobody is asked to decide |
 | `input_schema` | the whole composed input the plugin receives, in the dialect below |
 | `output_schema` | what a succeeded result must look like |
 | `external_ids` | the kinds of provider identifier the operation may return, and what each identifies |
@@ -90,14 +101,74 @@ The runtime composes it; the plugin never sees a work item's context. It is alwa
 
 - `args` is what the caller put under the work item's `context.input`, and nothing else from the context. It is
   present even when the operation takes no arguments, as `{}`.
-- `contacts` appears only when `preflight.contact` is `required`, carries exactly one person in this version, and
-  is cut to the declared projection — only the channel the operation consumes, never the person's whole
-  reachability.
+- `contacts` appears when `preflight.contact` is `required`, or when it is `optional` and the work item names a
+  contact. It carries exactly one person — an operation that acts acts on one person in this version, and a read
+  about a person reads about one — and is cut to the declared projection: only the channel the operation consumes,
+  or none, never the person's whole reachability.
 - `campaign` is Jason's record of the campaign the work item belongs to.
 - `idempotency_key` appears only when the operation requires one, and it is the **work item's** identifier: stable
   across every attempt, which is what makes "the prior run under this key" answerable.
 - Every `external_ids` object is filtered to the calling plugin's own pins. Another provider's identifier is never
   visible.
+
+## The preview a person reads
+
+An operation a person approves may declare a `preview`: one line a person deciding reads first, and the values in
+the input it singles out.
+
+```json
+"preview": {
+  "summary": "Enroll {/contacts/0/first_name} {/contacts/0/last_name} ({/contacts/0/channels/0/value}) in campaign {/campaign/name} …",
+  "highlights": ["/contacts/0/channels/0/value", "/campaign/name", "/args/start", "/args/first_touch", "/args/collision"]
+}
+```
+
+- `summary` is text with `{/json-pointer}` placeholders into the **composed input** — the document the plugin would
+  receive. There is nothing else: no escapes, no conditionals and no logic, and any other brace is refused when the
+  document loads.
+- A value renders as follows: a string bare; a number or a boolean as its JSON literal; null, or nothing at the
+  pointer, as `—`; an object or an array as compact JSON, its text left as written apart from a character outside
+  the Basic Multilingual Plane, which the JSON writes as an escape. Every control character in a value, either
+  Unicode line separator and every format character — the bidirectional controls, the zero-width characters, the
+  byte-order mark and the tag characters among them, one outside the Basic Multilingual Plane included — become a
+  space, so the summary is always one line, read in the order it is written: a value can neither forge a second line
+  nor turn the first one around.
+- `highlights` lists pointers; each carries a copy of its value, or `null` where the input holds nothing there.
+- Every pointer is checked when the document loads. The walk steps through plain `properties` by name and `items`
+  by index, and refuses a name a closed object does not allow, an index past `maxItems` and a step into a value
+  whose only type is a scalar; a value that may be a scalar or something else is not refused.
+  What lies behind a `$ref`, an `anyOf` or an `allOf` is proven by the preview fixtures instead: every pointer has to
+  name a value in at least one of them.
+
+The claim renders the preview when it parks the work, from the subject's own input, and stores it beside the subject:
+the approval's `preview` starts with `summary` and `highlights`, and `jason approval get --human` prints the summary
+first, above the operation. **The preview is never part of what is approved:** the subject carries the composed input
+— beside the operation and its version, the plugin, the account and the work item — and not the summary, so its hash
+does not change when a summary is worded differently. An operation nobody is asked to decide on
+declares `preview: null`, and every `auto` operation does.
+
+## Pages
+
+A read that can answer more items than one result may hold — `enrollment.list`, `conversation.list` and
+`conversation.get` — answers a page of them, and every paged read pages the same way. `engagement.summarize` answers
+at most a row per channel and is not paged.
+
+- `args.limit` — at least 1, at most what the operation states — and `args.offset` — 0 to 1 000 000 — are both
+  required: a page size nobody chose is a decision made on somebody's behalf.
+- The result holds at most `limit` items, starting at `offset` in the provider's own order, which `vendor.ordering`
+  names, and `has_more` says whether more follow. The page array's `maxItems` is the same number as `limit`'s
+  maximum.
+- **A page may come back shorter than `limit` with `has_more: true`.** The runtime refuses a result above 1 MiB,
+  counted as System.Text.Json's default encoder writes it — six bytes for DEL, for every character outside ASCII
+  and for each of `<`, `>`, `&`, `'`, `"`, `+` and the backtick, twelve for a character outside the Basic Multilingual
+  Plane — and a page of the largest items a schema allows can pass that. So a plugin stops filling a page before the
+  result would pass 768 KiB.
+- The next page starts at `offset` plus the number of items this page returned, never at `offset + limit`.
+- One item always fits. Every output string of a paged read is bounded, and the largest result the schema allows
+  with one item on the page — every string at its longest, twelve bytes a character — is held under 768 KiB by a
+  test.
+- There are no cursors in this version: the providers mapped first page by offset, and
+  [`divergence-from-l1.md`](divergence-from-l1.md) records where the catalogue says otherwise.
 
 ## The schema dialect
 
@@ -180,14 +251,17 @@ or `{"invalid": [ … ]}`. An **outcome fixture** is `{operation, version, case,
 is a plugin outcome exactly as a child writes it and `expect` is `{status, class?, retriable, invalid?, pinned?}`.
 `status` is `succeeded`, `failed`, or `result_invalid` — a well-formed outcome whose result does not satisfy the
 output schema, or which pins an identifier of a kind the operation never declared. `pinned` is what the runtime
-writes into its record of provider identifiers from that answer, as `{kind: value}`.
+writes into its record of provider identifiers from that answer, as `{kind: value}`. A **preview fixture** is
+`{operation, version, case, input, expect}`, where `input` is a composed input the operation's schema accepts and
+`expect` is `{summary, highlights}`: the line the template renders and the values it highlights, both compared
+whole. An operation has preview fixtures exactly when it declares a preview.
 
-An `invalid` list names exactly what is wrong with the document, and it is written the same way in both kinds of
-fixture: each entry is a JSON pointer, or `{"pointer": "…", "reason": "…"}` where the fixture means one particular
-refusal, the reason being one of the codes above. The reported set must equal the stated set, so a document broken
-somewhere other than where the fixture says fails instead of passing for a reason nobody wrote down; and where a
-fixture states the reason, a constraint that changes kind at that pointer fails too, rather than going on passing
-while it no longer demonstrates what the case is named for.
+An `invalid` list names exactly what is wrong with the document, and it is written the same way in an input fixture
+and an outcome fixture: each entry is a JSON pointer, or `{"pointer": "…", "reason": "…"}` where the fixture means
+one particular refusal, the reason being one of the codes above. The reported set must equal the stated set, so a
+document broken somewhere other than where the fixture says fails instead of passing for a reason nobody wrote down;
+and where a fixture states the reason, a constraint that changes kind at that pointer fails too, rather than going on
+passing while it no longer demonstrates what the case is named for.
 
 A `failed` fixture is held against the operation's own `failure_codes`: the code its error carries is one the
 document declares, under the class the document declares it with. A fixture may not teach a plugin author a code no

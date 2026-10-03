@@ -1,0 +1,15 @@
+{
+  "operation": "conversation.get",
+  "version": 1,
+  "case": "no thread named: nothing says which conversation to read",
+  "input": {
+    "args": { "limit": 20, "offset": 0 },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    }
+  },
+  "expect": { "invalid": [{ "pointer": "/args/thread", "reason": "required" }] }
+}

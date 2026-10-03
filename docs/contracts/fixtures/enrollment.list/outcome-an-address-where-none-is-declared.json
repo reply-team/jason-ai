@@ -1,0 +1,43 @@
+{
+  "operation": "enrollment.list",
+  "version": 1,
+  "case": "a page carrying a person's address, which this operation never returns",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "total": 1,
+      "items": [
+        {
+          "external_id": "48211",
+          "first_name": "Marta",
+          "last_name": "Alvarez",
+          "status": "active",
+          "current_step": "Follow-up 2",
+          "added_at": "2026-10-02T06:15:42.170Z",
+          "opted_out": false,
+          "vendor": {
+            "status_in_sequence": "active",
+            "current_step_id": "9902",
+            "call_status": "none",
+            "meeting_status": "none",
+            "email_disposition": null
+          },
+          "email": "marta@example.com"
+        }
+      ],
+      "has_more": false,
+      "vendor": { "ordering": "added_desc" }
+    },
+    "external_ids": { "campaign": "c_7714" },
+    "error": null,
+    "diagnostics": { "duration_ms": 380, "exec_calls": 2, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": false,
+    "invalid": [{ "pointer": "/items/0/email", "reason": "additional_properties" }]
+  }
+}

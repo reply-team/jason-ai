@@ -1,0 +1,15 @@
+{
+  "operation": "engagement.summarize",
+  "version": 1,
+  "case": "the provider's own preset window, for a campaign already linked",
+  "input": {
+    "args": { "window": { "preset": "last_month" }, "group_by": "channel" },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    }
+  },
+  "expect": "valid"
+}

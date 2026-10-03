@@ -4,7 +4,7 @@
 it. Where the two seem to differ, the document is right and this page is a bug.
 
 > **A dispatcher never runs this one on its own.** Routing, the composed input and the answer check are all in
-> place — the other two published operations run through them — and this operation's approval is `confirm_once`,
+> place — every other published operation runs through them — and this operation's approval is `confirm_once`,
 > so an item naming it is parked at the claim for a person to decide: `approval_required`, no attempt, and a
 > record of exactly what would be enrolled. Approving releases it to the next scan, and nothing runs but the
 > subject that was approved. See `docs/work-execution.md` §Approvals.
@@ -72,6 +72,21 @@ Return the identifiers you learned on the failure as well — `host.fail({ exter
 recorded by the same rule as on a success, and after a lost answer they are the only trace of what the attempt did:
 without the pin the next attempt has nobody to read the prior outcome for.
 
+## What a person reads before deciding
+
+The document declares a `preview`: one line its template renders from the composed input. The approval carries it
+as `summary`, ahead of everything else, with the values it highlights beside it under `highlights` — the address, the
+campaign, the start, the first touch and the collision policy:
+
+> Enroll Marta Alvarez (marta@example.com) in campaign Q3 LatAm founders at the provider: start at first_step, first
+> touch authored_delay, skip if they already take part. If the campaign is live there, its messages start going to
+> this person on that timing.
+
+A value the input does not hold renders as `—`, and a line break inside a value renders as a space, so the summary is
+always one line. It is not part of what is approved: the subject carries the composed input, not the summary, so
+wording the summary differently never turns a pending decision into another one. The fixtures
+[`fixtures/campaign.enroll/preview-*.json`](../fixtures/campaign.enroll) show each case.
+
 ## The properties
 
 <!-- BEGIN GENERATED properties -->
@@ -82,6 +97,7 @@ without the pin the next attempt has nobody to read the prior outcome for.
 | `reach` | `act` | conditional — bookkeeping while the campaign is not live, `act` the moment it is; resolved by the preview, never assumed. |
 | `reversibility` | `irreversible` | conditional — compensatable until the first touch goes, irreversible after. |
 | `approval` | `confirm_once` | conditional — confirm_once before go-live; confirm_once with a mandatory preview once live. One call over a set is one decision, and the preview is the approval artefact — it names the population, it does not count it. |
+| `protective_floor` | `false` | — |
 | `before_repeating` | the per-item outcome of the prior run under this key, and the campaign's live state — re-running blind into a live campaign sends twice. | — |
 | `idempotency_key` | `required` | — |
 | `per_item_results` | `required` | — |
@@ -92,6 +108,7 @@ without the pin the next attempt has nobody to read the prior outcome for.
 | pre-flight | contact `required`, channel `from_args` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | Ensure the provider's own contact exists before enrolling it: work by `contacts[0].external_ids.contact` when that pin is present, otherwise create the contact from the value of the channel named by `args.channel`, and return the provider's identifier under `external_ids.contact`. |
+| preview a person reads | `Enroll {/contacts/0/first_name} {/contacts/0/last_name} ({/contacts/0/channels/0/value}) in campaign {/campaign/name} at the provider: start at {/args/start/position}, first touch {/args/first_touch}, {/args/collision} if they already take part. If the campaign is live there, its messages start going to this person on that timing.`; highlighted: `/contacts/0/channels/0/value`, `/campaign/name`, `/args/start`, `/args/first_touch`, `/args/collision` |
 | pinned identifiers | `contact` names a contact; `campaign` names a campaign |
 | recovery read | The per-item outcome of the prior run under this idempotency key, and the campaign's live state. |
 | after an ambiguous end | `after_recovery_read` — a later attempt performs the recovery read above and answers from it when the effect already happened |

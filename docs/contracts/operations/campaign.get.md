@@ -12,13 +12,13 @@ Where the two seem to differ, the document is right and this page is a bug.
 ## What it is for
 
 "Show me this campaign": the settings, the state and the count of people in each state, as the provider holds them.
-It is the only read among the three operations this version publishes, and it is the operation that **links** a
-Jason campaign to the provider's own — the first successful call returns the provider's identifier, the runtime
-will pin it, and every later operation on that campaign works by the pin rather than by a name anybody typed
-twice.
+It reads one campaign, and it **links** a Jason campaign to the
+provider's own, as every read that names a campaign does the first time: the first successful call returns the
+provider's identifier, the runtime will pin it, and every later operation on that campaign works by the pin rather
+than by a name anybody typed twice.
 
-Because it reads, it changes nothing, it costs nothing and it needs no idempotency key. It is the one operation in
-this version whose answer may simply be asked for again when an attempt ends without one.
+Because it reads, it changes nothing, it costs nothing and it needs no idempotency key. Like every read, its answer
+may simply be asked for again when an attempt ends without one.
 
 ## The input you receive
 
@@ -68,7 +68,9 @@ will keep it.
 
 ## When it fails
 
-Use the codes the document declares. The class is what the runtime reads: `transient` may be repeated,
+Use the codes the document declares. `provider_answer_too_large` says the provider's answer was longer than this
+installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`): asking again would cut it at the same
+place, so it is permanent. The class is what the runtime reads: `transient` may be repeated,
 `permanent` and `validation` are final, and `ambiguous` says the provider may already have acted — which, for a
 read, costs nothing, so this operation allows the repeat. The class you report is therefore the class the work
 item is retried or ended by; a failure filed under the wrong one is a decision made on your word.
@@ -87,6 +89,7 @@ leaves the link behind.
 | `reach` | `read` | — |
 | `reversibility` | `reversible` | — |
 | `approval` | `auto` | — |
+| `protective_floor` | `false` | — |
 | `before_repeating` | nothing at stake | — |
 | `idempotency_key` | `none` | — |
 | `per_item_results` | `not_applicable` | — |
@@ -97,6 +100,7 @@ leaves the link behind.
 | pre-flight | contact `not_used`, channel `none` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | none |
+| preview a person reads | none |
 | pinned identifiers | `campaign` names a campaign |
 | recovery read | none |
 | after an ambiguous end | `safe` — repeating changes nothing and costs nothing, so the item is handed out again |

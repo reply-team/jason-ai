@@ -1,0 +1,21 @@
+{
+  "operation": "conversation.list",
+  "version": 1,
+  "case": "the provider failed on its own side; the read may be asked again",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "transient",
+      "code": "provider_unavailable",
+      "message": "The provider answered with a failure on its own side.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": { "duration_ms": 380, "exec_calls": 1, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "transient", "retriable": true }
+}

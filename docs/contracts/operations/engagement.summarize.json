@@ -1,0 +1,254 @@
+{
+  "id": "engagement.summarize",
+  "version": 1,
+  "l1": { "name": "engagement.summarize", "contract_version": "2.0.0", "family": 20, "core": true },
+  "intent": "\"How is this doing?\" — one measure set over one scope, grouped the way the question actually needs.",
+
+  "reach": "read",
+  "reversibility": "reversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "nothing at stake, but two runs are only the same number if as-of, window, basis, denominator and detection method all match.",
+  "idempotency_key": "none",
+  "per_item_results": "required",
+  "accepts_collection": false,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": ["E5", "F6", "M1", "M2", "M3", "M4", "M5", "M6", "M7"],
+
+  "preflight": { "contact": "not_used", "channel": "none" },
+  "contact_projection": null,
+  "precondition": "none",
+  "preview": null,
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:engagement.summarize:1:input",
+    "title": "engagement.summarize input",
+    "description": "The provider's counts for one campaign over one window, one row per channel. The campaign is named as campaign.get names it.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "campaign"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["window", "group_by"],
+        "properties": {
+          "campaign": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["external_id"],
+            "properties": {
+              "external_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The provider's own identifier, given to link a campaign for the first time. Later calls work by the pin."
+              }
+            }
+          },
+          "window": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "from": { "type": "string", "format": "date-time", "maxLength": 64 },
+              "to": { "type": "string", "format": "date-time", "maxLength": 64 },
+              "preset": { "type": "string", "enum": ["last_week", "last_month", "last_year", "all_time"] }
+            },
+            "anyOf": [
+              { "required": ["from", "to"], "not": { "required": ["preset"] } },
+              { "required": ["preset"], "not": { "anyOf": [{ "required": ["from"] }, { "required": ["to"] }] } }
+            ],
+            "description": "Either a span, `from` and `to`, or one of the provider's presets. Both at once are refused, and so is neither: a window nobody chose is a number nobody can compare."
+          },
+          "group_by": {
+            "const": "channel",
+            "description": "The one grouping this version offers: a row for each channel the provider reports."
+          }
+        }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" }
+    },
+    "anyOf": [
+      {
+        "type": "object",
+        "required": ["args"],
+        "properties": { "args": { "type": "object", "required": ["campaign"] } }
+      },
+      {
+        "type": "object",
+        "required": ["campaign"],
+        "properties": {
+          "campaign": {
+            "type": "object",
+            "required": ["external_ids"],
+            "properties": { "external_ids": { "type": "object", "required": ["campaign"] } }
+          }
+        }
+      }
+    ],
+    "$defs": {
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it, so another provider's identifier is never visible here."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:engagement.summarize:1:output",
+    "title": "engagement.summarize result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["rows", "vendor"],
+    "properties": {
+      "rows": {
+        "type": "array",
+        "maxItems": 3,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["group", "envelope", "measures", "vendor"],
+          "properties": {
+            "group": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["channel"],
+              "properties": { "channel": { "type": "string", "enum": ["email", "linkedin", "other"] } }
+            },
+            "envelope": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["as_of", "window", "basis", "denominator", "detection"],
+              "description": "What the numbers of this row count. Two rows are only the same number if all five match.",
+              "properties": {
+                "as_of": {
+                  "type": "string",
+                  "format": "date-time",
+                  "maxLength": 64,
+                  "description": "The plugin's clock when it asked, in UTC. The provider does not say when it counted."
+                },
+                "window": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "from": { "type": "string", "format": "date-time", "maxLength": 64 },
+                    "to": { "type": "string", "format": "date-time", "maxLength": 64 },
+                    "preset": { "type": "string", "enum": ["last_week", "last_month", "last_year", "all_time"] }
+                  },
+                  "anyOf": [
+                    { "required": ["from", "to"], "not": { "required": ["preset"] } },
+                    { "required": ["preset"], "not": { "anyOf": [{ "required": ["from"] }, { "required": ["to"] }] } }
+                  ],
+                  "description": "The window exactly as it was asked for."
+                },
+                "basis": {
+                  "const": "provider_reported",
+                  "description": "The provider counted these; Jason counted nothing."
+                },
+                "denominator": {
+                  "type": "string",
+                  "enum": ["contacted", "sent", "unknown"],
+                  "description": "The count a rate of this row would divide by, where the provider names it; `unknown` where it does not."
+                },
+                "detection": {
+                  "const": "provider",
+                  "description": "Whether an open, a reply or a bounce happened is the provider's judgement."
+                }
+              }
+            },
+            "measures": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The counts the provider reports for this channel. A count it does not report is absent, never 0, and no rate is ever returned.",
+              "properties": {
+                "contacted": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+                "delivered": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+                "opened": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+                "replied": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+                "interested": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+                "bounced": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+                "opted_out": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+                "out_of_office": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+                "auto_replied": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+                "meetings_booked": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+                "connections_sent": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+                "connections_accepted": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+                "messages_sent": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+                "inmails_sent": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+                "inmails_replied": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+                "profile_views": { "type": "integer", "minimum": 0, "maximum": 2147483647 }
+              }
+            },
+            "vendor": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["overview"],
+              "properties": {
+                "overview": {
+                  "type": "string",
+                  "enum": ["emailOverview", "linkedInOverview"],
+                  "description": "The block of the provider's answer this row was read from."
+                }
+              }
+            }
+          }
+        },
+        "description": "One row per channel the provider reports, each with its own envelope."
+      },
+      "vendor": { "type": "object", "additionalProperties": false, "properties": {} }
+    }
+  },
+
+  "external_ids": {
+    "campaign": {
+      "entity": "campaign",
+      "description": "The provider's identifier for the campaign this read summarised, pinned the first time as campaign.get pins it."
+    }
+  },
+
+  "recovery_read": null,
+  "repeat_after_ambiguous": "safe",
+
+  "failure_codes": [
+    { "code": "campaign_not_found", "class": "permanent", "when": "The provider holds no campaign under the identifier this call carried." },
+    { "code": "feature_unavailable", "class": "permanent", "when": "The provider account's plan or role does not include this capability, so no call by this account can answer it." },
+    { "code": "window_invalid", "class": "validation", "when": "The provider refused the window, so no later attempt with the same window can answer." },
+    { "code": "provider_answer_too_large", "class": "permanent", "when": "The provider's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off; asking again would cut it the same way." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it read the counts of a campaign for this account." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the read for now and it may be asked again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived. A read changes nothing and costs nothing, so the next attempt simply asks again." }
+  ],
+
+  "timeout_ms": 60000,
+
+  "conformance": [
+    "A call carrying only `campaign.external_ids.campaign` answers, and a call carrying only `args.campaign.external_id` answers and returns that identifier under `external_ids.campaign`.",
+    "A campaign the provider does not hold fails `campaign_not_found` as permanent, rather than answering with no rows.",
+    "There is one row for each channel the provider reports, and none for a channel it does not; a row never mixes two channels.",
+    "A count the provider does not report is absent, never 0, and a rate is never returned: a rate is two counts and a denominator, and the envelope says which denominator is known.",
+    "Every row carries its envelope: `as_of` is the plugin's clock when it asked, `window` is the window exactly as asked, `basis` is `provider_reported`, `detection` is `provider`, and `denominator` is `unknown` unless the provider names the count its rates divide by.",
+    "A window the provider refuses fails `window_invalid` as validation, and is not asked again.",
+    "A read creates nothing and pins nothing but the campaign."
+  ]
+}

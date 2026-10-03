@@ -9,6 +9,8 @@
   "approval": "auto",
   "approval_artefact": null,
   "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
   "before_repeating": "nothing at stake",
   "idempotency_key": "none",
   "per_item_results": "not_applicable",
@@ -21,6 +23,7 @@
   "preflight": { "contact": "not_used", "channel": "none" },
   "contact_projection": null,
   "precondition": "none",
+  "preview": null,
 
   "input_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -141,6 +144,7 @@
 
   "failure_codes": [
     { "code": "campaign_not_found", "class": "permanent", "when": "The provider holds no campaign under the identifier this call carried." },
+    { "code": "provider_answer_too_large", "class": "permanent", "when": "The provider's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off; asking again would cut it the same way." },
     { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
     { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it read campaigns for this account." },
     { "code": "rate_limited", "class": "transient", "when": "The provider refused the read for now and it may be asked again." },
@@ -154,6 +158,7 @@
     "A call carrying only `campaign.external_ids.campaign` answers, so a linked campaign never needs the planner to repeat the provider's identifier.",
     "A call carrying only `args.campaign.external_id` answers and returns that identifier under `external_ids.campaign`, which is how the first link is made.",
     "A campaign the provider does not hold fails `campaign_not_found` as permanent, rather than succeeding with an empty result.",
+    "An answer larger than the plugin may read from a program fails `provider_answer_too_large` as permanent: asking again would cut it at the same place.",
     "A provider state this vocabulary has no word for is reported as `other`, with the provider's own word under `vendor`.",
     "The result carries no field this contract does not declare, apart from whatever sits under `vendor`."
   ]

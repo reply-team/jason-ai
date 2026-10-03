@@ -1,0 +1,15 @@
+{
+  "operation": "engagement.summarize",
+  "version": 1,
+  "case": "a grouping by step, which this version does not offer",
+  "input": {
+    "args": { "window": { "preset": "last_week" }, "group_by": "step" },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    }
+  },
+  "expect": { "invalid": [{ "pointer": "/args/group_by", "reason": "const" }] }
+}

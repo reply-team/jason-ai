@@ -7,6 +7,11 @@ metadata:
 
 # Sending guardrails
 
+> **Knowledge, not the enforced contract.** This skill names operations from the vendor-neutral
+> catalogue in `sdr-operations`, which says what an SDR operation *is*. What this runtime validates
+> and executes is the smaller set of JSON documents under `docs/contracts/operations/`; where the
+> two disagree, the contract is what decides.
+
 > **Expert skeleton.** The structure, the safety posture and the decision points are final.
 > Every number and every playbook is `TODO(expert)` and must be validated by the deliverability
 > experts who own this skill before it leaves `draft`. Visible gaps are deliberate;

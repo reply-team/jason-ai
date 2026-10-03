@@ -1,0 +1,22 @@
+{
+  "operation": "conversation.list",
+  "version": 1,
+  "case": "a person carrying their channels, which this read never receives: it works by the pin",
+  "input": {
+    "args": { "limit": 20, "offset": 0, "source": "all" },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "channels": [{ "channel": "email", "value": "marta@example.com", "primary": true }],
+        "external_ids": { "contact": "48211" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    }
+  },
+  "expect": { "invalid": [{ "pointer": "/contacts/0/channels", "reason": "additional_properties" }] }
+}

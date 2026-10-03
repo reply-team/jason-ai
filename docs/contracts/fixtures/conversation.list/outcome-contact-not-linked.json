@@ -1,0 +1,21 @@
+{
+  "operation": "conversation.list",
+  "version": 1,
+  "case": "a person with no provider identifier pinned: nothing was called, and a read creates nobody",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "permanent",
+      "code": "contact_not_linked",
+      "message": "No provider identifier is pinned for this person.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": { "duration_ms": 380, "exec_calls": 0, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "permanent", "retriable": false }
+}

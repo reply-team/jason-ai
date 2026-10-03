@@ -1,0 +1,42 @@
+{
+  "operation": "conversation.get",
+  "version": 1,
+  "case": "the first page of a longer thread",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "thread": {
+        "external_id": "t_99812",
+        "channel": "email",
+        "subject": "Re: Q3 pilot",
+        "contact": { "external_id": "48211", "name": "Marta Alvarez" },
+        "campaign_external_id": "c_7714",
+        "unread": true,
+        "vendor": { "category": { "id": "3", "name": "Interested" }, "has_ai_draft": false }
+      },
+      "messages": [
+        {
+          "external_id": "<CAF1x@mail.example.com>",
+          "direction": "outbound",
+          "sent_at": "2026-09-29T08:00:00.000Z",
+          "from": "sdr@vendor.example",
+          "to": ["marta@example.com"],
+          "cc": null,
+          "bcc": null,
+          "subject": "Q3 pilot",
+          "body": "<p>Hi Marta, would a short pilot in Q3 help your team?</p>",
+          "truncated": false,
+          "vendor": { "state": "ok", "status_code": null, "ai_sent_type": "ai_generated_edited" }
+        }
+      ],
+      "has_more": true,
+      "vendor": { "ordering": "oldest_first" }
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": { "duration_ms": 380, "exec_calls": 2, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "succeeded", "retriable": false }
+}

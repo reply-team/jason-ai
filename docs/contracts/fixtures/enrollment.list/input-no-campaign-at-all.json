@@ -1,0 +1,7 @@
+{
+  "operation": "enrollment.list",
+  "version": 1,
+  "case": "neither a pin nor an argument names a campaign, so nothing says whose people to list",
+  "input": { "args": { "limit": 100, "offset": 0 } },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }, { "pointer": "/campaign", "reason": "required" }] }
+}

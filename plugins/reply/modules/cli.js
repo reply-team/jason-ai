@@ -8,7 +8,7 @@
 //
 // This module knows command lines and nothing about operations; the operation modules know Reply and nothing
 // about command lines. That split is what makes the rule above assertable instead of aspirational.
-import { callOf, fail, lostAnswerRow } from "./errors.js";
+import { callOf, cutAnswerRow, fail, lostAnswerRow } from "./errors.js";
 
 // The vendor program, by the name the manifest declares and the operator grants. The runtime decided at reload
 // what that name means on this machine; nothing here looks a program up for itself.
@@ -77,9 +77,11 @@ export function args(context, method, path, hasBody) {
  * One call to Reply through the CLI: the answer is `{ code, data }` — Reply's own status and its body, whatever
  * that status was — and every other ending throws `host.fail` with the class the table decided. `learned` is what
  * this package already knows Reply calls our entities at the moment of the call; it travels out with a failure,
- * because after a lost answer a pin is the only trace of what was done.
+ * because after a lost answer a pin is the only trace of what was done. `operation` is the canonical operation the
+ * call serves, because one ending — an answer too large to read whole — means something only a read's own row can
+ * say.
  */
-export function call(context, method, path, body, learned) {
+export function call(context, method, path, body, learned, operation) {
   const hasBody = body !== undefined && body !== null;
   const known = callOf(method, path);
 
@@ -93,13 +95,13 @@ export function call(context, method, path, body, learned) {
     env: { REPLY_NO_UPDATE_CHECK: "1" },
   }));
 
-  return read(answer, known, learned);
+  return read(answer, known, learned, operation);
 }
 
 // The endings that are not an answer, each turned into the row that says what it means. Nothing else is ever
 // thrown from here: a plugin that threw something of its own would have the runtime call it `plugin_exception`,
 // which says nothing about whether the provider acted.
-function read(answer, known, learned) {
+function read(answer, known, learned, operation) {
   const observed = {
     call: known,
     exit_code: answer.exit_code,
@@ -116,6 +118,15 @@ function read(answer, known, learned) {
   if (answer.exit_code === NEVER_STARTED) {
     observed.row = "program_never_started";
     fail(null, observed, learned);
+  }
+
+  // An answer cut off at the exec capture is read before anything is parsed: what survived the cut can even parse,
+  // and acting on half an answer is worse than having none. On a read it fails with the operation's own row — the
+  // same read would be cut at the same byte — and anywhere else it keeps the lost-answer ending it always had.
+  if (answer.truncated !== null && typeof answer.truncated === "object" && answer.truncated.stdout === true) {
+    observed.row = cutAnswerRow(operation, known);
+    observed.reason = "The answer passed Plugins:Exec:OutputBytes and was cut off.";
+    fail(operation === undefined ? null : operation, observed, learned);
   }
 
   const parsed = parse(answer.stdout);

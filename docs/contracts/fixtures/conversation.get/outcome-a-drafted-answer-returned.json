@@ -1,0 +1,51 @@
+{
+  "operation": "conversation.get",
+  "version": 1,
+  "case": "the text of a drafted answer, which this read reports the existence of and never returns",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "thread": {
+        "external_id": "t_99812",
+        "channel": "email",
+        "subject": "Re: Q3 pilot",
+        "contact": { "external_id": "48211", "name": "Marta Alvarez" },
+        "campaign_external_id": "c_7714",
+        "unread": true,
+        "vendor": {
+          "category": { "id": "3", "name": "Interested" },
+          "has_ai_draft": false,
+          "ai_draft": "Sure, Thursday at 10 works."
+        }
+      },
+      "messages": [
+        {
+          "external_id": "<CAG7y@mail.example.com>",
+          "direction": "inbound",
+          "sent_at": "2026-10-03T07:41:09.000Z",
+          "from": "marta@example.com",
+          "to": ["sdr@vendor.example"],
+          "cc": null,
+          "bcc": null,
+          "subject": "Re: Q3 pilot",
+          "body": "<p>Thanks — could we talk on Thursday?</p>",
+          "truncated": false,
+          "vendor": { "state": "needs_attention", "status_code": null, "ai_sent_type": null }
+        }
+      ],
+      "has_more": false,
+      "vendor": { "ordering": "oldest_first" }
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": { "duration_ms": 380, "exec_calls": 2, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": false,
+    "invalid": [{ "pointer": "/thread/vendor/ai_draft", "reason": "additional_properties" }]
+  }
+}
