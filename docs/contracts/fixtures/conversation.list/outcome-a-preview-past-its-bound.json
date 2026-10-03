@@ -1,0 +1,41 @@
+{
+  "operation": "conversation.list",
+  "version": 1,
+  "case": "a preview longer than 500 characters, which a plugin cuts before it answers",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "external_id": "t_99812",
+          "channel": "email",
+          "subject": "Re: Q3 pilot",
+          "preview": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "last_activity_at": "2026-10-03T07:41:09.000Z",
+          "unread": true,
+          "contact": { "external_id": "48211", "name": "Marta Alvarez" },
+          "campaign_external_id": "c_7714",
+          "has_meeting_intent": true,
+          "vendor": {
+            "is_last_message_planned": false,
+            "state": "needs_attention",
+            "category": { "id": "3", "name": "Interested" }
+          }
+        }
+      ],
+      "has_more": false,
+      "vendor": { "ordering": "last_activity_desc" }
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": { "duration_ms": 380, "exec_calls": 1, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": false,
+    "invalid": [{ "pointer": "/items/0/preview", "reason": "max_length" }]
+  }
+}

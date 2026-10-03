@@ -78,7 +78,7 @@ export function ensureContact(operation, context, input, learned) {
 export function refuseIfSuppressed(operation, context, contactId, learned) {
   const path = "/v3/contacts/" + contactId + "/statuses";
   const known = callOf("GET", path);
-  const answer = call(context, "GET", path, undefined, learned);
+  const answer = call(context, "GET", path, undefined, learned, operation);
 
   if (answer.code === 404) {
     // The path names exactly one contact, so a 404 here is about that contact and nothing else: the pin no
@@ -140,7 +140,7 @@ function text(value) {
 function imported(operation, context, contact, channel, learned) {
   const path = "/v3/contacts/import";
   const known = callOf("POST", path);
-  const answer = call(context, "POST", path, { items: [item(contact, channel)] }, learned);
+  const answer = call(context, "POST", path, { items: [item(contact, channel)] }, learned, operation);
 
   if (answer.code !== 200) {
     fail(operation, observe(known, answer, refusalRow(answer, known, ADDRESS_FIELD)), learned);
@@ -169,7 +169,7 @@ function imported(operation, context, contact, channel, learned) {
 function created(operation, context, contact, channel, learned) {
   const path = "/v3/contacts";
   const known = callOf("POST", path);
-  const answer = call(context, "POST", path, item(contact, channel), learned);
+  const answer = call(context, "POST", path, item(contact, channel), learned, operation);
 
   if (answer.code !== 200 && answer.code !== 201) {
     fail(operation, observe(known, answer, refusalRow(answer, known, ADDRESS_FIELD)), learned);

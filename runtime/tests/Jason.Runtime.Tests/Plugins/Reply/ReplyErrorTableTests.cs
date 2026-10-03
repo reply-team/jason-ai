@@ -19,6 +19,10 @@ public class ReplyErrorTableTests
     [InlineData("campaign.get")]
     [InlineData("list_membership.add")]
     [InlineData("campaign.enroll")]
+    [InlineData("enrollment.list")]
+    [InlineData("engagement.summarize")]
+    [InlineData("conversation.list")]
+    [InlineData("conversation.get")]
     public void Every_code_the_table_names_is_one_the_operation_declares(string operation)
     {
         var contract = OperationCatalog.Find(operation);
@@ -42,6 +46,10 @@ public class ReplyErrorTableTests
     [InlineData("campaign.get")]
     [InlineData("list_membership.add")]
     [InlineData("campaign.enroll")]
+    [InlineData("enrollment.list")]
+    [InlineData("engagement.summarize")]
+    [InlineData("conversation.list")]
+    [InlineData("conversation.get")]
     public void Every_code_the_operation_declares_has_a_row_that_says_when_it_is_reported(string operation)
     {
         var contract = OperationCatalog.Find(operation);
@@ -111,12 +119,53 @@ public class ReplyErrorTableTests
     {
         var shared = ReplyErrorTable.Shared.Select(row => Text(row.Value!.AsObject(), "code")).ToList();
 
-        // The split between shared rows and per-operation rows is not tidiness. The three documents do not
-        // declare the same codes: only the two writes take a channel value, and only two of them read a
-        // campaign, so a single shared row naming either code would name a code the runtime refuses.
+        // The split between shared rows and per-operation rows is not tidiness. The documents do not declare
+        // the same codes: only the two writes take a channel value or find a person suppressed, and the list add
+        // and the two conversation reads declare no missing campaign, so a single shared row naming any of these
+        // codes would name a code the runtime refuses.
         Assert.DoesNotContain("invalid_channel_value", shared);
         Assert.DoesNotContain("campaign_not_found", shared);
         Assert.DoesNotContain("suppressed", shared);
+    }
+
+    /// <summary>
+    /// The one permanent ending a read has for an answer too large to read whole belongs to the reads alone: each
+    /// declares it, each names the setting that bounds what a plugin may read from a program, and no shared row
+    /// carries it — the writes do not declare the code, and a cut answer to a write may still have written.
+    /// </summary>
+    [Fact]
+    public void Every_read_says_its_answer_was_too_large_and_names_the_setting_that_bounds_it()
+    {
+        var reads = ReplyErrorTable.Performed()
+            .Select(OperationCatalog.Find)
+            .Where(contract => contract!.Reach.Value == "read")
+            .Select(contract => contract!.Id)
+            .ToList();
+        Assert.Contains("campaign.get", reads);
+
+        foreach (var read in reads)
+        {
+            var row = Assert.Single(ReplyErrorTable.Rows(read), entry => entry.Key == "answer_too_large_on_a_read").Row;
+            Assert.Equal("provider_answer_too_large", Text(row, "code"));
+            Assert.Equal("permanent", Text(row, "class"));
+            Assert.Contains("Plugins:Exec:OutputBytes", Text(row, "note"), StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("provider_answer_too_large", ReplyErrorTable.Shared.Select(row => Text(row.Value!.AsObject(), "code")));
+    }
+
+    /// <summary>
+    /// The remedy an operator reads when a profile is not signed in has to be one they can type. Windows PowerShell's
+    /// default execution policy refuses the script npm installs beside the command, so there the command is
+    /// <c>reply.cmd</c>; PowerShell 7 and Command Prompt take the name as written.
+    /// </summary>
+    [Fact]
+    public void The_sign_in_remedy_says_what_windows_powershell_takes()
+    {
+        var note = Text(ReplyErrorTable.Shared["unauthorized"]!.AsObject(), "note");
+
+        Assert.Contains("`reply.cmd auth login`", note, StringComparison.Ordinal);
+        Assert.Contains("PowerShell 7 and Command Prompt take `reply auth login` as written", note, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -149,7 +198,15 @@ internal static class ReplyErrorTable
 {
     public static JsonObject Calls => Table("CALLS");
 
-    /// <summary>The rows every one of the three operations shares.</summary>
+    /// <summary>The operations the package's manifest says it performs, read from its one <c>operations:</c> line.</summary>
+    public static IReadOnlyList<string> Performed()
+    {
+        var manifest = File.ReadAllLines(Path.Combine(ReplyPlugins.PackageSource, "plugin.yaml"));
+        var line = Assert.Single(manifest, entry => entry.StartsWith("operations: [", StringComparison.Ordinal));
+        return [.. line["operations: [".Length..].TrimEnd(']').Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)];
+    }
+
+    /// <summary>The rows every operation the package performs shares.</summary>
     public static JsonObject Shared => Table("ROWS")["shared"]!.AsObject();
 
     /// <summary>The rows one operation declares and the others do not.</summary>

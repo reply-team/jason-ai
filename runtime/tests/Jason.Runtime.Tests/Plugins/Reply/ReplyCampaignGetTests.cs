@@ -112,6 +112,20 @@ public class ReplyCampaignGetTests
         Assert.Equal("queued", answer["vendor"]!["status"]!.GetValue<string>());
     }
 
+    /// <summary>A provider state naming a property every JavaScript object has is still a state with no word here.</summary>
+    [Fact]
+    public async Task A_provider_state_that_names_an_object_property_is_still_reported_as_other()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 outbound", "constructor");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = Succeeded(await InvokeAsync(api, Input(supplied: "7"), Ct));
+
+        Assert.Equal("other", answer["campaign"]!["status"]!.GetValue<string>());
+    }
+
     [Fact]
     public async Task The_result_carries_no_field_the_contract_does_not_declare_apart_from_vendor()
     {

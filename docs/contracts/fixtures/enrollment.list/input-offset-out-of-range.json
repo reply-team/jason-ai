@@ -1,0 +1,15 @@
+{
+  "operation": "enrollment.list",
+  "version": 1,
+  "case": "an offset past any campaign this version pages through, refused as a number rather than read as one",
+  "input": {
+    "args": { "limit": 100, "offset": 1000001 },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    }
+  },
+  "expect": { "invalid": [{ "pointer": "/args/offset", "reason": "maximum" }] }
+}

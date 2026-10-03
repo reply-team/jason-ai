@@ -29,6 +29,8 @@ internal static class Account
     private const string SequencesFile = "sequences.json";
     private const string EnrollmentsFile = "enrollments.json";
     private const string OptOutsFile = "optouts.json";
+    private const string StatsFile = "stats.json";
+    private const string ThreadsFile = "threads.json";
     private const string InstructionsFile = "instructions.json";
     private const string CredentialFile = "credential.json";
 
@@ -212,8 +214,14 @@ internal static class Account
         {
             (["v3", "sequences"], "GET") => Sequences(root, query),
             (["v3", "sequences", var sequence], "GET") => Sequence(root, sequence),
+            (["v3", "sequences", var sequence, "contacts"], "GET") => SequenceContacts(root, sequence, query),
+            (["v3", "sequences", var sequence, "contacts", "count"], "GET") => SequenceContactCount(root, sequence),
             (["v3", "sequences", var sequence, "contacts", var contact], "GET") => Participation(root, sequence, contact),
             (["v3", "sequences", var sequence, "contact-links", "bulk"], "POST") => Enroll(root, sequence, body),
+            (["v3", "sequences", var sequence, "stats"], "POST") => Stats(root, sequence, body),
+            (["v3", "inbox", "threads", "filter"], "POST") => FilterThreads(root, query, body),
+            (["v3", "inbox", "threads", var thread], "GET") => InboxThread(root, thread),
+            (["v3", "inbox", "threads", var thread, "messages"], "GET") => ThreadMessages(root, thread, query),
             (["v3", "contacts"], "POST") => CreateContact(root, body),
             (["v3", "contacts", "import"], "POST") => Import(root, body),
             (["v3", "contacts", "filter"], "POST") => Filter(root, query, body),
@@ -255,6 +263,253 @@ internal static class Account
         return enrollment is null
             ? (404, Problem(404, "Not Found", "sequenceContact.notInSequence", $"Contact {contactId} does not take part in sequence {sequenceId}."))
             : (200, enrollment.DeepClone());
+    }
+
+    /// <summary>
+    /// The people a sequence holds, a page at a time, most recently added first, in the shape a live account
+    /// answered: the key order it used, the address included — a read that must never map it has to be shown one —
+    /// an empty last name where the person has none, and the date added with an offset and two fractional digits
+    /// rather than in UTC. Built from the enrollments this account keeps, so somebody enrolled is somebody listed.
+    /// </summary>
+    private static (int, JsonNode?) SequenceContacts(string root, string sequenceId, string query)
+    {
+        if (Find(root, SequencesFile, sequenceId) is null)
+        {
+            return (404, Problem(404, "Not Found", "sequenceContact.sequenceNotFound", $"This account holds no sequence {sequenceId}."));
+        }
+
+        var contacts = Read(root, ContactsFile);
+        var suppressed = OptOuts(root);
+        var rows = Records(root, EnrollmentsFile)
+            .Select((entry, position) => (Entry: entry, Position: position))
+            .Where(row => Matches(row.Entry, "sequenceId", sequenceId))
+            .OrderByDescending(row => Added(row.Entry))
+            .ThenByDescending(row => row.Position)
+            .Select(row => (JsonNode)Member(row.Entry, Find(contacts, row.Entry["contactId"]!.GetValue<int>()), suppressed))
+            .ToList();
+
+        var skip = Count(query, "skip") ?? 0;
+        var top = Count(query, "top") ?? 25;
+        var page = new JsonArray([.. rows.Skip(skip).Take(top).Select(row => row!.DeepClone())]);
+        return (200, new JsonObject { ["items"] = page, ["hasMore"] = rows.Count > skip + page.Count });
+    }
+
+    private static (int, JsonNode?) SequenceContactCount(string root, string sequenceId) =>
+        Find(root, SequencesFile, sequenceId) is null
+            ? (404, Problem(404, "Not Found", "sequenceContact.sequenceNotFound", $"This account holds no sequence {sequenceId}."))
+            : (200, new JsonObject { ["count"] = Records(root, EnrollmentsFile).Count(entry => Matches(entry, "sequenceId", sequenceId)) });
+
+    /// <summary>
+    /// A sequence's counts over one window, in the shape a live account answered: an overview per channel, every
+    /// count and every percentage a whole number, and counts this provider reports that no document names. A
+    /// window with a preset and a span at once, or a span that ends before it starts, is Reply's validation problem.
+    /// </summary>
+    private static (int, JsonNode?) Stats(string root, string sequenceId, string? body)
+    {
+        if (Find(root, SequencesFile, sequenceId) is null)
+        {
+            return (404, Problem(404, "Not Found", "sequenceStats.notFound", $"This account holds no sequence {sequenceId}."));
+        }
+
+        var filters = Request(body)?["filters"] as JsonObject;
+        var preset = filters is null ? string.Empty : Text(filters, "dateRangePreset");
+        var from = filters is null ? string.Empty : Text(filters, "from");
+        var to = filters is null ? string.Empty : Text(filters, "to");
+        if (preset.Length > 0 && (from.Length > 0 || to.Length > 0))
+        {
+            return Invalid("/filters", "A date range preset cannot be combined with from and to.");
+        }
+
+        if (from.Length > 0 && to.Length > 0
+            && DateTimeOffset.TryParse(from, CultureInfo.InvariantCulture, DateTimeStyles.None, out var start)
+            && DateTimeOffset.TryParse(to, CultureInfo.InvariantCulture, DateTimeStyles.None, out var end)
+            && end < start)
+        {
+            return Invalid("/filters/to", "The end of the period is before its start.");
+        }
+
+        var planted = Records(root, StatsFile).FirstOrDefault(entry => Matches(entry, "sequenceId", sequenceId));
+        if (planted is not null)
+        {
+            var answer = new JsonObject();
+            foreach (var (name, value) in planted)
+            {
+                if (name != "sequenceId")
+                {
+                    answer[name] = value?.DeepClone();
+                }
+            }
+
+            return (200, answer);
+        }
+
+        return (200, new JsonObject
+        {
+            ["emailOverview"] = Overview(
+                "contacted", "delivered", "opened", "replied", "interested", "notReached", "optedOut", "outOfOffice", "bounced",
+                "autoReplied", "meetingsBooked", "deliveredPercentage", "openedPercentage", "repliedPercentage",
+                "interestedPercentage", "notReachedPercentage", "optedOutPercentage", "outOfOfficePercentage",
+                "bouncedPercentage", "autoRepliedPercentage", "meetingsBookedPercentage"),
+            ["linkedInOverview"] = Overview(
+                "connectionsSent", "connectionsAccepted", "messagesSent", "replied", "inMailsSent", "inMailsReplied",
+                "connectionNotesSent", "connectionNotesReplied", "profileViews", "likes", "follows", "endorses", "comments",
+                "regularMessagesSent", "regularMessagesReplied", "connectionsAcceptedPercentage", "repliedPercentage",
+                "inMailsRepliedPercentage", "connectionNotesRepliedPercentage", "regularMessagesRepliedPercentage"),
+        });
+    }
+
+    /// <summary>
+    /// The inbox threads a filter matches, the one that moved last first, each in the list's lighter shape: the whole
+    /// party Reply holds — address, phone, profile URL, company and title — and no message history. A contact
+    /// identifier this account does not hold is Reply's validation problem, a 400 with no code of its own, as a live
+    /// account answered it; a field the filter does not define is one too.
+    /// </summary>
+    private static (int, JsonNode?) FilterThreads(string root, string query, string? body)
+    {
+        if (Request(body) is not { } filter)
+        {
+            return Invalid("/", "A JSON object is required.");
+        }
+
+        string[] known = ["contactIds", "sequenceIds", "source", "from", "to", "channels", "search"];
+        if (filter.FirstOrDefault(member => !known.Contains(member.Key)) is { Key: { } stray })
+        {
+            return Invalid("/" + stray, "Field is not recognized.");
+        }
+
+        var contacts = Read(root, ContactsFile);
+        var people = Identifiers(body, "contactIds");
+        if (people is not null && people.FirstOrDefault(person => Find(contacts, person) is null) is var missing and > 0)
+        {
+            return Invalid("/contactIds", $"Contact {missing} was not found.");
+        }
+
+        var sequences = Identifiers(body, "sequenceIds");
+        var source = Text(filter, "source");
+        var since = DateTimeOffset.TryParse(Text(filter, "from"), CultureInfo.InvariantCulture, DateTimeStyles.None, out var from)
+            ? from
+            : DateTimeOffset.MinValue;
+
+        var matched = Records(root, ThreadsFile)
+            .Where(thread => people is null || (thread["contact"]?["id"] is JsonValue id && people.Contains(id.GetValue<int>())))
+            .Where(thread => sequences is null || (thread["sequence"]?["id"] is JsonValue sequence && sequences.Contains(sequence.GetValue<int>())))
+            .Where(thread => source != "inbox" || (thread["messages"] as JsonArray ?? []).Any(message => message?["isOutbound"] is JsonValue outbound && !outbound.GetValue<bool>()))
+            .Where(thread => LastActivity(thread) >= since)
+            .OrderByDescending(LastActivity)
+            .Select(thread => (JsonNode)Listed(thread))
+            .ToList();
+
+        var skip = Count(query, "skip") ?? 0;
+        var top = Count(query, "top") ?? 25;
+        var page = new JsonArray([.. matched.Skip(skip).Take(top).Select(thread => thread!.DeepClone())]);
+        return (200, new JsonObject { ["items"] = page, ["hasMore"] = matched.Count > skip + page.Count });
+    }
+
+    /// <summary>
+    /// One thread in full, as Reply answers it: no subject of its own, the drafted answer if there is one, and the
+    /// whole message history inline — which is what makes a long thread's answer long whatever page is asked for.
+    /// </summary>
+    private static (int, JsonNode?) InboxThread(string root, string threadId)
+    {
+        if (Find(root, ThreadsFile, threadId) is not { } thread)
+        {
+            return (404, Problem(404, "Not Found", "inboxThread.notFound", $"This account holds no thread {threadId}."));
+        }
+
+        var whole = new JsonObject();
+        foreach (var name in new[] { "id", "channel", "isRead", "contact", "emailAccountId", "linkedInAccountId", "sequence", "messages", "aiDraft", "category", "hasMeetingIntent" })
+        {
+            if (thread.TryGetPropertyValue(name, out var value))
+            {
+                whole[name] = value?.DeepClone();
+            }
+        }
+
+        return (200, whole);
+    }
+
+    /// <summary>One page of a thread's messages, the first sent first, paged with <c>top</c> and <c>skip</c>.</summary>
+    private static (int, JsonNode?) ThreadMessages(string root, string threadId, string query)
+    {
+        if (Find(root, ThreadsFile, threadId) is not { } thread)
+        {
+            return (404, Problem(404, "Not Found", "inboxThread.notFound", $"This account holds no thread {threadId}."));
+        }
+
+        var messages = thread["messages"] as JsonArray ?? [];
+        var skip = Count(query, "skip") ?? 0;
+        var top = Count(query, "top") ?? 25;
+        var page = new JsonArray([.. messages.Skip(skip).Take(top).Select(entry => entry!.DeepClone())]);
+        return (200, new JsonObject { ["items"] = page, ["hasMore"] = messages.Count > skip + page.Count });
+    }
+
+    private static DateTimeOffset LastActivity(JsonObject thread) =>
+        DateTimeOffset.TryParse(Text(thread, "lastActivityDate"), CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)
+            ? at
+            : DateTimeOffset.MinValue;
+
+    /// <summary>A thread as the list and the filter answer it: everything but the history, the draft and the accounts.</summary>
+    private static JsonObject Listed(JsonObject thread)
+    {
+        var listed = new JsonObject();
+        foreach (var name in new[] { "id", "channel", "isRead", "subject", "bodyPreview", "lastActivityDate", "isLastMessagePlanned", "contact", "sequence", "category", "hasMeetingIntent", "status" })
+        {
+            if (thread.TryGetPropertyValue(name, out var value))
+            {
+                listed[name] = value?.DeepClone();
+            }
+        }
+
+        return listed;
+    }
+
+    private static JsonObject Overview(params string[] names)
+    {
+        var overview = new JsonObject();
+        foreach (var name in names)
+        {
+            overview[name] = 0;
+        }
+
+        return overview;
+    }
+
+    /// <summary>When a person was added, for the order the list answers in; one planted without a date sorts last.</summary>
+    private static DateTimeOffset Added(JsonObject enrollment) =>
+        DateTimeOffset.TryParse(Text(enrollment, "addingDate"), CultureInfo.InvariantCulture, DateTimeStyles.None, out var added)
+            ? added
+            : DateTimeOffset.MinValue;
+
+    private static JsonObject Member(JsonObject enrollment, JsonObject? contact, HashSet<int> suppressed)
+    {
+        var contactId = enrollment["contactId"]!.GetValue<int>();
+        JsonNode step = enrollment["currentStep"] switch
+        {
+            JsonObject planted => planted.DeepClone(),
+            JsonValue number when number.TryGetValue<int>(out var position) =>
+                new JsonObject { ["stepId"] = 9900 + position, ["displayName"] = position.ToString(CultureInfo.InvariantCulture) },
+            _ => new JsonObject { ["stepId"] = null, ["displayName"] = "Finished" },
+        };
+
+        return new JsonObject
+        {
+            ["contactId"] = contactId,
+            ["sequenceId"] = enrollment["sequenceId"]!.GetValue<int>(),
+            ["email"] = contact?["email"]?.DeepClone(),
+            ["firstName"] = contact?["firstName"]?.DeepClone(),
+            ["lastName"] = contact?["lastName"]?.DeepClone() ?? JsonValue.Create(string.Empty),
+            ["company"] = contact?["company"]?.DeepClone(),
+            ["title"] = contact?["title"]?.DeepClone(),
+            ["statusInSequence"] = Text(enrollment, "statusInSequence"),
+            ["currentStep"] = step,
+            ["addingDate"] = enrollment["addingDate"]?.DeepClone() ?? JsonValue.Create("2026-10-02T09:15:42.17+03:00"),
+            ["isOptedOut"] = suppressed.Contains(contactId),
+            ["callStatus"] = contact?["callStatus"]?.DeepClone() ?? JsonValue.Create("none"),
+            ["meetingStatus"] = contact?["meetingStatus"]?.DeepClone() ?? JsonValue.Create("none"),
+            ["emailDisposition"] = enrollment["emailDisposition"]?.DeepClone(),
+            ["emailAccountId"] = 77,
+            ["linkedInAccountId"] = null,
+        };
     }
 
     private static (int, JsonNode?) Enroll(string root, string sequenceId, string? body)

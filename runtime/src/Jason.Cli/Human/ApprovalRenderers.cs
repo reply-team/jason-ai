@@ -50,6 +50,14 @@ public static class ApprovalRenderers
 
         var preview = approval.Preview;
         var text = new StringBuilder();
+
+        // The one line the operation's own template renders, where it declares one: what would be done, to whom
+        // and how, read before the properties it is drawn from. A preview without one prints as it always did.
+        if ((string?)preview?["summary"] is { Length: > 0 } summary)
+        {
+            text.AppendLine(Line("Summary:", summary));
+        }
+
         text.AppendLine(Line("Operation:", approval.Operation));
         text.AppendLine(Line("Intent:", (string?)preview?["intent"]));
         text.AppendLine(Line("Reach:", Property(preview?["reach"])));

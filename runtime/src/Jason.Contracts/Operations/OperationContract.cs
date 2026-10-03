@@ -25,6 +25,8 @@ public sealed record OperationContract(
     ContractProperty Approval,
     string? ApprovalArtefact,
     bool ApprovalDeparts,
+    bool ProtectiveFloor,
+    string? ApprovalReason,
     ContractProperty BeforeRepeating,
     ContractProperty IdempotencyKey,
     ContractProperty PerItemResults,
@@ -36,6 +38,7 @@ public sealed record OperationContract(
     Preflight Preflight,
     ContactProjection? ContactProjection,
     string Precondition,
+    OperationPreview? Preview,
     JsonObject InputSchema,
     JsonObject OutputSchema,
     IReadOnlyDictionary<string, ExternalIdKind> ExternalIds,
@@ -71,6 +74,8 @@ public sealed record OperationContract(
             reader.Property("approval"),
             reader.OptionalText("approval_artefact"),
             reader.Flag("approval_departs"),
+            reader.Flag("protective_floor"),
+            reader.OptionalText("approval_reason"),
             reader.Property("before_repeating"),
             reader.Property("idempotency_key"),
             reader.Property("per_item_results"),
@@ -82,6 +87,7 @@ public sealed record OperationContract(
             ReadPreflight(reader.Object("preflight"), reader),
             ReadProjection(reader.OptionalObject("contact_projection"), reader),
             reader.Text("precondition"),
+            ReadPreview(reader.OptionalObject("preview"), reader),
             reader.Object("input_schema"),
             reader.Object("output_schema"),
             ReadExternalIds(reader.Object("external_ids"), reader),
@@ -92,7 +98,50 @@ public sealed record OperationContract(
             reader.TextList("conformance"));
 
         reader.RefuseAnythingElse();
+        RefuseUnpairedChannels(source, contract);
+        RefuseUnaddressablePreview(source, contract);
         return contract;
+    }
+
+    /// <summary>
+    /// Every pointer a preview renders or highlights has to be one the input schema can hold, or a misspelling would
+    /// render a dash in front of a person deciding. The walk reads plain <c>properties</c> and <c>items</c>; what lies
+    /// behind a reference or a combinator is proven by the preview fixtures instead.
+    /// </summary>
+    private static void RefuseUnaddressablePreview(string source, OperationContract contract)
+    {
+        if (contract.Preview is not { } preview)
+        {
+            return;
+        }
+
+        foreach (var pointer in preview.Summary.Pointers.Concat(preview.Highlights))
+        {
+            if (PreviewPointer.Parse(pointer).Unaddressable(contract.InputSchema) is { } reason)
+            {
+                throw new InvalidOperationException($"{source}: the preview's `{pointer}` names nothing the composed input can hold: {reason}.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// A channel taken from the arguments is one of the contact's channels, and the plugin consumes exactly that
+    /// one. So an operation that may run without a contact has nothing to take a channel from, and a projection
+    /// that consumes a channel while the arguments name none would hand the plugin a channel nobody chose.
+    /// </summary>
+    private static void RefuseUnpairedChannels(string source, OperationContract contract)
+    {
+        if (contract.Preflight.Contact == ContactRequirement.Optional && contract.Preflight.Channel == ChannelRequirement.FromArgs)
+        {
+            throw new InvalidOperationException(
+                $"{source}: `preflight.contact` is `optional` and `preflight.channel` is `from_args`, but a channel is the contact's own, and an operation that may run without a contact has nothing to take it from.");
+        }
+
+        if (contract.ContactProjection?.Channels == "consumed" && contract.Preflight.Channel != ChannelRequirement.FromArgs)
+        {
+            throw new InvalidOperationException(
+                $"{source}: `contact_projection.channels` is `consumed`, but only a channel named by the arguments is consumed, and `preflight.channel` is not `from_args`.");
+        }
     }
 
     private static readonly IReadOnlyDictionary<string, RepeatAfterAmbiguous> RepeatAfterAmbiguousNames =
@@ -108,7 +157,11 @@ public sealed record OperationContract(
         {
             ["required"] = ContactRequirement.Required,
             ["not_used"] = ContactRequirement.NotUsed,
+            ["optional"] = ContactRequirement.Optional,
         };
+
+    /// <summary>Whether the plugin receives the channel the arguments name, or none of the person's channels.</summary>
+    private static readonly IReadOnlyList<string> ProjectedChannelsNames = ["consumed", "none"];
 
     private static readonly IReadOnlyDictionary<string, ChannelRequirement> ChannelRequirementNames =
         new Dictionary<string, ChannelRequirement>(StringComparer.Ordinal)
@@ -159,9 +212,52 @@ public sealed record OperationContract(
         }
 
         var reader = outer.Into("contact_projection", projection);
-        var value = new ContactProjection(reader.TextList("fields"), reader.Text("channels"));
+        var value = new ContactProjection(reader.TextList("fields"), reader.Word("channels", ProjectedChannelsNames));
         reader.RefuseAnythingElse();
         return value;
+    }
+
+    private static OperationPreview? ReadPreview(JsonObject? preview, DocumentReader outer)
+    {
+        if (preview is null)
+        {
+            return null;
+        }
+
+        var reader = outer.Into("preview", preview);
+        var summary = reader.Text("summary");
+        var highlights = reader.TextList("highlights");
+        reader.RefuseAnythingElse();
+
+        PreviewTemplate template;
+        try
+        {
+            template = PreviewTemplate.Parse(summary);
+        }
+        catch (FormatException error)
+        {
+            throw outer.Problem($"`preview.summary` is text with `{{/pointer}}` placeholders and nothing else: {error.Message}");
+        }
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var highlight in highlights)
+        {
+            try
+            {
+                PreviewPointer.Parse(highlight);
+            }
+            catch (FormatException error)
+            {
+                throw outer.Problem($"`preview.highlights` lists JSON pointers into the composed input: {error.Message}");
+            }
+
+            if (!seen.Add(highlight))
+            {
+                throw outer.Problem($"`preview.highlights` names `{highlight}` twice.");
+            }
+        }
+
+        return new OperationPreview(template, highlights);
     }
 
     private static RecoveryRead? ReadRecoveryRead(JsonObject? recoveryRead, DocumentReader outer)
@@ -286,6 +382,14 @@ public sealed record OperationContract(
             return values;
         }
 
+        public string Word(string name, IReadOnlyList<string> vocabulary)
+        {
+            var text = Text(name);
+            return vocabulary.Contains(text, StringComparer.Ordinal)
+                ? text
+                : throw Problem($"`{Named(name)}` is one of {string.Join(", ", vocabulary)}, and `{text}` is none of them.");
+        }
+
         public TValue Enumeration<TValue>(string name, IReadOnlyDictionary<string, TValue> vocabulary)
             where TValue : struct, Enum
         {
@@ -346,9 +450,32 @@ public sealed record Preflight(ContactRequirement Contact, ChannelRequirement Ch
 
 /// <summary>
 /// The contact fields an operation consumes. Declaring the projection is what makes widening it a visible change
-/// rather than a plugin quietly receiving more of a person than the work needed.
+/// rather than a plugin quietly receiving more of a person than the work needed. <c>Channels</c> is
+/// <c>consumed</c>, the one channel the arguments name, or <c>none</c>.
 /// </summary>
 public sealed record ContactProjection(IReadOnlyList<string> Fields, string Channels);
+
+/// <summary>
+/// What a person deciding on this operation reads first: one line rendered from the composed input, and the values
+/// in that input it singles out. Null for an operation nobody is asked to decide on.
+/// </summary>
+public sealed record OperationPreview(PreviewTemplate Summary, IReadOnlyList<string> Highlights)
+{
+    /// <summary>
+    /// Each highlighted pointer and a copy of the value the composed input holds there, in the order the document
+    /// lists them; a pointer that resolves to nothing carries null.
+    /// </summary>
+    public JsonObject Highlight(JsonNode? input)
+    {
+        var values = new JsonObject();
+        foreach (var pointer in Highlights)
+        {
+            values[pointer] = PreviewPointer.Parse(pointer).Resolve(input)?.DeepClone();
+        }
+
+        return values;
+    }
+}
 
 /// <summary>One kind of provider identifier this operation may return, and what it identifies.</summary>
 public sealed record ExternalIdKind(PinnedEntity Entity, string Description);
@@ -380,6 +507,12 @@ public enum ContactRequirement
 {
     Required,
     NotUsed,
+
+    /// <summary>
+    /// The operation takes the work item's contact when the item names one and runs without it when it does not:
+    /// a read about one person, or about the whole campaign.
+    /// </summary>
+    Optional,
 }
 
 /// <summary>Where the channel the operation acts on comes from.</summary>

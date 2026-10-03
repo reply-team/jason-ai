@@ -40,6 +40,8 @@ public sealed class ReplyAccount : IDisposable
     public const string SequencesFile = "sequences.json";
     public const string EnrollmentsFile = "enrollments.json";
     public const string OptOutsFile = "optouts.json";
+    public const string StatsFile = "stats.json";
+    public const string ThreadsFile = "threads.json";
     public const string InstructionsFile = "instructions.json";
     public const string CredentialFile = "credential.json";
 
@@ -112,14 +114,23 @@ public sealed class ReplyAccount : IDisposable
     // -------------------------------------------------------------------------------------------------------
 
     /// <summary>A person this account already holds. Identifiers are integers, as Reply's are.</summary>
-    public ReplyAccount WithContact(int id, string email, string? firstName = null, bool optedOut = false)
+    public ReplyAccount WithContact(
+        int id,
+        string email,
+        string? firstName = null,
+        bool optedOut = false,
+        string? lastName = null,
+        string? company = null,
+        string? title = null)
     {
         Replace(ContactsFile, id, new JsonObject
         {
             ["id"] = id,
             ["email"] = email,
             ["firstName"] = firstName,
-            ["lastName"] = null,
+            ["lastName"] = lastName,
+            ["company"] = company,
+            ["title"] = title,
             ["callStatus"] = "none",
             ["meetingStatus"] = "none",
         });
@@ -223,7 +234,18 @@ public sealed class ReplyAccount : IDisposable
         });
     }
 
-    public ReplyAccount WithEnrollment(int sequence, int contact, string statusInSequence = "active")
+    /// <summary>
+    /// A person taking part in a sequence. The date added, the step and what the last email met are optional, as a
+    /// test plants them: Reply always answers a date and a step, and the stand-in fills in the ones left out.
+    /// </summary>
+    public ReplyAccount WithEnrollment(
+        int sequence,
+        int contact,
+        string statusInSequence = "active",
+        string? addedAt = null,
+        int? stepId = null,
+        string? stepName = null,
+        (bool Replied, bool Bounced)? disposition = null)
     {
         var enrollments = ReadArray(EnrollmentsFile);
         foreach (var existing in enrollments.ToList())
@@ -234,16 +256,71 @@ public sealed class ReplyAccount : IDisposable
             }
         }
 
-        enrollments.Add(new JsonObject
+        var enrollment = new JsonObject
         {
             ["sequenceId"] = sequence,
             ["contactId"] = contact,
             ["statusInSequence"] = statusInSequence,
-            ["currentStep"] = 1,
-        });
+            ["currentStep"] = stepId is null && stepName is null
+                ? 1
+                : new JsonObject { ["stepId"] = stepId, ["displayName"] = stepName },
+        };
+
+        if (addedAt is not null)
+        {
+            enrollment["addingDate"] = addedAt;
+        }
+
+        if (disposition is { } met)
+        {
+            enrollment["emailDisposition"] = new JsonObject { ["isReplied"] = met.Replied, ["isBounced"] = met.Bounced };
+        }
+
+        enrollments.Add(enrollment);
 
         Write(EnrollmentsFile, enrollments);
         return this;
+    }
+
+    /// <summary>
+    /// What the account answers a sequence's statistics with, overview by overview, whatever the window. A null
+    /// overview is left out of the answer, which is how a provider that reports one channel only is planted.
+    /// </summary>
+    public ReplyAccount WithStats(int sequence, JsonObject? emailOverview, JsonObject? linkedInOverview)
+    {
+        var stats = ReadArray(StatsFile);
+        foreach (var existing in stats.ToList())
+        {
+            if (existing!["sequenceId"]!.GetValue<int>() == sequence)
+            {
+                stats.Remove(existing);
+            }
+        }
+
+        var entry = new JsonObject { ["sequenceId"] = sequence };
+        if (emailOverview is not null)
+        {
+            entry["emailOverview"] = emailOverview;
+        }
+
+        if (linkedInOverview is not null)
+        {
+            entry["linkedInOverview"] = linkedInOverview;
+        }
+
+        stats.Add(entry);
+        Write(StatsFile, stats);
+        return this;
+    }
+
+    /// <summary>
+    /// An inbox thread, written as Reply holds it: the list's fields, the party with everything Reply knows of them,
+    /// and the whole message history inline. The test builds the object, because the shapes are the point.
+    /// </summary>
+    public ReplyAccount WithThread(JsonObject thread)
+    {
+        ArgumentNullException.ThrowIfNull(thread);
+        return Replace(ThreadsFile, thread["id"]!.GetValue<int>(), thread);
     }
 
     // -------------------------------------------------------------------------------------------------------

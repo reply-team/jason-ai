@@ -15,9 +15,10 @@ build, because every skill's do.
 
 ## What this build gives you, and what it does not
 
-**There is no metrics store in this build.** No open, click, reply or delivery is recorded anywhere, so any
-number about them would be invented. What you do have is three things, and it is worth saying which one each of
-your statements came from:
+**There is no metrics store in this build.** Jason records no open, click, reply or delivery of its own; the
+provider's counts reach it only as the result of a `provider_op` item naming `engagement.summarize`, with the
+envelope that says what each number counts. Any other number about them would be invented. What you do have is
+three things, and it is worth saying which one each of your statements came from:
 
 ```
 jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status failed

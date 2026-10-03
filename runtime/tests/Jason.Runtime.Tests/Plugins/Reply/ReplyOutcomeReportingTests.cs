@@ -82,7 +82,7 @@ public class ReplyOutcomeReportingTests
 
     private static InvocationProvenance Provenance { get; } = new(
         "reply",
-        "0.1.0",
+        "0.2.0-dev",
         "sha256:0000000000000000000000000000000000000000000000000000000000000000",
         ProtocolVersion: 1,
         OperationContractVersion: 1,

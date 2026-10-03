@@ -58,6 +58,29 @@ public class WorkItemCommandsTests
                 + "\"context\":{\"icp\":\"founders\"},\"result_format\":{\"type\":\"object\"},\"reason\":\"the plan asks for it\",\"actor\":{\"type\":\"role\",\"id\":\"planner\"}}");
     }
 
+    /// <summary>
+    /// Two namespaces use the same kind of words: the canonical operations a provider performs, and the verbs a
+    /// person types at Jason. The help for <c>--operation</c> says which one it takes, so `campaign.get` is never
+    /// mistaken for `jason campaign get`.
+    /// </summary>
+    [Fact]
+    public async Task The_operation_option_says_it_takes_a_canonical_operation_and_not_a_jason_verb()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        var exit = await CliApp.RunAsync(
+            ["workitem", "create", "--help"],
+            new CliEnvironment(output, new StringWriter(), dir.Paths),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains(
+            "The canonical operation to perform, for a provider_op item: one of those under docs/contracts/operations, not a Jason verb.",
+            string.Join(' ', output.ToString().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)),
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Create_carries_an_operation_for_a_provider_item()
     {

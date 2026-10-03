@@ -1,0 +1,16 @@
+{
+  "operation": "conversation.list",
+  "version": 1,
+  "case": "a person the provider has never been told about: the input is well formed, and the plugin answers contact_not_linked without calling",
+  "input": {
+    "args": { "limit": 20, "offset": 0, "source": "all" },
+    "contacts": [{ "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", "external_ids": {} }],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": {}
+    }
+  },
+  "expect": "valid"
+}

@@ -1,6 +1,6 @@
 # Divergence from the vendor-neutral operations contract
 
-The three operations Jason publishes are seeded from a vendor-neutral contract of SDR business operations,
+The operations Jason publishes are seeded from a vendor-neutral contract of SDR business operations,
 published as an open skill pack at contract version **2.0.0** — the first level, the business layer that sits above
 any provider, which is what the `l1` field in each document and the `l1` in this file's name refer to. Jason implements a strict subset of it, and adds
 fields of its own about execution. This is the list of every place the two differ.
@@ -30,6 +30,23 @@ travels through this repository's issues: an issue per row, not a private note.
 | `contact_projection` | Not present | Jason declares exactly which contact fields and which channels reach a plugin | A plugin should receive what the operation consumes, not a person's whole record; declaring it makes widening it visible | No — an execution concern |
 | `repeat_after_ambiguous` and `recovery_read` | `before_repeating` names what to observe before running an operation again | Jason turns that observation into a rule a runtime can execute, and states the money argument for it | A dispatcher cannot read prose. The contract's sentence is the reason; this is the rule | No — an execution concern |
 | `preflight`, `failure_codes`, `timeout_ms`, `conformance` | Not present | Jason's own fields | All four are about running the operation rather than defining it | No |
+| Paging | Not defined; `conversation.list` says "page with the returned cursor" | `limit` and `offset`, both required, with `has_more`. A page may come back short with `has_more: true` before the result would pass 768 KiB, and the next page starts at `offset` plus the items returned | The providers mapped first page by offset, and a short page is the only way a page of long text fits what the runtime accepts as one result | **Yes** — say how a page is asked for and continued |
+| `enrollment.list` from the person's end | One read from either end: "who is in this campaign?" and "where is this person across everything?" | The campaign's end only | The person's end is a different provider call with a different shape; it is cheap to add later as an operation of its own | No — a restriction |
+| `enrollment.list` status filter | Not stated | No status filter; every person carries a status | A filter applied after reading would break `offset` plus the items returned, because the provider's offset counts the unfiltered list | No — a restriction |
+| `engagement.summarize` grouping | "grouped the way the question actually needs" | `group_by: "channel"`, the one grouping, stated by the caller | One grouping every provider can answer, named rather than inherited; another is additive | No — a restriction |
+| Basis and denominator | Two runs are only the same number if as-of, window, basis, denominator and detection method all match; their values are not named | `basis: provider_reported`, `detection: provider`, and `denominator: unknown` unless the provider names it; `as_of` is the plugin's clock when it asked | The provider counted, and names neither the denominator of its rates nor the moment of its counts, so the envelope says so rather than inventing either | **Yes** — name the vocabularies of basis, denominator and detection |
+| Rates | Not stated whether a summary returns rates | Counts only, from a closed list; a rate is never returned, and a count the provider reports beyond the list is not returned in this version | A rate is two counts and a denominator, and the denominator is exactly what is unknown. Adding a measure later is additive | **Yes** — name the measure vocabulary |
+| `conversation.list` order | "ordered by what is most overdue" | The provider's own order, the thread that moved last first, stated in `vendor.ordering` | What is most overdue is a judgement over a thread, not something a provider sorts by | **Yes** |
+| A thread's classification | "filterable by meaning" | Not read: the provider's category travels under `vendor`, untranslated | No neutral classification vocabulary exists yet, and a guessed one would have a planner reason over a word nobody defined | **Yes** |
+| `conversation.list` filters | "filterable by meaning, channel, owner, campaign and how long each has been waiting" | A person or a campaign, `since`, and replies only or everything | Meaning is the classification row above; channel, owner and waiting time are filters this version does not take yet, and adding one is additive | No — a restriction |
+| `enrollment.list` historical participations | "with historical participations included on request" | The participations the provider still lists, finished ones included; one it no longer lists is not served | The provider answers who a sequence holds now; a participation that ended and was removed is a different read | No — a restriction |
+| `conversation.list` unread-only filter | Not stated | No unread-only filter; every thread carries `unread` | The same reason as `enrollment.list`'s status filter: a filter after reading breaks the page | No — a restriction |
+| `enrollment.list` step | Not stated | `current_step` is the provider's own label for the step, a string, never a number | Providers number steps differently, and some do not number them at all; a label is what they all have | **Yes** — say what a position in a campaign is |
+| A thread's person | Not stated | `{external_id, name}`: the provider's identifier, null once it holds the person no longer, and the name it shows — never an address | A list of threads says who each one is with, not how to reach them. The addresses on a thread's own messages come back from `conversation.get`, which reads that one thread, rather than being copied into every page of the list | **Yes** |
+| `feature_unavailable` and `contact_not_linked` | No words for either | `feature_unavailable` (permanent): the account's plan or role does not include the capability. `contact_not_linked` (permanent): no provider identifier is pinned for the person, and a read creates nobody | `unauthorized`'s remedy, signing in again, would misdescribe a plan's limit; and a read must not create the person it was asked about | **Yes** — the catalogue lacks both words |
+| `provider_answer_too_large` | No word for it | Permanent, on every read: the provider's answer was larger than the plugin may read from a program, so it was cut off | Asking again would be cut at the same place; reading it as a missing answer would repeat it until the attempts ran out | **Yes** |
+| `per_item_results` written plainly | `engagement.summarize` writes `{value: required, detail: "one row per group, each with its own envelope."}` — a detail beside a plain value, with no `conditional`, as it does in 15 places | Written plainly as `required`; the detail is on the operation's page | Jason's loader reads a block only when it is conditional, because a block is how a document says its value has a condition; this one has none | **Yes** — say whether a detail beside a plain value is part of the contract |
+| `accepts_collection` on the reads | Not stated; the stated default is `true` | `false` on the four reads, as on `campaign.get` | Each read names one campaign, one person or one thread; the default contradicts that | **Yes** — as for `campaign.get` |
 | Spelling | British spelling in the source (`enrolment`) | American spelling in identifiers and prose (`enrollment`, `enroll`) | This repository is written in American English throughout | No — not a divergence, recorded so nobody "fixes" it |
 
 ## Known gaps of these documents
@@ -51,8 +68,8 @@ repair the situation: the repair is to drop the pin and match the person again �
 is deliberately not in this increment. Until it exists, an identifier that stops resolving turns every
 later operation on that person into a failure a plugin can name and a human has to resolve.
 
-**A call that never became work has a word too.** `provider_call_failed`, permanent, on all three
-operations: the vendor tool refused the call or never started, so nothing the operation asks for was
+**A call that never became work has a word too.** `provider_call_failed`, permanent, on every
+published operation: the vendor tool refused the call or never started, so nothing the operation asks for was
 attempted and repeating it runs the same broken call. It is deliberately apart from
 `provider_unavailable`, which is transient and means the provider was reachable enough to say "not
 now".

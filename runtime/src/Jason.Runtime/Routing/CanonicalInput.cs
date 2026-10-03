@@ -52,7 +52,9 @@ public static class CanonicalInput
 
         var input = new JsonObject { ["args"] = Arguments(facts.Item) };
 
-        if (contract.Preflight.Contact == ContactRequirement.Required && facts.Contact is { } contact)
+        // A required contact is always here by the time anything is composed — the pre-flight refused the item
+        // otherwise — and an optional one travels exactly when the work item names somebody.
+        if (contract.Preflight.Contact != ContactRequirement.NotUsed && facts.Contact is { } contact)
         {
             input["contacts"] = new JsonArray(Person(contract, contact, facts.ContactPins, ConsumedChannel(contract, facts.Item)));
         }

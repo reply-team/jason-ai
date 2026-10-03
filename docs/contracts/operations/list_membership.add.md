@@ -88,6 +88,7 @@ contact creation it implies may be metered, and a second contact is a merge nobo
 | `reach` | `control` | — |
 | `reversibility` | `reversible` | — |
 | `approval` | `auto` | — |
+| `protective_floor` | `false` | — |
 | `before_repeating` | current membership for these people, and the per-item ledger under this key. | — |
 | `idempotency_key` | `required` | — |
 | `per_item_results` | `required` | — |
@@ -98,6 +99,7 @@ contact creation it implies may be metered, and a second contact is a merge nobo
 | pre-flight | contact `required`, channel `from_args` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | Ensure the provider's own contact exists before adding it: work by `contacts[0].external_ids.contact` when that pin is present, otherwise create the contact from the value of the channel named by `args.channel`, and return the provider's identifier under `external_ids.contact`. |
+| preview a person reads | none |
 | pinned identifiers | `contact` names a contact |
 | recovery read | The membership of the pinned contact in the list named by `args.list.external_id`, and the ledger entry under this idempotency key. |
 | after an ambiguous end | `after_recovery_read` — a later attempt performs the recovery read above and answers from it when the effect already happened |

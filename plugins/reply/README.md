@@ -5,13 +5,17 @@ Reply CLI.
 
 ## What it does
 
-Three operations — the whole set this build publishes:
+Seven operations — the whole set this build publishes: two that act and five that only read.
 
 | Operation | What it is at Reply |
 |---|---|
 | `campaign.get` | Reads one sequence: its name, its state, and Reply's own words for both. |
 | `list_membership.add` | Puts one person on one of the account's contact lists. |
 | `campaign.enroll` | Puts one person into a sequence. Into a live sequence, that is a send. |
+| `enrollment.list` | Reads one page of the people a sequence holds, and Reply's count of them. No address is returned. |
+| `engagement.summarize` | Reads a sequence's counts over one window, a row per channel. Counts only: no rate is returned. |
+| `conversation.list` | Reads one page of inbox threads: one person's across the account, or one sequence's. A person is their identifier and the name Reply shows, never an address. |
+| `conversation.get` | Reads one page of one thread's messages, the first sent first: who wrote each, to whom, and the body as Reply holds it. |
 
 A campaign is a **sequence** at Reply and a person is a **contact**; every call is made by starting the
 Reply CLI — `reply api <path>` — with the request body on its standard input.
@@ -58,6 +62,9 @@ cp -r plugins/reply ~/.jason/plugins/reply
 ```sh
 reply auth login
 ```
+
+In Windows PowerShell, type `reply.cmd auth login`: its default execution policy refuses the `reply.ps1`
+that npm installs beside the command. PowerShell 7 and Command Prompt take `reply auth login` as written.
 
 **3. Grant the program**, in `~/.jason/config/settings.json`. A manifest that requests an executable is
 not permission to start it, and without the grant every call fails at `host.exec`:
@@ -163,6 +170,12 @@ creates people.
 |---|---|---|
 | `GET /v3/sequences/{id}` | read | The sequence itself: what `campaign.get` answers from, and the live-state read before an enrollment. |
 | `GET /v3/sequences/{id}/contacts/{contact_id}` | read | Whether this person already takes part: `campaign.enroll`'s first recovery read. |
+| `GET /v3/sequences/{id}/contacts` | read | One page of the people a sequence holds: what `enrollment.list` answers from. |
+| `GET /v3/sequences/{id}/contacts/count` | read | How many people the sequence holds: `enrollment.list`'s total. |
+| `POST /v3/sequences/{id}/stats` | read | A sequence's counts over one window: what `engagement.summarize` answers from. A `POST` that changes nothing. |
+| `POST /v3/inbox/threads/filter` | read | One page of inbox threads, by person or by sequence: what `conversation.list` answers from. A `POST` that changes nothing. |
+| `GET /v3/inbox/threads/{id}` | read | One thread with its whole history: `conversation.get`'s header. |
+| `GET /v3/inbox/threads/{id}/messages` | read | One page of a thread's messages: what `conversation.get` answers from. |
 | `GET /v3/contacts/{id}/statuses` | read | The opt-out register, and by the same call whether a pin still resolves. |
 | `POST /v3/contacts/filter` | read | The people one list holds, a page of them: `list_membership.add`'s recovery read. |
 | `POST /v3/contacts/import` | write | Matches or creates the contact by email, in one call. |
@@ -176,8 +189,8 @@ creates people.
 |---|---|---|---|
 | The CLI could not be started at all, so nothing was sent. | `provider_call_failed` | permanent | Install the CLI where the runtime can find it, check that the grant names it, reload. |
 | The CLI refused the call before making it — its own usage error. | `provider_call_failed` | permanent | Nothing reached the account and a repeat builds the same call. Report it: either this package or the CLI's surface has moved. |
-| A **read** timed out, answered 5xx, or exited with nothing that could be parsed. | `provider_unavailable` | transient | Nothing. The call changed nothing, so the attempt is repeated. |
-| A **write** timed out, answered 5xx, or exited with nothing that could be parsed. | `provider_answer_lost` | ambiguous | The item stops for a person. Look at the account — the contact, the list, the sequence — and decide; a blind repeat can create somebody twice or send to them twice. Whatever the attempt had learned travels with the failure, so there are identifiers to look by. |
+| A **read** timed out, answered 5xx, or exited with nothing that could be parsed — or, made inside a write, was cut off at `Plugins:Exec:OutputBytes`. | `provider_unavailable` | transient | Nothing. The call changed nothing, so the attempt is repeated. |
+| A **write** timed out, answered 5xx, exited with nothing that could be parsed, or its answer was cut off at `Plugins:Exec:OutputBytes`. | `provider_answer_lost` | ambiguous | The item stops for a person. Look at the account — the contact, the list, the sequence — and decide; a blind repeat can create somebody twice or send to them twice. Whatever the attempt had learned travels with the failure, so there are identifiers to look by. |
 | 401 or 403, and the per-item word `forbidden` inside a 200. | `unauthorized` | permanent | Sign that profile in again, or issue a key carrying the scope the call needs. |
 | 429. | `rate_limited` | transient | Nothing. The runtime waits and repeats the attempt. |
 | Any other status, or a business code no row below names. | `provider_call_failed` | permanent | Read `details`: the status and Reply's own code are in it. Reply's per-item error set is published as an open one, so there will be some — and a refusal that recurs belongs in the table. |
@@ -187,8 +200,48 @@ creates people.
 | When | Code | Class | What to do about it |
 |---|---|---|---|
 | The identifier is not a Reply sequence number, or Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier the work item carries. A link the provider has denied is not recorded, so there is nothing to undo. |
+| Reply's answer was longer than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. | `provider_answer_too_large` | permanent | Raise `Plugins:Exec:OutputBytes`. The same read would be cut at the same place, so it is not repeated. |
 
 This operation is one read and nothing else, so the ambiguous ending above cannot arise for it.
+
+### `enrollment.list`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The identifier is not a Reply sequence number, or Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. |
+| Reply answers 403 with its own code `sequenceContact.forbidden`: the account's role may not read a sequence's people. | `feature_unavailable` | permanent | A role or a plan that includes it. Signing in again changes nothing. Any other 403 is `unauthorized` above. |
+| Reply's answer was longer than `Plugins:Exec:OutputBytes` lets a plugin read from a program, so it was cut off. | `provider_answer_too_large` | permanent | Ask for a smaller `limit`, or raise `Plugins:Exec:OutputBytes`. |
+
+A refusal of the count alone is not a failure: the page is answered and `total` is null.
+
+### `engagement.summarize`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The identifier is not a Reply sequence number, or Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier. |
+| Reply answers 403 with its own code `sequenceStats.forbidden`: the account's role may not read a sequence's statistics. | `feature_unavailable` | permanent | A role or a plan that includes it. Any other 403 is `unauthorized` above. |
+| Reply refuses the window — a 400 carrying `errors[]`, such as a span that ends before it starts. | `window_invalid` | validation | Correct `args.window`; the same window is refused every time. |
+| Reply's answer was longer than `Plugins:Exec:OutputBytes` lets a plugin read from a program. | `provider_answer_too_large` | permanent | Raise `Plugins:Exec:OutputBytes`. |
+
+### `conversation.list`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The work item names a person and no Reply contact identifier is pinned for them. Nothing is called. | `contact_not_linked` | permanent | A write that ensures the contact — `list_membership.add` or `campaign.enroll` — is what links them. A read creates nobody. |
+| The pinned contact identifier, or the campaign's, is not a Reply number at all. Nothing is called. | `provider_call_failed` | permanent | The pin is wrong; `details.reason` says which. |
+| Reply answers 403 with its own code `inboxThread.forbidden`: the inbox is not available to this user or team. | `feature_unavailable` | permanent | A plan or a role that includes the inbox. Any other 403 is `unauthorized` above. |
+| Reply's answer was longer than `Plugins:Exec:OutputBytes` lets a plugin read from a program. | `provider_answer_too_large` | permanent | Ask for a smaller `limit`, or raise `Plugins:Exec:OutputBytes`. |
+
+A person or a sequence with no threads is an empty page, not a failure. A contact identifier Reply does not hold is
+answered with a validation problem that names no code, so it arrives as the last shared row above.
+
+### `conversation.get`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The identifier is not a Reply thread number, or Reply holds no thread under it that this account may see. | `conversation_not_found` | permanent | Read the thread by an identifier `conversation.list` returned. |
+| Reply answers 403 with its own code `inboxThread.forbidden`. | `feature_unavailable` | permanent | A plan or a role that includes the inbox. Any other 403 is `unauthorized` above. |
+| Reply's answer was longer than `Plugins:Exec:OutputBytes` lets a plugin read from a program. Reply sends a thread's whole history with the thread, so a long enough history does this whatever page is asked for. | `provider_answer_too_large` | permanent | Raise `Plugins:Exec:OutputBytes`, up to about twice its default: past that, the two answers a thread read holds outgrow the package's memory. A smaller page cannot help. |
 
 ### `list_membership.add`
 
@@ -224,9 +277,10 @@ This operation is one read and nothing else, so the ambiguous ending above canno
   contract; the operation can also be driven through the plugin host by hand, which
   [docs/plugins.md](../../docs/plugins.md) §7 and §12 say how to do.
 - **`campaign.get` answers no counts.** `counts` is `{}`, which is the contract's way of saying the
-  provider reports none: a Reply sequence carries no people counts at all, and the one count endpoint in
-  the published description still says it is coming. An empty object is a different fact from a zero, and
-  the alternative was paging every contact in the sequence inside the operation's own budget.
+  provider reports none: a Reply sequence carries no people counts of its own, and the one count Reply
+  publishes beside it — `GET /v3/sequences/{id}/contacts/count`, which `enrollment.list` reads for its
+  `total` — counts everybody at once rather than by state. An empty object is a different fact from a zero,
+  and the alternative was paging every contact in the sequence inside the operation's own budget.
 - **A campaign name longer than 500 characters is truncated.** That is what the contract allows a name
   and Reply agrees to no limit, so the neutral half carries what it can hold and Reply's whole name
   survives beside it under `vendor.name`. Passing the longer one through unchanged would make the answer
@@ -283,6 +337,33 @@ This operation is one read and nothing else, so the ambiguous ending above canno
   That second path publishes no code for an address the account already holds, so a duplicate there is
   reported as `provider_call_failed` with Reply's own word in the details, rather than mapped to a code
   nobody published.
+
+- **The reads page by `limit` and `offset`, never by a cursor**, because Reply pages by `top` and `skip`. A
+  page may come back shorter than `limit` with `has_more: true`: the plugin stops before the result would
+  pass 768 KiB, counted as the runtime counts a result, so the next page starts at `offset` plus what came
+  back. That is the documents' own paging rule, and nothing about it is Reply's.
+- **`enrollment.list` reads from the campaign's end only.** "Where is this person across everything?" is
+  the same read from the person's end, and this version does not serve it. Nor does it filter by status:
+  every person carries one, and a page filtered after reading could not say where the next one starts.
+- **`engagement.summarize` returns counts, never a rate, and only the counts the document names.** Reply
+  sends percentages beside its counts without saying what they divide by, so a rate is left to whoever
+  holds two counts and knows the denominator. Reply also reports counts no document names yet — not
+  reached, connection notes, regular messages, likes, follows, endorsements, comments — and those are not
+  returned in this version.
+- **`conversation.list` takes no unread-only filter and reads no classification.** Every thread says
+  whether it is unread, and the order is the provider's, the one that moved last first; what needs
+  answering first is a judgement this read does not make, and Reply's categories travel under `vendor`
+  untranslated.
+- **A thread whose whole history is longer than `Plugins:Exec:OutputBytes` cannot be read at all.** Reply
+  sends the history with the thread, so `conversation.get` fails `provider_answer_too_large` for it however
+  small a page it asks for.
+- **The package asks for 256 MiB of memory.** The budget counts what an invocation allocates, and a read
+  of a thread reads two answers that can each be as large as the exec capture. 256 MiB holds two answers
+  up to about twice the default capture of 4 MiB; a larger `Plugins:Exec:OutputBytes` lets a longer answer
+  arrive and then runs a thread read out of memory. It is under the installation's default ceiling of
+  512 MiB (`Plugins:Limits:MaxMemoryMb`). An installation that lowers that ceiling below 256 has a reload
+  that loads this package refused as `field_invalid` — the whole reload, so every package stays on the
+  previous snapshot until the ceiling is raised.
 
 ## Versioning
 

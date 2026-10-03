@@ -6,6 +6,7 @@
 // reason — an attempt that ended without an answer simply asks again, and there is no recovery read here.
 import { call } from "./cli.js";
 import { callOf, fail, lostAnswerRow, observe, statusRow } from "./errors.js";
+import { lookup } from "./reading.js";
 
 const OPERATION = "campaign.get";
 
@@ -36,7 +37,7 @@ export function campaignGet(input, context) {
   // behind — and after a lost answer a pin is the only trace that anything happened at all.
   const learned = { campaign: sequence };
 
-  const answer = call(context, "GET", path, undefined, learned);
+  const answer = call(context, "GET", path, undefined, learned, OPERATION);
 
   if (answer.code === 404) {
     // Reply holds no sequence under this identifier. The identifier deliberately does not travel out as a pin:
@@ -75,17 +76,18 @@ export function campaignGet(input, context) {
         name: name,
         // A state this vocabulary has no word for is `other`, never the closest-looking word: `other` is an
         // honest answer a caller can act on, and a guess is one they cannot tell from a fact.
-        status: archived ? "archived" : (STATUS[state] || "other"),
+        status: archived ? "archived" : (lookup(STATUS, state) || "other"),
         // An empty object is a real answer, and here it is the true one: it says the provider reports no counts,
-        // which is a different fact from reporting zero. A Reply sequence carries no people counts at all — the
-        // one count endpoint in the published description still says "coming soon" — and synthesising a number
-        // would mean paging every contact in the sequence inside this operation's sixty-second budget.
+        // which is a different fact from reporting zero. A Reply sequence carries no people counts of its own —
+        // the one count Reply publishes beside it, which enrollment.list reads, counts everybody rather than by
+        // state — and synthesising a count by state would mean paging every contact in the sequence inside this
+        // operation's sixty-second budget.
         counts: {},
       },
       // Reply's own answer, untranslated and untyped, so nothing is lost while the neutral half stays strict.
       // Two of Reply's fields collapse into one word above and `health` has no word here at all, so this is
-      // where they survive. Of the three operations this package implements only this one publishes a `vendor`
-      // bag: the other two output schemas are closed.
+      // where they survive. Of the operations this package implements only this one publishes an open `vendor`
+      // bag: every other output schema is closed, the reads' `vendor` objects included.
       vendor: {
         // Only when it did not fit: a name repeated unchanged in both halves would say the two disagree when
         // they do not.

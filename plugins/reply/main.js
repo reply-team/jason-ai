@@ -7,6 +7,9 @@
 import { campaignGet } from "./modules/campaign.js";
 import { listMembershipAdd } from "./modules/membership.js";
 import { campaignEnroll } from "./modules/enroll.js";
+import { enrollmentList } from "./modules/enrollments.js";
+import { engagementSummarize } from "./modules/stats.js";
+import { conversationGet, conversationList } from "./modules/inbox.js";
 
 export function invoke(operation, input, context) {
   switch (operation) {
@@ -18,6 +21,18 @@ export function invoke(operation, input, context) {
 
     case "campaign.enroll":
       return campaignEnroll(input, context);
+
+    case "enrollment.list":
+      return enrollmentList(input, context);
+
+    case "engagement.summarize":
+      return engagementSummarize(input, context);
+
+    case "conversation.list":
+      return conversationList(input, context);
+
+    case "conversation.get":
+      return conversationGet(input, context);
 
     default:
       // A work item can only name an operation the manifest lists, so this is a call that should not exist. It

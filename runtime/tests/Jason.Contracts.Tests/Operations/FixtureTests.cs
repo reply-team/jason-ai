@@ -17,6 +17,8 @@ public class FixtureTests
 
     public static TheoryData<string> Outcomes() => Files("outcome");
 
+    public static TheoryData<string> Previews() => Files("preview");
+
     private static TheoryData<string> Files(string prefix)
     {
         var data = new TheoryData<string>();
@@ -43,6 +45,78 @@ public class FixtureTests
         {
             Assert.Contains(inputs, fixture => (string?)fixture["operation"] == id);
             Assert.Contains(outcomes, fixture => (string?)fixture["operation"] == id);
+        }
+    }
+
+    /// <summary>
+    /// A preview is proven by rendering it, so an operation that declares one has fixtures that render it, and one
+    /// that declares none has nothing to render. An operation nobody approves declares none (the document tests hold
+    /// that), so it has no preview fixtures either.
+    /// </summary>
+    [Fact]
+    public void An_operation_has_preview_fixtures_exactly_when_it_declares_a_preview()
+    {
+        var previews = ContractFiles.FixtureFiles("preview").Select(Read).ToList();
+
+        Assert.All(OperationCatalog.All, contract =>
+        {
+            var rendered = previews.Any(fixture => (string?)fixture["operation"] == contract.Id);
+            Assert.True(
+                rendered == contract.Preview is not null,
+                contract.Preview is null
+                    ? $"{contract.Id} declares no preview, yet a preview fixture renders one for it."
+                    : $"{contract.Id} declares a preview and no fixture renders it.");
+        });
+    }
+
+    /// <summary>
+    /// What a person deciding will read, rendered from an input the schema accepts. The summary is compared whole,
+    /// because the words around the values are the half of the preview a pointer check cannot see.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Previews))]
+    public void A_preview_fixture_says_what_a_person_deciding_will_read(string relative)
+    {
+        var fixture = Read(relative);
+        var contract = Operation(fixture, relative);
+        var input = fixture["input"];
+
+        Assert.True(contract.Preview is not null, $"{relative} renders a preview {contract.Id} does not declare.");
+        var problems = SchemaValidator.Validate(input, contract.InputSchema);
+        Assert.True(problems.Count == 0, $"{relative} renders an input the schema refuses at {Listed([.. problems.Select(problem => problem.Pointer)])}.");
+
+        var expected = Assert.IsType<JsonObject>(fixture["expect"]);
+        Assert.True(
+            expected.All(member => member.Key is "summary" or "highlights"),
+            $"{relative} expects something other than a summary and its highlights.");
+        Assert.Equal((string?)expected["summary"], contract.Preview.Summary.Render(input));
+
+        var highlights = Assert.IsType<JsonObject>(expected["highlights"]);
+        var rendered = contract.Preview.Highlight(input);
+        Assert.True(
+            JsonNode.DeepEquals(highlights, rendered),
+            $"{relative} expects the highlights {highlights.ToJsonString()}; the preview carries {rendered.ToJsonString()}.");
+    }
+
+    /// <summary>
+    /// The load check walks plain properties only, so a pointer behind a reference — a contact's name, the
+    /// campaign's — is proven here instead: each placeholder and each highlight has to name a real value in at least
+    /// one fixture, or a misspelling would render a dash for every person anybody is ever asked about.
+    /// </summary>
+    [Fact]
+    public void Every_pointer_a_preview_uses_names_a_value_in_at_least_one_of_its_fixtures()
+    {
+        var previews = ContractFiles.FixtureFiles("preview").Select(Read).ToList();
+
+        foreach (var contract in OperationCatalog.All.Where(contract => contract.Preview is not null))
+        {
+            var inputs = previews.Where(fixture => (string?)fixture["operation"] == contract.Id).Select(fixture => fixture["input"]).ToList();
+            foreach (var pointer in contract.Preview!.Summary.Pointers.Concat(contract.Preview.Highlights).Distinct(StringComparer.Ordinal))
+            {
+                Assert.True(
+                    inputs.Exists(input => PreviewPointer.Parse(pointer).Resolve(input) is not null),
+                    $"No preview fixture of {contract.Id} holds a value at `{pointer}`, so nothing shows that the pointer names one.");
+            }
         }
     }
 

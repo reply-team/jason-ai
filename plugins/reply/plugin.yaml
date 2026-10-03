@@ -1,6 +1,6 @@
 manifest_version: 1
 id: reply
-version: 0.1.0
+version: 0.2.0-dev
 kind: provider
 name: Reply
 description: >-
@@ -10,7 +10,7 @@ homepage: https://reply.io
 contracts:
   protocol: [1]
   operations: [1]
-operations: [campaign.get, list_membership.add, campaign.enroll]
+operations: [campaign.get, list_membership.add, campaign.enroll, enrollment.list, engagement.summarize, conversation.list, conversation.get]
 entry:
   module: main.js
   function: invoke
@@ -34,10 +34,18 @@ capabilities:
   # or REPLY_CONFIG_DIR deliberately does not reach the child, so an account is chosen by the binding below and by
   # the profile store the CLI already keeps, never by whatever happened to be exported in a shell.
 #
-# No `limits`: the installation's default timeout is the budget of the slowest operation this runtime publishes,
-# and a package's own limit can only lower what an operation asks for. `campaign.enroll` is allowed 300 s, so a
-# smaller ceiling here would kill an invocation that the contract says is still running — reported as ambiguous,
-# because the provider may already have enrolled someone.
+# Memory, and nothing else. The budget counts what an invocation allocates, every answer it reads included, and a
+# read of a thread reads two answers that can each be as large as the exec capture (`Plugins:Exec:OutputBytes`,
+# 4 MiB by default): the thread with its whole history, then the page. Measured, two answers of 1.4 MB allocate
+# 68 MB with the parsing and the mapping around them, so 256 MiB holds two at the cap, under the installation's
+# default ceiling of 512.
+#
+# No `timeout_ms`: the installation's default timeout is the budget of the slowest operation this runtime
+# publishes, and a package's own limit can only lower what an operation asks for. `campaign.enroll` is allowed
+# 300 s, so a smaller ceiling here would kill an invocation that the contract says is still running — reported as
+# ambiguous, because the provider may already have enrolled someone.
+limits:
+  memory_mb: 256
 binding:
   type: object
   additionalProperties: false

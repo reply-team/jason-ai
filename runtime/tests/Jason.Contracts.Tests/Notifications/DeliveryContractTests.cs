@@ -38,7 +38,7 @@ public sealed class DeliveryContractTests
         Assert.False(OperationCatalog.Knows("notification.send"));
         Assert.DoesNotContain(OperationCatalog.All, contract => contract.Id == "notification.send");
         Assert.Equal(OperationCatalog.All.Max(contract => contract.TimeoutMs), OperationCatalog.Slowest!.TimeoutMs);
-        Assert.Equal(3, OperationCatalog.All.Count);
+        Assert.Equal(Directory.EnumerateFiles(OperationContracts.ContractFiles.Operations, "*.json").Count(), OperationCatalog.All.Count);
         Assert.False(DeliveryCatalog.Knows("campaign.enroll"));
     }
 

@@ -47,7 +47,7 @@ public static class WorkItemCommands
         var id = CampaignId();
         var kind = new Option<string?>("--kind") { Description = "What the item is: ai_role or provider_op." };
         var role = new Option<string?>("--role") { Description = "The role that does the work, for an ai_role item — for example researcher." };
-        var operation = new Option<string?>("--operation") { Description = "The provider operation to perform, for a provider_op item." };
+        var operation = new Option<string?>("--operation") { Description = "The canonical operation to perform, for a provider_op item: one of those under docs/contracts/operations, not a Jason verb." };
         var contact = new Option<string?>("--contact") { Description = "The contact the work is about, as cnt_…, when it is about one." };
         var executionProfile = new Option<string?>("--execution-profile") { Description = "The execution profile the attempt should run under." };
         var priority = new Option<int?>("--priority") { Description = "Higher is claimed first; the runtime defaults to 0." };

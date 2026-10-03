@@ -1,0 +1,37 @@
+{
+  "operation": "enrollment.list",
+  "version": 1,
+  "case": "the last page: nothing follows it, and a person who finished reads `finished`",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "total": 3,
+      "items": [
+        {
+          "external_id": "48102",
+          "first_name": "Lena",
+          "last_name": "Okafor",
+          "status": "finished",
+          "current_step": "Break-up",
+          "added_at": "2026-09-12T08:00:00.000Z",
+          "opted_out": false,
+          "vendor": {
+            "status_in_sequence": "finished",
+            "current_step_id": "9904",
+            "call_status": "none",
+            "meeting_status": "none",
+            "email_disposition": null
+          }
+        }
+      ],
+      "has_more": false,
+      "vendor": { "ordering": "added_desc" }
+    },
+    "external_ids": { "campaign": "c_7714" },
+    "error": null,
+    "diagnostics": { "duration_ms": 380, "exec_calls": 2, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "succeeded", "retriable": false }
+}

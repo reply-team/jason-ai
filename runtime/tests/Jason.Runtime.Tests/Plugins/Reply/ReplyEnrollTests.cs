@@ -613,6 +613,36 @@ public class ReplyEnrollTests
         Assert.Empty(account.EnrolledIn(Sequence));
     }
 
+    /// <summary>
+    /// A per-item word that names a property every JavaScript object has is a word this version does not know, like
+    /// any other: it is looked up as the table's own entry, so it ends on the same row, with the same note, Reply's
+    /// own item in the details and both identifiers pinned. The ordinary unknown word is the first case.
+    /// </summary>
+    [Theory]
+    [InlineData("sequenceHasNoSendingAccount")]
+    [InlineData("constructor")]
+    [InlineData("__proto__")]
+    public async Task A_per_item_word_that_names_an_object_property_is_still_a_word_this_version_does_not_know(string slug)
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
+            .WithContact(1001, Address, FirstName)
+            .Answers("POST", BulkPath, 200, NotProcessed(slug).ToJsonString());
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await InvokeAsync(api, Input(pinned: Ensured), Ct);
+
+        var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
+        var row = ReplyErrorTable.Shared["refusal_this_version_has_no_word_for"]!.AsObject();
+        Assert.Equal(row["code"]!.GetValue<string>(), failed.Error.Code);
+        Assert.Equal(FailureClass.Permanent, failed.Error.Class);
+        Assert.Equal(row["note"]!.GetValue<string>(), failed.Error.Message);
+        Assert.Contains(slug, failed.Error.Details!["provider_item"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Equal(Ensured, failed.Error.ExternalIds!["contact"]!.GetValue<string>());
+        Assert.Equal("7", failed.Error.ExternalIds["campaign"]!.GetValue<string>());
+    }
+
     // -------------------------------------------------------------------------------------------------------
     // The failure rows this operation declares, and only those
     // -------------------------------------------------------------------------------------------------------

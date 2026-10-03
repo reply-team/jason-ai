@@ -1,0 +1,15 @@
+{
+  "operation": "conversation.get",
+  "version": 1,
+  "case": "an argument nobody declared, which is how a planner's note would otherwise reach a plugin",
+  "input": {
+    "args": { "thread": { "external_id": "t_99812" }, "limit": 20, "offset": 0, "include_draft": true },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    }
+  },
+  "expect": { "invalid": [{ "pointer": "/args/include_draft", "reason": "additional_properties" }] }
+}

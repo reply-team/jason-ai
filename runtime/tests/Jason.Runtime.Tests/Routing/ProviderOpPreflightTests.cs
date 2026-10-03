@@ -22,6 +22,7 @@ public class ProviderOpPreflightTests
     private const string Add = "list_membership.add";
     private const string Enroll = "campaign.enroll";
     private const string Get = "campaign.get";
+    private const string Threads = "conversation.list";
 
     /// <summary>
     /// The order, proven by repairing one thing at a time: everything is wrong at the start, and each repair
@@ -244,6 +245,60 @@ public class ProviderOpPreflightTests
         Assert.True(scenario.Check().Passed);
     }
 
+    /// <summary>
+    /// The contact check asks for a person only where the operation requires one. A read whose contact is optional
+    /// runs about the campaign when the item names nobody, and about the person — by their pins — when it names one.
+    /// </summary>
+    [Fact]
+    public void An_operation_whose_contact_is_optional_runs_without_a_person_and_with_one()
+    {
+        var scenario = Scenario.Reading(Threads);
+
+        var alone = scenario.Check();
+        Assert.True(alone.Passed);
+        Assert.Null(alone.Plan!.Input["contacts"]);
+
+        scenario.Contact = Scenario.Person(("email", "ada@example.test"));
+        scenario.ContactPins = new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "48211" };
+        var about = scenario.Check();
+        Assert.True(about.Passed);
+        var person = Assert.Single(about.Plan!.Input["contacts"]!.AsArray())!;
+        Assert.Equal("48211", (string?)person["external_ids"]!["contact"]);
+        Assert.Null(person["channels"]);
+    }
+
+    /// <summary>
+    /// A person the provider was never told about is still a well-formed input. The plugin answers
+    /// <c>contact_not_linked</c> without calling anything, because a read creates nobody; the claim has nothing to
+    /// refuse and no reason to guess at the person's address instead.
+    /// </summary>
+    [Fact]
+    public void A_person_with_no_pin_is_handed_on_for_the_plugin_to_answer_for()
+    {
+        var scenario = Scenario.Reading(Threads);
+        scenario.Contact = Scenario.Person(("email", "ada@example.test"));
+
+        var verdict = scenario.Check();
+
+        Assert.True(verdict.Passed);
+        Assert.Empty(verdict.Plan!.Input["contacts"]![0]!["external_ids"]!.AsObject());
+    }
+
+    /// <summary>
+    /// The checks after the contact ask about the channel the operation consumes, and a read that consumes none is
+    /// asked neither whether the person is reachable on one nor whether their address is suppressed.
+    /// </summary>
+    [Fact]
+    public void A_read_that_consumes_no_channel_is_not_asked_about_reachability_or_suppression()
+    {
+        var scenario = Scenario.Reading(Threads);
+        scenario.Contact = Scenario.Person(("phone", "+15555550100"));
+        scenario.ContactPins = new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "48211" };
+        scenario.Suppressed = true;
+
+        Assert.True(scenario.Check().Passed);
+    }
+
     /// <summary>What the claim hands on: the plan carries what the run needs, and every id it was decided by.</summary>
     [Fact]
     public void A_passing_pre_flight_hands_on_what_was_resolved()
@@ -330,6 +385,16 @@ public class ProviderOpPreflightTests
             ["collision"] = "skip",
             ["start"] = new JsonObject { ["position"] = "first_step" },
             ["first_touch"] = "authored_delay",
+        };
+
+        /// <summary>A routed read of a linked campaign with a well-formed page, and nobody named yet.</summary>
+        public static Scenario Reading(string operation) => new()
+        {
+            Operation = operation,
+            Route = ToTheInstalledPackage,
+            Plugin = Package(operations: [operation]),
+            Arguments = new JsonObject { ["limit"] = 20, ["offset"] = 0, ["source"] = "all" },
+            CampaignPins = new Dictionary<string, string>(StringComparer.Ordinal) { ["campaign"] = "c-7714" },
         };
 
         public string RoutingSnapshotId { get; } = PublicId.New(RouteSnapshot.IdPrefix);

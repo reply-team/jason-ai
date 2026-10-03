@@ -213,6 +213,46 @@ public class WorkItemContractTests
         Assert.Contains(error.Details, detail => detail.Field == "context.input/first_touch");
     }
 
+    /// <summary>
+    /// A read whose contact is optional is the same work with a person or without one, so creation takes either and
+    /// measures the arguments the same way.
+    /// </summary>
+    [Fact]
+    public async Task A_read_whose_contact_is_optional_is_created_with_a_person_or_without_one()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign();
+        var contact = new Contact
+        {
+            PublicId = Jason.Contracts.Ids.PublicId.New("cnt"),
+            FirstName = "Marta",
+            CreatedAt = Noon.UtcDateTime,
+            UpdatedAt = Noon.UtcDateTime,
+        };
+        db.Contacts.Add(contact);
+        db.CampaignContacts.Add(new CampaignContact
+        {
+            Campaign = campaign,
+            Contact = contact,
+            State = MembershipState.Enrolled,
+            AddedAt = Noon.UtcDateTime,
+            UpdatedAt = Noon.UtcDateTime,
+        });
+        db.SaveChanges();
+        var service = NewService(db);
+        var listing = new JsonObject { ["input"] = new JsonObject { ["limit"] = 20, ["offset"] = 0, ["source"] = "inbound" } };
+
+        var aboutTheCampaign = await service.CreateAsync(ProviderOp(campaign.PublicId, "conversation.list") with { Context = listing }, Ct);
+        var aboutThePerson = await service.CreateAsync(
+            ProviderOp(campaign.PublicId, "conversation.list") with { ContactId = contact.PublicId, Context = (JsonObject)listing.DeepClone() },
+            Ct);
+
+        Assert.Null(aboutTheCampaign.ContactId);
+        Assert.Equal(contact.PublicId, aboutThePerson.ContactId);
+        Assert.Equal("inbound", (string?)aboutThePerson.Context["input"]!["source"]);
+    }
+
     [Fact]
     public async Task An_ai_role_item_carries_whatever_its_planner_wrote()
     {

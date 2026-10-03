@@ -110,6 +110,40 @@ public class ApprovalCommandsTests
         Assert.True(text.IndexOf("Intent:", StringComparison.Ordinal) < text.IndexOf("Id:", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Where the operation declares a summary, it is the first thing a person reads: one line saying what would be
+    /// done, to whom and how, above the properties it is drawn from.
+    /// </summary>
+    [Fact]
+    public async Task Get_leads_with_the_summary_when_the_operation_declares_one()
+    {
+        var summarised = OneApproval.Replace(
+            "\"preview\": {",
+            "\"preview\": {\"summary\": \"Enroll Ada — (ada@example.test) in campaign Autumn outreach at the provider.\", \"highlights\": {\"/campaign/name\": \"Autumn outreach\"},",
+            StringComparison.Ordinal);
+        using var cli = new CliRun(summarised);
+
+        var exit = await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var lines = cli.Text.ReplaceLineEndings("\n").Split('\n');
+        Assert.Equal("Summary:       Enroll Ada — (ada@example.test) in campaign Autumn outreach at the provider.", lines[0]);
+        Assert.StartsWith("Operation:", lines[1], StringComparison.Ordinal);
+    }
+
+    /// <summary>A preview stored without a summary — every operation that declares none — prints as it always did.</summary>
+    [Fact]
+    public async Task Get_of_a_preview_without_a_summary_prints_as_it_always_did()
+    {
+        using var cli = new CliRun(OneApproval);
+
+        var exit = await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.StartsWith("Operation:     campaign.enroll", cli.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Summary:", cli.Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task List_renders_a_table_of_what_is_waiting()
     {

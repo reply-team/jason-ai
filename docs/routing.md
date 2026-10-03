@@ -163,8 +163,8 @@ claim.
 
 The most common real `usable: false` is a **default** route, and it is worth showing. A default route
 is validated only against the operations its plugin already claims, so a global default to a provider
-that implements two of the three published operations activates cleanly — and then answers this for
-the third:
+that implements only some of the published operations activates cleanly — and then answers this for
+the rest:
 
 ```text
 Operation:  campaign.enroll v1
@@ -300,7 +300,7 @@ asked to approve reaching somebody the suppression register already protects.
 | 5 | `plugin_operation_unsupported` | permanent | the plugin does not perform this operation, or is not a kind of plugin that performs any. Route this operation to a plugin that claims it |
 | 6 | `contract_incompatible` | permanent | the plugin speaks no version of this operation's contract that this runtime publishes. Upgrade the plugin |
 | 7 | `binding_invalid` | permanent | the route's binding does not satisfy the schema the plugin declares — including a route with no binding to a plugin that requires one. Fix the binding |
-| 8 | `contact_required` | permanent | the operation acts on somebody and the work item names nobody. Create the item with `--contact` |
+| 8 | `contact_required` | permanent | the operation acts on somebody and the work item names nobody. Create the item with `--contact`. An operation whose contact is `optional` runs with one or without, so it never meets this check |
 | 9 | `no_channel_value` | permanent | the person is not reachable on the channel the operation consumes. Add the channel to the contact, or name a channel they have |
 | 10 | `suppressed` | permanent | that channel value is on the do-not-contact register. It is not reached, and that is the register working |
 | 11 | `input_invalid` | validation | the composed input does not satisfy the operation's own schema, or an argument contradicts an identifier Jason has already pinned. The details carry a JSON pointer each |
@@ -370,7 +370,7 @@ says a repeat is `safe`, because asking for a campaign a second time costs nothi
 `after_recovery_read`, so a repeat is allowed only because the contract obliges the plugin to read the
 ledger under the idempotency key, and the membership it writes, before writing anything — which is what
 makes one crash cost one effect rather than one bill. An operation that said `never` would end for a
-person rather than risk a second send; none of the published three does.
+person rather than risk a second send; none of the published operations does, and every read says `safe`.
 
 Every end where nobody answered is ambiguous: the invoker's timeout, a lease that ran out, a missed
 heartbeat, a command that could not be started, a command that was stopped. A missing answer says nothing
@@ -493,9 +493,10 @@ reconciliation — matching a person again, against two providers' answers — a
   standing approvals, no bulk decisions over a population, no expiry windows and no anomaly stop rules
   (DEF-APPROVAL-001). Nothing notifies anybody either, so a person finds out what is waiting by asking
   — `jason approval list` is the floor this version ships.
-- **Three operations, not a catalog.** `campaign.get`, `list_membership.add` and `campaign.enroll` are the
-  whole published set; an operation outside it cannot be routed, created or named, and adding one is a
-  deliberate act with its own document, fixtures and version (DEF-OPS-001).
+- **Seven operations, not a catalog.** The documents under `docs/contracts/operations/` — two that act,
+  `list_membership.add` and `campaign.enroll`, and five reads — are the whole published set; an operation
+  outside it cannot be routed, created or named, and adding one is a deliberate act with its own document,
+  fixtures and version (DEF-OPS-001).
 - **No compatibility window and no deprecation policy.** Every published operation is at version 1, and a
   plugin declares which contract family versions it implements. What happens when version 2 arrives — how
   long version 1 keeps being served, and how a plugin is told — is not settled and is deliberately not

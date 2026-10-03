@@ -26,8 +26,8 @@ There are two kinds:
   should look like. The runtime never reads the meaning of either; it hands them to the role's entry
   command and records what comes back.
 - **`provider_op`** — work a provider performs. It names an `operation` — one of the canonical
-  operations this build publishes a contract for (`campaign.get`, `list_membership.add`,
-  `campaign.enroll`) — and carries that operation's arguments under `input`, the one reserved key of
+  operations this build publishes a contract for — the documents under
+  `docs/contracts/operations/` — and carries that operation's arguments under `input`, the one reserved key of
   the context. Which plugin performs it, and in which provider account, is a route
   ([docs/routing.md](routing.md)); the runtime composes what the plugin is given and never hands over
   the rest of the context.
@@ -143,8 +143,8 @@ A silent skip would leave the item looking claimable forever.
 
 ## Approvals
 
-An operation's contract says what approval it needs. `campaign.get` and `list_membership.add` publish
-`auto`, which is the one approval a runtime may give itself. `campaign.enroll` publishes
+An operation's contract says what approval it needs. Every published operation but one publishes `auto`,
+which is the one approval a runtime may give itself. `campaign.enroll` publishes
 `confirm_once`, and work naming it is **parked** at the claim rather than run: the item moves to
 `awaiting_approval` and an `apr_` row records what is being approved.
 
@@ -164,8 +164,10 @@ including them would supersede every pending decision the moment an operator rel
 
 **Beside the subject is the preview**, assembled at the claim from the operation's own sentence about
 itself, the dangerous readings of what it reaches, undoes and costs, the campaign, the person it would
-reach and where, and the account. It is stored rather than re-assembled, so what a person reads is
-what the claim saw.
+reach and where, and the account — and, where the operation declares one, a summary rendered from the
+composed input with the values it highlights, which `jason approval get --human` prints first
+([docs/contracts/README.md](contracts/README.md), "The preview a person reads"). Neither is part of the
+subject. It is stored rather than re-assembled, so what a person reads is what the claim saw.
 
 **A park makes no attempt.** An attempt is a run; `max_attempts` counts attempts; an item parked three
 times that had spent three of its attempts would have been given up on for being patient. Everything

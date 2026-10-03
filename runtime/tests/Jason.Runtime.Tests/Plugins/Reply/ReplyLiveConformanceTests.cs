@@ -11,13 +11,13 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>
-/// The three operations against a real Reply account, through the real package, the real plugin host and the
-/// operator's own vendor CLI. It is the only test in this package that is not offline, and everything about it
-/// is arranged so that it cannot happen by accident: it runs only when an operator has named, in the
-/// environment, the account to act as and the one recipient it may touch, and it skips loudly — naming the key
-/// that is absent and what that key is for — the moment either is missing. A skip that said nothing would be
-/// indistinguishable from a pass, and this is the one test where a false pass would mean "nobody ever checked
-/// the provider" while the wave claimed it had.
+/// <c>campaign.get</c>, <c>list_membership.add</c> and <c>campaign.enroll</c> against a real Reply account, through
+/// the real package, the real plugin host and the operator's own vendor CLI. It is the only test in this package
+/// that is not offline, and everything about it is arranged so that it cannot happen by accident: it runs only when
+/// an operator has named, in the environment, the account to act as and the one recipient it may touch, and it skips
+/// loudly — naming the key that is absent and what that key is for — the moment either is missing. A skip that said
+/// nothing would be indistinguishable from a pass, and this is the one test where a false pass would mean "nobody
+/// ever checked the provider" while the suite claimed it had.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -92,7 +92,7 @@ public class ReplyLiveConformanceTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     // -------------------------------------------------------------------------------------------------------
-    // The three operations, each against the live account
+    // campaign.get, list_membership.add and campaign.enroll, each against the live account
     // -------------------------------------------------------------------------------------------------------
 
     [Fact]

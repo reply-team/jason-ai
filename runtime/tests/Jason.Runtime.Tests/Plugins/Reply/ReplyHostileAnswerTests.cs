@@ -97,23 +97,16 @@ public class ReplyHostileAnswerTests
         Assert.Contains("created", error.Details!["provider_item"]!.GetValue<string>(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The exec capture is bounded, and a body past that bound arrives cut in half: valid JSON up to the cut and
+    /// nothing after it. On a read that is not an answer that went missing — asking again would be cut at the same
+    /// byte — so it is the one permanent ending a read has for it, and it says which setting is the bound.
+    /// </summary>
     [Fact]
-    public async Task An_answer_larger_than_the_capture_that_has_to_hold_it_is_no_answer()
+    public async Task A_read_whose_answer_outgrows_the_capture_fails_permanently_as_too_large()
     {
-        // The exec capture is bounded, and a body past that bound arrives cut in half: valid JSON up to the cut
-        // and nothing after it. Reading what survived would mean acting on half an answer, so the ending is the
-        // one every unreadable answer to a read gets.
-        const int Capture = 65_536;
-        var enormous = new JsonObject
-        {
-            ["id"] = ReplyOperations.Sequence,
-            ["name"] = new string('a', Capture * 3),
-            ["status"] = "active",
-            ["isArchived"] = false,
-        };
-
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.Answers("GET", SequencePath, 200, enormous.ToJsonString());
+        account.Answers("GET", SequencePath, 200, Enormous().ToJsonString());
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct, paths => Capping(paths, Capture));
 
@@ -124,14 +117,56 @@ public class ReplyHostileAnswerTests
             Ct);
         var error = ReplyOperations.Failed(ReplyOperations.CampaignGet, result);
 
-        Assert.Equal("provider_unavailable", error.Code);
-        Assert.Equal(FailureClass.Transient, error.Class);
+        Assert.Equal("provider_answer_too_large", error.Code);
+        Assert.Equal(FailureClass.Permanent, error.Class);
+        Assert.Contains("Plugins:Exec:OutputBytes", error.Message, StringComparison.Ordinal);
 
-        // And it really was the cut that made it unreadable, said by the host that made it rather than inferred
-        // from the package having failed: the `exec` diagnostic records that what it captured was not all there
-        // was to capture.
+        // And it really was the cut, said by the host that made it rather than inferred from the package having
+        // failed: the `exec` diagnostic records that what it captured was not all there was to capture.
         var diagnostics = await File.ReadAllTextAsync(Path.Combine(result.Launch!.WorkDir, "stderr.log"), Ct);
         Assert.Contains("\"truncated\":true", diagnostics, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The same cut on a write is still the expensive ending. The request went out and its answer did not come
+    /// back whole, so the write may have happened, and nothing about the answer's size changes that.
+    /// </summary>
+    [Fact]
+    public async Task A_write_whose_answer_outgrows_the_capture_is_still_a_lost_write()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.Answers("POST", ImportPath, 200, Enormous().ToJsonString());
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct, paths => Capping(paths, Capture));
+
+        var error = ReplyOperations.Failed(
+            ReplyOperations.MembershipAdd,
+            await ReplyOperations.InvokeAsync(api, ReplyOperations.MembershipAdd, ReplyOperations.MembershipAddInput(), Ct));
+
+        Assert.Equal("provider_answer_lost", error.Code);
+        Assert.Equal(FailureClass.Ambiguous, error.Class);
+    }
+
+    /// <summary>
+    /// A read made inside a write keeps the ending it always had. The write declares no too-large code — its
+    /// answers are small, and the code is a read's — so a cut there is reported as the read going unanswered,
+    /// which the next attempt simply asks again.
+    /// </summary>
+    [Fact]
+    public async Task A_read_inside_a_write_whose_answer_outgrows_the_capture_keeps_the_ending_it_had()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
+        account.Answers("GET", SequencePath, 200, Enormous().ToJsonString());
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct, paths => Capping(paths, Capture));
+
+        var error = ReplyOperations.Failed(
+            ReplyOperations.Enroll,
+            await ReplyOperations.InvokeAsync(api, ReplyOperations.Enroll, ReplyOperations.EnrollInput(), Ct));
+
+        Assert.Equal("provider_unavailable", error.Code);
+        Assert.Equal(FailureClass.Transient, error.Class);
     }
 
     [Fact]
@@ -378,6 +413,18 @@ public class ReplyHostileAnswerTests
 
         return ReplyOperations.Failed(operation, result);
     }
+
+    /// <summary>The smallest exec capture an installation may configure, which a test can outgrow cheaply.</summary>
+    private const int Capture = 65_536;
+
+    /// <summary>A sequence whose name alone is three times the capture: a well-formed answer nobody can read whole.</summary>
+    private static JsonObject Enormous() => new()
+    {
+        ["id"] = ReplyOperations.Sequence,
+        ["name"] = new string('a', Capture * 3),
+        ["status"] = "active",
+        ["isArchived"] = false,
+    };
 
     /// <summary>
     /// The exec capture, lowered to its smallest allowed size so an answer can be built that outgrows it

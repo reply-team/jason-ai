@@ -27,9 +27,9 @@ public class ReplyPackageTests
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Empty(plugin.Problems);
         Assert.Equal(PluginKind.Provider, plugin.Kind);
-        Assert.Equal("0.1.0", plugin.Version);
+        Assert.Equal("0.2.0-dev", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
-        Assert.Equal(["campaign.enroll", "campaign.get", "list_membership.add"], plugin.Operations.Order());
+        Assert.Equal(["campaign.enroll", "campaign.get", "conversation.get", "conversation.list", "engagement.summarize", "enrollment.list", "list_membership.add"], plugin.Operations.Order());
 
         // Declaration is not permission, and this package declares nothing it does not use: one program, no
         // environment variable it could hold a secret in, and no way to reach the provider except through it. A
@@ -83,6 +83,24 @@ public class ReplyPackageTests
             $"the package's ceiling of {plugin.Limits.TimeoutMs} ms is below {slowest.Id}'s own budget of {slowest.TimeoutMs} ms.");
     }
 
+    /// <summary>
+    /// The memory budget counts what an invocation allocates, and a read of a thread reads two answers, each up to the
+    /// exec capture — the thread with its whole history, and the page. So the package asks for room for both at that
+    /// cap, and asks for memory alone: the timeout stays the installation's, which is what lets the slowest
+    /// operation finish.
+    /// </summary>
+    [Fact]
+    public async Task The_package_asks_for_the_memory_two_answers_at_the_exec_capture_need_and_no_timeout_of_its_own()
+    {
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var registry = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, Ct);
+
+        var plugin = Assert.Single(registry.Plugins);
+        Assert.Equal(256, plugin.Limits.MemoryMb);
+        Assert.Equal(OperationCatalog.Slowest!.TimeoutMs, plugin.Limits.TimeoutMs);
+    }
+
     [Fact]
     public async Task The_entry_module_is_loaded_by_a_real_child_and_answers_for_the_operation_it_was_given()
     {
@@ -102,7 +120,21 @@ public class ReplyPackageTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("campaign_not_found", failed.Error.Code);
         Assert.Equal(ReplyPlugins.PluginId, result.Provenance.PluginId);
-        Assert.Equal("0.1.0", result.Provenance.Version);
+        Assert.Equal("0.2.0-dev", result.Provenance.Version);
+    }
+
+    /// <summary>
+    /// The sign-in step is the first command a person types, and in Windows PowerShell the name as written is refused
+    /// by the default execution policy — so the step says what that shell takes, and what the others take.
+    /// </summary>
+    [Fact]
+    public void The_sign_in_step_says_what_windows_powershell_takes()
+    {
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        var step = readme[readme.IndexOf("**2. Sign in**", StringComparison.Ordinal)..readme.IndexOf("**3. Grant the program**", StringComparison.Ordinal)];
+
+        Assert.Contains("In Windows PowerShell, type `reply.cmd auth login`", step, StringComparison.Ordinal);
+        Assert.Contains("PowerShell 7 and Command Prompt take `reply auth login` as written", step, StringComparison.Ordinal);
     }
 
     [Fact]

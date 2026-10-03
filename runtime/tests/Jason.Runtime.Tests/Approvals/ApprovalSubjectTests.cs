@@ -70,6 +70,54 @@ public class ApprovalSubjectTests
         Assert.Equal("alex@example.test", (string?)subject.Document["input"]!["contact"]!["email"]);
     }
 
+    /// <summary>
+    /// The preview a person reads sits beside the subject and never inside it. A summary worded differently — a
+    /// template corrected, a value rendered another way — changes what a person reads and not what they decide
+    /// about, so it must never turn a pending decision into a different one. The hash of one fixed subject is
+    /// pinned as it was before previews gained a summary.
+    /// </summary>
+    [Fact]
+    public void A_fixed_subject_hashes_as_it_did_before_previews_gained_a_summary()
+    {
+        var item = WorkItemFactory.NewProviderOp(Outreach, "campaign.enroll");
+        item.PublicId = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF";
+        var input = new JsonObject
+        {
+            ["args"] = new JsonObject
+            {
+                ["channel"] = "email",
+                ["collision"] = "skip",
+                ["start"] = new JsonObject { ["position"] = "first_step" },
+                ["first_touch"] = "authored_delay",
+            },
+            ["contacts"] = new JsonArray(new JsonObject
+            {
+                ["id"] = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+                ["first_name"] = "Marta",
+                ["last_name"] = "Alvarez",
+                ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = "marta@example.com", ["primary"] = true }),
+                ["external_ids"] = new JsonObject { ["contact"] = "p_88421" },
+            }),
+            ["campaign"] = new JsonObject { ["id"] = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE", ["name"] = "Q3 LatAm founders", ["status"] = "active" },
+            ["idempotency_key"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF",
+        };
+
+        var subject = ApprovalSubject.Of(
+            new ProviderOpPlan(
+                TestPlugins.Loaded("provider", ["campaign.enroll"]),
+                "snp_one",
+                "rts_one",
+                RouteScope.CampaignDefault,
+                new JsonObject { ["account"] = "one" },
+                "sha256:account",
+                OperationCatalog.Find("campaign.enroll")!,
+                input),
+            item);
+
+        Assert.True(subject.Hash == "sha256:9bb06770da1e8ce7c70c0e8f76670d122798bbe4a535192b87949f6a59e76423", $"The subject now hashes as {subject.Hash}.");
+        Assert.DoesNotContain(subject.Document, member => member.Key is "preview" or "summary" or "highlights");
+    }
+
     private static ApprovalSubject Subject(JsonObject input, string? bindingIdentity = "sha256:account") =>
         ApprovalSubject.Of(
             new ProviderOpPlan(

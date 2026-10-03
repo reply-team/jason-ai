@@ -240,6 +240,8 @@ public class GeneratedBlockTests
         Property(block, "reach", contract.Reach);
         Property(block, "reversibility", contract.Reversibility);
         Property(block, "approval", contract.Approval);
+        block.Append("| `protective_floor` | `").Append(contract.ProtectiveFloor ? "true" : "false").Append("` | ")
+            .Append(contract.ApprovalReason ?? "—").Append(" |\n");
         Property(block, "before_repeating", contract.BeforeRepeating);
         Property(block, "idempotency_key", contract.IdempotencyKey);
         Property(block, "per_item_results", contract.PerItemResults);
@@ -250,7 +252,13 @@ public class GeneratedBlockTests
         Row(block, "pre-flight", $"contact `{Name(contract.Preflight.Contact)}`, channel `{Name(contract.Preflight.Channel)}`");
         Row(block, "contact projection", Projection(contract));
         Row(block, "precondition", contract.Precondition);
-        Row(block, "pinned identifiers", string.Join("; ", contract.ExternalIds.Select(kind => $"`{kind.Key}` names a {Name(kind.Value.Entity)}")));
+        Row(block, "preview a person reads", Preview(contract));
+        Row(
+            block,
+            "pinned identifiers",
+            contract.ExternalIds.Count == 0
+                ? "none — this operation pins nothing"
+                : string.Join("; ", contract.ExternalIds.Select(kind => $"`{kind.Key}` names a {Name(kind.Value.Entity)}")));
         Row(block, "recovery read", contract.RecoveryRead is null ? "none" : contract.RecoveryRead.Reads);
         Row(block, "after an ambiguous end", Ambiguous(contract));
         Row(block, "timeout", contract.TimeoutMs.ToString(System.Globalization.CultureInfo.InvariantCulture) + " ms");
@@ -300,6 +308,11 @@ public class GeneratedBlockTests
             ? "none — this operation never receives the work item's contact"
             : string.Join(", ", contract.ContactProjection.Fields.Select(field => "`" + field + "`"))
               + $"; channels: `{contract.ContactProjection.Channels}`";
+
+    private static string Preview(OperationContract contract) =>
+        contract.Preview is null
+            ? "none"
+            : $"`{contract.Preview.Summary.Text}`; highlighted: {string.Join(", ", contract.Preview.Highlights.Select(pointer => "`" + pointer + "`"))}";
 
     private static string Ambiguous(OperationContract contract) => contract.RepeatAfterAmbiguous switch
     {

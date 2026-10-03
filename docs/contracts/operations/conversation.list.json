@@ -1,0 +1,283 @@
+{
+  "id": "conversation.list",
+  "version": 1,
+  "l1": { "name": "conversation.list", "contract_version": "2.0.0", "family": 9, "core": true },
+  "intent": "\"What came back overnight, and what needs answering first?\" — filterable by meaning, channel, owner, campaign and how long each has been waiting, ordered by what is most overdue",
+
+  "reach": "read",
+  "reversibility": "reversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "nothing at stake; page with the returned cursor",
+  "idempotency_key": "none",
+  "per_item_results": "not_applicable",
+  "accepts_collection": false,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": ["H10"],
+
+  "preflight": { "contact": "optional", "channel": "none" },
+  "contact_projection": { "fields": ["id"], "channels": "none" },
+  "precondition": "none",
+  "preview": null,
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:conversation.list:1:input",
+    "title": "conversation.list input",
+    "description": "One page of conversation threads: one person's across the account when the work item names a person, otherwise one campaign's.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "campaign"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["limit", "offset", "source"],
+        "properties": {
+          "campaign": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["external_id"],
+            "properties": {
+              "external_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The provider's own identifier, given to link a campaign for the first time. Later calls work by the pin."
+              }
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "At most this many threads on the page. Required: absence is not a default, and a page may come back shorter."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Where the page starts in the provider's own order: 0 for the first page, then the previous page's `offset` plus the number of items it returned."
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "maxLength": 64,
+            "description": "Only threads that moved at or after this moment."
+          },
+          "source": {
+            "type": "string",
+            "enum": ["inbound", "all"],
+            "description": "`inbound`: only threads the other side wrote into. `all`: every thread. Required, because which of the two a caller meant is not something to guess."
+          }
+        }
+      },
+      "contacts": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "items": { "$ref": "#/$defs/contact" },
+        "description": "The work item's person, present only when the work item names one."
+      },
+      "campaign": { "$ref": "#/$defs/campaign" }
+    },
+    "anyOf": [
+      { "type": "object", "required": ["contacts"] },
+      {
+        "type": "object",
+        "required": ["args"],
+        "properties": { "args": { "type": "object", "required": ["campaign"] } }
+      },
+      {
+        "type": "object",
+        "required": ["campaign"],
+        "properties": {
+          "campaign": {
+            "type": "object",
+            "required": ["external_ids"],
+            "properties": { "external_ids": { "type": "object", "required": ["campaign"] } }
+          }
+        }
+      }
+    ],
+    "$defs": {
+      "contact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it. A person with no pin here is one the provider has never been told about by this installation."
+          }
+        }
+      },
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it, so another provider's identifier is never visible here."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:conversation.list:1:output",
+    "title": "conversation.list result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items", "has_more", "vendor"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "external_id",
+            "channel",
+            "subject",
+            "preview",
+            "last_activity_at",
+            "unread",
+            "contact",
+            "campaign_external_id",
+            "has_meeting_intent",
+            "vendor"
+          ],
+          "properties": {
+            "external_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "description": "The provider's identifier for the thread, the one `conversation.get` reads by."
+            },
+            "channel": { "type": "string", "enum": ["email", "linkedin", "other"] },
+            "subject": {
+              "type": ["string", "null"],
+              "maxLength": 1000,
+              "description": "The thread's subject, or null where the channel has none."
+            },
+            "preview": {
+              "type": ["string", "null"],
+              "maxLength": 500,
+              "description": "The start of the latest message as the provider shows it, at most 500 characters; null when the provider shows none."
+            },
+            "last_activity_at": {
+              "type": "string",
+              "format": "date-time",
+              "maxLength": 64,
+              "description": "When the thread last moved, in UTC. The page is ordered by it, most recent first."
+            },
+            "unread": { "type": "boolean", "description": "Whether the provider holds the thread as unread." },
+            "contact": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "required": ["external_id", "name"],
+              "description": "The person on the thread as the provider names them: its identifier, null when the provider no longer holds the person, and a display name. Null when the thread names nobody.",
+              "properties": {
+                "external_id": { "type": ["string", "null"], "maxLength": 256 },
+                "name": { "type": ["string", "null"], "maxLength": 200 }
+              }
+            },
+            "campaign_external_id": {
+              "type": ["string", "null"],
+              "maxLength": 256,
+              "description": "The provider's identifier for the campaign the thread belongs to, or null."
+            },
+            "has_meeting_intent": {
+              "type": ["boolean", "null"],
+              "description": "The provider's own judgement that the thread asks for a meeting, or null when it makes none."
+            },
+            "vendor": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["is_last_message_planned", "state", "category"],
+              "description": "The provider's own words about the thread. A closed list, so no address or message text can travel here.",
+              "properties": {
+                "is_last_message_planned": { "type": ["boolean", "null"] },
+                "state": { "type": ["string", "null"], "enum": ["ok", "needs_attention", null] },
+                "category": {
+                  "type": ["object", "null"],
+                  "additionalProperties": false,
+                  "required": ["id", "name"],
+                  "properties": {
+                    "id": { "type": "string", "maxLength": 64 },
+                    "name": { "type": "string", "maxLength": 100 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "has_more": { "type": "boolean", "description": "Whether the provider holds more threads after this page." },
+      "vendor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ordering"],
+        "properties": {
+          "ordering": {
+            "const": "last_activity_desc",
+            "description": "The provider's own order, the one `offset` counts in: the thread that moved last first."
+          }
+        }
+      }
+    }
+  },
+
+  "external_ids": {
+    "campaign": {
+      "entity": "campaign",
+      "description": "The provider's identifier for the campaign whose threads this read listed, returned only when the read made the first link. It is never the person's."
+    }
+  },
+
+  "recovery_read": null,
+  "repeat_after_ambiguous": "safe",
+
+  "failure_codes": [
+    { "code": "contact_not_linked", "class": "permanent", "when": "No provider identifier is pinned for this person, and a read creates nobody." },
+    { "code": "feature_unavailable", "class": "permanent", "when": "The provider account's plan or role does not include this capability, so no call by this account can answer it." },
+    { "code": "provider_answer_too_large", "class": "permanent", "when": "The provider's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off; asking again would cut it the same way." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it read conversations for this account." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the read for now and it may be asked again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived. A read changes nothing and costs nothing, so the next attempt simply asks again." }
+  ],
+
+  "timeout_ms": 60000,
+
+  "conformance": [
+    "A page holds at most `limit` threads, starting at `offset` in the provider's own order, and `has_more` says whether more follow.",
+    "A page may come back short of `limit` with `has_more: true`: the plugin stops before the result would pass 768 KiB, counted as the runtime counts it (six bytes for DEL, for every character outside ASCII and for each of `<`, `>`, `&`, `'`, `\"`, `+` and the backtick, twelve for one outside the Basic Multilingual Plane).",
+    "The next page starts at `offset` plus the number of items this page returned, never at `offset + limit`.",
+    "Threads come most recent activity first, which `vendor.ordering` states. The order is not a queue of what to answer: what needs answering first is a judgement this read does not make.",
+    "With a person, the page is that person's threads across the account, and the campaign is context only; without one, it is the campaign's threads.",
+    "A person with no provider identifier pinned fails `contact_not_linked`, and nothing is called: a read creates nobody.",
+    "A preview is at most 500 characters, cut where a character ends.",
+    "No address appears anywhere in the result: a thread's person is their identifier and the name the provider shows.",
+    "A read pins no person: the only identifier it may return under `external_ids` is the campaign's, and only when it made the first link."
+  ]
+}

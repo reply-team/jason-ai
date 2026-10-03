@@ -87,7 +87,7 @@ function listOf(input) {
 function holds(context, list, contactId, learned) {
   const path = "/v3/contacts/filter?top=" + PAGE;
   const known = callOf("POST", path);
-  const answer = call(context, "POST", path, { listId: Number(list) }, learned);
+  const answer = call(context, "POST", path, { listId: Number(list) }, learned, OPERATION);
 
   if (answer.code !== 200) {
     // A list this account does not hold is not recognised here — the path names no list, so a refusal is about
@@ -134,7 +134,7 @@ function holds(context, list, contactId, learned) {
 function add(context, list, contactId, learned) {
   const path = "/v3/contact-lists/" + list + "/add-contacts";
   const known = callOf("POST", path);
-  const answer = call(context, "POST", path, { contactIds: [Number(contactId)] }, learned);
+  const answer = call(context, "POST", path, { contactIds: [Number(contactId)] }, learned, OPERATION);
 
   if (answer.code === 409) {
     // A conflict on an add names the one conflict there is: this person is on this list already. Reply is not

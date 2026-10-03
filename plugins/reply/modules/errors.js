@@ -25,6 +25,30 @@ export const CALLS = {
     "kind": "read",
     "note": "Whether this person already takes part in the sequence: campaign.enroll's first recovery read."
   },
+  "GET /v3/sequences/{id}/contacts": {
+    "kind": "read",
+    "note": "One page of the people the sequence holds, most recently added first: what enrollment.list answers from."
+  },
+  "GET /v3/sequences/{id}/contacts/count": {
+    "kind": "read",
+    "note": "How many people the sequence holds: enrollment.list's total, and nothing else."
+  },
+  "POST /v3/sequences/{id}/stats": {
+    "kind": "read",
+    "note": "A sequence's counts over one window: what engagement.summarize answers from. A POST, and a read all the same."
+  },
+  "POST /v3/inbox/threads/filter": {
+    "kind": "read",
+    "note": "One page of inbox threads, by person or by sequence: what conversation.list answers from. A POST, and a read all the same."
+  },
+  "GET /v3/inbox/threads/{id}": {
+    "kind": "read",
+    "note": "One thread, its whole history inline: conversation.get's header, and the reason a history too long to read whole is too large."
+  },
+  "GET /v3/inbox/threads/{id}/messages": {
+    "kind": "read",
+    "note": "One page of a thread's messages, the first sent first: what conversation.get answers from."
+  },
   "GET /v3/contacts/{id}/statuses": {
     "kind": "read",
     "note": "The opt-out register and, by the same call, whether a pinned contact still resolves. No address travels."
@@ -51,8 +75,8 @@ export const CALLS = {
   }
 };
 
-// The table itself. `shared` holds the rows every one of the three operations declares; `per_operation` holds the
-// rows one operation declares and another does not — the three documents do not publish the same failure codes,
+// The table itself. `shared` holds the rows every operation this package performs declares; `per_operation` holds
+// the rows one operation declares and another does not — the documents do not publish the same failure codes,
 // and a shared row naming a code an operation never declared would be a code the runtime refuses. Each row says
 // `when` it applies, the `code` and `class` it reports, and the `note` an operator reads, which is also the
 // message the failure carries.
@@ -71,22 +95,22 @@ export const ROWS = {
       "note": "The Reply CLI refused the call before making it. Nothing reached the account, and a repeat would build the same call, so this is reported rather than retried."
     },
     "answer_lost_on_a_read": {
-      "when": "A call marked `read` timed out, answered 5xx, or exited 1 with nothing on stdout that could be parsed.",
+      "when": "A call marked `read` timed out, answered 5xx, or exited 1 with nothing on stdout that could be parsed — or its answer was cut off at `Plugins:Exec:OutputBytes` inside an operation with no too-large row of its own, which is every write.",
       "code": "provider_unavailable",
       "class": "transient",
       "note": "Reply could not be reached, or did not answer, on a call that changes nothing. Asking again costs nothing, so the attempt is simply repeated."
     },
     "answer_lost_on_a_write": {
-      "when": "A call marked `write` timed out, answered 5xx, or exited 1 with nothing on stdout that could be parsed.",
+      "when": "A call marked `write` timed out, answered 5xx, exited 1 with nothing on stdout that could be parsed, or had its answer cut off at `Plugins:Exec:OutputBytes`.",
       "code": "provider_answer_lost",
       "class": "ambiguous",
       "note": "A write was sent to Reply and no answer came back, so it may already have happened. The CLI's exit codes cannot tell a request that was never sent from one whose answer was lost, and repeating a write can create a person twice or send to them twice — so the work item stops here for a person rather than guessing."
     },
     "unauthorized": {
-      "when": "401, whose body Reply leaves empty, or 403 on any call — and the per-item word `forbidden`, which is how the bulk enrol says the same thing about one person inside a 200.",
+      "when": "401, whose body Reply leaves empty, or a 403 that the operation has no row of its own for — a read maps the code Reply gives a plan or role without the feature to `feature_unavailable` — and the per-item word `forbidden`, which is how the bulk enrol says the same thing about one person inside a 200.",
       "code": "unauthorized",
       "class": "permanent",
-      "note": "The profile this route names is not signed in, or its key does not carry the scope this call needs. Sign in with `reply auth login` for that profile, or issue a key with the scope; no retry can help."
+      "note": "The profile this route names is not signed in, or its key does not carry the scope this call needs. Sign in with `reply auth login` for that profile — in Windows PowerShell, `reply.cmd auth login`, because its default execution policy refuses npm's `reply.ps1`; PowerShell 7 and Command Prompt take `reply auth login` as written — or issue a key with the scope; no retry can help."
     },
     "rate_limited": {
       "when": "429 on any call.",
@@ -108,6 +132,104 @@ export const ROWS = {
         "code": "campaign_not_found",
         "class": "permanent",
         "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
+      },
+      "answer_too_large_on_a_read": {
+        "when": "The host reports the CLI's stdout truncated on a call marked `read`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
+        "code": "provider_answer_too_large",
+        "class": "permanent",
+        "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. The same read would be cut at the same place, so it is not repeated; raising `Plugins:Exec:OutputBytes` is what lets it through."
+      }
+    },
+    "enrollment.list": {
+      "campaign_not_found": {
+        "when": "404 on `GET /v3/sequences/{id}/contacts`, where Reply's own code is `sequenceContact.sequenceNotFound`, or an identifier that is not a Reply sequence number at all, which is refused without a call.",
+        "code": "campaign_not_found",
+        "class": "permanent",
+        "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
+      },
+      "feature_not_included": {
+        "when": "403 with Reply's own code `sequenceContact.forbidden` on `GET /v3/sequences/{id}/contacts`. Any other 403 is the shared `unauthorized` row.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role may not read a sequence's people. Signing in again would not change it; a role or a plan that includes it would."
+      },
+      "answer_too_large_on_a_read": {
+        "when": "The host reports the CLI's stdout truncated on a call marked `read`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
+        "code": "provider_answer_too_large",
+        "class": "permanent",
+        "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. The same page would be cut at the same place, so it is not repeated: ask for less — a smaller `limit` — or raise `Plugins:Exec:OutputBytes`."
+      }
+    },
+    "engagement.summarize": {
+      "campaign_not_found": {
+        "when": "404 on `POST /v3/sequences/{id}/stats`, where Reply's own code is `sequenceStats.notFound`, or an identifier that is not a Reply sequence number at all, which is refused without a call.",
+        "code": "campaign_not_found",
+        "class": "permanent",
+        "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
+      },
+      "feature_not_included": {
+        "when": "403 with Reply's own code `sequenceStats.forbidden`. Any other 403 is the shared `unauthorized` row.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role may not read a sequence's statistics. Signing in again would not change it; a role or a plan that includes it would."
+      },
+      "window_refused": {
+        "when": "400 carrying `errors[]` and no `code` on `POST /v3/sequences/{id}/stats`: Reply refused the window, which is the whole of what the call asked.",
+        "code": "window_invalid",
+        "class": "validation",
+        "note": "Reply refused the window this work item asked for. The same window would be refused again; correct `args.window`."
+      },
+      "answer_too_large_on_a_read": {
+        "when": "The host reports the CLI's stdout truncated on a call marked `read`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
+        "code": "provider_answer_too_large",
+        "class": "permanent",
+        "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. The same read would be cut at the same place, so it is not repeated; raising `Plugins:Exec:OutputBytes` is what lets it through."
+      }
+    },
+    "conversation.list": {
+      "contact_not_linked": {
+        "when": "The work item names a person and no Reply contact identifier is pinned for them. Decided before any call: a read creates nobody.",
+        "code": "contact_not_linked",
+        "class": "permanent",
+        "note": "Reply has never been told about this person through this installation, so there is no thread to read by. A write that ensures the contact — list_membership.add or campaign.enroll — is what links them."
+      },
+      "identifier_names_nothing": {
+        "when": "The pinned contact identifier, or the campaign's, is not a Reply number at all. Decided before any call.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The identifier this read would filter by names nothing a Reply account could hold, so nothing was asked. The pin is wrong; the details say which one."
+      },
+      "feature_not_included": {
+        "when": "403 with Reply's own code `inboxThread.forbidden`: the inbox is not available to this user or team. Any other 403 is the shared `unauthorized` row.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role does not include the inbox. Signing in again would not change it; a plan or a role that includes it would."
+      },
+      "answer_too_large_on_a_read": {
+        "when": "The host reports the CLI's stdout truncated on a call marked `read`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
+        "code": "provider_answer_too_large",
+        "class": "permanent",
+        "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. The same page would be cut at the same place, so it is not repeated: ask for less — a smaller `limit` — or raise `Plugins:Exec:OutputBytes`."
+      }
+    },
+    "conversation.get": {
+      "conversation_not_found": {
+        "when": "404 on either thread call, where Reply's own code is `inboxThread.notFound`, or an identifier that is not a Reply thread number at all, which is refused without a call.",
+        "code": "conversation_not_found",
+        "class": "permanent",
+        "note": "This account holds no thread under the identifier the work item carries, or none this account may see. No later attempt will find it."
+      },
+      "feature_not_included": {
+        "when": "403 with Reply's own code `inboxThread.forbidden`: the inbox is not available to this user or team. Any other 403 is the shared `unauthorized` row.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role does not include the inbox. Signing in again would not change it; a plan or a role that includes it would."
+      },
+      "answer_too_large_on_a_read": {
+        "when": "The host reports the CLI's stdout truncated on a call marked `read`. Reply sends a thread's whole history with the thread, so a long enough history passes `Plugins:Exec:OutputBytes` however small the page.",
+        "code": "provider_answer_too_large",
+        "class": "permanent",
+        "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. Reply sends the thread's whole history with it, so a smaller page cannot help: raising `Plugins:Exec:OutputBytes` lets it through, up to about twice its default of 4 MiB — past that, the two answers a thread read holds outgrow the 256 MiB this package asks for."
       }
     },
     "list_membership.add": {
@@ -215,9 +337,12 @@ function compact(request) {
 
 // Which entry of CALLS a concrete call is, by matching the path against the templates segment by segment. The
 // path is the one the package built, so this is a lookup rather than a parse; a call the table does not hold is
-// an omission in this file and says so.
+// an omission in this file and says so. Where two templates match, the one with more literal segments is the
+// call: `/v3/sequences/7/contacts/count` is the count, not a person whose identifier happens to be `count`.
 export function callOf(method, path) {
   const segments = String(path).split("?")[0].split("/");
+  let found = null;
+  let literal = -1;
 
   for (const call of Object.keys(CALLS)) {
     const space = call.indexOf(" ");
@@ -227,17 +352,31 @@ export function callOf(method, path) {
 
     const template = call.slice(space + 1).split("/");
     if (template.length === segments.length && template.every((part, at) => part.startsWith("{") || part === segments[at])) {
-      return call;
+      const literals = template.filter(part => !part.startsWith("{")).length;
+      if (literals > literal) {
+        found = call;
+        literal = literals;
+      }
     }
   }
 
-  return null;
+  return found;
 }
 
 // Read or write, for the one decision that turns on it. A call this package does not declare gets no default:
 // treating an unmarked write as a read is exactly the mistake that ends in a double send.
 export function kindOf(call) {
   return call !== null && Object.prototype.hasOwnProperty.call(CALLS, call) ? CALLS[call].kind : null;
+}
+
+// The row an answer cut off at the exec capture belongs in. A read whose operation has a row of its own for it
+// fails with that one, permanently: asking again would be cut at the same byte. Anything else keeps the ending a
+// lost answer has always had — a write's cut answer may still have written, and a read made inside a write is
+// the write's business, which declares no such code.
+export function cutAnswerRow(operation, call) {
+  const own = operation !== null && operation !== undefined ? ROWS.per_operation[operation] : undefined;
+  const readsIt = own !== undefined && Object.prototype.hasOwnProperty.call(own, "answer_too_large_on_a_read");
+  return kindOf(call) === "read" && readsIt ? "answer_too_large_on_a_read" : lostAnswerRow(call);
 }
 
 // Which lost-answer row an ending on this call belongs in — the whole point of the read/write mark. Only a call

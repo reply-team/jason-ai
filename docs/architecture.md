@@ -1670,12 +1670,14 @@ original chat session.
 | DEC-AI-005 | Execution-profile resolution is explicit override → campaign/role policy → causal lineage → global default. |
 | DEC-AI-006 | Causal execution lineage can cross deterministic work and must not be inferred magically from a caller process. |
 | DEC-EXEC-001 | Runtime has separate deterministic internal, deterministic provider, AI-role, and human-decision execution classes. |
+| DEC-APPR-001 | An approval's preview is declared by the operation's contract as a template over the composed input and rendered by the runtime at the claim; the plugin never sees it, and a population the preview names is held by the plugin at execution. |
 | DEC-NOTIFY-001 | A notification is a pointer (counts and where to look), never a decision surface; made by a deterministic scan step with no work item and no AI in the path; recorded as the reserved journal line `notification_sent` with no campaign; a channel that cannot reach anybody is recorded and skipped, never a failure of the parked item. |
 | DEC-EXT-001 | AI agents may call external CLI/MCP/API tools directly during semantic work. |
 | DEC-EXT-002 | Campaign side effects should use managed canonical operations, but out-of-band effects remain possible. |
 | DEC-EXT-003 | Out-of-band side effects may enter Runtime through provenance-bearing post-factum reports that preserve asserted/observed status and uncertainty. |
 | DEC-OPS-001 | Runtime defines strict, versioned, vendor-neutral canonical provider operations. |
 | DEC-OPS-002 | Runtime does not launch AI merely as a proxy for an already determined provider call. |
+| DEC-OPS-003 | Canonical operations are published in subsets chosen by the role sentences they retire and the chain they complete, each copied from the vendor-neutral catalogue with its properties unsoftened; an operation on the catalogue's protective floor runs `auto`, and the claim's own guards do not block it. |
 | DEC-MCP-001 | MCP is an AI-agent tool, not the accepted deterministic Runtime transport. |
 | DEC-ROUTE-001 | Plugin routing selects the plugin implementation at global and campaign scopes; binding separately selects provider identity/workspace context. |
 | DEC-ROUTE-002 | Routing precedence is campaign operation override → campaign default → global operation override → global default. |

@@ -10,8 +10,8 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 /// <summary>
 /// What the official package may put on a command line, asserted from the stand-in's own call log rather than
 /// from the package's claim about itself. The rule is not about one operation: a command line is built in one
-/// place for all three, so every assertion here runs over the calls of all three, and a rule that held for the
-/// read and not for the two writes would fail rather than pass on the read alone.
+/// place for every operation, so every assertion here runs over every call of a read and two writes, and a rule
+/// that held for the read and not for the two writes would fail rather than pass on the read alone.
 /// </summary>
 /// <remarks>
 /// The class writes a process-wide variable — the one the CLI finds its account through — so it belongs to the
@@ -88,7 +88,7 @@ public class ReplyCommandLineTests
         await ReplyOperations.RunEachAsync(api, binding, Ct);
 
         // Read from the log: the account these calls reached is the one that profile names, and both halves of
-        // the binding are in the prefix, in the published order, on every call of all three operations.
+        // the binding are in the prefix, in the published order, on every call of every operation driven.
         AssertEveryArgumentVector(account, Profile, Team);
     }
 
@@ -145,12 +145,12 @@ public class ReplyCommandLineTests
     }
 
     /// <summary>
-    /// Every call of all three operations, with its whole argument vector rebuilt from what that call was and
+    /// Every call of every operation driven, with its whole argument vector rebuilt from what that call was and
     /// compared in full. Nothing is skipped and nothing is matched loosely: the promise is the exact vector.
     /// </summary>
     private static void AssertEveryArgumentVector(ReplyAccount account, string? profile, string? team)
     {
-        // The three operations really ran, in full, or every loop below would be one over an empty log.
+        // Every operation driven really ran, in full, or every loop below would be one over an empty log.
         Assert.Equal(ReplyOperations.EveryCall, Paths(account));
 
         foreach (var call in account.Calls)
@@ -199,10 +199,10 @@ public class ReplyCommandLineTests
 }
 
 /// <summary>
-/// The three operations this package implements, driven against one account with the inputs their own documents
-/// publish. The rules of this file and of the two beside it hold whatever the operation, so they are asserted
-/// over all three — which is worth something only if all three really run, so every driver here holds what came
-/// back to the operation's own contract before a test reads it.
+/// A read and two writes — <c>campaign.get</c>, <c>list_membership.add</c> and <c>campaign.enroll</c> — driven
+/// against one account with the inputs their own documents publish. The rules of this file and of the two beside it
+/// hold whatever the operation, so they are asserted over each of these — which is worth something only if each
+/// really runs, so every driver here holds what came back to the operation's own contract before a test reads it.
 /// </summary>
 internal static class ReplyOperations
 {
@@ -229,11 +229,11 @@ internal static class ReplyOperations
     private const string CampaignId = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
     private const string WorkItemId = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRH";
 
-    /// <summary>The three, in the order <see cref="RunEachAsync"/> drives them.</summary>
+    /// <summary>The operations driven here, in the order <see cref="RunEachAsync"/> drives them.</summary>
     public static IReadOnlyList<string> All => [CampaignGet, MembershipAdd, Enroll];
 
     /// <summary>
-    /// Every call the three operations make against a planted account, in order: one read for the campaign;
+    /// Every call those operations make against a planted account, in order: one read for the campaign;
     /// then the ensure, the suppression read and the add; then the ensure, the live-state read, the suppression
     /// read and the enrollment. A test that asserts a rule over "every call" asserts this list first, so a rule
     /// that held because nothing ran fails instead.
@@ -250,7 +250,7 @@ internal static class ReplyOperations
         $"POST /v3/sequences/{Sequence}/contact-links/bulk",
     ];
 
-    /// <summary>The provider's world all three operations need: one live sequence with steps, and one list.</summary>
+    /// <summary>The provider's world these operations need: one live sequence with steps, and one list.</summary>
     public static ReplyAccount Plant(ReplyAccount account)
     {
         ArgumentNullException.ThrowIfNull(account);
@@ -259,7 +259,7 @@ internal static class ReplyOperations
             .WithList(List, "Q3 LatAm founders");
     }
 
-    /// <summary>Drives all three operations once, each held to its own document, and answers with what they said.</summary>
+    /// <summary>Drives each operation once, held to its own document, and answers with what they said.</summary>
     public static async Task<IReadOnlyList<PluginInvocationResult>> RunEachAsync(
         RuntimeApiFixture api,
         JsonObject? binding,
@@ -282,7 +282,7 @@ internal static class ReplyOperations
         CampaignGet => CampaignGetInput(),
         MembershipAdd => MembershipAddInput(),
         Enroll => EnrollInput(),
-        _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "This package implements three operations."),
+        _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "This file drives no such operation."),
     };
 
     /// <summary>A campaign named by the identifier a planner supplied, or by the pin the runtime already holds.</summary>

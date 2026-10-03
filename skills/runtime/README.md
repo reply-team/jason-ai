@@ -87,8 +87,8 @@ differs between them is one paragraph of purpose and one of what this build can 
   guardrails: what to read before judging it, what a verdict is worth here, and why saying plainly what fails
   is the whole of the job.
 - [`roles/responder`](roles/responder/SKILL.md) — **draft.** What a reply means and what should happen
-  next: the reply is in the brief or it is nowhere, and the answer is a reading and a draft rather than
-  anything sent.
+  next: the reply is in the brief, in the result of a provider operation that read it, or nowhere, and the
+  answer is a reading and a draft rather than anything sent.
 - [`roles/analyst`](roles/analyst/SKILL.md) — **draft.** What is working in a campaign, read off the three
   things this runtime keeps — the work items, the chronicle and the reports — and honest about where the
   record runs out.

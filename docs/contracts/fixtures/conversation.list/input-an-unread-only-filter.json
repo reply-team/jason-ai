@@ -1,0 +1,15 @@
+{
+  "operation": "conversation.list",
+  "version": 1,
+  "case": "an unread-only filter, which this version does not take: a page filtered after reading could not say where the next one starts",
+  "input": {
+    "args": { "limit": 20, "offset": 0, "source": "all", "only_unread": true },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    }
+  },
+  "expect": { "invalid": [{ "pointer": "/args/only_unread", "reason": "additional_properties" }] }
+}

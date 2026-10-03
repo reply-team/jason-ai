@@ -4,8 +4,8 @@ using Jason.Runtime.Plugins.Invocation;
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>
-/// What must never leave, proven by running all three operations and then looking everywhere a value could have
-/// gone: the outcomes the runtime kept, the argument vectors the stand-in recorded, the diagnostics the child
+/// What must never leave, proven by running the package's operations and then looking everywhere a value could
+/// have gone: the outcomes the runtime kept, the argument vectors the stand-in recorded, the diagnostics the child
 /// wrote, and the log files on disk. Two different things are being ruled out and they leak differently — the
 /// account's credential, which is the CLI's alone and may reach nothing of ours, and a person's own data, which
 /// legitimately reaches Reply but only ever inside a body on stdin.
@@ -95,7 +95,7 @@ public class ReplyPrivacyTests
         // This is the rule that makes the whole privacy claim real, and it is about data that legitimately
         // travels rather than about a secret that never should. The `exec` diagnostic records every argument
         // and the runtime's logs may never hold contact data, so a person's own fields ride on stdin and
-        // nowhere else — asserted over the calls of all three operations, not the one that imports.
+        // nowhere else — asserted over every call those operations make, not only the import.
         var personal = new[] { ReplyOperations.Address, ReplyOperations.FirstName, ReplyOperations.LastName, ReplyOperations.Company };
         Assert.Equal(ReplyOperations.EveryCall, Paths(account));
         foreach (var call in account.Calls)
@@ -171,6 +171,110 @@ public class ReplyPrivacyTests
         var logs = ReadAll(api.Paths.LogsDirectory);
         Assert.DoesNotContain(ExportedKey, logs, StringComparison.Ordinal);
         Assert.DoesNotContain(ExportedTeam, logs, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The reads bring people's data back rather than sending it: names, a thread's subject and preview, a message's
+    /// body and the addresses on it. The documents let a result carry them, and the result is where they stay — not
+    /// in an argument, not in a request body (a read sends identifiers and a window, nothing else), not in a
+    /// diagnostic the child wrote and not in a log. Each corpus is shown to hold what did travel, so a value that
+    /// had gone there would be found.
+    /// </summary>
+    [Fact]
+    public async Task What_the_reads_bring_back_reaches_no_argument_request_diagnostic_or_log()
+    {
+        const string Name = "Ottilie-marker-3f1a";
+        const string Surname = "Varga-marker-6b02";
+        const string Address = "ottilie.marker@example.com";
+        const string Subject = "Subject-marker-77c2";
+        const string Preview = "Preview-marker-90ab";
+        const string Body = "Body-marker-e41d";
+        string[] personal = [Name, Surname, Address, Subject, Preview, Body];
+
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.WithContact(1001, Address, Name, lastName: Surname);
+        account.WithEnrollment(ReplyOperations.Sequence, 1001);
+        var thread = ReplyConversationListTests.Thread(501, "2026-10-03T07:41:09Z", name: Name + " " + Surname, subject: Subject, preview: Preview);
+        thread["contact"]!["email"] = Address;
+        thread["messages"] = new JsonArray(new JsonObject
+        {
+            ["channel"] = "email",
+            ["messageId"] = "<m501@mail.example.com>",
+            ["date"] = "2026-10-03T07:41:09Z",
+            ["body"] = Body,
+            ["fromName"] = Name,
+            ["isOutbound"] = false,
+            ["subject"] = Subject,
+            ["fromAddress"] = Address,
+            ["to"] = new JsonArray("sdr@vendor.example"),
+        });
+        account.WithThread(thread);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var campaign = new JsonObject
+        {
+            ["id"] = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+            ["name"] = "Q3 LatAm founders",
+            ["status"] = "active",
+            ["external_ids"] = new JsonObject { ["campaign"] = "7" },
+        };
+        var reads = new (string Operation, JsonObject Input)[]
+        {
+            ("enrollment.list", new JsonObject { ["args"] = new JsonObject { ["limit"] = 10, ["offset"] = 0 }, ["campaign"] = campaign.DeepClone() }),
+            ("engagement.summarize", new JsonObject
+            {
+                ["args"] = new JsonObject { ["window"] = new JsonObject { ["preset"] = "last_week" }, ["group_by"] = "channel" },
+                ["campaign"] = campaign.DeepClone(),
+            }),
+            ("conversation.list", new JsonObject
+            {
+                ["args"] = new JsonObject { ["limit"] = 10, ["offset"] = 0, ["source"] = "all" },
+                ["contacts"] = new JsonArray(new JsonObject { ["id"] = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", ["external_ids"] = new JsonObject { ["contact"] = "1001" } }),
+                ["campaign"] = campaign.DeepClone(),
+            }),
+            ("conversation.get", new JsonObject
+            {
+                ["args"] = new JsonObject { ["thread"] = new JsonObject { ["external_id"] = "501" }, ["limit"] = 10, ["offset"] = 0 },
+                ["campaign"] = campaign.DeepClone(),
+            }),
+        };
+
+        var answered = new List<string>();
+        foreach (var (operation, input) in reads)
+        {
+            answered.Add(ReplyOperations.Succeeded(operation, await ReplyOperations.InvokeAsync(api, operation, input, Ct)).ToJsonString());
+        }
+
+        // What the results carry, which is where it belongs: a name from the list, a subject and a preview from the
+        // threads, a body and an address from the thread itself.
+        Assert.Contains(Name, answered[0], StringComparison.Ordinal);
+        Assert.Contains(Subject, answered[2], StringComparison.Ordinal);
+        Assert.Contains(Preview, answered[2], StringComparison.Ordinal);
+        Assert.Contains(Body, answered[3], StringComparison.Ordinal);
+        Assert.Contains(Address, answered[3], StringComparison.Ordinal);
+
+        // And nowhere else. A read sends identifiers, a window and a page, so the requests themselves hold none of it.
+        Assert.Equal(6, account.Calls.Count);
+        foreach (var call in account.Calls)
+        {
+            var sent = string.Join(' ', call.Args) + call.Path + (call.Body ?? string.Empty);
+            foreach (var field in personal)
+            {
+                Assert.DoesNotContain(field, sent, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        var diagnostics = ReadAll(api.Paths.PluginWorkDirectory);
+        Assert.Contains("\"exec\"", diagnostics, StringComparison.Ordinal);
+        await api.Runtime.StopAsync();
+        var logs = ReadAll(api.Paths.LogsDirectory);
+        Assert.Contains("conversation.get", logs, StringComparison.Ordinal);
+        foreach (var field in personal)
+        {
+            Assert.DoesNotContain(field, diagnostics, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(field, logs, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     /// <summary>Everything one invocation answered, whichever way it ended, as one string to look through.</summary>

@@ -6,9 +6,10 @@ using Jason.Runtime.Routing;
 namespace Jason.Runtime.Approvals;
 
 /// <summary>
-/// What a person reads before deciding: the operation's own sentence about itself, the dangerous reading of what
-/// it reaches, undoes and costs, who it would act on and where they would be reached, which account it would act
-/// through, and the exact document it would send.
+/// What a person reads before deciding: where the operation declares one, a summary rendered from the composed
+/// input and the values it highlights; then the operation's own sentence about itself, the dangerous reading of
+/// what it reaches, undoes and costs, who it would act on and where they would be reached, which account it would
+/// act through, and the exact document it would send.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -35,22 +36,31 @@ public static class ApprovalPreview
         ArgumentNullException.ThrowIfNull(subject);
         ArgumentNullException.ThrowIfNull(campaign);
 
-        return new JsonObject
+        var preview = new JsonObject();
+        if (contract.Preview is { } declared)
         {
-            ["intent"] = contract.Intent,
-            ["reach"] = Property(contract.Reach),
-            ["reversibility"] = Property(contract.Reversibility),
-            ["cost"] = Property(contract.Cost),
-            ["campaign"] = new JsonObject
-            {
-                ["id"] = campaign.PublicId,
-                ["name"] = campaign.Name,
-            },
-            ["contact"] = Person(contact, channel),
-            ["plugin"] = (string?)subject.Document["plugin"],
-            ["binding_identity"] = (string?)subject.Document["binding_identity"],
-            ["subject"] = subject.Document.DeepClone(),
+            // Rendered from the subject's own input, so what a person reads is the document that would run, and
+            // beside the subject rather than in it: a summary worded differently is never a different decision.
+            var input = subject.Document["input"];
+            preview["summary"] = declared.Summary.Render(input);
+            preview["highlights"] = declared.Highlight(input);
+        }
+
+        preview["intent"] = contract.Intent;
+        preview["reach"] = Property(contract.Reach);
+        preview["reversibility"] = Property(contract.Reversibility);
+        preview["cost"] = Property(contract.Cost);
+        preview["campaign"] = new JsonObject
+        {
+            ["id"] = campaign.PublicId,
+            ["name"] = campaign.Name,
         };
+        preview["contact"] = Person(contact, channel);
+        preview["plugin"] = (string?)subject.Document["plugin"];
+        preview["binding_identity"] = (string?)subject.Document["binding_identity"];
+        preview["subject"] = subject.Document.DeepClone();
+
+        return preview;
     }
 
     private static JsonObject Property(ContractProperty property) => new()

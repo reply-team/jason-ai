@@ -507,6 +507,15 @@ public class ClaimerTests
         Assert.Equal("ada@example.test", (string?)approval.Preview["contact"]!["value"]);
         Assert.Equal("sha256:west", (string?)approval.Preview["binding_identity"]);
 
+        // It leads with the line the operation's own template renders from that same document, the values it
+        // singles out beside it, and neither of them is part of what is approved.
+        Assert.Equal(
+            "Enroll Ada — (ada@example.test) in campaign Flow at the provider: start at first_step, first touch authored_delay, "
+            + "skip if they already take part. If the campaign is live there, its messages start going to this person on that timing.",
+            (string?)approval.Preview["summary"]);
+        Assert.Equal("ada@example.test", (string?)approval.Preview["highlights"]!["/contacts/0/channels/0/value"]);
+        Assert.DoesNotContain(approval.Subject, member => member.Key is "preview" or "summary" or "highlights");
+
         var lines = await fresh.Journal.AsNoTracking()
             .Where(e => e.WorkItemId == item.PublicId)
             .OrderBy(e => e.Id)

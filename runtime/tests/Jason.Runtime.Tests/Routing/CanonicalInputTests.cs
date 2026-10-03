@@ -16,6 +16,7 @@ public class CanonicalInputTests
 {
     private const string ListMembershipAdd = "list_membership.add";
     private const string CampaignGet = "campaign.get";
+    private const string ConversationList = "conversation.list";
 
     /// <summary>
     /// A3. The person's other addresses are not this operation's business, and because the projection is declared
@@ -65,6 +66,51 @@ public class CanonicalInputTests
 
         Assert.Equal(["args", "campaign"], input.Select(member => member.Key));
         Assert.Equal("c-7", (string?)input["args"]!["campaign"]!["external_id"]);
+    }
+
+    /// <summary>
+    /// A read whose contact is optional takes the person when the work item names one — their id and this plugin's
+    /// pins, and never their channels: a read about a person works by the pin, so how they are reachable is not its
+    /// business.
+    /// </summary>
+    [Fact]
+    public void An_optional_contact_travels_as_its_id_and_its_pins_and_never_its_channels()
+    {
+        var contact = ContactWith(("email", "ada@example.test", true), ("phone", "+15555550100", false));
+        var facts = Facts(
+            ConversationList,
+            Listing(),
+            contact,
+            contactPins: new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "48211" });
+        var contract = Contract(ConversationList);
+
+        var input = CanonicalInput.Compose(contract, facts);
+
+        var person = Assert.Single(input["contacts"]!.AsArray())!.AsObject();
+        Assert.Equal(["id", "external_ids"], person.Select(member => member.Key));
+        Assert.Equal(contact.PublicId, (string?)person["id"]);
+        Assert.Equal("48211", (string?)person["external_ids"]!["contact"]);
+        Assert.Empty(SchemaValidator.Validate(input, contract.InputSchema));
+    }
+
+    /// <summary>
+    /// Without a person the same read is about the campaign, and the document says so by leaving the person out —
+    /// never by sending an empty list the schema would refuse.
+    /// </summary>
+    [Fact]
+    public void An_optional_contact_the_work_item_does_not_name_is_left_out()
+    {
+        var facts = Facts(
+            ConversationList,
+            Listing(),
+            contact: null,
+            campaignPins: new Dictionary<string, string>(StringComparer.Ordinal) { ["campaign"] = "c-7714" });
+        var contract = Contract(ConversationList);
+
+        var input = CanonicalInput.Compose(contract, facts);
+
+        Assert.Equal(["args", "campaign"], input.Select(member => member.Key));
+        Assert.Empty(SchemaValidator.Validate(input, contract.InputSchema));
     }
 
     /// <summary>
@@ -167,6 +213,8 @@ public class CanonicalInputTests
     }
 
     private static OperationContract Contract(string id) => OperationCatalog.Find(id)!;
+
+    private static JsonObject Listing() => new() { ["limit"] = 20, ["offset"] = 0, ["source"] = "all" };
 
     private static JsonObject Arguments(string channel) => new()
     {

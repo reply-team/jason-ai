@@ -347,8 +347,8 @@ produced it keeps it, named from the evidence rather than copied into it.
   are two rows; one reporter who genuinely produced the same effect twice must say so with a key.
 - **`effect` is uninterpreted free text.** There is no vocabulary of effects, so `email_sent` and
   `sent_email` are two different things to every filter and every reader.
-- **Only three published operations to correlate to.** `campaign.get`, `list_membership.add` and
-  `campaign.enroll` are the whole catalog, so `operation_known` is false for most of what anybody
+- **Only seven published operations to correlate to.** The documents under
+  `docs/contracts/operations/` are the whole catalog, so `operation_known` is false for most of what anybody
   will actually report (DEF-OPS-001).
 
 The design these follow from — managed execution preferred but not exclusive, post-factum reporting

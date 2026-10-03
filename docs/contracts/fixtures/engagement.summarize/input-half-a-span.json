@@ -1,0 +1,15 @@
+{
+  "operation": "engagement.summarize",
+  "version": 1,
+  "case": "a span with a start and no end",
+  "input": {
+    "args": { "window": { "from": "2026-09-01T00:00:00Z" }, "group_by": "channel" },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    }
+  },
+  "expect": { "invalid": [{ "pointer": "/args/window", "reason": "any_of" }] }
+}

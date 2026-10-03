@@ -21,6 +21,8 @@
   },
   "approval_artefact": "preview",
   "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
   "before_repeating": "the per-item outcome of the prior run under this key, and the campaign's live state — re-running blind into a live campaign sends twice.",
   "idempotency_key": "required",
   "per_item_results": "required",
@@ -40,6 +42,10 @@
     "channels": "consumed"
   },
   "precondition": "Ensure the provider's own contact exists before enrolling it: work by `contacts[0].external_ids.contact` when that pin is present, otherwise create the contact from the value of the channel named by `args.channel`, and return the provider's identifier under `external_ids.contact`.",
+  "preview": {
+    "summary": "Enroll {/contacts/0/first_name} {/contacts/0/last_name} ({/contacts/0/channels/0/value}) in campaign {/campaign/name} at the provider: start at {/args/start/position}, first touch {/args/first_touch}, {/args/collision} if they already take part. If the campaign is live there, its messages start going to this person on that timing.",
+    "highlights": ["/contacts/0/channels/0/value", "/campaign/name", "/args/start", "/args/first_touch", "/args/collision"]
+  },
 
   "input_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",

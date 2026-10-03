@@ -15,9 +15,10 @@ build, because every skill's do.
 
 ## What this build gives you, and what it does not
 
-**This build has no inbound reply to read.** No verb reads a mailbox, a thread or a message, so the reply you
-are asked about is in the brief or it is nowhere: if `context` does not carry it, fail with a code rather than
-imagining one. What you can read is the person and what Jason has already done about them.
+**This build reads a reply only through the provider.** A `provider_op` item naming `conversation.list` or
+`conversation.get` does it, and its result carries the threads; no verb of Jason's reads a mailbox. So the reply
+you are asked about is in the brief, in such an item's result, or nowhere: if neither carries it, fail with a code
+rather than imagining one. What you can read is the person and what Jason has already done about them.
 
 ```
 jason contact get cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
@@ -28,9 +29,9 @@ jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 A reply you draft is this work item's result. If the person asked not to be contacted again, that is a
 suppression somebody with that operation records — say so in your answer rather than acting on it yourself.
 
-**No operation this build publishes sends anything.** The three it has are `campaign.enroll`, `campaign.get`
-and `list_membership.add`: enrolling somebody puts them into the provider's own campaign, and whatever goes
-out after that is the provider's doing, on its schedule. Nothing here composes a message and sends it.
+**No operation this build publishes sends anything.** The two that act are `campaign.enroll` and
+`list_membership.add`, and the rest only read: enrolling somebody puts them into the provider's own campaign, and
+whatever goes out after that is the provider's doing, on its schedule. Nothing here composes a message and sends it.
 
 ```
 jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD responder --note '{"pattern":"most replies here are forwarding to a colleague","checked":"2026-09-21"}'

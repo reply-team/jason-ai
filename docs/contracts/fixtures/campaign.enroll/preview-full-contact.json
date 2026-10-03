@@ -1,0 +1,58 @@
+{
+  "operation": "campaign.enroll",
+  "version": 1,
+  "case": "every field of the person filled in: the summary still names only who they are and where the messages go, and the step number is in the highlighted start",
+  "input": {
+    "args": {
+      "channel": "email",
+      "collision": "skip",
+      "start": {
+        "position": "step",
+        "step": 3
+      },
+      "first_touch": "immediately"
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": "Puerto Analytics",
+        "title": "Head of Growth",
+        "time_zone": "America/Bogota",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "marta@example.com",
+            "primary": true
+          }
+        ],
+        "external_ids": {
+          "contact": "p_88421"
+        }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": {
+        "campaign": "c_7714"
+      }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "summary": "Enroll Marta Alvarez (marta@example.com) in campaign Q3 LatAm founders at the provider: start at step, first touch immediately, skip if they already take part. If the campaign is live there, its messages start going to this person on that timing.",
+    "highlights": {
+      "/contacts/0/channels/0/value": "marta@example.com",
+      "/campaign/name": "Q3 LatAm founders",
+      "/args/start": {
+        "position": "step",
+        "step": 3
+      },
+      "/args/first_touch": "immediately",
+      "/args/collision": "skip"
+    }
+  }
+}

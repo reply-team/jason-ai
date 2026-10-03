@@ -7,10 +7,10 @@ using Jason.Runtime.Plugins.Invocation;
 namespace Jason.Runtime.Tests.Plugins.Invocation;
 
 /// <summary>
-/// The three published contracts, implemented by a real plugin against a real provider account and driven
-/// through the shipped executable. The fixtures under <c>docs/contracts/fixtures/</c> say what a conforming
-/// answer looks like; this is their live counterpart, and what makes the claim "these contracts are
-/// implementable" something other than an opinion.
+/// The contracts of <c>campaign.get</c>, <c>list_membership.add</c> and <c>campaign.enroll</c>, implemented by a
+/// real plugin against a real provider account and driven through the shipped executable. The fixtures under
+/// <c>docs/contracts/fixtures/</c> say what a conforming answer looks like; this is their live counterpart, and what
+/// makes the claim "these contracts are implementable" something other than an opinion.
 /// </summary>
 /// <remarks>
 /// The input is composed here rather than by a claim, so that one operation can be exercised without a work
