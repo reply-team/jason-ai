@@ -1,6 +1,6 @@
 # jason-ai
 
-**The open-source Jason AI runtime** — a local-first, vendor-neutral SDR domain runtime that
+**The Jason AI runtime** — a local-first, vendor-neutral SDR domain runtime that
 turns your own AI agents, installed SDR skills, and external execution providers into a
 durable outbound-sales operation.
 
@@ -401,4 +401,6 @@ product naming may change — the architecture does not depend on it.
 
 ## License
 
-[MIT](LICENSE)
+Everything in this repository outside `runtime/` is MIT ([LICENSE](LICENSE)): the skills, the contracts, the
+plugins, the documentation and the install scripts. The runtime under `runtime/` is proprietary
+([runtime/LICENSE](runtime/LICENSE)); its binaries ship with their licence inside each release archive.

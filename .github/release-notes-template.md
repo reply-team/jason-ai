@@ -22,10 +22,11 @@ from the tag `v{{version}}` by the tests that passed at it.
 | `install.sh` | macOS and Linux: the install script this release was published with |
 | `install.ps1` | Windows: the install script this release was published with |
 
-Each archive holds the executable and `LICENSE`, nothing else. Plugins are installed from the repository as
-before: a package is copied into `~/.jason/plugins/`. On Linux the executable needs the ICU library
-(`libicu`), which desktop distributions carry and minimal images may not; the install script stops, with the
-runtime's own message, rather than install a program that does not start.
+Each archive holds the executable and `LICENSE` (the runtime's licence; the repository's MIT does not cover the
+runtime), nothing else. Plugins are installed from the repository as before: a package is copied into
+`~/.jason/plugins/`. On Linux the executable needs the ICU library (`libicu`), which desktop distributions carry
+and minimal images may not; the install script stops, with the runtime's own message, rather than install a
+program that does not start.
 
 ## Installing
 

@@ -93,12 +93,14 @@ runs:
         RID: ${{ inputs.rid }}
         EXECUTABLE: ${{ steps.publish.outputs.executable }}
       run: |
-        # MIT's own condition is that the notice accompanies every copy of the software.
+        # The archive carries the runtime's own licence, runtime/LICENSE, under the name LICENSE. The
+        # repository's MIT licence covers the skills, contracts, plugins, documentation and install scripts, not
+        # the runtime, so the repository's LICENSE is not the one that travels beside the executable.
         $staging = "artifacts/package/$env:RID"
         New-Item -ItemType Directory -Force $staging | Out-Null
         New-Item -ItemType Directory -Force artifacts/release | Out-Null
         Copy-Item $env:EXECUTABLE $staging
-        Copy-Item LICENSE $staging
+        Copy-Item runtime/LICENSE (Join-Path $staging LICENSE)
 
     - name: Archive as zip
       if: startsWith(inputs.rid, 'win-')

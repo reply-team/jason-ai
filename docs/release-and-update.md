@@ -25,9 +25,9 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 
 | Asset | What it is |
 |---|---|
-| `jason-win-x64.zip` | the Windows executable and `LICENSE` |
-| `jason-linux-x64.tar.gz` | the Linux executable and `LICENSE` |
-| `jason-osx-arm64.tar.gz` | the macOS (Apple silicon) executable and `LICENSE` |
+| `jason-win-x64.zip` | the Windows executable and `LICENSE` (the runtime's licence) |
+| `jason-linux-x64.tar.gz` | the Linux executable and `LICENSE` (the runtime's licence) |
+| `jason-osx-arm64.tar.gz` | the macOS (Apple silicon) executable and `LICENSE` (the runtime's licence) |
 | `checksums.txt` | one `sha256sum` line per archive |
 | `manifest.json` | what the updater reads |
 | `install.sh` | the macOS and Linux install script, as this release was published with it |
@@ -46,9 +46,11 @@ https://github.com/reply-team/jason-ai/releases/latest/download/jason-linux-x64.
 resolve for every release there will ever be, so a README, an install script and a runtime's feed URL are
 written once and never edited again.
 
-**An archive holds the executable and `LICENSE`, and nothing else.** A plugin is installed by copying a
-directory into the data directory and nothing reads the install directory, so a bundled plugin would be a file
-nothing loads. Plugins are installed from the repository, exactly as `docs/plugins.md` §4 says.
+**An archive holds the executable and `LICENSE`, and nothing else.** That `LICENSE` is the runtime's own; the
+repository's MIT licence covers the skills, contracts, plugins, documentation and install scripts, not the
+runtime. A plugin is installed by copying a directory into the data directory and nothing reads the install
+directory, so a bundled plugin would be a file nothing loads. Plugins are installed from the repository, exactly
+as `docs/plugins.md` §4 says.
 
 ## 3. The manifest
 

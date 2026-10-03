@@ -44,7 +44,7 @@ public class ReleaseWorkflowTests
             Assert.Contains(ReleaseAssets.For(rid), action, StringComparison.Ordinal);
         }
 
-        // Q5: MIT's own condition is that the notice accompanies every copy of the software.
+        // Q5: every archive carries a licence beside the executable, and it is the runtime's own (the test below).
         Assert.Contains("LICENSE", action, StringComparison.Ordinal);
     }
 
@@ -135,6 +135,43 @@ public class ReleaseWorkflowTests
 
         var again = Pwsh(environment, "-Command", line);
         Assert.True(again.Exit == 0, $"A warm runner packages a second time and: {again.Stderr}");
+    }
+
+    /// <summary>
+    /// The archive carries the runtime's own licence under the name <c>LICENSE</c>, not the repository's: the
+    /// repository's MIT licence covers what lies outside <c>runtime/</c>, and the executable is the runtime.
+    /// </summary>
+    /// <remarks>
+    /// The action's own step is read out of the action and run against a tree of this test's own that holds both
+    /// files, so the test sees which of the two lands beside the executable rather than what the step mentions.
+    /// </remarks>
+    [Fact]
+    public void The_archive_carries_the_runtime_s_licence_rather_than_the_repository_s()
+    {
+        var staging = Assert.IsType<YamlSequenceNode>(Node(Mapping(Parse(Read(Action)), "runs"), "steps")).Children.Cast<YamlMappingNode>()
+            .Single(step => Scalar(step, "name") == "Put LICENSE beside the executable");
+
+        using var tree = new TempTree();
+        File.WriteAllText(Path.Combine(tree.Root, "LICENSE"), "the repository's licence");
+        Directory.CreateDirectory(Path.Combine(tree.Root, "runtime"));
+        File.WriteAllText(Path.Combine(tree.Root, "runtime", "LICENSE"), "the runtime's licence");
+        var executable = Path.Combine(tree.Root, "jason.exe");
+        File.WriteAllText(executable, "not really an executable");
+
+        var step = Path.Combine(tree.Root, "stage.ps1");
+        File.WriteAllText(step, Scalar(staging, "run"));
+        var environment = new Dictionary<string, string>
+        {
+            ["RID"] = "win-x64",
+            ["EXECUTABLE"] = executable,
+        };
+
+        var run = Pwsh(environment, "-Command", $"$ErrorActionPreference = 'Stop'; Set-Location -LiteralPath '{tree.Root}'; & '{step}'");
+        Assert.True(run.Exit == 0, run.Stderr);
+
+        var package = Path.Combine(tree.Root, "artifacts", "package", "win-x64");
+        Assert.Equal("the runtime's licence", File.ReadAllText(Path.Combine(package, "LICENSE")));
+        Assert.Equal(["LICENSE", "jason.exe"], Directory.GetFiles(package).Select(Path.GetFileName).Order(StringComparer.Ordinal));
     }
 
     /// <summary>
