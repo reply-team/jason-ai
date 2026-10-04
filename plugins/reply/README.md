@@ -164,6 +164,12 @@ Every failure carries a code the operation's own contract publishes and a class 
 [`modules/errors.js`](modules/errors.js), which is their single source — a test reads that file and holds
 every code in it to the operation's published contract, the same code under the same class.
 
+A failure's message is all of it that reaches the work item's last error. What it carries beyond its code, class and
+message — Reply's status and code, the package's own reason, the numbers a decision was about — is in the failed
+attempt's trace ([docs/plugins.md](../../docs/plugins.md) §5, "Failing"): `jason workitem get <id>` prints it as
+`attempts[].error.trace` in its JSON, the default, and the `--human` view does not show it. The tables below say "the
+trace" for it.
+
 ### Which call it was
 
 Whether a lost answer is cheap or expensive is decided by the call it was lost on, so every call this
@@ -201,7 +207,7 @@ creates people.
 | A **write** timed out, answered 5xx, exited with nothing that could be parsed, or its answer was cut off at `Plugins:Exec:OutputBytes`. | `provider_answer_lost` | ambiguous | The item stops for a person. Look at the account — the contact, the list, the sequence — and decide; a blind repeat can create somebody twice or send to them twice. Whatever the attempt had learned travels with the failure, so there are identifiers to look by. |
 | 401 or 403, and the per-item word `forbidden` inside a 200. | `unauthorized` | permanent | Sign that profile in again, or issue a key carrying the scope the call needs. |
 | 429. | `rate_limited` | transient | Nothing. The runtime waits and repeats the attempt. |
-| Any other status, or a business code no row below names. | `provider_call_failed` | permanent | Read `details`: the status and Reply's own code are in it. Reply's per-item error set is published as an open one, so there will be some — and a refusal that recurs belongs in the table. |
+| Any other status, or a business code no row below names. | `provider_call_failed` | permanent | The status and Reply's own code are in the trace. Reply's per-item error set is published as an open one, so there will be some — and a refusal that recurs belongs in the table. |
 
 ### `campaign.get`
 
@@ -236,7 +242,7 @@ A refusal of the count alone is not a failure: the page is answered and `total` 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
 | The work item names a person and no Reply contact identifier is pinned for them. Nothing is called. | `contact_not_linked` | permanent | A write that ensures the contact — `list_membership.add` or `campaign.enroll` — is what links them. A read creates nobody. |
-| The pinned contact identifier, or the campaign's, is not a Reply number at all. Nothing is called. | `provider_call_failed` | permanent | The pin is wrong; `details.reason` says which. |
+| The pinned contact identifier, or the campaign's, is not a Reply number at all. Nothing is called. | `provider_call_failed` | permanent | The pin is wrong; the trace says which. |
 | Reply answers 403 with its own code `inboxThread.forbidden`: the inbox is not available to this user or team. | `feature_unavailable` | permanent | A plan or a role that includes the inbox. Any other 403 is `unauthorized` above. |
 | Reply's answer was longer than `Plugins:Exec:OutputBytes` lets a plugin read from a program. | `provider_answer_too_large` | permanent | Ask for a smaller `limit`, or raise `Plugins:Exec:OutputBytes`. |
 
@@ -272,15 +278,15 @@ answered with a validation problem that names no code, so it arrives as `provide
 | Reply's own opt-out register holds this person. | `suppressed` | permanent | Nothing, on purpose. |
 | Reply will not accept the address on the channel the call named. | `invalid_channel_value` | validation | Correct the contact's data. |
 | The account will hold no further contact or enrollment. | `limit_reached` | permanent | Free capacity at Reply. A **sequence's** own capacity publishes no code, so it arrives as `provider_call_failed`. |
-| The arguments name a call that cannot be built: a start position the shape of this sequence's steps cannot answer, or a first touch this version has no word for. Nothing is sent. | `provider_call_failed` | permanent | `details.reason` says which reading failed. Ask for the first step, or name a position the sequence really has. |
-| Reply answers the per-item word `invalidInput` for this person. | `provider_call_failed` | permanent | Reply read the request and would not take it; its own word is in the details. A request built wrong is built the same way every time. |
+| The arguments name a call that cannot be built: a start position the shape of this sequence's steps cannot answer, or a first touch this version has no word for. Nothing is sent. | `provider_call_failed` | permanent | The trace says which reading failed. Ask for the first step, or name a position the sequence really has. |
+| Reply answers the per-item word `invalidInput` for this person. | `provider_call_failed` | permanent | Reply read the request and would not take it; its own word is in the trace. A request built wrong is built the same way every time. |
 
 ### `campaign.pause`
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
 | The identifier is not a Reply sequence number, or Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. |
-| The sequence is archived, or never started — read from its state, so no pause is asked for — or Reply refuses the pause with 409 or 400. | `campaign_not_pausable` | permanent | Nothing to pause. Reply's own code is in `details.provider_code` where it gave one. |
+| The sequence is archived, or never started — read from its state, so no pause is asked for — or Reply refuses the pause with 409 or 400. | `campaign_not_pausable` | permanent | Nothing to pause. The trace says which, with Reply's own code where it gave one. |
 
 The pause is idempotent at Reply, so the ambiguous ending above is repeated rather than stopped for a person: the
 next attempt reads the state and answers `already_paused` if the pause landed. A pause runs even while its Jason
@@ -291,8 +297,8 @@ campaign is paused, because the provider's sequence must still stop after somebo
 | When | Code | Class | What to do about it |
 |---|---|---|---|
 | The identifier is not a Reply sequence number, or Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. |
-| The sequence is archived — read from its state, so no start is asked for — or Reply refuses the start: 409 archived, or 400 with no contacts, no connected sending account or no sending hours. | `campaign_not_activatable` | permanent | Change what `details.provider_code` names at Reply first; then propose the activation again. |
-| Reply's count, read at execution, is not the population the person approved. Nothing starts. | `population_changed` | permanent | Read the count again and propose a new activation: `details.expected` and `details.actual` carry both numbers, which reach you in the failed attempt's `trace` ([docs/plugins.md](../../docs/plugins.md) §5, "Failing"). |
+| The sequence is archived — read from its state, so no start is asked for — or Reply refuses the start: 409 archived, or 400 with no contacts, no connected sending account or no sending hours. | `campaign_not_activatable` | permanent | Change at Reply what the trace names — Reply's own code, where it gave one — then propose the activation again. |
+| Reply's count, read at execution, is not the population the person approved. Nothing starts. | `population_changed` | permanent | Read the count again and propose a new activation: the trace carries both numbers. |
 
 A start whose answer was lost may already be sending, so the next attempt reads the sequence's state and its count
 first, and answers `already_live` rather than starting twice. A person approves every activation: it waits for them
@@ -304,7 +310,7 @@ before it runs, as `campaign.enroll` does.
 |---|---|---|---|
 | The pinned contact identifier is not a Reply contact number, or no longer resolves there — including as the word `notFound` against this person in the opt-out's answer. | `contact_not_found` | permanent | The pin has to be cleared before the opt-out can be recorded at Reply. |
 | The lookup found more than one contact under the address. Nothing is set. | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the opt-out again. |
-| The lookup read five pages of a hundred and Reply said there were more, so one match could not be told from two. Nothing is made and nothing is set. | `provider_call_failed` | permanent | Record the opt-out at Reply by hand: a repeat would read the same pages. Where `jason suppression add` recorded the address, Jason's own register already stops Jason's own reach. `details.reason` says why. |
+| The lookup read five pages of a hundred and Reply said there were more, so one match could not be told from two. Nothing is made and nothing is set. | `provider_call_failed` | permanent | Record the opt-out at Reply by hand: a repeat would read the same pages. Where `jason suppression add` recorded the address, Jason's own register already stops Jason's own reach. The trace says why. |
 | Reply will not accept the address, so no contact could be made to record the opt-out on. | `invalid_channel_value` | validation | Correct the contact's data. |
 | The account will hold no further contact, so the person could not be made there. | `limit_reached` | permanent | Free capacity at Reply. Reply never held them under this address, so it cannot reach them there either. |
 
@@ -323,7 +329,7 @@ harm — and it runs even while its Jason campaign is paused. Jason's own regist
 | The identifier is not a Reply sequence number, or — read first when the work item names the campaign for the first time — Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. A campaign already pinned is not read again: if Reply no longer holds it, its one lumped 404 reads `already_stopped`. |
 | The pinned contact identifier is not a Reply contact number at all. Nothing is called. | `contact_not_found` | permanent | The pin is wrong and has to be cleared. A well-formed pin Reply no longer holds is not this: it reads `already_stopped`. |
 | The lookup found more than one contact under the address. Nobody is taken out. | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the stop again. |
-| The lookup read five pages of a hundred and Reply said there were more, so one match could not be told from two, or from none. Nobody is taken out. | `provider_call_failed` | permanent | Take the person out at Reply by hand, then check with `enrollment.list`: a repeat would read the same pages. It is never read as a person Reply does not hold. `details.reason` says why. |
+| The lookup read five pages of a hundred and Reply said there were more, so one match could not be told from two, or from none. Nobody is taken out. | `provider_call_failed` | permanent | Take the person out at Reply by hand, then check with `enrollment.list`: a repeat would read the same pages. It is never read as a person Reply does not hold. The trace says why. |
 | The person carries no value on the channel the call named. Nothing is called. | `invalid_channel_value` | validation | Name a channel they have. |
 
 The person is found without creating anybody: by the pin, or by looking the address up as `optout.record` does. A
@@ -416,7 +422,7 @@ every stop before it runs, and its work waits while its Jason campaign is paused
 - **A person with no first name is created rather than imported**, because Reply's import refuses an item
   without one and inventing a first name would write data nobody supplied into a customer's own records.
   That second path publishes no code for an address the account already holds, so a duplicate there is
-  reported as `provider_call_failed` with Reply's own word in the details, rather than mapped to a code
+  reported as `provider_call_failed` with Reply's own word in the trace, rather than mapped to a code
   nobody published.
 
 - **The reads page by `limit` and `offset`, never by a cursor**, because Reply pages by `top` and `skip`. A

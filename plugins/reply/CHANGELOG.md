@@ -3,6 +3,16 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.2.1
+
+- The messages of `campaign_not_pausable`, `campaign_not_activatable` and `population_changed`, and of
+  four `provider_call_failed` rows — a refusal in a word this package does not know, an enrollment Reply
+  rejects as invalid, an enrollment that could not be built, and a read filtering by an identifier that
+  names nothing — no longer send their reader to the failure's details, which never reach a work item's
+  last error. Each says what happened and what could have caused it, and that the attempt's trace says
+  which, with Reply's own code or both numbers. The README's tables say the same, and two tests hold
+  every message in the error table and every remedy in those tables to it.
+
 ## 0.2.0
 
 Adds the four reads — `enrollment.list`, `engagement.summarize`, `conversation.list` and
