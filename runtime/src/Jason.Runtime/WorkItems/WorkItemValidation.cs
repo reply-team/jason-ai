@@ -35,7 +35,7 @@ internal static partial class WorkItemValidation
     /// How long the invoker gives a child to stop once its budget is spent, which is part of the shortest lease
     /// a provider operation can be run under.
     /// </param>
-    public static void ValidateCreate(WorkItemCreateRequest request, bool roleExists, bool profileExists, int killGraceMs, ValidationErrors errors)
+    public static void ValidateCreate(WorkItemCreateRequest request, bool roleExists, bool profileExists, int killGraceMs, PatternTiming timing, ValidationErrors errors)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(errors);
@@ -61,7 +61,7 @@ internal static partial class WorkItemValidation
         {
             if (ValidateOperation(request.Operation, errors) is { } operation)
             {
-                ValidateProviderOperation(operation, request.Context?[WorkItemService.InputKey], errors);
+                ValidateProviderOperation(operation, request.Context?[WorkItemService.InputKey], timing, errors);
                 ValidateProviderTimeout(operation, request.TimeoutSeconds, killGraceMs, errors);
             }
 
@@ -241,7 +241,7 @@ internal static partial class WorkItemValidation
     /// item is being written is the whole point — otherwise a mistyped argument is discovered by the attempt
     /// that failed on it, hours later and with a plugin already called.
     /// </summary>
-    public static void ValidateProviderOperation(string operation, JsonNode? input, ValidationErrors errors)
+    public static void ValidateProviderOperation(string operation, JsonNode? input, PatternTiming timing, ValidationErrors errors)
     {
         ArgumentNullException.ThrowIfNull(operation);
         ArgumentNullException.ThrowIfNull(errors);
@@ -256,7 +256,7 @@ internal static partial class WorkItemValidation
             return;
         }
 
-        ValidateInput(contract, input, errors);
+        ValidateInput(contract, input, timing, errors);
     }
 
     /// <summary>
@@ -264,14 +264,14 @@ internal static partial class WorkItemValidation
     /// measured again — and an item created by a build that published a contract this one does not is left alone
     /// here rather than stranded behind a field no patch can reach; the claim fails such an item closed anyway.
     /// </summary>
-    public static void ValidateProviderInput(string operation, JsonNode? input, ValidationErrors errors)
+    public static void ValidateProviderInput(string operation, JsonNode? input, PatternTiming timing, ValidationErrors errors)
     {
         ArgumentNullException.ThrowIfNull(operation);
         ArgumentNullException.ThrowIfNull(errors);
 
         if (OperationCatalog.Find(operation) is { } contract)
         {
-            ValidateInput(contract, input, errors);
+            ValidateInput(contract, input, timing, errors);
         }
     }
 
@@ -311,7 +311,7 @@ internal static partial class WorkItemValidation
                 $"timeout_seconds must be at least {floor} for '{contract.Id}', which declares {contract.TimeoutMs} ms, plus the {killGraceMs} ms a child is given to stop."));
     }
 
-    private static void ValidateInput(OperationContract contract, JsonNode? input, ValidationErrors errors)
+    private static void ValidateInput(OperationContract contract, JsonNode? input, PatternTiming timing, ValidationErrors errors)
     {
         var declared = ArgumentSchema(contract);
         if (input is null)
@@ -330,9 +330,17 @@ internal static partial class WorkItemValidation
             return;
         }
 
-        foreach (var problem in SchemaValidator.Validate(input, declared))
+        var problems = SchemaValidator.Validate(input, declared, timing);
+        foreach (var problem in SchemaValidator.Verdicts(problems))
         {
             errors.Add(InputField + problem.Pointer, "invalid", problem.Message);
+        }
+
+        // A pattern that did not finish is no verdict on the arguments, so it is never reported as `invalid`: nothing
+        // is written either way, and the request is answered as one to send again unless something else is wrong.
+        foreach (var problem in problems.Where(problem => problem.Reason == SchemaValidator.PatternTimedOut))
+        {
+            errors.Unmeasured(InputField + problem.Pointer, problem.Message);
         }
     }
 

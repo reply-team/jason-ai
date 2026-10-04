@@ -54,6 +54,11 @@ attempt that failed on it much later, with a provider already called. `workitem.
 | `context.input` | `required` | the operation declares required arguments and the item carries none. An absent key and a JSON `null` read alike — neither is an argument |
 | `context.input<pointer>` | `invalid` | the arguments do not satisfy the `args` sub-schema of the operation's input, one detail per failure with the JSON pointer of the offending place (`context.input/channel`), all of them reported at once |
 
+A pattern that did not finish matching the arguments, twice, is none of these: a timeout says nothing about the
+value, so nothing is written and the request is answered `validation_timed_out`, 503, `retryable: true`, with a
+`pattern_timed_out` detail at each place it happened — send it again. Arguments wrong somewhere else are still
+refused as above, and the refusal names only what is wrong.
+
 What is measured here is the caller's own arguments — the `args` property of the operation's input
 schema — and not the whole composed input. The rest of that input is the runtime's to write, at
 claim: the contact, the campaign and the idempotency key. So a rule the operation states across the
@@ -403,7 +408,9 @@ is alive.
 **An answer is held to the shape that was asked for.** Where the item declares a `result_format`, a
 completion whose result does not satisfy it is refused with `result_invalid` (400, not retryable) and
 the item stays `processing`, so the executor still holds its attempt and can answer again; one that
-gives up instead ends as `executor_exited`. What is judged is the result that will stand — the one
+gives up instead ends as `executor_exited`. A pattern of that schema that did not finish matching the
+result, twice, refuses nothing: the completion is answered `validation_timed_out`, 503, `retryable: true`,
+nothing is recorded, and the executor still holds its attempt to send it again. What is judged is the result that will stand — the one
 the completion carries, or the one an earlier `set_result` left — so an executor cannot check in with
 a paragraph and then finish empty-handed. A **failed** completion is never judged against the shape:
 a failure has an error to report and no result to measure.
@@ -449,6 +456,7 @@ settings at all and are never refused for this reason.
 | `result_invalid` | 400 | the result does not satisfy the `result_format` the item declared |
 | `role_exists` | 409 | a role of that name already exists |
 | `settings_unreadable` | 503 | the settings are invalid and none have validated since the runtime started; repair the file and call again |
+| `validation_timed_out` | 503, and attempt | a pattern a value is measured against did not finish matching in time, twice, so nothing was decided and nothing changed: send the request again. At the claim the attempt ends `transient`; over a plugin's answer, `ambiguous` |
 | `lease_expired` | attempt | the whole budget of the attempt was spent |
 | `heartbeat_missed` | attempt | nothing was heard for twice the heartbeat interval |
 | `executor_exited` | attempt | the child ended without reporting |
@@ -486,11 +494,22 @@ item for a person (§Approvals above), and it is asked last so that nobody is as
 would have been refused anyway. [docs/routing.md](routing.md) says what each one means and what to
 change.
 
+Two of those checks measure a document against a schema — the binding against the plugin's (7), the
+composed input against the operation's (11) — and one answer they can give is not a refusal. Where a
+pattern of that schema did not finish matching, twice, nothing was found wrong and nothing has run, so
+the attempt ends `validation_timed_out`, `transient`, and the dispatcher retries it under the ordinary
+retry rule — never `input_invalid` or `binding_invalid`, which would send a planner to edit an item that
+may be right.
+
 **A failure's class decides the retry, not the code table.** A provider attempt ends with one of four
 classes: `transient` comes back, `permanent` and `validation` are final, and `ambiguous` — the
 provider may already have acted — is repeated only where the operation's own contract says a repeat is
 `safe` or is answerable `after_recovery_read`. An answer that arrived and does not satisfy the
-operation's output schema is `result_invalid`: ambiguous, and never repeated.
+operation's output schema is `result_invalid`: ambiguous, and never repeated. An answer a pattern of
+that schema could not finish measuring, twice, is a lost answer instead: `validation_timed_out`,
+ambiguous, and the operation's own repeat rule decides, because the plugin has run and its effect may
+have landed — calling it transient would run a completed write again blind. The unmeasured answer is
+kept on the attempt's trace for a person, and nothing in it is pinned.
 
 **What ran is pinned to the attempt.** Every provider attempt carries a `provenance` record, written at
 the claim from the decision that was just made and completed when the invocation ends: the plugin, its

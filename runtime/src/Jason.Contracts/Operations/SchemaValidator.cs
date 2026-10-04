@@ -50,8 +50,46 @@ public static class SchemaValidator
 
     private const double MaxDecimal = 7.9e28;
 
-    private static readonly TimeSpan PatternTimeout = TimeSpan.FromMilliseconds(100);
+    /// <summary>
+    /// How long one match of a pattern may take, in milliseconds. A published constant of the dialect and never a
+    /// setting: it is a statement about what a pattern may cost on a warm engine, and an installation that raised it
+    /// would be accepting patterns another installation refuses.
+    /// </summary>
+    public const int PatternTimeoutMilliseconds = 100;
+
+    /// <summary>
+    /// The reason a problem carries when a pattern did not finish matching, twice. It says nothing about the value —
+    /// which is why it is neither <c>pattern</c> nor a <c>schema_…</c> code — and each caller decides what an
+    /// unanswered question costs where it was asked.
+    /// </summary>
+    public const string PatternTimedOut = "pattern_timed_out";
+
+    /// <summary>
+    /// How many times a request's match is tried: once, and once more at once when the first ran out of time, because
+    /// the engine that timed out was most likely only cold. Two timeouts in a row are a question left unanswered.
+    /// </summary>
+    private const int MatchAttempts = 2;
+
+    /// <summary>
+    /// How many times a warm-up keeps matching a pattern past a timeout. Every try makes progress — compiled code
+    /// stays compiled and an automaton keeps the states it built — so a trusted pattern needs one or two, and a
+    /// warm-up that runs out leaves the request's own second match to finish the job.
+    /// </summary>
+    private const int WarmAttempts = 5;
+
+    /// <summary>
+    /// What a warm-up and a load-time probe match a pattern against: short, so the probe measures the pattern rather
+    /// than the input, and mixed — cases, digits, punctuation, a space — so the automaton builds more than one path.
+    /// </summary>
+    private const string ProbeText = "Probe_09 az-AZ.x@y/~";
+
+    private static readonly TimeSpan PatternTimeout = TimeSpan.FromMilliseconds(PatternTimeoutMilliseconds);
     private static readonly ConcurrentDictionary<string, Regex?> CompiledPatterns = new(StringComparer.Ordinal);
+
+    private static long _compiled;
+
+    /// <summary>How many patterns this process has compiled, read through <see cref="PatternTiming.PatternsCompiled"/>.</summary>
+    internal static long Compiled => Interlocked.Read(ref _compiled);
 
     private static readonly HashSet<string> TypeNames = new(StringComparer.Ordinal)
     {
@@ -71,12 +109,151 @@ public static class SchemaValidator
     /// document.
     /// </para>
     /// </remarks>
-    public static IReadOnlyList<SchemaProblem> Validate(JsonNode? value, JsonObject schema)
+    public static IReadOnlyList<SchemaProblem> Validate(JsonNode? value, JsonObject schema) =>
+        Validate(value, schema, PatternTiming.Default);
+
+    /// <summary>The same validation, with patterns matched under <paramref name="timing"/>.</summary>
+    /// <remarks>
+    /// A pattern whose match runs past its timeout is matched once more at once, because the engine that timed out
+    /// was most likely only cold: it builds its automaton, and its code is compiled, inside the first match's time.
+    /// A second timeout is reported as <see cref="PatternTimedOut"/> at the value's pointer — a question this call
+    /// could not answer, never a refusal of the value — and <see cref="Verdicts"/> and <see cref="Unmeasured"/> are
+    /// how a caller tells the two apart.
+    /// </remarks>
+    public static IReadOnlyList<SchemaProblem> Validate(JsonNode? value, JsonObject schema, PatternTiming timing)
+    {
+        ArgumentNullException.ThrowIfNull(schema);
+        ArgumentNullException.ThrowIfNull(timing);
+
+        var problems = new List<SchemaProblem>();
+        Apply(value, schema, schema, string.Empty, 0, problems, new Walk(timing));
+        return problems;
+    }
+
+    /// <summary>
+    /// The problems that are verdicts on the value: everything but a pattern that did not finish. Where a value has
+    /// both, the verdicts decide — it is wrong whatever the unanswered pattern would have said — and a caller reports
+    /// only them, so nothing it says about the value rests on a timeout.
+    /// </summary>
+    public static IReadOnlyList<SchemaProblem> Verdicts(IReadOnlyList<SchemaProblem> problems)
+    {
+        ArgumentNullException.ThrowIfNull(problems);
+
+        return [.. problems.Where(problem => !string.Equals(problem.Reason, PatternTimedOut, StringComparison.Ordinal))];
+    }
+
+    /// <summary>
+    /// Whether these problems leave the value unmeasured rather than refused: there is at least one, and every one is
+    /// a pattern that did not finish. What that costs is the caller's to say, because it depends on what has already
+    /// happened where the question was asked.
+    /// </summary>
+    public static bool Unmeasured(IReadOnlyList<SchemaProblem> problems)
+    {
+        ArgumentNullException.ThrowIfNull(problems);
+
+        return problems.Count > 0 && problems.All(problem => string.Equals(problem.Reason, PatternTimedOut, StringComparison.Ordinal));
+    }
+
+    /// <summary>Warms every pattern <paramref name="schema"/> holds, under the default timing.</summary>
+    public static WarmedPatterns Warm(JsonObject schema) => Warm(schema, PatternTiming.Default);
+
+    /// <summary>Warms every pattern <paramref name="schema"/> holds; see the form that takes several schemas.</summary>
+    public static WarmedPatterns Warm(JsonObject schema, PatternTiming timing)
     {
         ArgumentNullException.ThrowIfNull(schema);
 
+        return Warm([schema], timing);
+    }
+
+    /// <summary>
+    /// Compiles every distinct pattern <paramref name="schemas"/> hold and matches each once, so the cost a cold engine
+    /// pays on its first match — building the automaton, compiling the matcher's code — is paid here rather than inside
+    /// a request's timeout. A timeout here is that cost being paid, so the match is simply tried again, a few times;
+    /// nothing is refused, because a warm-up has no verdict to give, and what it gave up on is counted rather than hidden.
+    /// </summary>
+    /// <remarks>
+    /// Meant for schemas that have been through <see cref="CheckDialect"/>: a pattern that does not compile is passed
+    /// over here and reported there. The caller decides when to pay — the runtime does it once at start, for the
+    /// schemas this build publishes — and nothing here runs on its own.
+    /// </remarks>
+    public static WarmedPatterns Warm(IEnumerable<JsonObject> schemas, PatternTiming timing)
+    {
+        ArgumentNullException.ThrowIfNull(schemas);
+        ArgumentNullException.ThrowIfNull(timing);
+
+        var finished = 0;
+        var unfinished = 0;
+        var patterns = schemas.SelectMany(schema => Patterns(schema)).Select(found => found.Pattern).Distinct(StringComparer.Ordinal);
+        foreach (var pattern in patterns)
+        {
+            if (Compile(pattern) is not { } regex)
+            {
+                continue;
+            }
+
+            if (Warmed(regex, timing))
+            {
+                finished++;
+            }
+            else
+            {
+                unfinished++;
+            }
+        }
+
+        return new WarmedPatterns(finished, unfinished);
+    }
+
+    /// <summary>Matches one compiled pattern against the probe until a match finishes, or the tries run out.</summary>
+    private static bool Warmed(Regex regex, PatternTiming timing)
+    {
+        for (var attempt = 0; attempt < WarmAttempts; attempt++)
+        {
+            try
+            {
+                timing.IsMatch(regex, ProbeText);
+                return true;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                // The cost this exists to pay, interrupted part-way: what was compiled and built stays, so the next try
+                // starts further along.
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Holds every pattern of a schema nobody here wrote to the dialect's time: each is matched against a short probe
+    /// under its timeout and, past a timeout, once more on the now warm engine. A second timeout is a pattern that
+    /// cannot run in the time this dialect allows, refused as <c>schema_pattern_invalid</c> at the pattern itself.
+    /// </summary>
+    /// <remarks>
+    /// This is the load-time half of the rule. With matching linear in the input, the only costs a timeout can measure
+    /// are a cold engine's and a pathological pattern's, and a warm retry removes the first — so what is refused here
+    /// is the pattern, decided where an author can fix it, rather than a value somebody sent later. Like
+    /// <see cref="Warm(JsonObject, PatternTiming)"/>, it expects a schema that passed <see cref="CheckDialect"/>.
+    /// </remarks>
+    public static IReadOnlyList<SchemaProblem> ProbePatterns(JsonObject schema, PatternTiming timing)
+    {
+        ArgumentNullException.ThrowIfNull(schema);
+        ArgumentNullException.ThrowIfNull(timing);
+
         var problems = new List<SchemaProblem>();
-        Apply(value, schema, schema, string.Empty, 0, problems, []);
+        foreach (var (pointer, pattern) in Patterns(schema))
+        {
+            if (Compile(pattern) is { } regex && Matches(regex, ProbeText, timing) is null)
+            {
+                problems.Add(new SchemaProblem(
+                    pointer,
+                    "schema_pattern_invalid",
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"`{pattern}` did not finish matching a {ProbeText.Length}-character probe within {PatternTimeoutMilliseconds} ms on a warm engine, twice (`{PatternTimedOut}`), so it cannot run in the time this dialect allows.")));
+            }
+        }
+
         return problems;
     }
 
@@ -201,7 +378,7 @@ public static class SchemaValidator
         string pointer,
         int depth,
         List<SchemaProblem> problems,
-        HashSet<(string Target, string Pointer)> openReferences)
+        Walk walk)
     {
         if (depth > MaxDepth)
         {
@@ -222,7 +399,7 @@ public static class SchemaValidator
 
         foreach (var (keyword, argument) in schema)
         {
-            ApplyKeyword(keyword, argument, value, schema, root, pointer, depth, problems, openReferences);
+            ApplyKeyword(keyword, argument, value, schema, root, pointer, depth, problems, walk);
         }
     }
 
@@ -235,7 +412,7 @@ public static class SchemaValidator
         string pointer,
         int depth,
         List<SchemaProblem> problems,
-        HashSet<(string Target, string Pointer)> openReferences)
+        Walk walk)
     {
         switch (keyword)
         {
@@ -243,7 +420,7 @@ public static class SchemaValidator
                 break;
 
             case "$ref":
-                ApplyRef(argument, value, root, pointer, depth, problems, openReferences);
+                ApplyRef(argument, value, root, pointer, depth, problems, walk);
                 break;
 
             case "type":
@@ -251,7 +428,7 @@ public static class SchemaValidator
                 break;
 
             case "properties":
-                ApplyProperties(argument, value, root, pointer, depth, problems, openReferences);
+                ApplyProperties(argument, value, root, pointer, depth, problems, walk);
                 break;
 
             case "required":
@@ -279,7 +456,7 @@ public static class SchemaValidator
                 break;
 
             case "pattern":
-                ApplyPattern(argument, value, pointer, problems);
+                ApplyPattern(argument, value, pointer, problems, walk.Timing);
                 break;
 
             case "minimum" or "maximum" or "exclusiveMinimum" or "exclusiveMaximum" or "multipleOf":
@@ -287,7 +464,7 @@ public static class SchemaValidator
                 break;
 
             case "items":
-                ApplyItems(argument, value, root, pointer, depth, problems, openReferences);
+                ApplyItems(argument, value, root, pointer, depth, problems, walk);
                 break;
 
             case "minItems" or "maxItems":
@@ -299,11 +476,11 @@ public static class SchemaValidator
                 break;
 
             case "anyOf" or "allOf":
-                ApplyCombinator(keyword, argument, value, root, pointer, depth, problems, openReferences);
+                ApplyCombinator(keyword, argument, value, root, pointer, depth, problems, walk);
                 break;
 
             case "not":
-                ApplyNot(argument, value, root, pointer, depth, problems, openReferences);
+                ApplyNot(argument, value, root, pointer, depth, problems, walk);
                 break;
 
             case "format":
@@ -326,7 +503,7 @@ public static class SchemaValidator
         string pointer,
         int depth,
         List<SchemaProblem> problems,
-        HashSet<(string Target, string Pointer)> openReferences)
+        Walk walk)
     {
         if (!TryString(argument, out var target))
         {
@@ -347,14 +524,14 @@ public static class SchemaValidator
         // A reference is a cycle when it comes back to the same definition over the same value: the chain would
         // never consume anything and never end.
         var visit = (target, pointer);
-        if (!openReferences.Add(visit))
+        if (!walk.OpenReferences.Add(visit))
         {
             problems.Add(new SchemaProblem(pointer, "schema_cyclic", $"`{target}` refers back to itself without consuming any of the value."));
             return;
         }
 
-        Apply(value, resolved, root, pointer, depth + 1, problems, openReferences);
-        openReferences.Remove(visit);
+        Apply(value, resolved, root, pointer, depth + 1, problems, walk);
+        walk.OpenReferences.Remove(visit);
     }
 
     private static void ApplyType(JsonNode? argument, JsonNode? value, string pointer, List<SchemaProblem> problems)
@@ -397,7 +574,7 @@ public static class SchemaValidator
         string pointer,
         int depth,
         List<SchemaProblem> problems,
-        HashSet<(string Target, string Pointer)> openReferences)
+        Walk walk)
     {
         if (argument is not JsonObject declared)
         {
@@ -425,7 +602,7 @@ public static class SchemaValidator
 
             if (sub is JsonObject subSchema)
             {
-                Apply(property, subSchema, root, Child(pointer, name), depth + 1, problems, openReferences);
+                Apply(property, subSchema, root, Child(pointer, name), depth + 1, problems, walk);
             }
             else
             {
@@ -547,7 +724,7 @@ public static class SchemaValidator
         }
     }
 
-    private static void ApplyPattern(JsonNode? argument, JsonNode? value, string pointer, List<SchemaProblem> problems)
+    private static void ApplyPattern(JsonNode? argument, JsonNode? value, string pointer, List<SchemaProblem> problems, PatternTiming timing)
     {
         if (!TryString(argument, out var pattern))
         {
@@ -570,18 +747,51 @@ public static class SchemaValidator
             return;
         }
 
-        try
+        // A timeout is a fact about the pattern and the machine, never about the value: the schema is not wrong for
+        // it, and neither is the value. So it is neither of the two codes that would say so, and a caller that has to
+        // decide something reads it apart from the verdicts.
+        switch (Matches(regex, text, timing))
         {
-            if (!regex.IsMatch(text))
-            {
+            case null:
+                problems.Add(TimedOut(pointer, pattern));
+                break;
+            case false:
                 problems.Add(new SchemaProblem(pointer, "pattern", $"The value here must match `{pattern}`."));
-            }
-        }
-        catch (RegexMatchTimeoutException)
-        {
-            problems.Add(new SchemaProblem(pointer, "schema_pattern_invalid", $"`{pattern}` did not finish matching within the time this dialect allows."));
+                break;
+            default:
+                break;
         }
     }
+
+    /// <summary>
+    /// One match, and once more at once if the first ran out of time: the first match on a cold engine builds the
+    /// automaton and compiles the matcher's code inside its own timeout, and the second runs on what the first built.
+    /// Null when the warm match ran out of time too — the one answer that is not an answer.
+    /// </summary>
+    private static bool? Matches(Regex regex, string text, PatternTiming timing)
+    {
+        for (var attempt = 0; attempt < MatchAttempts; attempt++)
+        {
+            try
+            {
+                return timing.IsMatch(regex, text);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                // Nothing is recorded for a first timeout: it measured the engine, and the next try asks again.
+            }
+        }
+
+        return null;
+    }
+
+    private static SchemaProblem TimedOut(string pointer, string pattern) =>
+        new(
+            pointer,
+            "pattern_timed_out",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"`{pattern}` did not finish matching within {PatternTimeoutMilliseconds} ms, twice, so nothing is known about the value here: neither that it fails nor that it passes."));
 
     private static void ApplyNumeric(string keyword, JsonNode? argument, JsonNode? value, string pointer, List<SchemaProblem> problems)
     {
@@ -644,7 +854,7 @@ public static class SchemaValidator
         string pointer,
         int depth,
         List<SchemaProblem> problems,
-        HashSet<(string Target, string Pointer)> openReferences)
+        Walk walk)
     {
         if (argument is not JsonObject itemSchema)
         {
@@ -659,7 +869,7 @@ public static class SchemaValidator
 
         for (var index = 0; index < array.Count; index++)
         {
-            Apply(array[index], itemSchema, root, Child(pointer, index.ToString(CultureInfo.InvariantCulture)), depth + 1, problems, openReferences);
+            Apply(array[index], itemSchema, root, Child(pointer, index.ToString(CultureInfo.InvariantCulture)), depth + 1, problems, walk);
         }
     }
 
@@ -718,7 +928,7 @@ public static class SchemaValidator
         string pointer,
         int depth,
         List<SchemaProblem> problems,
-        HashSet<(string Target, string Pointer)> openReferences)
+        Walk walk)
     {
         if (argument is not JsonArray branches || branches.Count == 0)
         {
@@ -728,9 +938,15 @@ public static class SchemaValidator
 
         // A combinator reports once, at its own pointer: the branches' own problems describe roads not taken, and
         // listing them all would bury the one thing the caller has to change.
+        //
+        // A branch that could not be measured has no verdict to contribute. Read as a failed branch, its timeout would
+        // become a verdict one level up — an alternative refused that might have accepted — so it decides only when no
+        // measured branch already has: it is passed up as it is, and the combinator stays unanswered with it.
         var first = -1;
         SchemaProblem? firstProblem = null;
+        SchemaProblem? unmeasured = null;
         var satisfied = 0;
+        var refused = 0;
 
         for (var index = 0; index < branches.Count; index++)
         {
@@ -741,26 +957,34 @@ public static class SchemaValidator
             }
 
             var branchProblems = new List<SchemaProblem>();
-            Apply(value, branch, root, pointer, depth + 1, branchProblems, openReferences);
+            Apply(value, branch, root, pointer, depth + 1, branchProblems, walk);
             if (branchProblems.Count == 0)
             {
                 satisfied++;
             }
-            else if (firstProblem is null)
+            else if (Verdicts(branchProblems) is { Count: > 0 } verdicts)
             {
-                first = index;
-                firstProblem = branchProblems[0];
+                refused++;
+                if (firstProblem is null)
+                {
+                    first = index;
+                    firstProblem = verdicts[0];
+                }
+            }
+            else
+            {
+                unmeasured ??= branchProblems[0];
             }
         }
 
         if (keyword == "anyOf" && satisfied == 0)
         {
-            problems.Add(new SchemaProblem(
+            problems.Add(unmeasured ?? new SchemaProblem(
                 pointer,
                 "any_of",
                 $"No alternative this schema allows accepts the value here; the first reported `{firstProblem!.Reason}` at `{Shown(firstProblem.Pointer)}`."));
         }
-        else if (keyword == "allOf" && satisfied < branches.Count)
+        else if (keyword == "allOf" && refused > 0)
         {
             problems.Add(new SchemaProblem(
                 pointer,
@@ -768,6 +992,10 @@ public static class SchemaValidator
                 string.Create(
                     CultureInfo.InvariantCulture,
                     $"Every requirement here has to hold, and requirement {first + 1} reported `{firstProblem!.Reason}` at `{Shown(firstProblem.Pointer)}`.")));
+        }
+        else if (keyword == "allOf" && unmeasured is not null)
+        {
+            problems.Add(unmeasured);
         }
     }
 
@@ -778,7 +1006,7 @@ public static class SchemaValidator
         string pointer,
         int depth,
         List<SchemaProblem> problems,
-        HashSet<(string Target, string Pointer)> openReferences)
+        Walk walk)
     {
         if (argument is not JsonObject forbidden)
         {
@@ -787,10 +1015,16 @@ public static class SchemaValidator
         }
 
         var branchProblems = new List<SchemaProblem>();
-        Apply(value, forbidden, root, pointer, depth + 1, branchProblems, openReferences);
+        Apply(value, forbidden, root, pointer, depth + 1, branchProblems, walk);
         if (branchProblems.Count == 0)
         {
             problems.Add(new SchemaProblem(pointer, "not", "The value here is one this schema excludes."));
+        }
+        else if (Unmeasured(branchProblems))
+        {
+            // Whether the value is the excluded one is exactly what went unanswered, so neither reading is safe: the
+            // timeout is passed up rather than read as "not excluded", which would accept what this exists to refuse.
+            problems.Add(branchProblems[0]);
         }
     }
 
@@ -1177,6 +1411,66 @@ public static class SchemaValidator
                 : null;
     }
 
+    /// <summary>
+    /// Every pattern a schema holds, with the pointer to it in the schema document — the same pointer the dialect
+    /// check would use — read only from the places the dialect lets a schema stand. Bounded like every walk here: it
+    /// stops at the depth limit and passes over an object nothing can read.
+    /// </summary>
+    private static List<(string Pointer, string Pattern)> Patterns(JsonObject schema)
+    {
+        var found = new List<(string Pointer, string Pattern)>();
+        CollectPatterns(schema, string.Empty, 0, found);
+        return found;
+    }
+
+    private static void CollectPatterns(JsonObject schema, string pointer, int depth, List<(string Pointer, string Pattern)> found)
+    {
+        if (depth > MaxDepth || Unreadable(schema))
+        {
+            return;
+        }
+
+        foreach (var (keyword, argument) in schema)
+        {
+            var at = Child(pointer, keyword);
+            switch (keyword)
+            {
+                case "pattern" when TryString(argument, out var pattern):
+                    found.Add((at, pattern));
+                    break;
+
+                case "properties" or "$defs" when argument is JsonObject map && !Unreadable(map):
+                    foreach (var (name, sub) in map)
+                    {
+                        if (sub is JsonObject subSchema)
+                        {
+                            CollectPatterns(subSchema, Child(at, name), depth + 1, found);
+                        }
+                    }
+
+                    break;
+
+                case "items" or "not" when argument is JsonObject sub:
+                    CollectPatterns(sub, at, depth + 1, found);
+                    break;
+
+                case "anyOf" or "allOf" when argument is JsonArray branches:
+                    for (var index = 0; index < branches.Count; index++)
+                    {
+                        if (branches[index] is JsonObject branch)
+                        {
+                            CollectPatterns(branch, Child(at, index.ToString(CultureInfo.InvariantCulture)), depth + 1, found);
+                        }
+                    }
+
+                    break;
+
+                default:
+                    break;
+            }
+        }
+    }
+
     private static Regex? Compile(string pattern)
     {
         if (CompiledPatterns.TryGetValue(pattern, out var cached))
@@ -1197,6 +1491,7 @@ public static class SchemaValidator
 
     private static Regex? Build(string pattern)
     {
+        Interlocked.Increment(ref _compiled);
         try
         {
             return new Regex(pattern, RegexOptions.NonBacktracking | RegexOptions.CultureInvariant, PatternTimeout);
@@ -1641,5 +1936,16 @@ public static class SchemaValidator
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// What one validation carries down every branch of its walk: the references still open on the way down, and the
+    /// timing every pattern on the way is matched under.
+    /// </summary>
+    private sealed class Walk(PatternTiming timing)
+    {
+        public PatternTiming Timing { get; } = timing;
+
+        public HashSet<(string Target, string Pointer)> OpenReferences { get; } = [];
     }
 }

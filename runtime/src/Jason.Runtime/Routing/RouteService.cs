@@ -30,15 +30,20 @@ public sealed class RouteService(
     PluginRegistry plugins,
     RouteActivator activator,
     ReloadGate gate,
-    TimeProvider clock)
+    TimeProvider clock,
+    PatternTiming? timing = null)
 {
+    /// <summary>How a binding is matched against its plugin's patterns: the runtime's one default, which a test replaces.</summary>
+    private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
+
     public const int MaxReasonLength = 2000;
 
     /// <summary>
     /// What would perform this operation for this campaign, and — when the route cannot be run — why not.
     /// Nothing resolving at all is the business error <c>no_route</c>: that a campaign has no route is a
     /// configuration answer, while a route that resolves and cannot run is a diagnosis, and the two must not
-    /// arrive looking alike.
+    /// arrive looking alike. A route whose binding no pattern could finish measuring is neither: whether it can run
+    /// is not known, so it is answered as a read to ask again.
     /// </summary>
     public async Task<RouteResolutionDto> ResolveAsync(RouteResolveRequest request, CancellationToken cancellationToken)
     {
@@ -58,7 +63,21 @@ public sealed class RouteService(
 
         var route = resolution.Route;
         var plugin = snapshot.Find(route.PluginId);
-        var refused = ProviderOpPreflight.Routable(snapshot, contract, route);
+        var refused = ProviderOpPreflight.Routable(snapshot, contract, route, _timing);
+
+        // Resolve predicts the claim, and the claim would end such an item transient rather than refuse it: a binding
+        // no pattern could finish measuring is not "cannot run", so `usable: false` would be a verdict nobody reached.
+        // The read is answered as one to ask again, as `route.set` answers the same binding.
+        if (refused is { Code: ProviderOpPreflight.TransientOutcome })
+        {
+            throw DomainErrors.ValidationTimedOut(
+            [
+                new ErrorDetail(
+                    Field(campaign.PublicId, contract.Id, resolution.Scope),
+                    SchemaValidator.PatternTimedOut,
+                    $"the binding could not be measured against what '{route.PluginId}' declares, so whether this route can run is not known yet."),
+            ]);
+        }
 
         return new RouteResolutionDto(
             contract.Id,
@@ -119,10 +138,15 @@ public sealed class RouteService(
 
         // Before the row, never after it. The plugin set this is checked against is the set the write will be
         // activated over, because both happen under the reload gate.
-        if (RouteActivator.Check(plugins.Snapshot, operation, plugin, binding) is { } problem)
+        if (RouteActivator.Check(plugins.Snapshot, operation, plugin, binding, _timing) is { } problem)
         {
-            throw new ValidationException(
-                [new ErrorDetail(RouteActivator.CampaignField(campaign.PublicId, operation), problem.Code, problem.Message)]);
+            var detail = new ErrorDetail(RouteActivator.CampaignField(campaign.PublicId, operation), problem.Code, problem.Message);
+
+            // A binding no pattern could finish measuring is not refused: nothing was found wrong with it and nothing
+            // has been written, so the request is answered as one to send again.
+            throw problem.Code == SchemaValidator.PatternTimedOut
+                ? DomainErrors.ValidationTimedOut([detail])
+                : new ValidationException([detail]);
         }
 
         return await ActivateAsync(
@@ -240,8 +264,11 @@ public sealed class RouteService(
                 {
                     // This route was checked before it was written, so reaching here means another route in the
                     // set no longer holds. Nothing is committed and nothing is swapped, and the answer names
-                    // every route that refused — exactly as a rejected reload does.
-                    throw DomainErrors.PluginReloadRejected(candidate.Problems);
+                    // every route that refused — exactly as a rejected reload does — and only those: a binding that
+                    // merely went unmeasured is no refusal, and alone it makes this a write to send again.
+                    throw candidate.Unmeasured
+                        ? DomainErrors.ValidationTimedOut(candidate.Problems)
+                        : DomainErrors.PluginReloadRejected(candidate.Refusals);
                 }
 
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -306,21 +333,19 @@ public sealed class RouteService(
     /// </summary>
     private static IReadOnlyList<ErrorDetail> Problems(string campaignId, string operation, RouteScope scope, PreflightVerdict? refused)
     {
-        if (refused is null)
-        {
-            return [];
-        }
-
-        var field = scope switch
-        {
-            RouteScope.CampaignOperation => RouteActivator.CampaignField(campaignId, operation),
-            RouteScope.CampaignDefault => RouteActivator.CampaignField(campaignId, null),
-            RouteScope.GlobalOperation => RouteActivator.GlobalOperationField(operation),
-            _ => RouteActivator.GlobalDefaultField,
-        };
-
-        return [new ErrorDetail(field, refused.Code!, refused.Message!), .. refused.Details ?? []];
+        return refused is null
+            ? []
+            : [new ErrorDetail(Field(campaignId, operation, scope), refused.Code!, refused.Message!), .. refused.Details ?? []];
     }
+
+    /// <summary>The route that won, named the way the operator wrote it.</summary>
+    private static string Field(string campaignId, string operation, RouteScope scope) => scope switch
+    {
+        RouteScope.CampaignOperation => RouteActivator.CampaignField(campaignId, operation),
+        RouteScope.CampaignDefault => RouteActivator.CampaignField(campaignId, null),
+        RouteScope.GlobalOperation => RouteActivator.GlobalOperationField(operation),
+        _ => RouteActivator.GlobalDefaultField,
+    };
 
     private static RoutesDto ToDto(RouteSnapshot snapshot, string? only)
     {

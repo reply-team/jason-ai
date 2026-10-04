@@ -71,7 +71,12 @@ public sealed class PluginService(
             var candidate = await activator.BuildAsync(load.Snapshot, GlobalRouteSource.FromSettings, cancellationToken).ConfigureAwait(false);
             if (candidate.Snapshot is null)
             {
-                throw Reject(load.Report with { Activated = false, Routes = candidate.Problems });
+                // A route whose binding no pattern could finish measuring is unanswered rather than wrong: alone, nothing
+                // is activated or recorded as rejected and the reload is answered as one to send again; beside a real
+                // problem it is left out of the refusal, which names only what is wrong.
+                throw candidate.Unmeasured
+                    ? DomainErrors.ValidationTimedOut(candidate.Problems)
+                    : Reject(load.Report with { Activated = false, Routes = candidate.Refusals });
             }
 
             // The record first, the swap second: the swap is in memory and cannot fail, the save can. A reload that

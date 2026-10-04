@@ -8,5 +8,8 @@
 
     <!-- The version this tree carries, read from the one file that says it, for the test that checks the stamp. -->
     <Compile Include="../Jason.Runtime.Tests/TreeVersion.cs" Link="TreeVersion.cs" />
+
+    <!-- The suite's one timing that makes a pattern's match time out on demand, so no test has to be slow to show one. -->
+    <Compile Include="../Jason.Runtime.Tests/TimingOut.cs" Link="TimingOut.cs" />
   </ItemGroup>
 </Project>

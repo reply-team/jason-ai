@@ -77,10 +77,16 @@ public static class RouteChecks
     /// includes a plugin that declares no schema and therefore asks for nothing. A route carrying no binding at
     /// all is measured too — a plugin whose schema requires one is unusable without it.
     /// </summary>
-    public static IReadOnlyList<SchemaProblem> BindingProblems(LoadedPlugin plugin, JsonObject? binding)
+    /// <remarks>
+    /// A pattern of that schema that did not finish matching, twice, comes back as
+    /// <see cref="SchemaValidator.PatternTimedOut"/> beside whatever else is wrong. It is never a verdict on the
+    /// binding, so each gate reads it apart from the verdicts and answers it in its own terms.
+    /// </remarks>
+    public static IReadOnlyList<SchemaProblem> BindingProblems(LoadedPlugin plugin, JsonObject? binding, PatternTiming timing)
     {
         ArgumentNullException.ThrowIfNull(plugin);
+        ArgumentNullException.ThrowIfNull(timing);
 
-        return plugin.Manifest.Binding is { } schema ? SchemaValidator.Validate(binding, schema) : [];
+        return plugin.Manifest.Binding is { } schema ? SchemaValidator.Validate(binding, schema, timing) : [];
     }
 }

@@ -50,11 +50,15 @@ public static class OutcomeContract
     }
 
     /// <summary>Validates a succeeded result against the operation's output schema.</summary>
-    public static IReadOnlyList<SchemaProblem> CheckResult(OperationContract contract, JsonNode? result)
+    public static IReadOnlyList<SchemaProblem> CheckResult(OperationContract contract, JsonNode? result) =>
+        CheckResult(contract, result, PatternTiming.Default);
+
+    /// <summary>The same check, with the schema's patterns matched under <paramref name="timing"/>.</summary>
+    public static IReadOnlyList<SchemaProblem> CheckResult(OperationContract contract, JsonNode? result, PatternTiming timing)
     {
         ArgumentNullException.ThrowIfNull(contract);
 
-        return SchemaValidator.Validate(result, contract.OutputSchema);
+        return SchemaValidator.Validate(result, contract.OutputSchema, timing);
     }
 
     /// <summary>Every returned external-id key must be a kind the contract declares, carrying a string value.</summary>

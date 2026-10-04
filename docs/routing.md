@@ -138,7 +138,7 @@ global route, and `route list` shows no rows for it. Archiving is not itself an 
 rows leave at the next one — a reload, or any `route set` — and until then both verbs still show the
 route the campaign had.
 
-### `route resolve` has two different answers
+### `route resolve` has three different answers
 
 `route resolve` is the diagnostic verb: it asks the active snapshot — the same one the claim reads —
 where this campaign's work would go and whether the plugin there could take it.
@@ -146,6 +146,9 @@ where this campaign's work would go and whether the plugin there could take it.
 - **Nothing resolves** → `no_route`, a 404 (CLI exit 1). That is a configuration fact: no route sends
   this operation anywhere for this campaign.
 - **A route resolves and cannot run** → a 200 with `"usable": false` and the problems listed.
+- **A route whose binding no pattern could finish measuring** → `validation_timed_out`, a 503 with
+  `retryable: true`: whether it can run is not known, and the claim would end such an item transient rather than
+  refuse it, so the answer is to ask again rather than `usable: false`.
 
 The problems in that second answer carry **attempt-error codes, not route-problem codes**, because
 resolve is predicting what the claim would decide and therefore speaks the claim's vocabulary. §7 has
@@ -263,7 +266,14 @@ the operator wrote it:
 | a campaign route | `campaign:<cmp_…>/routes/<operation>`, or `campaign:<cmp_…>/routes/default` |
 
 The load at startup takes the same path: a runtime started with a bad route reports it in the startup
-report and leaves **both** registries empty, rather than running with plugins and no routes.
+report and leaves **both** registries empty, rather than running with plugins and no routes. A pattern that
+could not finish is judged by where it happened. At a busy **start**, a binding probe that timed out twice, or a
+binding no pattern could finish measuring (§7), is not yet known to be bad — the engine may simply have been cold —
+and nobody is there to send a reload again: a load whose only problems are of these two kinds is built once more,
+whole, on the now warm engine, and only a second such load leaves the registries empty, reported as
+`field_invalid` or under `pattern_timed_out` and repaired by `jason plugin reload`. At a **live reload** the engine
+is warm, so a binding pattern whose probe times out twice is at fault: the package is refused, as any package
+problem is, and the previous snapshot stays active.
 
 **An archived campaign's routes are ignored.** History must never stand between an operator and an
 uninstall: the campaign will never dispatch again, so what its route named no longer has to exist.
@@ -283,7 +293,9 @@ an account nobody named.
 
 Every one of these is decided **before a child process exists**, and the first that fails is the one the
 attempt records. The attempt is kept either way, with the context it was claimed with and the provenance
-as far as the decision got, so a manager can see what would have run. None of them is retried.
+as far as the decision got, so a manager can see what would have run. None of them is retried. One answer two of
+them can give does come back, because it refuses nothing: a schema pattern that did not finish matching, twice —
+rows 7 and 11 below.
 
 The twelfth is not a refusal at all: it is the gate the runtime owes a person, and an item that reaches
 it is **parked** rather than failed — no attempt, nothing spent, and `approval.list` is where it waits.
@@ -299,11 +311,11 @@ asked to approve reaching somebody the suppression register already protects.
 | 4 | `plugin_unavailable` | permanent | the package is installed and listed, but its environment holds it back — usually a program it declares is not on the machine. Repair what `jason plugin list --human` names, then reload |
 | 5 | `plugin_operation_unsupported` | permanent | the plugin does not perform this operation, or is not a kind of plugin that performs any. Route this operation to a plugin that claims it |
 | 6 | `contract_incompatible` | permanent | the plugin speaks no version of this operation's contract that this runtime publishes. Upgrade the plugin |
-| 7 | `binding_invalid` | permanent | the route's binding does not satisfy the schema the plugin declares — including a route with no binding to a plugin that requires one. Fix the binding |
+| 7 | `binding_invalid` | permanent | the route's binding does not satisfy the schema the plugin declares — including a route with no binding to a plugin that requires one. Fix the binding. A pattern of that schema that did not finish matching, twice, is not `binding_invalid`: nothing was found wrong, so the attempt ends `validation_timed_out`, `transient`, and comes back |
 | 8 | `contact_required` | permanent | the operation acts on somebody and the work item names nobody. Create the item with `--contact`. An operation whose contact is `optional` runs with one or without, so it never meets this check |
 | 9 | `no_channel_value` | permanent | the person is not reachable on the channel the operation consumes. Add the channel to the contact, or name a channel they have |
 | 10 | `suppressed` | permanent | that channel value is on the do-not-contact register. It is not reached, and that is the register working. An operation that only takes a person out declares `preflight.suppression: not_applicable` — today `optout.record` and `enrollment.stop` — and meets neither the check nor the read: a suppressed person is exactly who it is for |
-| 11 | `input_invalid` | validation | the composed input does not satisfy the operation's own schema, or an argument contradicts an identifier Jason has already pinned. The details carry a JSON pointer each |
+| 11 | `input_invalid` | validation | the composed input does not satisfy the operation's own schema, or an argument contradicts an identifier Jason has already pinned. The details carry a JSON pointer each. A pattern of that schema that did not finish matching, twice, is not `input_invalid`: nothing was found wrong and nothing has run, so the attempt ends `validation_timed_out`, `transient`, and comes back under the ordinary retry rule |
 | 12 | `approval_required` | — | **not a failure**: the operation needs a person's approval, and a dispatcher may not stand in for the person who approves it. The item is parked as `awaiting_approval` with a record of exactly what is being approved. `docs/work-execution.md` §Approvals |
 
 Two of these are worth a second sentence. `input_invalid` is the only one classed `validation` — it is
@@ -330,6 +342,19 @@ something no route could be built from. The options system reports that as prose
 structure, so the runtime carries the validator's own sentence through verbatim and names the setting it
 came from. It arrives as the same rejected reload, because an operator who mistypes a route must get one
 answer — and never a 500, which would say the runtime broke rather than the edit.
+
+**A binding no pattern could finish measuring is none of these.** Where a pattern of the plugin's binding
+schema did not finish matching, twice, nothing was found wrong with the binding: it is not
+`route_binding_invalid`. Alone, it leaves nothing written or activated, and `route.set`, `route.unset` and
+`plugin.reload` answer `validation_timed_out`, 503, `retryable: true` — send the request again; the detail names
+the route the way the operator wrote it, under the dialect's own code, `pattern_timed_out`, rather than a route
+problem. Beside a route that really is wrong, it is left out of the 409, which names only what is wrong. The start
+builds such a set once more instead (§6). Usually it is a busy machine's cold engine, but not always: a plugin's
+binding patterns are probed on a warm engine when its package loads — a pattern that cannot finish there has
+already refused its package, reported as `field_invalid` at `binding#/properties/<name>/pattern` with a message
+naming `pattern_timed_out` — yet the probe is a short string and a binding may be up to 64 KiB, so a pattern slow
+only on a long value passes the probe and times out here. Either way the answer is the same: never a refusal of the
+binding.
 
 **Two facts about the order that would otherwise surprise you:**
 
@@ -382,6 +407,9 @@ schema is a defect in the plugin: the next attempt would run the same code over 
 only spend budget while somebody waits. It is recorded as ambiguous — the call did reach the provider —
 with `retriable: false`, whatever the operation's repeat rule says. The failing pointers are on the error,
 and the answer that was refused is kept on the attempt's provenance so its author can see what was sent.
+An answer a pattern of that schema could not finish measuring, twice, is not `result_invalid`: nothing is known to
+be wrong with it, so it is a lost answer — `validation_timed_out`, ambiguous — and the operation's own rule above
+decides whether it is repeated. The unmeasured answer is kept on the attempt's trace.
 
 ## 9. Budgets, and what they cost the handler pool
 
@@ -460,7 +488,9 @@ fake-provider  contact  p_1001  -         -
 
 - A pin is per plugin and per kind, on a contact or on a campaign, and it is written by a plugin's answer
   and by nothing else. An `external_ids` field posted to `contact.update` is ignored; no caller can write
-  a pin.
+  a pin. An answer whose validation timed out pins nothing: a pin is never overwritten, so it is written
+  only from an answer that was checked, and that one never was. Its result stays on the attempt's trace and the
+  identifiers it returned in the attempt's provenance, as `external_ids_returned`.
 - **A pin is never overwritten.** The same value again changes nothing. A *different* value is recorded
   beside the pin as a **divergence**, with the attempt that returned it — the original stands, both values
   are visible, and later attempts keep receiving the value Jason recorded rather than the one it disputes.

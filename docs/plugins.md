@@ -125,7 +125,7 @@ binding:                         # optional; a schema, in the published dialect,
 | a variable that decides what a program loads | never; the same names `host.exec` refuses — `LD_*`, `DYLD_*`, `COMPlus_*`, `CORECLR_*`, `DOTNET_STARTUP_HOOKS`, `NODE_OPTIONS`, `PYTHONPATH`, `JAVA_TOOL_OPTIONS`, `PATH` and the rest listed under `host.exec` below. A granted variable is copied into every child the plugin starts, so being handed one and setting one end in the same place | `field_invalid` |
 | `limits.timeout_ms` | 1000 .. `Plugins:Limits:MaxTimeoutMs` (3 600 000 by default) | `field_invalid` |
 | `limits.memory_mb` | 16 .. `Plugins:Limits:MaxMemoryMb` (512 by default) | `field_invalid` |
-| `binding` | optional; a schema of `type: object` in the dialect of `docs/contracts/`, at most 64 KiB. A problem inside it is located as `binding#<json pointer>` | `field_invalid` |
+| `binding` | optional; a schema of `type: object` in the dialect of `docs/contracts/`, at most 64 KiB. A problem inside it is located as `binding#<json pointer>` — including a pattern that cannot finish matching a short probe within the dialect's 100 ms on a warm engine, twice | `field_invalid` |
 | a field a `binding` declares, at any depth | never named like a credential — any of `token`, `secret`, `password`, `passwd`, `api_key`, `apikey`, `credential`, `private_key`, `authorization`, `bearer`, `cookie`, matched case-insensitively anywhere in the name and with every separator ignored, so `x-api-key`, `API.KEY` and `api key` are all that same name | `binding_secret_like` |
 
 `binding` says what an installation has to tell this plugin before it can act — which account, which
@@ -229,7 +229,12 @@ for a package-level problem, `grants.http[0]` for a grant warning. In the 409 de
 The load at startup follows exactly the same path. If the candidate set has a package problem the
 runtime **still starts**, with an empty active snapshot and the diagnostics on record — a broken
 plugin must never stand between you and your campaigns, and an empty registry is honest rather than
-half-working. `jason runtime status --human` says which of the two it is:
+half-working. One case is loaded once more first: when the only thing wrong is a binding pattern
+whose load-time probe timed out twice (reported as `field_invalid`, naming `pattern_timed_out`), the
+start builds the whole load again on the now warm engine, because a cold engine on a busy machine is not
+yet a fault in the package; only if the second load is held back the same way does the runtime start
+empty. A live `jason plugin reload` is not repeated. `jason runtime status --human` says which of the
+two it is:
 
 ```text
 Plugins:    1 active · snapshot snp_01J4… · loaded 2026-09-14 12:00:00 UTC

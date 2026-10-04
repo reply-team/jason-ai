@@ -2,6 +2,7 @@ using System.Collections;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Ids;
+using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Plugins.Manifest;
@@ -21,8 +22,12 @@ public sealed class PluginLoader(
     ExecutableResolver resolver,
     IOptionsMonitor<PluginsOptions> options,
     TimeProvider clock,
-    ILogger<PluginLoader> logger)
+    ILogger<PluginLoader> logger,
+    PatternTiming? timing = null)
 {
+    /// <summary>How a manifest's binding patterns are probed: the runtime's one default, which a test replaces.</summary>
+    private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
+
     private static readonly Action<ILogger, string, bool, int, int, Exception?> Loaded = LoggerMessage.Define<string, bool, int, int>(
         LogLevel.Information,
         new EventId(1, nameof(Loaded)),
@@ -167,7 +172,7 @@ public sealed class PluginLoader(
             return (Invalid(candidate, null, ProblemCodes.PackageUnreadable, PackageScanner.ManifestFileName, exception.Message), null);
         }
 
-        var read = ManifestReader.Read(yaml, candidate.Name, candidate.Path, bounds);
+        var read = ManifestReader.Read(yaml, candidate.Name, candidate.Path, bounds, _timing);
         if (read.Manifest is null)
         {
             return (new CandidateReport(candidate.Name, null, CandidateStatus.Invalid, read.Problems), null);

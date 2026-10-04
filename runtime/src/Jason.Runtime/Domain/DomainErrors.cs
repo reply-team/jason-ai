@@ -1,5 +1,6 @@
 using System.Globalization;
 using Jason.Contracts.Api;
+using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
 using Microsoft.AspNetCore.Http;
 
@@ -53,6 +54,20 @@ public static class DomainErrors
             "result_invalid",
             "The result does not satisfy the result_format this work item declared.",
             retryable: false,
+            details);
+
+    /// <summary>
+    /// A value this request carried could not be measured: a pattern in the schema it is held to did not finish
+    /// matching, twice. That is a fact about the pattern and the machine and never about the value, so the request is
+    /// neither accepted nor refused — nothing was written, and sending it again is the whole remedy. A 503 rather than
+    /// a 400, because a 400 tells its sender to change something that may be perfectly right.
+    /// </summary>
+    public static DomainException ValidationTimedOut(IReadOnlyList<ErrorDetail> details) =>
+        new(
+            StatusCodes.Status503ServiceUnavailable,
+            AttemptErrors.ValidationTimedOut,
+            "A pattern this request is measured against did not finish matching in time, twice, so nothing was decided and nothing was changed; send it again.",
+            retryable: true,
             details);
 
     public static ConflictException RoleExists(string name) => new("role_exists", $"A role named '{name}' already exists.");

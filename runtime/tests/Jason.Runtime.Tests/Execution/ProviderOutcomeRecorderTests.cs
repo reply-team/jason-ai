@@ -97,6 +97,103 @@ public class ProviderOutcomeRecorderTests
     }
 
     /// <summary>
+    /// An answer arrived and a pattern of the output schema could not finish measuring it. The plugin has run and its
+    /// effect may have landed, so this is a lost answer — ambiguous — and the operation's own repeat rule decides:
+    /// calling it transient would run a completed write again blind, the one thing that rule exists to prevent. The
+    /// answer is kept, unmeasured, on the attempt's trace for a person, and nothing in it is written down.
+    /// </summary>
+    [Fact]
+    public async Task An_answer_a_pattern_could_not_measure_is_a_lost_answer_the_operation_s_rule_decides()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, timing: TimingOut.Always());
+        var answer = Added(scene.Contact.PublicId);
+
+        Assert.Equal(RepeatAfterAmbiguous.AfterRecoveryRead, Add.RepeatAfterAmbiguous);
+        await scene.RecordAsync(db, Add, Succeeded(answer, new JsonObject { ["contact"] = "p_1001" }));
+
+        var error = scene.Attempt.Error!;
+        Assert.Equal((AttemptErrors.ValidationTimedOut, FailureClass.Ambiguous, true), (error.Code, error.Class, error.Retriable));
+        Assert.Equal(WorkItemStatus.Created, scene.Item.Status);
+        Assert.Null(scene.Item.Result);
+        Assert.Equal(answer.ToJsonString(), error.Trace);
+        Assert.Equal("/items/0/contact_id", Assert.Single(error.Details!).Field);
+        Assert.Empty(await db.ExternalIds.AsNoTracking().ToListAsync(Ct));
+    }
+
+    /// <summary>
+    /// A pin is written once and never overwritten, so it is written only from an answer that was checked — and an
+    /// answer whose validation timed out never was. What it said is kept where a person can read it — the result on the
+    /// attempt's trace, the identifiers it returned in the provenance — and none of it becomes Jason's record of what
+    /// the provider calls anybody. A later attempt that measures its answer pins as any answer does.
+    /// </summary>
+    [Fact]
+    public async Task An_answer_whose_validation_timed_out_pins_nothing_and_stays_on_the_trace()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, timing: TimingOut.Always());
+
+        // The result names no identifier itself, so the only place p_1001 can be read afterwards is where the
+        // identifiers the plugin returned are kept.
+        var answer = new JsonObject { ["items"] = new JsonArray(new JsonObject { ["contact_id"] = scene.Contact.PublicId, ["status"] = "added" }) };
+
+        await scene.RecordAsync(db, Add, Succeeded(answer, new JsonObject { ["contact"] = "p_1001" }));
+
+        Assert.Empty(await db.ExternalIds.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal(answer.ToJsonString(), scene.Attempt.Error!.Trace);
+        Assert.DoesNotContain("p_1001", scene.Attempt.Error.Trace, StringComparison.Ordinal);
+
+        // What the plugin said is still recorded as said — the provenance's account of the answer, which is not a pin.
+        var provenance = await scene.ProvenanceAsync(db);
+        Assert.Equal(new Dictionary<string, string>(StringComparer.Ordinal) { ["contact"] = "p_1001" }, provenance.ExternalIdsReturned);
+        Assert.Null(provenance.RejectedResult);
+    }
+
+    [Fact]
+    public async Task An_unmeasured_answer_to_an_operation_that_is_never_repeated_ends_for_a_person()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, timing: TimingOut.Always());
+
+        await scene.RecordAsync(db, Never, Succeeded(Added(scene.Contact.PublicId), null));
+
+        var error = scene.Attempt.Error!;
+        Assert.Equal((AttemptErrors.ValidationTimedOut, FailureClass.Ambiguous, false), (error.Code, error.Class, error.Retriable));
+        Assert.Equal(WorkItemStatus.Failed, scene.Item.Status);
+    }
+
+    [Fact]
+    public async Task An_answer_whose_pattern_times_out_once_is_measured_warm_and_becomes_the_result()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, timing: new TimingOut(1));
+
+        await scene.RecordAsync(db, Add, Succeeded(Added(scene.Contact.PublicId), new JsonObject { ["contact"] = "p_1001" }));
+
+        Assert.Equal(WorkItemStatus.Succeeded, scene.Item.Status);
+        Assert.Single(await db.ExternalIds.AsNoTracking().ToListAsync(Ct));
+    }
+
+    /// <summary>An answer wrong somewhere else is a shape error whatever the unanswered pattern would have said.</summary>
+    [Fact]
+    public async Task An_answer_wrong_elsewhere_is_result_invalid_for_what_is_wrong()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, timing: TimingOut.Always());
+        var refused = JsonNode.Parse($$"""{"items":[{"contact_id":"{{scene.Contact.PublicId}}","status":"joined"}]}""")!;
+
+        await scene.RecordAsync(db, Add, Succeeded(refused, null));
+
+        Assert.Equal(AttemptErrors.ResultInvalid, scene.Attempt.Error!.Code);
+        Assert.Equal("/items/0/status", Assert.Single(scene.Attempt.Error.Details!).Field);
+    }
+
+    /// <summary>
     /// The pin is Jason's record; the answer is the plugin's. When they disagree the disagreement is written
     /// down beside the pin — and the work still happened, so the attempt is still a success. Failing it would
     /// throw away work really done at the provider, and deciding which value is right is reconciliation, which
@@ -382,7 +479,7 @@ public class ProviderOutcomeRecorderTests
     /// A scene is one provider item mid-flight. Passing a previous scene reuses its campaign, contact and item
     /// and adds the next attempt to them, which is what a second answer about the same person needs.
     /// </summary>
-    private static async Task<Scene> SeedAsync(JasonDbContext db, int? invokerOutcomeBytes = null, Scene? after = null)
+    private static async Task<Scene> SeedAsync(JasonDbContext db, int? invokerOutcomeBytes = null, Scene? after = null, PatternTiming? timing = null)
     {
         var clock = new FixedClock(new DateTimeOffset(Noon));
         var campaign = after?.Campaign ?? WorkItemFactory.NewCampaign(now: Noon);
@@ -410,7 +507,8 @@ public class ProviderOutcomeRecorderTests
         var recorder = new ProviderOutcomeRecorder(
             new AttemptOutcomes(new JournalWriter(clock), clock, TestOptions.Settings(o => o.RetryDelaySeconds = 0)),
             new ExternalIdStore(new JournalWriter(clock), clock),
-            options);
+            options,
+            timing);
         return new Scene(recorder, campaign, contact, item, attempt);
     }
 

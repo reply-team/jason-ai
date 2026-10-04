@@ -166,6 +166,41 @@ public class ManifestReaderTests : IDisposable
         Assert.NotEmpty(problem.Message);
     }
 
+    /// <summary>
+    /// A binding schema is a stranger's, so the dialect's time is a property of its patterns, decided where its author
+    /// can fix it: each is probed on a warm engine, and one that cannot finish within the timeout, twice, refuses the
+    /// package at the pattern — the same place a pattern that does not compile is refused.
+    /// </summary>
+    [Fact]
+    public void A_binding_pattern_that_cannot_finish_on_a_warm_engine_refuses_the_package()
+    {
+        var manifest = Merge(PatternedBinding);
+
+        var result = ManifestReader.Read(manifest, "fake", NewPackage(manifest, "fake"), Bounds, TimingOut.Always());
+
+        Assert.Null(result.Manifest);
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal(("field_invalid", "binding#/properties/workspace/pattern"), (problem.Code, problem.Path));
+        Assert.Contains("did not finish matching", problem.Message, StringComparison.Ordinal);
+
+        // The code is the manifest's; the sentence names the dialect's cause.
+        Assert.Contains("`pattern_timed_out`", problem.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_binding_pattern_that_times_out_once_is_probed_again_warm_and_accepted()
+    {
+        var manifest = Merge(PatternedBinding);
+        var timing = new TimingOut(1);
+
+        var result = ManifestReader.Read(manifest, "fake", NewPackage(manifest, "fake"), Bounds, timing);
+
+        Assert.True(result.IsValid, string.Join("; ", result.Problems.Select(p => $"{p.Path}: {p.Code}")));
+        Assert.Equal(2, timing.Calls);
+    }
+
+    private const string PatternedBinding = "binding:\n  type: object\n  properties:\n    workspace:\n      type: string\n      pattern: \"^[a-z]+$\"\n";
+
     [Fact]
     public void A_binding_schema_says_what_a_route_to_this_plugin_must_carry()
     {

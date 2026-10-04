@@ -196,18 +196,21 @@ never enforced).
 fixed codes: `type`, `required`, `enum`, `const`, `min_length`, `max_length`, `pattern`, `minimum`, `maximum`,
 `exclusive_minimum`, `exclusive_maximum`, `multiple_of`, `min_items`, `max_items`, `unique_items`,
 `additional_properties`, `any_of`, `all_of`, `not`, `format`, `schema_keyword_unknown`,
-`schema_keyword_malformed`, `schema_ref_unresolved`, `duplicate_property`, `number_not_comparable`,
+`schema_keyword_malformed`, `schema_ref_unresolved`, `duplicate_property`, `number_not_comparable`, `pattern_timed_out`,
 `schema_too_deep`, `schema_cyclic`, `schema_pattern_invalid`, `schema_too_large`, `schema_number_not_finite`.
 
 The `schema_…` codes say the schema is wrong, not the value: they are what a rule that could not run reports, and
-the reader who has to fix one is looking at the contract rather than at the arguments. Everything else is about
-the value at the pointer.
+the reader who has to fix one is looking at the contract rather than at the arguments. `pattern_timed_out` is about
+neither: a pattern did not finish matching, twice, so nothing is known about the value — the last detail below says
+what that costs. Everything else is about the value at the pointer.
 
-Five details worth knowing before you write a schema:
+Six details worth knowing before you write a schema:
 
 - **Combinators report once.** `anyOf`, `allOf` and `not` report a single problem at their own pointer rather than
   every branch's problems; the message names what the first failing branch objected to. Listing every road not
-  taken buries the one thing a caller has to change.
+  taken buries the one thing a caller has to change. The exception is a branch no pattern could finish measuring:
+  unless a measured branch has already decided the combinator, its `pattern_timed_out` is passed up as it stands, at
+  its own pointer, because a branch nobody measured gives the combinator no verdict to report.
 - **An explicit `null` satisfies `required`.** Saying null is saying something; only an absent property is missing.
   That is a rule about a property *inside* a document being validated, and it is not the rule about the work item's
   reserved `context.input` key, where an absent key and a JSON null read alike — neither is a set of arguments.
@@ -227,6 +230,21 @@ Five details worth knowing before you write a schema:
   Patterns compile without backtracking and run under a match timeout, which rules out lookaround and
   backreferences; `$ref` resolves only inside its own document and never in a loop; nesting stops at 32 levels; a
   schema over 64 KiB is refused unread.
+- **The build's own patterns are warmed when the runtime starts, and a plugin's binding patterns are decided when its
+  package loads, on a warm engine; at a work item a timeout is never a verdict on the value, and what happens then
+  depends on where it happened.** Every match runs under a published 100 ms, and with matching linear in the input
+  the only costs that can run past it are a cold engine's — building its automaton, compiling its code — and a
+  pathological pattern's. The runtime matches the patterns of these documents once when it starts. A plugin's
+  binding patterns are probed against a short string when its package loads, and one that still cannot finish on a
+  warm engine refuses the package: the reload reports it as `field_invalid` at `binding#/properties/<name>/pattern`,
+  the code a manifest gives every dialect problem in its binding schema, with a message that names the cause,
+  `pattern_timed_out`. A `result_format` schema's patterns are checked against the dialect when the item is written
+  but not probed, so a slow one is bounded only by that work item's own timeout and attempt count. A match that times
+  out anywhere is tried once more at once. A second timeout is reported as `pattern_timed_out`, and nothing has been
+  decided: a request is answered `validation_timed_out`, retryable; at the claim the attempt ends `transient`; over a
+  plugin's answer the plugin has run, so the attempt is `ambiguous` and the operation's own repeat rule decides.
+  [`docs/work-execution.md`](../work-execution.md), [`docs/routing.md`](../routing.md) and
+  [`docs/notifications.md`](../notifications.md) say each in place.
 
 ## Versioning
 

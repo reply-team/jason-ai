@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Json;
 using Jason.Contracts.Operations;
+using Jason.Runtime.Tests;
 
 namespace Jason.Contracts.Tests.OperationContracts;
 
@@ -82,6 +83,8 @@ public class GeneratedBlockTests
                 SchemaValidator.CheckDialect(new JsonObject { ["maximum"] = JsonValue.Create(double.PositiveInfinity) }),
             ["duplicate_property"] = () => Check("""{"type":"object","properties":{"a":{},"a":{}}}"""),
             ["number_not_comparable"] = () => Refuse("""{"type":"number","maximum":100}""", "1e40"),
+            ["pattern_timed_out"] = () =>
+                SchemaValidator.Validate(JsonNode.Parse("\"a\""), (JsonObject)JsonNode.Parse("""{"type":"string","pattern":"^a$"}""")!, TimingOut.Always()),
         };
 
     private static readonly Regex Aside = new(@"\([^)]*\)", RegexOptions.None, TimeSpan.FromSeconds(5));

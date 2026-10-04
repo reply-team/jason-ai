@@ -150,6 +150,34 @@ public class ProviderOpPreflightTests
         Assert.All(ProviderOpPreflight.Codes, code => Assert.DoesNotContain(code, FailureClassifier.RetriableCodes));
 
     /// <summary>
+    /// The one answer two of the checks give that is not a refusal is named beside the twelve rather than among them:
+    /// the list is the published order of reasons an item cannot run, and a pattern that did not finish is not one.
+    /// What both checks answer when their pattern does not finish is that named outcome, and nothing else.
+    /// </summary>
+    [Fact]
+    public void The_claim_s_transient_outcome_is_what_checks_7_and_11_answer_and_is_not_among_the_twelve()
+    {
+        var schema = Scenario.BindingSchema;
+        schema["properties"]!["workspace"]!["pattern"] = "^[a-z]+$";
+        var atTheBinding = new Scenario
+        {
+            Route = new Route(Scenario.PluginId, new JsonObject { ["workspace"] = "west" }, "sha256:west"),
+            Plugin = Scenario.Package(binding: schema),
+            Timing = TimingOut.Always(),
+        }.Check();
+        var atTheInput = new Scenario
+        {
+            Route = Scenario.ToTheInstalledPackage,
+            Contact = Scenario.Person(("email", "ada@example.test")),
+            Arguments = Scenario.CompleteArguments,
+            Timing = TimingOut.Always(),
+        }.Check();
+
+        Assert.Equal([ProviderOpPreflight.TransientOutcome, ProviderOpPreflight.TransientOutcome], [atTheBinding.Code, atTheInput.Code]);
+        Assert.DoesNotContain(ProviderOpPreflight.TransientOutcome, ProviderOpPreflight.Codes);
+    }
+
+    /// <summary>
     /// A plugin that cannot be invoked at all is the same fact as one that does not implement the operation, and
     /// it is caught by the same check: a notification plugin implements no canonical operation by construction.
     /// </summary>
@@ -387,6 +415,82 @@ public class ProviderOpPreflightTests
         Assert.Equal(RouteScope.CampaignOperation, scenario.Check().Plan!.Scope);
     }
 
+    /// <summary>
+    /// Check 11 asks whether the composed input satisfies the operation's schema, and a pattern that did not finish
+    /// matching, twice, leaves that unanswered. Nothing has happened — no child exists — so it is not
+    /// <c>input_invalid</c>, which would tell a planner to edit an item that may be right: the attempt ends
+    /// <c>transient</c>, under a code of its own, and the next scan asks again.
+    /// </summary>
+    [Fact]
+    public void A_composed_input_a_pattern_could_not_measure_ends_transient_and_never_input_invalid()
+    {
+        var scenario = new Scenario
+        {
+            Route = Scenario.ToTheInstalledPackage,
+            Contact = Scenario.Person(("email", "ada@example.test")),
+            Arguments = Scenario.CompleteArguments,
+            Timing = TimingOut.Always(),
+        };
+
+        var verdict = scenario.Check();
+
+        Assert.Equal((AttemptErrors.ValidationTimedOut, FailureClass.Transient), (verdict.Code, verdict.Class));
+        Assert.True(verdict.Refused);
+        Assert.Null(verdict.Plan);
+        Assert.NotNull(verdict.Resolution);
+        Assert.All(verdict.Details!, detail => Assert.Equal("pattern_timed_out", detail.Code));
+    }
+
+    [Fact]
+    public void A_composed_input_whose_pattern_times_out_once_is_measured_warm_and_passes()
+    {
+        var verdict = new Scenario
+        {
+            Route = Scenario.ToTheInstalledPackage,
+            Contact = Scenario.Person(("email", "ada@example.test")),
+            Arguments = Scenario.CompleteArguments,
+            Timing = new TimingOut(1),
+        }.Check();
+
+        Assert.True(verdict.Passed);
+    }
+
+    /// <summary>An input wrong somewhere else is wrong whatever the unanswered pattern would have said.</summary>
+    [Fact]
+    public void A_composed_input_wrong_elsewhere_is_refused_as_input_invalid_for_what_is_wrong()
+    {
+        var verdict = new Scenario
+        {
+            Route = Scenario.ToTheInstalledPackage,
+            Contact = Scenario.Person(("email", "ada@example.test")),
+            Arguments = new JsonObject { ["channel"] = "email" },
+            Timing = TimingOut.Always(),
+        }.Check();
+
+        Assert.Equal((AttemptErrors.InputInvalid, FailureClass.Validation), (verdict.Code, verdict.Class));
+        Assert.Equal("/args/list", Assert.Single(verdict.Details!).Field);
+    }
+
+    /// <summary>
+    /// Check 7 measures the route's binding against the plugin's own schema, and the same rule holds there: a pattern
+    /// that did not finish says nothing about the binding, so it is not <c>binding_invalid</c>.
+    /// </summary>
+    [Fact]
+    public void A_binding_a_pattern_could_not_measure_ends_transient_and_never_binding_invalid()
+    {
+        var schema = Scenario.BindingSchema;
+        schema["properties"]!["workspace"]!["pattern"] = "^[a-z]+$";
+        var verdict = new Scenario
+        {
+            Route = new Route(Scenario.PluginId, new JsonObject { ["workspace"] = "west" }, "sha256:west"),
+            Plugin = Scenario.Package(binding: schema),
+            Timing = TimingOut.Always(),
+        }.Check();
+
+        Assert.Equal((AttemptErrors.ValidationTimedOut, FailureClass.Transient), (verdict.Code, verdict.Class));
+        Assert.Equal("/workspace", Assert.Single(verdict.Details!).Field);
+    }
+
     /// <summary>The code this state is refused with, having first said that the class travels with it.</summary>
     private static string Refused(Scenario scenario, FailureClass expected)
     {
@@ -466,6 +570,8 @@ public class ProviderOpPreflightTests
 
         public IReadOnlyDictionary<string, string> CampaignPins { get; set; } = PreflightFacts.NoPins;
 
+        public PatternTiming Timing { get; set; } = PatternTiming.Default;
+
         public static LoadedPlugin Package(
             string id = PluginId,
             PluginKind kind = PluginKind.Provider,
@@ -514,7 +620,7 @@ public class ProviderOpPreflightTests
                 new RouteSet(Route, RouteSet.Empty.Operations),
                 campaigns);
 
-            return ProviderOpPreflight.Check(facts, plugins, routes);
+            return ProviderOpPreflight.Check(facts, plugins, routes, Timing);
         }
     }
 }

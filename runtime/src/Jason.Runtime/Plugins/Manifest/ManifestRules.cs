@@ -11,7 +11,7 @@ namespace Jason.Runtime.Plugins.Manifest;
 /// appends its own problem and carries on, so an author who got three things wrong is told all three at once
 /// rather than made to fix them one reload at a time.
 /// </summary>
-internal sealed partial class ManifestRules(JsonObject root, string directoryName, string packageRoot, ManifestBounds bounds)
+internal sealed partial class ManifestRules(JsonObject root, string directoryName, string packageRoot, ManifestBounds bounds, PatternTiming timing)
 {
     private const int MaxNameLength = 100;
     private const int MaxDescriptionLength = 1000;
@@ -84,6 +84,18 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
         foreach (var problem in dialect)
         {
             Add(ProblemCodes.FieldInvalid, Locate(problem.Pointer), problem.Message);
+        }
+
+        // The dialect's time is a property of a stranger's pattern, so it is decided here, where its author can fix
+        // it: each pattern is probed on a warm engine, once more past a timeout so a busy machine does not refuse a
+        // good package, and one that still cannot finish refuses the package at the pattern. A timeout a route meets
+        // against this schema later can then only be a cold engine's, and that is never a verdict on a binding.
+        if (dialect.Count == 0)
+        {
+            foreach (var problem in SchemaValidator.ProbePatterns(binding, timing))
+            {
+                _problems.Add(new ManifestProblem(ProblemCodes.FieldInvalid, Locate(problem.Pointer), problem.Message) { Unmeasured = true });
+            }
         }
 
         // A route carries a mapping of named fields, so a schema of any other type could never describe one. The

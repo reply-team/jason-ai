@@ -4,6 +4,7 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
@@ -38,8 +39,12 @@ public sealed class Claimer(
     ISuppressionCheck suppression,
     LiveSettings<DispatcherOptions> settings,
     JasonPaths paths,
-    ILogger<Claimer> logger)
+    ILogger<Claimer> logger,
+    PatternTiming? timing = null)
 {
+    /// <summary>How the claim matches a schema's patterns: the runtime's one default, which a test replaces.</summary>
+    private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
+
     private static readonly Action<ILogger, string, Exception?> ClaimSkipped = LoggerMessage.Define<string>(
         LogLevel.Information,
         new EventId(1, nameof(ClaimSkipped)),
@@ -85,7 +90,7 @@ public sealed class Claimer(
             // and one of the answers is not a refusal at all: work whose operation needs a person's approval is
             // parked, and parking makes no attempt, because an attempt is a run and nothing has run.
             var verdict = item.Kind == WorkItemKind.ProviderOp
-                ? ProviderOpPreflight.Check(await FactsAsync(db, item, routing, ct).ConfigureAwait(false), packages, routing)
+                ? ProviderOpPreflight.Check(await FactsAsync(db, item, routing, ct).ConfigureAwait(false), packages, routing, _timing)
                 : null;
 
             // The same question for agent work, asked in the same place and with the same rule: everything that
@@ -215,7 +220,8 @@ public sealed class Claimer(
     /// <remarks>
     /// For a provider operation this is the whole pre-flight: everything that can refuse the work is decided
     /// here, before a child process exists, and what comes back is either the plan the run needs or the one
-    /// reason the item cannot run. Nothing is retried and nothing falls back to another plugin.
+    /// reason the item cannot run. Nothing falls back to another plugin, and nothing is retried but a check a
+    /// schema pattern could not finish, which is transient: nothing was found wrong and nothing has run.
     /// </remarks>
     private ProviderOpPlan? FailClosed(
         JasonDbContext db,
@@ -286,8 +292,9 @@ public sealed class Claimer(
                 // Said here rather than inferred from a table somewhere else: nothing about the work changed
                 // between two scans, so an item released back into the queue would be refused for the same
                 // reason for as long as the queue existed. A pre-flight refusal is final because the pre-flight
-                // says it is.
-                retriable: false);
+                // says it is — and the one answer that is not a refusal says so by its class: a check a schema
+                // pattern could not finish is transient, nothing has run, and the next scan may well answer it.
+                retriable: verdict.Class == FailureClass.Transient);
             return null;
         }
 

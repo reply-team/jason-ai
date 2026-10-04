@@ -118,6 +118,10 @@ toast has a fourth, `silenced`, for a notification Windows did not show because 
 outcome is ever a failure of the parked item, the approval or the decision, and a delivery never reads, writes or
 re-times any of them.
 
+A binding or an input a pattern could not finish measuring is failed `validation_timed_out`, `transient` — nothing was
+sent — and an answer it could not measure is failed `validation_timed_out`, `ambiguous`: never `binding_invalid`,
+`input_invalid` or `result_invalid`, because a pattern that timed out says nothing about the value it was measuring.
+
 `silenced` covers `disabled_for_application` (Jason switched off), `disabled_for_user` (every app switched off),
 `disabled_by_group_policy` and `disabled_by_manifest`.
 

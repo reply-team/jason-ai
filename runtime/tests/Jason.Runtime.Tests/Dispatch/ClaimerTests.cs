@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Ids;
+using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
@@ -355,6 +356,43 @@ public class ClaimerTests
 
         // The attempt is kept, and it is kept with what the item said at the moment it was refused.
         Assert.Equal("what the planner wrote", (string?)attempt.ContextSnapshot["note"]);
+    }
+
+    /// <summary>
+    /// A composed input a pattern could not finish measuring is no reason the item cannot run: nothing has happened,
+    /// no child exists, and the next scan may measure it in a moment. So the attempt ends transient and the item goes
+    /// back to the queue under the ordinary retry rule — the one outcome of the claim's checks that is not final.
+    /// </summary>
+    [Fact]
+    public async Task A_composed_input_a_pattern_could_not_measure_ends_transient_and_the_item_comes_back()
+    {
+        using var harness = new Harness(
+            dispatcher: options => options.RetryDelaySeconds = 30,
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.get"]),
+            route: new Route("stand-in-provider", null, null),
+            timing: TimingOut.Always());
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = WorkItemFactory.NewProviderOp(campaign, now: Noon);
+        item.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject { ["campaign"] = new JsonObject { ["external_id"] = "c-7714" } },
+        };
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var attempt = await fresh.Attempts.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal((AttemptErrors.ValidationTimedOut, FailureClass.Transient, true), (attempt.Error!.Code, attempt.Error.Class, attempt.Error.Retriable));
+        Assert.Null(attempt.Launch);
+        var stored = await fresh.WorkItems.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(WorkItemStatus.Created, stored.Status);
+        Assert.Equal(1, stored.AttemptCount);
+        Assert.Equal(Noon.AddSeconds(30), stored.RetryAfter);
     }
 
     [Fact]
@@ -901,7 +939,8 @@ public class ClaimerTests
             RolesOptions? roles = null,
             LoadedPlugin? plugin = null,
             Route? route = null,
-            ISuppressionCheck? register = null)
+            ISuppressionCheck? register = null,
+            PatternTiming? timing = null)
         {
             var clock = new FixedClock(Noon);
             var settings = TestOptions.Settings(dispatcher);
@@ -941,7 +980,8 @@ public class ClaimerTests
                 register ?? new NothingIsSuppressed(),
                 settings,
                 _dir.Paths,
-                NullLogger<Claimer>.Instance);
+                NullLogger<Claimer>.Instance,
+                timing);
         }
 
         public JasonPaths Paths => _dir.Paths;

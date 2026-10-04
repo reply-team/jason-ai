@@ -16,7 +16,21 @@ namespace Jason.Runtime.Routing;
 /// A candidate route set and what stands in its way. The snapshot is null whenever there is a problem: a route
 /// set is activated whole or not at all, exactly as a plugin set is.
 /// </summary>
-public sealed record RouteCandidate(RouteSnapshot? Snapshot, IReadOnlyList<ErrorDetail> Problems);
+public sealed record RouteCandidate(RouteSnapshot? Snapshot, IReadOnlyList<ErrorDetail> Problems)
+{
+    /// <summary>
+    /// Whether nothing stands in the way but bindings no pattern could finish measuring. Then nothing is wrong with the
+    /// set — only unanswered — and whoever asked for the activation is told to ask again rather than told it was refused.
+    /// </summary>
+    public bool Unmeasured => Problems.Count > 0 && Problems.All(problem => problem.Code == SchemaValidator.PatternTimedOut);
+
+    /// <summary>
+    /// What the set is refused for: every problem but a binding no pattern could finish measuring. A refusal names what
+    /// is wrong, and an unmeasured binding beside a real problem is not wrong — only unanswered, and asked again by the
+    /// next activation once the real problem is repaired.
+    /// </summary>
+    public IReadOnlyList<ErrorDetail> Refusals => [.. Problems.Where(problem => problem.Code != SchemaValidator.PatternTimedOut)];
+}
 
 /// <summary>
 /// Where the global half of a candidate comes from. A reload and the load at startup read
@@ -43,8 +57,12 @@ public sealed class RouteActivator(
     JasonDbContext db,
     IOptionsMonitor<RoutesOptions> options,
     RouteRegistry registry,
-    TimeProvider clock)
+    TimeProvider clock,
+    PatternTiming? timing = null)
 {
+    /// <summary>How a binding is matched against its plugin's patterns: the runtime's one default, which a test replaces.</summary>
+    private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
+
     /// <summary>The route an operator edits under <c>Routes:Default</c>, named the way they wrote it.</summary>
     public const string GlobalDefaultField = RoutesOptions.Section + ":Default";
 
@@ -63,7 +81,7 @@ public sealed class RouteActivator(
         var problems = new List<ErrorDetail>();
         var global = source == GlobalRouteSource.FromSettings
             ? FromSettings(snapshot, problems)
-            : Rechecked(registry.Snapshot.Global, snapshot, problems);
+            : Rechecked(registry.Snapshot.Global, snapshot, _timing, problems);
 
         var campaigns = await CampaignsAsync(snapshot, problems, cancellationToken).ConfigureAwait(false);
 
@@ -98,7 +116,11 @@ public sealed class RouteActivator(
     /// </para>
     /// </summary>
     public static RouteProblem? Check(PluginSnapshot plugins, string? operation, string? pluginId, JsonObject? binding) =>
-        Check(plugins, operation, pluginId, binding, out _);
+        Check(plugins, operation, pluginId, binding, PatternTiming.Default);
+
+    /// <summary>The same check, with the binding's patterns matched under <paramref name="timing"/>.</summary>
+    public static RouteProblem? Check(PluginSnapshot plugins, string? operation, string? pluginId, JsonObject? binding, PatternTiming timing) =>
+        Check(plugins, operation, pluginId, binding, timing, out _);
 
     /// <summary>
     /// The same check, also answering what the binding is called — the identity the route will be frozen with.
@@ -110,9 +132,11 @@ public sealed class RouteActivator(
         string? operation,
         string? pluginId,
         JsonObject? binding,
+        PatternTiming timing,
         out string? bindingIdentity)
     {
         ArgumentNullException.ThrowIfNull(plugins);
+        ArgumentNullException.ThrowIfNull(timing);
         bindingIdentity = null;
 
         if (RouteChecks.Loaded(plugins, pluginId) is not { } plugin)
@@ -161,10 +185,20 @@ public sealed class RouteActivator(
             bindingIdentity = measured.Identity;
         }
 
-        return RouteChecks.BindingProblems(plugin, binding) is { Count: > 0 } failures
-            ? new RouteProblem(
+        var failures = RouteChecks.BindingProblems(plugin, binding, timing);
+        if (SchemaValidator.Verdicts(failures) is { Count: > 0 } wrong)
+        {
+            return new RouteProblem(
                 RouteProblemCodes.BindingInvalid,
-                $"the binding does not satisfy what '{plugin.Manifest.Id}' declares a route to it must carry: {Where(failures[0].Pointer)}{failures[0].Message}")
+                $"the binding does not satisfy what '{plugin.Manifest.Id}' declares a route to it must carry: {Where(wrong[0].Pointer)}{wrong[0].Message}");
+        }
+
+        // Not one of the route problems: a pattern that did not finish says nothing about the binding, so the answer
+        // carries the dialect's own word for it, and whoever asked for the activation is told to ask again.
+        return SchemaValidator.Unmeasured(failures)
+            ? new RouteProblem(
+                SchemaValidator.PatternTimedOut,
+                $"the binding could not be measured against what '{plugin.Manifest.Id}' declares: {Where(failures[0].Pointer)}{failures[0].Message}")
             : null;
     }
 
@@ -198,7 +232,7 @@ public sealed class RouteActivator(
         var operations = new Dictionary<string, Route>(StringComparer.Ordinal);
         foreach (var (operation, entry) in settings.Operations)
         {
-            var route = Accept(plugins, GlobalOperationField(operation), operation, entry?.Plugin, entry?.Binding as JsonObject, problems);
+            var route = Accept(plugins, GlobalOperationField(operation), operation, entry?.Plugin, entry?.Binding as JsonObject, _timing, problems);
             if (route is not null)
             {
                 operations[operation] = route;
@@ -207,7 +241,7 @@ public sealed class RouteActivator(
 
         var fallback = settings.Default is null
             ? null
-            : Accept(plugins, GlobalDefaultField, null, settings.Default.Plugin, settings.Default.Binding as JsonObject, problems);
+            : Accept(plugins, GlobalDefaultField, null, settings.Default.Plugin, settings.Default.Binding as JsonObject, _timing, problems);
 
         return new RouteSet(fallback, operations);
     }
@@ -217,12 +251,12 @@ public sealed class RouteActivator(
     /// valid against the set it was frozen with, and <c>route.set</c> runs against that same set — but checking
     /// is cheap and the alternative is a rule that holds only because of where it is called from.
     /// </summary>
-    private static RouteSet Rechecked(RouteSet active, PluginSnapshot plugins, List<ErrorDetail> problems)
+    private static RouteSet Rechecked(RouteSet active, PluginSnapshot plugins, PatternTiming timing, List<ErrorDetail> problems)
     {
         var operations = new Dictionary<string, Route>(StringComparer.Ordinal);
         foreach (var (operation, route) in active.Operations)
         {
-            var rechecked = Accept(plugins, GlobalOperationField(operation), operation, route.PluginId, route.Binding, problems);
+            var rechecked = Accept(plugins, GlobalOperationField(operation), operation, route.PluginId, route.Binding, timing, problems);
             if (rechecked is not null)
             {
                 operations[operation] = rechecked;
@@ -231,7 +265,7 @@ public sealed class RouteActivator(
 
         var fallback = active.Default is null
             ? null
-            : Accept(plugins, GlobalDefaultField, null, active.Default.PluginId, active.Default.Binding, problems);
+            : Accept(plugins, GlobalDefaultField, null, active.Default.PluginId, active.Default.Binding, timing, problems);
 
         return new RouteSet(fallback, operations);
     }
@@ -255,7 +289,7 @@ public sealed class RouteActivator(
         var campaigns = new Dictionary<string, CampaignRoutes>(StringComparer.Ordinal);
         foreach (var row in rows)
         {
-            var route = Accept(plugins, CampaignField(row.Campaign, row.Operation), row.Operation, row.PluginId, row.Binding, problems);
+            var route = Accept(plugins, CampaignField(row.Campaign, row.Operation), row.Operation, row.PluginId, row.Binding, _timing, problems);
             if (route is null)
             {
                 continue;
@@ -296,9 +330,10 @@ public sealed class RouteActivator(
         string? operation,
         string? pluginId,
         JsonObject? binding,
+        PatternTiming timing,
         List<ErrorDetail> problems)
     {
-        if (Check(plugins, operation, pluginId, binding, out var identity) is { } problem)
+        if (Check(plugins, operation, pluginId, binding, timing, out var identity) is { } problem)
         {
             problems.Add(new ErrorDetail(field, problem.Code, problem.Message));
             return null;

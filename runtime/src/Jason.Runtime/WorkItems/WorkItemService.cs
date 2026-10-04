@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Configuration;
@@ -29,13 +30,20 @@ namespace Jason.Runtime.WorkItems;
 /// edited settings file governs the next item written — through the seam, so that an edit the validator refuses
 /// costs the edit rather than every creation until somebody notices.
 /// </param>
+/// <param name="timing">
+/// How a provider operation's arguments are matched against its patterns: the runtime's one default, which a test
+/// replaces to make a match time out without making anything slow.
+/// </param>
 public sealed class WorkItemService(
     JasonDbContext db,
     JournalWriter journal,
     TimeProvider clock,
     WorkItemCanceller canceller,
-    LiveSettings<PluginsOptions> plugins)
+    LiveSettings<PluginsOptions> plugins,
+    PatternTiming? timing = null)
 {
+    private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
+
     /// <summary>
     /// The one context key a provider operation's arguments live under. Everything else in a work item's context
     /// is the planner's own and never reaches a plugin: what an operation takes is a typed input, not a note.
@@ -92,6 +100,7 @@ public sealed class WorkItemService(
             await RoleExistsAsync(request, cancellationToken).ConfigureAwait(false),
             await ProfileExistsAsync(request.ExecutionProfile, cancellationToken).ConfigureAwait(false),
             KillGrace(),
+            _timing,
             errors);
         errors.ThrowIfAny();
         await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
@@ -325,7 +334,7 @@ public sealed class WorkItemService(
         }
 
         ValidateContextKeys(request.Set, request.Unset, errors);
-        ValidateProviderInput(item, request.Set, request.Unset, errors);
+        ValidateProviderInput(item, request.Set, request.Unset, _timing, errors);
         errors.ThrowIfAny();
 
         var changes = new List<FieldChange>();
@@ -583,7 +592,7 @@ public sealed class WorkItemService(
     /// reads them again exactly as it did at create. A patch that leaves the key alone is not re-measured: the
     /// arguments were accepted once and nothing in this request moved them.
     /// </summary>
-    private static void ValidateProviderInput(WorkItem item, JsonObject? set, IReadOnlyList<string>? unset, ValidationErrors errors)
+    private static void ValidateProviderInput(WorkItem item, JsonObject? set, IReadOnlyList<string>? unset, PatternTiming timing, ValidationErrors errors)
     {
         if (item.Kind != WorkItemKind.ProviderOp || item.Operation is null)
         {
@@ -599,7 +608,7 @@ public sealed class WorkItemService(
 
         // The patch writes the set before it honours the unset, so a key named in both ends up gone; the contract
         // has to read the arguments the item will actually hold, not the ones the request mentions first.
-        WorkItemValidation.ValidateProviderInput(item.Operation, removed ? null : set![InputKey], errors);
+        WorkItemValidation.ValidateProviderInput(item.Operation, removed ? null : set![InputKey], timing, errors);
     }
 
     private static void ValidateContextKeys(JsonObject? set, IReadOnlyList<string>? unset, ValidationErrors errors)

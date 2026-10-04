@@ -1,5 +1,6 @@
 using System.Globalization;
 using Jason.Contracts.Api;
+using Jason.Contracts.Operations;
 using Microsoft.AspNetCore.Http;
 
 namespace Jason.Runtime.Domain;
@@ -46,16 +47,36 @@ public sealed class ValidationException(IReadOnlyList<ErrorDetail> details)
 public sealed class ValidationErrors
 {
     private readonly List<ErrorDetail> _details = [];
+    private readonly List<ErrorDetail> _unmeasured = [];
 
+    /// <summary>Whether anything is known to be wrong. A value that could not be measured is not.</summary>
     public bool Any => _details.Count > 0;
 
     public void Add(string field, string code, string message) => _details.Add(new ErrorDetail(field, code, message));
 
+    /// <summary>
+    /// A place whose value could not be measured, because a pattern there did not finish matching, twice. It is not
+    /// a problem with the request and never joins the refusal: it decides the answer only when nothing else is wrong,
+    /// and the answer it decides is one to send again.
+    /// </summary>
+    public void Unmeasured(string field, string message) =>
+        _unmeasured.Add(new ErrorDetail(field, SchemaValidator.PatternTimedOut, message));
+
+    /// <summary>
+    /// The refusal, when anything is known to be wrong; otherwise, when a value went unmeasured, the retryable
+    /// answer that nothing was decided. What is wrong decides first: it is wrong whatever the unanswered pattern
+    /// would have said, and its sender has something to fix.
+    /// </summary>
     public void ThrowIfAny()
     {
         if (Any)
         {
             throw new ValidationException(_details);
+        }
+
+        if (_unmeasured.Count > 0)
+        {
+            throw DomainErrors.ValidationTimedOut(_unmeasured);
         }
     }
 }

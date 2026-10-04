@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Notifications;
+using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Notifications.Plugins;
@@ -40,8 +41,8 @@ public sealed class PluginNotificationChannelTests
     private static void Package(Jason.Contracts.Discovery.JasonPaths paths, string id, string mainJs, string manifest = Speaks) =>
         TestPlugins.Write(paths, id, manifest.Replace("ID", id, StringComparison.Ordinal), mainJs);
 
-    private static PluginNotificationChannel Channel(RuntimeApiFixture api, string id, JsonObject? binding) =>
-        new(id, new NotificationPluginEntry { Binding = binding }, api.Resolve<PluginRegistry>(), api.Resolve<IServiceScopeFactory>());
+    private static PluginNotificationChannel Channel(RuntimeApiFixture api, string id, JsonObject? binding, PatternTiming? timing = null, DeliveryContract? delivery = null) =>
+        new(id, new NotificationPluginEntry { Binding = binding }, api.Resolve<PluginRegistry>(), api.Resolve<IServiceScopeFactory>(), timing, delivery);
 
     private static JsonObject Topic(string topic = "walk") => new() { ["topic"] = topic };
 
@@ -182,6 +183,105 @@ public sealed class PluginNotificationChannelTests
         Assert.Contains("/channel", outcome.Detail, StringComparison.Ordinal);
         NothingStarted(api);
     }
+
+    /// <summary>
+    /// A binding the plugin's own pattern could not finish measuring, twice, is not invalid — nothing was found wrong
+    /// with it. Nothing has been sent either, so the channel fails transient and is tried again like any transient
+    /// failure, rather than written off as a binding somebody has to repair.
+    /// </summary>
+    [Fact]
+    public async Task A_binding_its_own_pattern_could_not_measure_is_a_transient_failure_and_nothing_starts()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(paths, "carrier", "export function invoke() { return { result: { receipt: 'x' } }; }", Patterned));
+
+        var outcome = await Channel(api, "carrier", Topic(), TimingOut.Always(value => value == "walk")).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        Assert.Equal((ChannelResult.Failed, "validation_timed_out", (FailureClass?)FailureClass.Transient), (outcome.Result, outcome.Code, outcome.Class));
+        Assert.Contains("/topic", outcome.Detail, StringComparison.Ordinal);
+        NothingStarted(api);
+    }
+
+    [Fact]
+    public async Task A_binding_whose_pattern_times_out_once_is_measured_warm_and_delivered()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(paths, "carrier", "export function invoke() { return { result: { receipt: 'x' } }; }", Patterned));
+
+        var outcome = await Channel(api, "carrier", Topic(), new TimingOut(1, value => value == "walk")).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        Assert.Equal((ChannelResult.Delivered, "x"), (outcome.Result, outcome.Receipt));
+    }
+
+    /// <summary>
+    /// The runtime's own half of the contract, over the input it is about to hand a plugin, measured under the timing
+    /// the channel is given: a pattern that could not finish is no refusal — nothing was sent, so the channel fails
+    /// transient — and nothing starts. The published contract carries no pattern, so this one adds one to the title.
+    /// </summary>
+    [Fact]
+    public async Task An_input_no_pattern_could_measure_is_a_transient_failure_and_nothing_starts()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(paths, "carrier", "export function invoke() { return { result: { receipt: 'r-1' } }; }"));
+        var timing = TimingOut.Always(value => value == NotificationComposer.Title);
+
+        var outcome = await Channel(api, "carrier", Topic(), timing, PatternedContract()).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        Assert.Equal((ChannelResult.Failed, "validation_timed_out", (FailureClass?)FailureClass.Transient), (outcome.Result, outcome.Code, outcome.Class));
+        Assert.Contains("/title", outcome.Detail, StringComparison.Ordinal);
+        NothingStarted(api);
+    }
+
+    /// <summary>
+    /// Over the plugin's answer the plugin has already run, so a pattern that could not finish measuring it is a pointer
+    /// that may have arrived: ambiguous, recorded, never repeated — and never <c>result_invalid</c>, which would blame it.
+    /// </summary>
+    [Fact]
+    public async Task An_answer_no_pattern_could_measure_is_an_ambiguous_failure_and_never_result_invalid()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(paths, "carrier", "export function invoke() { return { result: { receipt: 'r-1' } }; }"));
+
+        var outcome = await Channel(api, "carrier", Topic(), TimingOut.Always(value => value == "r-1"), PatternedContract()).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        Assert.Equal((ChannelResult.Failed, "validation_timed_out", (FailureClass?)FailureClass.Ambiguous), (outcome.Result, outcome.Code, outcome.Class));
+    }
+
+    /// <summary>One timeout, measured warm: the input passes, and the answer is measured and delivered.</summary>
+    [Fact]
+    public async Task An_input_whose_pattern_times_out_once_is_measured_warm_and_delivered()
+    {
+        await using var api = await PluginInvokerTests.StartAsync(paths => Package(paths, "carrier", "export function invoke() { return { result: { receipt: 'r-1' } }; }"));
+        var timing = new TimingOut(1, value => value is NotificationComposer.Title);
+
+        var outcome = await Channel(api, "carrier", Topic(), timing, PatternedContract()).DeliverAsync(Message, "ntf_01K0test", Ct);
+
+        Assert.Equal((ChannelResult.Delivered, "r-1"), (outcome.Result, outcome.Receipt));
+        Assert.Equal(1, timing.TimedOut);
+    }
+
+    /// <summary>The published delivery contract with a pattern on the input's title and on the result's receipt.</summary>
+    private static DeliveryContract PatternedContract()
+    {
+        var published = DeliveryCatalog.Find("notification.send")!;
+        var input = published.InputSchema.DeepClone().AsObject();
+        input["properties"]!["title"]!["pattern"] = "^[A-Za-z]+$";
+        var output = published.OutputSchema.DeepClone().AsObject();
+        output["properties"]!["receipt"]!["pattern"] = "^r-[0-9]+$";
+        return published with { InputSchema = input, OutputSchema = output };
+    }
+
+    private const string Patterned = """
+        manifest_version: 1
+        id: ID
+        version: 1.0.0
+        kind: notification
+        contracts:
+          protocol: [1]
+          operations: [1]
+        binding:
+          type: object
+          properties:
+            topic: { type: string, minLength: 1, pattern: "^[a-z]+$" }
+          required: [topic]
+          additionalProperties: false
+        """;
 
     [Fact]
     public async Task A_delivery_the_plugin_answers_is_delivered_with_its_receipt()

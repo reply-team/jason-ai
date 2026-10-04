@@ -1,6 +1,7 @@
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Operations;
 using Jason.Runtime.Api;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Discovery;
@@ -186,6 +187,13 @@ public static class RuntimeHost
         builder.Services.AddSingleton<TokenRedactor>();
         builder.Services.AddSingleton<RunningAttemptRegistry>();
         builder.Services.AddSingleton<DispatcherStatus>();
+
+        // How every validating site matches a schema's patterns: the real match under the dialect's own timeout. It is
+        // a service so a test can replace it for one host; nothing in the runtime chooses another. The warm-up is the
+        // first hosted service registered, and hosted services start in order, so the build's own patterns have been
+        // matched once before a manifest is read or the dispatcher scans.
+        builder.Services.AddSingleton(PatternTiming.Default);
+        builder.Services.AddHostedService<PatternWarmUp>();
         builder.Services.AddScoped<JournalWriter>();
         builder.Services.AddScoped<AttemptOutcomes>();
         builder.Services.AddScoped<ProviderOutcomeRecorder>();

@@ -34,25 +34,32 @@ public sealed class PluginStartupLoader(
         try
         {
             await using var scope = scopes.CreateAsyncScope();
-            var load = await scope.ServiceProvider.GetRequiredService<PluginLoader>()
-                .LoadAsync(SnapshotSource.Startup, cancellationToken)
-                .ConfigureAwait(false);
+            var (load, candidate) = await BuildAsync(scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
+            if (Unmeasured(load, candidate))
+            {
+                // Nothing in the load was found wrong — only a binding pattern that could not finish its probe, or a
+                // binding a pattern could not finish measuring: this machine's cost at this moment, never a verdict. A
+                // reload answers those in its own terms, but at startup nobody is there to send it again, and failing
+                // closed would leave every provider item to fail `no_route` until somebody did. So the whole load is
+                // built once more, on an engine that is warm by now, and only a second such load fails closed.
+                (load, candidate) = await BuildAsync(scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
+            }
 
             if (load.Snapshot is null)
             {
                 registry.Record(load.Report);
-                StartupRejected(logger, load.Report.Candidates.Sum(candidate => candidate.Problems.Count), null);
+                StartupRejected(logger, load.Report.Candidates.Sum(report => report.Problems.Count), null);
                 return;
             }
 
             // The same all-or-nothing rule a reload follows, and for the same reason: a bad route leaves both
-            // registries empty rather than a plugin set active with routes nobody checked.
-            var activator = scope.ServiceProvider.GetRequiredService<RouteActivator>();
-            var candidate = await activator.BuildAsync(load.Snapshot, GlobalRouteSource.FromSettings, cancellationToken).ConfigureAwait(false);
-            if (candidate.Snapshot is null)
+            // registries empty rather than a plugin set active with routes nobody checked. The report names what is
+            // wrong, and an unmeasured binding beside a real problem is not.
+            if (candidate!.Snapshot is null)
             {
-                registry.Record(load.Report with { Activated = false, Routes = candidate.Problems });
-                StartupRejected(logger, candidate.Problems.Count, null);
+                var named = candidate.Unmeasured ? candidate.Problems : candidate.Refusals;
+                registry.Record(load.Report with { Activated = false, Routes = named });
+                StartupRejected(logger, named.Count, null);
                 return;
             }
 
@@ -68,7 +75,7 @@ public sealed class PluginStartupLoader(
                 reason: null);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             registry.Replace(load.Snapshot, load.Report);
-            activator.Activate(candidate.Snapshot);
+            scope.ServiceProvider.GetRequiredService<RouteActivator>().Activate(candidate.Snapshot);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -77,4 +84,40 @@ public sealed class PluginStartupLoader(
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>One load and, where it produced a plugin set, the route set that load would activate with it.</summary>
+    private static async Task<(LoadResult Load, RouteCandidate? Candidate)> BuildAsync(IServiceProvider services, CancellationToken cancellationToken)
+    {
+        var load = await services.GetRequiredService<PluginLoader>()
+            .LoadAsync(SnapshotSource.Startup, cancellationToken)
+            .ConfigureAwait(false);
+
+        var candidate = load.Snapshot is null
+            ? null
+            : await services.GetRequiredService<RouteActivator>()
+                .BuildAsync(load.Snapshot, GlobalRouteSource.FromSettings, cancellationToken)
+                .ConfigureAwait(false);
+
+        return (load, candidate);
+    }
+
+    /// <summary>
+    /// Whether nothing held this load back but patterns that could not finish: a package refused only for its binding
+    /// probe, or a route set refused only for unmeasured bindings. Anything else — a broken package, a section the
+    /// validator refuses, a route that really is wrong — is deterministic, and a second load could change only the report.
+    /// </summary>
+    private static bool Unmeasured(LoadResult load, RouteCandidate? candidate)
+    {
+        if (load.Snapshot is not null)
+        {
+            return candidate is { Unmeasured: true };
+        }
+
+        var problems = load.Report.Candidates
+            .Where(report => report.Status == CandidateStatus.Invalid)
+            .SelectMany(report => report.Problems)
+            .ToList();
+
+        return load.Report.Settings is not { Count: > 0 } && problems.Count > 0 && problems.All(problem => problem.Unmeasured);
+    }
 }

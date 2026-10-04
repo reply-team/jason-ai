@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Operations;
 
 namespace Jason.Runtime.Plugins.Manifest;
 
@@ -14,12 +15,17 @@ public static class ManifestReader
     /// <param name="directoryName">The package directory's name, which the manifest's id must equal.</param>
     /// <param name="packageRoot">The package directory, for the entry module's existence.</param>
     /// <param name="bounds">The ceilings this installation allows a manifest to ask for.</param>
-    public static ManifestReadResult Read(string yamlText, string directoryName, string packageRoot, ManifestBounds bounds)
+    public static ManifestReadResult Read(string yamlText, string directoryName, string packageRoot, ManifestBounds bounds) =>
+        Read(yamlText, directoryName, packageRoot, bounds, PatternTiming.Default);
+
+    /// <summary>The same read, with the binding schema's patterns probed under <paramref name="timing"/>.</summary>
+    public static ManifestReadResult Read(string yamlText, string directoryName, string packageRoot, ManifestBounds bounds, PatternTiming timing)
     {
         ArgumentNullException.ThrowIfNull(yamlText);
         ArgumentException.ThrowIfNullOrWhiteSpace(directoryName);
         ArgumentException.ThrowIfNullOrWhiteSpace(packageRoot);
         ArgumentNullException.ThrowIfNull(bounds);
+        ArgumentNullException.ThrowIfNull(timing);
 
         JsonNode? document;
         try
@@ -38,7 +44,7 @@ public static class ManifestReader
             return new ManifestReadResult(null, [new ManifestProblem(ProblemCodes.YamlInvalid, "(root)", "A manifest is one YAML mapping of fields.")]);
         }
 
-        var rules = new ManifestRules(root, directoryName, packageRoot, bounds);
+        var rules = new ManifestRules(root, directoryName, packageRoot, bounds, timing);
         var manifest = rules.Build();
         return new ManifestReadResult(rules.Problems.Count == 0 ? manifest : null, rules.Problems);
     }

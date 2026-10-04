@@ -17,7 +17,9 @@ namespace Jason.Runtime.Routing;
 /// <param name="Message">What a person reading the work item is told.</param>
 /// <param name="Class">
 /// The kind of failure, which the attempt records: everything structural is permanent, and only a document that
-/// does not satisfy its own schema is a validation failure — the one a planner can fix by editing the item.
+/// does not satisfy its own schema is a validation failure — the one a planner can fix by editing the item. A
+/// document a schema pattern could not finish measuring is neither: nothing was found wrong and nothing has run,
+/// so it is transient, and the only outcome here the claim puts back in the queue.
 /// </param>
 /// <param name="Details">Where the input failed, by pointer, for the one check that can name more than one place.</param>
 /// <param name="Plan">Everything the run needs, and null whenever something refused it.</param>
@@ -55,9 +57,10 @@ public sealed record PreflightVerdict(
 /// </summary>
 /// <remarks>
 /// <para>
-/// A pure function over <see cref="PreflightFacts"/> and two immutable snapshots: no database, no clock, no
-/// options. The claimer reads the facts inside the claim transaction and this decides on them, which is what
-/// keeps the claim to a handful of indexed reads and lets the order above be a unit test with no fixture.
+/// A pure function over <see cref="PreflightFacts"/> and two immutable snapshots, matching schema patterns under
+/// the timing every validating site is handed: no database, no clock, no options. The claimer reads the facts
+/// inside the claim transaction and this decides on them, which is what keeps the claim to a handful of indexed
+/// reads and lets the order above be a unit test with no fixture.
 /// </para>
 /// <para>
 /// <b>Never a fallback to another plugin.</b> An operation the routed plugin cannot perform ends the item with
@@ -71,6 +74,11 @@ public static class ProviderOpPreflight
     private const string Automatic = "auto";
 
     /// <summary>The twelve, in the order they are checked. The first that fails is the one the attempt records.</summary>
+    /// <remarks>
+    /// Checks 7 and 11 have one answer more, <see cref="TransientOutcome"/>, which is not in this list because it is not
+    /// one of the reasons an item cannot run: it is what either check answers when a pattern of the schema it measures
+    /// against could not finish, twice — nothing found wrong, nothing run, and the item back in the queue.
+    /// </remarks>
     public static IReadOnlyList<string> Codes { get; } =
     [
         AttemptErrors.OperationUnknown,
@@ -87,12 +95,24 @@ public static class ProviderOpPreflight
         AttemptErrors.ApprovalRequired,
     ];
 
-    /// <summary>The whole decision, in the published order.</summary>
-    public static PreflightVerdict Check(PreflightFacts facts, PluginSnapshot plugins, RouteSnapshot routes)
+    /// <summary>
+    /// What checks 7 and 11 answer when a pattern of the schema they measure against — the plugin's binding schema, the
+    /// operation's input schema — did not finish matching, twice: transient, and the only answer here the claim puts
+    /// back in the queue.
+    /// </summary>
+    public const string TransientOutcome = AttemptErrors.ValidationTimedOut;
+
+    /// <summary>The whole decision, in the published order, with patterns matched the runtime's one way.</summary>
+    public static PreflightVerdict Check(PreflightFacts facts, PluginSnapshot plugins, RouteSnapshot routes) =>
+        Check(facts, plugins, routes, PatternTiming.Default);
+
+    /// <summary>The whole decision, in the published order, with every schema pattern matched under <paramref name="timing"/>.</summary>
+    public static PreflightVerdict Check(PreflightFacts facts, PluginSnapshot plugins, RouteSnapshot routes, PatternTiming timing)
     {
         ArgumentNullException.ThrowIfNull(facts);
         ArgumentNullException.ThrowIfNull(plugins);
         ArgumentNullException.ThrowIfNull(routes);
+        ArgumentNullException.ThrowIfNull(timing);
 
         var operation = facts.Item.Operation ?? string.Empty;
         if (OperationCatalog.Find(operation) is not { } contract)
@@ -108,7 +128,7 @@ public static class ProviderOpPreflight
         }
 
         var route = resolution.Route;
-        if (Routable(plugins, contract, route) is { } unroutable)
+        if (Routable(plugins, contract, route, timing) is { } unroutable)
         {
             // Task 5 made these five checks shared with route.resolve, which predicts this decision; the
             // resolution is attached here rather than inside them, because resolve has no attempt to record it on.
@@ -159,14 +179,23 @@ public static class ProviderOpPreflight
 
         // The whole document, not only the arguments: a rule over the root — "the campaign is named somehow" —
         // is one only the composed input can answer, and creation never sees the composed input.
-        if (SchemaValidator.Validate(input, contract.InputSchema) is { Count: > 0 } problems)
+        var problems = SchemaValidator.Validate(input, contract.InputSchema, timing);
+        if (SchemaValidator.Verdicts(problems) is { Count: > 0 } refused)
         {
             return Refused(
                 resolution,
                 AttemptErrors.InputInvalid,
                 $"The input composed for '{operation}' does not satisfy the schema that operation publishes.",
-                Details(problems),
+                Details(refused),
                 FailureClass.Validation);
+        }
+
+        // A pattern that did not finish matching, twice, answers nothing about the input, so this is not
+        // `input_invalid`: nobody has anything to edit. Nothing has happened either — no child exists — so the
+        // attempt is transient, and the next scan asks the same question of a warm engine.
+        if (SchemaValidator.Unmeasured(problems))
+        {
+            return Unmeasured(resolution, $"A pattern in the schema '{operation}' publishes did not finish matching the composed input in time, twice, so nothing was decided about it; the item is tried again.", problems);
         }
 
         var plan = new ProviderOpPlan(
@@ -214,11 +243,16 @@ public static class ProviderOpPreflight
     /// what belongs here is the order they are asked in and the words a manager is answered with.
     /// </para>
     /// </summary>
-    public static PreflightVerdict? Routable(PluginSnapshot plugins, OperationContract contract, Route route)
+    public static PreflightVerdict? Routable(PluginSnapshot plugins, OperationContract contract, Route route) =>
+        Routable(plugins, contract, route, PatternTiming.Default);
+
+    /// <summary>The same half of the decision, with the binding's patterns matched under <paramref name="timing"/>.</summary>
+    public static PreflightVerdict? Routable(PluginSnapshot plugins, OperationContract contract, Route route, PatternTiming timing)
     {
         ArgumentNullException.ThrowIfNull(plugins);
         ArgumentNullException.ThrowIfNull(contract);
         ArgumentNullException.ThrowIfNull(route);
+        ArgumentNullException.ThrowIfNull(timing);
 
         if (RouteChecks.Loaded(plugins, route.PluginId) is not { } plugin)
         {
@@ -270,12 +304,19 @@ public static class ProviderOpPreflight
         // given has to be true of the package in front of it, not of the one the route was written against. A
         // route that carries no binding at all is checked too: a plugin whose schema requires one is unusable
         // without it, and passing the item on to a child that cannot work would be the dishonest answer.
-        return RouteChecks.BindingProblems(plugin, route.Binding) is { Count: > 0 } wrong
-            ? Refused(
+        var bindingProblems = RouteChecks.BindingProblems(plugin, route.Binding, timing);
+        if (SchemaValidator.Verdicts(bindingProblems) is { Count: > 0 } wrong)
+        {
+            return Refused(
                 null,
                 AttemptErrors.BindingInvalid,
                 $"The binding of the route to plugin '{plugin.Manifest.Id}' does not satisfy the schema that plugin declares.",
-                Details(wrong))
+                Details(wrong));
+        }
+
+        // The same rule as the composed input's: a pattern that did not finish is no verdict on the binding.
+        return SchemaValidator.Unmeasured(bindingProblems)
+            ? Unmeasured(null, $"A pattern in the binding schema plugin '{plugin.Manifest.Id}' declares did not finish matching the route's binding in time, twice, so nothing was decided about it; the item is tried again.", bindingProblems)
             : null;
     }
 
@@ -327,4 +368,12 @@ public static class ProviderOpPreflight
         IReadOnlyList<ErrorDetail>? details = null,
         FailureClass failureClass = FailureClass.Permanent) =>
         new(code, message, failureClass, details, null, resolution);
+
+    /// <summary>
+    /// A check that could not be answered, because a schema pattern did not finish matching, twice. It is not a
+    /// refusal of the work — nothing about the item or the route was found wrong — and nothing has run, so it is the
+    /// one outcome of these checks that is transient: the item goes back to the queue under the ordinary retry rule.
+    /// </summary>
+    private static PreflightVerdict Unmeasured(Resolution? resolution, string message, IReadOnlyList<SchemaProblem> problems) =>
+        Refused(resolution, TransientOutcome, message, Details(problems), FailureClass.Transient);
 }

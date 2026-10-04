@@ -22,8 +22,11 @@ public sealed partial class ExecutorService(
     JasonDbContext db,
     TimeProvider clock,
     AttemptOutcomes outcomes,
-    LiveSettings<DispatcherOptions> settings)
+    LiveSettings<DispatcherOptions> settings,
+    PatternTiming? timing = null)
 {
+    private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
+
     /// <summary>A result is read back into an agent's context; a megabyte is already more than that can hold.</summary>
     public const int MaxResultBytes = 1024 * 1024;
 
@@ -278,16 +281,27 @@ public sealed partial class ExecutorService(
     /// and the work would be recorded as a success. The schema is the published dialect, checked when the item
     /// was written, so applying it here is bounded work over a document that has already been weighed.
     /// </summary>
-    private static void EnsureResultSatisfiesFormat(WorkItem item, JsonNode? result)
+    /// <remarks>
+    /// A pattern in that schema that did not finish matching decides nothing about the answer. Nothing has been
+    /// recorded and the executor still holds its attempt, so the completion is answered as one to send again rather
+    /// than refused — unless the answer is wrong somewhere else, which it is whatever the pattern would have said.
+    /// </remarks>
+    private void EnsureResultSatisfiesFormat(WorkItem item, JsonNode? result)
     {
         if (item.ResultFormat is not JsonObject schema)
         {
             return;
         }
 
-        if (SchemaValidator.Validate(result, schema) is { Count: > 0 } problems)
+        var problems = SchemaValidator.Validate(result, schema, _timing);
+        if (SchemaValidator.Verdicts(problems) is { Count: > 0 } verdicts)
         {
-            throw DomainErrors.ResultInvalid(ErrorDetail.From(problems));
+            throw DomainErrors.ResultInvalid(ErrorDetail.From(verdicts));
+        }
+
+        if (SchemaValidator.Unmeasured(problems))
+        {
+            throw DomainErrors.ValidationTimedOut(ErrorDetail.From(problems));
         }
     }
 

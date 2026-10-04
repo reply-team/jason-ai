@@ -92,10 +92,16 @@ public sealed record DeliveryContract(
     }
 
     /// <summary>A delivery's answer against its output schema.</summary>
-    public IReadOnlyList<SchemaProblem> CheckResult(JsonNode? result) => SchemaValidator.Validate(result, OutputSchema);
+    public IReadOnlyList<SchemaProblem> CheckResult(JsonNode? result) => CheckResult(result, PatternTiming.Default);
+
+    /// <summary>The same check, with the schema's patterns matched under <paramref name="timing"/>.</summary>
+    public IReadOnlyList<SchemaProblem> CheckResult(JsonNode? result, PatternTiming timing) => SchemaValidator.Validate(result, OutputSchema, timing);
 
     /// <summary>What is wrong with an input the runtime is about to hand a plugin, against the published input schema.</summary>
-    public IReadOnlyList<SchemaProblem> CheckInput(JsonNode? input) => SchemaValidator.Validate(input, InputSchema);
+    public IReadOnlyList<SchemaProblem> CheckInput(JsonNode? input) => CheckInput(input, PatternTiming.Default);
+
+    /// <summary>The same check, with the schema's patterns matched under <paramref name="timing"/>.</summary>
+    public IReadOnlyList<SchemaProblem> CheckInput(JsonNode? input, PatternTiming timing) => SchemaValidator.Validate(input, InputSchema, timing);
 
     /// <summary>A delivery pins nothing: any identifier beside its result is one nothing later knows how to read.</summary>
     public static IReadOnlyList<SchemaProblem> CheckExternalIds(JsonObject? externalIds)

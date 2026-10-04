@@ -95,6 +95,14 @@ public static class AttemptErrors
     public const string ResultInvalid = "result_invalid";
 
     /// <summary>
+    /// A schema's pattern did not finish matching, twice, so a value was neither accepted nor refused. It is never a
+    /// verdict on the value, and what it costs follows where it happened: at the claim nothing has happened and the
+    /// attempt is transient; over a plugin's answer the plugin has run and the attempt is ambiguous. The API answers a
+    /// request the same way, under the same code, as one to send again.
+    /// </summary>
+    public const string ValidationTimedOut = "validation_timed_out";
+
+    /// <summary>
     /// A runtime restart found the attempt still scheduled, before anything was launched, so it was never
     /// counted — for provider work as much as for an agent's, because `processing` is committed before a
     /// child exists and an attempt still scheduled therefore provably ran nothing.

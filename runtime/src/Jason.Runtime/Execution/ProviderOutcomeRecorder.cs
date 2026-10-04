@@ -24,7 +24,8 @@ namespace Jason.Runtime.Execution;
 /// <para>
 /// Validate first, act second. An answer the operation's own schema does not recognise is not a result, so it
 /// never becomes one — the item fails <c>result_invalid</c> and the failing pointers say where, in the words
-/// the validator used.
+/// the validator used. An answer a schema pattern could not finish measuring is not refused: it is a lost answer,
+/// ambiguous, and the operation's own repeat rule decides, because the plugin has already run.
 /// </para>
 /// <para>
 /// Whether a failure is worth another attempt is never decided here: the class comes from the plugin or from how
@@ -34,8 +35,12 @@ namespace Jason.Runtime.Execution;
 public sealed class ProviderOutcomeRecorder(
     AttemptOutcomes outcomes,
     ExternalIdStore identifiers,
-    LiveSettings<PluginsOptions> plugins)
+    LiveSettings<PluginsOptions> plugins,
+    PatternTiming? timing = null)
 {
+    /// <summary>How an answer is matched against the output schema's patterns: the runtime's one default, which a test replaces.</summary>
+    private readonly PatternTiming _timing = timing ?? PatternTiming.Default;
+
     /// <summary>
     /// Ends <paramref name="attempt"/> by what came back from the plugin. Nothing is saved: the outcome joins the
     /// caller's change set, so a pin and the attempt that learned it commit together or not at all.
@@ -61,12 +66,37 @@ public sealed class ProviderOutcomeRecorder(
         var returned = Returned(result.Outcome);
         JsonNode? rejected = null;
 
+        // Measured once: an answer is held to its contract a single time, and every branch below reads that verdict.
+        var problems = result.Outcome is InvocationOutcome.Succeeded answered ? Problems(contract, answered, _timing) : [];
+
         switch (result.Outcome)
         {
-            case InvocationOutcome.Succeeded succeeded when Problems(contract, succeeded) is { Count: > 0 } problems:
+            case InvocationOutcome.Succeeded succeeded when SchemaValidator.Unmeasured(problems):
+
+                // The plugin has run and its effect may have landed; only the measuring of its answer failed. That
+                // is a lost answer, so it is ambiguous and the operation's own repeat rule decides — calling it
+                // transient would run a completed write again blind, which is what that rule exists to prevent. The
+                // answer was never measured, so it is neither a result nor a refused one: it is kept on the attempt's
+                // trace for a person, and nothing in it is written down, exactly as for an answer that never came.
+                outcomes.Fail(
+                    db,
+                    item,
+                    attempt,
+                    AttemptErrors.ValidationTimedOut,
+                    $"A pattern in the schema '{contract.Id}' publishes did not finish matching the plugin's answer in time, twice, so the answer was never measured; it is on this attempt's trace.",
+                    Capped(succeeded.Result)?.ToJsonString(),
+                    ErrorDetail.From(problems),
+                    Actors.Dispatcher,
+                    failureClass: FailureClass.Ambiguous,
+                    retriable: OutcomeContract.Retriable(FailureClass.Ambiguous, contract));
+                break;
+
+            case InvocationOutcome.Succeeded succeeded when problems.Count > 0:
 
                 // A2. A shape error is deterministic, so the next attempt runs the same code over the same answer
-                // and can only spend budget while a person waits. The operation's repeat rule has no vote here.
+                // and can only spend budget while a person waits. The operation's repeat rule has no vote here. An
+                // answer wrong somewhere is wrong whatever an unfinished pattern would have said of the rest, so
+                // only what is known to be wrong is named.
                 rejected = Capped(succeeded.Result);
                 outcomes.Fail(
                     db,
@@ -75,7 +105,7 @@ public sealed class ProviderOutcomeRecorder(
                     AttemptErrors.ResultInvalid,
                     $"The plugin's answer is not the shape '{contract.Id}' publishes, so nothing can read it as a result.",
                     trace: null,
-                    ErrorDetail.From(problems),
+                    ErrorDetail.From(SchemaValidator.Verdicts(problems)),
                     Actors.Dispatcher,
                     failureClass: FailureClass.Ambiguous,
                     retriable: false);
@@ -136,8 +166,8 @@ public sealed class ProviderOutcomeRecorder(
     }
 
     /// <summary>Everything the operation refuses about this answer, result and identifiers together.</summary>
-    private static IReadOnlyList<SchemaProblem> Problems(OperationContract contract, InvocationOutcome.Succeeded succeeded) =>
-        [.. OutcomeContract.CheckResult(contract, succeeded.Result), .. OutcomeContract.CheckExternalIds(contract, succeeded.ExternalIds)];
+    private static IReadOnlyList<SchemaProblem> Problems(OperationContract contract, InvocationOutcome.Succeeded succeeded, PatternTiming timing) =>
+        [.. OutcomeContract.CheckResult(contract, succeeded.Result, timing), .. OutcomeContract.CheckExternalIds(contract, succeeded.ExternalIds)];
 
     /// <summary>
     /// Which of a failed answer's identifiers were not written down, named beside the failure that was kept. The
