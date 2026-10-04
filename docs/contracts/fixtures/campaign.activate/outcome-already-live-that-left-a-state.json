@@ -1,0 +1,22 @@
+{
+  "operation": "campaign.activate",
+  "version": 1,
+  "case": "a campaign that was already live, said to have left a state",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [{ "campaign_external_id": "c_7714", "status": "already_live", "was": "paused", "enrolled": 240 }]
+    },
+    "external_ids": { "campaign": "c_7714" },
+    "error": null,
+    "diagnostics": { "duration_ms": 380, "exec_calls": 1, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": false,
+    "invalid": [{ "pointer": "/items/0", "reason": "any_of" }]
+  }
+}

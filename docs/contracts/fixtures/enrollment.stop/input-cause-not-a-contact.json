@@ -1,0 +1,28 @@
+{
+  "operation": "enrollment.stop",
+  "version": 1,
+  "case": "a cause that is not a contact identifier",
+  "input": {
+    "args": { "channel": "email", "reason": { "code": "referred_out", "caused_by_contact_id": "marta" } },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": "Alvarez",
+        "company": null,
+        "title": null,
+        "time_zone": "America/Bogota",
+        "channels": [{ "channel": "email", "value": "marta@example.com", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": { "invalid": [{ "pointer": "/args/reason/caused_by_contact_id", "reason": "pattern" }] }
+}

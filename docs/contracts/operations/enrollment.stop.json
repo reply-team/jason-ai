@@ -1,0 +1,251 @@
+{
+  "id": "enrollment.stop",
+  "version": 1,
+  "l1": { "name": "enrollment.stop", "contract_version": "2.0.0", "family": 8, "core": true },
+  "intent": "\"Take them out, and record why\" — the reason is mandatory and must be able to name a different person as the cause.",
+
+  "reach": "control",
+  "reversibility": "irreversible",
+  "approval": "confirm_once",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "the participation is absent or finished — either reads as a completed stop.",
+  "idempotency_key": "required",
+  "per_item_results": "required",
+  "accepts_collection": true,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": ["G1", "G3", "G6", "G8"],
+
+  "preflight": { "contact": "required", "channel": "from_args", "suppression": "not_applicable" },
+  "dispatch": { "in_paused_campaign": "waits" },
+  "contact_projection": {
+    "fields": ["id", "first_name", "last_name", "company", "title", "time_zone"],
+    "channels": "consumed"
+  },
+  "precondition": "Find the provider's own contact without creating one: by `contacts[0].external_ids.contact` when that pin is present, otherwise by the value of the channel named by `args.channel`, compared exactly and without regard to case. A person the provider does not hold takes part in nothing, which is a completed stop.",
+  "preview": {
+    "summary": "Take {/contacts/0/first_name} {/contacts/0/last_name} ({/contacts/0/channels/0/value}) out of campaign {/campaign/name} at the provider, reason {/args/reason/code}. Their history stays; nothing further is sent to them from this campaign.",
+    "highlights": [
+      "/args/reason",
+      "/contacts/0/channels/0/value",
+      "/campaign/name",
+      "/campaign/external_ids/campaign",
+      "/args/campaign"
+    ]
+  },
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:enrollment.stop:1:input",
+    "title": "enrollment.stop input",
+    "description": "One person, one campaign, the channel they are reached on, and why they are taken out. The reason is Jason's record.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "contacts", "campaign", "idempotency_key"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["channel", "reason"],
+        "properties": {
+          "channel": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "description": "Which of the contact's channels this operation consumes. Exactly that one channel is projected into `contacts[0].channels`."
+          },
+          "campaign": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["external_id"],
+            "properties": {
+              "external_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The provider's own identifier, given to link a campaign for the first time. Later calls work by the pin."
+              }
+            }
+          },
+          "reason": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code"],
+            "description": "Why they are taken out. Mandatory, and able to name a different person as the cause; it is Jason's record and never reaches the provider.",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": ["not_interested", "opted_out", "wrong_person", "referred_out", "bounced", "customer", "other"]
+              },
+              "note": { "type": "string", "minLength": 1, "maxLength": 500 },
+              "caused_by_contact_id": {
+                "type": "string",
+                "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$",
+                "description": "The person whose words or act caused this stop, when it was somebody else."
+              }
+            }
+          }
+        }
+      },
+      "contacts": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "This version addresses one person per work item, in the collection shape the level-1 contract uses.",
+        "items": { "$ref": "#/$defs/contact" }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" },
+      "idempotency_key": {
+        "type": "string",
+        "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+        "description": "The work item's own identifier: stable across every attempt, which is what makes a ledger under this key answerable."
+      }
+    },
+    "anyOf": [
+      {
+        "type": "object",
+        "required": ["args"],
+        "properties": { "args": { "type": "object", "required": ["campaign"] } }
+      },
+      {
+        "type": "object",
+        "required": ["campaign"],
+        "properties": {
+          "campaign": {
+            "type": "object",
+            "required": ["external_ids"],
+            "properties": { "external_ids": { "type": "object", "required": ["campaign"] } }
+          }
+        }
+      }
+    ],
+    "$defs": {
+      "contact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "first_name", "last_name", "company", "title", "time_zone", "channels", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "first_name": { "type": ["string", "null"], "maxLength": 200 },
+          "last_name": { "type": ["string", "null"], "maxLength": 200 },
+          "company": { "type": ["string", "null"], "maxLength": 200 },
+          "title": { "type": ["string", "null"], "maxLength": 200 },
+          "time_zone": { "type": ["string", "null"], "maxLength": 200 },
+          "channels": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "description": "Only the channel the operation consumes, never the person's whole reachability.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["channel", "value", "primary"],
+              "properties": {
+                "channel": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+                "value": { "type": "string", "minLength": 1, "maxLength": 500 },
+                "primary": { "type": "boolean" }
+              }
+            }
+          },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      },
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:enrollment.stop:1:output",
+    "title": "enrollment.stop result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "One outcome per item, with the reason. A partial success reported as a single verdict is a defect.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contact_id", "status"],
+          "properties": {
+            "contact_id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+            "status": { "type": "string", "enum": ["stopped", "already_stopped"] },
+            "external_ids": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The provider's identifier for the person, present exactly when the provider holds them.",
+              "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "external_ids": {
+    "contact": {
+      "entity": "contact",
+      "description": "The provider's identifier for the person this call found, pinned so no later call has to match them by address again."
+    },
+    "campaign": {
+      "entity": "campaign",
+      "description": "The provider's identifier for the campaign, pinned when the call named it for the first time."
+    }
+  },
+
+  "recovery_read": {
+    "reads": "Whether this person still takes part in the campaign.",
+    "justification": "A removal that lost its answer may already have removed; asking again costs one read, and a second removal would answer that the person is not in the campaign, which is the same fact."
+  },
+  "repeat_after_ambiguous": "after_recovery_read",
+
+  "failure_codes": [
+    { "code": "campaign_not_found", "class": "permanent", "when": "The provider holds no campaign under the identifier this call carried." },
+    { "code": "contact_not_found", "class": "permanent", "when": "The identifier pinned for this person is not one the provider issues at all, so it names nobody. A well-formed pin the provider no longer holds cannot be told apart from a person who takes no part, and answers `already_stopped`." },
+    { "code": "contact_not_unique", "class": "permanent", "when": "More than one provider contact carries this address, so picking one would be guessing and nothing was done. A person resolves the duplicate at the provider, then proposes the work again." },
+    { "code": "invalid_channel_value", "class": "validation", "when": "The provider will not accept the channel value for the channel named, so no later attempt can accept it either." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, or the plugin could not finish a lookup it needs, so nothing the operation asks for was done. Repeating it runs the same call again." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it take people out of campaigns for this account." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the removal for now and it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was written." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the person may already be out of the campaign. The next attempt reads whether they still take part before it removes anything." }
+  ],
+
+  "timeout_ms": 120000,
+
+  "conformance": [
+    "A contact pinned under `contacts[0].external_ids.contact` is worked by that identifier, and never matched again by the channel value.",
+    "A stop creates nobody at the provider: the person is found by the pin or by an exact lookup of the address, and a person the provider has never seen takes part in nothing and answers `already_stopped`.",
+    "A person enrolled at the provider under another address is not found, and answers `already_stopped`.",
+    "More than one contact under one address is refused with `contact_not_unique`, never guessed at.",
+    "A lookup that cannot be read to its end is refused, and never taken to mean that nobody, or only one, matched.",
+    "A participation that is absent or finished answers `already_stopped`, the catalogue's completed stop; a pin the provider no longer holds reads the same way.",
+    "The person is taken out of the campaign, never marked as having finished it: their history stays, and they are not counted as having completed it.",
+    "The reason is Jason's record and never reaches the provider."
+  ]
+}

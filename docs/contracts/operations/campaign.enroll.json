@@ -36,7 +36,8 @@
   "meter": "message",
   "invariants": ["A7", "D1", "D4", "E2", "F2", "G1", "G2", "G7", "G8"],
 
-  "preflight": { "contact": "required", "channel": "from_args" },
+  "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked" },
+  "dispatch": { "in_paused_campaign": "waits" },
   "contact_projection": {
     "fields": ["id", "first_name", "last_name", "company", "title", "time_zone"],
     "channels": "consumed"

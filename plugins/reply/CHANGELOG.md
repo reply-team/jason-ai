@@ -3,12 +3,23 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
-## 0.2.0 (in progress)
+## 0.2.0
 
-Adds the four reads: `enrollment.list`, `engagement.summarize`, `conversation.list` and
-`conversation.get`. Built against Reply API v3 through the same CLI, under the same rules as the
-first three operations.
+Adds the four reads — `enrollment.list`, `engagement.summarize`, `conversation.list` and
+`conversation.get` — and four writes: `campaign.pause`, `campaign.activate`, `optout.record` and
+`enrollment.stop`. Built against Reply API v3 through the same CLI, under the same rules as the
+first three operations: eleven in all, every operation this build publishes.
 
+- `campaign.pause` pauses a sequence, and answers `already_paused` for one that is; it runs while its
+  Jason campaign is paused. `campaign.activate` starts or resumes one only when Reply's count is the
+  population a person approved, and fails `population_changed` with both numbers when it is not.
+- `optout.record` sets Reply's opt-out flag, and `enrollment.stop` takes a person out of a sequence
+  without marking them finished. Both find a person without a pin by Reply's free-text search, read to
+  its end and compared with the address exactly; neither creates a second contact for an address Reply
+  holds, and a stop creates nobody. What they said, and why they were taken out, never reach Reply.
+- A contact Reply answers under an identifier this package cannot work by — from the search, the import
+  or the create path — is reported in the failure's details by that identifier alone, never with the
+  rest of the person's record.
 - A read whose answer is cut off at `Plugins:Exec:OutputBytes` now fails `provider_answer_too_large`,
   permanently, instead of being retried as an answer that went missing. A write's cut answer is still
   a lost write.

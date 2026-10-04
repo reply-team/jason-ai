@@ -1,0 +1,205 @@
+{
+  "id": "optout.record",
+  "version": 1,
+  "l1": { "name": "optout.record", "contract_version": "2.0.0", "family": 14, "core": true },
+  "intent": "\"They said stop\" — records the act itself: what they said, where it arrived, when they did it, when we learned of it.",
+
+  "reach": "control",
+  "reversibility": "irreversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": true,
+  "protective_floor": true,
+  "approval_reason": "the protective floor — recording that somebody said stop is an operation whose non-performance is itself the harm, and waiting for permission to stop is the destructive choice.",
+  "before_repeating": "the current opt-out state for this person and identifier, with its recorded event time.",
+  "idempotency_key": "required",
+  "per_item_results": "required",
+  "accepts_collection": true,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": ["A2", "A3", "A4", "K2"],
+
+  "preflight": { "contact": "required", "channel": "from_args", "suppression": "not_applicable" },
+  "dispatch": { "in_paused_campaign": "runs" },
+  "contact_projection": {
+    "fields": ["id", "first_name", "last_name", "company", "title", "time_zone"],
+    "channels": "consumed"
+  },
+  "precondition": "Find the provider's own contact before recording the opt-out: work by `contacts[0].external_ids.contact` when that pin is present, otherwise look the person up by the value of the channel named by `args.channel`, compared exactly and without regard to case, and create the contact from that value only when the provider holds nobody under it; return the provider's identifier under `external_ids.contact`.",
+  "preview": null,
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:optout.record:1:input",
+    "title": "optout.record input",
+    "description": "One person who said stop, the channel they are reached on, and the four facts of what they said. The facts are Jason's record.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "contacts", "campaign", "idempotency_key"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["channel", "statement", "arrived_via", "said_at", "learned_at"],
+        "properties": {
+          "channel": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "description": "Which of the contact's channels this operation consumes. Exactly that one channel is projected into `contacts[0].channels`."
+          },
+          "statement": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "What they said, quoted or paraphrased. Jason's record: the provider holds only a yes or a no, and this never reaches it."
+          },
+          "arrived_via": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "description": "Where it arrived: `reply`, `email`, `call`, `form`, `social`, or another word of the same shape."
+          },
+          "said_at": { "type": "string", "format": "date-time", "maxLength": 64, "description": "When they said it." },
+          "learned_at": {
+            "type": "string",
+            "format": "date-time",
+            "maxLength": 64,
+            "description": "When it was learned."
+          }
+        }
+      },
+      "contacts": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "This version addresses one person per work item, in the collection shape the level-1 contract uses.",
+        "items": { "$ref": "#/$defs/contact" }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" },
+      "idempotency_key": {
+        "type": "string",
+        "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+        "description": "The work item's own identifier: stable across every attempt, which is what makes a ledger under this key answerable."
+      }
+    },
+    "$defs": {
+      "contact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "first_name", "last_name", "company", "title", "time_zone", "channels", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "first_name": { "type": ["string", "null"], "maxLength": 200 },
+          "last_name": { "type": ["string", "null"], "maxLength": 200 },
+          "company": { "type": ["string", "null"], "maxLength": 200 },
+          "title": { "type": ["string", "null"], "maxLength": 200 },
+          "time_zone": { "type": ["string", "null"], "maxLength": 200 },
+          "channels": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "description": "Only the channel the operation consumes, never the person's whole reachability.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["channel", "value", "primary"],
+              "properties": {
+                "channel": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+                "value": { "type": "string", "minLength": 1, "maxLength": 500 },
+                "primary": { "type": "boolean" }
+              }
+            }
+          },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      },
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:optout.record:1:output",
+    "title": "optout.record result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "One outcome per item, with the reason. A partial success reported as a single verdict is a defect.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contact_id", "status"],
+          "properties": {
+            "contact_id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+            "status": { "type": "string", "enum": ["recorded", "already_recorded"] },
+            "external_ids": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "external_ids": {
+    "contact": {
+      "entity": "contact",
+      "description": "The provider's identifier for the contact this call found or ensured, pinned so no later call has to match the person by address again."
+    }
+  },
+
+  "recovery_read": {
+    "reads": "The contact's opt-out flag at the provider.",
+    "justification": "The ensure step is a write that can create a person; the flag read is one call and decides whether anything is left to do."
+  },
+  "repeat_after_ambiguous": "after_recovery_read",
+
+  "failure_codes": [
+    { "code": "contact_not_found", "class": "permanent", "when": "The identifier pinned for this person no longer resolves at the provider, so the operation cannot act on the person it was told to act on. Working by the pinned identifier is the rule, so this is reported rather than re-matched by address." },
+    { "code": "contact_not_unique", "class": "permanent", "when": "More than one provider contact carries this address, so picking one would be guessing and nothing was done. A person resolves the duplicate at the provider, then proposes the work again." },
+    { "code": "invalid_channel_value", "class": "validation", "when": "The provider will not accept the channel value for the channel named, so no later attempt can accept it either." },
+    { "code": "limit_reached", "class": "permanent", "when": "The account will not hold another contact, so the person who said stop cannot be created there." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, or the plugin could not finish a lookup it needs, so nothing the operation asks for was done. Repeating it runs the same call again." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it record an opt-out for this account." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the opt-out for now and it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was written." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the opt-out may already be recorded. The next attempt reads the contact's flag before it writes." }
+  ],
+
+  "timeout_ms": 120000,
+
+  "conformance": [
+    "A contact pinned under `contacts[0].external_ids.contact` is worked by that identifier, and never matched again by the channel value.",
+    "What they said, where it arrived and when are Jason's record: none of it reaches the provider, which holds only the flag.",
+    "A person the provider already holds as opted out answers `already_recorded`, and nothing is written.",
+    "The flag is only ever set, never cleared: this operation cannot undo an opt-out.",
+    "An opt-out never creates a second contact for an address the provider already holds: the person is looked up first, compared exactly, and created only when nobody matches.",
+    "More than one contact under one address is refused with `contact_not_unique`, never guessed at.",
+    "A lookup that cannot be read to its end is refused, and never taken to mean that nobody, or only one, matched."
+  ]
+}

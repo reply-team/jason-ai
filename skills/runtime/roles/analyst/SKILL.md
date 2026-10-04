@@ -15,9 +15,10 @@ build, because every skill's do.
 
 ## What this build gives you, and what it does not
 
-**There is no metrics store in this build.** Jason records no open, click, reply or delivery of its own; the
-provider's counts reach it only as the result of a `provider_op` item naming `engagement.summarize`, with the
-envelope that says what each number counts. Any other number about them would be invented. What you do have is
+**There is no metrics store here — the provider reports, and the envelope says what the number is.** Jason
+records no open, click, reply or delivery of its own; the provider's counts reach it only as the result of a
+`provider_op` item naming `engagement.summarize`, with the envelope that says what each number counts. Ask for them
+over the campaign's window; the answer is a row per channel. Any other number about them would be invented. What you do have is
 three things, and it is worth saying which one each of your statements came from:
 
 ```

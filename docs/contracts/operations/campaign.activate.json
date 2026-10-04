@@ -1,0 +1,201 @@
+{
+  "id": "campaign.activate",
+  "version": 1,
+  "l1": { "name": "campaign.activate", "contract_version": "2.0.0", "family": 5, "core": false },
+  "intent": "\"Turn it on\"",
+
+  "reach": {
+    "value": "act",
+    "conditional": true,
+    "detail": "`act`, with magnitude equal to the enrolled population; `control` only where the campaign holds no enrolments, and even then it arms the campaign so the next enrolment sends immediately."
+  },
+  "reversibility": "irreversible",
+  "approval": "confirm_once",
+  "approval_artefact": "preview",
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "the campaign's live state and its first-touch ledger — an activation whose result was lost may already be sending.",
+  "idempotency_key": "required",
+  "per_item_results": { "value": "required", "conditional": true, "detail": "when a collection is given." },
+  "accepts_collection": true,
+  "cost": "metered",
+  "cost_basis": "per message released",
+  "meter": "message",
+  "invariants": ["E1", "E2", "E3"],
+
+  "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked" },
+  "dispatch": { "in_paused_campaign": "waits" },
+  "contact_projection": null,
+  "precondition": "The campaign exists at the provider and is not archived, and the provider's enrolled count equals `args.expected.enrolled`.",
+  "preview": {
+    "summary": "Start sending campaign {/campaign/name} at the provider. People enrolled there: {/args/expected/enrolled}. Step 1 goes to each of them on the campaign's own schedule, and the cost is metered per message released. If the provider's count is not {/args/expected/enrolled} at execution, nothing starts.",
+    "highlights": ["/args/expected/enrolled", "/campaign/name", "/campaign/external_ids/campaign", "/args/campaign"]
+  },
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:campaign.activate:1:input",
+    "title": "campaign.activate input",
+    "description": "One campaign, named at the provider by its pin or, the first time, by the planner, and the population a person approves starting it for.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "campaign", "idempotency_key"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expected"],
+        "properties": {
+          "campaign": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["external_id"],
+            "properties": {
+              "external_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The provider's own identifier, given to link a campaign for the first time. Later calls work by the pin."
+              }
+            }
+          },
+          "expected": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["enrolled"],
+            "description": "The population the person is approving, read beforehand with `enrollment.list` (`total`) or `campaign.get`. The plugin reads the count again at execution and starts nothing when it differs.",
+            "properties": {
+              "enrolled": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000000,
+                "description": "How many people the campaign holds at the provider: the number the preview names."
+              }
+            }
+          }
+        }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" },
+      "idempotency_key": {
+        "type": "string",
+        "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+        "description": "The work item's own identifier: stable across every attempt, which is what makes a ledger under this key answerable."
+      }
+    },
+    "anyOf": [
+      {
+        "type": "object",
+        "required": ["args"],
+        "properties": { "args": { "type": "object", "required": ["campaign"] } }
+      },
+      {
+        "type": "object",
+        "required": ["campaign"],
+        "properties": {
+          "campaign": {
+            "type": "object",
+            "required": ["external_ids"],
+            "properties": { "external_ids": { "type": "object", "required": ["campaign"] } }
+          }
+        }
+      }
+    ],
+    "$defs": {
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:campaign.activate:1:output",
+    "title": "campaign.activate result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "One outcome per item, with the reason. A partial success reported as a single verdict is a defect.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["campaign_external_id", "status", "was", "enrolled"],
+          "properties": {
+            "campaign_external_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "description": "The provider's identifier for the campaign."
+            },
+            "status": { "type": "string", "enum": ["activated", "already_live"] },
+            "was": {
+              "type": ["string", "null"],
+              "enum": ["draft", "paused", null],
+              "description": "The state the campaign left: `draft` the first time it goes live, `paused` when it resumes; null when it was already live."
+            },
+            "enrolled": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The provider's enrolled count, read at execution."
+            }
+          },
+          "anyOf": [
+            { "properties": { "status": { "const": "activated" }, "was": { "enum": ["draft", "paused"] } } },
+            { "properties": { "status": { "const": "already_live" }, "was": { "const": null } } }
+          ]
+        }
+      }
+    }
+  },
+
+  "external_ids": {
+    "campaign": {
+      "entity": "campaign",
+      "description": "The provider's identifier for the campaign this call started, pinned so no later call has to name it again."
+    }
+  },
+
+  "recovery_read": {
+    "reads": "The campaign's live state and its enrolled count.",
+    "justification": "An activation whose answer was lost may already be sending; a second start is documented idempotent, but the count is what the decision was about."
+  },
+  "repeat_after_ambiguous": "after_recovery_read",
+
+  "failure_codes": [
+    { "code": "campaign_not_found", "class": "permanent", "when": "The provider holds no campaign under the identifier this call carried." },
+    { "code": "campaign_not_activatable", "class": "permanent", "when": "The provider will not start this campaign: it is archived, or it has no contacts, no connected sending account or no schedule with sending hours. `details.provider_code` says which, where the provider gave a code." },
+    { "code": "population_changed", "class": "permanent", "when": "The provider's enrolled count at execution is not the `args.expected.enrolled` a person approved, so nothing was started. `details.expected` and `details.actual` carry both numbers; a different population is a different decision, made on a new work item." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it start campaigns for this account." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the start for now and it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was written." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the campaign may already be live and sending. The next attempt reads the campaign's live state and its count before it starts anything." }
+  ],
+
+  "timeout_ms": 120000,
+
+  "conformance": [
+    "The plugin reads the provider's enrolled count at execution and starts nothing when it is not `args.expected.enrolled`: it fails `population_changed`, with both numbers under `details.expected` and `details.actual`.",
+    "A campaign already live answers `already_live` with its count and `was: null`, and starts nothing.",
+    "`was` says which state the campaign left: `draft` the first time it goes live, `paused` when it resumes.",
+    "An attempt after a lost answer reads the campaign's live state and its count first, so a start that already happened answers `already_live` rather than starting twice.",
+    "A campaign that will not start fails `campaign_not_activatable`, with the provider's own code under `details.provider_code` where it gave one."
+  ]
+}

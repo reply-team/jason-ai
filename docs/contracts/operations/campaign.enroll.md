@@ -105,7 +105,8 @@ wording the summary differently never turns a pending decision into another one.
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `required`, channel `from_args` |
+| pre-flight | contact `required`, channel `from_args`, suppression `checked` |
+| in a paused campaign | `waits` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | Ensure the provider's own contact exists before enrolling it: work by `contacts[0].external_ids.contact` when that pin is present, otherwise create the contact from the value of the channel named by `args.channel`, and return the provider's identifier under `external_ids.contact`. |
 | preview a person reads | `Enroll {/contacts/0/first_name} {/contacts/0/last_name} ({/contacts/0/channels/0/value}) in campaign {/campaign/name} at the provider: start at {/args/start/position}, first touch {/args/first_touch}, {/args/collision} if they already take part. If the campaign is live there, its messages start going to this person on that timing.`; highlighted: `/contacts/0/channels/0/value`, `/campaign/name`, `/args/start`, `/args/first_touch`, `/args/collision` |

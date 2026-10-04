@@ -96,7 +96,8 @@ contact creation it implies may be metered, and a second contact is a merge nobo
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `required`, channel `from_args` |
+| pre-flight | contact `required`, channel `from_args`, suppression `checked` |
+| in a paused campaign | `waits` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | Ensure the provider's own contact exists before adding it: work by `contacts[0].external_ids.contact` when that pin is present, otherwise create the contact from the value of the channel named by `args.channel`, and return the provider's identifier under `external_ids.contact`. |
 | preview a person reads | none |

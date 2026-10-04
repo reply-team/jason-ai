@@ -20,7 +20,8 @@
   "meter": null,
   "invariants": ["D3"],
 
-  "preflight": { "contact": "required", "channel": "from_args" },
+  "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked" },
+  "dispatch": { "in_paused_campaign": "waits" },
   "contact_projection": {
     "fields": ["id", "first_name", "last_name", "company", "title", "time_zone"],
     "channels": "consumed"

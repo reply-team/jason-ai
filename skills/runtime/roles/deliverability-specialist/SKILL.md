@@ -25,8 +25,21 @@ jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --status failed
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
+**What the provider counts, you can read.** A `provider_op` item naming `engagement.summarize` answers a row of
+counts per channel over a window, with the envelope that says what each number counts; `bounced` and `opted_out` are
+counts in the email row.
+
+**And there is one protective move.** When what you read means a campaign must stop sending, a `provider_op` item
+naming `campaign.pause` stops the provider's campaign. It runs without anybody approving it, and even while Jason's
+campaign is paused, because not running is the harm. Give it a high `--priority`, so it is the campaign's next item,
+and say why with it; the reason is Jason's record and never reaches the provider.
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.pause --priority 100 --input '{"reason":{"code":"deliverability","note":"eight bounces from the new domain in an hour"}}' --reason "bounces climbing on the new domain"
+```
+
 The do-not-contact register is the one thing here that is about deliverability and is enforced: a suppressed
-person stops the work before anything is sent. Failed items carry the code they failed with, which is where a
+person stops any work that would reach them before anything is sent. Failed items carry the code they failed with, which is where a
 provider's own refusal shows up. Rather than describing an act this runtime cannot perform, say what a person
 would have to do outside Jason, and in which system.
 

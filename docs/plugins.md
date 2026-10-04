@@ -514,7 +514,7 @@ The second group is about executing it, and it is the half you implement:
 | Field | What it asks of you |
 |---|---|
 | `preflight`, `contact_projection` | what you are handed: whether a contact comes with the call, and exactly which of its fields and channels |
-| `precondition` | what must be true at the provider before you may act — for the writes, that the provider's own contact exists |
+| `precondition` | what must be true at the provider before you may act — for a write about a person, that the provider's own contact is found, and for some writes made where it is missing |
 | `input_schema` | the whole input you receive, already valid by the time it reaches you |
 | `output_schema` | what a succeeded `result` must look like |
 | `external_ids` | the kinds of provider identifier you may return, and what each one identifies |
@@ -579,12 +579,23 @@ The runtime composes it from the work item; a plugin never sees a work item's co
 
 ### The provider-contact precondition
 
-A provider's list or campaign holds the *provider's* contacts, not Jason's, so every write operation
-states the same precondition. When `contacts[0].external_ids.contact` is present it is the provider's
-identifier for this person and you work by it. When it is absent, create the contact from the value of
-the channel named by `args.channel` and return the identifier the provider gave you. Once a pin exists
-nobody matches that person by address again, which is what stops two spellings of one address becoming
-two people.
+A provider's list or campaign holds the *provider's* contacts, not Jason's, so every write about a person
+states how the provider's contact is found. When `contacts[0].external_ids.contact` is present it is the
+provider's identifier for this person and you work by it, whatever the operation. When it is absent, each
+document's `precondition` says what to do, and they differ on purpose:
+
+- `list_membership.add` and `campaign.enroll` create the contact from the value of the channel named by
+  `args.channel` when the provider holds nobody under it, and return the identifier the provider gave you.
+- `optout.record` looks the person up by that value first, compared exactly, and creates the contact only
+  when the lookup, read to its end, finds nobody — an opt-out must land on the person the provider already
+  holds, never on a second contact made for them.
+- `enrollment.stop` never creates anybody: a person the provider does not hold takes part in nothing, which
+  is a completed stop.
+- A write about a campaign — `campaign.pause`, `campaign.activate` — names no person, and has no contact to
+  find.
+
+Once a pin exists nobody matches that person by address again, which is what stops two spellings of one
+address becoming two people.
 
 ### Repeating after a lost answer
 
@@ -703,7 +714,9 @@ every operation's plugin is held to, and the runtime enforces each of them:
    the runtime cannot: a person suppressed at the provider between the moment the work was claimed and
    the moment you act on it is the ordinary case. Your job is not to re-check anything the runtime
    already checked — it is to recognise the provider's refusal and report it as `suppressed` with class
-   `permanent`, so the item ends in a person's inbox rather than being retried into the same wall. The
+   `permanent`, so the item ends in a person's inbox rather than being retried into the same wall — unless
+   the document declares `preflight.suppression: not_applicable`: an operation that only takes a person out
+   is for exactly the people a suppression names, and declares no `suppressed` to report. The
    reference plugin does exactly this and nothing more: the re-check happens at the provider, and the
    plugin maps the answer.
 
@@ -714,7 +727,7 @@ recorded rather than the one it disputes.
 
 ### The worked example
 
-`plugins/reply/` is the one to read: a marketplace package that implements all seven published
+`plugins/reply/` is the one to read: a marketplace package that implements all eleven published
 operations against a real provider by driving that provider's own command-line program. Its README
 says what each operation maps onto, what the provider will not answer, and which of its claims were
 checked against a live account; its `modules/errors.js` is the whole error table written as data, so
@@ -741,7 +754,8 @@ Every failure carries one of four classes, and the class — not the code — is
 the user's reputation rather than a retry budget.
 
 What may be done about an ambiguous end is a property of the operation, and every published contract
-states it as `repeat_after_ambiguous`: `safe` for a read, which may simply be asked again;
+states it as `repeat_after_ambiguous`: `safe` for a read, which may simply be asked again, and for a
+reversible control that costs nothing, whose second performance changes nothing — pausing a paused campaign;
 `after_recovery_read` for a write that declares the reading which settles the question; `never` where
 nothing can settle it — and an item that ends that way waits for a human or a manager role. The
 runtime reads that field and nothing else when it decides; your half is to make the permission true:
