@@ -76,6 +76,9 @@ public class ReplyCampaignActivateTests
         Assert.Equal("population_changed", error.Code);
         Assert.Equal(2, (int)error.Details!["expected"]!);
         Assert.Equal(3, (int)error.Details["actual"]!);
+
+        // The numbers reach a person through the attempt's trace, never the last error, and the message says so.
+        Assert.Contains("The attempt's trace carries both numbers", error.Message, StringComparison.Ordinal);
         Assert.Equal("7", (string?)error.ExternalIds!["campaign"]);
         Assert.Equal("new", (string?)account.Sequences.Single()!["status"]);
         Assert.DoesNotContain(account.Calls, call => call.Path == StartPath);
@@ -91,6 +94,8 @@ public class ReplyCampaignActivateTests
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(expected: 1, pinned: "7")));
 
         Assert.Equal("campaign_not_activatable", error.Code);
+        Assert.Contains("Either its state says it is archived, or Reply refused the start", error.Message, StringComparison.Ordinal);
+        Assert.Contains("The attempt's trace says which", error.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(account.Calls, call => call.Path == StartPath);
     }
 

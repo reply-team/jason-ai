@@ -81,6 +81,61 @@ public class ReplyErrorTableTests
         }
     }
 
+    /// <summary>
+    /// A row's note is the failure's message, and the message is all of a failure that reaches the work item's last
+    /// error: the details are stripped from it and flattened into the attempt's trace. So a note that sent its reader to
+    /// "the details" would send a person reading <c>jason workitem get</c> somewhere they cannot see. Where a note needs
+    /// what only the details hold, it says the attempt's trace.
+    /// </summary>
+    [Fact]
+    public void No_message_sends_its_reader_to_details_a_work_item_never_shows()
+    {
+        foreach (var (where, key, row) in ReplyErrorTable.AllRows())
+        {
+            Assert.False(
+                Text(row, "note").Contains("details", StringComparison.OrdinalIgnoreCase),
+                $"{where} row '{key}' sends its reader to the details, which never reach a work item's last error.");
+        }
+    }
+
+    /// <summary>
+    /// The README's failure tables are the same notes written for a person, and a remedy that sent its reader to "the
+    /// details" would send them where <c>jason workitem get</c> never shows. The README says "the trace" for what the
+    /// details carry, so every "What to do about it" cell is held to that the way the table's notes are.
+    /// </summary>
+    [Fact]
+    public void No_remedy_in_the_readme_sends_its_reader_to_details_a_work_item_never_shows()
+    {
+        const string header = "| When | Code | Class | What to do about it |";
+        var lines = File.ReadAllLines(Path.Combine(ReplyPlugins.PackageSource, "README.md"));
+        var remedies = new List<(int Line, string Cell)>();
+
+        for (var at = 0; at < lines.Length; at++)
+        {
+            if (lines[at] != header)
+            {
+                continue;
+            }
+
+            for (at += 2; at < lines.Length && lines[at].StartsWith('|'); at++)
+            {
+                var cells = lines[at].Split('|');
+                Assert.True(cells.Length == 6, $"README line {at + 1} is not a row of four cells.");
+                remedies.Add((at + 1, cells[4]));
+            }
+        }
+
+        // The reader has to reach the column it holds, or it would pass by holding nothing.
+        Assert.Contains(remedies, remedy => remedy.Cell.Contains("the trace", StringComparison.OrdinalIgnoreCase));
+
+        foreach (var (line, cell) in remedies)
+        {
+            Assert.False(
+                cell.Contains("details", StringComparison.OrdinalIgnoreCase),
+                $"README line {line} sends its reader to the details, which never reach a work item's last error.");
+        }
+    }
+
     [Fact]
     public void Every_call_the_package_makes_is_marked_a_read_or_a_write()
     {

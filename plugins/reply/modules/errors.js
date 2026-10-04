@@ -138,7 +138,7 @@ export const ROWS = {
       "when": "Any other status, or a business code no row below names — the bulk-enrol error set is published as open, so there will be some.",
       "code": "provider_call_failed",
       "class": "permanent",
-      "note": "Reply refused the call in a word this version of the package does not know; the status and Reply's own code travel in the failure's details. Nothing was done, so the attempt is not repeated — and a refusal that turns up often enough belongs in this table."
+      "note": "Reply refused the call in a word this version of the package does not know; the status and Reply's own code are in the attempt's trace. Nothing was done, so the attempt is not repeated — and a refusal that turns up often enough belongs in this table."
     }
   },
   "per_operation": {
@@ -153,13 +153,13 @@ export const ROWS = {
         "when": "The sequence read says it is archived, and the start is not asked for; or the start answers 409 (archived) or 400 (no contacts, no connected sending account, no schedule with sending hours), whose own code travels in `details.provider_code`.",
         "code": "campaign_not_activatable",
         "class": "permanent",
-        "note": "Reply will not start this sequence. Nothing was started; `details.provider_code` says why where Reply gave a code, and what it names has to change at Reply first."
+        "note": "Reply will not start this sequence, and nothing was started. Either its state says it is archived, or Reply refused the start: no contacts, no connected sending account or no sending hours. The attempt's trace says which, with Reply's own code where Reply gave one; that has to change at Reply before the activation is proposed again."
       },
       "population_changed": {
         "when": "The sequence's count, read at execution, is not the `args.expected.enrolled` a person approved. The start is not asked for.",
         "code": "population_changed",
         "class": "permanent",
-        "note": "The population a person approved is not the one the campaign holds now, so nothing was started. `details.expected` and `details.actual` carry both numbers; read the count again and propose a new activation."
+        "note": "The population a person approved is not the one the campaign holds now, so nothing was started. The attempt's trace carries both numbers; read the count again with enrollment.list and propose a new activation for the number it gives."
       }
     },
     "campaign.pause": {
@@ -173,7 +173,7 @@ export const ROWS = {
         "when": "The sequence read says it is archived, or that it never started (`new`), and the pause is not asked for — `details.reason` says which; or the pause answers 409 or 400, whose own code travels in `details.provider_code` (the one 400 Reply documents for a pause is `sequenceAction.teamMemberNotFound`).",
         "code": "campaign_not_pausable",
         "class": "permanent",
-        "note": "Reply will not pause this sequence, and nothing was changed. `details.reason` says why where the sequence's state decided it, and `details.provider_code` carries Reply's own code where Reply refused; what it names has to change at Reply before a pause can succeed."
+        "note": "Reply will not pause this sequence, and nothing was changed. Either its state says it cannot be paused — archived, or never started — or Reply refused the pause. The attempt's trace says which, with Reply's own code where Reply gave one; that has to change at Reply before a pause can succeed."
       }
     },
     "campaign.get": {
@@ -247,7 +247,7 @@ export const ROWS = {
         "when": "The pinned contact identifier, or the campaign's, is not a Reply number at all. Decided before any call.",
         "code": "provider_call_failed",
         "class": "permanent",
-        "note": "The identifier this read would filter by names nothing a Reply account could hold, so nothing was asked. The pin is wrong; the details say which one."
+        "note": "The identifier this read would filter by names nothing a Reply account could hold, so nothing was asked. The pin is wrong; the attempt's trace says which one."
       },
       "feature_not_included": {
         "when": "403 with Reply's own code `inboxThread.forbidden`: the inbox is not available to this user or team. Any other 403 is the shared `unauthorized` row.",
@@ -361,13 +361,13 @@ export const ROWS = {
         "when": "The arguments name a call this provider cannot be asked to make: a start position no shape of this sequence's steps can answer, or a first-touch timing this version has no word for. Decided before anything is sent.",
         "code": "provider_call_failed",
         "class": "permanent",
-        "note": "The enrollment could not be built from the arguments it was given, so nothing was sent. A Reply step carries no ordering field at all — the steps are a graph of parents with branch labels — so a numbered start position has a sound meaning only while they form a single chain, and the details say which reading failed. Ask for the first step, or name a position the sequence really has."
+        "note": "The enrollment could not be built from the arguments it was given, so nothing was sent. A Reply step carries no ordering field at all — the steps are a graph of parents with branch labels — so a numbered start position has a sound meaning only while they form a single chain, and the attempt's trace says which reading failed. Ask for the first step, or name a position the sequence really has."
       },
       "request_rejected_as_invalid": {
         "when": "The bulk enrol answers the per-item word `invalidInput` against this person: Reply read the request and would not take it.",
         "code": "provider_call_failed",
         "class": "permanent",
-        "note": "Reply rejected the enrollment request as invalid. A request built wrong is built the same way on every attempt, so it is reported rather than retried, and what Reply said travels in the details."
+        "note": "Reply rejected the enrollment request as invalid. A request built wrong is built the same way on every attempt, so it is reported rather than retried, and what Reply said is in the attempt's trace."
       }
     },
     "enrollment.stop": {

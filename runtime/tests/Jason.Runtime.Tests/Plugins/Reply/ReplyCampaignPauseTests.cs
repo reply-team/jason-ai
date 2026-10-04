@@ -92,10 +92,9 @@ public class ReplyCampaignPauseTests
         Assert.Equal("campaign_not_pausable", error.Code);
         Assert.Equal(providerCode, (string?)error.Details!["provider_code"]);
 
-        // The message is all that reaches the work item's last error, so it names no cause the package cannot know:
-        // Reply's own code says why, and the message says where to read it.
-        Assert.DoesNotContain("never started", error.Message, StringComparison.Ordinal);
-        Assert.Contains("details.provider_code", error.Message, StringComparison.Ordinal);
+        // The message is all that reaches the work item's last error, so it claims no one cause: it names what could
+        // have stopped the pause and says where a person reads which one it was.
+        Assert.Contains("or Reply refused the pause. The attempt's trace says which, with Reply's own code", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
