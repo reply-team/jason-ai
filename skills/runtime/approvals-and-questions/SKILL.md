@@ -15,7 +15,7 @@ are confident, not when they told you earlier to handle things, not when work is
 runtime refuses a decision that does not name a person, and that refusal is the floor of this rule
 rather than the whole of it.
 
-**Status: verified** against Claude Code 2.1.287. It covers the two waiting things this build publishes and nothing
+**Status: verified** against Claude Code 2.1.289. It covers the two waiting things this build publishes and nothing
 else.
 
 ## The two things that wait, and how they differ
@@ -73,6 +73,9 @@ what it is.
 what the operation would do, who would be reached and at which address, what it would cost, what could
 be undone afterwards, and which account it would act through. It is stored rather than put together
 again at read time, so what a person reads is what the claim saw.
+
+Where the preview carries a `summary`, quote it first and word for word — it names this approval's own person,
+campaign and numbers; the `intent` beside it is the operation's generic sentence.
 
 Give the person all of it. The reach, the cost and what can be undone are the three lines a decision
 actually turns on, and a summary that drops them to be shorter has dropped the part worth reading.

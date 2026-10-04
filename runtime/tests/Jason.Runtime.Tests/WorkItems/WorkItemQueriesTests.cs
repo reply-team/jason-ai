@@ -74,6 +74,52 @@ public class WorkItemQueriesTests
         Assert.False(WorkItemQueries.IsEligible(item, Noon));
     }
 
+    /// <summary>
+    /// The one predicate has three readers — the listing's SQL, its compiled twin, and the claimer's own query — and all
+    /// three agree in every campaign state and for every kind of work: a paused campaign holds its work, except a
+    /// provider operation whose contract says it runs there; a draft or an archived one holds everything. Two
+    /// operations say so, which is what makes the claim's set a set; an add is `control` and `auto` like them, and
+    /// still waits.
+    /// </summary>
+    [Fact]
+    public async Task The_listing_its_twin_and_the_claim_agree_in_every_campaign_state()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var items = new List<(WorkItem Item, bool Expected)>();
+        foreach (var status in Enum.GetValues<CampaignStatus>())
+        {
+            var kinds = new (string Name, Func<Campaign, WorkItem> Make)[]
+            {
+                ("a pause", campaign => WorkItemFactory.NewProviderOp(campaign, "campaign.pause", Noon)),
+                ("a record of a stop", campaign => WorkItemFactory.NewProviderOp(campaign, "optout.record", Noon)),
+                ("an add", campaign => WorkItemFactory.NewProviderOp(campaign, "list_membership.add", Noon)),
+                ("an enrollment", campaign => WorkItemFactory.NewProviderOp(campaign, "campaign.enroll", Noon)),
+                ("a role's work", campaign => WorkItemFactory.NewAiRole(campaign, now: Noon)),
+            };
+            foreach (var (name, make) in kinds)
+            {
+                // One item in a campaign of its own, so the claimer's one-per-campaign rule cannot hide a disagreement.
+                var campaign = WorkItemFactory.NewCampaign($"{status} {name}", status, Noon);
+                var item = make(campaign);
+                db.Campaigns.Add(campaign);
+                db.WorkItems.Add(item);
+                items.Add((item, status == CampaignStatus.Active || (status == CampaignStatus.Paused && name is "a pause" or "a record of a stop")));
+            }
+        }
+
+        await db.SaveChangesAsync(Ct);
+
+        var expected = items.Where(entry => entry.Expected).Select(entry => entry.Item.PublicId).Order(StringComparer.Ordinal).ToList();
+        var fromSql = await db.WorkItems.AsNoTracking().WithNavigation().Where(WorkItemQueries.Eligible(Noon)).Select(w => w.PublicId).ToListAsync(Ct);
+        var all = await db.WorkItems.AsNoTracking().WithNavigation().ToListAsync(Ct);
+        var claimable = await Jason.Runtime.Dispatch.Claimer.CandidatesAsync(db, Noon, freeSlots: 100, Ct);
+
+        Assert.Equal(expected, fromSql.Order(StringComparer.Ordinal));
+        Assert.Equal(expected, all.Where(w => WorkItemQueries.IsEligible(w, Noon)).Select(w => w.PublicId).Order(StringComparer.Ordinal));
+        Assert.Equal(expected, all.Where(w => claimable.Contains(w.Id)).Select(w => w.PublicId).Order(StringComparer.Ordinal));
+    }
+
     [Fact]
     public async Task The_query_and_its_compiled_twin_agree_row_by_row()
     {

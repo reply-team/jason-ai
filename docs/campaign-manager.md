@@ -25,7 +25,9 @@ them — and this is a rule the database keeps, not one the summon merely intend
 the open ones. Two writers both looking first would both see none and both insert.
 
 **Only `active` campaigns are reviewed.** A draft campaign is a backlog, a paused one was stopped on
-purpose, and an archived one is over.
+purpose, and an archived one is over. So a failure of work that runs in a paused campaign — the provider's own
+pause, or the record that somebody said stop — is seen when the campaign resumes, or by whoever answers the
+decision raised about it.
 
 ## 2. What wakes a manager
 
@@ -138,7 +140,7 @@ The runtime writes the brief, and the brief is identifiers and constants:
   },
   "allowed_operations": ["workitem.create", "workitem.update", "workitem.cancel",
                          "campaign.update_context", "journal.append", "rolenote.set",
-                         "approval.list", "report.list", "decision.raise", "decision.list"],
+                         "approval.list", "report.list", "decision.raise", "decision.list", "campaign.pause"],
   "escalation": "decision.raise"
 }
 ```
@@ -155,12 +157,13 @@ answered since the last review for itself — `jason decision list --campaign <i
 rather than trusting the brief to name one.
 
 **`escalation` is the verb to raise a question with**, in a key of its own beside a list that also
-holds it. A role should not have to pick the one verb that changes what happens next out of eight.
+holds it. A role should not have to pick the one verb that changes what happens next out of a list.
 
 **`allowed_operations` is guidance and not a permission.** Nothing in the runtime consults it. The
 answer to a call outside that list is the answer anybody gets: deterministic guardrails still apply,
 approvals still park what needs a person, and being the manager grants no authority at all. A second
-permission system would be a second place for authority to be wrong.
+permission system would be a second place for authority to be wrong. The list names Runtime API verbs, so its
+`campaign.pause` is Jason's own; the provider's pause is a `provider_op` item, made with `workitem.create`.
 
 **The answer has a shape.** A check-in carries a `result_format`, so a review reports something that
 can be counted rather than prose:

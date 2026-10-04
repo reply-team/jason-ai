@@ -194,10 +194,10 @@ public partial class ShippedRoleSkillTests
         Assert.Contains("exactly that line", skill, StringComparison.Ordinal);
         Assert.Contains("journal append", skill, StringComparison.Ordinal);
 
-        // 8. No outbound effect, and the way a decision still becomes one: through a work item that parks on
-        // approval like everybody else's. A manager that reached a provider itself would be an effect nobody
-        // approved, performed by the role whose job is to notice such things.
-        Assert.Contains("no outbound effect", skill, StringComparison.OrdinalIgnoreCase);
+        // 8. Nothing reaches a provider from the manager itself, and the way a decision still becomes an effect:
+        // through a work item that parks on approval like everybody else's. A manager that reached a provider itself
+        // would be an effect nobody approved, performed by the role whose job is to notice such things.
+        Assert.Contains("You never act at a provider yourself:", skill, StringComparison.Ordinal);
         Assert.Contains("parks on approval like anybody else's", skill, StringComparison.Ordinal);
 
         // 9. The plain callback, with what the rule was actually seen to decide and nothing more; no file to

@@ -1,0 +1,21 @@
+{
+  "operation": "campaign.activate",
+  "version": 1,
+  "case": "a campaign with no connected sending account",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "permanent",
+      "code": "campaign_not_activatable",
+      "message": "The provider will not start this campaign: it has no account to send from.",
+      "details": { "provider_code": "campaign.no_sender" },
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "diagnostics": { "duration_ms": 380, "exec_calls": 3, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "permanent", "retriable": false, "pinned": { "campaign": "c_7714" } }
+}

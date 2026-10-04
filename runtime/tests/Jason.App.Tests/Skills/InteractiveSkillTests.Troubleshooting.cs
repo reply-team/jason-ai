@@ -2,6 +2,22 @@ namespace Jason.App.Tests.Skills;
 
 public partial class InteractiveSkillTests
 {
+    /// <summary>
+    /// The troubleshooting skill is verified by the host that read it as it ships, and it says which work a paused
+    /// campaign still lets through: the field a contract declares, and the two operations that declare it today.
+    /// </summary>
+    [Fact]
+    public void The_troubleshooting_skill_is_verified_by_the_host_that_read_it_and_names_what_runs_in_a_paused_campaign()
+    {
+        var file = SkillPack.Find("troubleshooting-jason").File;
+        Assert.Equal("verified", SkillFrontMatter.Read(file).Metadata.GetValueOrDefault("status"));
+        Assert.Contains($"| `troubleshooting-jason` | Claude Code 2.1.289 (claude-opus-5) | 0.3.0 | `{SkillPack.BodyDigest(file)}` |", File.ReadAllText(SkillPack.Catalog()), StringComparison.Ordinal);
+        Assert.Contains(
+            "Only an active campaign's work is claimed, with one exception: a paused campaign still lets through a `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs` (`optout.record` and `campaign.pause`). So an archived or still-draft campaign holds every one of its items at once, and a paused one holds every item but theirs.",
+            Flattened("troubleshooting-jason"),
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_troubleshooting_skill_is_honest_about_what_this_version_does_not_have()
     {

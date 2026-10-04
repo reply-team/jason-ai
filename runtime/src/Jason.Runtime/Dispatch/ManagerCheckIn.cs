@@ -61,6 +61,7 @@ public static class ManagerCheckIn
         "report.list",
         Operations.DecisionRaise,
         Operations.DecisionList,
+        Operations.CampaignPause,
     ];
 
     /// <summary>
@@ -122,7 +123,7 @@ public static class ManagerCheckIn
             ["allowed_operations"] = new JsonArray([.. AllowedOperations.Select(operation => (JsonNode?)JsonValue.Create(operation))]),
 
             // The one verb that changes what happens next, in a key of its own beside a list that also holds
-            // it: a role should not have to pick it out of eight. A scheduled review may find something worth
+            // it: a role should not have to pick it out of a list. A scheduled review may find something worth
             // asking about just as a triggered one may, so it is on every brief.
             ["escalation"] = Operations.DecisionRaise,
         };

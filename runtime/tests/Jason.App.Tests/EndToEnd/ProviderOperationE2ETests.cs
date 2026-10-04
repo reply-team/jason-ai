@@ -264,7 +264,7 @@ public class ProviderOperationE2ETests
     {
         var written = Directory
             .GetFiles(paths.LogsDirectory, "*", SearchOption.AllDirectories)
-            .ToDictionary(file => file, File.ReadAllText, StringComparer.Ordinal);
+            .ToDictionary(file => file, RuntimeLogs.ReadAllText, StringComparer.Ordinal);
         Assert.NotEmpty(written);
 
         // The work this run did is in there by name, so the lines a leak would have travelled in are lines these

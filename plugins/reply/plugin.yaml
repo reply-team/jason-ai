@@ -1,6 +1,6 @@
 manifest_version: 1
 id: reply
-version: 0.2.0-dev
+version: 0.2.0
 kind: provider
 name: Reply
 description: >-
@@ -10,7 +10,7 @@ homepage: https://reply.io
 contracts:
   protocol: [1]
   operations: [1]
-operations: [campaign.get, list_membership.add, campaign.enroll, enrollment.list, engagement.summarize, conversation.list, conversation.get]
+operations: [campaign.get, list_membership.add, campaign.enroll, enrollment.list, engagement.summarize, conversation.list, conversation.get, campaign.pause, campaign.activate, optout.record, enrollment.stop]
 entry:
   module: main.js
   function: invoke

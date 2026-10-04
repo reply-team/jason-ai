@@ -249,7 +249,11 @@ public class GeneratedBlockTests
         block.Append('\n');
 
         block.Append("| What Jason adds | Value |\n|---|---|\n");
-        Row(block, "pre-flight", $"contact `{Name(contract.Preflight.Contact)}`, channel `{Name(contract.Preflight.Channel)}`");
+        Row(
+            block,
+            "pre-flight",
+            $"contact `{Name(contract.Preflight.Contact)}`, channel `{Name(contract.Preflight.Channel)}`, suppression `{Name(contract.Preflight.Suppression)}`");
+        Row(block, "in a paused campaign", $"`{Name(contract.Dispatch.InPausedCampaign)}`");
         Row(block, "contact projection", Projection(contract));
         Row(block, "precondition", contract.Precondition);
         Row(block, "preview a person reads", Preview(contract));

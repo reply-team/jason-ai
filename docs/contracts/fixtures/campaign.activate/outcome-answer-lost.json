@@ -1,0 +1,21 @@
+{
+  "operation": "campaign.activate",
+  "version": 1,
+  "case": "the start may already have happened; the next attempt reads first",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "ambiguous",
+      "code": "provider_answer_lost",
+      "message": "The start was sent and no answer came back.",
+      "details": null,
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "diagnostics": { "duration_ms": 380, "exec_calls": 3, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "ambiguous", "retriable": true, "pinned": { "campaign": "c_7714" } }
+}

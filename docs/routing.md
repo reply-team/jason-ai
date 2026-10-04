@@ -302,7 +302,7 @@ asked to approve reaching somebody the suppression register already protects.
 | 7 | `binding_invalid` | permanent | the route's binding does not satisfy the schema the plugin declares — including a route with no binding to a plugin that requires one. Fix the binding |
 | 8 | `contact_required` | permanent | the operation acts on somebody and the work item names nobody. Create the item with `--contact`. An operation whose contact is `optional` runs with one or without, so it never meets this check |
 | 9 | `no_channel_value` | permanent | the person is not reachable on the channel the operation consumes. Add the channel to the contact, or name a channel they have |
-| 10 | `suppressed` | permanent | that channel value is on the do-not-contact register. It is not reached, and that is the register working |
+| 10 | `suppressed` | permanent | that channel value is on the do-not-contact register. It is not reached, and that is the register working. An operation that only takes a person out declares `preflight.suppression: not_applicable` — today `optout.record` and `enrollment.stop` — and meets neither the check nor the read: a suppressed person is exactly who it is for |
 | 11 | `input_invalid` | validation | the composed input does not satisfy the operation's own schema, or an argument contradicts an identifier Jason has already pinned. The details carry a JSON pointer each |
 | 12 | `approval_required` | — | **not a failure**: the operation needs a person's approval, and a dispatcher may not stand in for the person who approves it. The item is parked as `awaiting_approval` with a record of exactly what is being approved. `docs/work-execution.md` §Approvals |
 
@@ -493,10 +493,10 @@ reconciliation — matching a person again, against two providers' answers — a
   standing approvals, no bulk decisions over a population, no expiry windows and no anomaly stop rules
   (DEF-APPROVAL-001). Nothing notifies anybody either, so a person finds out what is waiting by asking
   — `jason approval list` is the floor this version ships.
-- **Seven operations, not a catalog.** The documents under `docs/contracts/operations/` — two that act,
-  `list_membership.add` and `campaign.enroll`, and five reads — are the whole published set; an operation
-  outside it cannot be routed, created or named, and adding one is a deliberate act with its own document,
-  fixtures and version (DEF-OPS-001).
+- **Eleven operations, not a catalog.** The documents under `docs/contracts/operations/` — six that write,
+  `list_membership.add`, `campaign.enroll`, `campaign.pause`, `campaign.activate`, `optout.record` and
+  `enrollment.stop`, and five reads — are the whole published set; an operation outside it cannot be routed,
+  created or named, and adding one is a deliberate act with its own document, fixtures and version (DEF-OPS-001).
 - **No compatibility window and no deprecation policy.** Every published operation is at version 1, and a
   plugin declares which contract family versions it implements. What happens when version 2 arrives — how
   long version 1 keeps being served, and how a plugin is told — is not settled and is deliberately not

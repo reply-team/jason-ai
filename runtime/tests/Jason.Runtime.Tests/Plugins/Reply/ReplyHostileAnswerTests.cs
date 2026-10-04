@@ -82,7 +82,7 @@ public class ReplyHostileAnswerTests
         // Guessing one — the first contact in the account, say — would enrol or list somebody else.
         var answered = new JsonObject
         {
-            ["items"] = new JsonArray(new JsonObject { ["status"] = "created" }),
+            ["items"] = new JsonArray(new JsonObject { ["status"] = "created", ["error"] = $"{ReplyOperations.Address} could not be read" }),
         };
 
         using var account = ReplyOperations.Plant(new ReplyAccount());
@@ -93,8 +93,51 @@ public class ReplyHostileAnswerTests
         Assert.Equal("provider_call_failed", error.Code);
         Assert.Equal(FailureClass.Permanent, error.Class);
 
-        // What came back travels as evidence rather than as a reading of it: the item is reported, never mapped.
-        Assert.Contains("created", error.Details!["provider_item"]!.GetValue<string>(), StringComparison.Ordinal);
+        // What came back is reported by the identifier it carries, never mapped, and nothing else of the item travels:
+        // the rest of an import item can say what a person's record holds.
+        var item = error.Details!["provider_item"]!.GetValue<string>();
+        Assert.DoesNotContain(ReplyOperations.Address, item, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("created", item, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An import item, or a contact the create path made, under an identifier this package cannot work by is reported
+    /// by that identifier alone: the rest of either answer is a person's record, and none of it belongs in a failure.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_contact_made_under_an_identifier_nobody_can_work_by_is_reported_by_that_identifier_alone(bool imported)
+    {
+        var record = new JsonObject
+        {
+            ["id"] = "c-88",
+            ["email"] = ReplyOperations.Address,
+            ["firstName"] = "Recorded-marker",
+            ["phone"] = "+15550100",
+        };
+
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        var input = ReplyOperations.MembershipAddInput();
+        if (imported)
+        {
+            account.Answers("POST", ImportPath, 200, new JsonObject { ["items"] = new JsonArray(record) }.ToJsonString());
+        }
+        else
+        {
+            // Without a first name the import is never asked, and the contact is created instead.
+            input["contacts"]![0]!["first_name"] = null;
+            account.Answers("POST", "/v3/contacts", 200, record.ToJsonString());
+        }
+
+        var error = await FailedAsync(account, ReplyOperations.MembershipAdd, input);
+
+        var item = error.Details!["provider_item"]!.GetValue<string>();
+        Assert.Contains("c-88", item, StringComparison.Ordinal);
+        foreach (var field in new[] { ReplyOperations.Address, "Recorded-marker", "+15550100" })
+        {
+            Assert.DoesNotContain(field, item, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     /// <summary>
@@ -320,8 +363,8 @@ public class ReplyHostileAnswerTests
     {
         // The day-one failure: the operator has not signed in. The CLI decides that before it builds a request,
         // so nothing reached the account — and calling it a lost answer would stop a work item for a person over
-        // a write nobody made, on the two operations where that verdict is the expensive one. Both are driven
-        // here, because the read/write mark is what the old reading turned on.
+        // a write nobody made, on writes where that verdict is the expensive one. The add and the enrollment are
+        // driven here, because the read/write mark is what the old reading turned on.
         using var account = ReplyOperations.Plant(new ReplyAccount());
         account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
 
@@ -384,6 +427,149 @@ public class ReplyHostileAnswerTests
         Assert.Equal(FailureClass.Ambiguous, error.Class);
         Assert.Null(error.Details!["provider_code"]);
     }
+
+    // -------------------------------------------------------------------------------------------------------
+    // The four writes: a shape no provider documents, on the read each one decides by, ends in a declared code
+    // -------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A pause decides by the sequence's state. A 200 carrying a page where one sequence was asked for says no state,
+    /// and the pause is not asked for: the read is reported as one that did not arrive.
+    /// </summary>
+    [Fact]
+    public async Task A_pause_whose_state_read_answers_a_page_pauses_nothing()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.Answers("GET", SequencePath, 200, new JsonArray(new JsonObject { ["id"] = ReplyOperations.Sequence }).ToJsonString());
+
+        var error = await FailedAsync(account, "campaign.pause", CampaignOnly(new JsonObject()));
+
+        Assert.Equal("provider_unavailable", error.Code);
+        Assert.Equal(FailureClass.Transient, error.Class);
+        Assert.DoesNotContain(account.Calls, call => call.Path.EndsWith("/pause", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// An activation holds the population to the count. A count written as words is no count, and nothing starts.
+    /// </summary>
+    [Fact]
+    public async Task An_activation_whose_count_is_not_a_number_starts_nothing()
+    {
+        using var account = new ReplyAccount().WithSequence(ReplyOperations.Sequence, "Q3 LatAm founders", "new", false, 11, 12);
+        account.Answers("GET", SequencePath + "/contacts/count", 200, new JsonObject { ["count"] = "two" }.ToJsonString());
+
+        var error = await FailedAsync(account, "campaign.activate", CampaignOnly(new JsonObject { ["expected"] = new JsonObject { ["enrolled"] = 2 } }));
+
+        Assert.Equal("provider_unavailable", error.Code);
+        Assert.Equal(FailureClass.Transient, error.Class);
+        Assert.DoesNotContain(account.Calls, call => call.Path.EndsWith("/start", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The opt-out's write answers a failures-only dictionary. An array there says nothing about whom it took, and the
+    /// write went out, so it is the lost write it may be: the next attempt reads the flag before writing again.
+    /// </summary>
+    [Fact]
+    public async Task An_opt_out_whose_write_answers_an_array_is_a_lost_write()
+    {
+        using var account = new ReplyAccount().WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
+        account.Answers("POST", "/v3/contacts/set-opted-out", 200, new JsonArray(1001).ToJsonString());
+
+        var error = await FailedAsync(account, "optout.record", Person(
+            new JsonObject
+            {
+                ["channel"] = "email",
+                ["statement"] = "please take me off your list",
+                ["arrived_via"] = "reply",
+                ["said_at"] = "2026-10-03T08:14:00Z",
+                ["learned_at"] = "2026-10-03T08:20:00Z",
+            },
+            pinned: "1001"));
+
+        Assert.Equal("provider_answer_lost", error.Code);
+        Assert.Equal(FailureClass.Ambiguous, error.Class);
+        Assert.Equal("1001", (string?)error.ExternalIds!["contact"]);
+    }
+
+    /// <summary>
+    /// The lookup reads a page and its word for the end. A page whose items are not a list says neither, and taking it
+    /// for nobody would answer a stop that never happened: it is a read that did not arrive.
+    /// </summary>
+    [Fact]
+    public async Task A_stop_whose_lookup_answers_no_list_takes_nobody_for_absent()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName).WithEnrollment(ReplyOperations.Sequence, 1001);
+        account.Answers("POST", "/v3/contacts/filter?top=100&skip=0", 200, new JsonObject { ["items"] = "nobody", ["hasMore"] = false }.ToJsonString());
+
+        var error = await FailedAsync(account, "enrollment.stop", Person(
+            new JsonObject { ["channel"] = "email", ["reason"] = new JsonObject { ["code"] = "other" } },
+            pinned: null,
+            campaign: "7"));
+
+        Assert.Equal("provider_unavailable", error.Code);
+        Assert.Equal(FailureClass.Transient, error.Class);
+        Assert.Equal([1001], account.EnrolledIn(ReplyOperations.Sequence));
+    }
+
+    /// <summary>
+    /// The stop decides by the participation. A 200 carrying a bare string is no participation, and nothing is removed.
+    /// </summary>
+    [Fact]
+    public async Task A_stop_whose_participation_read_answers_a_string_removes_nothing()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName).WithEnrollment(ReplyOperations.Sequence, 1001);
+        account.Answers("GET", SequencePath + "/contacts/1001", 200, "\"active\"");
+
+        var error = await FailedAsync(account, "enrollment.stop", Person(
+            new JsonObject { ["channel"] = "email", ["reason"] = new JsonObject { ["code"] = "other" } },
+            pinned: "1001",
+            campaign: "7"));
+
+        Assert.Equal("provider_unavailable", error.Code);
+        Assert.Equal(FailureClass.Transient, error.Class);
+        Assert.Equal([1001], account.EnrolledIn(ReplyOperations.Sequence));
+    }
+
+    /// <summary>An input naming the campaign by its pin and nobody else, as a campaign-scope write receives it.</summary>
+    private static JsonObject CampaignOnly(JsonObject arguments) => new()
+    {
+        ["args"] = arguments,
+        ["campaign"] = new JsonObject
+        {
+            ["id"] = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+            ["name"] = "Q3 LatAm founders",
+            ["status"] = "active",
+            ["external_ids"] = new JsonObject { ["campaign"] = ReplyOperations.Sequence.ToString(System.Globalization.CultureInfo.InvariantCulture) },
+        },
+        ["idempotency_key"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRT",
+    };
+
+    /// <summary>An input about one person, pinned or not, in a campaign pinned or not.</summary>
+    private static JsonObject Person(JsonObject arguments, string? pinned, string? campaign = null) => new()
+    {
+        ["args"] = arguments,
+        ["contacts"] = new JsonArray(new JsonObject
+        {
+            ["id"] = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+            ["first_name"] = ReplyOperations.FirstName,
+            ["last_name"] = null,
+            ["company"] = null,
+            ["title"] = null,
+            ["time_zone"] = null,
+            ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = ReplyOperations.Address, ["primary"] = true }),
+            ["external_ids"] = pinned is null ? new JsonObject() : new JsonObject { ["contact"] = pinned },
+        }),
+        ["campaign"] = new JsonObject
+        {
+            ["id"] = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+            ["name"] = "Q3 LatAm founders",
+            ["status"] = "active",
+            ["external_ids"] = campaign is null ? new JsonObject() : new JsonObject { ["campaign"] = campaign },
+        },
+        ["idempotency_key"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRV",
+    };
 
     /// <summary>
     /// Drives one operation against an account that has already been told what to answer, and holds the ending

@@ -23,6 +23,8 @@ public class ProviderOpPreflightTests
     private const string Enroll = "campaign.enroll";
     private const string Get = "campaign.get";
     private const string Threads = "conversation.list";
+    private const string Optout = "optout.record";
+    private const string Stop = "enrollment.stop";
 
     /// <summary>
     /// The order, proven by repairing one thing at a time: everything is wrong at the start, and each repair
@@ -297,6 +299,48 @@ public class ProviderOpPreflightTests
         scenario.Suppressed = true;
 
         Assert.True(scenario.Check().Passed);
+    }
+
+    /// <summary>
+    /// The register refuses what would reach a person, and the record that somebody said stop reaches nobody: its
+    /// contract declares that the register does not apply, and a suppressed person is exactly who it is for. Taking
+    /// them out of a campaign is the same, and is parked for a person rather than refused. The same person, the same
+    /// register, and an operation that would reach them is still refused.
+    /// </summary>
+    [Fact]
+    public void A_suppressed_person_is_refused_what_would_reach_them_and_not_the_record_that_they_said_stop()
+    {
+        Scenario Suppressed(string operation, JsonObject arguments) => new()
+        {
+            Operation = operation,
+            Plugin = Scenario.Package(operations: [Add, Enroll, Optout, Stop]),
+            Route = Scenario.ToTheInstalledPackage,
+            Contact = Scenario.Person(("email", "ada@example.test")),
+            Arguments = arguments,
+            Suppressed = true,
+        };
+
+        var recorded = Suppressed(Optout, new JsonObject
+        {
+            ["channel"] = "email",
+            ["statement"] = "please take me off your list",
+            ["arrived_via"] = "reply",
+            ["said_at"] = "2026-10-03T08:14:00Z",
+            ["learned_at"] = "2026-10-03T08:20:00Z",
+        }).Check();
+        var stopped = Suppressed(Stop, new JsonObject
+        {
+            ["campaign"] = new JsonObject { ["external_id"] = "7" },
+            ["channel"] = "email",
+            ["reason"] = new JsonObject { ["code"] = "opted_out" },
+        }).Check();
+        var added = Suppressed(Add, Scenario.CompleteArguments).Check();
+        var enrolled = Suppressed(Enroll, Scenario.CompleteEnrollment).Check();
+
+        Assert.True(recorded.Passed, recorded.Code);
+        Assert.True(stopped.Parks, stopped.Code);
+        Assert.Equal(AttemptErrors.Suppressed, added.Code);
+        Assert.Equal(AttemptErrors.Suppressed, enrolled.Code);
     }
 
     /// <summary>What the claim hands on: the plan carries what the run needs, and every id it was decided by.</summary>

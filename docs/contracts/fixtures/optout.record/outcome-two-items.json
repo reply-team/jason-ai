@@ -1,0 +1,33 @@
+{
+  "operation": "optout.record",
+  "version": 1,
+  "case": "two answers for the one person",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "contact_id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+          "status": "recorded",
+          "external_ids": { "contact": "p_88421" }
+        },
+        {
+          "contact_id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+          "status": "recorded",
+          "external_ids": { "contact": "p_88421" }
+        }
+      ]
+    },
+    "external_ids": { "contact": "p_88421" },
+    "error": null,
+    "diagnostics": { "duration_ms": 380, "exec_calls": 1, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": false,
+    "invalid": [{ "pointer": "/items", "reason": "max_items" }]
+  }
+}

@@ -64,27 +64,101 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("| `provider_answer_too_large` |")]
     [InlineData("| `per_item_results` written plainly |")]
     [InlineData("| `accepts_collection` on the reads |")]
+    [InlineData("| `campaign.resume` |")]
+    [InlineData("| A first-touch ledger |")]
+    [InlineData("| `expected.enrolled` |")]
+    [InlineData("| A population that moved |")]
+    [InlineData("| `campaign_not_pausable` and `campaign_not_activatable` |")]
+    [InlineData("| A reason for a pause |")]
+    [InlineData("| Work in a paused Jason campaign |")]
+    [InlineData("| Two records of a stop |")]
+    [InlineData("| The suppression register and a stop |")]
+    [InlineData("| Finding a person before creating one |")]
+    [InlineData("| `contact_not_unique` |")]
+    [InlineData("| A reason for a stop |")]
+    [InlineData("| Taken out, never finished |")]
+    [InlineData("| A pin the provider no longer holds |")]
+    [InlineData("| What a metered write consumed |")]
     public void The_divergence_file_has_a_row_for_it(string row) =>
         Assert.Contains(row, Source("docs/contracts/divergence-from-l1.md"), StringComparison.Ordinal);
 
     /// <summary>
-    /// A page that counts the published operations counts them right, and one that lists them lists them all — the
-    /// count is read from the catalog, so the next operation added fails here until the pages say so.
+    /// Where a page quotes the catalogue, the words are the catalogue's: each quotation is on the page and, with the
+    /// comment marks and line breaks of the YAML taken out, in the catalogue's own files. A paraphrase in quotation
+    /// marks is how a page comes to argue with something the catalogue never said.
     /// </summary>
     [Theory]
-    [InlineData("README.md")]
-    [InlineData("docs/plugins.md")]
-    [InlineData("docs/reports.md")]
-    [InlineData("docs/routing.md")]
-    [InlineData("docs/contracts/divergence-from-l1.md")]
-    [InlineData("plugins/reply/README.md")]
-    public void No_page_counts_the_published_operations_as_three(string page)
+    [InlineData("docs/contracts/divergence-from-l1.md", "a mandatory preview naming the population, not counting it")]
+    [InlineData("docs/contracts/divergence-from-l1.md", "whose non-performance is itself the harm")]
+    [InlineData("docs/contracts/divergence-from-l1.md", "Take them out, and record why")]
+    [InlineData("docs/contracts/divergence-from-l1.md", "the reason is mandatory and must be able to name a different person as the cause")]
+    [InlineData("docs/contracts/divergence-from-l1.md", "Every metered operation returns what it actually consumed, including zero")]
+    [InlineData("docs/contracts/README.md", "true when the value RAISES above the derivation table")]
+    [InlineData("docs/contracts/README.md", "true for the one legitimate LOWERING: an operation whose non-performance is itself the harm")]
+    public void A_quotation_of_the_catalogue_is_the_catalogue_s_words(string page, string quotation)
     {
-        var text = Flat(Source(page));
+        Assert.Contains($"\"{quotation}\"", Flat(Source(page)), StringComparison.Ordinal);
 
-        Assert.Equal(7, OperationCatalog.All.Count);
-        Assert.DoesNotMatch(ThreePublished(), text);
+        var words = string.Join(' ', Directory.GetFiles(Rooted("skills/business/sdr-operations/operations"), "*.yaml").Order(StringComparer.Ordinal).Select(file => Flat(CommentMarks().Replace(File.ReadAllText(file), " "))));
+        Assert.Contains(quotation, words, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The catalogue's approval for an enrollment and an activation asks for a preview that names the population, and
+    /// Jason's activation preview counts it: the row says so and puts it back to the catalogue as a question, rather
+    /// than calling it no disagreement.
+    /// </summary>
+    [Fact]
+    public void The_approval_row_says_the_activation_preview_counts_and_asks_back()
+    {
+        var row = Source("docs/contracts/divergence-from-l1.md").Split('\n').Single(line => line.StartsWith("| Approval |", StringComparison.Ordinal));
+
+        Assert.Contains("counts the population", row, StringComparison.Ordinal);
+        Assert.Contains("it names no member of the population", row, StringComparison.Ordinal);
+        Assert.EndsWith("| **Yes** — whether the campaign with its count is the naming `+p` asks for |", row.TrimEnd('\r'), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The pin passage and the precondition row speak for every operation about a person, the stop included: the stop
+    /// creates nobody, and a pin the provider no longer holds is, for the stop, the completed stop it cannot be told
+    /// apart from.
+    /// </summary>
+    [Theory]
+    [InlineData("the stop never creates anybody")]
+    [InlineData("the opt-out looks the address up first and creates it only when nobody matches")]
+    [InlineData("The four writes about a person declare `contact_not_found` for it")]
+    [InlineData("for `enrollment.stop` a pin the provider no longer holds reads as the completed stop it cannot be told apart from")]
+    [InlineData("except the stop, which reads it as a person who takes no part")]
+    [InlineData("it also covers a lookup by address the plugin could not finish")]
+    public void The_divergence_file_speaks_for_every_operation_about_a_person(string sentence) =>
+        Assert.Contains(sentence, Flat(Source("docs/contracts/divergence-from-l1.md")), StringComparison.Ordinal);
+
+    /// <summary>
+    /// A page that counts the published operations counts them right: the number word is the catalog's own count, so
+    /// the next operation added fails here until every page says so, and any other number in a count phrase fails
+    /// whatever it is. The five pages that count say it at least once; the divergence file may not count at all.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md", true)]
+    [InlineData("docs/plugins.md", true)]
+    [InlineData("docs/reports.md", true)]
+    [InlineData("docs/routing.md", true)]
+    [InlineData("docs/contracts/divergence-from-l1.md", false)]
+    [InlineData("plugins/reply/README.md", true)]
+    public void A_page_that_counts_the_published_operations_says_the_catalog_s_number(string page, bool counts)
+    {
+        var expected = NumberWords[OperationCatalog.All.Count];
+        var said = CountPhrase().Matches(Flat(Source(page))).Select(match => match.Groups["n"].Value.ToLowerInvariant()).ToList();
+
+        Assert.True(!counts || said.Count > 0, $"{page} no longer counts the published operations.");
+        Assert.All(said, word => Assert.Equal(expected, word));
+    }
+
+    private static readonly string[] NumberWords =
+    [
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+        "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
+    ];
 
     [Fact]
     public void The_plugins_index_lists_every_operation_the_reply_plugin_performs()
@@ -93,6 +167,57 @@ public sealed partial class CanonicalReadsDocTests
         var row = index.Split('\n').Single(line => line.StartsWith("| [`reply/`]", StringComparison.Ordinal));
 
         Assert.All(OperationCatalog.All, contract => Assert.Contains($"`{contract.Id}`", row, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The eligibility rule names the field that lets work run in a paused campaign, and every operation that declares
+    /// it today — read from the catalog, so a third fails here until the sentence says so.
+    /// </summary>
+    [Fact]
+    public void The_eligibility_rule_names_the_field_and_every_operation_that_runs_in_a_paused_campaign()
+    {
+        var text = Flat(Source("docs/work-execution.md"));
+        var start = text.IndexOf("2. its campaign is `active`", StringComparison.Ordinal);
+        var end = text.IndexOf("3. `not_before`", start, StringComparison.Ordinal);
+        var item = text[start..end];
+
+        Assert.Contains("— or `paused`", item, StringComparison.Ordinal);
+        Assert.Contains("`dispatch.in_paused_campaign: runs`", item, StringComparison.Ordinal);
+        Assert.NotEmpty(OperationCatalog.RunsInPausedCampaign);
+        Assert.All(OperationCatalog.RunsInPausedCampaign, id => Assert.Contains($"`{id}`", item, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The approvals section names the operations a person confirms, and exactly those: every operation the catalog
+    /// publishes as `confirm_once`, and none that runs `auto`.
+    /// </summary>
+    [Fact]
+    public void Work_execution_names_every_operation_a_person_confirms_and_no_other()
+    {
+        var text = Flat(Source("docs/work-execution.md"));
+        var start = text.IndexOf("the one approval a runtime may give itself.", StringComparison.Ordinal);
+        var end = text.IndexOf("`confirm_once`, and work naming", start, StringComparison.Ordinal);
+        var sentence = text[start..end];
+
+        foreach (var contract in OperationCatalog.All)
+        {
+            Assert.Equal(contract.Approval.Value == "confirm_once", sentence.Contains($"`{contract.Id}`", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// The table of the claim's twelve answers says, at row 10, which operations the suppression register does not
+    /// refuse — every one the catalog marks `not_applicable`, and the field that marks it.
+    /// </summary>
+    [Fact]
+    public void Routing_row_10_names_every_operation_the_register_does_not_refuse()
+    {
+        var row = Source("docs/routing.md").Split('\n').Single(line => line.StartsWith("| 10 | `suppressed` |", StringComparison.Ordinal));
+        var exempt = OperationCatalog.All.Where(contract => contract.Preflight.Suppression == SuppressionCheck.NotApplicable).ToList();
+
+        Assert.Contains("`preflight.suppression: not_applicable`", row, StringComparison.Ordinal);
+        Assert.NotEmpty(exempt);
+        Assert.All(exempt, contract => Assert.Contains($"`{contract.Id}`", row, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -105,14 +230,14 @@ public sealed partial class CanonicalReadsDocTests
     /// <summary>
     /// The draft roles say what this build gives them, and two of those sentences said a read did not exist. They now
     /// say where a reply and a count come from — the result of a provider operation — and the three that listed the
-    /// operations say which two act.
+    /// operations that act now say what writing does without counting the writes, which a new one would make untrue.
     /// </summary>
     [Theory]
     [InlineData("skills/runtime/roles/responder/SKILL.md", "**This build reads a reply only through the provider.** A `provider_op` item naming `conversation.list` or `conversation.get` does it, and its result carries the threads; no verb of Jason's reads a mailbox.")]
     [InlineData("skills/runtime/roles/analyst/SKILL.md", "Jason records no open, click, reply or delivery of its own; the provider's counts reach it only as the result of a `provider_op` item naming `engagement.summarize`, with the envelope that says what each number counts.")]
-    [InlineData("skills/runtime/roles/copywriter/SKILL.md", "The two that act are `campaign.enroll` and `list_membership.add`, and the rest only read:")]
-    [InlineData("skills/runtime/roles/responder/SKILL.md", "The two that act are `campaign.enroll` and `list_membership.add`, and the rest only read:")]
-    [InlineData("skills/runtime/roles/personalizer/SKILL.md", "The two that act are `campaign.enroll` and `list_membership.add`, and the rest only read:")]
+    [InlineData("skills/runtime/roles/copywriter/SKILL.md", "Some write and the rest only read: enrolling somebody puts them into the provider's own campaign, starting a campaign releases its first step to everybody in it,")]
+    [InlineData("skills/runtime/roles/responder/SKILL.md", "Some write and the rest only read: enrolling somebody puts them into the provider's own campaign, starting a campaign releases its first step to everybody in it,")]
+    [InlineData("skills/runtime/roles/personalizer/SKILL.md", "Some write and the rest only read: enrolling somebody puts them into the provider's own campaign, starting a campaign releases its first step to everybody in it,")]
     public void A_draft_role_says_where_a_read_comes_from(string skill, string sentence) =>
         Assert.Contains(sentence, Flat(Source(skill)), StringComparison.Ordinal);
 
@@ -169,16 +294,22 @@ public sealed partial class CanonicalReadsDocTests
     [GeneratedRegex(@"\s+")]
     private static partial Regex Whitespace();
 
+    [GeneratedRegex(@"#\s*")]
+    private static partial Regex CommentMarks();
+
     /// <summary>
-    /// A count of the published operations as three, however it is put — "three published", "the published three",
-    /// "all three operations". "The first three published" names a subset, and passes.
+    /// A count of the published operations, however a page puts it — "all N published operations", "Only N published
+    /// operations", "N operations, not a catalog", "N operations — the whole set", "the published N". "The first three
+    /// published" names a subset, and is not a count.
     /// </summary>
     [GeneratedRegex(
-        @"(?<!first )\bthree (published|operations this (build|version) publishes)|\bpublished three\b|\ball three (published )?operations\b",
+        @"(?<!first )\b(?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty) (published operations|operations this (build|version) publishes|operations, not a catalog|operations — the whole set)|\bpublished (?<n>zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b",
         RegexOptions.IgnoreCase)]
-    private static partial Regex ThreePublished();
+    private static partial Regex CountPhrase();
 
-    private static string Source(string relative)
+    private static string Source(string relative) => File.ReadAllText(Rooted(relative));
+
+    private static string Rooted(string relative)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "global.json")))
@@ -187,6 +318,6 @@ public sealed partial class CanonicalReadsDocTests
         }
 
         Assert.NotNull(directory);
-        return File.ReadAllText(Path.Combine(directory.FullName, relative.Replace('/', Path.DirectorySeparatorChar)));
+        return Path.Combine(directory.FullName, relative.Replace('/', Path.DirectorySeparatorChar));
     }
 }

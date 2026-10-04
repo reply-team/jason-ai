@@ -109,14 +109,19 @@ An item is **eligible** — the dispatcher would claim it right now — when all
 
 1. its status is `created` — work `awaiting_approval` is not eligible, and no number of scans makes
    it so;
-2. its campaign is `active` (a draft campaign is a backlog, a paused one simply stops);
+2. its campaign is `active` (a draft campaign is a backlog, a paused one stops) — or `paused`, for a
+   `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs`
+   ([docs/contracts/README.md](contracts/README.md)): an operation whose not running is the harm, which must still
+   reach the provider after somebody paused Jason's campaign first. Today those are `campaign.pause` and
+   `optout.record`;
 3. `not_before` is unset or already past;
 4. `due_at` is unset or still ahead;
 5. `retry_after` is unset or already past.
 
-`eligible` is never stored. It is computed from one shared expression that the item list, the claim
-query and the DTO all use, so `workitem.list --eligible` tells you exactly what the next scan would
-consider.
+`eligible` is never stored. It is computed from one shared expression that the item list and the DTO
+use, and that the claim query states again in SQL — a window function the expression cannot carry — held to
+it by a test across every campaign state, so `workitem.list --eligible` tells you exactly what the next
+scan would consider.
 
 ## The claim rule
 
@@ -143,9 +148,9 @@ A silent skip would leave the item looking claimable forever.
 
 ## Approvals
 
-An operation's contract says what approval it needs. Every published operation but one publishes `auto`,
-which is the one approval a runtime may give itself. `campaign.enroll` publishes
-`confirm_once`, and work naming it is **parked** at the claim rather than run: the item moves to
+An operation's contract says what approval it needs. Most published operations publish `auto`, which is
+the one approval a runtime may give itself. `campaign.enroll`, `campaign.activate` and `enrollment.stop` publish
+`confirm_once`, and work naming any of them is **parked** at the claim rather than run: the item moves to
 `awaiting_approval` and an `apr_` row records what is being approved.
 
 **What the gate reads is the published value, and never the condition beside it.** A conditional

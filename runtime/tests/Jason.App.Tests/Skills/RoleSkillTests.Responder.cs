@@ -16,4 +16,26 @@ public partial class RoleSkillTests
 
         CarriesTheLaunchContract("responder");
     }
+
+    [Fact]
+    public void The_responder_records_a_stop_in_order_and_proposes_taking_the_person_out()
+    {
+        var skill = Flattened("responder");
+
+        // Somebody who said stop is the one case where waiting is the harm. Jason's own register first, because it
+        // stops Jason's reach at once; then the provider's half, which runs without anybody approving it; and taking
+        // them out of the campaign proposed for a person, never done on the responder's own say.
+        var register = skill.IndexOf("jason suppression add --channel email", StringComparison.Ordinal);
+        var optout = skill.IndexOf("--operation optout.record", StringComparison.Ordinal);
+        var stop = skill.IndexOf("--operation enrollment.stop", StringComparison.Ordinal);
+        Assert.True(register >= 0 && optout > register && stop > optout, "the register, then the opt-out, then the proposed stop");
+        Assert.Contains("runs even while the campaign is paused", skill, StringComparison.Ordinal);
+        Assert.Contains("waits for a person", skill, StringComparison.Ordinal);
+
+        // A campaign that is archived takes no new work, and the provider's opt-out is account-wide.
+        Assert.Contains("record the opt-out through any active or paused campaign they are a member of that is routed to the same provider account", skill, StringComparison.Ordinal);
+        Assert.Contains("Do not remove them, or archive them or the campaign, until the opt-out has succeeded", skill, StringComparison.Ordinal);
+        Assert.Contains("the provider's half waits, and say so", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("rather than acting on it yourself", skill, StringComparison.Ordinal);
+    }
 }

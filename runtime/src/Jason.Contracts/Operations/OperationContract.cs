@@ -36,6 +36,7 @@ public sealed record OperationContract(
     string? Meter,
     IReadOnlyList<string> Invariants,
     Preflight Preflight,
+    DispatchRule Dispatch,
     ContactProjection? ContactProjection,
     string Precondition,
     OperationPreview? Preview,
@@ -85,6 +86,7 @@ public sealed record OperationContract(
             reader.OptionalText("meter"),
             reader.TextList("invariants"),
             ReadPreflight(reader.Object("preflight"), reader),
+            ReadDispatch(reader.Object("dispatch"), reader),
             ReadProjection(reader.OptionalObject("contact_projection"), reader),
             reader.Text("precondition"),
             ReadPreview(reader.OptionalObject("preview"), reader),
@@ -98,7 +100,10 @@ public sealed record OperationContract(
             reader.TextList("conformance"));
 
         reader.RefuseAnythingElse();
+        RefuseUnsupportedFloor(source, contract);
         RefuseUnpairedChannels(source, contract);
+        RefuseUncheckedReach(source, contract);
+        RefuseUnpausableWork(source, contract);
         RefuseUnaddressablePreview(source, contract);
         return contract;
     }
@@ -144,6 +149,77 @@ public sealed record OperationContract(
         }
     }
 
+    /// <summary>
+    /// The protective floor is the catalogue's one lowering of an approval, and a checked one: the operation runs
+    /// <c>auto</c>, says why, and nothing in Jason holds it back — neither the suppression register nor a paused
+    /// campaign. Checked first, so a document that claims the floor is told what the floor requires.
+    /// </summary>
+    private static void RefuseUnsupportedFloor(string source, OperationContract contract)
+    {
+        if (!contract.ProtectiveFloor)
+        {
+            return;
+        }
+
+        var unmet = new List<string>();
+        if (!string.Equals(contract.Approval.Value, "auto", StringComparison.Ordinal))
+        {
+            unmet.Add("`approval` is `auto`");
+        }
+
+        if (string.IsNullOrWhiteSpace(contract.ApprovalReason))
+        {
+            unmet.Add("`approval_reason` says why");
+        }
+
+        if (contract.Preflight.Suppression != SuppressionCheck.NotApplicable)
+        {
+            unmet.Add("`preflight.suppression` is `not_applicable`");
+        }
+
+        if (contract.Dispatch.InPausedCampaign != InPausedCampaign.Runs)
+        {
+            unmet.Add("`dispatch.in_paused_campaign` is `runs`");
+        }
+
+        if (unmet.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"{source}: `protective_floor` is `true`, and the floor requires that {string.Join("; that ", unmet)}. This document does not.");
+        }
+    }
+
+    /// <summary>
+    /// The suppression register protects a person from being reached, so only an operation that cannot reach anybody
+    /// — one whose reach is <c>control</c>, read as its dangerous value — may declare that the register does not
+    /// apply to it.
+    /// </summary>
+    private static void RefuseUncheckedReach(string source, OperationContract contract)
+    {
+        if (contract.Preflight.Suppression == SuppressionCheck.NotApplicable
+            && !string.Equals(contract.Reach.Value, "control", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"{source}: `preflight.suppression` is `not_applicable`, but `reach` is `{contract.Reach.Value}`; only an operation whose reach is `control` takes a person out rather than reaching them.");
+        }
+    }
+
+    /// <summary>
+    /// Pausing a campaign stops its work. Only an operation that reaches nobody and that nobody is asked about —
+    /// <c>control</c> and <c>auto</c>, each read as its dangerous value — may run past that: a read, an act or
+    /// anything a person approves waits with its campaign.
+    /// </summary>
+    private static void RefuseUnpausableWork(string source, OperationContract contract)
+    {
+        if (contract.Dispatch.InPausedCampaign == InPausedCampaign.Runs
+            && !(string.Equals(contract.Reach.Value, "control", StringComparison.Ordinal)
+                && string.Equals(contract.Approval.Value, "auto", StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                $"{source}: `dispatch.in_paused_campaign` is `runs`, but `reach` is `{contract.Reach.Value}` and `approval` is `{contract.Approval.Value}`; only an operation whose reach is `control` and whose approval is `auto` runs while its campaign is paused.");
+        }
+    }
+
     private static readonly IReadOnlyDictionary<string, RepeatAfterAmbiguous> RepeatAfterAmbiguousNames =
         new Dictionary<string, RepeatAfterAmbiguous>(StringComparer.Ordinal)
         {
@@ -162,6 +238,20 @@ public sealed record OperationContract(
 
     /// <summary>Whether the plugin receives the channel the arguments name, or none of the person's channels.</summary>
     private static readonly IReadOnlyList<string> ProjectedChannelsNames = ["consumed", "none"];
+
+    private static readonly IReadOnlyDictionary<string, SuppressionCheck> SuppressionCheckNames =
+        new Dictionary<string, SuppressionCheck>(StringComparer.Ordinal)
+        {
+            ["checked"] = SuppressionCheck.Checked,
+            ["not_applicable"] = SuppressionCheck.NotApplicable,
+        };
+
+    private static readonly IReadOnlyDictionary<string, InPausedCampaign> InPausedCampaignNames =
+        new Dictionary<string, InPausedCampaign>(StringComparer.Ordinal)
+        {
+            ["waits"] = InPausedCampaign.Waits,
+            ["runs"] = InPausedCampaign.Runs,
+        };
 
     private static readonly IReadOnlyDictionary<string, ChannelRequirement> ChannelRequirementNames =
         new Dictionary<string, ChannelRequirement>(StringComparer.Ordinal)
@@ -199,7 +289,16 @@ public sealed record OperationContract(
         var reader = outer.Into("preflight", preflight);
         var value = new Preflight(
             reader.Enumeration("contact", ContactRequirementNames),
-            reader.Enumeration("channel", ChannelRequirementNames));
+            reader.Enumeration("channel", ChannelRequirementNames),
+            reader.Enumeration("suppression", SuppressionCheckNames));
+        reader.RefuseAnythingElse();
+        return value;
+    }
+
+    private static DispatchRule ReadDispatch(JsonObject dispatch, DocumentReader outer)
+    {
+        var reader = outer.Into("dispatch", dispatch);
+        var value = new DispatchRule(reader.Enumeration("in_paused_campaign", InPausedCampaignNames));
         reader.RefuseAnythingElse();
         return value;
     }
@@ -445,8 +544,11 @@ public sealed record ContractProperty(string Value, bool Conditional, string? De
 /// <summary>Where the operation comes from in the vendor-neutral contract this catalog is seeded from.</summary>
 public sealed record L1Origin(string Name, string ContractVersion, int Family, bool Core);
 
-/// <summary>What the runtime must have in hand before it may compose this operation's input.</summary>
-public sealed record Preflight(ContactRequirement Contact, ChannelRequirement Channel);
+/// <summary>
+/// What the runtime must have in hand before it may compose this operation's input, and whether the suppression
+/// register refuses it for a person whose consumed channel value the register holds.
+/// </summary>
+public sealed record Preflight(ContactRequirement Contact, ChannelRequirement Channel, SuppressionCheck Suppression);
 
 /// <summary>
 /// The contact fields an operation consumes. Declaring the projection is what makes widening it a visible change
@@ -520,6 +622,35 @@ public enum ChannelRequirement
 {
     FromArgs,
     None,
+}
+
+/// <summary>How the dispatcher treats this operation's work beyond what every work item shares.</summary>
+public sealed record DispatchRule(InPausedCampaign InPausedCampaign);
+
+/// <summary>Whether a work item naming this operation is claimed while its campaign is paused.</summary>
+public enum InPausedCampaign
+{
+    /// <summary>It waits with its campaign, as all work does.</summary>
+    Waits,
+
+    /// <summary>
+    /// It runs: an operation whose not running is the harm — recording that somebody said stop, or pausing the
+    /// provider's own campaign — still reaches the provider after somebody paused Jason's campaign first.
+    /// </summary>
+    Runs,
+}
+
+/// <summary>Whether the claim refuses a person whose consumed channel value is on the suppression register.</summary>
+public enum SuppressionCheck
+{
+    /// <summary>It does: nobody is reached through a value the register protects.</summary>
+    Checked,
+
+    /// <summary>
+    /// It does not, because the operation only takes a person out — records that they said stop, or removes them
+    /// from a campaign — and refusing it for a suppressed person would refuse exactly the people it is for.
+    /// </summary>
+    NotApplicable,
 }
 
 /// <summary>What a returned provider identifier is an identifier of.</summary>

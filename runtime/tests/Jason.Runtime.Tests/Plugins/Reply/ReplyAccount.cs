@@ -151,6 +151,18 @@ public sealed class ReplyAccount : IDisposable
     }
 
     /// <summary>
+    /// A second contact under the address of one already planted. Reply's create path publishes no word for an
+    /// address the account already holds, so an account can come to hold the same person twice — and a lookup by
+    /// address then finds two.
+    /// </summary>
+    public ReplyAccount WithDuplicate(int id, int of)
+    {
+        var original = Contacts.OfType<JsonObject>().SingleOrDefault(existing => existing["id"]!.GetValue<int>() == of)
+            ?? throw new InvalidOperationException($"no contact {of} has been planted to duplicate.");
+        return WithContact(id, (string)original["email"]!, (string?)original["firstName"]);
+    }
+
+    /// <summary>
     /// A contact list. It is not shared unless a test says so, which is how the lists a person makes for
     /// themselves arrive — and a list that is not shared is one Reply's own <c>GET /v3/contacts/{id}/lists</c>
     /// does not report, as a live account showed.
@@ -197,6 +209,18 @@ public sealed class ReplyAccount : IDisposable
             ["health"] = "good",
             ["steps"] = chain,
         });
+    }
+
+    /// <summary>
+    /// A planted sequence with no connected account to send from, so a start is refused. The stand-in keeps this
+    /// under a key of its own and never shows it in an answer.
+    /// </summary>
+    public ReplyAccount WithoutSendingAccount(int sequence)
+    {
+        var record = ReadArray(SequencesFile).OfType<JsonObject>().Single(existing => existing["id"]!.GetValue<int>() == sequence);
+        var changed = (JsonObject)record.DeepClone();
+        changed["_sendingAccounts"] = 0;
+        return Replace(SequencesFile, sequence, changed);
     }
 
     /// <summary>
@@ -458,6 +482,9 @@ public sealed class ReplyAccount : IDisposable
     public JsonArray Sequences => ReadArray(SequencesFile);
 
     public JsonArray Enrollments => ReadArray(EnrollmentsFile);
+
+    /// <summary>The account's opt-out register: the contact identifiers Reply holds as opted out.</summary>
+    public JsonArray OptOuts => ReadArray(OptOutsFile);
 
     /// <summary>Who is on a list right now, which is the only honest answer to "did the add happen at all".</summary>
     public IReadOnlyList<int> MembersOf(int listId) =>

@@ -1,0 +1,21 @@
+{
+  "operation": "campaign.activate",
+  "version": 1,
+  "case": "the count moved between the approval and the execution",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "permanent",
+      "code": "population_changed",
+      "message": "The provider holds 241 people in this campaign; 240 were approved.",
+      "details": { "expected": 240, "actual": 241 },
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "diagnostics": { "duration_ms": 380, "exec_calls": 2, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "permanent", "retriable": false, "pinned": { "campaign": "c_7714" } }
+}

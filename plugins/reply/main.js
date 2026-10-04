@@ -10,6 +10,9 @@ import { campaignEnroll } from "./modules/enroll.js";
 import { enrollmentList } from "./modules/enrollments.js";
 import { engagementSummarize } from "./modules/stats.js";
 import { conversationGet, conversationList } from "./modules/inbox.js";
+import { campaignActivate, campaignPause } from "./modules/sequence.js";
+import { optoutRecord } from "./modules/optout.js";
+import { enrollmentStop } from "./modules/stop.js";
 
 export function invoke(operation, input, context) {
   switch (operation) {
@@ -33,6 +36,18 @@ export function invoke(operation, input, context) {
 
     case "conversation.get":
       return conversationGet(input, context);
+
+    case "campaign.pause":
+      return campaignPause(input, context);
+
+    case "campaign.activate":
+      return campaignActivate(input, context);
+
+    case "optout.record":
+      return optoutRecord(input, context);
+
+    case "enrollment.stop":
+      return enrollmentStop(input, context);
 
     default:
       // A work item can only name an operation the manifest lists, so this is a call that should not exist. It

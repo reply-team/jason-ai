@@ -20,7 +20,8 @@
   "meter": null,
   "invariants": ["H3", "H5"],
 
-  "preflight": { "contact": "not_used", "channel": "none" },
+  "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked" },
+  "dispatch": { "in_paused_campaign": "waits" },
   "contact_projection": null,
   "precondition": "none",
   "preview": null,

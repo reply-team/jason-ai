@@ -184,7 +184,7 @@ public class ManagerCheckInTests
 
     /// <summary>
     /// The verb a review escalates with, in a key of its own beside a list that also holds it. A role should
-    /// not have to pick the one verb that changes what happens next out of a list of eight; and a scheduled
+    /// not have to pick the one verb that changes what happens next out of a list; and a scheduled
     /// review may find something worth asking about just as a triggered one may, so it is on both briefs.
     /// </summary>
     [Theory]
@@ -208,6 +208,9 @@ public class ManagerCheckInTests
         // And a review may read the questions it has already asked, but never answer one: that is a person's.
         var allowed = Assert.IsType<JsonArray>(item.Context["allowed_operations"]).Select(node => (string?)node).ToList();
         Assert.Contains(Operations.DecisionRaise, allowed);
+
+        // Pausing Jason's own campaign is how a review answers an incident, beside the provider's pause it creates.
+        Assert.Contains(Operations.CampaignPause, allowed);
         Assert.Contains(Operations.DecisionList, allowed);
         Assert.DoesNotContain(Operations.DecisionAnswer, allowed);
     }

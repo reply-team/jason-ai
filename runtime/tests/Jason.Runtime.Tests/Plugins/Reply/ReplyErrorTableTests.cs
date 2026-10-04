@@ -15,14 +15,22 @@ public class ReplyErrorTableTests
 {
     private static readonly string[] Classes = ["transient", "permanent", "validation", "ambiguous"];
 
+    /// <summary>
+    /// Every operation the package's manifest says it performs, read from the manifest itself: a list written here was
+    /// seven operations long while the package performed eleven, and the four writes it left out were held to nothing.
+    /// </summary>
+    public static TheoryData<string> Performed() => [.. ReplyErrorTable.Performed()];
+
+    [Fact]
+    public void The_table_is_held_for_every_operation_the_package_performs()
+    {
+        Assert.Equal(
+            OperationCatalog.All.Select(contract => contract.Id).Order(StringComparer.Ordinal),
+            ReplyErrorTable.Performed().Order(StringComparer.Ordinal));
+    }
+
     [Theory]
-    [InlineData("campaign.get")]
-    [InlineData("list_membership.add")]
-    [InlineData("campaign.enroll")]
-    [InlineData("enrollment.list")]
-    [InlineData("engagement.summarize")]
-    [InlineData("conversation.list")]
-    [InlineData("conversation.get")]
+    [MemberData(nameof(Performed))]
     public void Every_code_the_table_names_is_one_the_operation_declares(string operation)
     {
         var contract = OperationCatalog.Find(operation);
@@ -43,13 +51,7 @@ public class ReplyErrorTableTests
     }
 
     [Theory]
-    [InlineData("campaign.get")]
-    [InlineData("list_membership.add")]
-    [InlineData("campaign.enroll")]
-    [InlineData("enrollment.list")]
-    [InlineData("engagement.summarize")]
-    [InlineData("conversation.list")]
-    [InlineData("conversation.get")]
+    [MemberData(nameof(Performed))]
     public void Every_code_the_operation_declares_has_a_row_that_says_when_it_is_reported(string operation)
     {
         var contract = OperationCatalog.Find(operation);
@@ -120,7 +122,7 @@ public class ReplyErrorTableTests
         var shared = ReplyErrorTable.Shared.Select(row => Text(row.Value!.AsObject(), "code")).ToList();
 
         // The split between shared rows and per-operation rows is not tidiness. The documents do not declare
-        // the same codes: only the two writes take a channel value or find a person suppressed, and the list add
+        // the same codes: only the writes about a person take a channel value, only two of them find a person suppressed, and the list add
         // and the two conversation reads declare no missing campaign, so a single shared row naming any of these
         // codes would name a code the runtime refuses.
         Assert.DoesNotContain("invalid_channel_value", shared);

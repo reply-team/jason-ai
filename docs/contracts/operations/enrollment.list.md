@@ -115,7 +115,8 @@ nothing.
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `not_used`, channel `none` |
+| pre-flight | contact `not_used`, channel `none`, suppression `checked` |
+| in a paused campaign | `waits` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | none |
 | preview a person reads | none |

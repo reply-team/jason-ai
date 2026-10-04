@@ -24,4 +24,15 @@ public partial class RoleSkillTests
 
         CarriesTheLaunchContract("planner");
     }
+
+    [Fact]
+    public void The_planner_meets_a_population_that_moved_with_a_new_item_for_the_new_number()
+    {
+        var skill = Flattened("planner");
+
+        // A person approved one population; a different one at execution is a different decision. A planner that
+        // edited the failed item, or copied its input, would ask nobody about the number that is actually there.
+        Assert.Contains("with both numbers in the failed attempt's `trace`. Read the count again and create a new item for the new number", skill, StringComparison.Ordinal);
+        Assert.Contains("a different population is a different decision, never an edit of the old one", skill, StringComparison.Ordinal);
+    }
 }

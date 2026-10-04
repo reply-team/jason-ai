@@ -728,6 +728,147 @@ public class ClaimerTests
         return approval;
     }
 
+    /// <summary>
+    /// The register is asked only where its answer decides something. The record that somebody said stop declares
+    /// that the register does not apply, so a person the register holds is claimed for it without the question being
+    /// put; work that would reach them asks, and is refused.
+    /// </summary>
+    [Theory]
+    [InlineData("optout.record", 0, null)]
+    [InlineData("list_membership.add", 1, "suppressed")]
+    public async Task The_register_is_asked_only_where_its_answer_can_refuse_the_work(string operation, int asked, string? refused)
+    {
+        var register = new Harness.EverybodyIsSuppressed();
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", [operation]),
+            route: new Route("stand-in-provider", null, null),
+            register: register);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var contact = new Contact { PublicId = PublicId.New("cnt"), FirstName = "Ada", CreatedAt = Noon, UpdatedAt = Noon };
+        contact.Channels.Add(new ContactChannel { Channel = "email", Value = "ada@example.test", IsPrimary = true });
+        db.Contacts.Add(contact);
+        var item = WorkItemFactory.NewProviderOp(campaign, operation, Noon);
+        item.Contact = contact;
+        item.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = operation == "optout.record"
+                ? new JsonObject
+                {
+                    ["channel"] = "email",
+                    ["statement"] = "please take me off your list",
+                    ["arrived_via"] = "reply",
+                    ["said_at"] = "2026-10-03T08:14:00Z",
+                    ["learned_at"] = "2026-10-03T08:20:00Z",
+                }
+                : new JsonObject { ["list"] = new JsonObject { ["external_id"] = "9" }, ["channel"] = "email" },
+        };
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        Assert.Equal(asked, register.Asked);
+        if (refused is null)
+        {
+            Assert.Single(claimed);
+            Assert.Equal(WorkItemStatus.Scheduled, item.Status);
+        }
+        else
+        {
+            Assert.Empty(claimed);
+            Assert.Equal(WorkItemStatus.Failed, item.Status);
+            Assert.Equal(refused, (await db.Attempts.AsNoTracking().SingleAsync(Ct)).Error!.Code);
+        }
+    }
+
+    /// <summary>
+    /// The claim itself, not only the query beneath it: in a paused campaign it schedules the provider's pause and the
+    /// record that somebody said stop, and holds an add, which is control and auto like them and still waits. Each sits
+    /// in a paused campaign of its own, so the one-per-campaign rule cannot hide a disagreement.
+    /// </summary>
+    [Fact]
+    public async Task In_a_paused_campaign_the_claim_schedules_what_runs_there_and_holds_the_rest()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.pause", "optout.record", "list_membership.add"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var pause = PausedItem(db, "campaign.pause", null, new JsonObject { ["campaign"] = new JsonObject { ["external_id"] = "7" } });
+        var optout = PausedItem(db, "optout.record", Person(db), new JsonObject
+        {
+            ["channel"] = "email",
+            ["statement"] = "please take me off your list",
+            ["arrived_via"] = "reply",
+            ["said_at"] = "2026-10-03T08:14:00Z",
+            ["learned_at"] = "2026-10-03T08:20:00Z",
+        });
+        var add = PausedItem(db, "list_membership.add", Person(db), new JsonObject
+        {
+            ["list"] = new JsonObject { ["external_id"] = "9" },
+            ["channel"] = "email",
+        });
+        await db.SaveChangesAsync(Ct);
+
+        var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
+
+        Assert.Equal(
+            new[] { pause.PublicId, optout.PublicId }.Order(StringComparer.Ordinal),
+            claimed.Select(work => work.WorkItemPublicId).Order(StringComparer.Ordinal));
+        Assert.Equal(WorkItemStatus.Scheduled, pause.Status);
+        Assert.Equal(WorkItemStatus.Scheduled, optout.Status);
+        Assert.Equal(WorkItemStatus.Created, add.Status);
+    }
+
+    /// <summary>
+    /// The campaign's choice is made among the work its status lets through, before the most important is picked: a
+    /// paused campaign whose most important items wait offers the pause behind them, and nothing at all while one of its
+    /// items is in flight.
+    /// </summary>
+    [Fact]
+    public async Task A_paused_campaign_offers_the_work_that_runs_there_behind_more_important_work_that_waits()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign("paused", CampaignStatus.Paused, Noon);
+        db.Campaigns.Add(campaign);
+        var enroll = WorkItemFactory.NewProviderOp(campaign, "campaign.enroll", Noon);
+        enroll.Priority = 10;
+        var role = WorkItemFactory.NewAiRole(campaign, now: Noon, configure: item => item.Priority = 9);
+        var pause = WorkItemFactory.NewProviderOp(campaign, "campaign.pause", Noon);
+        db.WorkItems.AddRange(enroll, role, pause);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal([pause.Id], await Claimer.CandidatesAsync(db, Noon, freeSlots: 4, Ct));
+
+        db.WorkItems.Add(WorkItemFactory.NewAiRole(campaign, now: Noon, configure: item => item.Status = WorkItemStatus.Processing));
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await Claimer.CandidatesAsync(db, Noon, freeSlots: 4, Ct));
+    }
+
+    private static WorkItem PausedItem(JasonDbContext db, string operation, Contact? contact, JsonObject arguments)
+    {
+        var campaign = WorkItemFactory.NewCampaign("paused " + operation, CampaignStatus.Paused, Noon);
+        db.Campaigns.Add(campaign);
+        var item = WorkItemFactory.NewProviderOp(campaign, operation, Noon);
+        item.Contact = contact;
+        item.Context = new JsonObject { [WorkItemService.InputKey] = arguments };
+        db.WorkItems.Add(item);
+        return item;
+    }
+
+    private static Contact Person(JasonDbContext db)
+    {
+        var contact = new Contact { PublicId = PublicId.New("cnt"), FirstName = "Ada", CreatedAt = Noon, UpdatedAt = Noon };
+        contact.Channels.Add(new ContactChannel { Channel = "email", Value = $"ada.{contact.PublicId.ToLowerInvariant()}@example.test", IsPrimary = true });
+        db.Contacts.Add(contact);
+        return contact;
+    }
+
     /// <summary>An enrollment with nothing wrong with it, so the only thing that can stop it is a person.</summary>
     private static WorkItem Enrolment(JasonDbContext db, Campaign campaign)
     {
@@ -759,7 +900,8 @@ public class ClaimerTests
             Action<DispatcherOptions>? dispatcher = null,
             RolesOptions? roles = null,
             LoadedPlugin? plugin = null,
-            Route? route = null)
+            Route? route = null,
+            ISuppressionCheck? register = null)
         {
             var clock = new FixedClock(Noon);
             var settings = TestOptions.Settings(dispatcher);
@@ -796,7 +938,7 @@ public class ClaimerTests
                 plugins,
                 routing,
                 new ExternalIdStore(journal, clock),
-                new NothingIsSuppressed(),
+                register ?? new NothingIsSuppressed(),
                 settings,
                 _dir.Paths,
                 NullLogger<Claimer>.Instance);
@@ -817,6 +959,18 @@ public class ClaimerTests
             public string? Path => null;
 
             public string? PathExt => null;
+        }
+
+        /// <summary>A register that holds everybody, and counts how often it was asked.</summary>
+        internal sealed class EverybodyIsSuppressed : ISuppressionCheck
+        {
+            public int Asked { get; private set; }
+
+            public Task<bool> IsSuppressedAsync(JasonDbContext db, string channel, string value, CancellationToken cancellationToken)
+            {
+                Asked++;
+                return Task.FromResult(true);
+            }
         }
 
         /// <summary>The register these tests are not about; the suppression check itself is tested where it lives.</summary>

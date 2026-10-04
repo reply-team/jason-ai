@@ -110,7 +110,8 @@ be asked again.
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `optional`, channel `none` |
+| pre-flight | contact `optional`, channel `none`, suppression `checked` |
+| in a paused campaign | `waits` |
 | contact projection | `id`; channels: `none` |
 | precondition | none |
 | preview a person reads | none |

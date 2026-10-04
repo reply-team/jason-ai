@@ -33,6 +33,13 @@ public static class OperationCatalog
     public static OperationContract? Slowest { get; } =
         All.OrderByDescending(contract => contract.TimeoutMs).FirstOrDefault();
 
+    /// <summary>
+    /// The operations whose work is claimed while its campaign is paused, from each document's
+    /// <c>dispatch.in_paused_campaign</c>: an operation whose not running is the harm. Read once, as the documents are.
+    /// </summary>
+    public static IReadOnlyList<string> RunsInPausedCampaign { get; } =
+        [.. All.Where(contract => contract.Dispatch.InPausedCampaign == InPausedCampaign.Runs).Select(contract => contract.Id)];
+
     /// <summary>The contract for one operation, or null when nothing of that name is published.</summary>
     public static OperationContract? Find(string operation)
     {

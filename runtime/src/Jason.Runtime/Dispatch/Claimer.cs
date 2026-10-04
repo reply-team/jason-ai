@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
@@ -148,20 +149,25 @@ public sealed class Claimer(
     /// <summary>
     /// One item per campaign, the most important first, and never more than the free slots. Raw SQL because the
     /// per-campaign choice is a window function: doing it in memory would either idle a slot or read the whole
-    /// backlog.
+    /// backlog. Its campaign rule is the eligible predicate's, written a second time here and held to it by a test:
+    /// an active campaign, or a paused one for an operation whose contract says its work runs there.
     /// </summary>
-    private static async Task<List<int>> CandidatesAsync(JasonDbContext db, DateTime now, int freeSlots, CancellationToken ct)
+    internal static async Task<List<int>> CandidatesAsync(JasonDbContext db, DateTime now, int freeSlots, CancellationToken ct)
     {
         var created = SnakeCaseEnumConverter<WorkItemStatus>.Format(WorkItemStatus.Created);
         var scheduled = SnakeCaseEnumConverter<WorkItemStatus>.Format(WorkItemStatus.Scheduled);
         var processing = SnakeCaseEnumConverter<WorkItemStatus>.Format(WorkItemStatus.Processing);
         var active = SnakeCaseEnumConverter<CampaignStatus>.Format(CampaignStatus.Active);
+        var paused = SnakeCaseEnumConverter<CampaignStatus>.Format(CampaignStatus.Paused);
+        var runsInPaused = JsonSerializer.Serialize(OperationCatalog.RunsInPausedCampaign);
 
         return await db.WorkItems.FromSqlInterpolated($"""
             SELECT * FROM (
               SELECT w.*, ROW_NUMBER() OVER (PARTITION BY w.campaign_id ORDER BY w.priority DESC, w.id ASC) AS rn
               FROM work_items w JOIN campaigns c ON c.id = w.campaign_id
-              WHERE w.status = {created} AND c.status = {active}
+              WHERE w.status = {created}
+                AND (c.status = {active}
+                     OR (c.status = {paused} AND w.operation IN (SELECT value FROM json_each({runsInPaused}))))
                 AND (w.not_before IS NULL OR w.not_before <= {now})
                 AND (w.due_at IS NULL OR w.due_at > {now})
                 AND (w.retry_after IS NULL OR w.retry_after <= {now})
@@ -441,11 +447,13 @@ public sealed class Claimer(
     }
 
     /// <summary>
-    /// The one question the register is asked, and only where the operation names a channel to ask about: both
-    /// a stored channel value and a suppression are already normalized, so they are compared as they stand.
+    /// The one question the register is asked, and only where the operation names a channel to ask about and
+    /// declares that the register applies to it — a read whose answer nothing uses is not made. Both a stored
+    /// channel value and a suppression are already normalized, so they are compared as they stand.
     /// </summary>
     private async Task<bool> SuppressedAsync(JasonDbContext db, OperationContract contract, WorkItem item, Contact contact, CancellationToken ct) =>
-        CanonicalInput.ConsumedChannel(contract, item) is { } channel
+        contract.Preflight.Suppression == SuppressionCheck.Checked
+        && CanonicalInput.ConsumedChannel(contract, item) is { } channel
         && CanonicalInput.Reachable(contact, channel) is { } reachable
         && await suppression.IsSuppressedAsync(db, channel, reachable.Value, ct).ConfigureAwait(false);
 }

@@ -34,6 +34,9 @@ internal static class Account
     private const string InstructionsFile = "instructions.json";
     private const string CredentialFile = "credential.json";
 
+    /// <summary>How many accounts a sequence sends from, kept by this stand-in alone and never shown in an answer.</summary>
+    private const string SendingAccounts = "_sendingAccounts";
+
     /// <summary>
     /// The file that says a store belongs to this stand-in. It is looked for before anything is created, read
     /// or written, because the directory this program finds is decided by a variable a test sets — and a test
@@ -218,12 +221,16 @@ internal static class Account
             (["v3", "sequences", var sequence, "contacts", "count"], "GET") => SequenceContactCount(root, sequence),
             (["v3", "sequences", var sequence, "contacts", var contact], "GET") => Participation(root, sequence, contact),
             (["v3", "sequences", var sequence, "contact-links", "bulk"], "POST") => Enroll(root, sequence, body),
+            (["v3", "sequences", var sequence, "contact-links", var contact], "DELETE") => Remove(root, sequence, contact),
+            (["v3", "sequences", var sequence, "pause"], "POST") => Pause(root, sequence),
+            (["v3", "sequences", var sequence, "start"], "POST") => Start(root, sequence),
             (["v3", "sequences", var sequence, "stats"], "POST") => Stats(root, sequence, body),
             (["v3", "inbox", "threads", "filter"], "POST") => FilterThreads(root, query, body),
             (["v3", "inbox", "threads", var thread], "GET") => InboxThread(root, thread),
             (["v3", "inbox", "threads", var thread, "messages"], "GET") => ThreadMessages(root, thread, query),
             (["v3", "contacts"], "POST") => CreateContact(root, body),
             (["v3", "contacts", "import"], "POST") => Import(root, body),
+            (["v3", "contacts", "set-opted-out"], "POST") => SetOptedOut(root, body),
             (["v3", "contacts", "filter"], "POST") => Filter(root, query, body),
             (["v3", "contacts", var contact, "statuses"], "GET") => Statuses(root, contact),
             (["v3", "contacts", var contact, "lists"], "GET") => ListsOf(root, contact),
@@ -246,23 +253,184 @@ internal static class Account
 
     private static (int, JsonNode?) Sequence(string root, string id) =>
         Find(root, SequencesFile, id) is { } sequence
-            ? (200, sequence.DeepClone())
+            ? (200, Shown(sequence))
             : (404, Problem(404, "Not Found", "sequence.notFound", $"This account holds no sequence {id}."));
+
+    /// <summary>
+    /// A pause, as Reply documents it: idempotent, answered with the sequence itself whether it was just paused or
+    /// already was. Its refusals carry the words Reply documents for it and none of this stand-in's own: an archived
+    /// sequence is an incompatible state, a 409 `sequenceAction.archived`; a sequence it does not hold is a 404
+    /// `sequenceAction.notFound`; and pausing one that never started is a domain rule rejection, a 400 with no code:
+    /// the one 400 word Reply documents for a pause, `sequenceAction.teamMemberNotFound`, names a team member's
+    /// rejection, and this is not one.
+    /// </summary>
+    private static (int, JsonNode?) Pause(string root, string id)
+    {
+        var sequences = Read(root, SequencesFile);
+        if (Find(sequences, Number(id)) is not { } sequence)
+        {
+            return (404, Problem(404, "Not Found", "sequenceAction.notFound", "Sequence not found."));
+        }
+
+        if (Flag(sequence, "isArchived"))
+        {
+            return (409, Problem(409, "Conflict", "sequenceAction.archived", "Sequence is in an incompatible state (archived)."));
+        }
+
+        if (string.Equals((string?)sequence["status"], "new", StringComparison.Ordinal))
+        {
+            return (400, Problem(400, "Bad Request", code: null, "Domain rule rejection."));
+        }
+
+        sequence["status"] = "paused";
+        Write(root, SequencesFile, sequences);
+        return (200, Shown(sequence));
+    }
+
+    /// <summary>
+    /// A start, as Reply documents it: idempotent, answered with the sequence itself, live; it also resumes a paused
+    /// one. Its refusals carry the words Reply documents for it and none of this stand-in's own: no contacts
+    /// (`sequenceAction.noContacts`) and no email accounts (`sequenceAction.noEmailAccounts`), both 400; a sequence it
+    /// does not hold, 404 `sequenceAction.notFound`; and an archived one, 409 `sequenceAction.archived`. The plugin maps
+    /// by status and carries whatever code arrives.
+    /// </summary>
+    private static (int, JsonNode?) Start(string root, string id)
+    {
+        var sequences = Read(root, SequencesFile);
+        if (Find(sequences, Number(id)) is not { } sequence)
+        {
+            return (404, Problem(404, "Not Found", "sequenceAction.notFound", "Sequence not found."));
+        }
+
+        if (Flag(sequence, "isArchived"))
+        {
+            return (409, Problem(409, "Conflict", "sequenceAction.archived", "Sequence is in an incompatible state (archived)."));
+        }
+
+        if (!Records(root, EnrollmentsFile).Any(entry => Matches(entry, "sequenceId", id)))
+        {
+            return (400, Problem(400, "Bad Request", "sequenceAction.noContacts", "Sequence has no contacts."));
+        }
+
+        if (sequence[SendingAccounts] is JsonValue sending && sending.GetValue<int>() == 0)
+        {
+            return (400, Problem(400, "Bad Request", "sequenceAction.noEmailAccounts", "Sequence has no email accounts."));
+        }
+
+        sequence["status"] = "active";
+        Write(root, SequencesFile, sequences);
+        return (200, Shown(sequence));
+    }
+
+    /// <summary>
+    /// One person taken out of a sequence. Reply answers 204 with an empty body, and one 404, lumped as the participation
+    /// read's is, for a sequence or a contact it does not hold or a contact that does not take part.
+    /// </summary>
+    private static (int, JsonNode?) Remove(string root, string sequenceId, string contactId)
+    {
+        if (Find(root, SequencesFile, sequenceId) is null)
+        {
+            return NotInSequence();
+        }
+
+        var enrollments = Read(root, EnrollmentsFile);
+        var enrollment = enrollments.OfType<JsonObject>().FirstOrDefault(entry =>
+            Matches(entry, "sequenceId", sequenceId) && Matches(entry, "contactId", contactId));
+        if (enrollment is null)
+        {
+            return NotInSequence();
+        }
+
+        enrollments.Remove(enrollment);
+        Write(root, EnrollmentsFile, enrollments);
+        return (204, null);
+    }
+
+    /// <summary>
+    /// The opt-out flag set or cleared for up to a hundred contacts at once. Non-atomic: the answer lists only the
+    /// contacts that failed, and a contact already in the state asked for counts as updated.
+    /// </summary>
+    private static (int, JsonNode?) SetOptedOut(string root, string? body)
+    {
+        var request = Request(body);
+        if (request?["contactIds"] is not JsonArray ids || ids.Count == 0 || ids.Count > 100)
+        {
+            return Invalid("/contactIds", "contactIds names between 1 and 100 contacts.");
+        }
+
+        if (request["isOptedOut"] is not JsonValue flag || !flag.TryGetValue<bool>(out var optedOut))
+        {
+            return Invalid("/isOptedOut", "isOptedOut is required.");
+        }
+
+        var numbers = new List<int>();
+        foreach (var id in ids)
+        {
+            if (id is not JsonValue value || !value.TryGetValue<int>(out var number) || number <= 0)
+            {
+                return Invalid("/contactIds", "Each contact id is a positive integer.");
+            }
+
+            numbers.Add(number);
+        }
+
+        var contacts = Read(root, ContactsFile);
+        var register = Read(root, OptOutsFile);
+        var failed = new JsonObject();
+        foreach (var number in numbers)
+        {
+            if (Find(contacts, number) is null)
+            {
+                failed[number.ToString(System.Globalization.CultureInfo.InvariantCulture)] = Failure("notFound", $"Contact {number} does not exist.");
+                continue;
+            }
+
+            var held = register.FirstOrDefault(entry => entry!.GetValue<int>() == number);
+            if (optedOut && held is null)
+            {
+                register.Add(number);
+            }
+            else if (!optedOut && held is not null)
+            {
+                register.Remove(held);
+            }
+        }
+
+        Write(root, OptOutsFile, register);
+        return (200, failed);
+    }
+
+    /// <summary>A sequence as Reply would answer it: without the keys this stand-in keeps for its own refusals.</summary>
+    private static JsonObject Shown(JsonObject sequence)
+    {
+        var shown = (JsonObject)sequence.DeepClone();
+        foreach (var key in shown.Select(member => member.Key).Where(key => key.StartsWith('_')).ToList())
+        {
+            shown.Remove(key);
+        }
+
+        return shown;
+    }
+
+    /// <summary>
+    /// Reply's one documented 404 for a person's part in a sequence: "Sequence or contact not found, or contact not in
+    /// sequence", under one code. A caller cannot tell from it which of the three it was.
+    /// </summary>
+    private static (int, JsonNode?) NotInSequence() =>
+        (404, Problem(404, "Not Found", "sequenceContact.notInSequence", "Sequence or contact not found, or contact not in sequence."));
 
     private static (int, JsonNode?) Participation(string root, string sequenceId, string contactId)
     {
         if (Find(root, SequencesFile, sequenceId) is null)
         {
-            return (404, Problem(404, "Not Found", "sequence.notFound", $"This account holds no sequence {sequenceId}."));
+            return NotInSequence();
         }
 
         var enrollment = Records(root, EnrollmentsFile).FirstOrDefault(entry =>
             Matches(entry, "sequenceId", sequenceId) && Matches(entry, "contactId", contactId));
 
-        // The definitive "not enrolled": one call, and a code that says which of the two things was missing.
-        return enrollment is null
-            ? (404, Problem(404, "Not Found", "sequenceContact.notInSequence", $"Contact {contactId} does not take part in sequence {sequenceId}."))
-            : (200, enrollment.DeepClone());
+        // "Not enrolled", in the same lumped 404 a missing sequence or contact gets.
+        return enrollment is null ? NotInSequence() : (200, enrollment.DeepClone());
     }
 
     /// <summary>
@@ -807,33 +975,40 @@ internal static class Account
     }
 
     /// <summary>
-    /// The contacts search, scoped to one list and paged with <c>top</c> and <c>skip</c>. It is the read the
-    /// package performs to answer whether a person is already on a list, and it answers for a private list as
-    /// readily as for a shared one — the difference that made it the read.
+    /// The contacts search, paged with <c>top</c> and <c>skip</c>, as a live account answered it. Scoped to one
+    /// list, it is the read the package performs to answer whether a person is already on a list, and it answers
+    /// for a private list as readily as for a shared one — the difference that made it the read. With a
+    /// <c>searchTerm</c>, it answers every contact whose address contains the term, whatever the case of either:
+    /// Reply's own search reaches further than the address, which only adds near matches a caller has to tell apart
+    /// anyway. A rule set is ignored, as the live account ignored it, and so is anything else the body carries.
     /// </summary>
     private static (int, JsonNode?) Filter(string root, string query, string? body)
     {
-        if (Request(body)?["listId"] is not JsonValue named || !named.TryGetValue<int>(out var listId))
+        var request = Request(body);
+        var contacts = Read(root, ContactsFile);
+        IEnumerable<JsonObject> found = contacts.OfType<JsonObject>();
+
+        if (request?["listId"] is JsonValue named && named.TryGetValue<int>(out var listId))
         {
-            // This stand-in searches by list and by nothing else: a rule set it cannot honour must not be
-            // answered as though it had been.
-            return Invalid("/listId", "This stand-in searches by list and by nothing else.");
+            var members = Find(Read(root, ListsFile), listId) is { } list
+                ? list["members"]!.AsArray().Select(member => member!.GetValue<int>()).ToList()
+                : [];
+            found = members.Select(member => Find(contacts, member)).Where(contact => contact is not null).Select(contact => contact!);
         }
 
-        var members = Find(Read(root, ListsFile), listId) is { } list
-            ? list["members"]!.AsArray().Select(member => member!.GetValue<int>()).ToList()
-            : [];
+        if (request?["searchTerm"] is JsonValue searched && searched.TryGetValue<string>(out var term) && term.Length > 0)
+        {
+            found = found.Where(contact =>
+                contact["email"] is JsonValue email && email.TryGetValue<string>(out var address)
+                && address.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
 
-        var contacts = Read(root, ContactsFile);
-        var found = new JsonArray([.. members
-            .Select(member => Find(contacts, member))
-            .Where(contact => contact is not null)
-            .Select(contact => (JsonNode)contact!.DeepClone())]);
+        var matched = found.ToList();
 
         var skip = Count(query, "skip") ?? 0;
         var top = Count(query, "top") ?? 25;
-        var page = new JsonArray([.. found.Skip(skip).Take(top).Select(contact => contact!.DeepClone())]);
-        return (200, new JsonObject { ["items"] = page, ["hasMore"] = found.Count > skip + page.Count });
+        var page = new JsonArray([.. matched.Skip(skip).Take(top).Select(contact => (JsonNode)contact.DeepClone())]);
+        return (200, new JsonObject { ["items"] = page, ["hasMore"] = matched.Count > skip + page.Count });
     }
 
     private static (int, JsonNode?) ContactLists(string root, string query) =>
@@ -1076,14 +1251,23 @@ internal static class Account
         return null;
     }
 
-    private static JsonObject Problem(int status, string title, string code, string detail) => new()
+    private static JsonObject Problem(int status, string title, string? code, string detail)
     {
-        ["type"] = "about:blank",
-        ["title"] = title,
-        ["status"] = status,
-        ["detail"] = detail,
-        ["code"] = code,
-    };
+        var problem = new JsonObject
+        {
+            ["type"] = "about:blank",
+            ["title"] = title,
+            ["status"] = status,
+            ["detail"] = detail,
+        };
+
+        if (code is not null)
+        {
+            problem["code"] = code;
+        }
+
+        return problem;
+    }
 
     private static (int, JsonNode?) Invalid(string pointer, string detail) => (400, new JsonObject
     {

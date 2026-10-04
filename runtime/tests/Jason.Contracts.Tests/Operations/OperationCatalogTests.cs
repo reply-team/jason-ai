@@ -53,6 +53,7 @@ public class OperationCatalogTests
     [InlineData("protective_floor")]
     [InlineData("approval_reason")]
     [InlineData("preview")]
+    [InlineData("dispatch")]
     public void A_document_that_leaves_out_a_field_added_since_the_first_three_is_refused_by_name(string field)
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
@@ -73,6 +74,10 @@ public class OperationCatalogTests
     [InlineData("preview", "{\"summary\": \"Enroll somebody\"}")]
     [InlineData("preview", "{\"summary\": \"Enroll somebody\", \"highlights\": [1]}")]
     [InlineData("preview", "{\"summary\": \"Enroll somebody\", \"highlights\": [], \"title\": \"x\"}")]
+    [InlineData("dispatch", "\"waits\"")]
+    [InlineData("dispatch", "{}")]
+    [InlineData("dispatch", "{\"in_paused_campaign\": \"sometimes\"}")]
+    [InlineData("dispatch", "{\"in_paused_campaign\": \"waits\", \"in_draft_campaign\": \"waits\"}")]
     public void A_new_field_of_the_wrong_shape_is_refused_by_name(string field, string value)
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
@@ -103,7 +108,7 @@ public class OperationCatalogTests
     public void An_operation_may_take_the_contact_when_there_is_one_and_none_of_its_channels()
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
-        document["preflight"] = JsonNode.Parse("""{ "contact": "optional", "channel": "none" }""");
+        document["preflight"] = JsonNode.Parse("""{ "contact": "optional", "channel": "none", "suppression": "checked" }""");
         document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "none" }""");
 
         var contract = OperationContract.Parse("conversation.list.json", document);
@@ -120,7 +125,7 @@ public class OperationCatalogTests
     public void An_optional_contact_with_a_channel_from_the_arguments_is_refused()
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
-        document["preflight"] = JsonNode.Parse("""{ "contact": "optional", "channel": "from_args" }""");
+        document["preflight"] = JsonNode.Parse("""{ "contact": "optional", "channel": "from_args", "suppression": "checked" }""");
         document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "consumed" }""");
 
         var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("conversation.list.json", document));
@@ -138,7 +143,7 @@ public class OperationCatalogTests
     public void A_projection_that_consumes_a_channel_the_arguments_do_not_name_is_refused()
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
-        document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "none" }""");
+        document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "none", "suppression": "checked" }""");
         document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "consumed" }""");
 
         var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("enrollment.list.json", document));
@@ -149,8 +154,9 @@ public class OperationCatalogTests
     }
 
     [Theory]
-    [InlineData("""{ "contact": "sometimes", "channel": "none" }""", """{ "fields": ["id"], "channels": "none" }""", "preflight.contact")]
-    [InlineData("""{ "contact": "optional", "channel": "none" }""", """{ "fields": ["id"], "channels": "all" }""", "contact_projection.channels")]
+    [InlineData("""{ "contact": "sometimes", "channel": "none", "suppression": "checked" }""", """{ "fields": ["id"], "channels": "none" }""", "preflight.contact")]
+    [InlineData("""{ "contact": "optional", "channel": "none", "suppression": "checked" }""", """{ "fields": ["id"], "channels": "all" }""", "contact_projection.channels")]
+    [InlineData("""{ "contact": "optional", "channel": "none", "suppression": "sometimes" }""", """{ "fields": ["id"], "channels": "none" }""", "preflight.suppression")]
     public void A_word_outside_either_vocabulary_is_refused_by_name(string preflight, string projection, string field)
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
@@ -160,6 +166,135 @@ public class OperationCatalogTests
         var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("conversation.list.json", document));
 
         Assert.Contains(field, error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Whether the suppression register refuses this operation for a suppressed person was added to documents that
+    /// already existed, so it is stated on every one of them: a missing word is not "checked".
+    /// </summary>
+    [Fact]
+    public void A_preflight_that_does_not_say_whether_the_suppression_register_applies_is_refused_by_name()
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["preflight"] = JsonNode.Parse("""{ "contact": "not_used", "channel": "none" }""");
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("campaign.get.json", document));
+
+        Assert.Contains("campaign.get.json", error.Message, StringComparison.Ordinal);
+        Assert.Contains("preflight.suppression", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An operation that only takes a person out — records that they said stop, or removes them from a campaign —
+    /// declares that the register does not apply to it, because refusing it for a suppressed person would refuse
+    /// exactly the people it is for.
+    /// </summary>
+    [Fact]
+    public void An_operation_that_reaches_nobody_may_declare_that_the_suppression_register_does_not_apply()
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["reach"] = "control";
+        document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "from_args", "suppression": "not_applicable" }""");
+        document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "consumed" }""");
+
+        var contract = OperationContract.Parse("enrollment.stop.json", document);
+
+        Assert.Equal(SuppressionCheck.NotApplicable, contract.Preflight.Suppression);
+    }
+
+    /// <summary>
+    /// The register protects a person from being reached. An operation that may reach somebody — a read of what
+    /// they wrote, or an act whose reach is `act`, even conditionally — is checked against it, whatever it declares.
+    /// </summary>
+    [Theory]
+    [InlineData("\"read\"")]
+    [InlineData("\"act\"")]
+    [InlineData("""{ "value": "act", "conditional": true, "detail": "`control` while the campaign holds nobody." }""")]
+    public void Only_an_operation_whose_reach_is_control_may_set_the_suppression_register_aside(string reach)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["reach"] = JsonNode.Parse(reach);
+        document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "from_args", "suppression": "not_applicable" }""");
+        document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "consumed" }""");
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("campaign.enroll.json", document));
+
+        Assert.Contains("preflight.suppression", error.Message, StringComparison.Ordinal);
+        Assert.Contains("control", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The incident response and the record that somebody said stop must still reach the provider after somebody
+    /// paused Jason's campaign first; an operation that may run there says so, and it is `control` and `auto`.
+    /// </summary>
+    [Fact]
+    public void A_control_operation_nobody_is_asked_about_may_run_in_a_paused_campaign()
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["reach"] = "control";
+        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs" }""");
+
+        var contract = OperationContract.Parse("campaign.pause.json", document);
+
+        Assert.Equal(InPausedCampaign.Runs, contract.Dispatch.InPausedCampaign);
+    }
+
+    /// <summary>
+    /// Pausing a campaign stops its work, and only an operation that reaches nobody and asks nobody may run past
+    /// that: a read, an act, or anything a person must approve waits with its campaign.
+    /// </summary>
+    [Theory]
+    [InlineData("\"read\"", "\"auto\"")]
+    [InlineData("\"act\"", "\"auto\"")]
+    [InlineData("""{ "value": "act", "conditional": true, "detail": "`control` while the campaign holds nobody." }""", "\"auto\"")]
+    [InlineData("\"control\"", "\"confirm_once\"")]
+    [InlineData("\"control\"", """{ "value": "confirm_once", "conditional": true, "detail": "auto for one person." }""")]
+    public void Only_a_control_operation_nobody_approves_may_run_in_a_paused_campaign(string reach, string approval)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["reach"] = JsonNode.Parse(reach);
+        document["approval"] = JsonNode.Parse(approval);
+        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs" }""");
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("campaign.activate.json", document));
+
+        Assert.Contains("dispatch.in_paused_campaign", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The catalogue's one lowering of an approval: an operation whose not running is the harm runs `auto`, says why,
+    /// is not refused for a suppressed person and runs while its campaign is paused.
+    /// </summary>
+    [Fact]
+    public void An_operation_on_the_protective_floor_is_read_with_everything_the_floor_implies()
+    {
+        var contract = OperationContract.Parse("optout.record.json", Floor());
+
+        Assert.True(contract.ProtectiveFloor);
+        Assert.Equal(SuppressionCheck.NotApplicable, contract.Preflight.Suppression);
+        Assert.Equal(InPausedCampaign.Runs, contract.Dispatch.InPausedCampaign);
+    }
+
+    /// <summary>
+    /// The floor is a checked lowering, not a phrase: it is refused where the approval is not `auto`, where no reason
+    /// is stated, and where the register or a pause would still hold the operation back.
+    /// </summary>
+    [Theory]
+    [InlineData("approval", "\"confirm_once\"")]
+    [InlineData("approval", """{ "value": "confirm_once", "conditional": true, "detail": "auto for one person." }""")]
+    [InlineData("approval_reason", "null")]
+    [InlineData("approval_reason", "\"   \"")]
+    [InlineData("preflight", """{ "contact": "required", "channel": "from_args", "suppression": "checked" }""")]
+    [InlineData("dispatch", """{ "in_paused_campaign": "waits" }""")]
+    public void The_protective_floor_is_refused_where_anything_it_implies_does_not_hold(string field, string value)
+    {
+        var document = Floor();
+        document[field] = JsonNode.Parse(value);
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("optout.record.json", document));
+
+        Assert.Contains("optout.record.json", error.Message, StringComparison.Ordinal);
+        Assert.Contains("protective_floor", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -180,6 +315,41 @@ public class OperationCatalogTests
         Assert.NotNull(contract.Reach.Detail);
         Assert.False(contract.Reversibility.Conditional);
         Assert.Null(contract.Reversibility.Detail);
+    }
+
+    /// <summary>
+    /// Not only the four a gate reads: the catalogue itself makes a key and a per-item report conditional ("when a
+    /// collection is given"), so any of the seven properties is read as its dangerous value, its condition and its
+    /// detail.
+    /// </summary>
+    [Theory]
+    [InlineData("reach", "act")]
+    [InlineData("reversibility", "irreversible")]
+    [InlineData("approval", "confirm_once")]
+    [InlineData("before_repeating", "the campaign's live state")]
+    [InlineData("idempotency_key", "required")]
+    [InlineData("per_item_results", "required")]
+    [InlineData("cost", "metered")]
+    public void Any_of_the_seven_properties_may_be_a_conditional_block(string field, string value)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document[field] = new JsonObject { ["value"] = value, ["conditional"] = true, ["detail"] = "when a collection is given." };
+
+        var contract = OperationContract.Parse("campaign.get.json", document);
+        var property = field switch
+        {
+            "reach" => contract.Reach,
+            "reversibility" => contract.Reversibility,
+            "approval" => contract.Approval,
+            "before_repeating" => contract.BeforeRepeating,
+            "idempotency_key" => contract.IdempotencyKey,
+            "per_item_results" => contract.PerItemResults,
+            _ => contract.Cost,
+        };
+
+        Assert.Equal(value, property.Value);
+        Assert.True(property.Conditional);
+        Assert.Equal("when a collection is given.", property.Detail);
     }
 
     [Fact]
@@ -203,6 +373,8 @@ public class OperationCatalogTests
         Assert.True(contract.L1.Core);
         Assert.Equal(ContactRequirement.NotUsed, contract.Preflight.Contact);
         Assert.Equal(ChannelRequirement.None, contract.Preflight.Channel);
+        Assert.Equal(SuppressionCheck.Checked, contract.Preflight.Suppression);
+        Assert.Equal(InPausedCampaign.Waits, contract.Dispatch.InPausedCampaign);
         Assert.Null(contract.ContactProjection);
         Assert.Null(contract.RecoveryRead);
         Assert.Equal(RepeatAfterAmbiguous.Safe, contract.RepeatAfterAmbiguous);
@@ -212,6 +384,20 @@ public class OperationCatalogTests
         Assert.Null(contract.Preview);
         Assert.Equal(60000, contract.TimeoutMs);
         Assert.Equal("provider_answer_lost", Assert.Single(contract.FailureCodes).Code);
+    }
+
+    /// <summary>The smallest document on the protective floor: everything the floor implies, and nothing else changed.</summary>
+    private static JsonObject Floor()
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["reach"] = "control";
+        document["approval_departs"] = true;
+        document["protective_floor"] = true;
+        document["approval_reason"] = "the protective floor: waiting for permission to stop is the destructive choice.";
+        document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "from_args", "suppression": "not_applicable" }""");
+        document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs" }""");
+        document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "consumed" }""");
+        return document;
     }
 
     /// <summary>The smallest document that satisfies every field, used to prove what happens when one is taken away.</summary>
@@ -237,7 +423,8 @@ public class OperationCatalogTests
           "cost_basis": null,
           "meter": null,
           "invariants": [],
-          "preflight": { "contact": "not_used", "channel": "none" },
+          "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked" },
+          "dispatch": { "in_paused_campaign": "waits" },
           "contact_projection": null,
           "precondition": "none",
           "preview": null,

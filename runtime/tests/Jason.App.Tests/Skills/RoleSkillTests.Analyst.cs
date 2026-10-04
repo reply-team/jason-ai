@@ -9,7 +9,7 @@ public partial class RoleSkillTests
 
         // The role whose job description implies a dashboard. An analyst that assumed opens and clicks were
         // somewhere would either hunt for them or, worse, report plausible ones.
-        Assert.Contains("There is no metrics store in this build", skill, StringComparison.Ordinal);
+        Assert.Contains("There is no metrics store here — the provider reports, and the envelope says what the number is.", skill, StringComparison.Ordinal);
 
         // And the one distinction that keeps its answer honest: a report is somebody's word, not a measurement.
         Assert.Contains("an admission, not a measurement", skill, StringComparison.Ordinal);

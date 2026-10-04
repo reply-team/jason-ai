@@ -12,7 +12,7 @@ told: waiting for a moment that has not arrived, waiting for a person who has no
 it cannot route. This skill is how to tell those apart from a genuine failure, and how to name the one repair
 that is safe rather than the first one that comes to mind.
 
-**Status: verified** against Claude Code 2.1.278. It covers what this build records and nothing else.
+**Status: verified** against Claude Code 2.1.289. It covers what this build records and nothing else.
 
 ## Look here first, in this order
 
@@ -83,8 +83,10 @@ when the moment arrives. Say when that is, and stop.
 ### 2. Paused or archived
 
 **How you recognise it.** The item looks perfectly healthy and is never claimed — and the campaign it belongs
-to is not active. Only an active campaign's work is claimed, so a paused, archived or still-draft campaign
-holds every one of its items at once.
+to is not active. Only an active campaign's work is claimed, with one exception: a paused campaign still lets
+through a `provider_op` item whose operation declares `dispatch.in_paused_campaign: runs` (`optout.record` and
+`campaign.pause`). So an archived or still-draft campaign holds every one of its items at once, and a paused one
+holds every item but theirs.
 
 **What it means.** This is about the *campaign*, not the item, which is why reading the item over and over
 tells you nothing. Somebody paused it, or it was never started. Say which campaign and in which status; the

@@ -277,6 +277,112 @@ public class ReplyPrivacyTests
         }
     }
 
+    /// <summary>
+    /// The two writes that take a person out carry what the person said and why they were taken out — Jason's record,
+    /// which never reaches Reply — and they find the person by an address. The record reaches no argument, no request,
+    /// no diagnostic and no log; the address travels once per lookup, in the search's body on stdin, and nowhere else.
+    /// Each corpus is shown to hold what did travel, so a value that had gone there would be found.
+    /// </summary>
+    [Fact]
+    public async Task What_a_stop_and_an_opt_out_record_reaches_no_request_argument_diagnostic_or_log()
+    {
+        const string Address = "wilhelmina.marker@example.com";
+        const string Statement = "Statement-marker-5a9c please stop";
+        const string ArrivedVia = "via_marker_4c2e";
+        const string SaidAt = "2025-02-11T06:07:08Z";
+        const string LearnedAt = "2025-02-11T06:09:10Z";
+        const string Note = "Note-marker-b13f";
+        string[] record = [Statement, ArrivedVia, SaidAt, LearnedAt, Note];
+
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.WithContact(1001, Address, "Wilhelmina").WithEnrollment(ReplyOperations.Sequence, 1001);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var person = new JsonObject
+        {
+            ["id"] = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+            ["first_name"] = "Wilhelmina",
+            ["last_name"] = null,
+            ["company"] = null,
+            ["title"] = null,
+            ["time_zone"] = null,
+            ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = Address, ["primary"] = true }),
+            ["external_ids"] = new JsonObject(),
+        };
+        var campaign = new JsonObject
+        {
+            ["id"] = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+            ["name"] = "Q3 LatAm founders",
+            ["status"] = "active",
+            ["external_ids"] = new JsonObject { ["campaign"] = "7" },
+        };
+        var writes = new (string Operation, JsonObject Input)[]
+        {
+            ("optout.record", new JsonObject
+            {
+                ["args"] = new JsonObject
+                {
+                    ["channel"] = "email",
+                    ["statement"] = Statement,
+                    ["arrived_via"] = ArrivedVia,
+                    ["said_at"] = SaidAt,
+                    ["learned_at"] = LearnedAt,
+                },
+                ["contacts"] = new JsonArray(person.DeepClone()),
+                ["campaign"] = campaign.DeepClone(),
+                ["idempotency_key"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRP",
+            }),
+            ("enrollment.stop", new JsonObject
+            {
+                ["args"] = new JsonObject { ["channel"] = "email", ["reason"] = new JsonObject { ["code"] = "opted_out", ["note"] = Note } },
+                ["contacts"] = new JsonArray(person.DeepClone()),
+                ["campaign"] = campaign.DeepClone(),
+                ["idempotency_key"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRQ",
+            }),
+        };
+
+        foreach (var (operation, input) in writes)
+        {
+            ReplyOperations.Succeeded(operation, await ReplyOperations.InvokeAsync(api, operation, input, Ct));
+        }
+
+        // Both writes did their work, each finding the person by the address first.
+        Assert.Equal(
+            [
+                "POST /v3/contacts/filter?top=100&skip=0", "GET /v3/contacts/1001/statuses", "POST /v3/contacts/set-opted-out",
+                "POST /v3/contacts/filter?top=100&skip=0", "GET /v3/sequences/7/contacts/1001", "DELETE /v3/sequences/7/contact-links/1001",
+            ],
+            Paths(account));
+        Assert.Equal([1001], account.OptOuts.Select(entry => entry!.GetValue<int>()));
+        Assert.Empty(account.EnrolledIn(ReplyOperations.Sequence));
+
+        foreach (var call in account.Calls)
+        {
+            var sent = string.Join(' ', call.Args) + call.Path + (call.Body ?? string.Empty);
+            foreach (var field in record)
+            {
+                Assert.DoesNotContain(field, sent, StringComparison.OrdinalIgnoreCase);
+            }
+
+            // The address goes to the lookup, in its body, and to nothing else.
+            var lookup = call.Path.StartsWith("/v3/contacts/filter", StringComparison.Ordinal);
+            Assert.DoesNotContain(Address, string.Join(' ', call.Args) + call.Path, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(lookup, (call.Body ?? string.Empty).Contains(Address, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var diagnostics = ReadAll(api.Paths.PluginWorkDirectory);
+        Assert.Contains("\"exec\"", diagnostics, StringComparison.Ordinal);
+        await api.Runtime.StopAsync();
+        var logs = ReadAll(api.Paths.LogsDirectory);
+        Assert.Contains("enrollment.stop", logs, StringComparison.Ordinal);
+        foreach (var field in record.Append(Address))
+        {
+            Assert.DoesNotContain(field, diagnostics, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(field, logs, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     /// <summary>Everything one invocation answered, whichever way it ended, as one string to look through.</summary>
     private static string Answered(PluginInvocationResult result) => result.Outcome switch
     {

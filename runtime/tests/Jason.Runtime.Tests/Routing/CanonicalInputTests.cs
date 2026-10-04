@@ -127,6 +127,24 @@ public class CanonicalInputTests
         Assert.Equal(facts.Item.PublicId, (string?)input["idempotency_key"]);
     }
 
+    /// <summary>
+    /// A key the catalogue requires only "when a collection is given" is a conditional block whose value is
+    /// `required`. The composer reads the value, as every gate does: a condition never decides that a key is left out.
+    /// </summary>
+    [Fact]
+    public void A_key_required_only_under_a_condition_is_composed_all_the_same()
+    {
+        var facts = Facts(ListMembershipAdd, Arguments("email"), ContactWith(("email", "ada@example.test", true)));
+        var contract = Contract(ListMembershipAdd) with
+        {
+            IdempotencyKey = new ContractProperty("required", true, "when a collection is given."),
+        };
+
+        var input = CanonicalInput.Compose(contract, facts);
+
+        Assert.Equal(facts.Item.PublicId, (string?)input["idempotency_key"]);
+    }
+
     [Fact]
     public void The_campaign_travels_with_the_pins_this_plugin_recorded_for_it()
     {

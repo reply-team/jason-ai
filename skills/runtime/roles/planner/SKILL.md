@@ -30,6 +30,19 @@ items you create and the note you leave, and nothing else remembers it. What you
 the items themselves — `--not-before`, `--due-at` and `--priority` — and there is no calendar and nothing that
 repeats on its own.
 
+**What the provider holds is a read away.** A `provider_op` item naming `enrollment.list` answers who the provider's
+campaign holds, with its `total`; plan the horizon from that rather than from Jason's list of contacts alone.
+
+**Starting a campaign is a person's decision over a population.** Prepare it as a `provider_op` item naming
+`campaign.activate`, with `expected.enrolled` set to the `total` you read: the item waits for a person, who is shown
+how many people step 1 will go to. If the count has moved by the time it runs, nothing starts and the attempt fails
+`population_changed`, with both numbers in the failed attempt's `trace`. Read the count again and create a new item
+for the new number — a different population is a different decision, never an edit of the old one.
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.activate --input '{"expected":{"enrolled":240}}' --reason "the list is enrolled and the copy is approved"
+```
+
 **Whether you create the work or only describe it comes from the brief**, and from nothing else. When the brief
 asks for work to be created, create it: work items are the only form a plan takes here, and a dispatcher claims
 them. When it asks for a plan, the plan is your result, in the shape `result_format` asks for. When the brief

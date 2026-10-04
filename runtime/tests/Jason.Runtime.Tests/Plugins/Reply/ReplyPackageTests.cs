@@ -27,9 +27,11 @@ public class ReplyPackageTests
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Empty(plugin.Problems);
         Assert.Equal(PluginKind.Provider, plugin.Kind);
-        Assert.Equal("0.2.0-dev", plugin.Version);
+        Assert.Equal("0.2.0", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
-        Assert.Equal(["campaign.enroll", "campaign.get", "conversation.get", "conversation.list", "engagement.summarize", "enrollment.list", "list_membership.add"], plugin.Operations.Order());
+        Assert.Equal(
+            ["campaign.activate", "campaign.enroll", "campaign.get", "campaign.pause", "conversation.get", "conversation.list", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record"],
+            plugin.Operations.Order());
 
         // Declaration is not permission, and this package declares nothing it does not use: one program, no
         // environment variable it could hold a secret in, and no way to reach the provider except through it. A
@@ -120,7 +122,7 @@ public class ReplyPackageTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("campaign_not_found", failed.Error.Code);
         Assert.Equal(ReplyPlugins.PluginId, result.Provenance.PluginId);
-        Assert.Equal("0.2.0-dev", result.Provenance.Version);
+        Assert.Equal("0.2.0", result.Provenance.Version);
     }
 
     /// <summary>

@@ -19,11 +19,11 @@
 export const CALLS = {
   "GET /v3/sequences/{id}": {
     "kind": "read",
-    "note": "The sequence itself: what campaign.get answers from, and campaign.enroll's live-state recovery read."
+    "note": "The sequence itself: what campaign.get answers from, campaign.enroll's live-state recovery read, the state campaign.pause and campaign.activate read before they write, and the read that confirms a campaign enrollment.stop names for the first time."
   },
   "GET /v3/sequences/{id}/contacts/{contact_id}": {
     "kind": "read",
-    "note": "Whether this person already takes part in the sequence: campaign.enroll's first recovery read."
+    "note": "Whether this person already takes part in the sequence: campaign.enroll's first recovery read, and the participation enrollment.stop reads before it removes anything."
   },
   "GET /v3/sequences/{id}/contacts": {
     "kind": "read",
@@ -31,7 +31,7 @@ export const CALLS = {
   },
   "GET /v3/sequences/{id}/contacts/count": {
     "kind": "read",
-    "note": "How many people the sequence holds: enrollment.list's total, and nothing else."
+    "note": "How many people the sequence holds: enrollment.list's total, and the population campaign.activate holds a person's approval to."
   },
   "POST /v3/sequences/{id}/stats": {
     "kind": "read",
@@ -55,7 +55,7 @@ export const CALLS = {
   },
   "POST /v3/contacts/filter": {
     "kind": "read",
-    "note": "The people one list holds, a page at a time: list_membership.add's recovery read. A POST, and a read all the same."
+    "note": "The people one list holds, a page at a time: list_membership.add's recovery read; and, by a search term, the contacts whose address holds one, a page at a time: the lookup optout.record makes before it creates anybody, and the only way enrollment.stop finds a person it has no pin for. A POST, and a read all the same."
   },
   "POST /v3/contacts/import": {
     "kind": "write",
@@ -65,6 +65,10 @@ export const CALLS = {
     "kind": "write",
     "note": "Ensures a contact that has no first name to import with. A write, and one with no documented duplicate code."
   },
+  "POST /v3/contacts/set-opted-out": {
+    "kind": "write",
+    "note": "Sets Reply's opt-out flag for the person, by identifier in the body. Only ever set here, never cleared; a contact already opted out counts as updated."
+  },
   "POST /v3/contact-lists/{id}/add-contacts": {
     "kind": "write",
     "note": "Adds the person to the list. Re-adding is documented nowhere, which is why the recovery read exists."
@@ -72,6 +76,18 @@ export const CALLS = {
   "POST /v3/sequences/{id}/contact-links/bulk": {
     "kind": "write",
     "note": "Enrols the person. Into a live sequence this is a send, so it is the most expensive repeat of all."
+  },
+  "DELETE /v3/sequences/{id}/contact-links/{contact_id}": {
+    "kind": "write",
+    "note": "Takes the person out of the sequence, with no body: their history stays and they are not marked finished. A 404 means they take no part."
+  },
+  "POST /v3/sequences/{id}/pause": {
+    "kind": "write",
+    "note": "Pauses the sequence, with no body. Reply documents it as idempotent: a paused sequence answers the same."
+  },
+  "POST /v3/sequences/{id}/start": {
+    "kind": "write",
+    "note": "Starts the sequence, with no body; it also resumes a paused one. Step 1 goes to everybody enrolled, so it is a send."
   }
 };
 
@@ -126,6 +142,40 @@ export const ROWS = {
     }
   },
   "per_operation": {
+    "campaign.activate": {
+      "campaign_not_found": {
+        "when": "404 on `GET /v3/sequences/{id}`, on its count or on the start itself, all of whose paths name exactly one sequence — Reply's own code is `sequence.notFound` — or an identifier that is not a Reply sequence number at all, which is refused without a call.",
+        "code": "campaign_not_found",
+        "class": "permanent",
+        "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
+      },
+      "campaign_not_activatable": {
+        "when": "The sequence read says it is archived, and the start is not asked for; or the start answers 409 (archived) or 400 (no contacts, no connected sending account, no schedule with sending hours), whose own code travels in `details.provider_code`.",
+        "code": "campaign_not_activatable",
+        "class": "permanent",
+        "note": "Reply will not start this sequence. Nothing was started; `details.provider_code` says why where Reply gave a code, and what it names has to change at Reply first."
+      },
+      "population_changed": {
+        "when": "The sequence's count, read at execution, is not the `args.expected.enrolled` a person approved. The start is not asked for.",
+        "code": "population_changed",
+        "class": "permanent",
+        "note": "The population a person approved is not the one the campaign holds now, so nothing was started. `details.expected` and `details.actual` carry both numbers; read the count again and propose a new activation."
+      }
+    },
+    "campaign.pause": {
+      "campaign_not_found": {
+        "when": "404 on `GET /v3/sequences/{id}` or on the pause itself, both of whose paths name exactly one sequence — Reply's own code is `sequence.notFound` — or an identifier that is not a Reply sequence number at all, which is refused without a call.",
+        "code": "campaign_not_found",
+        "class": "permanent",
+        "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
+      },
+      "campaign_not_pausable": {
+        "when": "The sequence read says it is archived, or that it never started (`new`), and the pause is not asked for — `details.reason` says which; or the pause answers 409 or 400, whose own code travels in `details.provider_code` (the one 400 Reply documents for a pause is `sequenceAction.teamMemberNotFound`).",
+        "code": "campaign_not_pausable",
+        "class": "permanent",
+        "note": "Reply will not pause this sequence, and nothing was changed. `details.reason` says why where the sequence's state decided it, and `details.provider_code` carries Reply's own code where Reply refused; what it names has to change at Reply before a pause can succeed."
+      }
+    },
     "campaign.get": {
       "campaign_not_found": {
         "when": "404 on `GET /v3/sequences/{id}`, whose path names exactly one sequence — Reply's own code there is `sequence.notFound` — or an identifier that is not a Reply sequence number at all, which is refused without a call.",
@@ -319,6 +369,70 @@ export const ROWS = {
         "class": "permanent",
         "note": "Reply rejected the enrollment request as invalid. A request built wrong is built the same way on every attempt, so it is reported rather than retried, and what Reply said travels in the details."
       }
+    },
+    "enrollment.stop": {
+      "campaign_not_found": {
+        "when": "404 on `GET /v3/sequences/{id}`, read first when the work item names the campaign for the first time; or an identifier that is not a Reply sequence number at all, which is refused without a call. A campaign already pinned is not read again, and Reply answers its absence with the same lumped 404 as a person who takes no part, which reads `already_stopped`; `sequence.notFound` or `sequenceContact.sequenceNotFound` on the participation read or the removal would still map here.",
+        "code": "campaign_not_found",
+        "class": "permanent",
+        "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
+      },
+      "contact_not_found": {
+        "when": "A pin that is not a Reply contact number at all, refused without a call. A well-formed pin Reply no longer holds is answered with the same 404 as a person who takes no part, so it reads `already_stopped` instead.",
+        "code": "contact_not_found",
+        "class": "permanent",
+        "note": "The identifier pinned for this person names nobody a Reply account could hold, so there is nobody to take out by it. The pin is wrong and has to be cleared."
+      },
+      "contact_not_unique": {
+        "when": "The lookup by address, read to its end, answered more than one contact whose `email` equals the channel value, ignoring case.",
+        "code": "contact_not_unique",
+        "class": "permanent",
+        "note": "Reply holds more than one contact under this address, so picking one would be guessing and nobody was taken out. A person resolves the duplicate at Reply, then proposes the work again."
+      },
+      "lookup_not_finished": {
+        "when": "The lookup by address read five pages of a hundred and Reply said there were more. Reply's search matches by containment, so every one of them holds this address, and the end was not reached.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply holds more contacts whose address holds this one than one lookup reads, so whether exactly one of them is this person could not be decided, and nobody was taken out — it is never read as a person Reply does not hold. A repeat would read the same pages, so it is not repeated: take the person out at Reply by hand, then check with enrollment.list."
+      },
+      "invalid_channel_value": {
+        "when": "The person carries no value on the channel the call named. Decided before any call.",
+        "code": "invalid_channel_value",
+        "class": "validation",
+        "note": "The person has no value on the channel the call named, so there is no address to find them by. Name a channel they have."
+      }
+    },
+    "optout.record": {
+      "contact_not_found": {
+        "when": "404 on `GET /v3/contacts/{id}/statuses`, read by the pin Jason holds or by the identifier the lookup found; a pin that is not a Reply contact number at all, refused without a call; or the per-item word `notFound` against this person inside the opt-out's answer.",
+        "code": "contact_not_found",
+        "class": "permanent",
+        "note": "The identifier pinned for this person no longer resolves at Reply — the contact was deleted, or it belongs to another account. The pin has to be cleared before the opt-out can be recorded there."
+      },
+      "contact_not_unique": {
+        "when": "The lookup by address, read to its end, answered more than one contact whose `email` equals the channel value, ignoring case.",
+        "code": "contact_not_unique",
+        "class": "permanent",
+        "note": "Reply holds more than one contact under this address, so picking one would be guessing and nothing was done. A person resolves the duplicate at Reply, then proposes the work again."
+      },
+      "lookup_not_finished": {
+        "when": "The lookup by address read five pages of a hundred and Reply said there were more. Reply's search matches by containment, so every one of them holds this address, and the end was not reached.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply holds more contacts whose address holds this one than one lookup reads, so whether exactly one of them is this person could not be decided, and nothing was done: no contact made, no flag set. A repeat would read the same pages, so it is not repeated: record the opt-out at Reply by hand. Where `jason suppression add` recorded the address, Jason's own register already stops Jason's own reach."
+      },
+      "invalid_channel_value": {
+        "when": "400 carrying `errors[]` and no `code` on the ensure-contact call, where a pointer names the address.",
+        "code": "invalid_channel_value",
+        "class": "validation",
+        "note": "Reply will not accept the address this person carries on the channel the call named, so no contact could be made to record the opt-out on. The contact's data has to be corrected; no later attempt would be accepted either."
+      },
+      "limit_reached": {
+        "when": "400 with code `contactLimitExceeded` on the ensure-contact call.",
+        "code": "limit_reached",
+        "class": "permanent",
+        "note": "The account will hold no further contact, so the person who said stop could not be made there. Reply never held them under this address, so it cannot reach them there either."
+      }
     }
   }
 };
@@ -492,6 +606,9 @@ export function fail(operation, observed, learned) {
     // from Reply. An operator reading one of those has no status and no provider code to go on, so the reason
     // is the whole of what they get.
     reason: observed.reason,
+    // The two numbers a person's decision was about and the one found at execution, where a population moved.
+    expected: observed.expected,
+    actual: observed.actual,
     exit_code: observed.exit_code,
     timed_out: observed.timed_out,
   });

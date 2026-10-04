@@ -26,12 +26,42 @@ jason workitem list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-A reply you draft is this work item's result. If the person asked not to be contacted again, that is a
-suppression somebody with that operation records — say so in your answer rather than acting on it yourself.
+A reply you draft is this work item's result.
 
-**No operation this build publishes sends anything.** The two that act are `campaign.enroll` and
-`list_membership.add`, and the rest only read: enrolling somebody puts them into the provider's own campaign, and
-whatever goes out after that is the provider's doing, on its schedule. Nothing here composes a message and sends it.
+**When the person asks not to be contacted again, record it, in this order.** Jason's own register first, which
+stops Jason's reach at once:
+
+```
+jason suppression add --channel email --value marta@example.com --reason "replied asking to be taken off the list"
+```
+
+Then the provider's half: a `provider_op` item naming `optout.record`, with what they said, where it arrived and
+when, and a high `--priority` so it is the campaign's next item. It runs without anybody approving it — not running
+is the harm — and it runs even while the campaign is paused. What they said is Jason's record; the provider holds only
+a yes or a no. Do not remove them, or archive them or the campaign, until the opt-out has succeeded: any of these
+cancels the record still waiting to run.
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation optout.record --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --priority 100 --input '{"channel":"email","statement":"please take me off your list","arrived_via":"reply","said_at":"2026-10-03T08:14:00Z","learned_at":"2026-10-03T08:20:00Z"}' --reason "they asked not to be contacted again"
+```
+
+Taking them out of the provider's campaign as well is a person's decision. Propose it as a `provider_op` item naming
+`enrollment.stop`, with the reason, and it waits for a person to approve it; the register holding them does not
+refuse it, because a stop is for exactly those people.
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation enrollment.stop --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","reason":{"code":"opted_out","note":"replied asking to be taken off the list"}}' --reason "they asked not to be contacted again"
+```
+
+An archived campaign takes no new work. If theirs is archived, record the opt-out through any active or paused
+campaign they are a member of that is routed to the same provider account
+(`jason route resolve --campaign <id> --operation optout.record` names the account) — the provider's opt-out is
+account-wide. The register stops Jason's reach at once either way; if no such campaign exists, the provider's half
+waits, and say so in your answer.
+
+**No operation this build publishes writes a message.** Some write and the rest only read: enrolling somebody puts
+them into the provider's own campaign, starting a campaign releases its first step to everybody in it, and whatever
+goes out after that is the provider's doing, on its schedule. Nothing here composes a message and sends it.
 
 ```
 jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD responder --note '{"pattern":"most replies here are forwarding to a colleague","checked":"2026-09-21"}'

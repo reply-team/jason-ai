@@ -15,7 +15,7 @@ public class ContractDocumentTests
         "id", "version", "l1", "intent",
         "reach", "reversibility", "approval", "approval_artefact", "approval_departs", "protective_floor",
         "approval_reason", "before_repeating", "idempotency_key", "per_item_results", "accepts_collection", "cost",
-        "cost_basis", "meter", "invariants", "preflight", "contact_projection", "precondition", "preview",
+        "cost_basis", "meter", "invariants", "preflight", "dispatch", "contact_projection", "precondition", "preview",
         "input_schema", "output_schema", "external_ids",
         "recovery_read", "repeat_after_ambiguous", "failure_codes", "timeout_ms", "conformance",
     ];
@@ -40,7 +40,10 @@ public class ContractDocumentTests
     public void The_catalog_publishes_exactly_the_operations_of_this_version()
     {
         Assert.Equal(
-            ["campaign.enroll", "campaign.get", "conversation.get", "conversation.list", "engagement.summarize", "enrollment.list", "list_membership.add"],
+            [
+                "campaign.activate", "campaign.enroll", "campaign.get", "campaign.pause", "conversation.get", "conversation.list",
+                "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record",
+            ],
             OperationCatalog.All.Select(c => c.Id));
         Assert.All(OperationCatalog.All, contract => Assert.Equal(1, contract.Version));
     }
@@ -72,18 +75,76 @@ public class ContractDocumentTests
 
     /// <summary>
     /// The catalogue lets an operation lower its approval only as a protective floor and raise it only by a stated
-    /// departure, and either one needs a reason. No operation of this version does either, so each says so in the
-    /// two fields rather than leaving the reading of their absence to whoever reads the document next.
+    /// departure, and either one needs a reason. In this version one operation does: recording that somebody said
+    /// stop, whose not running is itself the harm. Every other document says it does neither, in the two fields,
+    /// rather than leaving the reading of their absence to whoever reads it next.
     /// </summary>
     [Theory]
     [MemberData(nameof(Published))]
-    public void No_operation_of_this_version_lowers_its_approval_or_raises_it(string id)
+    public void Only_the_record_that_somebody_said_stop_lowers_its_approval_and_it_says_why(string id)
     {
         var contract = Contract(id);
+        var floor = id == "optout.record";
 
-        Assert.False(contract.ProtectiveFloor);
-        Assert.False(contract.ApprovalDeparts);
-        Assert.Null(contract.ApprovalReason);
+        Assert.Equal(floor, contract.ProtectiveFloor);
+        Assert.Equal(floor, contract.ApprovalDeparts);
+        Assert.Equal(floor, contract.ApprovalReason is not null);
+    }
+
+    /// <summary>
+    /// The floor is read with everything it implies, on the document itself and not only on a test's minimal one:
+    /// the record that somebody said stop is not refused for a suppressed person, and it runs while its campaign is
+    /// paused.
+    /// </summary>
+    [Fact]
+    public void The_record_that_somebody_said_stop_is_held_back_by_nothing_in_jason()
+    {
+        var contract = Contract("optout.record");
+
+        Assert.Equal("auto", contract.Approval.Value);
+        Assert.Equal(SuppressionCheck.NotApplicable, contract.Preflight.Suppression);
+        Assert.Equal(InPausedCampaign.Runs, contract.Dispatch.InPausedCampaign);
+    }
+
+    /// <summary>
+    /// Pausing a Jason campaign holds its work, and exactly two operations run past that: the provider's own pause,
+    /// which is the incident response, and the record that somebody said stop. A third would be a change to what a
+    /// pause means, and it is made here or not at all.
+    /// </summary>
+    [Fact]
+    public void Exactly_the_incident_response_and_the_record_of_a_stop_run_in_a_paused_campaign()
+    {
+        Assert.Equal(["campaign.pause", "optout.record"], OperationCatalog.RunsInPausedCampaign.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The suppression register refuses what would reach a person, and exactly two operations only take a person out:
+    /// the record that somebody said stop, and taking somebody out of a campaign. Every other document says the
+    /// register applies, and a third that set it aside would be a change to what the register protects.
+    /// </summary>
+    [Fact]
+    public void Exactly_the_two_operations_that_take_a_person_out_set_the_suppression_register_aside()
+    {
+        Assert.Equal(
+            ["enrollment.stop", "optout.record"],
+            OperationCatalog.All
+                .Where(contract => contract.Preflight.Suppression == SuppressionCheck.NotApplicable)
+                .Select(contract => contract.Id)
+                .Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Taking somebody out of a campaign cannot be undone at the provider, so a person decides it, and its work waits
+    /// with a paused campaign like any other decision a person has to make.
+    /// </summary>
+    [Fact]
+    public void Taking_a_person_out_of_a_campaign_is_a_person_s_decision_and_waits_in_a_paused_campaign()
+    {
+        var contract = Contract("enrollment.stop");
+
+        Assert.Equal("confirm_once", contract.Approval.Value);
+        Assert.Equal(SuppressionCheck.NotApplicable, contract.Preflight.Suppression);
+        Assert.Equal(InPausedCampaign.Waits, contract.Dispatch.InPausedCampaign);
     }
 
     /// <summary>
@@ -117,9 +178,14 @@ public class ContractDocumentTests
         Assert.Equal(published.ReplaceLineEndings("\n"), reader.ReadToEnd().ReplaceLineEndings("\n"));
     }
 
+    /// <summary>
+    /// A repeat is handed out blind only where a second performance changes nothing and costs nothing: a read, or a
+    /// reversible control whose repeat is a no-op — pausing a paused campaign. Anything that may reach somebody, or
+    /// that cannot be taken back, is repeated only after a recovery read, or never.
+    /// </summary>
     [Theory]
     [MemberData(nameof(Published))]
-    public void A_repeat_is_only_safe_where_the_operation_reads_and_costs_nothing(string id)
+    public void A_repeat_is_only_safe_where_a_second_performance_changes_nothing_and_costs_nothing(string id)
     {
         var contract = Contract(id);
         if (contract.RepeatAfterAmbiguous != RepeatAfterAmbiguous.Safe)
@@ -127,8 +193,26 @@ public class ContractDocumentTests
             return;
         }
 
-        Assert.Equal("read", contract.Reach.Value);
         Assert.Equal("none", contract.Cost.Value);
+        Assert.True(
+            contract.Reach.Value == "read" || (contract.Reach.Value == "control" && contract.Reversibility.Value == "reversible"),
+            $"{id} repeats blind, but its reach is `{contract.Reach.Value}` and it is `{contract.Reversibility.Value}`.");
+    }
+
+    /// <summary>
+    /// The rule above admits a reversible control, which an add to a list also is; so the writes that repeat blind are
+    /// held to an exact set as well. Pausing a paused campaign is the one write whose second performance is the
+    /// provider's own documented no-op; any other write that repeated blind would be a choice made here and nowhere
+    /// else.
+    /// </summary>
+    [Fact]
+    public void The_one_write_that_repeats_blind_is_the_pause()
+    {
+        Assert.Equal(
+            ["campaign.pause"],
+            OperationCatalog.All
+                .Where(contract => contract.Reach.Value != "read" && contract.RepeatAfterAmbiguous == RepeatAfterAmbiguous.Safe)
+                .Select(contract => contract.Id));
     }
 
     [Theory]
@@ -164,6 +248,70 @@ public class ContractDocumentTests
         {
             Assert.False(arguments?.ContainsKey("channel"), $"{id} declares no channel but its args carry one.");
         }
+    }
+
+    /// <summary>
+    /// Every object a document defines — under <c>properties</c>, <c>items</c> or <c>$defs</c>, at any depth — is closed,
+    /// so nothing the document did not name can ride along in an argument or an answer. The one exception is the
+    /// provider's own untranslated answer beside a read's neutral part, which is open by declaration. The branches of a
+    /// combinator only add rules to the object they sit on, so they are not objects of their own. And a write answers
+    /// one item for its one subject, never two.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Published))]
+    public void Every_object_a_document_defines_is_closed_and_a_write_answers_one_item(string id)
+    {
+        var contract = Contract(id);
+        var open = new List<string>();
+        foreach (var (name, schema) in new[] { ("input_schema", contract.InputSchema), ("output_schema", contract.OutputSchema) })
+        {
+            OpenObjects(schema, name, open);
+        }
+
+        var undeclared = open.Where(path => !OpenByDeclaration.Contains((id, path))).ToList();
+        Assert.True(undeclared.Count == 0, $"{id} leaves open: {string.Join(", ", undeclared)}");
+        if (contract.Reach.Value != "read")
+        {
+            Assert.Equal(1, (int)contract.OutputSchema["properties"]!["items"]!["maxItems"]!);
+        }
+    }
+
+    private static readonly HashSet<(string, string)> OpenByDeclaration = [("campaign.get", "output_schema/properties/vendor")];
+
+    private static void OpenObjects(JsonNode? node, string path, List<string> open)
+    {
+        if (node is not JsonObject schema)
+        {
+            return;
+        }
+
+        var type = schema["type"];
+        var isObject = schema.ContainsKey("properties")
+            || (type is JsonValue single && (string?)single == "object")
+            || (type is JsonArray many && many.Any(entry => (string?)entry == "object"));
+        var closed = schema["additionalProperties"] is JsonValue flag && flag.GetValueKind() == System.Text.Json.JsonValueKind.False;
+        if (isObject && !closed)
+        {
+            open.Add(path);
+        }
+
+        if (schema["properties"] is JsonObject properties)
+        {
+            foreach (var (name, child) in properties)
+            {
+                OpenObjects(child, $"{path}/properties/{name}", open);
+            }
+        }
+
+        if (schema["$defs"] is JsonObject definitions)
+        {
+            foreach (var (name, child) in definitions)
+            {
+                OpenObjects(child, $"{path}/$defs/{name}", open);
+            }
+        }
+
+        OpenObjects(schema["items"], $"{path}/items", open);
     }
 
     [Theory]

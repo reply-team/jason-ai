@@ -135,7 +135,7 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
 | `managed-campaign-work` | Claude Code 2.1.278 | 0.1.0 | `sha256:01adfb08dec48564d6fef17639fd58cdac16deb7ddfbfea50ebcaa673989d855` |
-| `approvals-and-questions` | Claude Code 2.1.287 (claude-opus-5) | 0.2.0 | `sha256:e62e64c4dfd809c0096f6b31b3c9c49bb8809c11b890a62cac6b08082921d6db` |
+| `approvals-and-questions` | Claude Code 2.1.289 (claude-opus-5) | 0.3.0 | `sha256:42f0d58b4d7ad5d1e299a33a431f9f722cd22e5a2ecbe20f3dc6a531b9512387` |
 | `operating-the-installation` | Claude Code 2.1.287 (claude-opus-5) | 0.2.0 | `sha256:c3b655a1066b51c8298237c3d90afd7e96784235e080a271dee77cc66ea54924` |
-| `troubleshooting-jason` | Claude Code 2.1.278 | 0.1.0 | `sha256:fac60f6d04618c2d4d614592024de133144c563b8462cc9c4ca751786cf77a9f` |
+| `troubleshooting-jason` | Claude Code 2.1.289 (claude-opus-5) | 0.3.0 | `sha256:962084069418eae7d4e29fc473c71197ed5c13156ed05dcd5e4467328da79c48` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:9fb55ca5364ec65c9b629df5538ff26d7ce380e8d09017989e0d222fca4eb037` |

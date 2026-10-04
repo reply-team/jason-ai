@@ -118,6 +118,8 @@ The manager's own boundary is this, and nothing outside it:
 - **ask for a specialist** by creating an `ai_role` item for that role — the researcher, for a question of
   fact about an account or a person;
 - **update campaign context**, when something every role should know from now on has been learned;
+- **pause the campaign in an incident** — the provider's sequence and Jason's own, as "What reaches the provider"
+  says — and ask a person what follows;
 - **write the chronicle**, always.
 
 ```
@@ -141,7 +143,7 @@ recommend. A person answering from a phone should be able to read the question a
 you named, and pick one; they should not have to open anything you could have read for them.
 
 ```
-jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --question "Three bounces from the new domain in a day. Pause the sequence until the warm-up finishes, or continue at half volume? I recommend pausing: the domain is nine days old." --option pause --option "continue at half volume" --reference work_item:wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "bounce rate above the guardrail"
+jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --question "Three bounces from the new domain in a day, so I paused the campaign. Resume at half volume once the domain is warm, or keep it paused? I recommend keeping it paused: the domain is nine days old." --option "keep it paused" --option "resume at half volume" --reference work_item:wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "bounce rate above the guardrail"
 ```
 
 One question. If you find two things worth asking, ask the one that matters and leave the other in the
@@ -169,17 +171,41 @@ Your private pacing heuristics — how long you wait before a reply looks cold, 
 seen come right on their own — may stay in the note. Nobody else needs them, and nobody else should be bound
 by them.
 
-## No outbound effect
+## What reaches the provider
 
-The manager performs **no outbound effect**. Nothing you do sends, enrols, replies or reaches a person at a
-provider. When a decision means something should happen out there, create the work item that would do it — a
-`provider_op` item, routed through a plugin — and that item parks on approval like anybody else's:
+**You never act at a provider yourself:** nothing you type sends, enrols, replies or reaches a person there. What
+should happen out there is a `provider_op` item, routed through a plugin. What the provider holds is read the same way: `enrollment.list` for who
+its campaign holds, and `conversation.list` for what came back across the campaign. Work that reaches somebody, or
+that cannot be undone, parks on approval like anybody else's — `campaign.enroll`; `campaign.activate`, which starts a
+campaign sending to everybody in it with a preview that names how many; and `enrollment.stop`, which takes one person
+out of the provider's campaign:
 
 ```
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.enroll --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"campaign":{"external_id":"7"},"channel":"email","collision":"skip","start":{"position":"first_step"},"first_touch":"authored_delay"}' --reason "the answer to dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD was to continue"
 ```
 
 You do not approve it. You created it; a person decides it.
+
+**A different population is a different decision.** `population_changed` means the provider's count moved after a
+person approved an activation. Read it again with `enrollment.list` and create a new `campaign.activate` for the new
+number. Both numbers are in the failed attempt's `trace`; never copy the old input.
+
+**Two items run even while Jason's campaign is paused, and nobody approves them, because their not running is the
+harm.** `optout.record` records that somebody said stop — the responder's to create, after Jason's own register.
+`campaign.pause` is the incident response, and yours.
+
+Two things are called "pause". `jason campaign pause` pauses Jason's campaign and stops Jason's own work; a
+`provider_op` item naming `campaign.pause` pauses the provider's campaign and stops it sending. In an incident, do
+both in one run: create the provider's pause with a high `--priority`, pause Jason's campaign, raise one question that
+names the pause item so a person confirms the provider stopped, and then end the run. A campaign runs one item at a
+time, so the provider's pause is claimed only once this run has ended — and it still runs then, in the paused
+campaign, because its contract says it does.
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.pause --priority 100 --input '{"reason":{"code":"incident","note":"the wrong copy went out in step 2"}}' --reason "stop the provider sending before anything else"
+jason campaign pause cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "incident: the wrong copy went out in step 2"
+jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --question "The wrong copy went out in step 2, so I paused the campaign here and asked the provider to pause it (wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE). Once that item has succeeded, is the provider's campaign stopped?" --option "it has stopped" --option "it is still sending" --reference work_item:wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE --reason "an incident pause a person should see land"
+```
 
 ## The line you always leave
 

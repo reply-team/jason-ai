@@ -1,0 +1,37 @@
+{
+  "operation": "enrollment.stop",
+  "version": 1,
+  "case": "a person with no last name: the dash is what is missing",
+  "input": {
+    "args": { "channel": "email", "reason": { "code": "not_interested", "note": "replied that the timing is wrong" } },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "first_name": "Marta",
+        "last_name": null,
+        "company": null,
+        "title": null,
+        "time_zone": "America/Bogota",
+        "channels": [{ "channel": "email", "value": "marta@example.com", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "summary": "Take Marta — (marta@example.com) out of campaign Q3 LatAm founders at the provider, reason not_interested. Their history stays; nothing further is sent to them from this campaign.",
+    "highlights": {
+      "/args/reason": { "code": "not_interested", "note": "replied that the timing is wrong" },
+      "/contacts/0/channels/0/value": "marta@example.com",
+      "/campaign/name": "Q3 LatAm founders",
+      "/campaign/external_ids/campaign": "c_7714",
+      "/args/campaign": null
+    }
+  }
+}

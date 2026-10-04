@@ -146,7 +146,7 @@ public class EndToEndTests
         }
 
         var logs = Directory.EnumerateFiles(paths.LogsDirectory, "runtime-*.jsonl").ToList();
-        var written = string.Join('\n', logs.Select(File.ReadAllText));
+        var written = string.Join('\n', logs.Select(RuntimeLogs.ReadAllText));
 
         Assert.Contains("Update check is disabled by configuration", written, StringComparison.Ordinal);
 

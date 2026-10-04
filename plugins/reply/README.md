@@ -5,7 +5,7 @@ Reply CLI.
 
 ## What it does
 
-Seven operations — the whole set this build publishes: two that act and five that only read.
+Eleven operations — the whole set this build publishes: six that write and five that only read.
 
 | Operation | What it is at Reply |
 |---|---|
@@ -16,6 +16,10 @@ Seven operations — the whole set this build publishes: two that act and five t
 | `engagement.summarize` | Reads a sequence's counts over one window, a row per channel. Counts only: no rate is returned. |
 | `conversation.list` | Reads one page of inbox threads: one person's across the account, or one sequence's. A person is their identifier and the name Reply shows, never an address. |
 | `conversation.get` | Reads one page of one thread's messages, the first sent first: who wrote each, to whom, and the body as Reply holds it. |
+| `campaign.pause` | Pauses one sequence: the incident response. A paused sequence stops sending; pausing one already paused changes nothing. |
+| `campaign.activate` | Starts one sequence sending, or resumes a paused one, for the population a person approved. A different count starts nothing. |
+| `optout.record` | Records that somebody said stop: sets Reply's opt-out flag on the contact it holds under the address, made only when it holds nobody. What they said stays Jason's record. |
+| `enrollment.stop` | Takes one person out of a sequence, once a person approves it. Nobody is created to do it, and the reason stays Jason's record. |
 
 A campaign is a **sequence** at Reply and a person is a **contact**; every call is made by starting the
 Reply CLI — `reply api <path>` — with the request body on its standard input.
@@ -168,20 +172,24 @@ creates people.
 
 | Call | Mark | What it is for |
 |---|---|---|
-| `GET /v3/sequences/{id}` | read | The sequence itself: what `campaign.get` answers from, and the live-state read before an enrollment. |
-| `GET /v3/sequences/{id}/contacts/{contact_id}` | read | Whether this person already takes part: `campaign.enroll`'s first recovery read. |
+| `GET /v3/sequences/{id}` | read | The sequence itself: what `campaign.get` answers from, the live-state read before an enrollment, and the state read before a pause or a start. |
+| `GET /v3/sequences/{id}/contacts/{contact_id}` | read | Whether this person already takes part: `campaign.enroll`'s first recovery read, and what `enrollment.stop` reads before it removes anything. |
 | `GET /v3/sequences/{id}/contacts` | read | One page of the people a sequence holds: what `enrollment.list` answers from. |
-| `GET /v3/sequences/{id}/contacts/count` | read | How many people the sequence holds: `enrollment.list`'s total. |
+| `GET /v3/sequences/{id}/contacts/count` | read | How many people the sequence holds: `enrollment.list`'s total, and the population `campaign.activate` checks before it starts. |
 | `POST /v3/sequences/{id}/stats` | read | A sequence's counts over one window: what `engagement.summarize` answers from. A `POST` that changes nothing. |
 | `POST /v3/inbox/threads/filter` | read | One page of inbox threads, by person or by sequence: what `conversation.list` answers from. A `POST` that changes nothing. |
 | `GET /v3/inbox/threads/{id}` | read | One thread with its whole history: `conversation.get`'s header. |
 | `GET /v3/inbox/threads/{id}/messages` | read | One page of a thread's messages: what `conversation.get` answers from. |
 | `GET /v3/contacts/{id}/statuses` | read | The opt-out register, and by the same call whether a pin still resolves. |
-| `POST /v3/contacts/filter` | read | The people one list holds, a page of them: `list_membership.add`'s recovery read. |
+| `POST /v3/contacts/filter` | read | The people one list holds, a page of them: `list_membership.add`'s recovery read; and, by a search term, the contacts whose address holds one: the lookup `optout.record` makes before it creates anybody, and the only way `enrollment.stop` finds a person it has no pin for. |
 | `POST /v3/contacts/import` | write | Matches or creates the contact by email, in one call. |
 | `POST /v3/contacts` | write | Creates a contact the import will not take, because it carries no first name. |
+| `POST /v3/contacts/set-opted-out` | write | The opt-out itself: Reply's flag, set for one contact. This package never clears it. |
 | `POST /v3/contact-lists/{id}/add-contacts` | write | The add itself. |
 | `POST /v3/sequences/{id}/contact-links/bulk` | write | The enrollment itself. Into a live sequence, a send. |
+| `DELETE /v3/sequences/{id}/contact-links/{contact_id}` | write | The removal itself, with no body: the person is taken out, never marked finished. |
+| `POST /v3/sequences/{id}/pause` | write | The pause itself, with no body. Reply documents it as idempotent. |
+| `POST /v3/sequences/{id}/start` | write | The start itself, with no body; it also resumes a paused sequence. Step 1 goes to everybody enrolled, so it is a send. |
 
 ### Endings every operation can meet
 
@@ -233,7 +241,7 @@ A refusal of the count alone is not a failure: the page is answered and `total` 
 | Reply's answer was longer than `Plugins:Exec:OutputBytes` lets a plugin read from a program. | `provider_answer_too_large` | permanent | Ask for a smaller `limit`, or raise `Plugins:Exec:OutputBytes`. |
 
 A person or a sequence with no threads is an empty page, not a failure. A contact identifier Reply does not hold is
-answered with a validation problem that names no code, so it arrives as the last shared row above.
+answered with a validation problem that names no code, so it arrives as `provider_call_failed`.
 
 ### `conversation.get`
 
@@ -251,7 +259,7 @@ answered with a validation problem that names no code, so it arrives as the last
 | The pinned contact identifier is not a Reply contact number, or no longer resolves there. | `contact_not_found` | permanent | The pin has to be cleared before this person can be worked again, and this version has no repair path for one. |
 | Reply's own opt-out register holds this person. | `suppressed` | permanent | Nothing, on purpose. Only the person themselves can ask to be reinstated. |
 | Reply will not accept the address on the channel the call named. | `invalid_channel_value` | validation | Correct the contact's data; no later attempt would be accepted either. |
-| The account will hold no further contact. | `limit_reached` | permanent | Free capacity at Reply. A **list's** own capacity publishes no code of its own, so a full list arrives as the last shared row instead of this one. |
+| The account will hold no further contact. | `limit_reached` | permanent | Free capacity at Reply. A **list's** own capacity publishes no code of its own, so a full list arrives as `provider_call_failed` instead of this one. |
 
 ### `campaign.enroll`
 
@@ -263,12 +271,85 @@ answered with a validation problem that names no code, so it arrives as the last
 | `collision: refuse` was asked for and Reply says this person already takes part. | `collision_refused` | permanent | Choose another collision policy if a second participation is what was meant. A repeated attempt answers differently — see below. |
 | Reply's own opt-out register holds this person. | `suppressed` | permanent | Nothing, on purpose. |
 | Reply will not accept the address on the channel the call named. | `invalid_channel_value` | validation | Correct the contact's data. |
-| The account will hold no further contact or enrollment. | `limit_reached` | permanent | Free capacity at Reply. A **sequence's** own capacity publishes no code, so it arrives as the last shared row. |
+| The account will hold no further contact or enrollment. | `limit_reached` | permanent | Free capacity at Reply. A **sequence's** own capacity publishes no code, so it arrives as `provider_call_failed`. |
 | The arguments name a call that cannot be built: a start position the shape of this sequence's steps cannot answer, or a first touch this version has no word for. Nothing is sent. | `provider_call_failed` | permanent | `details.reason` says which reading failed. Ask for the first step, or name a position the sequence really has. |
 | Reply answers the per-item word `invalidInput` for this person. | `provider_call_failed` | permanent | Reply read the request and would not take it; its own word is in the details. A request built wrong is built the same way every time. |
 
+### `campaign.pause`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The identifier is not a Reply sequence number, or Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. |
+| The sequence is archived, or never started — read from its state, so no pause is asked for — or Reply refuses the pause with 409 or 400. | `campaign_not_pausable` | permanent | Nothing to pause. Reply's own code is in `details.provider_code` where it gave one. |
+
+The pause is idempotent at Reply, so the ambiguous ending above is repeated rather than stopped for a person: the
+next attempt reads the state and answers `already_paused` if the pause landed. A pause runs even while its Jason
+campaign is paused, because the provider's sequence must still stop after somebody paused Jason's first.
+
+### `campaign.activate`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The identifier is not a Reply sequence number, or Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. |
+| The sequence is archived — read from its state, so no start is asked for — or Reply refuses the start: 409 archived, or 400 with no contacts, no connected sending account or no sending hours. | `campaign_not_activatable` | permanent | Change what `details.provider_code` names at Reply first; then propose the activation again. |
+| Reply's count, read at execution, is not the population the person approved. Nothing starts. | `population_changed` | permanent | Read the count again and propose a new activation: `details.expected` and `details.actual` carry both numbers, which reach you in the failed attempt's `trace` ([docs/plugins.md](../../docs/plugins.md) §5, "Failing"). |
+
+A start whose answer was lost may already be sending, so the next attempt reads the sequence's state and its count
+first, and answers `already_live` rather than starting twice. A person approves every activation: it waits for them
+before it runs, as `campaign.enroll` does.
+
+### `optout.record`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The pinned contact identifier is not a Reply contact number, or no longer resolves there — including as the word `notFound` against this person in the opt-out's answer. | `contact_not_found` | permanent | The pin has to be cleared before the opt-out can be recorded at Reply. |
+| The lookup found more than one contact under the address. Nothing is set. | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the opt-out again. |
+| The lookup read five pages of a hundred and Reply said there were more, so one match could not be told from two. Nothing is made and nothing is set. | `provider_call_failed` | permanent | Record the opt-out at Reply by hand: a repeat would read the same pages. Where `jason suppression add` recorded the address, Jason's own register already stops Jason's own reach. `details.reason` says why. |
+| Reply will not accept the address, so no contact could be made to record the opt-out on. | `invalid_channel_value` | validation | Correct the contact's data. |
+| The account will hold no further contact, so the person could not be made there. | `limit_reached` | permanent | Free capacity at Reply. Reply never held them under this address, so it cannot reach them there either. |
+
+The person is found before anything is written: by the pin, or by looking the address up — Reply's free-text search,
+whose matches the package compares with the address exactly and whatever the case, read to its end. Only when Reply
+holds nobody under it is a contact made, through the import or, without a first name, the create path. The flag is
+then read, and a person Reply already holds as opted out answers `already_recorded` with nothing written; that read is
+also what makes a lost answer safe to repeat. The opt-out runs without anybody approving it — not running is the
+harm — and it runs even while its Jason campaign is paused. Jason's own register is the other half:
+`jason suppression add` stops Jason's reach at once for that address, and is written first.
+
+### `enrollment.stop`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The identifier is not a Reply sequence number, or — read first when the work item names the campaign for the first time — Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. A campaign already pinned is not read again: if Reply no longer holds it, its one lumped 404 reads `already_stopped`. |
+| The pinned contact identifier is not a Reply contact number at all. Nothing is called. | `contact_not_found` | permanent | The pin is wrong and has to be cleared. A well-formed pin Reply no longer holds is not this: it reads `already_stopped`. |
+| The lookup found more than one contact under the address. Nobody is taken out. | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the stop again. |
+| The lookup read five pages of a hundred and Reply said there were more, so one match could not be told from two, or from none. Nobody is taken out. | `provider_call_failed` | permanent | Take the person out at Reply by hand, then check with `enrollment.list`: a repeat would read the same pages. It is never read as a person Reply does not hold. `details.reason` says why. |
+| The person carries no value on the channel the call named. Nothing is called. | `invalid_channel_value` | validation | Name a channel they have. |
+
+The person is found without creating anybody: by the pin, or by looking the address up as `optout.record` does. A
+person Reply does not hold takes part in nothing, so the stop answers `already_stopped` and asks nothing more. Then the
+participation is read — a person who takes no part, or whose part is finished, is already stopped and nothing is
+removed — and only then is the person taken out, never marked finished. That read is also what makes a lost answer
+safe to repeat. Reply's own opt-out is never read: a stop is for exactly the people it would refuse. A person approves
+every stop before it runs, and its work waits while its Jason campaign is paused.
+
 ## What it cannot do
 
+- **An opt-out at Reply is a yes or a no.** What they said, where it arrived and when are Jason's record, carried
+  by the work item; none of it reaches Reply, whose contact holds only its opt-out flag.
+- **A person Reply holds under another address is not found by this one.** The lookup compares the address the
+  work item carries, exactly; somebody who wrote from a second address is a second contact at Reply. The opt-out is
+  recorded on the contact for this address — made for it if need be — and the other is untouched: record the stop
+  for that address as well. A stop finds nobody under this address and answers `already_stopped`, while the
+  participation under the other one stays; `enrollment.list` shows who the sequence still holds.
+- **A pin Reply no longer holds reads as a completed stop.** Reply answers a participation read for a contact or a
+  sequence it no longer holds with the same 404 as for a person who takes no part, so `enrollment.stop` cannot tell
+  them apart and answers `already_stopped`. A campaign the work item names for the first time is read before
+  anything else, so an identifier Reply does not hold is `campaign_not_found` and is never pinned. The reason for a
+  stop is Jason's record; Reply holds none.
+- **The count and the start are two calls.** `campaign.activate` reads Reply's count, compares it with the
+  population the person approved, and then starts the sequence. Somebody enrolled in between is a race Reply offers
+  no way to close: the start is not conditional on a count.
 - **`campaign.enroll` waits for a person before it runs.** That operation's contract asks for an
   approval, so the claim parks the item as `awaiting_approval` with a record of exactly what would be
   enrolled, and nothing reaches Reply until somebody answers — `jason approval list`, then

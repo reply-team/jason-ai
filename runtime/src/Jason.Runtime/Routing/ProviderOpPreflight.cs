@@ -135,7 +135,9 @@ public static class ProviderOpPreflight
                     $"The contact has no '{channel}' channel, and '{channel}' is the one '{operation}' consumes.");
             }
 
-            if (facts.Suppressed)
+            // The register refuses what would reach the person. An operation that only takes them out declares
+            // that it does not apply, and a suppressed person is exactly who that operation is for.
+            if (facts.Suppressed && contract.Preflight.Suppression == SuppressionCheck.Checked)
             {
                 return Refused(
                     resolution,

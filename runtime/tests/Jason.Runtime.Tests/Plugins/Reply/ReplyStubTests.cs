@@ -593,6 +593,104 @@ public class ReplyStubTests
         Assert.Equal(1002, Answer(second).Data!["items"]![0]!["id"]!.GetValue<int>());
     }
 
+    /// <summary>
+    /// The free-text search as a live account answered it: every contact whose address contains the term, whatever
+    /// the case of either — so a term finds the person who carries it and anybody whose address merely holds it.
+    /// Telling the two apart is the caller's business.
+    /// </summary>
+    [Fact]
+    public async Task A_search_term_finds_every_contact_whose_address_contains_it_whatever_the_case()
+    {
+        using var account = new ReplyAccount();
+        account.WithContact(1001, "marta@example.com", "Marta");
+        account.WithContact(1002, "ana.marta@example.com", "Ana");
+        account.WithContact(1003, "someone@example.org", "Someone");
+
+        var (_, stdout, _) = await account.RunAsync(
+            [.. Prefix, "api", "/v3/contacts/filter?top=5&skip=0", "--method", "POST", "--body", "-"],
+            """{"searchTerm":"MARTA@EXAMPLE.COM"}""",
+            Ct);
+
+        var page = Answer(stdout).Data!.AsObject();
+        Assert.Equal([1001, 1002], page["items"]!.AsArray().Select(item => item!["id"]!.GetValue<int>()));
+        Assert.False(page["hasMore"]!.GetValue<bool>());
+        Assert.Equal(["hasMore", "items"], page.Select(member => member.Key).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The search pages the same way whatever it searches by, and says nothing of a total: the only word for the end
+    /// is <c>hasMore</c>, and a page past the end is empty.
+    /// </summary>
+    [Fact]
+    public async Task A_search_term_pages_with_top_and_skip_and_says_where_it_ends()
+    {
+        using var account = new ReplyAccount();
+        account.WithContact(1001, "first@example.com", "First");
+        account.WithContact(1002, "second@example.com", "Second");
+        account.WithContact(1003, "third@example.com", "Third");
+
+        async Task<JsonObject> PageAsync(int skip)
+        {
+            var (_, stdout, _) = await account.RunAsync(
+                [.. Prefix, "api", $"/v3/contacts/filter?top=2&skip={skip}", "--method", "POST", "--body", "-"],
+                """{"searchTerm":"example.com"}""",
+                Ct);
+            return Answer(stdout).Data!.AsObject();
+        }
+
+        var first = await PageAsync(0);
+        var second = await PageAsync(2);
+        var past = await PageAsync(1000000);
+
+        Assert.Equal([1001, 1002], first["items"]!.AsArray().Select(item => item!["id"]!.GetValue<int>()));
+        Assert.True(first["hasMore"]!.GetValue<bool>());
+        Assert.Equal([1003], second["items"]!.AsArray().Select(item => item!["id"]!.GetValue<int>()));
+        Assert.False(second["hasMore"]!.GetValue<bool>());
+        Assert.Empty(past["items"]!.AsArray());
+        Assert.False(past["hasMore"]!.GetValue<bool>());
+        Assert.Null(first["total"]);
+    }
+
+    /// <summary>
+    /// A live account ignored a rule set entirely and answered a page of everybody, which is why the package never
+    /// sends one. The stand-in answers the same way, so a package that did would find the wrong person here too.
+    /// </summary>
+    [Fact]
+    public async Task A_rule_set_is_ignored_and_the_search_answers_everybody()
+    {
+        using var account = new ReplyAccount();
+        account.WithContact(1001, "marta@example.com", "Marta");
+        account.WithContact(1002, "someone@example.org", "Someone");
+
+        var (_, stdout, _) = await account.RunAsync(
+            [.. Prefix, "api", "/v3/contacts/filter?top=5&skip=0", "--method", "POST", "--body", "-"],
+            """{"rules":[{"property":"email","condition":"equals","value":"marta@example.com"}]}""",
+            Ct);
+
+        var page = Answer(stdout).Data!.AsObject();
+        Assert.Equal([1001, 1002], page["items"]!.AsArray().Select(item => item!["id"]!.GetValue<int>()));
+    }
+
+    /// <summary>
+    /// Reply's create path publishes no word for an address it already holds, so an account can hold two contacts
+    /// under one address, and a search for it answers both.
+    /// </summary>
+    [Fact]
+    public async Task An_account_can_hold_two_contacts_under_one_address_and_the_search_answers_both()
+    {
+        using var account = new ReplyAccount();
+        account.WithContact(1001, "marta@example.com", "Marta").WithDuplicate(1002, of: 1001);
+
+        var (_, stdout, _) = await account.RunAsync(
+            [.. Prefix, "api", "/v3/contacts/filter?top=5&skip=0", "--method", "POST", "--body", "-"],
+            """{"searchTerm":"marta@example.com"}""",
+            Ct);
+
+        var items = Answer(stdout).Data!["items"]!.AsArray();
+        Assert.Equal([1001, 1002], items.Select(item => item!["id"]!.GetValue<int>()));
+        Assert.All(items, item => Assert.Equal("marta@example.com", (string?)item!["email"]));
+    }
+
     // -------------------------------------------------------------------------------------------------------
     // The import, whose first-name rule decides how a contact is ensured
     // -------------------------------------------------------------------------------------------------------
@@ -806,6 +904,232 @@ public class ReplyStubTests
     }
 
     // -------------------------------------------------------------------------------------------------------
+    // A sequence paused and started
+    // -------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Reply documents the pause as idempotent and answers the sequence itself, paused, whether it was just paused or
+    /// already was.
+    /// </summary>
+    [Theory]
+    [InlineData("active")]
+    [InlineData("paused")]
+    public async Task A_pause_leaves_the_sequence_paused_and_answers_it(string status)
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(7, "Nurture", status, false, 11);
+
+        var (exit, stdout, _) = await account.RunAsync([.. Prefix, "api", "/v3/sequences/7/pause", "--method", "POST"], null, Ct);
+
+        Assert.Equal(0, exit);
+        var (code, data) = Answer(stdout);
+        Assert.Equal(200, code);
+        Assert.Equal("paused", (string?)data!["status"]);
+        Assert.Equal("paused", (string?)account.Sequences.Single()!["status"]);
+    }
+
+    /// <summary>The start likewise: a draft goes live, a paused sequence resumes, a live one stays live.</summary>
+    [Theory]
+    [InlineData("new")]
+    [InlineData("paused")]
+    [InlineData("active")]
+    public async Task A_start_leaves_the_sequence_live_and_answers_it(string status)
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(7, "Nurture", status, false, 11).WithContact(1001, "held@example.test", "Held").WithEnrollment(7, 1001);
+
+        var (exit, stdout, _) = await account.RunAsync([.. Prefix, "api", "/v3/sequences/7/start", "--method", "POST"], null, Ct);
+
+        Assert.Equal(0, exit);
+        var (code, data) = Answer(stdout);
+        Assert.Equal(200, code);
+        Assert.Equal("active", (string?)data!["status"]);
+        Assert.Equal("active", (string?)account.Sequences.Single()!["status"]);
+    }
+
+    /// <summary>
+    /// The refusals Reply publishes for both: a sequence it does not hold, and one archived — an incompatible state,
+    /// so a 409 rather than the 400 the bulk enrol answers for the same fact.
+    /// </summary>
+    [Theory]
+    [InlineData("pause", 8, false, 404, "sequenceAction.notFound")]
+    [InlineData("pause", 7, true, 409, "sequenceAction.archived")]
+    [InlineData("start", 8, false, 404, "sequenceAction.notFound")]
+    [InlineData("start", 7, true, 409, "sequenceAction.archived")]
+    public async Task A_sequence_that_is_missing_or_archived_is_refused_by_both(string act, int sequence, bool archived, int status, string providerCode)
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(7, "Nurture", "active", archived, 11).WithContact(1001, "held@example.test", "Held").WithEnrollment(7, 1001);
+
+        var (_, stdout, _) = await account.RunAsync([.. Prefix, "api", $"/v3/sequences/{sequence}/{act}", "--method", "POST"], null, Ct);
+
+        Assert.Equal((status, providerCode), Coded(stdout));
+        Assert.Equal("active", (string?)account.Sequences.Single()!["status"]);
+    }
+
+    /// <summary>
+    /// The business refusals of a start: nobody to send to, or nothing to send from, each under the word Reply documents
+    /// for it; the plugin carries whatever code arrives rather than relying on one.
+    /// </summary>
+    [Fact]
+    public async Task A_start_with_nobody_enrolled_or_nothing_to_send_from_is_a_business_refusal()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(7, "Nurture", "new", false, 11).WithSequence(8, "Outbound", "new", false, 21)
+            .WithContact(1001, "held@example.test", "Held").WithEnrollment(8, 1001).WithoutSendingAccount(8);
+
+        var (_, empty, _) = await account.RunAsync([.. Prefix, "api", "/v3/sequences/7/start", "--method", "POST"], null, Ct);
+        var (_, unsent, _) = await account.RunAsync([.. Prefix, "api", "/v3/sequences/8/start", "--method", "POST"], null, Ct);
+
+        Assert.Equal((400, "sequenceAction.noContacts"), Coded(empty));
+        Assert.Equal((400, "sequenceAction.noEmailAccounts"), Coded(unsent));
+        Assert.All(account.Sequences, sequence => Assert.Equal("new", (string?)sequence!["status"]));
+    }
+
+    /// <summary>
+    /// Pausing a draft is a domain rule rejection, a 400 with no code: the one 400 word Reply documents for a pause names a
+    /// team member's rejection, and this is not one. The plugin never asks, because the state it reads first already
+    /// says the sequence never started.
+    /// </summary>
+    [Fact]
+    public async Task Pausing_a_sequence_that_never_started_is_a_domain_rule_rejection()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(7, "Nurture", "new", false, 11);
+
+        var (_, stdout, _) = await account.RunAsync([.. Prefix, "api", "/v3/sequences/7/pause", "--method", "POST"], null, Ct);
+
+        Assert.Equal((400, (string?)null), Coded(stdout));
+        Assert.Equal("new", (string?)account.Sequences.Single()!["status"]);
+    }
+
+    /// <summary>What the stand-in keeps for its own refusals is never part of an answer Reply would give.</summary>
+    [Fact]
+    public async Task The_stand_in_s_own_state_never_reaches_an_answer()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(7, "Nurture", "active", false, 11).WithoutSendingAccount(7);
+
+        var (_, read, _) = await account.RunAsync([.. Prefix, "api", "/v3/sequences/7"], null, Ct);
+        var (_, paused, _) = await account.RunAsync([.. Prefix, "api", "/v3/sequences/7/pause", "--method", "POST"], null, Ct);
+
+        Assert.DoesNotContain("_sending", read, StringComparison.Ordinal);
+        Assert.DoesNotContain("_sending", paused, StringComparison.Ordinal);
+    }
+
+    // -------------------------------------------------------------------------------------------------------
+    // A person opted out, and taken out of a sequence
+    // -------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Reply's opt-out is a flag on the contact, set or cleared for up to a hundred at once; a contact already in the
+    /// state asked for counts as updated, so the answer is the same empty dictionary either time.
+    /// </summary>
+    [Fact]
+    public async Task An_opt_out_sets_the_flag_and_answers_an_empty_dictionary_each_time()
+    {
+        using var account = new ReplyAccount();
+        account.WithContact(1001, "held@example.test", "Held");
+        var body = new JsonObject { ["contactIds"] = new JsonArray(1001), ["isOptedOut"] = true }.ToJsonString();
+        string[] args = [.. Prefix, "api", "/v3/contacts/set-opted-out", "--method", "POST", "--body", "-"];
+
+        var (exit, first, _) = await account.RunAsync(args, body, Ct);
+        var (_, second, _) = await account.RunAsync(args, body, Ct);
+
+        Assert.Equal(0, exit);
+        Assert.Equal((200, "{}"), (Answer(first).Code, Answer(first).Data!.ToJsonString()));
+        Assert.Equal((200, "{}"), (Answer(second).Code, Answer(second).Data!.ToJsonString()));
+        Assert.Equal([1001], account.OptOuts.Select(entry => entry!.GetValue<int>()));
+    }
+
+    [Fact]
+    public async Task Clearing_the_flag_takes_the_person_off_the_register()
+    {
+        using var account = new ReplyAccount();
+        account.WithContact(1001, "held@example.test", "Held", optedOut: true);
+        var body = new JsonObject { ["contactIds"] = new JsonArray(1001), ["isOptedOut"] = false }.ToJsonString();
+
+        var (_, stdout, _) = await account.RunAsync([.. Prefix, "api", "/v3/contacts/set-opted-out", "--method", "POST", "--body", "-"], body, Ct);
+
+        Assert.Equal(200, Answer(stdout).Code);
+        Assert.Empty(account.OptOuts);
+    }
+
+    /// <summary>A contact the account does not hold is a per-item failure inside a 200, in the bulk calls' own shape.</summary>
+    [Fact]
+    public async Task A_contact_the_account_does_not_hold_is_a_per_item_failure_of_its_own()
+    {
+        using var account = new ReplyAccount();
+        account.WithContact(1001, "held@example.test", "Held");
+        var body = new JsonObject { ["contactIds"] = new JsonArray(1001, 4242), ["isOptedOut"] = true }.ToJsonString();
+
+        var (_, stdout, _) = await account.RunAsync([.. Prefix, "api", "/v3/contacts/set-opted-out", "--method", "POST", "--body", "-"], body, Ct);
+
+        var (code, data) = Answer(stdout);
+        Assert.Equal(200, code);
+        Assert.Equal(["4242"], data!.AsObject().Select(entry => entry.Key));
+        Assert.Equal("notFound", (string?)data["4242"]!["error"]);
+        Assert.NotNull(data["4242"]!["errorDetails"]);
+        Assert.Equal([1001], account.OptOuts.Select(entry => entry!.GetValue<int>()));
+    }
+
+    /// <summary>A request without its flag, or naming nobody, is a validation failure: `errors[]` and no code.</summary>
+    [Theory]
+    [InlineData("""{"contactIds":[1001]}""", "/isOptedOut")]
+    [InlineData("""{"contactIds":[],"isOptedOut":true}""", "/contactIds")]
+    public async Task An_opt_out_that_says_too_little_is_a_validation_failure(string body, string pointer)
+    {
+        using var account = new ReplyAccount();
+        account.WithContact(1001, "held@example.test", "Held");
+
+        var (_, stdout, _) = await account.RunAsync([.. Prefix, "api", "/v3/contacts/set-opted-out", "--method", "POST", "--body", "-"], body, Ct);
+
+        var (code, data) = Answer(stdout);
+        Assert.Equal(400, code);
+        Assert.Null(data!["code"]);
+        Assert.Equal(pointer, (string?)data["errors"]![0]!["pointer"]);
+        Assert.Empty(account.OptOuts);
+    }
+
+    /// <summary>
+    /// The removal answers 204 with an empty body — which the real CLI prints as `data: null` — and the person no
+    /// longer takes part. A second removal finds nobody to remove, in the participation read's own words.
+    /// </summary>
+    [Fact]
+    public async Task A_removal_takes_the_person_out_and_a_second_one_finds_nobody()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(7, "Nurture", "active", false, 11).WithContact(1001, "held@example.test", "Held").WithEnrollment(7, 1001);
+        string[] args = [.. Prefix, "api", "/v3/sequences/7/contact-links/1001", "--method", "DELETE"];
+
+        var (exit, first, _) = await account.RunAsync(args, null, Ct);
+        var (_, second, _) = await account.RunAsync(args, null, Ct);
+
+        Assert.Equal(0, exit);
+        Assert.Equal("""{"code":204,"data":null}""", first.Trim());
+        Assert.Empty(account.EnrolledIn(7));
+        Assert.Equal((404, "sequenceContact.notInSequence"), Coded(second));
+    }
+
+    /// <summary>
+    /// Reply documents one 404 for a removal or a participation read, whatever was missing: a sequence it does not hold
+    /// answers exactly as a person who takes no part does.
+    /// </summary>
+    [Fact]
+    public async Task A_removal_from_a_sequence_the_account_does_not_hold_answers_the_one_lumped_404()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(7, "Nurture", "active", false, 11).WithContact(1001, "held@example.test", "Held").WithEnrollment(7, 1001);
+
+        var (_, stdout, _) = await account.RunAsync([.. Prefix, "api", "/v3/sequences/8/contact-links/1001", "--method", "DELETE"], null, Ct);
+        var (_, read, _) = await account.RunAsync([.. Prefix, "api", "/v3/sequences/8/contacts/1001"], null, Ct);
+
+        Assert.Equal((404, "sequenceContact.notInSequence"), Coded(stdout));
+        Assert.Equal((404, "sequenceContact.notInSequence"), Coded(read));
+        Assert.Equal([1001], account.EnrolledIn(7));
+    }
+
+    // -------------------------------------------------------------------------------------------------------
     // Reading what it printed
     // -------------------------------------------------------------------------------------------------------
 
@@ -815,6 +1139,12 @@ public class ReplyStubTests
         ["status"] = status,
         ["code"] = code,
     };
+
+    private static (int Code, string? ProviderCode) Coded(string stdout)
+    {
+        var (code, data) = Answer(stdout);
+        return (code, (string?)data?["code"]);
+    }
 
     private static (int Code, JsonNode? Data) Answer(string stdout)
     {
