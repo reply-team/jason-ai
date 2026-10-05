@@ -29,6 +29,15 @@ const AUTHENTICATION = "auth.";
 // bound, not a budget.
 const STDERR_TAIL = 8192;
 
+// What this package keeps back from an invocation's budget when it times a call: five seconds, which is how long
+// the host waits for a program it has ended to be gone, and never more than half of what is left. A call given
+// everything that is left runs out at the moment the host's own engine ends the invocation, and before this
+// package hears that the call was cut off the host has ended the program's process tree and waited for its
+// pipes — work that takes longer on a busy machine. When that outlasts the engine's last moments the host answers
+// `plugin_timeout` itself, and the identifiers this package had learned never leave with it. A call that is cut
+// off sooner is one this package answers, from the row that says what the call was.
+const RESERVE_MS = 5000;
+
 // The SDK reads request objects strictly, so a key whose value is undefined is dropped rather than passed on.
 function compact(request) {
   const cleaned = {};
@@ -74,6 +83,27 @@ export function args(context, method, path, hasBody) {
 }
 
 /**
+ * How long one call may run: what is left of the invocation's budget, less what this package keeps back to answer
+ * for itself if the call is cut off. The invocation's own deadline is read from the context, so a call made late in
+ * an invocation is given what that invocation has left rather than what it started with. Without a deadline to
+ * read — a context that does not carry one — the host's own default applies, which is everything that is left.
+ */
+function timeoutOf(context) {
+  const total = context ? context.timeout_ms : undefined;
+  const deadline = context && typeof context.deadline === "string" ? Date.parse(context.deadline) : Number.NaN;
+  if (!Number.isInteger(total) || total < 1 || !Number.isFinite(deadline)) {
+    return undefined;
+  }
+
+  const left = deadline - Date.now();
+  const kept = Math.min(RESERVE_MS, left / 2);
+
+  // The host refuses a timeout outside 1 .. the invocation's own, so a clock that has drifted from the host's
+  // cannot turn this into a call that fails before it is made.
+  return Math.min(total, Math.max(1, Math.floor(left - kept)));
+}
+
+/**
  * One call to Reply through the CLI: the answer is `{ code, data }` — Reply's own status and its body, whatever
  * that status was — and every other ending throws `host.fail` with the class the table decided. `learned` is what
  * this package already knows Reply calls our entities at the moment of the call; it travels out with a failure,
@@ -89,6 +119,7 @@ export function call(context, method, path, body, learned, operation) {
     executable: PROGRAM,
     args: args(context, method, path, hasBody),
     stdin: hasBody ? JSON.stringify(body) : undefined,
+    timeout_ms: timeoutOf(context),
     // The CLI otherwise asks whether a newer release exists: latency inside the operation's budget, a write to
     // the configuration directory, and a notice on stderr, all for nothing. An ordinary name, so it needs no
     // capability — and it is the only variable this package sets on anything.

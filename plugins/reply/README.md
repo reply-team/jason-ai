@@ -209,6 +209,13 @@ creates people.
 | 429. | `rate_limited` | transient | Nothing. The runtime waits and repeats the attempt. |
 | Any other status, or a business code no row below names. | `provider_call_failed` | permanent | The status and Reply's own code are in the trace. Reply's per-item error set is published as an open one, so there will be some — and a refusal that recurs belongs in the table. |
 
+A call that runs out of time is the package's to answer, so each call is given what is left of the invocation's
+budget less five seconds (never more than half of what is left) rather than all of it. A call given everything
+runs out at the moment the host's own engine ends the invocation, and on a busy machine the host's work after
+a cut-off call — ending the CLI's process tree, waiting for its pipes — can outlast what the engine has left;
+the host then answers `plugin_timeout`, and the identifiers the attempt had learned do not travel with it.
+A call cut off sooner is one the package hears about, and it answers from the two timeout rows above.
+
 ### `campaign.get`
 
 | When | Code | Class | What to do about it |
