@@ -3,6 +3,17 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.2.2
+
+- A call to Reply is given what is left of the invocation's budget less five seconds (never more than half of
+  what is left), where it used to be given all of it. A call given everything runs out at the moment the
+  host's own engine ends the invocation, and on a busy machine the host's work after a cut-off call — ending
+  the CLI's process tree, waiting for its pipes — could outlast what the engine had left. The host then
+  answered `plugin_timeout` in place of this package's `provider_unavailable` or `provider_answer_lost`, and
+  the identifiers the attempt had learned did not travel with it. A call that runs out of time is now cut off
+  with time left for the package to answer it.
+- Nothing else changes: the same calls, codes, classes and messages.
+
 ## 0.2.1
 
 - The messages of `campaign_not_pausable`, `campaign_not_activatable` and `population_changed`, and of

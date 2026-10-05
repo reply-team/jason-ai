@@ -130,12 +130,12 @@ public static partial class ChannelRules
         return string.Concat(uri.Scheme, "://", uri.Host.ToLowerInvariant(), port, path, uri.Query);
     }
 
-    [GeneratedRegex("^[a-z][a-z0-9_]{0,31}$")]
+    [GeneratedRegex(@"^[a-z][a-z0-9_]{0,31}\z")]
     private static partial Regex ChannelName();
 
     [GeneratedRegex(@"[\s().-]")]
     private static partial Regex PhoneSeparators();
 
-    [GeneratedRegex(@"^\+[1-9][0-9]{1,14}$")]
+    [GeneratedRegex(@"^\+[1-9][0-9]{1,14}\z")]
     private static partial Regex E164();
 }

@@ -9,6 +9,7 @@ using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Jason.Runtime.Tests.Dispatch;
 
@@ -398,6 +399,31 @@ public class SummonerTests
         await FinishCheckInAsync(harness);
 
         Assert.Equal(0, await SummonAsync(harness));
+    }
+
+    /// <summary>
+    /// A summon that failed while reading JSON — directly, or as the database's own failure around it — is said by
+    /// the kind of failure and where the reader stopped. What the parser quoted and the keys its path names are a
+    /// person's text, and the sink writes an exception whole, so the exception is not handed to the log.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_summon_that_failed_reading_json_is_logged_by_where_it_stopped_and_not_by_what_it_read(bool insideTheDatabasesFailure)
+    {
+        using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { ReviewSeconds = 3_600 });
+        var campaign = await SeedAsync(harness, live: true);
+        harness.Clock.Advance(TimeSpan.FromSeconds(3_600));
+        harness.InterfereOnceBeforeSaving(() => throw (insideTheDatabasesFailure
+            ? new DbUpdateException("the row could not be written", UnreadableJson.Failure())
+            : UnreadableJson.Failure()));
+
+        Assert.Equal(0, await harness.SummonAsync(Ct));
+
+        var failed = Assert.Single(harness.Logs.Lines, line => line.Level == LogLevel.Warning);
+        Assert.Equal($"The summon for campaign {campaign} failed; the rest of the scan continues without it: {UnreadableJson.Described}", failed.Message);
+        Assert.Null(failed.Exception);
+        Assert.False(UnreadableJson.ReachedTheLog(harness.Logs), "what the parser read reached the log");
     }
 
     /// <summary>

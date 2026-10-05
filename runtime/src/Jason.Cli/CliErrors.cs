@@ -17,6 +17,12 @@ public static class CliErrors
     public const string ShutdownTimeout = "shutdown_timeout";
     public const string RuntimeStartFailed = "runtime_start_failed";
 
+    /// <summary>
+    /// The runtime answered with an error and a body that is not JSON — the server's own answer to a failure, not one
+    /// the runtime composed — so there was no envelope to print and this one says what came back instead.
+    /// </summary>
+    public const string RuntimeError = "runtime_error";
+
     /// <summary>No remover was named for this environment, so <c>jason uninstall</c> touched nothing.</summary>
     public const string RemoverUnsupported = "remover_unsupported";
 
@@ -25,6 +31,15 @@ public static class CliErrors
 
     /// <summary>An uninstall understood the command and declined to perform it.</summary>
     public const string UninstallRefused = "uninstall_refused";
+
+    /// <summary>The log directory exists and <c>jason logs</c> could not read it: nothing was shown rather than less.</summary>
+    public const string LogsUnreadable = "logs_unreadable";
+
+    /// <summary>Something is already at the path <c>jason doctor --output</c> names, and a bundle is never written over anything.</summary>
+    public const string DoctorOutputExists = "doctor_output_exists";
+
+    /// <summary>The path <c>jason doctor</c> would write its bundle to cannot be written, so nothing was.</summary>
+    public const string DoctorOutputUnwritable = "doctor_output_unwritable";
 
     public static string Serialize(string code, string message, bool retryable) =>
         JsonSerializer.Serialize(new ErrorResponse(new ErrorBody(code, message, retryable)), JasonJson.Options);

@@ -3,8 +3,12 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
+using Jason.Runtime.Journal;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Tests.Dispatch;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Tests.Plugins;
 
@@ -301,6 +305,39 @@ public class PluginServiceTests
         Assert.Equal("reason", Assert.Single(error.Details!).Field);
     }
 
+    /// <summary>
+    /// The reason is free text typed by a person or an agent, which is exactly what the logs promise never to hold.
+    /// The journal is where it belongs: it is the record of who asked for the reload and why, and it is read by
+    /// the people allowed to read the data. The service's own logger is swapped for a recording one, because a
+    /// running host writes through its file sink and nothing else would see the line.
+    /// </summary>
+    [Fact]
+    public async Task A_reload_reason_is_kept_in_the_journal_and_never_in_the_log()
+    {
+        var logs = new RecordingLogs();
+        await using var api = await RuntimeApiFixture.StartAsync(
+            Ct,
+            configureServices: services => services.AddSingleton<ILogger<PluginService>>(
+                new Logger<PluginService>(LoggerFactory.Create(builder => builder.AddProvider(logs)))));
+
+        var reloaded = await api.PostOkAsync<PluginRegistryDto>(
+            Operations.PluginReload,
+            new { Reason = ReloadReasonSentinel },
+            Ct);
+
+        // The reload did log its activation, so an empty record below would mean the reason is absent and not
+        // that the line never reached the recorder.
+        Assert.Contains(logs.All, line => line.StartsWith("Plugin reload activated snapshot " + reloaded.Snapshot.Id, StringComparison.Ordinal));
+        Assert.DoesNotContain(logs.All, line => line.Contains(ReloadReasonSentinel, StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            logs.Lines.SelectMany(line => line.Scope.Values),
+            value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)!.Contains(ReloadReasonSentinel, StringComparison.Ordinal));
+
+        var entries = await api.PostOkAsync<Page<JournalEntryDto>>(Operations.JournalList, new { Kind = JournalKinds.PluginsReloaded }, Ct);
+        Assert.Equal(ReloadReasonSentinel, entries.Items[0].Reason);
+        Assert.Equal(reloaded.Snapshot.Id, entries.Items[0].Key);
+    }
+
     [Fact]
     public async Task A_caller_cannot_reload_as_the_runtime_itself()
     {
@@ -357,8 +394,79 @@ public class PluginServiceTests
         Assert.False(listed.Activated);
     }
 
+    /// <summary>
+    /// The same reload against a section holding a value of the wrong type: text where a number of milliseconds
+    /// belongs. The binder refuses that before the validator ever sees the section, and its refusal used to reach
+    /// the caller as a 500 and the log with the text in it. It is the same rejected reload now, naming the setting
+    /// and the type it has to be, with the previous snapshot still active — and the text is nowhere.
+    /// </summary>
+    [Fact]
+    public async Task A_reload_against_a_plugins_value_of_the_wrong_type_is_rejected_like_any_refused_section()
+    {
+        using var programs = new TestPrograms();
+        programs.AddProgram(FakeProviderCli.ExecutableName);
+        var search = new TestSearchPath { Path = programs.Root };
+        var api = await StartAsync(search, paths =>
+        {
+            TestPlugins.InstallFakeProvider(paths);
+            TestPlugins.Grant(paths, TestPlugins.FakeProviderId, exec: ["*"]);
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+        });
+        await using (api)
+        {
+            var active = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginReload, null, Ct);
+            Assert.Single(active.Plugins);
+
+            File.WriteAllText(api.Paths.UserSettingsFile, WrongTypedPlugins);
+            var monitor = api.Resolve<IOptionsMonitor<PluginsOptions>>();
+            Assert.True(await DispatchHarness.EventuallyAsync(() => Unreadable(monitor), Ct));
+
+            var error = await api.PostErrorAsync(Operations.PluginReload, null, HttpStatusCode.Conflict, Ct);
+
+            Assert.Equal("plugin_reload_rejected", error.Code);
+            var detail = Assert.Single(error.Details!);
+            Assert.Equal("plugins_settings_invalid", detail.Code);
+            Assert.Equal("Plugins:Limits:TimeoutMs", detail.Field);
+            Assert.Equal("Plugins:Limits:TimeoutMs could not be read as System.Int32.", detail.Message);
+
+            var listed = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, Ct);
+            Assert.Equal(active.Snapshot.Id, listed.Snapshot.Id);
+            Assert.Single(listed.Plugins);
+            Assert.False(listed.Activated);
+
+            await api.Runtime.StopAsync();
+            var logs = string.Concat(Directory.GetFiles(api.Paths.LogsDirectory).Select(File.ReadAllText));
+            Assert.DoesNotContain(WrongTypeSentinel, logs, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>Free text standing in for whatever a person or an agent might type as the reason for a reload.</summary>
+    private const string ReloadReasonSentinel = "SENTINEL_REASON";
+
     /// <summary>A plugin memory ceiling below the floor the validator holds, which refuses the whole section.</summary>
     private const string InvalidPlugins = """{"Dispatcher":{"Enabled":false},"Plugins":{"Limits":{"MemoryMb":0}}}""";
+
+    /// <summary>Text where the default plugin timeout wants a number, standing in for anything a person might type.</summary>
+    private const string WrongTypeSentinel = "SENTINEL_P_TIMEOUT";
+
+    private const string WrongTypedPlugins = """{"Dispatcher":{"Enabled":false},"Plugins":{"Limits":{"TimeoutMs":"SENTINEL_P_TIMEOUT"}}}""";
+
+    /// <summary>
+    /// Whether the running runtime has stopped handing the section over, for any reason: the wait for an edit to
+    /// land, which must not itself depend on how the refusal is raised.
+    /// </summary>
+    private static bool Unreadable(IOptionsMonitor<PluginsOptions> monitor)
+    {
+        try
+        {
+            _ = monitor.CurrentValue;
+            return false;
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
 
     internal static void Install(JasonPaths paths, string variable) => TestPlugins.Write(
         paths,

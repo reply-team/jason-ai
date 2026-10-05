@@ -1,6 +1,7 @@
 using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
@@ -54,6 +55,13 @@ public sealed class Summoner(
         new EventId(3, nameof(Failed)),
         "The summon for campaign {CampaignId} failed; the rest of the scan continues without it");
 
+    // The same event, for a summon that failed while reading JSON: what kind of failure and where, and no exception,
+    // because what the parser quoted is a person's text.
+    private static readonly Action<ILogger, string, string, Exception?> FailedToParse = LoggerMessage.Define<string, string>(
+        LogLevel.Warning,
+        new EventId(3, nameof(Failed)),
+        "The summon for campaign {CampaignId} failed; the rest of the scan continues without it: {Failure}");
+
     private static readonly Action<ILogger, string, Exception?> Moved = LoggerMessage.Define<string>(
         LogLevel.Information,
         new EventId(4, nameof(Moved)),
@@ -84,12 +92,29 @@ public sealed class Summoner(
                 // A summon that failed leaves nothing else behind — the row is untouched, by design — so this
                 // line is the whole of what somebody gets. It names the campaign the way every other line here
                 // does, because the row number is the one identifier that cannot be typed into any command.
-                Failed(logger, campaign.PublicId, ex);
+                SummonFailed(campaign.PublicId, ex);
                 db.ChangeTracker.Clear();
             }
         }
 
         return summoned;
+    }
+
+    /// <summary>
+    /// The one line a failed summon leaves. A failure that is — or holds — a failure to read JSON is said by its kind
+    /// and where the reader stopped, and its exception is not handed to the log: the parser's message quotes what it
+    /// read and a sink writes an exception whole.
+    /// </summary>
+    private void SummonFailed(string campaignId, Exception exception)
+    {
+        if (ParseFailure.Is(exception))
+        {
+            FailedToParse(logger, campaignId, ParseFailure.Describe(exception), null);
+        }
+        else
+        {
+            Failed(logger, campaignId, exception);
+        }
     }
 
     /// <summary>
@@ -206,7 +231,7 @@ public sealed class Summoner(
             // rather than being filed under a race that did not happen.
             if (!await OpenCheckInAsync(db, campaignId, ct).ConfigureAwait(false))
             {
-                Failed(logger, read.PublicId, ex);
+                SummonFailed(read.PublicId, ex);
                 return false;
             }
 

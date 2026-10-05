@@ -1,8 +1,8 @@
 ---
 name: troubleshooting-jason
-description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the nine states apart, and name the repair that is safe.
+description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the ten states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Troubleshooting Jason
@@ -12,7 +12,8 @@ told: waiting for a moment that has not arrived, waiting for a person who has no
 it cannot route. This skill is how to tell those apart from a genuine failure, and how to name the one repair
 that is safe rather than the first one that comes to mind.
 
-**Status: verified** against Claude Code 2.1.289. It covers what this build records and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. It covers what this build records and
+nothing else.
 
 ## Look here first, in this order
 
@@ -136,14 +137,18 @@ moving would be the one failure in this whole document that reaches a real perso
 on which value, and let the person decide. If the campaign should reach them somewhere else, that is new work
 on a channel they have.
 
-### 6. A transient provider failure
+### 6. A transient failure
 
 **How you recognise it.** The failure was classed `transient`, and the item has been tried more than once.
 The attempt count on the item says how often; the chronicle says when.
 
-**What it means.** The provider was unreachable or busy, the runtime already knows, and it decides when to
-try again and when to stop trying. There is nothing for you to do while attempts remain. Report how many
-there have been and what the last one said, and leave it to run.
+**What it means.** Usually the provider was unreachable or busy. Sometimes the moment was the runtime's own
+and no provider was asked anything: at the claim, a schema check did not finish in time, and the attempt
+ended `validation_timed_out` — which, despite its name, found nothing wrong with the item, so it is not
+state 7. Either way the runtime already knows, retries it the same way, and decides when to try again and
+when to stop trying. There is nothing for you to do while attempts remain. Report how many there have been
+and what the last one said, and leave it to run. The same code classed `ambiguous` is state 8: there the
+answer, not the item, went unmeasured, after the provider had acted.
 
 ### 7. A permanent or validation problem
 
@@ -166,10 +171,11 @@ the source, ask the operator for it rather than guessing at the correction.
 **How you recognise it.** The failure was recorded as `ambiguous`.
 
 **What it means.** It means exactly one thing: **nobody can say whether the provider acted**. The attempt was
-cut off somewhere between sending and hearing back, so the effect may have happened, may have half happened,
-or may never have started. Where the operation's contract declares a recovery read, the next attempt asks the
-provider what actually happened before it writes anything. Where it does not, the work stops there and a
-person decides — because the alternative is sending the same message to the same human being twice.
+cut off somewhere between sending and hearing back, or its answer could not be measured, so the effect may
+have happened, may have half happened, or may never have started. Where the operation's contract declares a
+recovery read, the next attempt asks the provider what actually happened before it writes anything. Where it
+does not, the work stops there and a person decides — because the alternative is sending the same message to
+the same human being twice.
 
 ### 9. An effect reported from outside
 
@@ -198,8 +204,9 @@ machine.
 
 Five. Nothing else on this list, and nothing off it.
 
-**A corrected new work item.** The ordinary repair for states 6 and 7: read the contract, fix the arguments,
-ask again.
+**A corrected new work item.** The ordinary repair for state 7: read the contract, fix the arguments, ask
+again. When state 6 runs out of attempts the item fails final the same way, and the repair is the same work
+asked again as a new item once the provider is back; nothing in the arguments changes.
 
 **Writing or fixing a route.** The repair for `no_route`, and an operator's act rather than a session's.
 
@@ -231,10 +238,10 @@ counts the attempts. A failure it called final was called final for a reason —
 the same failure, or worse, a second real effect on a real person.
 
 **A failed item is finished.** It is not reopened and it cannot be retried by hand. If the work is still
-wanted, it is new work — work still wanted is new work, asked for again as a fresh item with corrected
-arguments, with its own id, its own attempts and its own line in the chronicle. An item that merely expired
-is the one thing the runtime itself reopens: moving its `due_at` forward brings it back, because it never
-ran.
+wanted, it is new work — work still wanted is new work, asked for again as a fresh item, its arguments
+corrected where they were wrong, with its own id, its own attempts and its own line in the chronicle. An
+item that merely expired is the one thing the runtime itself reopens: moving its `due_at` forward brings it
+back, because it never ran.
 
 **Deciding an approval, or answering a question on the person's behalf**, is not a repair either, however
 obvious the answer looks. The runtime refuses a decision that does not name a person, and it is right to.
@@ -245,21 +252,56 @@ over, and a package whose contents no longer match its digest stops running rath
 
 ## What a useful report carries when it is none of these
 
-When the nine states do not explain it, the useful thing to produce is a description somebody else can act
-on, not a theory. **There is no command that collects a diagnostic bundle** in this version — say so plainly
-rather than implying one exists, and gather the five things by hand:
+When the ten states do not explain it, the useful thing to produce is a description somebody else can act
+on, not a theory — and `jason doctor` collects the installation's half of it into one file, whether or not
+the runtime answers.
+
+```
+jason doctor --dry-run
+jason doctor
+```
+
+**Run the dry run first and show the person what it lists**, because the file is theirs to share or not. It
+writes nothing; it lists what a plain run would write, and where. The bundle holds the versions; whether the
+runtime answered and what it says about itself; the shape of the settings — keys, types and lengths, with a
+value only for the settings its own list names; the work items counted by kind and status, and the newest
+failures by their codes; recent errors and a bounded slice of the logs; and the chronicle's metadata — how
+many entries of each kind and when, never what they say.
+
+What it leaves out is just as deliberate. What the runtime says about itself travels with a few free-text
+fields withheld, and the bundle names each one. The home directory, a data directory outside it — this one,
+or another the runtime reports — and the names of the account and the machine are rewritten before anything
+is written. It never carries the capability token, a request body or a prompt, and it reaches nothing beyond
+this machine. It writes one file and prints where; **sending it anywhere is the person's act, never yours.**
+`--include-journal` adds what the journal entries say: campaign names and fields as they changed, campaign and
+work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the
+do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered with, the
+errors attempts ended with, provider identifiers, the effect, tool and operation a report names, the failure
+text and receipts notification channels reported, entries people and agents wrote themselves, the names actors
+gave, and the reasons they typed — so use it only when the person asks for it, and pass on the warning it
+prints.
+
+The bundle is not the report. It carries what the installation knows; the report needs four things it
+cannot know:
 
 - what was asked for, in one sentence: which campaign, which operation or role, with which arguments;
 - the work item id and its error code, exactly as printed;
-- what `jason runtime status` said, and the version it reported;
 - the relevant chronicle lines, in order, with their timestamps;
 - what you have already ruled out, and how.
 
 A guess about the cause is not one of them. Name what you observed; let whoever reads it decide what it
 means.
 
-Logs are JSON Lines written under `~/.jason/logs/`, and nothing reads them for you: no command searches them,
-summarises them or attaches them to anything. They are there to be opened when the readings above have not
-settled it. They never contain request bodies, prompts, work-item contexts or the capability token, so do not
-send somebody to the logs expecting to find what was actually sent to a provider — it was never written
-there.
+Logs are JSON Lines written under `~/.jason/logs/`, and `jason logs` reads them without asking the runtime,
+so it answers the same when the runtime is stopped or will not start. It filters by level, campaign, work
+item and time, and returns the newest hundred events that match, oldest first, unless `--limit` says
+otherwise:
+
+```
+jason logs --level warning --since 2026-09-18T09:00:00Z
+jason logs --work-item wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+Read them when the readings above have not settled it. They never contain request bodies, prompts, work-item
+contexts or the capability token, so do not send somebody to the logs expecting to find what was actually
+sent to a provider — it was never written there.

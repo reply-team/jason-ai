@@ -17,7 +17,7 @@ using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.WorkItems;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 
 namespace Jason.Runtime.Tests.Dispatch;
 
@@ -393,6 +393,124 @@ public class ClaimerTests
         Assert.Equal(WorkItemStatus.Created, stored.Status);
         Assert.Equal(1, stored.AttemptCount);
         Assert.Equal(Noon.AddSeconds(30), stored.RetryAfter);
+    }
+
+    /// <summary>
+    /// A refusal of the claim is said once, under the attempt's own scope, so a log read for the work item finds it:
+    /// here a plugin that does not perform the operation. The next two say it for a composed input the operation's
+    /// schema refuses and for a pattern that could not finish, which are different answers ended in the same place.
+    /// </summary>
+    [Fact]
+    public async Task An_operation_the_routed_plugin_does_not_perform_is_said_once_at_the_claim()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["conversation.get"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = WorkItemFactory.NewProviderOp(campaign, now: Noon);
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await AssertSaidOnceAsync(harness, database, campaign, item, AttemptErrors.PluginOperationUnsupported);
+    }
+
+    [Fact]
+    public async Task A_composed_input_the_operation_refuses_is_said_once_at_the_claim()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.get"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = WorkItemFactory.NewProviderOp(campaign, now: Noon);
+        item.Context = new JsonObject { ["note"] = "what the planner wrote" };
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await AssertSaidOnceAsync(harness, database, campaign, item, AttemptErrors.InputInvalid);
+        Assert.False(harness.Logs.Mentions("what the planner wrote"));
+    }
+
+    /// <summary>
+    /// The attempt that ends transient at the claim is as much an attempt that ended there as a final one, and the item
+    /// going back to the queue does not make the line any less owed: nothing else would say what became of it.
+    /// </summary>
+    [Fact]
+    public async Task A_pattern_that_could_not_finish_is_said_once_at_the_claim_and_the_item_still_comes_back()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.get"]),
+            route: new Route("stand-in-provider", null, null),
+            timing: TimingOut.Always());
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = WorkItemFactory.NewProviderOp(campaign, now: Noon);
+        item.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject { ["campaign"] = new JsonObject { ["external_id"] = "c-7714" } },
+        };
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await AssertSaidOnceAsync(harness, database, campaign, item, AttemptErrors.ValidationTimedOut);
+        await using var fresh = database.Open();
+        Assert.Equal(WorkItemStatus.Created, (await fresh.WorkItems.AsNoTracking().SingleAsync(Ct)).Status);
+    }
+
+    /// <summary>
+    /// Parking is the claim's one answer that is not an end: no attempt exists, so there is no attempt to name and no
+    /// line about one. The approval it waits for is where it is read.
+    /// </summary>
+    [Fact]
+    public async Task An_item_parked_for_approval_says_nothing_about_an_attempt()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.enroll"]),
+            route: new Route("stand-in-provider", new JsonObject { ["workspace"] = "west" }, "sha256:west"));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        Enrolment(db, campaign);
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.DoesNotContain(harness.Logs.Lines, line => line.Scope.ContainsKey("AttemptId"));
+        Assert.DoesNotContain(harness.Logs.All, message => message.Contains("ended at the claim", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The attempt the claim ended has exactly one line, a warning under its own campaign, work item and attempt, that
+    /// says the code and nothing else the attempt recorded about why.
+    /// </summary>
+    private static async Task AssertSaidOnceAsync(Harness harness, TestDatabase database, Campaign campaign, WorkItem item, string code)
+    {
+        await using var fresh = database.Open();
+        var attempt = await fresh.Attempts.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(code, attempt.Error!.Code);
+
+        var line = Assert.Single(harness.Logs.Lines, each => each.Scope.ContainsKey("AttemptId"));
+        Assert.Equal(LogLevel.Warning, line.Level);
+        Assert.Equal($"Attempt {attempt.PublicId} of work item {item.PublicId} ended at the claim: {code}", line.Message);
+        Assert.Equal(1, harness.Logs.Count(line.Message));
+        Assert.Equal(campaign.PublicId, line.Scope["CampaignId"]);
+        Assert.Equal(item.PublicId, line.Scope["WorkItemId"]);
+        Assert.Equal(attempt.PublicId, line.Scope["AttemptId"]);
+        Assert.False(harness.Logs.Mentions(attempt.Error.Message));
     }
 
     [Fact]
@@ -933,6 +1051,7 @@ public class ClaimerTests
     private sealed class Harness : IDisposable
     {
         private readonly TempDataDir _dir = new();
+        private readonly ILoggerFactory _logging;
 
         public Harness(
             Action<DispatcherOptions>? dispatcher = null,
@@ -942,6 +1061,7 @@ public class ClaimerTests
             ISuppressionCheck? register = null,
             PatternTiming? timing = null)
         {
+            _logging = LoggerFactory.Create(builder => builder.AddProvider(Logs));
             var clock = new FixedClock(Noon);
             var settings = TestOptions.Settings(dispatcher);
             var journal = new JournalWriter(clock);
@@ -980,7 +1100,7 @@ public class ClaimerTests
                 register ?? new NothingIsSuppressed(),
                 settings,
                 _dir.Paths,
-                NullLogger<Claimer>.Instance,
+                _logging.CreateLogger<Claimer>(),
                 timing);
         }
 
@@ -988,7 +1108,14 @@ public class ClaimerTests
 
         public Claimer Claimer { get; }
 
-        public void Dispose() => _dir.Dispose();
+        /// <summary>What the claim logged, with the scope each line was written under.</summary>
+        public RecordingLogs Logs { get; } = new();
+
+        public void Dispose()
+        {
+            _logging.Dispose();
+            _dir.Dispose();
+        }
 
         /// <summary>
         /// No profile is configured in these tests, so nothing reaches the resolver; a search path that answers

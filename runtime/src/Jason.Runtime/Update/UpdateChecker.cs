@@ -34,10 +34,17 @@ public sealed class UpdateChecker(
         new EventId(2, nameof(NewerAvailable)),
         "A newer version of Jason is available: {Version}");
 
+    /// <summary>
+    /// The feed is named as the default one or the configured one, and never by its address: a configured address
+    /// is text a person wrote, it can carry a token in its query, and the log is what a diagnostic bundle carries
+    /// off the machine. For the same reason the line is handed no exception, since a sink renders one whole and
+    /// the reader's own message names the address. <c>jason update check</c> still shows a person the address on
+    /// their own terminal; this line is the runtime's, written to a file.
+    /// </summary>
     private static readonly Action<ILogger, string, string, Exception?> CheckFailed = LoggerMessage.Define<string, string>(
         LogLevel.Warning,
         new EventId(3, nameof(CheckFailed)),
-        "Update check failed ({Code}): {Message}");
+        "Update check failed: the {Feed} update feed could not be read ({Code})");
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -75,6 +82,7 @@ public sealed class UpdateChecker(
 
     private async Task CheckOnceAsync(string feedUrl, CancellationToken cancellationToken)
     {
+        var which = string.Equals(feedUrl, UpdateFeed.Default.ToString(), StringComparison.Ordinal) ? "default" : "configured";
         try
         {
             var manifest = await feed.ReadAsync(new Uri(feedUrl, UriKind.Absolute), cancellationToken).ConfigureAwait(false);
@@ -92,9 +100,9 @@ public sealed class UpdateChecker(
         {
             // Once per failed check, with the code: a feed that is down for a week is visible daily and no
             // louder, and the line says which of the three things went wrong.
-            CheckFailed(logger, error.Code, error.Message, null);
+            CheckFailed(logger, which, error.Code, null);
         }
-        catch (Exception error)
+        catch (Exception)
         {
             // Everything else too. A check that could take the runtime down is a check nobody would dare leave
             // on, and this one has to be on to be any use.
@@ -104,7 +112,7 @@ public sealed class UpdateChecker(
             // failures we know about" rather than dressing an unknown up as a known one. It was reachable once —
             // a body that died after the headers threw a raw IOException from outside the reader's guard — and
             // that is now an update_feed_unreachable like any other network failure.
-            CheckFailed(logger, "update_check_failed", error.Message, error);
+            CheckFailed(logger, which, "update_check_failed", null);
         }
     }
 }

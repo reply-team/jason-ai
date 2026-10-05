@@ -1,6 +1,7 @@
 using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -36,6 +37,13 @@ public sealed class DispatcherService(
         LogLevel.Error,
         new EventId(3, nameof(ScanFailed)),
         "Dispatcher scan failed; the loop continues");
+
+    // The same event, for a scan that gave out reading JSON — a stored column that no longer parses: what kind of
+    // failure and where, and no exception, because what the parser quoted is what the column held.
+    private static readonly Action<ILogger, string, Exception?> ScanFailedToParse = LoggerMessage.Define<string>(
+        LogLevel.Error,
+        new EventId(3, nameof(ScanFailed)),
+        "Dispatcher scan failed; the loop continues: {Failure}");
 
     private static readonly Action<ILogger, int, string, Exception?> DrainGaveUp = LoggerMessage.Define<int, string>(
         LogLevel.Information,
@@ -82,7 +90,14 @@ public sealed class DispatcherService(
             catch (Exception ex)
             {
                 // One bad scan is not the end of the dispatcher: the next tick tries again.
-                ScanFailed(logger, ex);
+                if (ParseFailure.Is(ex))
+                {
+                    ScanFailedToParse(logger, ParseFailure.Describe(ex), null);
+                }
+                else
+                {
+                    ScanFailed(logger, ex);
+                }
             }
 
             try

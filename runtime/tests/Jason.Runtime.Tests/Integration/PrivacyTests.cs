@@ -1,7 +1,10 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Json;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Hosting;
 
@@ -129,6 +132,48 @@ public class PrivacyTests
         {
             await host.DisposeAsync();
         }
+    }
+
+    /// <summary>
+    /// The CLI hands <c>--since</c> on as it was typed, so a word where a moment belongs arrives at the door as the
+    /// person wrote it. It is their mistake and is answered as one; and what they typed reaches no line of the log —
+    /// not the request line, not the server's own line about a failure, not an exception written whole under either.
+    /// </summary>
+    [Fact]
+    public async Task A_timestamp_the_runtime_cannot_read_is_refused_and_no_line_of_the_log_carries_it()
+    {
+        var sentinel = "SENTINEL_SINCE_" + Guid.NewGuid().ToString("N");
+        using var dir = new TempDataDir();
+        var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
+        HttpStatusCode status;
+        string body;
+        try
+        {
+            using var http = new HttpClient { BaseAddress = runtime.BaseUrl };
+            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", runtime.Token);
+            using var response = await http.PostAsync(Operations.Route(Operations.JournalList), Json($$"""{"since":"{{sentinel}}"}"""), Ct);
+            status = response.StatusCode;
+            body = await response.Content.ReadAsStringAsync(Ct);
+        }
+        finally
+        {
+            // Stopping flushes and closes the rolling file sink, so what is on disk now is everything there is.
+            await runtime.StopAsync();
+        }
+
+        var logs = ReadAll(dir.Paths.LogsDirectory);
+        Assert.DoesNotContain(sentinel, logs, StringComparison.Ordinal);
+
+        // The request was logged, so the absence is of the value and not of the line that would have carried it.
+        Assert.Contains(
+            logs.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(line => JsonNode.Parse(line)!.AsObject()),
+            line => (string?)line["RequestPath"] == Operations.Route(Operations.JournalList) && (int?)line["StatusCode"] == 400);
+
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+        var error = JsonSerializer.Deserialize<ErrorResponse>(body, JasonJson.Options)!.Error;
+        Assert.Equal("invalid_request", error.Code);
+        Assert.False(error.Retryable);
+        Assert.DoesNotContain(sentinel, error.Message, StringComparison.Ordinal);
     }
 
     private static string ReadAll(string directory)

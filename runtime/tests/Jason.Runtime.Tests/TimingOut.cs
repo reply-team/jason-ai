@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Operations;
 
@@ -23,6 +24,15 @@ namespace Jason.Runtime.Tests;
 /// leave everything else in a runtime alone — its warm-up, its plugin load — names the one value, or the one pattern,
 /// whose matches may time out, and every other match is answered and uncounted.
 /// </para>
+/// <para>
+/// A pattern is known here by the text of the compiled expression a match is handed, because that is all a match
+/// carries: it is what a real timeout names too, and it is the same on every path, since a warm-up, a load-time probe
+/// and a validation all compile the pattern as written into the one cached expression. That text is the pattern as
+/// the engine runs it, with every `$` that anchors written `\z` so it ends the value and nothing else; so
+/// <see cref="Matched"/> lists that form, <see cref="OnlyPattern"/> names it, and a test that starts from the pattern
+/// a document writes reads it through <see cref="AsCompiled"/>. The pattern as written is what problems and messages
+/// report, and it never passes through a timing.
+/// </para>
 /// </remarks>
 /// <param name="times">How many matches time out before the rest are answered.</param>
 /// <param name="only">The values whose matches may time out; null for every value.</param>
@@ -40,8 +50,9 @@ public sealed class TimingOut(int times, Func<string, bool>? only = null) : Patt
     public static TimingOut Never() => new(0);
 
     /// <summary>
-    /// The one pattern whose matches may time out; null for every pattern. For a test whose pattern is matched against the
-    /// same probe the runtime warms its own patterns with, where the value alone cannot tell the two apart.
+    /// The one pattern whose matches may time out, as the engine runs it; null for every pattern. For a test whose pattern
+    /// is matched against the same probe the runtime warms its own patterns with, where the value alone cannot tell the
+    /// two apart.
     /// </summary>
     public string? OnlyPattern { get; init; }
 
@@ -51,8 +62,20 @@ public sealed class TimingOut(int times, Func<string, bool>? only = null) : Patt
     /// <summary>How many matches were reported as timed out.</summary>
     public int TimedOut => Volatile.Read(ref _timedOut);
 
-    /// <summary>The patterns a match was answered for, in the order they were answered.</summary>
+    /// <summary>The patterns a match was answered for, as the engine runs them, in the order they were answered.</summary>
     public IReadOnlyCollection<string> Matched => _matched;
+
+    /// <summary>
+    /// The text a timing knows <paramref name="pattern"/> by: the expression the validator compiles from it, read by
+    /// having the validator compile it and match it once, so the form is the validator's own rather than a copy of its
+    /// rewrite.
+    /// </summary>
+    public static string AsCompiled(string pattern)
+    {
+        var timing = Never();
+        SchemaValidator.Validate(JsonValue.Create(string.Empty), new JsonObject { ["pattern"] = pattern }, timing);
+        return timing.Matched.Single();
+    }
 
     /// <summary>From now on the next <paramref name="count"/> matches time out: for a test that lets a runtime start first.</summary>
     public void TimeOutNext(int count) => Interlocked.Exchange(ref _remaining, count);

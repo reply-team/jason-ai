@@ -176,15 +176,15 @@ public static partial class YamlToJson
         return JsonValue.Create(value);
     }
 
-    [GeneratedRegex(@"^[-+]?[0-9]+$")]
+    [GeneratedRegex(@"^[-+]?[0-9]+\z")]
     private static partial Regex Decimal();
 
-    [GeneratedRegex("^0x[0-9a-fA-F]+$")]
+    [GeneratedRegex(@"^0x[0-9a-fA-F]+\z")]
     private static partial Regex Hexadecimal();
 
-    [GeneratedRegex("^0o[0-7]+$")]
+    [GeneratedRegex(@"^0o[0-7]+\z")]
     private static partial Regex Octal();
 
-    [GeneratedRegex(@"^[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?$")]
+    [GeneratedRegex(@"^[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?\z")]
     private static partial Regex Float();
 }

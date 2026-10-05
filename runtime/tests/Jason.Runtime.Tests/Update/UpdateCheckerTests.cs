@@ -195,6 +195,71 @@ public class UpdateCheckerTests
         Assert.Contains(UpdateFeedException.Unreachable, logs.Warnings[1], StringComparison.Ordinal);
         Assert.Contains(UpdateFeedException.Unreachable, logs.Warnings[2], StringComparison.Ordinal);
 
+        // A feed that answered with something other than a manifest was reached; what it answered could not be read.
+        Assert.Contains($"the default update feed could not be read ({UpdateFeedException.Invalid})", logs.Warnings[0], StringComparison.Ordinal);
+
+        await checker.StopAsync(Ct);
+    }
+
+    /// <summary>
+    /// A feed the settings name is text a person wrote, and an address can carry a token in its query, so the line
+    /// that says a check failed names the feed as the configured one and never by its address — the log is what a
+    /// diagnostic bundle carries off the machine. Nor is the exception handed to the logger: a sink renders it
+    /// whole, and the reader's own message names the address. A failure the reader did not name is held to the
+    /// same rule.
+    /// </summary>
+    [Fact]
+    public async Task A_configured_feed_that_fails_is_named_as_configured_and_never_by_its_address()
+    {
+        var clock = new FixedClock(Noon);
+        var logs = new RecordingLogs();
+        var answers = new Queue<Func<HttpResponseMessage>>(
+        [
+            () => throw new HttpRequestException("connection refused"),
+            () => throw new InvalidOperationException("SENTINEL thrown past the reader"),
+        ]);
+        var feed = new StubFeed(_ => answers.Dequeue()());
+        var options = new TestOptionsMonitor<UpdateOptions>(
+            new UpdateOptions { FeedUrl = "https://feed.example.test/manifest.json?token=ghp_SENTINEL" });
+        using var checker = Checker(clock, feed, new UpdateAdvertisement(), logs, options);
+        await checker.StartAsync(Ct);
+        await ArmedAsync(clock, atLeast: 1);
+
+        clock.Advance(TimeSpan.FromMinutes(5));
+        await feed.Asked(1).WaitAsync(Patience, Ct);
+        Assert.True(await DispatchHarness.EventuallyAsync(() => logs.Warnings.Count == 1 && clock.Armed == 1, Ct));
+
+        clock.Advance(TimeSpan.FromHours(24));
+        await feed.Asked(2).WaitAsync(Patience, Ct);
+        Assert.True(await DispatchHarness.EventuallyAsync(() => logs.Warnings.Count == 2 && clock.Armed == 1, Ct));
+
+        Assert.Contains($"the configured update feed could not be read ({UpdateFeedException.Unreachable})", logs.Warnings[0], StringComparison.Ordinal);
+        Assert.Contains("the configured update feed could not be read (update_check_failed)", logs.Warnings[1], StringComparison.Ordinal);
+        Assert.False(logs.Mentions("feed.example.test"));
+        Assert.False(logs.Mentions("SENTINEL"));
+        Assert.All(logs.Lines, line => Assert.Null(line.Exception));
+
+        await checker.StopAsync(Ct);
+    }
+
+    /// <summary>The shipped feed is named as the default one, and by nothing more: the address is the build's, not news.</summary>
+    [Fact]
+    public async Task The_shipped_feed_that_fails_is_named_as_the_default()
+    {
+        var clock = new FixedClock(Noon);
+        var logs = new RecordingLogs();
+        var feed = new StubFeed(_ => throw new HttpRequestException("connection refused"));
+        using var checker = Checker(clock, feed, new UpdateAdvertisement(), logs);
+        await checker.StartAsync(Ct);
+        await ArmedAsync(clock, atLeast: 1);
+
+        clock.Advance(TimeSpan.FromMinutes(5));
+        await feed.Asked(1).WaitAsync(Patience, Ct);
+        Assert.True(await DispatchHarness.EventuallyAsync(() => logs.Warnings.Count == 1 && clock.Armed == 1, Ct));
+
+        Assert.Contains($"the default update feed could not be read ({UpdateFeedException.Unreachable})", Assert.Single(logs.Warnings), StringComparison.Ordinal);
+        Assert.False(logs.Mentions(UpdateFeed.Default.Host));
+
         await checker.StopAsync(Ct);
     }
 

@@ -19,6 +19,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Serilog;
 using Serilog.Core;
 
@@ -49,13 +50,31 @@ public static class RuntimeHost
             throw new DataDirectoryUnusableException(paths.Root, cause);
         }
 
-        var configuration = JasonConfiguration.Build(paths, options.ShippedSettingsDirectory);
+        // Declared ahead of the configuration, which is built before there is a log: the handler it is given is for
+        // an edit made while the runtime runs, and by then the logger is the one assigned below. An edit in the
+        // moment between the two has nowhere to be said, and the next one is not affected by that.
+        Logger? logger = null;
+
+        // Whether the runtime has read its settings yet: set once the host has started. Validating every section fills
+        // the cache the options system keeps for each, but a service that reads a section once, as the handler pool reads
+        // the dispatcher's, reads it through a second cache that is first filled as the host makes its services. Until
+        // all of that is done an unreadable edit is not one the runtime keeps out. A failed reload empties the file's keys
+        // before it fails, and nothing outside the framework can put them back, so whatever is read for the first time
+        // after such an edit reads none of them and starts on its defaults. Reading every section right after the
+        // configuration is built would close that window, but the sections are read through the host's own services,
+        // which exist only after the lock, the log and the database; reading them any earlier would be reading through a
+        // second set the runtime never uses. So the window is said as what it does rather than said to keep the settings
+        // it had.
+        var settingsRead = false;
+        var configuration = JasonConfiguration.Build(
+            paths,
+            options.ShippedSettingsDirectory,
+            failure => ReportUnreadableSettings(logger, failure, Volatile.Read(ref settingsRead)));
         var settings = JasonConfiguration.Load(configuration);
 
         // The lock comes first: a second runtime must fail with RuntimeAlreadyRunningException, not with a
         // sharing violation on the rolling log file the first runtime already holds open.
         var instanceLock = InstanceLock.Acquire(paths);
-        Logger? logger = null;
         WebApplication? app = null;
         try
         {
@@ -73,8 +92,44 @@ public static class RuntimeHost
             logger.Information("Database ready: {Applied} migrations applied, {New} newly applied, backup {Backup}", migration.AppliedMigrations.Count, migration.NewlyApplied.Count, migration.BackupFile ?? "none");
 
             var token = CapabilityToken.Generate();
-            app = BuildApplication(paths, configuration, settings, options, info, migration, token, logger);
-            await app.StartAsync(cancellationToken).ConfigureAwait(false);
+            app = BuildApplication(paths, configuration, settings, options, info, migration, token, logger, out var seams);
+            // A section refused as the host starts is a settings refusal like the ones before the log began, and is said
+            // the same way: the refusal writer is where a person who started this runtime in the background hears it,
+            // whether or not this start has written to the log by then.
+            try
+            {
+                // Every section validated before the host makes a single service of its own. The host would validate
+                // them as it starts, but only after making its hosted services, and one of those reading a section
+                // first would refuse that section alone; validated here, every section refused is said at once.
+                app.Services.GetService<IStartupValidator>()?.Validate();
+            }
+            catch (Exception refused) when (InvalidSettingsException.FromStart(refused) is { } settingsRefused)
+            {
+                // The host is not started, so it says nothing of this; the log line is the runtime's own.
+                logger.Error("The runtime did not start: its settings were refused: {Failure}", settingsRefused.Failure);
+                throw settingsRefused;
+            }
+
+            // Every seam reads its section once, now that every section has validated, so each holds last good settings
+            // before an edit can reach it. Some are read as the host starts its services, but not all of them in every
+            // runtime: with no dispatch loop nothing read the roles, and a refused edit that reached that seam first found
+            // nothing to keep.
+            foreach (var seam in seams)
+            {
+                ((ISettingsSeam)app.Services.GetRequiredService(seam)).Seed();
+            }
+
+            try
+            {
+                await app.StartAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception refused) when (InvalidSettingsException.FromStart(refused) is { } settingsRefused)
+            {
+                // Logged by the host already, as the reason it failed to start.
+                throw settingsRefused;
+            }
+
+            Volatile.Write(ref settingsRead, true);
 
             var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()?.Addresses.FirstOrDefault()
                 ?? throw new InvalidOperationException("Kestrel started without reporting a listening address.");
@@ -100,6 +155,53 @@ public static class RuntimeHost
         }
     }
 
+    /// <summary>
+    /// One line for an edit that left the settings file unreadable: the kind of failure and where the parser
+    /// stopped, as separate properties so the log can be searched by them. Never the exception, whose message
+    /// quotes what was typed.
+    /// </summary>
+    /// <param name="settingsRead">
+    /// Whether the runtime had read its settings when the edit failed. Only then does it keep the settings it had;
+    /// before, any setting not yet in force starts on its default — the host may have read one already to build itself,
+    /// and the part of the runtime that works from it still reads it afresh — and a restart once the file can be read is
+    /// what puts all of them right, since some are read only at start.
+    /// </param>
+    private static void ReportUnreadableSettings(Logger? logger, SettingsFileFailure failure, bool settingsRead)
+    {
+        if (failure.LineNumber is null || failure.BytePositionInLine is null)
+        {
+            if (settingsRead)
+            {
+                logger?.Warning("The settings file could not be read ({ExceptionType}); the runtime keeps the settings it had", failure.ExceptionType);
+            }
+            else
+            {
+                logger?.Warning(
+                    "The settings file could not be read ({ExceptionType}) while the runtime was starting, so any setting not yet in force starts on its default; restart it once the file can be read",
+                    failure.ExceptionType);
+            }
+
+            return;
+        }
+
+        if (settingsRead)
+        {
+            logger?.Warning(
+                "The settings file could not be read ({ExceptionType} at line {LineNumber}, byte {BytePositionInLine}); the runtime keeps the settings it had",
+                failure.ExceptionType,
+                failure.LineNumber,
+                failure.BytePositionInLine);
+        }
+        else
+        {
+            logger?.Warning(
+                "The settings file could not be read ({ExceptionType} at line {LineNumber}, byte {BytePositionInLine}) while the runtime was starting, so any setting not yet in force starts on its default; restart it once the file can be read",
+                failure.ExceptionType,
+                failure.LineNumber,
+                failure.BytePositionInLine);
+        }
+    }
+
     /// <summary>Foreground mode (<c>jason runtime run</c>): start, wait for Ctrl+C or a host shutdown, stop.</summary>
     public static async Task<int> RunAsync(JasonPaths paths, RuntimeHostOptions? options, CancellationToken cancellationToken)
     {
@@ -109,7 +211,10 @@ public static class RuntimeHost
         {
             runtime = await StartAsync(paths, options, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception refused) when (refused is RuntimeAlreadyRunningException or DataDirectoryUnusableException)
+        // A stored value the start could not read is a refusal too: its sentence names the column and says what to do,
+        // and it quotes nothing, so it can be said where a person will read it. So are settings the start cannot use:
+        // the file and the position, or the setting's path and its type, refused before there is a log to read.
+        catch (Exception refused) when (refused is RuntimeAlreadyRunningException or DataDirectoryUnusableException or UnreadableStoredValueException or InvalidSettingsException)
         {
             // Said where whoever started this can hear it. A detached runtime's own standard error is the null
             // device by now, and the reason it will not start used to go there.
@@ -157,7 +262,8 @@ public static class RuntimeHost
         RuntimeInfo info,
         MigrationReport migration,
         string token,
-        Logger logger)
+        Logger logger,
+        out IReadOnlyList<Type> seams)
     {
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = [], ContentRootPath = paths.Root });
 
@@ -172,7 +278,7 @@ public static class RuntimeHost
         builder.WebHost.UseUrls($"http://127.0.0.1:{settings.Runtime.Port}");
 
         // The options bind against the standalone root, not builder.Configuration, which was cleared above.
-        builder.Services.AddJasonOptions(configuration);
+        builder.Services.AddJasonOptions(configuration, paths);
 
         // Stopping has to outlast the dispatcher's drain, or the host would cut short the very wait it asked for.
         builder.Services.Configure<HostOptions>(host => host.ShutdownTimeout = TimeSpan.FromSeconds(Math.Max(0, settings.Dispatcher.DrainSeconds) + 5));
@@ -205,11 +311,23 @@ public static class RuntimeHost
         // Last, so a test's registration wins over the runtime's own for the services that resolve by "the last one".
         options.ConfigureServices?.Invoke(builder.Services);
 
+        // Every settings seam registered, whichever module registered it, for the start to read once.
+        seams = [.. builder.Services
+            .Select(service => service.ServiceType)
+            .Where(type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(LiveSettings<>))
+            .Distinct()];
+
         var app = builder.Build();
 
         // Request logging goes through this runtime's logger, not Serilog's static global one, which is never
-        // configured here. The default template carries {RequestPath}, so every line names its operation.
-        app.UseSerilogRequestLogging(requestLogging => requestLogging.Logger = logger);
+        // configured here. The default template carries {RequestPath}, so every line names its operation — by the
+        // route it matched, never the path as sent: the line is written for every request, before the host and the
+        // token are checked, and a path and a method are whatever a local client chose to send.
+        app.UseSerilogRequestLogging(requestLogging =>
+        {
+            requestLogging.Logger = logger;
+            requestLogging.GetMessageTemplateProperties = (context, _, elapsedMs, statusCode) => RequestLine.Properties(context, elapsedMs, statusCode);
+        });
         app.Use(LoopbackHostFilter.Middleware);
         app.Use(BearerTokenAuthentication.Middleware(token));
 

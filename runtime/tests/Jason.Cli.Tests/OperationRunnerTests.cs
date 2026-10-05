@@ -62,6 +62,44 @@ public class OperationRunnerTests
         Assert.Equal(string.Empty, error.ToString());
     }
 
+    /// <summary>
+    /// An answer the runtime did not compose — the server's own empty 500 after a failure nothing caught — is still
+    /// an answer: printed as nothing, it left an agent with exit 1 and no shape to read. It gets the envelope every
+    /// other refusal has, saying what came back, and a failure on the runtime's side is worth trying again.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("Internal Server Error")]
+    public async Task An_error_whose_body_is_not_json_is_printed_as_an_envelope_and_exits_1(string body)
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var (env, output, error) = Environment(dir, new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new StringContent(body) }));
+
+        var exit = await OperationRunner.RunAsync(env, "journal.list", RequestBody.Empty(), new RunOptions(Human: false), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(
+            "{\"error\":{\"code\":\"runtime_error\",\"message\":\"The runtime answered 500 with a body that is not JSON.\",\"retryable\":true}}" + System.Environment.NewLine,
+            output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
+    [Fact]
+    public async Task A_refusal_whose_body_is_not_json_is_not_worth_repeating_as_it_was()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent("Bad Request") }));
+
+        var exit = await OperationRunner.RunAsync(env, "journal.list", RequestBody.Empty(), new RunOptions(Human: false), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(
+            "{\"error\":{\"code\":\"runtime_error\",\"message\":\"The runtime answered 400 with a body that is not JSON.\",\"retryable\":false}}" + System.Environment.NewLine,
+            output.ToString());
+    }
+
     [Fact]
     public async Task A_successful_response_is_printed_verbatim_and_the_request_carries_the_body_and_the_token()
     {

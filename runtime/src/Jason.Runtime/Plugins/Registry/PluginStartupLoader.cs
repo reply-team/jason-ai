@@ -1,6 +1,7 @@
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,6 +29,13 @@ public sealed class PluginStartupLoader(
         LogLevel.Error,
         new EventId(2, nameof(StartupFailed)),
         "The plugin load at startup failed; the runtime continues with no plugins active");
+
+    // The same event, for a load that gave out reading JSON — a campaign's route whose binding no longer parses: what
+    // kind of failure and where, and no exception, because what the parser quoted is what the binding held.
+    private static readonly Action<ILogger, string, Exception?> StartupFailedToParse = LoggerMessage.Define<string>(
+        LogLevel.Error,
+        new EventId(2, nameof(StartupFailed)),
+        "The plugin load at startup failed; the runtime continues with no plugins active: {Failure}");
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -79,7 +87,14 @@ public sealed class PluginStartupLoader(
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            StartupFailed(logger, exception);
+            if (ParseFailure.Is(exception))
+            {
+                StartupFailedToParse(logger, ParseFailure.Describe(exception), null);
+            }
+            else
+            {
+                StartupFailed(logger, exception);
+            }
         }
     }
 

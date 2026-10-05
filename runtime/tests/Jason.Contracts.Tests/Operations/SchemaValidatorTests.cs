@@ -138,6 +138,218 @@ public class SchemaValidatorTests
         Assert.Equal("pattern", problem.Reason);
     }
 
+    /// <summary>
+    /// A value is checked against a pattern written as the schema's author wrote it, so the pattern goes in through
+    /// the object model, which does the quoting, rather than through a JSON string that would need it twice.
+    /// </summary>
+    private static IReadOnlyList<SchemaProblem> CheckPattern(string pattern, string value) =>
+        SchemaValidator.Validate(JsonValue.Create(value), new JsonObject { ["type"] = "string", ["pattern"] = pattern });
+
+    /// <summary>
+    /// `$` is the end of the value and nothing else, as ECMA-262 has it. The engine that runs the patterns reads it
+    /// as "the end, or just before a final newline", so an identifier that is meant to be a single token passed with
+    /// a newline after it and went on to whatever read the value next.
+    /// </summary>
+    [Fact]
+    public void A_dollar_anchors_the_end_of_the_value_and_a_final_newline_does_not_satisfy_it()
+    {
+        Assert.Empty(CheckPattern("^[a-z]+$", "abc"));
+
+        var problem = Assert.Single(CheckPattern("^[a-z]+$", "abc\n"));
+
+        Assert.Equal("", problem.Pointer);
+        Assert.Equal("pattern", problem.Reason);
+    }
+
+    [Fact]
+    public void A_dollar_that_is_a_literal_character_is_left_alone()
+    {
+        // Inside a class, and escaped: neither is an anchor, and both still anchor the real one at the end.
+        foreach (var pattern in new[] { "^a[$]b$", @"^a\$b$" })
+        {
+            Assert.Empty(CheckPattern(pattern, "a$b"));
+            Assert.Equal("pattern", Assert.Single(CheckPattern(pattern, "a$b\n")).Reason);
+            Assert.Equal("pattern", Assert.Single(CheckPattern(pattern, "ab")).Reason);
+        }
+    }
+
+    [Fact]
+    public void An_escaped_backslash_does_not_escape_the_dollar_after_it()
+    {
+        // `^a\\$` is a, a backslash, then the end of the value.
+        Assert.Empty(CheckPattern(@"^a\\$", "a\\"));
+        Assert.Equal("pattern", Assert.Single(CheckPattern(@"^a\\$", "a\\\n")).Reason);
+    }
+
+    [Fact]
+    public void Every_alternative_that_ends_in_a_dollar_ends_the_value()
+    {
+        Assert.Empty(CheckPattern("^a$|^b$", "a"));
+        Assert.Empty(CheckPattern("^a$|^b$", "b"));
+        Assert.Equal("pattern", Assert.Single(CheckPattern("^a$|^b$", "a\n")).Reason);
+        Assert.Equal("pattern", Assert.Single(CheckPattern("^a$|^b$", "b\n")).Reason);
+    }
+
+    [Fact]
+    public void A_closing_bracket_that_is_escaped_does_not_end_the_class_a_dollar_could_hide_in()
+    {
+        Assert.Empty(CheckPattern(@"^[\]]$", "]"));
+        Assert.Equal("pattern", Assert.Single(CheckPattern(@"^[\]]$", "]\n")).Reason);
+
+        // Past the escaped bracket the class is still open, so this `$` is a character and the last one is the anchor.
+        Assert.Empty(CheckPattern(@"^[\]$]$", "$"));
+        Assert.Equal("pattern", Assert.Single(CheckPattern(@"^[\]$]$", "$\n")).Reason);
+    }
+
+    [Fact]
+    public void A_closing_bracket_first_in_a_class_is_a_member_of_it()
+    {
+        Assert.Empty(CheckPattern("^[]a$]$", "]"));
+        Assert.Empty(CheckPattern("^[]a$]$", "$"));
+        Assert.Equal("pattern", Assert.Single(CheckPattern("^[]a$]$", "$\n")).Reason);
+
+        Assert.Empty(CheckPattern("^[^]a$]$", "b"));
+        Assert.Equal("pattern", Assert.Single(CheckPattern("^[^]a$]$", "]")).Reason);
+        Assert.Equal("pattern", Assert.Single(CheckPattern("^[^]a$]$", "b\n")).Reason);
+    }
+
+    [Fact]
+    public void A_pattern_that_ends_in_a_lone_backslash_is_still_a_pattern_this_dialect_cannot_run()
+    {
+        var schema = new JsonObject { ["type"] = "string", ["pattern"] = @"^a\" };
+
+        Assert.Equal("schema_pattern_invalid", Assert.Single(SchemaValidator.CheckDialect(schema)).Reason);
+    }
+
+    [Fact]
+    public void A_refused_value_is_reported_against_the_pattern_as_its_author_wrote_it()
+    {
+        var problem = Assert.Single(CheckPattern("^[a-z]+$", "abc\n"));
+
+        Assert.Contains("`^[a-z]+$`", problem.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"\z", problem.Message, StringComparison.Ordinal);
+    }
+
+    private static JsonObject Patterned(string pattern) => new() { ["type"] = "string", ["pattern"] = pattern };
+
+    /// <summary>
+    /// <c>\A</c>, <c>\Z</c>, <c>\z</c> and <c>\G</c> are anchors to the engine that runs the patterns and the letters A,
+    /// Z, z and G to ECMA-262, which is the dialect JSON Schema names. A pattern written with one means one thing to
+    /// its author and another to the runtime, and either could be the one the author had in mind, so the dialect
+    /// refuses the escape rather than choose.
+    /// </summary>
+    [Theory]
+    [InlineData(@"^[a-z]+\Z", @"\Z")]
+    [InlineData(@"^[a-z]+\z", @"\z")]
+    [InlineData(@"\A[a-z]+$", @"\A")]
+    [InlineData(@"^[a-z]+\G", @"\G")]
+    [InlineData(@"^(a|b\Z)$", @"\Z")]
+    [InlineData(@"^[\Z]+$", @"\Z")]
+    [InlineData(@"^[a\Gb]+$", @"\G")]
+    [InlineData(@"^[^\A]+$", @"\A")]
+    [InlineData(@"^[a-z]+\\\Z", @"\Z")]
+    public void An_escape_that_is_an_anchor_to_the_engine_and_a_letter_to_ecma_262_is_refused_wherever_it_stands(string pattern, string escape)
+    {
+        var problem = Assert.Single(SchemaValidator.CheckDialect(Patterned(pattern)));
+
+        Assert.Equal("/pattern", problem.Pointer);
+        Assert.Equal("schema_pattern_invalid", problem.Reason);
+        Assert.Contains($"`{pattern}`", problem.Message, StringComparison.Ordinal);
+        Assert.Contains($"`{escape}`", problem.Message, StringComparison.Ordinal);
+        Assert.Contains("ECMA-262", problem.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_value_is_never_measured_against_a_pattern_whose_escape_has_two_meanings()
+    {
+        // The engine would take the end of the value here, and accept this one; ECMA-262 would take the letter Z.
+        var problem = Assert.Single(CheckPattern(@"^[a-z]+\Z", "abc\n"));
+
+        Assert.Equal("schema_pattern_invalid", problem.Reason);
+        Assert.Contains(@"`\Z`", problem.Message, StringComparison.Ordinal);
+        Assert.Equal("schema_pattern_invalid", Assert.Single(CheckPattern(@"^[a-z]+\Z", "abc")).Reason);
+    }
+
+    [Fact]
+    public void An_escaped_backslash_before_one_of_those_letters_is_a_backslash_and_a_letter()
+    {
+        foreach (var pattern in new[] { @"^a\\Z$", @"^a\\z$", @"^a\\A$", @"^a\\G$" })
+        {
+            Assert.Empty(SchemaValidator.CheckDialect(Patterned(pattern)));
+        }
+
+        // `^a\\Z$` is a, a backslash, a Z, then the end of the value.
+        Assert.Empty(CheckPattern(@"^a\\Z$", "a\\Z"));
+        Assert.Equal("pattern", Assert.Single(CheckPattern(@"^a\\Z$", "a")).Reason);
+        Assert.Equal("pattern", Assert.Single(CheckPattern(@"^a\\Z$", "a\\Z\n")).Reason);
+    }
+
+    [Fact]
+    public void The_check_reads_the_pattern_as_its_author_wrote_it_and_not_as_the_runtime_rewrites_it()
+    {
+        // A dollar that anchors is turned into `\z` for the engine; that must not be mistaken for the author's own.
+        Assert.Empty(SchemaValidator.CheckDialect(Patterned("^[a-z]+$")));
+        Assert.Empty(SchemaValidator.CheckDialect(Patterned("^a$|^b$")));
+        Assert.Empty(SchemaValidator.CheckDialect(Patterned(@"^a[$]b$")));
+
+        // And it is still the end of the value, and only that: the refusal changed no pattern that was accepted.
+        Assert.Empty(CheckPattern("^[a-z]+$", "abc"));
+        Assert.Equal("pattern", Assert.Single(CheckPattern("^[a-z]+$", "abc\n")).Reason);
+    }
+
+    /// <summary>
+    /// In ECMA-262 a dot is any character but the four line terminators, <c>\n</c>, <c>\r</c>, U+2028 and U+2029. The
+    /// engine that runs the patterns leaves out only <c>\n</c>, so <c>^.+$</c> would take a value that ends in a
+    /// carriage return, and the text a schema's author wrote as one line would reach whatever reads it next as two.
+    /// </summary>
+    [Fact]
+    public void A_dot_stops_at_each_of_the_four_line_terminators_ecma_262_names()
+    {
+        Assert.Empty(CheckPattern("^.+$", "abc"));
+        Assert.Empty(CheckPattern("^.+$", "a b\tc.é"));
+
+        foreach (var terminator in new[] { "\n", "\r", "\u2028", "\u2029" })
+        {
+            Assert.Equal("pattern", Assert.Single(CheckPattern("^.+$", "abc" + terminator)).Reason);
+            Assert.Equal("pattern", Assert.Single(CheckPattern("^.+$", terminator + "abc")).Reason);
+        }
+    }
+
+    [Fact]
+    public void A_dot_that_is_a_literal_character_is_left_alone()
+    {
+        // Inside a class, and escaped: neither is "any character".
+        foreach (var pattern in new[] { "^[.]$", @"^\.$", "^[a.]$", @"^[\]\.]$" })
+        {
+            Assert.Empty(CheckPattern(pattern, "."));
+            Assert.Equal("pattern", Assert.Single(CheckPattern(pattern, "x")).Reason);
+        }
+
+        Assert.Empty(CheckPattern("^[^.]+$", "abc"));
+        Assert.Equal("pattern", Assert.Single(CheckPattern("^[^.]+$", "a.c")).Reason);
+
+        // A class that opens with a closing bracket keeps going, so the dot after it is still a member of it.
+        Assert.Empty(CheckPattern("^[]a.]+$", "]a."));
+        Assert.Equal("pattern", Assert.Single(CheckPattern("^[]a.]+$", "x")).Reason);
+    }
+
+    [Fact]
+    public void An_escaped_backslash_does_not_escape_the_dot_after_it()
+    {
+        // `^a\\.$` is a, a backslash, then any character but a line terminator.
+        Assert.Empty(CheckPattern(@"^a\\.$", @"a\x"));
+        Assert.Equal("pattern", Assert.Single(CheckPattern(@"^a\\.$", "a\\\r")).Reason);
+    }
+
+    [Fact]
+    public void A_refused_value_is_reported_against_the_dot_as_its_author_wrote_it()
+    {
+        var problem = Assert.Single(CheckPattern("^.+$", "abc\r"));
+
+        Assert.Contains("`^.+$`", problem.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"\u2028", problem.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Minimum_and_maximum_bound_a_number_inclusively()
     {

@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Plugins.Invocation;
 
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
@@ -220,11 +221,16 @@ public class ReplyHostileAnswerTests
         using var account = ReplyOperations.Plant(new ReplyAccount());
         account.Hangs("GET", SequencePath, 20_000);
 
+        // Wide enough for the package's reserve to apply nearly in full — it keeps back five seconds, never more than half of
+        // what is left — so the call that is cut off has seconds to spare on a busy machine before the host's own
+        // timeout would answer in its place.
+        var timeout = TimeSpan.FromSeconds(10);
         var error = await FailedAsync(
             account,
             ReplyOperations.CampaignGet,
             ReplyOperations.CampaignGetInput(),
-            timeout: TimeSpan.FromSeconds(4));
+            timeout: timeout,
+            inspect: result => AssertCutOffWithTimeToAnswerAsync(result, timeout));
 
         Assert.Equal("provider_unavailable", error.Code);
         Assert.Equal(FailureClass.Transient, error.Class);
@@ -241,11 +247,14 @@ public class ReplyHostileAnswerTests
         account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
         account.Hangs("POST", BulkPath, 20_000);
 
+        // Wide enough for the package's reserve to apply in full, as in the read above.
+        var timeout = TimeSpan.FromSeconds(16);
         var error = await FailedAsync(
             account,
             ReplyOperations.Enroll,
             ReplyOperations.EnrollInput(pinned: ReplyOperations.Ensured),
-            timeout: TimeSpan.FromSeconds(8));
+            timeout: timeout,
+            inspect: result => AssertCutOffWithTimeToAnswerAsync(result, timeout));
 
         Assert.Equal("provider_answer_lost", error.Code);
         Assert.Equal(FailureClass.Ambiguous, error.Class);
@@ -583,7 +592,8 @@ public class ReplyHostileAnswerTests
         int attempt = 1,
         TimeSpan? timeout = null,
         Action<JasonPaths>? prepare = null,
-        JsonObject? binding = null)
+        JsonObject? binding = null,
+        Func<PluginInvocationResult, Task>? inspect = null)
     {
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct, prepare);
@@ -597,7 +607,38 @@ public class ReplyHostileAnswerTests
             attempt: attempt,
             timeout: timeout);
 
-        return ReplyOperations.Failed(operation, result);
+        var error = ReplyOperations.Failed(operation, result);
+        if (inspect is not null)
+        {
+            await inspect(result);
+        }
+
+        return error;
+    }
+
+    /// <summary>
+    /// A call that ran out of time is ended with time left for the package to say so. The host ends the whole
+    /// invocation when its budget is spent, and before the package hears that a call was cut off the host has
+    /// ended the program's process tree and waited for its pipes — work that takes longer on a busy machine. A
+    /// call given everything that was left leaves nothing for any of it, so the host's own timeout answers
+    /// instead of the package's: <c>plugin_timeout</c>, with the identifiers the attempt had learned lost. The
+    /// length the host recorded for the call that was cut off is how long it was given, and it has to leave a
+    /// quarter of the budget.
+    /// </summary>
+    private static async Task AssertCutOffWithTimeToAnswerAsync(PluginInvocationResult result, TimeSpan budget)
+    {
+        var lines = await File.ReadAllLinesAsync(Path.Combine(result.Launch!.WorkDir, "stderr.log"), Ct);
+        var cutOff = lines
+            .Where(line => line.Trim().Length > 0)
+            .Select(line => JsonNode.Parse(line)!.AsObject())
+            .Where(line => (string?)line["message"] == "exec" && line["data"]!["timed_out"]!.GetValue<bool>())
+            .ToList();
+
+        var ranMs = Assert.Single(cutOff)["data"]!["duration_ms"]!.GetValue<long>();
+        var allowedMs = budget.TotalMilliseconds * 3 / 4;
+        Assert.True(
+            ranMs <= allowedMs,
+            $"The call that was cut off ran for {ranMs} ms of a {budget.TotalMilliseconds} ms budget; it may run for {allowedMs} ms at most.");
     }
 
     /// <summary>The smallest exec capture an installation may configure, which a test can outgrow cheaply.</summary>

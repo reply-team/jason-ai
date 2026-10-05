@@ -63,11 +63,30 @@ public sealed class NotificationsOptionsTests
     [InlineData("""{"Notifications":{"QuietSeconds":0}}""", "Notifications:QuietSeconds must be")]
     [InlineData("""{"Notifications":{"QuietSeconds":120,"MaxWaitSeconds":60}}""", "Notifications:MaxWaitSeconds must be")]
     [InlineData("""{"Notifications":{"MinIntervalMinutes":-1}}""", "Notifications:MinIntervalMinutes must be")]
-    [InlineData("""{"Notifications":{"Plugins":{"Not An Id":{"Enabled":true}}}}""", "Notifications:Plugins")]
+    [InlineData("""{"Notifications":{"Plugins":{"Not An Id":{"Enabled":true}}}}""", "Notifications:Plugins must name each plugin by its id: a lowercase letter, then lowercase letters, digits or dashes; the key written is 9 characters long and is not one.")]
     [InlineData("""{"Notifications":{"Plugins":{"toast":{"Enabled":true}}}}""", "Notifications:Plugins cannot name a plugin 'toast'")]
-    [InlineData("""{"Notifications":{"Plugins":{"ntfy":{"Binding":"a string"}}}}""", "Notifications:Plugins:ntfy:Binding must be an object")]
+
+    // Nothing is installed where these tests compose the options, so the key is no installed plugin's id and is
+    // written as a placeholder: a key a person chose travels only when it names a plugin that is installed.
+    [InlineData("""{"Notifications":{"Plugins":{"ntfy":{"Binding":"a string"}}}}""", "Notifications:Plugins:<key>:Binding must be an object; got string.")]
     public void A_setting_out_of_its_range_is_refused_with_its_name(string settings, string said) =>
         Assert.Contains(said, Assert.Single(Validate(settings)), StringComparison.Ordinal);
+
+    /// <summary>
+    /// An entry that is nothing at all is refused with a sentence rather than read through. The validator reached into
+    /// it for its binding and threw, and an exception out of a validator is the one way a refused setting stops a runtime
+    /// instead of being said.
+    /// </summary>
+    [Fact]
+    public void A_channel_that_is_nothing_is_refused_by_its_path()
+    {
+        var options = new NotificationsOptions();
+        options.Plugins["ntfy"] = null!;
+
+        var result = new NotificationsOptionsValidator().Validate(null, options);
+
+        Assert.Equal(["Notifications:Plugins:<key> must be an object with an optional Enabled and an optional Binding."], result.Failures);
+    }
 
     private static NotificationsOptions Read(string settings) =>
         Provider(settings).GetRequiredService<IOptionsMonitor<NotificationsOptions>>().CurrentValue;
@@ -88,7 +107,7 @@ public sealed class NotificationsOptionsTests
     private static ServiceProvider Provider(string settings)
     {
         var services = new ServiceCollection();
-        services.AddJasonOptions(new ConfigurationBuilder().AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(settings))).Build());
+        services.AddJasonOptions(new ConfigurationBuilder().AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(settings))).Build(), TestOptions.NothingInstalled());
         return services.BuildServiceProvider();
     }
 }

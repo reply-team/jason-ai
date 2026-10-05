@@ -8,8 +8,9 @@ this pack ships with Jason **0.4.0**.
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
 
-**What they do not teach yet.** None of the five mentions `jason skills install` or `jason skills update`, and
-`jason status` is mentioned only by `operating-the-installation`. `verified` in
+**What they do not teach yet.** None of the five mentions `jason skills install` or `jason skills update`,
+`jason status` is mentioned only by `operating-the-installation`, and `jason logs` and `jason doctor` are
+taught by `troubleshooting-jason` only, which is a draft until a host reads it. `verified` in
 this repository means a named agent host read *that exact body* while driving this runtime and the digest of what
 it read is recorded, so a verified text cannot gain the new verbs without being re-read by a host — which is why
 the ones verified before 0.2.0 still teach what this build did before those verbs existed, correctly and incompletely.
@@ -29,9 +30,9 @@ description that promises everything matches nothing.
   whether the runtime is up, starting and stopping it, having it start at logon, the plugins and routes it
   has, the hosts it can launch, whether notifications reach the person and turning them off, whether a newer
   version exists, and installing it or taking it off again.
-- [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **verified.** Why work stopped: the runtime, the
-  work item's error code and the chronicle; the states a person needs told apart, and the repairs that are
-  safe.
+- [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **draft** until a host reads its new text. Why
+  work stopped: the runtime, the work item's error code and the chronicle; the states a person needs told
+  apart, the repairs that are safe, and the diagnostic file `jason doctor` writes.
 - [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
 
@@ -137,5 +138,4 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 | `managed-campaign-work` | Claude Code 2.1.278 | 0.1.0 | `sha256:01adfb08dec48564d6fef17639fd58cdac16deb7ddfbfea50ebcaa673989d855` |
 | `approvals-and-questions` | Claude Code 2.1.289 (claude-opus-5) | 0.3.0 | `sha256:42f0d58b4d7ad5d1e299a33a431f9f722cd22e5a2ecbe20f3dc6a531b9512387` |
 | `operating-the-installation` | Claude Code 2.1.287 (claude-opus-5) | 0.2.0 | `sha256:c3b655a1066b51c8298237c3d90afd7e96784235e080a271dee77cc66ea54924` |
-| `troubleshooting-jason` | Claude Code 2.1.289 (claude-opus-5) | 0.3.0 | `sha256:962084069418eae7d4e29fc473c71197ed5c13156ed05dcd5e4467328da79c48` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:9fb55ca5364ec65c9b629df5538ff26d7ce380e8d09017989e0d222fca4eb037` |

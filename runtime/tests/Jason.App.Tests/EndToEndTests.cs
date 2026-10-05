@@ -58,6 +58,44 @@ public class EndToEndTests
         }
     }
 
+    /// <summary>
+    /// A runtime in the foreground with no dispatch loop, whose roles are edited into a value of the wrong type before
+    /// anything has asked it a thing. Nothing had read the roles at start, so the edit found nothing to keep: the
+    /// runtime's answer about itself was a server error, and <c>runtime status</c> said the runtime was unreachable
+    /// while it ran. It answers now, and the refusal is logged by the setting's path and type.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_roles_edit_before_anything_asked_the_runtime_leaves_it_answering()
+    {
+        const string sentinel = "SENTINEL_E_ROLES";
+        var root = Path.Combine(Path.GetTempPath(), "jason-e2e", Guid.NewGuid().ToString("N"));
+        var paths = new JasonPaths(root);
+        Directory.CreateDirectory(paths.ConfigDirectory);
+        await File.WriteAllTextAsync(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Roles":{"MaxSkillBytes":8192}}""", Ct);
+
+        using var runtime = new RuntimeProcess(root);
+        try
+        {
+            var descriptor = await WaitForDescriptorAsync(paths, expectedNot: null, runtime);
+            await File.WriteAllTextAsync(paths.UserSettingsFile, "{\"Dispatcher\":{\"Enabled\":false},\"Roles\":{\"MaxSkillBytes\":\"" + sentinel + "\"}}", Ct);
+
+            // Long past the settings file's own reload delay; whether the edit had arrived is read from the log below.
+            await Task.Delay(TimeSpan.FromSeconds(2), Ct);
+            var (exit, output) = await StatusAsync(paths);
+
+            Assert.Equal(ExitCodes.Success, exit);
+            Assert.Equal(descriptor.InstanceId, JsonSerializer.Deserialize<SystemInfoResponse>(output, JasonJson.Options)!.InstanceId);
+        }
+        finally
+        {
+            await runtime.StopAsync();
+        }
+
+        var logs = string.Join('\n', Directory.EnumerateFiles(paths.LogsDirectory, "runtime-*.jsonl").Select(RuntimeLogs.ReadAllText));
+        Assert.Contains("Roles:MaxSkillBytes could not be read as System.Int32.", logs, StringComparison.Ordinal);
+        Assert.DoesNotContain(sentinel, logs, StringComparison.Ordinal);
+    }
+
     private static async Task<RuntimeDescriptor> WaitForDescriptorAsync(JasonPaths paths, string? expectedNot, RuntimeProcess process)
     {
         var deadline = DateTime.UtcNow.AddSeconds(120);

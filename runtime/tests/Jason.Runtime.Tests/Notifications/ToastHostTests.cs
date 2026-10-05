@@ -141,6 +141,23 @@ public sealed class ToastHostTests
         Assert.Contains(reason, stderr, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A payload that cannot be parsed is said to be unreadable and nothing more: what the parser read is not repeated
+    /// on the stderr the runtime keeps the end of, whatever the parser's own message would have quoted.
+    /// </summary>
+    [Fact]
+    public async Task A_payload_it_cannot_parse_is_rejected_without_being_quoted()
+    {
+        const string Sentinel = "SENTINEL_TOAST_PAYLOAD";
+
+        var (exit, stdout, stderr) = await RunAsync(["--protocol", "1"], "{\"title\":\"" + Sentinel + "\",\"lines\":");
+
+        Assert.Equal(3, exit);
+        Assert.Empty(stdout);
+        Assert.Contains("could not be read as JSON", stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain(Sentinel, stderr, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_line_longer_than_a_toast_holds_is_rejected()
     {

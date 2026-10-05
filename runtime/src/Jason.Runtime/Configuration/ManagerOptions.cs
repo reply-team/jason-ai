@@ -86,15 +86,18 @@ public sealed class ManagerOptions
     /// <remarks>
     /// An empty array in the file cannot be told from an absent key — configuration represents neither — so it
     /// reads as "unset" and the defaults apply. Reviewing on the cadence alone is therefore not something the
-    /// file can say; nothing in this version needs it to.
+    /// file can say; nothing in this version needs it to. A value of the wrong type is recorded for the validator
+    /// to refuse, as it is in every bound section, rather than thrown.
     /// </remarks>
-    public static void Fill(IConfiguration section, ManagerOptions options)
+    public static void Fill(IConfigurationSection section, ManagerOptions options)
     {
         ArgumentNullException.ThrowIfNull(section);
         ArgumentNullException.ThrowIfNull(options);
 
         options.Triggers.Clear();
-        section.Bind(options);
+
+        // No key of this section is one a person chooses, so no plugin's id can be in a path of it.
+        SafeBinding.Bind(section, options, SafeBinding.NoInstalledPlugins);
         if (options.Triggers.Count == 0)
         {
             options.Triggers = [.. Default];

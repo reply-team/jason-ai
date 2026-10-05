@@ -19,11 +19,13 @@ namespace Jason.Cli.Tests;
 public class VerbMapTests
 {
     /// <summary>
-    /// The names that are not nouns at all. Neither can be one; <c>CliApp</c> says why. <c>status</c> answers
-    /// about one installation rather than about anything the API owns, and <c>uninstall</c> takes this
-    /// installation off the machine, which is an act with no noun behind it and no operation either.
+    /// The names that are not nouns at all. None can be one; <c>CliApp</c> says why. <c>status</c> answers
+    /// about one installation rather than about anything the API owns, <c>uninstall</c> takes this
+    /// installation off the machine, which is an act with no noun behind it and no operation either,
+    /// <c>logs</c> reads the files the runtime writes, which the runtime is never asked about, and
+    /// <c>doctor</c> collects one installation into one file, half of which is not the runtime's to know.
     /// </summary>
-    private static readonly string[] DeclaredExceptions = ["status", "uninstall"];
+    private static readonly string[] DeclaredExceptions = ["status", "uninstall", "logs", "doctor"];
 
     /// <summary>
     /// The nouns with no API operation behind them. Both change this installation rather than asking the
@@ -70,8 +72,10 @@ public class VerbMapTests
     }
 
     /// <summary>
-    /// And neither exception has subcommands. <c>jason status logs</c> and <c>jason status probe</c> are how a
-    /// status verb becomes a diagnostics verb, which is a story of its own and deliberately not this one; and
+    /// And no exception has subcommands. <c>jason status probe</c> is how a status verb becomes a diagnostics
+    /// tool, and diagnostics arrive here as names of their own rather than as <c>status</c>'s subcommands;
+    /// <c>jason logs tail</c> is how a reader of files grows a follower that never ends;
+    /// <c>jason doctor send</c> is how a file a person reads before sharing it grows a way to leave unread; and
     /// <c>jason uninstall everything</c> is how a destructive verb grows a second, less careful spelling.
     /// </summary>
     [Theory]
@@ -88,7 +92,7 @@ public class VerbMapTests
 
     public static TheoryData<string> EveryName() => [.. Nouns, .. DeclaredExceptions];
 
-    /// <summary>And the exceptions are exactly these two, so a third arrives in this diff or not at all.</summary>
+    /// <summary>And the exceptions are exactly these, so another arrives in this diff or not at all.</summary>
     public static TheoryData<string> Exceptions() => [.. DeclaredExceptions];
 
     /// <summary>
@@ -109,9 +113,9 @@ public class VerbMapTests
 
         Assert.Equal(WithoutAnOperation.Order(StringComparer.Ordinal), strangers);
 
-        // And the two verbs stand for none either. Each says it never will, and nothing held that: an
-        // `uninstall.*` or `status.*` operation arriving in the contracts would have kept this test green while
-        // the four declared exceptions quietly became three.
+        // And the verbs stand for none either. Each says it never will, and nothing held that: an
+        // `uninstall.*`, `status.*`, `logs.*` or `doctor.*` operation arriving in the contracts would have kept
+        // this test green while the six declared exceptions quietly became five.
         Assert.All(DeclaredExceptions, exception => Assert.DoesNotContain(exception, operations));
     }
 

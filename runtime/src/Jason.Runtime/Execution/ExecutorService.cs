@@ -313,6 +313,6 @@ public sealed partial class ExecutorService(
         }
     }
 
-    [GeneratedRegex("^[a-z][a-z0-9_]{0,63}$")]
+    [GeneratedRegex(@"^[a-z][a-z0-9_]{0,63}\z")]
     private static partial Regex ErrorCode();
 }

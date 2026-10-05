@@ -29,6 +29,28 @@ public sealed class DesktopPresenceTests
         Assert.Equal("session 0", Jason.Contracts.Notifications.ChannelPresence.SessionZero);
     }
 
+    /// <summary>
+    /// Every reason the runtime gives for a missing desktop is one of the contract's own words, with the values a runtime
+    /// has always written: the client tells a word of the runtime's from text nobody controls by that list, and nothing
+    /// else.
+    /// </summary>
+    [Fact]
+    public void Every_reason_for_a_missing_desktop_is_one_of_the_contracts_own_words()
+    {
+        var words = Jason.Contracts.Notifications.ChannelPresence.Details;
+        var given = new[]
+        {
+            DesktopPresence.Find(Facts(DesktopPlatform.Windows, session: 0)),
+            DesktopPresence.Find(Facts(DesktopPlatform.Linux)),
+            DesktopPresence.Find(Facts(DesktopPlatform.Linux, environment: new() { ["DBUS_SESSION_BUS_ADDRESS"] = "unix:path=/run/user/1000/bus" })),
+        };
+
+        Assert.Equal(["session 0", "no session bus", "no notification program"], words);
+        Assert.Equal("no session bus", Jason.Contracts.Notifications.ChannelPresence.NoSessionBus);
+        Assert.Equal("no notification program", Jason.Contracts.Notifications.ChannelPresence.NoNotificationProgram);
+        Assert.Equal(words, given.Select(presence => presence.Detail));
+    }
+
     [Fact]
     public void A_windows_process_in_a_user_session_has_one() =>
         Assert.Equal(Presence.Desktop, DesktopPresence.Find(Facts(DesktopPlatform.Windows, session: 2)));

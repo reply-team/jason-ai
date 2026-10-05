@@ -103,11 +103,12 @@ public class RoutesOptionsTests
         Assert.Null(options.Default!.Binding);
     }
 
+    /// <summary>Named with its line and described by its length: what was written is not said back into the log.</summary>
     [Theory]
-    [InlineData("""{"Routes":{"Default":{"Plugin":""}}}""", "Routes:Default:Plugin must be a plugin id; got ''.")]
-    [InlineData("""{"Routes":{"Default":{"Binding":{"workspace":"west"}}}}""", "Routes:Default:Plugin must be a plugin id; got ''.")]
-    [InlineData("""{"Routes":{"Default":{"Plugin":"Fake Provider"}}}""", "Routes:Default:Plugin must be a plugin id; got 'Fake Provider'.")]
-    [InlineData("""{"Routes":{"Operations":{"campaign.get":{"Plugin":"-nope"}}}}""", "Routes:Operations:campaign.get:Plugin must be a plugin id; got '-nope'.")]
+    [InlineData("""{"Routes":{"Default":{"Plugin":""}}}""", "Routes:Default:Plugin must be a plugin id; nothing is written there.")]
+    [InlineData("""{"Routes":{"Default":{"Binding":{"workspace":"west"}}}}""", "Routes:Default:Plugin must be a plugin id; nothing is written there.")]
+    [InlineData("""{"Routes":{"Default":{"Plugin":"Fake Provider"}}}""", "Routes:Default:Plugin must be a plugin id; the value written is 13 characters long and is not one.")]
+    [InlineData("""{"Routes":{"Operations":{"campaign.get":{"Plugin":"-nope"}}}}""", "Routes:Operations:campaign.get:Plugin must be a plugin id; the value written is 5 characters long and is not one.")]
     public void A_plugin_that_could_not_be_a_plugin_id_is_named_with_its_line(string settings, string expected)
     {
         var result = new RoutesOptionsValidator().Validate(null, Read(settings));
@@ -116,20 +117,27 @@ public class RoutesOptionsTests
         Assert.Contains(expected, result.Failures!);
     }
 
+    /// <summary>
+    /// A key that names no published operation is a key the code does not know, and could be anything a person
+    /// pasted, so its line is written with a placeholder where the key was, and the key is described by its length.
+    /// </summary>
     [Theory]
-    [InlineData("not.an.operation")]
-    [InlineData("notification.send")]
-    public void An_operation_this_build_does_not_publish_is_named_with_its_line(string operation)
+    [InlineData("not.an.operation", 16)]
+    [InlineData("notification.send", 17)]
+    public void An_operation_this_build_does_not_publish_is_named_with_its_line(string operation, int length)
     {
         var result = new RoutesOptionsValidator().Validate(null, Read("""{"Routes":{"Operations":{"OPERATION":{"Plugin":"fake-provider"}}}}""".Replace("OPERATION", operation, StringComparison.Ordinal)));
 
         Assert.True(result.Failed);
-        Assert.Contains($"Routes:Operations:{operation} must name a published operation; got '{operation}'.", result.Failures!);
+        Assert.Contains(
+            FormattableString.Invariant($"Routes:Operations:<key> must name a published operation; the key written is {length} characters long and is not one."),
+            result.Failures!);
+        Assert.DoesNotContain(result.Failures!, failure => failure.Contains(operation, StringComparison.Ordinal));
     }
 
     [Theory]
-    [InlineData("""{"Routes":{"Default":{"Plugin":"fake-provider","Binding":"west"}}}""", "Routes:Default:Binding must be an object; got 'west'.")]
-    [InlineData("""{"Routes":{"Operations":{"campaign.get":{"Plugin":"fake-provider","Binding":7}}}}""", "Routes:Operations:campaign.get:Binding must be an object; got '7'.")]
+    [InlineData("""{"Routes":{"Default":{"Plugin":"fake-provider","Binding":"west"}}}""", "Routes:Default:Binding must be an object; got string.")]
+    [InlineData("""{"Routes":{"Operations":{"campaign.get":{"Plugin":"fake-provider","Binding":7}}}}""", "Routes:Operations:campaign.get:Binding must be an object; got number.")]
     public void A_binding_that_is_not_an_object_is_named_the_same_way(string settings, string expected)
     {
         var result = new RoutesOptionsValidator().Validate(null, Read(settings));
@@ -182,7 +190,8 @@ public class RoutesOptionsTests
         var error = Assert.Throws<OptionsValidationException>(
             () => provider.GetRequiredService<IOptionsMonitor<RoutesOptions>>().CurrentValue);
 
-        Assert.Contains("Routes:Operations:not.an.operation", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Routes:Operations:<key> must name a published operation", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("not.an.operation", error.Message, StringComparison.Ordinal);
     }
 
     private static RoutesOptions Read(string settings) =>
@@ -191,7 +200,7 @@ public class RoutesOptionsTests
     private static ServiceProvider Provider(string settings)
     {
         var services = new ServiceCollection();
-        services.AddJasonOptions(Configuration(settings));
+        services.AddJasonOptions(Configuration(settings), TestOptions.NothingInstalled());
         return services.BuildServiceProvider();
     }
 

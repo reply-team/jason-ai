@@ -58,6 +58,41 @@ public class DocumentedSkillCommandsTests
         await AssertUnderstoodAsync("jason --version", "this test");
 
     /// <summary>
+    /// A file a printed command writes lands in this test's own directory, never where the suite happens to run: these
+    /// lines are typed for real, and a page that printed <c>jason doctor --output bundle.json</c> would otherwise leave a
+    /// bundle in the repository, or in the test host's own directory, every time the suite ran. Every spelling of the
+    /// option the parser accepts is typed, and the bundle has to be written — inside this test's own directory — for the
+    /// test to pass: a line the verb refused would leave no stray either.
+    /// </summary>
+    [Theory]
+    [InlineData("jason doctor --output {0}")]
+    [InlineData("jason doctor --output={0}")]
+    [InlineData("jason doctor --output:{0}")]
+    public async Task A_file_a_printed_command_writes_lands_in_this_tests_own_directory(string line)
+    {
+        var name = $"guard-{Guid.NewGuid():N}.json";
+        var stray = Path.Combine(Directory.GetCurrentDirectory(), name);
+        try
+        {
+            using var tree = new TempTree();
+            var error = new StringWriter();
+
+            var exit = await CliApp.RunAsync(
+                Named([.. ShellWords.Split(string.Format(System.Globalization.CultureInfo.InvariantCulture, line, name))], tree.Root),
+                Machine(tree, error),
+                Ct);
+
+            Assert.True(exit == ExitCodes.Success, $"Typing '{line}' exited {exit}: {error}");
+            Assert.True(File.Exists(Path.Combine(tree.Root, name)), $"Typing '{line}' wrote nothing inside this test's own directory.");
+            Assert.False(File.Exists(stray), $"Typing '{line}' wrote {stray}, outside this test's own directory.");
+        }
+        finally
+        {
+            File.Delete(stray);
+        }
+    }
+
+    /// <summary>
     /// Typed at this program, with four seams in place: its own data directory, a process table that launches
     /// nothing, a release-feed handler that throws, and no autostart registrar at all — which production
     /// answers with a refusal. Internal because the business pack's guard types its lines through this same
@@ -117,14 +152,42 @@ public class DocumentedSkillCommandsTests
     /// the shape as it reads: a list of contacts is an array, a note or a result is an object.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The name is rewritten to an absolute path inside this test's own directory rather than the process
     /// being moved to it. A working directory is process-wide, and a guard that moved it would have to be
     /// kept away from everything else running beside it.
+    /// </para>
+    /// <para>
+    /// A file a command writes is moved there the same way, whatever the page printed: <c>--output</c>, which
+    /// <c>jason doctor</c> takes, in each of the spellings the parser accepts. These lines are typed for real,
+    /// and a relative name would otherwise be written wherever the suite runs — the repository, or the test
+    /// host's own directory. It is not made to exist, because the verb refuses a file that is already there.
+    /// </para>
     /// </remarks>
     private static string[] Named(string[] arguments, string root)
     {
-        for (var index = 0; index < arguments.Length - 1; index++)
+        const string Output = "--output";
+        for (var index = 0; index < arguments.Length; index++)
         {
+            if (arguments[index].Length > Output.Length + 1
+                && arguments[index].StartsWith(Output, StringComparison.Ordinal)
+                && arguments[index][Output.Length] is '=' or ':')
+            {
+                arguments[index] = arguments[index][..(Output.Length + 1)] + Path.Combine(root, Path.GetFileName(arguments[index][(Output.Length + 1)..]));
+                continue;
+            }
+
+            if (index == arguments.Length - 1)
+            {
+                break;
+            }
+
+            if (arguments[index] == Output)
+            {
+                arguments[index + 1] = Path.Combine(root, Path.GetFileName(arguments[index + 1]));
+                continue;
+            }
+
             var content = arguments[index] switch
             {
                 "--file" => "[]",

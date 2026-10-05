@@ -228,8 +228,13 @@ Six details worth knowing before you write a schema:
   and is decided for any number, however large.
 - **The same code validates untrusted schemas**, because a plugin's `binding` schema comes from its manifest.
   Patterns compile without backtracking and run under a match timeout, which rules out lookaround and
-  backreferences; `$ref` resolves only inside its own document and never in a loop; nesting stops at 32 levels; a
-  schema over 64 KiB is refused unread.
+  backreferences. `$` matches only at the end, as ECMA-262 has it; .NET's reading, which also accepts a final
+  newline, is not the one used. `.` matches any character except the four line terminators, `\n`, `\r`, U+2028 and
+  U+2029, as in ECMA-262; .NET's leaves out only `\n`. `\A`, `\Z`, `\z` and `\G` are outside the vocabulary and are
+  refused as `schema_pattern_invalid`, because ECMA-262 reads them as the letters A, Z, z and G and the engine reads
+  them as anchors. Until a pattern grammar is published, the classes `\d`, `\w` and `\s` and the word boundary `\b`
+  follow the engine rather than ECMA-262: `\d`, for one, accepts the digits of other scripts. `$ref` resolves only inside its own
+  document and never in a loop; nesting stops at 32 levels; a schema over 64 KiB is refused unread.
 - **The build's own patterns are warmed when the runtime starts, and a plugin's binding patterns are decided when its
   package loads, on a warm engine; at a work item a timeout is never a verdict on the value, and what happens then
   depends on where it happened.** Every match runs under a published 100 ms, and with matching linear in the input

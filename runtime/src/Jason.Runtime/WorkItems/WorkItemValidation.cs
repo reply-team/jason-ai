@@ -379,9 +379,9 @@ internal static partial class WorkItemValidation
         return name;
     }
 
-    [GeneratedRegex("^[a-z][a-z0-9-]{0,63}$")]
+    [GeneratedRegex(@"^[a-z][a-z0-9-]{0,63}\z")]
     private static partial Regex RoleNamePattern();
 
-    [GeneratedRegex(@"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")]
+    [GeneratedRegex(@"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*\z")]
     private static partial Regex OperationNamePattern();
 }

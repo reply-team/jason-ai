@@ -33,7 +33,9 @@ public sealed class VerbatimKeysConverter : JsonConverter<IReadOnlyDictionary<st
             var key = reader.GetString()!;
             if (!reader.Read() || reader.TokenType != JsonTokenType.String)
             {
-                throw new JsonException($"The value under `{key}` is a string.");
+                // Not the key, though it would say which: it is the provider's word, and a refusal can travel
+                // further than the map it refused. The reader's position says where.
+                throw new JsonException("Every value in a map of identifiers is a string.");
             }
 
             entries[key] = reader.GetString()!;

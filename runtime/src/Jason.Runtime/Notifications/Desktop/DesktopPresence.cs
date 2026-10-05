@@ -112,12 +112,12 @@ public static class DesktopPresence
             || (facts.Environment.TryGetValue("XDG_RUNTIME_DIR", out var runtime) && !string.IsNullOrEmpty(runtime) && facts.FileExists(runtime.TrimEnd('/') + "/bus"));
         if (!bus)
         {
-            return Presence.NoDesktop("no session bus");
+            return Presence.NoDesktop(ChannelPresence.NoSessionBus);
         }
 
         return facts.Which("notify-send") is not null || facts.Which("gdbus") is not null
             ? Presence.Desktop
-            : Presence.NoDesktop("no notification program");
+            : Presence.NoDesktop(ChannelPresence.NoNotificationProgram);
     }
 
     private static bool Has(DesktopFacts facts, string name) =>

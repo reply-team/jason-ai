@@ -187,9 +187,9 @@ to allow. Both print the target roots before they write anything, and both refus
 would later refuse to launch, rather than writing one.
 [`skills/README.md`](skills/README.md) is the contract both verbs keep.
 
-One question, answered check by check. It is one of four names in this CLI with no API operation behind
-it — `status` and `uninstall`, and the `skills` and `update` nouns — and it cannot be otherwise: half of what
-it reports is not the runtime's to know — an executable on PATH,
+One question, answered check by check. It is one of six names in this CLI with no API operation behind
+it — `status`, `uninstall`, `logs` and `doctor`, and the `skills` and `update` nouns — and it cannot be
+otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
 another vendor's CLI and whether it answers, files in a folder in your home directory. No API operation can
 answer "am I ready to work?", because the runtime is not the authority on the machine it runs on.
 
@@ -214,6 +214,50 @@ The provider check runs only a program **you** name — `jason status --provider
 one vendor's command by heart would be this product naming a vendor in its own sources, which it does not. It
 names the exact command it ran in its own output, and prints no credential — not the key, not a prefix of it,
 not its length.
+
+### When something is wrong
+
+```sh
+jason logs --human
+jason logs --level warning --since 2026-09-18T09:00:00Z
+jason logs --work-item wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
+jason doctor --dry-run
+jason doctor
+```
+
+`jason logs` reads the runtime's log files straight from the data directory and never asks the runtime, so it
+answers the same when the runtime is stopped, will not start, or has never run. Every filter you give must
+hold — a level and everything above it, a campaign, a work item, a moment written with `Z` or an offset —
+and the newest events that match come back, oldest first, exactly as the runtime wrote them; `--limit` says
+how many.
+
+`jason doctor` collects this installation into one file you can read before you share it. **Run it with
+`--dry-run` first**: that composes the whole bundle, writes nothing, and lists what a plain run would
+write — the sections and their sizes, the settings whose values it carries, what it never carries and what
+it leaves out. The file holds the versions, the report `jason status` gives, the settings file and the
+`JASON_*` variables by shape with a value only for the settings `jason doctor --help` lists, a bounded slice
+of the log, what the runtime says about itself and each plugin by its id, version, digest, status and
+problem codes, and the journal and the work items counted, with the newest entries by kind and ids and the
+newest failures by their error's code — never by what they say. It never holds the capability token,
+request or response bodies, prompts, work-item results, the database, or plugin packages. Only
+`--include-journal` adds what the journal entries say: campaign names and fields as they changed, campaign
+and work-item contexts as they changed, result formats, the addresses and numbers put on or taken off the
+do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered with,
+the errors attempts ended with, provider identifiers, the effect, tool and operation a report names, the
+failure text and receipts notification channels reported, entries people and agents wrote themselves, the
+names actors gave, and the reasons they typed; it prints a warning to read the file before you share it. The
+runtime's own report (`system_info`) is carried in part: channel detail, presence detail outside the
+runtime's own words, skill problem text and the release-notes URL are withheld, and the bundle says so.
+Before anything is written, your home directory becomes `~`, a data directory outside it `<data>`, a
+different directory the runtime keeps its data in a mark of its own, and this account's user, machine and
+domain names and its Windows account identifiers marks of their own.
+
+The file is written under the data directory, in `logs/doctor`, and the verb prints its path and the SHA-256
+of its bytes. **It is yours to share, and nothing sends it anywhere**: it never reaches the network, and the
+only requests it makes are to this installation's own runtime, on this machine. Bundles are not rolled — they
+stay until you delete them or `jason uninstall --purge-data` removes what Jason keeps in the data directory.
+Like `status`, both verbs exit 0 or 1 and never 3: `logs` never asks the runtime, and a runtime that does not
+answer `doctor` is written into the bundle rather than given as a reason there is none.
 
 ### Taking it off again
 

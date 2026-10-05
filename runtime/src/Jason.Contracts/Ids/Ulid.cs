@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Security.Cryptography;
 
 namespace Jason.Contracts.Ids;
@@ -9,6 +10,8 @@ namespace Jason.Contracts.Ids;
 public static class Ulid
 {
     private const string Alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+    private static readonly SearchValues<char> Crockford = SearchValues.Create(Alphabet);
 
     private static readonly Lock Gate = new();
     private static readonly byte[] LastRandom = new byte[10];
@@ -42,6 +45,9 @@ public static class Ulid
 
         return Encode(bytes);
     }
+
+    /// <summary>Whether the text is a ULID as this class writes one: 26 characters of the upper-case Crockford alphabet.</summary>
+    public static bool IsWellFormed(ReadOnlySpan<char> text) => text.Length == 26 && !text.ContainsAnyExcept(Crockford);
 
     /// <summary>Encodes a given instant with a random tail. For tests and for ids whose time is not "now".</summary>
     public static string NewUlid(DateTimeOffset now)

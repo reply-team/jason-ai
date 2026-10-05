@@ -540,7 +540,11 @@ environment variables), and every value is validated when the runtime starts —
 is a refusal to start, not a silently ignored line. Every dispatcher and roles setting is then re-read
 on each tick, so an edit applies without a restart. The exceptions are the two that are decided once:
 **`Dispatcher:MaxParallel`**, which sizes the handler pool, and **`Dispatcher:Enabled`**, which decides
-whether this runtime has a dispatch loop at all.
+whether this runtime has a dispatch loop at all. A live edit never stops the runtime: a refused edit keeps the
+last good settings and is logged by path and type, and a start with a malformed or mistyped file still fails,
+saying where — on stderr under `jason runtime run`, and after "It said:" in what `jason runtime start` answers:
+the line and byte of a malformed file, the setting's path and expected type for a
+mistyped one.
 
 | Setting | Default | Range | What it does |
 |---|---|---|---|

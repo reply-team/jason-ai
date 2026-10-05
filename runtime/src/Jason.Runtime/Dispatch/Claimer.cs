@@ -10,6 +10,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins;
 using Jason.Runtime.Plugins.Registry;
@@ -50,6 +51,18 @@ public sealed class Claimer(
         new EventId(1, nameof(ClaimSkipped)),
         "Claim skipped: another writer changed work item {WorkItemId} first");
 
+    private static readonly Action<ILogger, string, string, string, Exception?> EndedAtClaim = LoggerMessage.Define<string, string, string>(
+        LogLevel.Warning,
+        new EventId(2, nameof(EndedAtClaim)),
+        "Attempt {AttemptId} of work item {WorkItemId} ended at the claim: {Code}");
+
+    /// <summary>
+    /// An attempt the claim itself ended, by the ids a person can type and the code the attempt recorded. The code is
+    /// one of the closed words in <see cref="AttemptErrors"/>: never the attempt's message, which names what the work
+    /// was about.
+    /// </summary>
+    private readonly record struct AttemptEnd(string CampaignId, string WorkItemId, string AttemptId, string Code);
+
     /// <summary>
     /// Claims up to <paramref name="freeSlots"/> items. Work that cannot be run at all is failed inside the
     /// same transaction rather than returned: it is finished, not dispatched.
@@ -65,6 +78,7 @@ public sealed class Claimer(
         var now = clock.GetUtcNow().UtcDateTime;
         var current = settings.Current;
         var claimed = new List<ClaimedWork>();
+        var ended = new List<AttemptEnd>();
 
         // Both snapshots are read once, so every item this scan hands out was decided against one pair of them
         // and an activation that happens mid-scan belongs to the next one.
@@ -135,6 +149,14 @@ public sealed class Claimer(
                 continue;
             }
 
+            // Every refusal above ends the attempt through the one routine that ends attempts, so this is the one
+            // place that can tell an attempt the claim ended from one it handed out. No handler will ever run for it,
+            // so no line a handler writes can say what became of the work.
+            if (attempt.Status == AttemptStatus.Failed)
+            {
+                ended.Add(new AttemptEnd(item.Campaign!.PublicId, item.PublicId, attempt.PublicId, attempt.Error!.Code));
+            }
+
             if (item.Status == WorkItemStatus.Scheduled)
             {
                 claimed.Add(new ClaimedWork(
@@ -142,12 +164,24 @@ public sealed class Claimer(
                     attempt.Id,
                     item.PublicId,
                     attempt.PublicId,
+                    item.Campaign!.PublicId,
                     plan,
                     agent is AgentLaunchDecision.Ready ready ? new AgentLaunch(ready.Plan.Deny, ready.Plan.CliCommand) : null));
             }
         }
 
         await transaction.CommitAsync(ct).ConfigureAwait(false);
+
+        // Said once the ends are committed, as the scan says its own claims: a line about an attempt that a failed
+        // commit then took back would describe something that never happened.
+        foreach (var end in ended)
+        {
+            using (AttemptLogScope.Begin(logger, end.CampaignId, end.WorkItemId, end.AttemptId))
+            {
+                EndedAtClaim(logger, end.AttemptId, end.WorkItemId, end.Code, null);
+            }
+        }
+
         return claimed;
     }
 

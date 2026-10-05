@@ -167,6 +167,6 @@ public static partial class JournalKinds
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);
 
-    [GeneratedRegex("^[a-z][a-z0-9_]{0,63}$")]
+    [GeneratedRegex(@"^[a-z][a-z0-9_]{0,63}\z")]
     private static partial Regex WellFormed();
 }

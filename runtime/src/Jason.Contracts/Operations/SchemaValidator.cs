@@ -83,6 +83,9 @@ public static class SchemaValidator
     /// </summary>
     private const string ProbeText = "Probe_09 az-AZ.x@y/~";
 
+    /// <summary>What a `.` outside a class is rewritten to: any character but the four line terminators ECMA-262 names.</summary>
+    private const string AnyButLineTerminator = @"[^\n\r\u2028\u2029]";
+
     private static readonly TimeSpan PatternTimeout = TimeSpan.FromMilliseconds(PatternTimeoutMilliseconds);
     private static readonly ConcurrentDictionary<string, Regex?> CompiledPatterns = new(StringComparer.Ordinal);
 
@@ -735,10 +738,7 @@ public static class SchemaValidator
         var regex = Compile(pattern);
         if (regex is null)
         {
-            problems.Add(new SchemaProblem(
-                pointer,
-                "schema_pattern_invalid",
-                $"`{pattern}` is not a pattern this dialect can run: it must compile without backtracking, which rules out lookaround and backreferences."));
+            problems.Add(Unrunnable(pointer, pattern));
             return;
         }
 
@@ -1292,10 +1292,7 @@ public static class SchemaValidator
 
         if (Compile(pattern) is null)
         {
-            problems.Add(new SchemaProblem(
-                pointer,
-                "schema_pattern_invalid",
-                $"`{pattern}` is not a pattern this dialect can run: it must compile without backtracking, which rules out lookaround and backreferences."));
+            problems.Add(Unrunnable(pointer, pattern));
         }
     }
 
@@ -1471,6 +1468,13 @@ public static class SchemaValidator
         }
     }
 
+    /// <summary>
+    /// The one expression for a pattern, cached under the pattern as written. A validation, a warm-up and a load-time
+    /// probe all come here with that key, and a warm-up counts distinct patterns by it, so while the cache has room the
+    /// expression a warm-up matched is the one a later validation is handed. What is compiled is the pattern with its
+    /// end anchors and its dots rewritten (<see cref="EcmaForm"/>); what a problem quotes is the pattern as written. A
+    /// pattern that writes an escape this dialect refuses has no expression, and is cached as having none.
+    /// </summary>
     private static Regex? Compile(string pattern)
     {
         if (CompiledPatterns.TryGetValue(pattern, out var cached))
@@ -1489,12 +1493,37 @@ public static class SchemaValidator
         return compiled;
     }
 
+    /// <summary>
+    /// Why a pattern cannot run, in the words its author needs to fix it. The escapes this dialect refuses are read from
+    /// the pattern as written, by the same pass that rewrites it, so what is named here is what the author typed and
+    /// never the `\z` the rewrite itself writes.
+    /// </summary>
+    private static SchemaProblem Unrunnable(string pointer, string pattern)
+    {
+        _ = EcmaForm(pattern, out var escape);
+        return escape is null
+            ? new SchemaProblem(
+                pointer,
+                "schema_pattern_invalid",
+                $"`{pattern}` is not a pattern this dialect can run: it must compile without backtracking, which rules out lookaround and backreferences.")
+            : new SchemaProblem(
+                pointer,
+                "schema_pattern_invalid",
+                $"`{pattern}` is not a pattern this dialect can run: `{escape}` has no single meaning here, because ECMA-262 reads it as the letter {escape[1]} and the regular expression engine as an anchor. Write the letter without the backslash, or use `^` and `$` for the start and the end of the value.");
+    }
+
     private static Regex? Build(string pattern)
     {
+        var form = EcmaForm(pattern, out var refused);
+        if (refused is not null)
+        {
+            return null;
+        }
+
         Interlocked.Increment(ref _compiled);
         try
         {
-            return new Regex(pattern, RegexOptions.NonBacktracking | RegexOptions.CultureInvariant, PatternTimeout);
+            return new Regex(form, RegexOptions.NonBacktracking | RegexOptions.CultureInvariant, PatternTimeout);
         }
         catch (ArgumentException)
         {
@@ -1504,6 +1533,94 @@ public static class SchemaValidator
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// The pattern as the engine is handed it, and, through <paramref name="refused"/>, the first escape this dialect
+    /// refuses in it — null when it writes none. ECMA-262, which is the dialect JSON Schema names, and the engine that
+    /// runs the patterns read some of the same text differently, and this settles each so that a pattern means in the
+    /// runtime what its author read it as.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A `$` that anchors is written `\z`, and a `.` outside a class is written as a class of everything but the four
+    /// line terminators. In ECMA-262 `$` is the end of the value and nothing else, where .NET also lets it match just
+    /// before a final newline, so `^[a-z]+$` would accept `"abc\n"`; and `.` excludes `\n`, `\r`, U+2028 and U+2029,
+    /// where .NET excludes only `\n`, so `^.+$` would accept `"abc\r"`. The engine's ECMAScript mode would settle both
+    /// but cannot be combined with the non-backtracking one, which is what keeps a hostile pattern linear, so the text
+    /// is rewritten instead.
+    /// </para>
+    /// <para>
+    /// `\A`, `\Z`, `\z` and `\G` are anchors in the engine and the letters A, Z, z and G in ECMA-262, and nothing
+    /// rewritten can honour both, so they are not rewritten: the first is reported through <paramref name="refused"/>
+    /// and the pattern is refused. They are refused wherever they stand, in a class included.
+    /// </para>
+    /// <para>
+    /// One pass over the pattern as its author wrote it, tracking only what decides these: a backslash takes the
+    /// character after it as written, so `\$` is a dollar, `\.` is a dot and `\\$` is a backslash and then an anchor,
+    /// and `\\Z` is a backslash and then a letter, not an escape; inside a class `$` and `.` are members, and a `]` that
+    /// comes first in a class (`[]a]`, `[^]a]`) is a member too rather than its end. A pattern the pass does not
+    /// understand — a lone backslash at the end, an unclosed class — is passed on as it is, and the compile reports it
+    /// as it always has.
+    /// </para>
+    /// </remarks>
+    private static string EcmaForm(string pattern, out string? refused)
+    {
+        refused = null;
+        var builder = new StringBuilder(pattern.Length + 4);
+        var inClass = false;
+        for (var index = 0; index < pattern.Length; index++)
+        {
+            var character = pattern[index];
+            if (character == '\\' && index + 1 < pattern.Length)
+            {
+                var escaped = pattern[++index];
+                if (refused is null && escaped is 'A' or 'Z' or 'z' or 'G')
+                {
+                    refused = string.Concat(@"\", escaped.ToString());
+                }
+
+                builder.Append(character).Append(escaped);
+                continue;
+            }
+
+            if (!inClass && character == '[')
+            {
+                inClass = true;
+                builder.Append(character);
+                if (index + 1 < pattern.Length && pattern[index + 1] == '^')
+                {
+                    builder.Append(pattern[++index]);
+                }
+
+                if (index + 1 < pattern.Length && pattern[index + 1] == ']')
+                {
+                    builder.Append(pattern[++index]);
+                }
+
+                continue;
+            }
+
+            if (inClass && character == ']')
+            {
+                inClass = false;
+            }
+
+            if (!inClass && character == '$')
+            {
+                builder.Append(@"\z");
+            }
+            else if (!inClass && character == '.')
+            {
+                builder.Append(AnyButLineTerminator);
+            }
+            else
+            {
+                builder.Append(character);
+            }
+        }
+
+        return builder.ToString();
     }
 
     private static string KindOf(JsonNode? node) => node switch

@@ -2,6 +2,7 @@ using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -51,6 +52,13 @@ public sealed class Notifier(
         LogLevel.Warning,
         new EventId(5, nameof(Failed)),
         "The notifier failed; the scan's work was already handed out");
+
+    // The same event, for a notifier that gave out reading JSON — a journal line that no longer parses: what kind of
+    // failure and where, and no exception, because what the parser quoted is what the line held.
+    private static readonly Action<ILogger, string, Exception?> FailedToParse = LoggerMessage.Define<string>(
+        LogLevel.Warning,
+        new EventId(5, nameof(Failed)),
+        "The notifier failed; the scan's work was already handed out: {Failure}");
 
     /// <summary>The two kinds of line that mean a person is now needed: an approval parked at a claim, and a question a role raised.</summary>
     public static IReadOnlySet<string> Triggers { get; } =
@@ -105,7 +113,15 @@ public sealed class Notifier(
                 state.Return(handedOver);
             }
 
-            Failed(logger, ex);
+            if (ParseFailure.Is(ex))
+            {
+                FailedToParse(logger, ParseFailure.Describe(ex), null);
+            }
+            else
+            {
+                Failed(logger, ex);
+            }
+
             db.ChangeTracker.Clear();
             return 0;
         }

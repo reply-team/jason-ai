@@ -183,7 +183,11 @@ The reference plugin is [ntfy](../plugins/ntfy/README.md). Writing one is
 
 ## 9. The settings
 
-In `~/.jason/config/settings.json`, read at every scan, so an edit applies at the next one.
+In `~/.jason/config/settings.json`, read at every scan, so an edit applies at the next one. A live edit never
+stops the runtime: a refused edit keeps the last good settings and is logged by path and type, and a start
+with a malformed or mistyped file still fails, saying where — on stderr under `jason runtime run`, and after
+"It said:" in what `jason runtime start` answers: the line and byte of a malformed file,
+the setting's path and expected type for a mistyped one.
 
 | Setting | Default | What it decides |
 |---|---|---|

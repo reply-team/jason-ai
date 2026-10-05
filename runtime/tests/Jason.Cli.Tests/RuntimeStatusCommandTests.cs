@@ -253,6 +253,21 @@ public class RuntimeStatusCommandTests
         Assert.Equal(envelope + System.Environment.NewLine, output.ToString());
     }
 
+    [Fact]
+    public async Task Api_error_whose_body_is_not_json_is_printed_as_an_envelope_and_exits_1()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new StringContent(string.Empty) }));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: false, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var envelope = JsonSerializer.Deserialize<ErrorResponse>(output.ToString(), JasonJson.Options)!.Error;
+        Assert.Equal(CliErrors.RuntimeError, envelope.Code);
+        Assert.True(envelope.Retryable);
+    }
+
     /// <summary>The defaults of the chain above, with only the notifications section chosen by the test.</summary>
     private static string InfoJson(NotificationsInfo? notifications, DateTimeOffset? startedAt = null)
     {

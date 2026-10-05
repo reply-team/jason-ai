@@ -1,3 +1,4 @@
+using Jason.Contracts.Discovery;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Tests.Dispatch;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -30,6 +31,13 @@ public sealed class ThrowingOptionsMonitor<T>(OptionsValidationException failure
 
 public static class TestOptions
 {
+    /// <summary>
+    /// A data directory nobody created, for a test that composes the options and nothing else. No plugin is
+    /// installed in it, so no plugin id is one a refused setting may name, and nothing is ever written there.
+    /// </summary>
+    public static JasonPaths NothingInstalled() =>
+        new(Path.Combine(Path.GetTempPath(), "jason-tests", Guid.NewGuid().ToString("N")));
+
     /// <summary>Dispatcher options with the shipped defaults, adjusted by the test.</summary>
     public static TestOptionsMonitor<DispatcherOptions> Dispatcher(Action<DispatcherOptions>? configure = null)
     {

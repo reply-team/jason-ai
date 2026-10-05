@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Jason.Contracts.Configuration;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Update;
 using Jason.Runtime.Journal;
@@ -11,10 +12,19 @@ using Microsoft.Extensions.Options;
 namespace Jason.Runtime.Configuration;
 
 /// <summary>
-/// One message shape for every setting — <c>Section:Key must …; got …</c> — so a misconfigured runtime tells
-/// the person who edited the file which line to fix, whether the problem surfaces before the host exists or
-/// on start through <c>ValidateOnStart</c>.
+/// One message shape for every setting — <c>Section:Key must …;</c> and then what was found there — so a
+/// misconfigured runtime tells the person who edited the file which line to fix, whether the problem surfaces
+/// before the host exists or on start through <c>ValidateOnStart</c>. What was found is a number the binder has
+/// already read (<c>got 0.</c>), a word of the code's own (<c>got string.</c>), or, for text a person wrote, a
+/// description of it (<see cref="Written"/>): <c>the value written is 37 characters long and is not one.</c>
 /// </summary>
+/// <remarks>
+/// Text a person wrote is never said back: what is typed onto the wrong line is often a secret — a token pasted
+/// where a name belonged — and these sentences go to the log, and from there into whatever bundle the log is
+/// collected into. So a refused piece of text is described by its length, and a key of a path is written the way
+/// <see cref="SettingKey.ShownPath"/> writes it. The text itself stays in the file, where the person who wrote it
+/// can read it.
+/// </remarks>
 internal static class OptionRules
 {
     public static void Range(List<string> failures, string setting, int value, int min, int max)
@@ -24,6 +34,27 @@ internal static class OptionRules
             failures.Add(string.Create(CultureInfo.InvariantCulture, $"{setting} must be between {min} and {max}; got {value}."));
         }
     }
+
+    /// <summary>
+    /// The end of a sentence that refuses a piece of text: how long it is and, where that is all it is, that it is
+    /// white space — never a character of it. The length is what tells a stray space from a whole token, and it is
+    /// as much of the text as a log may keep.
+    /// </summary>
+    /// <param name="what">What the text is to the setting: <c>value</c>, or <c>key</c> for the name of a map's entry.</param>
+    /// <param name="text">The text that was refused.</param>
+    /// <param name="refusal">How the sentence ends where there was text, after "and": <c>is not one</c>, say.</param>
+    public static string Written(string what, string? text, string refusal) => text switch
+    {
+        null or "" => "nothing is written there.",
+        _ when string.IsNullOrWhiteSpace(text) => $"the {what} written is {Characters(text.Length)} of white space.",
+        _ => $"the {what} written is {Characters(text.Length)} long and {refusal}.",
+    };
+
+    /// <summary>What a binding that is not an object is instead, in JSON's own words: <c>string</c>, <c>array</c>, <c>true</c>.</summary>
+    public static string Kind(JsonNode node) => node.GetValueKind().ToString().ToLowerInvariant();
+
+    private static string Characters(int count) =>
+        count == 1 ? "1 character" : string.Create(CultureInfo.InvariantCulture, $"{count} characters");
 
     public static ValidateOptionsResult Result(List<string> failures) =>
         failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
@@ -53,7 +84,7 @@ public sealed class LoggingOptionsValidator : IValidateOptions<LoggingOptions>
 
         if (!Levels.Contains(options.MinimumLevel, StringComparer.OrdinalIgnoreCase))
         {
-            failures.Add($"Logging:MinimumLevel must be one of {string.Join(", ", Levels)}; got '{options.MinimumLevel}'.");
+            failures.Add($"Logging:MinimumLevel must be one of {string.Join(", ", Levels)}; {OptionRules.Written("value", options.MinimumLevel, "is none of them")}");
         }
 
         if (options.RetainedFileCountLimit < 1)
@@ -118,12 +149,23 @@ public sealed class DispatcherOptionsValidator : IValidateOptions<DispatcherOpti
 /// work the runtime itself asked for and answers ambiguous, with nothing on the attempt to say why. The floor
 /// therefore comes from the catalog, so publishing a slower operation moves it rather than leaving it stale.
 /// </remarks>
-public sealed partial class PluginsOptionsValidator : IValidateOptions<PluginsOptions>
+/// <param name="installedPluginIds">
+/// The plugins installed in this data directory, listed when there is a sentence to compose: a grant is keyed by
+/// the id of the plugin it is for, and a key travels into a sentence only when it names one that is installed.
+/// </param>
+public sealed partial class PluginsOptionsValidator(Func<IReadOnlySet<string>> installedPluginIds) : IValidateOptions<PluginsOptions>
 {
+    /// <summary>A validator that knows of no installed plugin, so every grant's key is written as a placeholder.</summary>
+    public PluginsOptionsValidator()
+        : this(SafeBinding.NoInstalledPlugins)
+    {
+    }
+
     public ValidateOptionsResult Validate(string? name, PluginsOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
         var failures = new List<string>();
+        var installed = new Lazy<IReadOnlySet<string>>(installedPluginIds);
 
         OptionRules.Range(failures, "Plugins:Limits:TimeoutMs", options.Limits.TimeoutMs, 1_000, 3_600_000);
         if (OperationCatalog.Slowest is { } slowest && options.Limits.TimeoutMs < slowest.TimeoutMs)
@@ -157,19 +199,19 @@ public sealed partial class PluginsOptionsValidator : IValidateOptions<PluginsOp
         {
             if (grant is null)
             {
-                failures.Add($"Plugins:Grants:{pluginId} must be an object with Exec, Http and Env lists.");
+                failures.Add($"{SettingKey.ShownPath($"Plugins:Grants:{pluginId}", installed.Value)} must be an object with Exec, Http and Env lists.");
                 continue;
             }
 
-            ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Exec", grant.Exec);
-            ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Http", grant.Http);
-            ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Env", grant.Env);
+            ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Exec", grant.Exec, installed);
+            ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Http", grant.Http, installed);
+            ValidateGrantList(failures, $"Plugins:Grants:{pluginId}:Env", grant.Env, installed);
         }
 
         return OptionRules.Result(failures);
     }
 
-    private static void ValidateGrantList(List<string> failures, string setting, List<string> entries)
+    private static void ValidateGrantList(List<string> failures, string setting, List<string> entries, Lazy<IReadOnlySet<string>> installed)
     {
         for (var index = 0; index < entries.Count; index++)
         {
@@ -181,7 +223,7 @@ public sealed partial class PluginsOptionsValidator : IValidateOptions<PluginsOp
 
             failures.Add(string.Create(
                 CultureInfo.InvariantCulture,
-                $"{setting}[{index}] must be \"*\" or the name of an executable, a host or a variable the manifest requests; got '{entry}'."));
+                $"{SettingKey.ShownPath(setting, installed.Value)}[{index}] must be \"*\" or the name of an executable, a host or a variable the manifest requests; {OptionRules.Written("value", entry, "is not one")}"));
         }
     }
 
@@ -195,16 +237,28 @@ public sealed partial class PluginsOptionsValidator : IValidateOptions<PluginsOp
 /// only what could never be right: a plugin nothing could be called, an operation this build does not publish,
 /// and a binding that is not an object.
 /// </summary>
-public sealed class RoutesOptionsValidator : IValidateOptions<RoutesOptions>
+/// <param name="installedPluginIds">
+/// The plugins installed in this data directory, listed when there is a sentence to compose. A route is keyed by
+/// an operation, and a key that names neither a published operation nor anything else the code knows is written
+/// as a placeholder; this is the one rule every key of a settings path is held to.
+/// </param>
+public sealed class RoutesOptionsValidator(Func<IReadOnlySet<string>> installedPluginIds) : IValidateOptions<RoutesOptions>
 {
+    /// <summary>A validator that knows of no installed plugin, so a key is shown only when the code itself knows it.</summary>
+    public RoutesOptionsValidator()
+        : this(SafeBinding.NoInstalledPlugins)
+    {
+    }
+
     public ValidateOptionsResult Validate(string? name, RoutesOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
         var failures = new List<string>();
+        var installed = new Lazy<IReadOnlySet<string>>(installedPluginIds);
 
         if (options.Default is not null)
         {
-            ValidateEntry(failures, $"{RoutesOptions.Section}:Default", options.Default);
+            ValidateEntry(failures, $"{RoutesOptions.Section}:Default", options.Default, installed);
         }
 
         foreach (var (operation, entry) in options.Operations)
@@ -212,32 +266,31 @@ public sealed class RoutesOptionsValidator : IValidateOptions<RoutesOptions>
             var setting = $"{RoutesOptions.Section}:Operations:{operation}";
             if (!OperationCatalog.Knows(operation))
             {
-                failures.Add($"{setting} must name a published operation; got '{operation}'.");
+                failures.Add($"{SettingKey.ShownPath(setting, installed.Value)} must name a published operation; {OptionRules.Written("key", operation, "is not one")}");
             }
 
             if (entry is null)
             {
-                failures.Add($"{setting} must be an object with Plugin and an optional Binding.");
+                failures.Add($"{SettingKey.ShownPath(setting, installed.Value)} must be an object with Plugin and an optional Binding.");
                 continue;
             }
 
-            ValidateEntry(failures, setting, entry);
+            ValidateEntry(failures, setting, entry, installed);
         }
 
         return OptionRules.Result(failures);
     }
 
-    private static void ValidateEntry(List<string> failures, string setting, RouteEntry entry)
+    private static void ValidateEntry(List<string> failures, string setting, RouteEntry entry, Lazy<IReadOnlySet<string>> installed)
     {
         if (!ManifestRules.IsPluginId(entry.Plugin))
         {
-            failures.Add($"{setting}:Plugin must be a plugin id; got '{entry.Plugin}'.");
+            failures.Add($"{SettingKey.ShownPath(setting, installed.Value)}:Plugin must be a plugin id; {OptionRules.Written("value", entry.Plugin, "is not one")}");
         }
 
         if (entry.Binding is not null and not JsonObject)
         {
-            var text = entry.Binding is JsonValue value ? value.ToString() : entry.Binding.ToJsonString();
-            failures.Add($"{setting}:Binding must be an object; got '{text}'.");
+            failures.Add($"{SettingKey.ShownPath(setting, installed.Value)}:Binding must be an object; got {OptionRules.Kind(entry.Binding)}.");
         }
     }
 }
@@ -267,7 +320,7 @@ public sealed partial class RolesOptionsValidator : IValidateOptions<RolesOption
         // when that item is claimed, where the person who has to fix it can see which work it stopped.
         if (options.DefaultExecutionProfile is { } profile && !ProfileName().IsMatch(profile))
         {
-            failures.Add($"Roles:DefaultExecutionProfile must be lowercase letters, digits and hyphens, starting with a letter, at most 64 characters; got '{profile}'.");
+            failures.Add($"Roles:DefaultExecutionProfile must be lowercase letters, digits and hyphens, starting with a letter, at most 64 characters; {OptionRules.Written("value", profile, "does not have that shape")}");
         }
 
         OptionRules.Range(failures, "Roles:MaxStdoutBytes", options.MaxStdoutBytes, 65_536, 67_108_864);
@@ -277,7 +330,7 @@ public sealed partial class RolesOptionsValidator : IValidateOptions<RolesOption
     }
 
     /// <summary>The shape of a role's name, which is the shape a profile's name is written under.</summary>
-    [GeneratedRegex("^[a-z][a-z0-9-]{0,63}$")]
+    [GeneratedRegex(@"^[a-z][a-z0-9-]{0,63}\z")]
     private static partial Regex ProfileName();
 }
 
@@ -293,7 +346,7 @@ public sealed class ManagerOptionsValidator : IValidateOptions<ManagerOptions>
     {
         ArgumentNullException.ThrowIfNull(options);
         var failures = new List<string>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var first = new Dictionary<string, int>(StringComparer.Ordinal);
 
         for (var index = 0; index < options.Triggers.Count; index++)
         {
@@ -302,13 +355,14 @@ public sealed class ManagerOptionsValidator : IValidateOptions<ManagerOptions>
             {
                 failures.Add(string.Create(
                     CultureInfo.InvariantCulture,
-                    $"Manager:Triggers[{index}] must be a chronicle kind the runtime writes itself; got '{kind}'."));
+                    $"Manager:Triggers[{index}] must be a chronicle kind the runtime writes itself; {OptionRules.Written("value", kind, "is not one")}"));
             }
-            else if (!seen.Add(kind))
+            else if (!first.TryAdd(kind, index))
             {
+                // Named by the line it repeats rather than by what it says, like every other refusal here.
                 failures.Add(string.Create(
                     CultureInfo.InvariantCulture,
-                    $"Manager:Triggers[{index}] repeats '{kind}'; a kind summons one review however many times it is listed."));
+                    $"Manager:Triggers[{index}] repeats Manager:Triggers[{first[kind]}]; a kind summons one review however many times it is listed."));
             }
         }
 
@@ -344,7 +398,7 @@ public sealed class UpdateOptionsValidator : IValidateOptions<UpdateOptions>
 
         if (!Uri.TryCreate(options.FeedUrl, UriKind.Absolute, out var feed) || !UpdateFeed.IsAllowed(feed))
         {
-            failures.Add($"Update:FeedUrl must be an absolute https address, or http on loopback; got '{options.FeedUrl}'.");
+            failures.Add($"Update:FeedUrl must be an absolute https address, or http on loopback; {OptionRules.Written("value", options.FeedUrl, "is not one")}");
         }
 
         OptionRules.Range(
@@ -369,12 +423,23 @@ public sealed class UpdateOptionsValidator : IValidateOptions<UpdateOptions>
 /// The notification settings, refused on start where a number is outside the range the coalescing rule can honour,
 /// a plugin is named by something no package could be called, or a binding is not an object a plugin could read.
 /// </summary>
-public sealed class NotificationsOptionsValidator : IValidateOptions<NotificationsOptions>
+/// <param name="installedPluginIds">
+/// The plugins installed in this data directory, listed when there is a sentence to compose: a channel is keyed by
+/// the id of the plugin that delivers it, and a key travels into a sentence only when it names one that is installed.
+/// </param>
+public sealed class NotificationsOptionsValidator(Func<IReadOnlySet<string>> installedPluginIds) : IValidateOptions<NotificationsOptions>
 {
+    /// <summary>A validator that knows of no installed plugin, so every channel's key is written as a placeholder.</summary>
+    public NotificationsOptionsValidator()
+        : this(SafeBinding.NoInstalledPlugins)
+    {
+    }
+
     public ValidateOptionsResult Validate(string? name, NotificationsOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
         var failures = new List<string>();
+        var installed = new Lazy<IReadOnlySet<string>>(installedPluginIds);
 
         OptionRules.Range(failures, "Notifications:QuietSeconds", options.QuietSeconds, NotificationsOptions.QuietSecondsMin, NotificationsOptions.QuietSecondsMax);
         OptionRules.Range(failures, "Notifications:MaxWaitSeconds", options.MaxWaitSeconds, Math.Max(NotificationsOptions.QuietSecondsMin, options.QuietSeconds), NotificationsOptions.MaxWaitSecondsMax);
@@ -384,7 +449,7 @@ public sealed class NotificationsOptionsValidator : IValidateOptions<Notificatio
         {
             if (!ManifestRules.IsPluginId(id))
             {
-                failures.Add($"Notifications:Plugins must name each plugin by its id: a lowercase letter, then lowercase letters, digits or dashes; got '{id}'.");
+                failures.Add($"Notifications:Plugins must name each plugin by its id: a lowercase letter, then lowercase letters, digits or dashes; {OptionRules.Written("key", id, "is not one")}");
                 continue;
             }
 
@@ -394,9 +459,17 @@ public sealed class NotificationsOptionsValidator : IValidateOptions<Notificatio
                 continue;
             }
 
+            // Refused rather than read through: an exception out of a validator is not a refusal anybody catches, and it
+            // stops the runtime instead of keeping the settings it had.
+            if (entry is null)
+            {
+                failures.Add($"{SettingKey.ShownPath($"Notifications:Plugins:{id}", installed.Value)} must be an object with an optional Enabled and an optional Binding.");
+                continue;
+            }
+
             if (entry.Binding is not null and not JsonObject)
             {
-                failures.Add($"Notifications:Plugins:{id}:Binding must be an object; got {entry.Binding.GetValueKind().ToString().ToLowerInvariant()}.");
+                failures.Add($"{SettingKey.ShownPath($"Notifications:Plugins:{id}:Binding", installed.Value)} must be an object; got {OptionRules.Kind(entry.Binding)}.");
             }
         }
 

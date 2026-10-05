@@ -699,6 +699,6 @@ public sealed partial class PluginInvoker(
         }
     }
 
-    [GeneratedRegex(@"^[A-Za-z0-9_.:-]{1,128}$")]
+    [GeneratedRegex(@"^[A-Za-z0-9_.:-]{1,128}\z")]
     private static partial Regex CorrelationPattern();
 }

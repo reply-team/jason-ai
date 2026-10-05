@@ -150,6 +150,31 @@ public class WorkItemContractTests
         Assert.Equal("invalid", detail.Code);
     }
 
+    /// <summary>
+    /// The channel's pattern ends in `$`, and an argument that is a name with a newline after it is not that name:
+    /// creation refuses it at the pointer that holds it rather than storing it for a plugin to trip over.
+    /// </summary>
+    [Fact]
+    public async Task An_argument_that_ends_in_a_newline_does_not_satisfy_a_pattern_that_ends_the_value()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var campaign = Seed(db, WorkItemFactory.NewCampaign());
+        var service = NewService(db);
+        var input = Membership();
+        input["channel"] = "email\n";
+
+        var error = await Assert.ThrowsAsync<ValidationException>(
+            () => service.CreateAsync(
+                ProviderOp(campaign.PublicId, "list_membership.add") with { Context = new JsonObject { ["input"] = input } },
+                Ct));
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal("context.input/channel", detail.Field);
+        Assert.Equal("invalid", detail.Code);
+        Assert.Contains("must match", detail.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Every_problem_in_the_arguments_is_reported_at_once()
     {

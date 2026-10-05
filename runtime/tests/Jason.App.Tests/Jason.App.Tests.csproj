@@ -31,5 +31,7 @@
     <Compile Include="../Jason.Runtime.Tests/TempDataDir.cs" Link="Skills/TempDataDir.cs" />
     <!-- The version this tree carries, read from the one file that says it, for the test that checks the version the executable prints. -->
     <Compile Include="../Jason.Runtime.Tests/TreeVersion.cs" Link="TreeVersion.cs" />
+    <!-- The one list of properties a runtime log line may carry: the scan of the source holds templates to it, and the run of the real executable holds its log to the same list. -->
+    <Compile Include="../Jason.Runtime.Tests/Logging/ReviewedLogProperties.cs" Link="EndToEnd/ReviewedLogProperties.cs" />
   </ItemGroup>
 </Project>

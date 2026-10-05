@@ -51,6 +51,34 @@ public class ResultFormatSchemaTests
         Assert.Contains("shape", detail.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// An escape the engine reads as an anchor and ECMA-262 as a letter has no one meaning in a schema the item
+    /// carries, so the dialect refuses it where the item is written, naming the escape.
+    /// </summary>
+    [Theory]
+    [InlineData(@"^[a-z]+\A", @"\A")]
+    [InlineData(@"^[a-z]+\z", @"\z")]
+    [InlineData(@"^[a-z]+\G", @"\G")]
+    public async Task A_pattern_with_an_escape_that_means_two_things_is_refused_rather_than_run(string pattern, string escape)
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var campaign = Seed(db);
+        var format = new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject { ["slug"] = new JsonObject { ["type"] = "string", ["pattern"] = pattern } },
+        };
+
+        var error = await Assert.ThrowsAsync<ValidationException>(
+            () => NewService(db).CreateAsync(AiRole(campaign, format), Ct));
+
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal("result_format/properties/slug/pattern", detail.Field);
+        Assert.Equal("schema_pattern_invalid", detail.Code);
+        Assert.Contains($"`{escape}`", detail.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_schema_of_the_dialect_is_accepted_and_read_back()
     {

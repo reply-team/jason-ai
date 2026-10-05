@@ -4,7 +4,9 @@ using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Plugins.Invocation;
+using Jason.Runtime.Tests.Dispatch;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Jason.Runtime.Tests.Plugins.Invocation;
 
@@ -16,6 +18,8 @@ namespace Jason.Runtime.Tests.Plugins.Invocation;
 /// </summary>
 public class ProtocolFailureTests
 {
+    private const string Sentinel = "SENTINEL_PLUGIN_STDOUT";
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -28,6 +32,46 @@ public class ProtocolFailureTests
         var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
         Assert.Equal(ProtocolCodes.PluginMalformedOutcome, failure.Code);
         Assert.Equal(FailureClass.Ambiguous, OutcomeClassification.ClassOf(failure.Code));
+    }
+
+    /// <summary>
+    /// What a child wrote when it did not write an outcome is the plugin's own text, and a plugin carries whatever
+    /// a person put into the work. It travels into the attempt's error, which is a value in the database; no log
+    /// line quotes it, whether the parser would or not. The invocation's own lines are in the record, so an
+    /// empty search means the text is absent and not that the lines never arrived.
+    /// </summary>
+    [Fact]
+    public async Task A_child_that_writes_an_unreadable_outcome_is_not_quoted_in_any_log_line()
+    {
+        var logs = new RecordingLogs();
+        await using var api = await StartAsync(Child("stdout", "{\"note\":\"" + Sentinel + "\",\"status\":}"), logs: logs);
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginMalformedOutcome, failure.Code);
+        Assert.Contains(logs.All, line => line.Contains(" ended: ", StringComparison.Ordinal));
+        Assert.False(logs.Mentions(Sentinel), "the child's output reached the log");
+    }
+
+    /// <summary>
+    /// The same holds for a document that is valid JSON and not an outcome: it is read by the typed reader, whose
+    /// message names the path it stopped at and can quote more, and that text goes into the attempt's error and no
+    /// further. The failure says it was this reader that refused, so the case is the one it is named for.
+    /// </summary>
+    [Fact]
+    public async Task A_child_that_writes_json_that_is_not_an_outcome_is_not_quoted_in_any_log_line()
+    {
+        var logs = new RecordingLogs();
+        await using var api = await StartAsync(Child("stdout", "{\"protocol_version\":\"" + Sentinel + "\"}"), logs: logs);
+
+        var result = await InvokeAsync(api);
+
+        var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginMalformedOutcome, failure.Code);
+        Assert.Contains("not an outcome document", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(logs.All, line => line.Contains(" ended: ", StringComparison.Ordinal));
+        Assert.False(logs.Mentions(Sentinel), "the child's output reached the log");
     }
 
     [Fact]
@@ -360,7 +404,8 @@ public class ProtocolFailureTests
     private static CommandLocator Child(params string[] behaviour) =>
         new(["dotnet", FakeProviderCli.Dll, .. behaviour]);
 
-    private static Task<RuntimeApiFixture> StartAsync(IPluginHostLocator locator, string? settings = null) =>
+    /// <param name="logs">Where the invoker writes its lines, when a test reads them: a running host writes through its file sink and nothing else would see them.</param>
+    private static Task<RuntimeApiFixture> StartAsync(IPluginHostLocator locator, string? settings = null, RecordingLogs? logs = null) =>
         RuntimeApiFixture.StartAsync(
             Ct,
             prepare: paths =>
@@ -373,6 +418,10 @@ public class ProtocolFailureTests
             {
                 services.AddSingleton(locator);
                 services.AddSingleton(TestPlugins.SearchPath);
+                if (logs is not null)
+                {
+                    services.AddSingleton<ILogger<PluginInvoker>>(new Logger<PluginInvoker>(LoggerFactory.Create(builder => builder.AddProvider(logs))));
+                }
             });
 
     private static async Task<PluginInvocationResult> InvokeAsync(

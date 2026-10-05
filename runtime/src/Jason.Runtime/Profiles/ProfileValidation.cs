@@ -321,6 +321,6 @@ internal static partial class ProfileValidation
     private static IEnumerable<string> Hosts() =>
         Enum.GetValues<AgentHostKind>().Select(SnakeCaseEnumConverter<AgentHostKind>.Format);
 
-    [GeneratedRegex("^[a-z][a-z0-9-]{0,63}$")]
+    [GeneratedRegex(@"^[a-z][a-z0-9-]{0,63}\z")]
     private static partial Regex Name();
 }

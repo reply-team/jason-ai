@@ -6,6 +6,11 @@ namespace Jason.Runtime.Dispatch;
 /// One claim handed from the scan to the handler pool. Both the internal keys and the public ids travel: the
 /// handler reloads by key in its own scope, and everything it says about the work uses the public ids.
 /// </summary>
+/// <param name="CampaignPublicId">
+/// The campaign the work belongs to. The log scope an attempt runs under has to be open before the handler loads
+/// anything, and again around the pool's own line when a handler gives out — so the id arrives with the claim
+/// rather than being read back from a row the scope is meant to cover.
+/// </param>
 /// <param name="Plan">
 /// For a provider operation, everything the claim resolved — the package, the route and the composed input —
 /// carried in memory rather than looked up again, so a reload between the claim and the run cannot change what
@@ -16,6 +21,7 @@ public sealed record ClaimedWork(
     int AttemptId,
     string WorkItemPublicId,
     string AttemptPublicId,
+    string CampaignPublicId,
     ProviderOpPlan? Plan = null,
 
     /// <summary>

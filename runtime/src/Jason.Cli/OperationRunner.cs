@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Cli.Discovery;
 using Jason.Cli.Http;
@@ -18,7 +20,8 @@ public static class OperationRunner
 {
     /// <summary>
     /// 3 when the runtime cannot be reached or rejects the token (the envelope is on stdout), 1 when the API
-    /// answers with an error (its body verbatim), 0 on success (the body verbatim, or the rendered text).
+    /// answers with an error (its body verbatim, or an envelope when the body is not JSON), 0 on success (the body
+    /// verbatim, or the rendered text).
     /// </summary>
     public static async Task<int> RunAsync(CliEnvironment env, string operation, JsonObject body, RunOptions options, CancellationToken cancellationToken)
     {
@@ -33,7 +36,7 @@ public static class OperationRunner
 
         if (!response.IsSuccess)
         {
-            env.Out.WriteLine(response.Body);
+            env.Out.WriteLine(ErrorText(response));
             return ExitCodes.ApiError;
         }
 
@@ -84,6 +87,29 @@ public static class OperationRunner
         }
 
         return (ExitCodes.Success, response);
+    }
+
+    /// <summary>
+    /// What an error response prints as: the body verbatim where the runtime composed it, and otherwise an envelope
+    /// that says what came back. A body that is not JSON is the server's own answer to a failure nothing caught —
+    /// empty, as often as not — and printed verbatim it gave an agent an exit code and nothing to read. A failure on
+    /// the runtime's side is worth trying again; a refusal of the request as it was is not.
+    /// </summary>
+    public static string ErrorText(RuntimeResponse response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        try
+        {
+            using var composed = JsonDocument.Parse(response.Body);
+            return response.Body;
+        }
+        catch (JsonException)
+        {
+            return CliErrors.Serialize(
+                CliErrors.RuntimeError,
+                string.Create(CultureInfo.InvariantCulture, $"The runtime answered {response.StatusCode} with a body that is not JSON."),
+                retryable: response.StatusCode >= 500);
+        }
     }
 
     private static int Fail(CliEnvironment env, string code, string message)

@@ -56,10 +56,32 @@ public sealed partial class RoutesOptions
     }
 
     /// <summary>The same read, into the instance the options factory made, which is what the options system needs.</summary>
+    /// <remarks>
+    /// Text where the whole section, or its map of operations, belongs has nothing in it to read, and reading past it
+    /// left no routes at all without a word. It is recorded against the instance by its path and what has to be there,
+    /// as a bound section's is, for the section's <see cref="BindingFailureValidator{TOptions}"/> to refuse: a start
+    /// then fails and a reload is rejected, naming the setting.
+    /// </remarks>
     internal static void Fill(IConfiguration section, RoutesOptions options)
     {
         ArgumentNullException.ThrowIfNull(section);
         ArgumentNullException.ThrowIfNull(options);
+
+        var passedOver = new List<string>();
+        if (section is IConfigurationSection { Value: { Length: > 0 } })
+        {
+            passedOver.Add($"{Section} could not be read as {typeof(RoutesOptions)}.");
+        }
+
+        if (section.GetSection(nameof(Operations)).Value is { Length: > 0 })
+        {
+            passedOver.Add($"{Section}:{nameof(Operations)} could not be read as a map of {typeof(RouteEntry)}.");
+        }
+
+        if (passedOver.Count > 0)
+        {
+            SafeBinding.Refuse(options, passedOver);
+        }
 
         var global = section.GetSection(nameof(Default));
         options.Default = global.Exists() ? Entry(global) : null;

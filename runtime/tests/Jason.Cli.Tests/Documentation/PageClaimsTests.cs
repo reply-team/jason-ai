@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Jason.Cli.Doctor;
 
 namespace Jason.Cli.Tests.Documentation;
 
@@ -56,19 +57,68 @@ public class PageClaimsTests
         Assert.Contains("asks for a\ntag that has not been published yet, and refuses", install, StringComparison.Ordinal);
     }
 
-    /// <summary>Four names have no API operation behind them, and no page says two.</summary>
+    /// <summary>
+    /// Six names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>logs</c> and <c>doctor</c>,
+    /// and the <c>skills</c> and <c>update</c> nouns — and no page says two, or the four it said before the two verbs
+    /// that read the installation's files arrived.
+    /// </summary>
     [Theory]
-    [InlineData("README.md")]
-    [InlineData("docs/INSTALL.md")]
-    [InlineData("CLAUDE.md")]
-    public void No_page_counts_fewer_names_without_an_operation_than_the_code_declares(string page)
+    [InlineData("README.md", "It is one of six names in this CLI with no API operation behind it")]
+    [InlineData("docs/INSTALL.md", "It is one of six names in this CLI with no API operation behind it")]
+    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations with **six declared exceptions**")]
+    public void No_page_counts_fewer_names_without_an_operation_than_the_code_declares(string page, string said)
     {
-        var text = Page(page.Split('/'));
+        var text = Flat(Page(page.Split('/')));
 
         Assert.DoesNotContain("two commands", text, StringComparison.Ordinal);
         Assert.DoesNotContain("two declared exceptions", text, StringComparison.Ordinal);
         Assert.DoesNotContain("the only command here", text, StringComparison.Ordinal);
-        Assert.Contains("four", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("one of four names", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("four declared exceptions", text, StringComparison.Ordinal);
+        Assert.Contains(said, text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The register of accepted decisions records what a diagnostic bundle is, in the row beside the notification
+    /// one, word for word as it was accepted: the row is what a later change to the bundle has to be measured against.
+    /// </summary>
+    [Fact]
+    public void The_decision_register_records_what_a_diagnostic_bundle_is()
+    {
+        var architecture = Page("docs", "architecture.md");
+        var start = architecture.IndexOf("\n## 18. Accepted decision register", StringComparison.Ordinal);
+        var end = architecture.IndexOf("\n## 19. ", StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start, "docs/architecture.md no longer has §18 followed by §19.");
+
+        var rows = architecture[start..end].Split('\n');
+        var notification = Array.FindIndex(rows, row => row.StartsWith("| DEC-NOTIFY-001 |", StringComparison.Ordinal));
+        Assert.True(notification >= 0, "§18 no longer has the notification row.");
+        Assert.Equal(DiagnosticBundleDecision, rows[notification + 1]);
+    }
+
+    /// <summary>The register's row for the diagnostic bundle, as it was accepted.</summary>
+    private const string DiagnosticBundleDecision =
+        "| DEC-DIAG-001 | A diagnostic bundle is shareable by construction. `jason doctor` composes it from the installation's files and the runtime's own metadata: "
+        + "versions, the readiness report, configuration as shape with literal values only from one published allowlist, a bounded log slice under the logging invariant, "
+        + "plugin status, and journal and work-item metadata without values, with the home directory and the account's names rewritten; "
+        + "journal values travel only on an explicit flag with a printed warning; it reaches no network and is never uploaded; it is listed before it is written. "
+        + "`jason logs` reads the installation's files and asks the runtime nothing; `jason doctor` asks the runtime only through its API and never opens the database; "
+        + "they are the fifth and sixth declared verb-map exceptions. |";
+
+    /// <summary>
+    /// What <c>--include-journal</c> adds, said on each page in the composer's own text: the one the warning and the
+    /// never-carried list quote, so a page cannot promise a bundle carries less than the flag puts in it. The list the
+    /// pages said before named six things and left out most of what the journal's entries hold.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md")]
+    [InlineData("CLAUDE.md")]
+    public void The_pages_say_what_the_journal_flag_adds_in_the_composers_own_words(string page)
+    {
+        var text = Flat(Page(page.Split('/')));
+
+        Assert.Contains(Flat(DoctorComposer.JournalCarries), text, StringComparison.Ordinal);
+        Assert.DoesNotContain("contact fields, decisions", text, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -91,6 +141,27 @@ public class PageClaimsTests
         Assert.DoesNotContain("outside the paths the receipts name", text, StringComparison.Ordinal);
         Assert.DoesNotContain("anything outside the paths it names", text, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// What a live edit may and may not do to a running runtime, and where a refused start is heard, is one sentence
+    /// and is said in the same words on every page that says it: the project instructions and the three documents
+    /// that carry settings. One of them kept the older wording, which said where a refused start is heard on stderr
+    /// alone and left out what <c>jason runtime start</c> answers.
+    /// </summary>
+    [Theory]
+    [InlineData("CLAUDE.md")]
+    [InlineData("docs/work-execution.md")]
+    [InlineData("docs/release-and-update.md")]
+    [InlineData("docs/notifications.md")]
+    public void Every_page_that_says_what_a_live_edit_does_says_it_in_the_same_words(string page) =>
+        Assert.Contains(LiveEditInvariant, Flat(Page(page.Split('/'))), StringComparison.Ordinal);
+
+    /// <summary>The live-edit sentence, as every page that states it has it.</summary>
+    private const string LiveEditInvariant =
+        "A live edit never stops the runtime: a refused edit keeps the last good settings and is logged by path and type, "
+        + "and a start with a malformed or mistyped file still fails, saying where — on stderr under `jason runtime run`, "
+        + "and after \"It said:\" in what `jason runtime start` answers: the line and byte of a malformed file, "
+        + "the setting's path and expected type for a mistyped one.";
 
     /// <summary>The sixth sentence a release would have made false, in both places it was written.</summary>
     [Theory]

@@ -3,14 +3,17 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Plugins;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Manifest;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
+using Jason.Runtime.Tests.Dispatch;
 using Jason.Runtime.Tests.Plugins;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Tests.Routing;
 
@@ -79,7 +82,8 @@ public class RouteActivationTests
     /// <summary>
     /// The same mistake in the settings file never reaches the route checks: the section is validated before it
     /// is handed over at all, so it is refused as the setting it is. One rejected reload either way, naming the
-    /// same route — an operator sees where the mistake is, not which layer noticed it.
+    /// route — an operator sees where the mistake is, not which layer noticed it. A settings key that names no
+    /// published operation is one the code does not know, so the line is named with a placeholder where it was.
     /// </summary>
     [Fact]
     public async Task A_global_route_for_an_operation_no_build_publishes_is_refused_as_the_setting_it_is()
@@ -97,9 +101,10 @@ public class RouteActivationTests
             Ct);
         var detail = await RefusedAsync(api);
 
-        Assert.Equal("Routes:Operations:not.an.operation", detail.Field);
+        Assert.Equal("Routes:Operations:<key>", detail.Field);
         Assert.Equal(RouteProblemCodes.SettingsInvalid, detail.Code);
         Assert.Contains("must name a published operation", detail.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("not.an.operation", detail.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -362,6 +367,94 @@ public class RouteActivationTests
         var after = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, new { }, Ct);
         Assert.Equal(before.Snapshot.Id, after.Snapshot.Id);
         Assert.Equal(before.RoutingSnapshotId, after.RoutingSnapshotId);
+    }
+
+    /// <summary>
+    /// A route written as text where an object belongs. Routes are read from the section by hand rather than
+    /// bound, so no binder ever meets the text; what this holds is the rest of the promise a mistyped setting
+    /// gets everywhere else — the rejected reload and never a 500, the setting named, and what was typed there
+    /// repeated neither to the caller nor into the log.
+    /// </summary>
+    [Fact]
+    public async Task A_route_written_as_text_where_an_object_belongs_refuses_the_reload_and_never_repeats_the_text()
+    {
+        const string sentinel = "SENTINEL_R_ROUTE";
+        var api = await StartAsync(
+            TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, Workspace()),
+            paths => TestPlugins.InstallFakeProvider(paths));
+        await using (api)
+        {
+            var before = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, new { }, Ct);
+
+            await TestRoutes.WriteGlobalAsync(api, new JsonObject { ["Default"] = sentinel }.ToJsonString(), Ct);
+            var detail = await RefusedAsync(api);
+
+            Assert.Equal(RouteProblemCodes.SettingsInvalid, detail.Code);
+            Assert.Equal("Routes:Default:Plugin", detail.Field);
+            Assert.DoesNotContain(sentinel, detail.Message, StringComparison.Ordinal);
+
+            var after = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, new { }, Ct);
+            Assert.Equal(before.Snapshot.Id, after.Snapshot.Id);
+            Assert.Equal(before.RoutingSnapshotId, after.RoutingSnapshotId);
+
+            await api.Runtime.StopAsync();
+            var logs = string.Concat(Directory.GetFiles(api.Paths.LogsDirectory).Select(File.ReadAllText));
+            Assert.DoesNotContain(sentinel, logs, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Text where the whole <c>Routes</c> section, or its map of operations, belongs. The section is read by hand, and
+    /// that text was passed over: the reload froze no routes at all and said nothing. It is the rejected reload every
+    /// other mistyped route gets, naming the setting, with the active snapshot kept and the text repeated nowhere.
+    /// </summary>
+    [Theory]
+    [InlineData("Operations", "Routes:Operations")]
+    [InlineData(null, "Routes")]
+    public async Task Text_where_the_routes_or_their_operations_belong_refuses_the_reload(string? map, string field)
+    {
+        const string sentinel = "SENTINEL_R_ROUTES";
+        var api = await StartAsync(
+            TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, Workspace()),
+            paths => TestPlugins.InstallFakeProvider(paths));
+        await using (api)
+        {
+            var before = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, new { }, Ct);
+
+            var settings = JsonNode.Parse(File.ReadAllText(api.Paths.UserSettingsFile))!.AsObject();
+            settings["Routes"] = map is null ? JsonValue.Create(sentinel) : new JsonObject { [map] = sentinel };
+            File.WriteAllText(api.Paths.UserSettingsFile, settings.ToJsonString());
+            var monitor = api.Resolve<IOptionsMonitor<RoutesOptions>>();
+            Assert.True(await DispatchHarness.EventuallyAsync(() => Refuses(monitor), Ct, 10000), "The edit never reached the runtime's view of the routes.");
+
+            var detail = await RefusedAsync(api);
+
+            Assert.Equal(RouteProblemCodes.SettingsInvalid, detail.Code);
+            Assert.Equal(field, detail.Field);
+            Assert.DoesNotContain(sentinel, detail.Message, StringComparison.Ordinal);
+
+            var after = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, new { }, Ct);
+            Assert.Equal(before.Snapshot.Id, after.Snapshot.Id);
+            Assert.Equal(before.RoutingSnapshotId, after.RoutingSnapshotId);
+
+            await api.Runtime.StopAsync();
+            var logs = string.Concat(Directory.GetFiles(api.Paths.LogsDirectory).Select(File.ReadAllText));
+            Assert.DoesNotContain(sentinel, logs, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>Whether the runtime's view of the routes is a refusal, which is what an edit to text turns it into.</summary>
+    private static bool Refuses(IOptionsMonitor<RoutesOptions> monitor)
+    {
+        try
+        {
+            _ = monitor.CurrentValue;
+            return false;
+        }
+        catch (OptionsValidationException)
+        {
+            return true;
+        }
     }
 
     /// <summary>

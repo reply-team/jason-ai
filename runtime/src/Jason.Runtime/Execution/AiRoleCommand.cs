@@ -71,11 +71,6 @@ public sealed class AiRoleCommand(
         // under, and whether it was taught anything at all.
         launch = launch with { Deny = context.Deny, RoleSkill = prepared.Skill };
 
-        if (prepared.Message is { } note)
-        {
-            logger.LogWarning("Attempt {AttemptId} of work item {WorkItemId}: {Note}", context.AttemptId, context.WorkItemId, note);
-        }
-
         var startInfo = ChildProcess.StartInfo(context.EntryCommand[0]);
         startInfo.WorkingDirectory = context.WorkDir;
         startInfo.RedirectStandardInput = true;

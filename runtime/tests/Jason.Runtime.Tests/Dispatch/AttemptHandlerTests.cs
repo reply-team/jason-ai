@@ -8,6 +8,7 @@ using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Jason.Runtime.Tests.Dispatch;
@@ -338,6 +339,27 @@ public class AttemptHandlerTests
         Assert.Null(Assert.Single(item.Attempts).StartedAt);
     }
 
+    /// <summary>
+    /// A command that throws while reading JSON is a failed launch like any command that throws, and its line says
+    /// the kind of failure and where the reader stopped. What the parser quoted and the keys its path names are a
+    /// person's text, and the sink writes an exception whole, so the exception is not handed to the log.
+    /// </summary>
+    [Fact]
+    public async Task A_command_that_throws_reading_json_is_logged_by_where_it_stopped_and_not_by_what_it_read()
+    {
+        var command = new FakeCommand(WorkItemKind.AiRole, _ => throw UnreadableJson.Failure());
+        using var harness = new DispatchHarness(Noon, o => o.RetryDelaySeconds = 0, commands: command);
+        await harness.SeedClaimableAsync(Ct);
+        var work = Assert.Single(await harness.ClaimAsync(Ct));
+
+        await AttemptHandler.RunAsync(harness.Scopes, work, harness.Registry, harness.Resolve<ILoggerFactory>().CreateLogger("Jason.Runtime.Tests"));
+
+        var failed = Assert.Single(harness.Logs.Lines, line => line.Message.StartsWith("The command of attempt", StringComparison.Ordinal));
+        Assert.Equal($"The command of attempt {work.AttemptPublicId} threw instead of reporting an outcome: {UnreadableJson.Described}", failed.Message);
+        Assert.Null(failed.Exception);
+        Assert.False(UnreadableJson.ReachedTheLog(harness.Logs), "what the parser read reached the log");
+    }
+
     private static Task RunAsync(DispatchHarness harness, ClaimedWork work) =>
         AttemptHandler.RunAsync(harness.Scopes, work, harness.Registry, NullLogger.Instance);
 
@@ -357,7 +379,7 @@ public class AttemptHandlerTests
         db.WorkItems.Add(item);
         db.Attempts.Add(attempt);
         await db.SaveChangesAsync(Ct);
-        return (item.PublicId, new ClaimedWork(item.Id, attempt.Id, item.PublicId, attempt.PublicId));
+        return (item.PublicId, new ClaimedWork(item.Id, attempt.Id, item.PublicId, attempt.PublicId, campaign.PublicId));
     }
 
     private static AttemptLaunchDto Launch(int? pid) => new(["agent-host"], "work", pid, null);

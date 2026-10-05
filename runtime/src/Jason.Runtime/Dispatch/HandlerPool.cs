@@ -1,5 +1,6 @@
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -21,6 +22,13 @@ public sealed class HandlerPool(
         LogLevel.Error,
         new EventId(1, nameof(HandlerFailed)),
         "The handler of attempt {AttemptId} ended unexpectedly");
+
+    // The same event, for a handler that gave out while reading JSON: what kind of failure and where, and no
+    // exception, because what the parser quoted is a person's text.
+    private static readonly Action<ILogger, string, string, Exception?> HandlerFailedToParse = LoggerMessage.Define<string, string>(
+        LogLevel.Error,
+        new EventId(1, nameof(HandlerFailed)),
+        "The handler of attempt {AttemptId} ended unexpectedly: {Failure}");
 
     private readonly Lock _gate = new();
     private readonly Dictionary<string, Task> _inFlight = new(StringComparer.Ordinal);
@@ -72,8 +80,20 @@ public sealed class HandlerPool(
             }
             catch (Exception ex)
             {
-                // A handler is the last line: whatever it failed at, the lease still ends the attempt.
-                HandlerFailed(logger, work.AttemptPublicId, ex);
+                // A handler is the last line: whatever it failed at, the lease still ends the attempt. The handler's
+                // own scope closed as the exception left it, and this is the line a log read for one campaign most
+                // needs, so it is written under the same three ids.
+                using (AttemptLogScope.Begin(logger, work.CampaignPublicId, work.WorkItemPublicId, work.AttemptPublicId))
+                {
+                    if (ParseFailure.Is(ex))
+                    {
+                        HandlerFailedToParse(logger, work.AttemptPublicId, ParseFailure.Describe(ex), null);
+                    }
+                    else
+                    {
+                        HandlerFailed(logger, work.AttemptPublicId, ex);
+                    }
+                }
             }
             finally
             {

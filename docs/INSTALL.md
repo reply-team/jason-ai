@@ -184,9 +184,9 @@ jason status
 jason status --human
 ```
 
-One question — "can this installation start work?" — answered check by check. It is one of four names in
-this CLI with no API operation behind it — `status` and `uninstall`, and the `skills` and `update` nouns — and
-it cannot be otherwise: half of what it reports is not the runtime's to know.
+One question — "can this installation start work?" — answered check by check. It is one of six names in
+this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `doctor`, and the `skills` and
+`update` nouns — and it cannot be otherwise: half of what it reports is not the runtime's to know.
 
 | Required — a failure exits 1 | Optional — absent never fails |
 |---|---|

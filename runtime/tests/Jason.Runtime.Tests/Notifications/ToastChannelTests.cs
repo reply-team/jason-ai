@@ -16,6 +16,8 @@ namespace Jason.Runtime.Tests.Notifications;
 /// </summary>
 public sealed class ToastChannelTests
 {
+    private const string UnreadableAnswer = "SENTINEL_TOAST_ANSWER";
+
     private static readonly NotificationMessage Message = NotificationComposer.Compose(2, 0);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -135,6 +137,22 @@ public sealed class ToastChannelTests
         Assert.Equal(ToastChannel.Bound, bound);
         Assert.Equal(TimeSpan.FromSeconds(5), bound);
         Assert.DoesNotContain(launch.Environment.Keys, name => name.StartsWith("JASON_", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// An answer the runtime cannot read back is no outcome, said by the exit code alone: the child's own text is not
+    /// repeated, in the outcome or in the log. The parser's message can quote what it read, and the line is a child's.
+    /// </summary>
+    [Fact]
+    public async Task A_toast_host_answer_that_cannot_be_read_is_no_outcome_and_is_quoted_nowhere()
+    {
+        var unreadable = "{\"registration\":\"" + UnreadableAnswer + "\",\"calls\":";
+        var (toast, _, logs) = Channel(Facts(DesktopPlatform.Windows), new() { ["toast-host"] = _ => Exit(0, unreadable) });
+
+        var outcome = await toast.DeliverAsync(Message, "ntf_test", Ct);
+
+        Is(outcome, ChannelResult.Failed, code: ToastOutcomes.NoOutcome, @class: FailureClass.Ambiguous, detail: "exit 0");
+        Assert.False(logs.Mentions(UnreadableAnswer), "the toast host's answer reached the log");
     }
 
     /// <summary>No daemon owns the name, and none the bus could start is installed: nothing can show a notification.</summary>

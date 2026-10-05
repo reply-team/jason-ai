@@ -1,5 +1,6 @@
 using Jason.Contracts.Api;
 using Jason.Runtime.Execution;
+using Jason.Runtime.Logging;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Persistence;
 using Microsoft.Extensions.DependencyInjection;
@@ -87,7 +88,13 @@ public sealed class ScanRunner(
 
         foreach (var work in claimed)
         {
-            Claimed(logger, work.WorkItemPublicId, work.AttemptPublicId, null);
+            // The scope closes with the line it is for. The handler opens its own, on the pool's task, because a
+            // scope follows the flow of the code that opened it and the pool does not run on the scan's.
+            using (AttemptLogScope.Begin(logger, work.CampaignPublicId, work.WorkItemPublicId, work.AttemptPublicId))
+            {
+                Claimed(logger, work.WorkItemPublicId, work.AttemptPublicId, null);
+            }
+
             pool.Dispatch(work);
         }
 

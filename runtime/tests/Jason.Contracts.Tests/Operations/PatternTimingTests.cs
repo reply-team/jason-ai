@@ -148,7 +148,9 @@ public class PatternTimingTests
 
         SchemaValidator.Warm(schema, timing);
 
-        Assert.Equal(["^a$", "^b$", "^c$", "^d$", "^e$"], timing.Matched.Order(StringComparer.Ordinal).ToArray());
+        // As the engine runs them, which is how a timing knows a pattern: the warm-up compiles what a validation
+        // compiles, where `$` ends the value and nothing else.
+        Assert.Equal([@"^a\z", @"^b\z", @"^c\z", @"^d\z", @"^e\z"], timing.Matched.Order(StringComparer.Ordinal).ToArray());
     }
 
     [Fact]
@@ -218,6 +220,81 @@ public class PatternTimingTests
         Assert.Empty(SchemaValidator.ProbePatterns(Schema(Channel), PatternTiming.Default));
     }
 
+    /// <summary>
+    /// A warm-up is worth what a later validation gains from it, so every path that matches a pattern — the warm-up, the
+    /// load-time probe and a validation — is handed the one expression compiled from the pattern as written, the one
+    /// whose `$` ends the value. What those paths say about the pattern quotes it as its author wrote it.
+    /// </summary>
+    [Fact]
+    public void Warming_probing_and_validating_a_pattern_meet_one_compiled_expression_and_quote_the_pattern_as_written()
+    {
+        // Never seen by this process before, so the warm-up is what compiles it.
+        var written = "^" + Guid.NewGuid().ToString("N") + "$";
+        var schema = new JsonObject { ["type"] = "string", ["pattern"] = written };
+        var (warming, probing, validating) = (new Recording(), new Recording(), new Recording());
+
+        SchemaValidator.Warm(schema, warming);
+        SchemaValidator.ProbePatterns(schema, probing);
+        SchemaValidator.Validate(JsonValue.Create("x"), schema, validating);
+
+        // One expression on each path however often a cold engine made it retry, and the same one on all three.
+        var warmed = Assert.Single(warming.Handed.Distinct());
+        Assert.Same(warmed, Assert.Single(probing.Handed.Distinct()));
+        Assert.Same(warmed, Assert.Single(validating.Handed.Distinct()));
+        Assert.Equal(written[..^1] + @"\z", warmed.ToString());
+
+        var unmeasured = Assert.Single(SchemaValidator.Validate(JsonValue.Create("x"), schema, TimingOut.Always()));
+        var refused = Assert.Single(SchemaValidator.ProbePatterns(schema, TimingOut.Always()));
+        Assert.All(
+            new[] { unmeasured.Message, refused.Message },
+            message =>
+            {
+                Assert.Contains($"`{written}`", message, StringComparison.Ordinal);
+                Assert.DoesNotContain(@"\z", message, StringComparison.Ordinal);
+            });
+    }
+
+    /// <summary>
+    /// What is compiled is the pattern as the engine is handed it, and every path that matches it is handed that: a `$`
+    /// that anchors is `\z`, and a `.` outside a class is a class of everything but the four line terminators. A pattern
+    /// with neither is compiled as written.
+    /// </summary>
+    [Theory]
+    [InlineData("^x$", @"^x\z")]
+    [InlineData("^.+$", @"^[^\n\r\u2028\u2029]+\z")]
+    [InlineData(@"^[.]\.a$", @"^[.]\.a\z")]
+    [InlineData(@"^a\\.$", @"^a\\[^\n\r\u2028\u2029]\z")]
+    [InlineData("^x", "^x")]
+    public void Warming_and_probing_a_pattern_hand_the_engine_the_form_it_runs_and_not_the_pattern_as_written(string written, string compiled)
+    {
+        var schema = new JsonObject { ["type"] = "string", ["pattern"] = written };
+        var (warming, probing, validating) = (new Recording(), new Recording(), new Recording());
+
+        SchemaValidator.Warm(schema, warming);
+        SchemaValidator.ProbePatterns(schema, probing);
+        SchemaValidator.Validate(JsonValue.Create("x"), schema, validating);
+
+        Assert.Equal(compiled, Assert.Single(warming.Handed.Select(handed => handed.ToString()).Distinct()));
+        Assert.Equal(compiled, Assert.Single(probing.Handed.Select(handed => handed.ToString()).Distinct()));
+        Assert.Equal(compiled, Assert.Single(validating.Handed.Select(handed => handed.ToString()).Distinct()));
+    }
+
+    /// <summary>A pattern that writes a refused escape has no compiled form, so no path matches it, warms it or probes it.</summary>
+    [Fact]
+    public void A_pattern_with_a_refused_escape_is_never_handed_to_the_engine()
+    {
+        var schema = new JsonObject { ["type"] = "string", ["pattern"] = @"^x\z" };
+        var (warming, probing, validating) = (new Recording(), new Recording(), new Recording());
+
+        Assert.Equal(new WarmedPatterns(Finished: 0, Unfinished: 0), SchemaValidator.Warm(schema, warming));
+        Assert.Empty(SchemaValidator.ProbePatterns(schema, probing));
+        Assert.Equal("schema_pattern_invalid", Assert.Single(SchemaValidator.Validate(JsonValue.Create("x"), schema, validating)).Reason);
+
+        Assert.Empty(warming.Handed);
+        Assert.Empty(probing.Handed);
+        Assert.Empty(validating.Handed);
+    }
+
     [Fact]
     public void An_operation_s_result_is_measured_under_the_timing_it_is_given()
     {
@@ -260,13 +337,17 @@ public class PatternTimingTests
         Assert.True(PatternTiming.PatternsCompiled > before, "compiling a new pattern did not move the count");
     }
 
-    /// <summary>The default match, recording the timeout every pattern it is handed was compiled with.</summary>
+    /// <summary>The default match, recording every compiled pattern it is handed and the timeout each was compiled with.</summary>
     private sealed class Recording : PatternTiming
     {
+        public List<Regex> Handed { get; } = [];
+
         public List<TimeSpan> Timeouts { get; } = [];
 
         public override bool IsMatch(Regex pattern, string value)
         {
+            // Recorded before the match, so a cold engine's real timeout still leaves a record of what it was handed.
+            Handed.Add(pattern);
             Timeouts.Add(pattern.MatchTimeout);
             return base.IsMatch(pattern, value);
         }

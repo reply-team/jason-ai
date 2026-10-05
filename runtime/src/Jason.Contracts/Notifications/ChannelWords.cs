@@ -84,4 +84,16 @@ public static class ChannelPresence
     /// <c>jason status</c> keys its advice on it.
     /// </summary>
     public const string SessionZero = "session 0";
+
+    /// <summary>The detail of a Linux runtime with no session bus to send a notification over.</summary>
+    public const string NoSessionBus = "no session bus";
+
+    /// <summary>The detail of a Linux runtime with a session bus and no program to talk to the notifier with.</summary>
+    public const string NoNotificationProgram = "no notification program";
+
+    /// <summary>
+    /// Every detail the runtime itself gives a missing desktop: a closed set of its own words. A detail in it is the
+    /// runtime's fact and may be shown anywhere; anything else is text nobody controls, which a diagnostic bundle leaves out.
+    /// </summary>
+    public static IReadOnlyList<string> Details { get; } = [SessionZero, NoSessionBus, NoNotificationProgram];
 }

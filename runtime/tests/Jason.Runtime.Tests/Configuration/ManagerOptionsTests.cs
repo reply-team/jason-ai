@@ -25,8 +25,10 @@ public class ManagerOptionsTests
     {
         var failure = Validate(options => options.Triggers = ["inbound_reply"]);
 
-        Assert.Contains("Manager:Triggers[0]", failure, StringComparison.Ordinal);
-        Assert.Contains("inbound_reply", failure, StringComparison.Ordinal);
+        // Named by its line and its length, never by what it says: the refusal goes to the log.
+        Assert.Equal(
+            "Manager:Triggers[0] must be a chronicle kind the runtime writes itself; the value written is 13 characters long and is not one.",
+            failure);
     }
 
     /// <summary>
@@ -46,7 +48,7 @@ public class ManagerOptionsTests
     {
         var failure = Validate(options => options.Triggers = [JournalKinds.WorkItemFailed, JournalKinds.WorkItemFailed]);
 
-        Assert.Contains("repeats", failure, StringComparison.Ordinal);
+        Assert.Contains("Manager:Triggers[1] repeats Manager:Triggers[0];", failure, StringComparison.Ordinal);
     }
 
     /// <summary>Cadence and nothing else is a configuration somebody may want, not a mistake.</summary>
@@ -214,7 +216,7 @@ public class ManagerOptionsTests
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
         File.WriteAllText(dir.Paths.UserSettingsFile, """{"Manager":{"Triggers":["inbound_reply"]}}""");
 
-        var failure = await Assert.ThrowsAsync<OptionsValidationException>(
+        var failure = await Assert.ThrowsAsync<InvalidSettingsException>(
             () => RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct));
 
         Assert.Contains("Manager:Triggers[0]", failure.Message, StringComparison.Ordinal);

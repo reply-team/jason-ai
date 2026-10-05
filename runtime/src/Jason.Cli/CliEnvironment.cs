@@ -1,4 +1,5 @@
 using Jason.Cli.Autostart;
+using Jason.Cli.Doctor;
 using Jason.Cli.Process;
 using Jason.Cli.Skills;
 using Jason.Cli.Uninstall;
@@ -44,7 +45,20 @@ namespace Jason.Cli;
 /// fetches a skills source with <c>git</c>; a seam that defaulted to the real runner would make a
 /// documentation guard the first test in this repository to open a socket to the internet.
 /// </param>
-public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null)
+/// <param name="Identity">
+/// The names this installation goes by — the home directory, the account, the machine, its domain and the account's
+/// security identifier — which a diagnostic bundle rewrites before anything is written. Null reads them from this
+/// machine, the answer everywhere but a test, and unlike the seams above a harmless one to leave null: reading a name
+/// acts on nothing. But a test that checks what a bundle says about a name would be checking the developer's own, so
+/// it hands in names of its own, and no fixture ever holds the real ones.
+/// </param>
+/// <param name="Variables">
+/// This process's environment variables, of which a diagnostic bundle describes the <c>JASON_*</c> ones. Null reads the
+/// process's own, the answer everywhere but a test — and the same kind of seam as <paramref name="Identity"/>: reading a
+/// variable acts on nothing, but a test that read the real environment would describe whatever the person running the
+/// suite happens to have set, so it hands in variables of its own.
+/// </param>
+public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null)
 {
     public static CliEnvironment Default() =>
         new(

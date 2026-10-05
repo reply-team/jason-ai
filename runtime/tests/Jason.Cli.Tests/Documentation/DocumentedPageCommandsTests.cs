@@ -31,6 +31,10 @@ public class DocumentedPageCommandsTests
         // stands behind. This list is "command prefixes whose printed lines this guard types", where the
         // prefix is only how a line is recognised in a page.
         "jason runtime autostart ", "jason status", "jason skills ", "jason uninstall",
+        // The two verbs that read the installation's files. `jason doctor` also writes one, and its lines are typed
+        // for real all the same: the data directory it writes under is this test's own, and an `--output` a page
+        // printed is moved there too (see Named).
+        "jason logs", "jason doctor",
     ];
 
     /// <summary>
@@ -95,6 +99,41 @@ public class DocumentedPageCommandsTests
     /// <summary>At least one line, or the theory above asserts nothing at all.</summary>
     [Fact]
     public void The_pages_carry_commands_to_check() => Assert.NotEmpty(DocumentedCommands());
+
+    /// <summary>
+    /// A file a printed command writes lands in this test's own directory, never where the suite happens to run: these
+    /// lines are typed for real, and a page that printed <c>jason doctor --output bundle.json</c> would otherwise leave a
+    /// bundle in the repository, or in the test host's own directory, every time the suite ran. Every spelling of the
+    /// option the parser accepts is typed, and the bundle has to be written — inside this test's own directory — for the
+    /// test to pass: a line the verb refused would leave no stray either.
+    /// </summary>
+    [Theory]
+    [InlineData("jason doctor --output {0}")]
+    [InlineData("jason doctor --output={0}")]
+    [InlineData("jason doctor --output:{0}")]
+    public async Task A_file_a_printed_command_writes_lands_in_this_tests_own_directory(string line)
+    {
+        var name = $"guard-{Guid.NewGuid():N}.json";
+        var stray = Path.Combine(Directory.GetCurrentDirectory(), name);
+        try
+        {
+            using var dir = new TempPaths();
+            var error = new StringWriter();
+
+            var exit = await CliApp.RunAsync(
+                Named(Tokens(string.Format(System.Globalization.CultureInfo.InvariantCulture, line, name)), dir.Paths.Root),
+                Machine(dir, error),
+                TestContext.Current.CancellationToken);
+
+            Assert.True(exit == 0, $"Typing '{line}' exited {exit}: {error}");
+            Assert.True(File.Exists(Path.Combine(dir.Paths.Root, name)), $"Typing '{line}' wrote nothing inside this test's own directory.");
+            Assert.False(File.Exists(stray), $"Typing '{line}' wrote {stray}, outside this test's own directory.");
+        }
+        finally
+        {
+            File.Delete(stray);
+        }
+    }
 
     /// <summary>
     /// And every noun in that list is really printed by one of these pages. A noun nobody prints is a guard
@@ -184,10 +223,36 @@ public class DocumentedPageCommandsTests
     /// that its command has the wrong spelling. The placeholder differs by option because the CLI checks the
     /// shape as it reads: a list of contacts is an array, a note or a result is an object.
     /// </summary>
+    /// <remarks>
+    /// A file a command writes is moved inside this test's own directory, whatever the page printed: <c>--output</c>,
+    /// which <c>jason doctor</c> takes, in each of the spellings the parser accepts. These lines are typed for real,
+    /// and a relative name would otherwise be written wherever the suite runs — the repository, or the test host's
+    /// own directory. It is not made to exist, because the verb refuses a file that is already there.
+    /// </remarks>
     private static string[] Named(string[] tokens, string root)
     {
-        for (var index = 0; index < tokens.Length - 1; index++)
+        const string Output = "--output";
+        for (var index = 0; index < tokens.Length; index++)
         {
+            if (tokens[index].Length > Output.Length + 1
+                && tokens[index].StartsWith(Output, StringComparison.Ordinal)
+                && tokens[index][Output.Length] is '=' or ':')
+            {
+                tokens[index] = tokens[index][..(Output.Length + 1)] + Path.Combine(root, Path.GetFileName(tokens[index][(Output.Length + 1)..]));
+                continue;
+            }
+
+            if (index == tokens.Length - 1)
+            {
+                break;
+            }
+
+            if (tokens[index] == Output)
+            {
+                tokens[index + 1] = Path.Combine(root, Path.GetFileName(tokens[index + 1]));
+                continue;
+            }
+
             var content = tokens[index] switch
             {
                 "--file" => "[]",

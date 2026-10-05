@@ -47,7 +47,7 @@ public static class RuntimeStatusCommand
 
         if (!response.IsSuccess)
         {
-            env.Out.WriteLine(response.Body);
+            env.Out.WriteLine(OperationRunner.ErrorText(response));
             return ExitCodes.ApiError;
         }
 

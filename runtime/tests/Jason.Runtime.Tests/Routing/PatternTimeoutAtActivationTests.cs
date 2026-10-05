@@ -23,11 +23,14 @@ public sealed class PatternTimeoutAtActivationTests
 {
     private const string PluginId = "patterned-provider";
 
-    /// <summary>The binding pattern of the package these tests install; nothing the runtime publishes uses it.</summary>
+    /// <summary>The binding pattern of the package these tests install, as its manifest writes it; nothing the runtime publishes uses it.</summary>
     private const string BindingPattern = "^[a-z]+$";
 
     /// <summary>The one binding value these tests let time out; the warm-up and the load's probe never meet it.</summary>
     private const string West = "west";
+
+    /// <summary>The binding pattern as the engine runs it, which is how a timing names the one pattern whose matches may time out.</summary>
+    private static readonly string ProbedPattern = TimingOut.AsCompiled(BindingPattern);
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -145,7 +148,7 @@ public sealed class PatternTimeoutAtActivationTests
     [Fact]
     public async Task A_start_whose_first_load_could_not_finish_a_binding_probe_loads_the_package_on_the_second()
     {
-        var timing = new TimingOut(2) { OnlyPattern = BindingPattern };
+        var timing = new TimingOut(2) { OnlyPattern = ProbedPattern };
 
         await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: Install, configureServices: services => services.AddSingleton<PatternTiming>(timing));
 
@@ -158,7 +161,7 @@ public sealed class PatternTimeoutAtActivationTests
     [Fact]
     public async Task A_start_whose_binding_probe_cannot_finish_twice_over_fails_closed_after_one_more_load()
     {
-        var probing = new TimingOut(int.MaxValue) { OnlyPattern = BindingPattern };
+        var probing = new TimingOut(int.MaxValue) { OnlyPattern = ProbedPattern };
 
         await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: Install, configureServices: services => services.AddSingleton<PatternTiming>(probing));
 
@@ -176,7 +179,7 @@ public sealed class PatternTimeoutAtActivationTests
     [Fact]
     public async Task A_start_whose_probe_timed_out_beside_a_broken_package_fails_closed_at_once()
     {
-        var probing = new TimingOut(int.MaxValue) { OnlyPattern = BindingPattern };
+        var probing = new TimingOut(int.MaxValue) { OnlyPattern = ProbedPattern };
 
         await using var api = await RuntimeApiFixture.StartAsync(
             Ct,

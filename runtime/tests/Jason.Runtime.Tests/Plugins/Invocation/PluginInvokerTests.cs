@@ -492,6 +492,22 @@ public class PluginInvokerTests
             Ct));
     }
 
+    /// <summary>
+    /// The id is the caller's own string and is not trimmed on the way in, so one followed by a line break would
+    /// reach argv and every log line about the invocation as two lines.
+    /// </summary>
+    [Fact]
+    public async Task A_correlation_id_followed_by_a_line_break_is_refused_like_any_other_malformed_one()
+    {
+        await using var api = await StartAsync();
+        using var scope = api.Runtime.Services.CreateScope();
+        var invoker = scope.ServiceProvider.GetRequiredService<PluginInvoker>();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => invoker.InvokeAsync(
+            new PluginInvocationRequest(TestPlugins.FakeProviderId, "echo.run", new JsonObject(), null, "att_01K0LINEBREAK\n"),
+            Ct));
+    }
+
     [Fact]
     public async Task A_plugin_that_never_ends_is_ended_by_its_own_budget()
     {

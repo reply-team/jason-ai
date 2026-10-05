@@ -28,6 +28,24 @@ public class JasonJsonTests
         Assert.Equal(local.ToUniversalTime(), back.At);
     }
 
+    /// <summary>
+    /// A timestamp the dialect cannot read is a body that is not valid for the operation, refused the way every other
+    /// such body is: as a <see cref="JsonException"/>. And the refusal does not quote what it refused. A runtime log
+    /// writes an exception whole, and the text a person typed where a moment belonged is still the text they typed.
+    /// </summary>
+    [Fact]
+    public void A_timestamp_the_dialect_cannot_read_is_refused_without_quoting_it()
+    {
+        const string sentinel = "SENTINEL_SINCE_yesterday";
+
+        var refused = Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Envelope>(
+            "{\"kind\":\"awaiting_approval\",\"at\":\"" + sentinel + "\"}",
+            JasonJson.Options));
+
+        Assert.DoesNotContain(sentinel, refused.ToString(), StringComparison.Ordinal);
+        Assert.Contains("ISO-8601", refused.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Enums_travel_as_snake_case_text_and_nothing_else()
     {
@@ -75,6 +93,22 @@ public class JasonJsonTests
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<AttemptProvenanceDto>(
             "{\"external_ids_returned\":{\"contactId\":1001}}",
             JasonJson.Options));
+    }
+
+    /// <summary>
+    /// The keys of that map are a provider's words, and a refusal of the value under one says where it stopped without
+    /// saying the word: what a provider answered is as much somebody else's text as what a person typed.
+    /// </summary>
+    [Fact]
+    public void A_map_of_identifiers_that_refuses_a_value_does_not_quote_its_key()
+    {
+        const string sentinel = "SENTINEL_KEY_contactId";
+
+        var refused = Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<AttemptProvenanceDto>(
+            "{\"external_ids_returned\":{\"" + sentinel + "\":1001}}",
+            JasonJson.Options));
+
+        Assert.DoesNotContain(sentinel, refused.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

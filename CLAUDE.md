@@ -105,18 +105,35 @@ covered here.
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for
   people, stderr is diagnostics only. Exit codes: 0 success, 1 understood and refused (an API
   business error, or a local act the CLI refused to perform), 2 usage error, 3 runtime unreachable
-  or unauthorized. The verb map is one-to-one with API operations with **four declared exceptions**:
+  or unauthorized. The verb map is one-to-one with API operations with **six declared exceptions**:
   `jason status` answers "can this installation start work?", half of which is not the runtime's to
   know, so no operation can stand behind it; `jason uninstall` takes this installation off the
   machine — a logon registration, an executable, a PATH entry, the files a deployment recorded — which
-  the runtime neither performs nor is asked about; and the `skills` and `update` nouns change this
+  the runtime neither performs nor is asked about; the `skills` and `update` nouns change this
   installation's files — deploying skills, replacing the executable — rather than ask the runtime
-  anything. `status` exits 0 or 1 and **never 3** — "I could not ask the runtime" is its answer rather
-  than a reason it has none — and its body carries `ready` so an agent branches on the body, never on the
-  code. `uninstall` removes skills only by receipt and the rest of the installation by rule, and keeps
-  the data directory unless `--purge-data` says otherwise. `CliApp` states all four where the rule is
-  written, each verb's `--help` publishes its own contract — which checks are required, what is removed
-  and what is never touched — and a guard holds the list to these four.
+  anything; `jason logs` reads the installation's log files, which the runtime writes and is never
+  asked about; and `jason doctor` collects one installation into one file, half of which is not the
+  runtime's to know — of the runtime it asks only what the runtime says about itself and the journal
+  and work-item pages it counts, keeping their metadata and dropping their values. `status`, `logs` and
+  `doctor` exit 0 or 1 and **never 3** — `logs` never asks the runtime, and for the other two "I could
+  not ask the runtime" is an answer rather than a reason there is none — and the body of `status`
+  carries `ready` so an agent branches on the body, never on the code. `uninstall` removes skills only
+  by receipt and the rest of the installation by rule, and keeps the data directory unless
+  `--purge-data` says otherwise. `doctor` lists what it would write before it writes — `--dry-run`
+  lists it and writes nothing — reaches no network and uploads nothing; only `--include-journal` adds
+  what the journal entries say: campaign names and fields as they changed, campaign and work-item
+  contexts as they changed, result formats, the addresses and numbers put on or taken off the
+  do-not-contact register, the accounts a campaign's routes bind, the options decisions were answered
+  with, the errors attempts ended with, provider identifiers, the effect, tool and operation a report
+  names, the failure text and receipts notification channels reported, entries people and agents wrote
+  themselves, the names actors gave, and the reasons they typed — and it prints a warning; the runtime's
+  own report (`system_info`) travels projected, withholding channel detail, presence detail outside the
+  runtime's own words, skill problem text and the release-notes URL, and the bundle says so; and before
+  anything is written the home directory becomes `~`, a data directory outside it `<data>`, a different
+  one the runtime keeps its data in a mark of its own, and the account's user, machine and domain names
+  and SIDs marks of their own. `CliApp` states all six where the rule is written, each verb's `--help`
+  publishes its own contract — which checks are required, what is removed, what is never touched and
+  what a bundle never carries — and a guard holds the list to these six.
 - Persistence: EF Core over SQLite in WAL mode, snake_case tables and columns, integer primary keys
   plus a unique public ULID. The `journal` table is append-only, enforced three times over: no API
   path that changes an entry, an EF interceptor, and database triggers. Schema-less JSON — campaign
@@ -131,9 +148,17 @@ covered here.
   defaults to `~/.jason`. Settings are bound through `IOptions<T>` with validation on start; the
   dispatcher reads `IOptionsMonitor<T>` each tick, so edits to `settings.json` apply live except
   `Dispatcher:MaxParallel`, which sizes the handler pool when the runtime starts, and
-  `Dispatcher:Enabled`, which decides at start whether this runtime has a dispatch loop at all.
+  `Dispatcher:Enabled`, which decides at start whether this runtime has a dispatch loop at all. A live
+  edit never stops the runtime: a refused edit keeps the last good settings and is logged by path and
+  type, and a start with a malformed or mistyped file still fails, saying where — on stderr under
+  `jason runtime run`, and after "It said:" in what `jason runtime start` answers: the line and byte
+  of a malformed file, the setting's path and expected type for a mistyped one.
 - Logs are JSON Lines under `~/.jason/logs/` and never contain request bodies, prompts, work-item
-  contexts or the capability token.
+  contexts or the capability token: no text a person gives Jason — a context, a field, a brief, an
+  operation's argument, a package's manifest, a refused setting, a reason — reaches them, held by a
+  guard over every message template the runtime writes and by a run of the real executable that reads
+  its own log back; the paths the installation runs from do, and a bundle rewrites them. `jason logs`
+  reads them without the runtime; `jason doctor` carries a bounded slice of them.
 - Everything in the repository is written in English.
 
 ## Working style

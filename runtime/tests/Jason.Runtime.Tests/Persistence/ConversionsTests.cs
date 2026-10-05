@@ -129,8 +129,52 @@ public class ConversionsTests
         Assert.Equal("awaiting_approval", SnakeCaseEnumConverter<Sample>.Format(Sample.AwaitingApproval));
         Assert.Equal("done", SnakeCaseEnumConverter<Sample>.Format(Sample.Done));
         Assert.Equal(Sample.AwaitingApproval, SnakeCaseEnumConverter<Sample>.Parse("awaiting_approval"));
-        Assert.Throws<InvalidOperationException>(() => SnakeCaseEnumConverter<Sample>.Parse("awaitingapproval"));
-        Assert.Throws<InvalidOperationException>(() => SnakeCaseEnumConverter<Sample>.Parse("Awaiting_Approval"));
+
+        // Refused, and not repeated: a column edited by hand can hold anything, and the refusal travels into logs.
+        foreach (var unknown in new[] { "awaitingapproval", "Awaiting_Approval" })
+        {
+            var refused = Assert.Throws<UnreadableStoredValueException>(() => SnakeCaseEnumConverter<Sample>.Parse(unknown));
+            Assert.Equal("not a stored Sample", refused.Failure);
+            Assert.DoesNotContain(unknown, refused.ToString(), StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Every column a converter reads refuses text it cannot read in words that name the column and quote none of the
+    /// text: a parser's message quotes what it read, a key written twice is named by the error that finds it, and an
+    /// exception kept inside another is written out with it by every log sink. Text no column can hold, and an object
+    /// whose key is written twice, which the database's own checks accept.
+    /// </summary>
+    [Theory]
+    [InlineData("{\"brief\": nSENTINEL_STORED}")]
+    [InlineData("{\"SENTINEL_STORED\": 1, \"SENTINEL_STORED\": 2}")]
+    public void Every_stored_column_refuses_text_it_cannot_read_by_its_own_name_and_quotes_none_of_it(string stored)
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var columns = db.Model.GetEntityTypes()
+            .SelectMany(entity => entity.GetProperties()
+                .Where(property => property.GetValueConverter()?.ProviderClrType == typeof(string))
+                .Select(property => (Name: $"{entity.GetTableName()}.{property.GetColumnName()}", Converter: property.GetValueConverter()!)))
+            .ToList();
+        Assert.Contains(columns, column => column.Name == "campaigns.context_json");
+        Assert.Contains(columns, column => column.Name == "campaigns.status");
+
+        var offences = new List<string>();
+        foreach (var (name, converter) in columns)
+        {
+            var refused = Record.Exception(() => converter.ConvertFromProvider(stored));
+            if (refused is null)
+            {
+                offences.Add($"{name} read it");
+            }
+            else if (refused.ToString().Contains("SENTINEL_STORED", StringComparison.Ordinal) || refused.InnerException is not null || !refused.Message.Contains(name, StringComparison.Ordinal))
+            {
+                offences.Add($"{name}: {refused.GetType().Name}, {(refused.InnerException is null ? "no inner exception" : "an inner exception")}, {(refused.Message.Contains(name, StringComparison.Ordinal) ? "names its column" : "does not name its column")}, {(refused.ToString().Contains("SENTINEL_STORED", StringComparison.Ordinal) ? "quotes the text" : "quotes nothing")}");
+            }
+        }
+
+        Assert.True(offences.Count == 0, $"{offences.Count} of {columns.Count} columns refused the text the wrong way:{Environment.NewLine}{string.Join(Environment.NewLine, offences)}");
     }
 
     [Fact]
@@ -221,8 +265,11 @@ public class ConversionsTests
             command.ExecuteNonQuery();
         }
 
+        // The read stops, naming the column; the text it found is not repeated, because whoever edited it could have
+        // written anything there and the refusal travels into logs.
         using var db = database.Open();
-        var failure = Assert.Throws<InvalidOperationException>(() => db.Campaigns.ToList());
-        Assert.Contains("pau_sed", failure.Message, StringComparison.Ordinal);
+        var failure = Assert.Throws<UnreadableStoredValueException>(() => db.Campaigns.ToList());
+        Assert.Equal("campaigns.status", failure.Column);
+        Assert.DoesNotContain("pau_sed", failure.ToString(), StringComparison.Ordinal);
     }
 }

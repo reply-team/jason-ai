@@ -11,11 +11,13 @@ namespace Jason.Cli;
 /// it, which is neither a usage error nor an unreachable runtime.
 /// </para>
 /// <para>
-/// <b><c>jason status</c> never answers 3.</b> It exits 0 when every required check passed and 1 when one did
-/// not, because "I could not ask the runtime" is the answer that verb exists to give rather than a reason it
-/// has none. It is the one declared exception, it is published in <c>jason status --help</c> beside the list of
-/// which checks are required, and its body carries <c>ready</c> so that a caller reading the answer never has
-/// to know about any of this.
+/// <b><c>jason status</c>, <c>jason logs</c> and <c>jason doctor</c> never answer 3.</b> <c>status</c> exits 0
+/// when every required check passed and 1 when one did not, because "I could not ask the runtime" is the answer
+/// that verb exists to give rather than a reason it has none; its body carries <c>ready</c> so that a caller
+/// reading the answer never has to know about any of this. <c>logs</c> never asks the runtime, so it cannot
+/// fail to reach it. <c>doctor</c> asks it, and a bundle is most wanted when it does not answer: not answering
+/// is written into the bundle, and the verb exits 1 when it refused to write the bundle. Each publishes its exit
+/// codes in its own <c>--help</c>.
 /// </para>
 /// </remarks>
 public static class ExitCodes

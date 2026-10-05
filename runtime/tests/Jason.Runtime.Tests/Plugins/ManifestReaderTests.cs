@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Plugins.Manifest;
@@ -199,6 +200,23 @@ public class ManifestReaderTests : IDisposable
         Assert.Equal(2, timing.Calls);
     }
 
+    /// <summary>
+    /// `\Z` is the end of the value to the engine and the letter Z to ECMA-262, so a binding that writes it has no one
+    /// meaning. The package is refused at the pattern, as any pattern the dialect cannot run is, and the sentence names
+    /// the escape.
+    /// </summary>
+    [Fact]
+    public void A_binding_pattern_with_an_escape_that_means_two_things_refuses_the_package_at_the_pattern()
+    {
+        var result = Read(Merge("binding:\n  type: object\n  properties:\n    workspace:\n      type: string\n      pattern: '^[a-z]+\\Z'\n"));
+
+        Assert.Null(result.Manifest);
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal(("field_invalid", "binding#/properties/workspace/pattern"), (problem.Code, problem.Path));
+        Assert.Contains(@"`\Z`", problem.Message, StringComparison.Ordinal);
+        Assert.Contains("ECMA-262", problem.Message, StringComparison.Ordinal);
+    }
+
     private const string PatternedBinding = "binding:\n  type: object\n  properties:\n    workspace:\n      type: string\n      pattern: \"^[a-z]+$\"\n";
 
     [Fact]
@@ -224,6 +242,33 @@ public class ManifestReaderTests : IDisposable
 
         // The key is optional and adds nothing an older runtime has to understand, so the version does not move.
         Assert.Equal(1, PluginProtocol.ManifestVersion);
+    }
+
+    /// <summary>
+    /// A binding's patterns are the plugin author's, read through the same validator as the operation documents, so
+    /// the end of a value means the same thing in both: a workspace name with a newline after it is not a name.
+    /// </summary>
+    [Fact]
+    public void A_binding_pattern_that_ends_the_value_refuses_a_trailing_newline_when_a_route_is_measured_against_it()
+    {
+        var result = Read(Merge("""
+            binding:
+              type: object
+              required: [workspace]
+              properties:
+                workspace:
+                  type: string
+                  pattern: "^[a-z0-9-]+$"
+
+            """));
+
+        Assert.True(result.IsValid, string.Join("; ", result.Problems.Select(p => $"{p.Path}: {p.Code}")));
+        var binding = result.Manifest!.Binding!;
+
+        Assert.Empty(SchemaValidator.Validate(new JsonObject { ["workspace"] = "acme-sales" }, binding));
+        var problem = Assert.Single(SchemaValidator.Validate(new JsonObject { ["workspace"] = "acme-sales\n" }, binding));
+        Assert.Equal("/workspace", problem.Pointer);
+        Assert.Equal("pattern", problem.Reason);
     }
 
     [Fact]

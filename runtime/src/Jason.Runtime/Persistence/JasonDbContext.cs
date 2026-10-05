@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Decisions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Jason.Runtime.Persistence;
 
@@ -51,13 +52,26 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         return $"Data Source={databaseFile};Default Timeout=30";
     }
 
-    /// <summary>One place for the SQLite options and interceptors; used by CreateOptions, the migrator and the DI registration.</summary>
+    /// <summary>
+    /// One place for the SQLite options, the interceptors and the events EF Core raises; used by CreateOptions, the
+    /// migrator and the DI registration.
+    /// </summary>
+    /// <remarks>
+    /// EF Core's own event for a query whose results failed to read is not raised. It writes the exception whole — into
+    /// its message and beside it — and when what failed is a stored JSON column that no longer parses, that text is the
+    /// parser's, which quotes what the column held. The exception still reaches the code that ran the query, and that
+    /// code's own line says what happened, a read failure by its kind and where the reader stopped: the event only
+    /// repeated it, and was the one place it was said whole. One event rather than EF Core's query category raised past
+    /// Error in the logger, because that category also carries EF Core's warnings about how a query is written, and
+    /// because an option of the context holds for whatever logger the context is given, not for the runtime's file alone.
+    /// </remarks>
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder builder, string databaseFile)
     {
         ArgumentNullException.ThrowIfNull(builder);
         return builder
             .UseSqlite(ConnectionString(databaseFile))
-            .AddInterceptors(new AppendOnlyInterceptor());
+            .AddInterceptors(new AppendOnlyInterceptor())
+            .ConfigureWarnings(warnings => warnings.Ignore(CoreEventId.QueryIterationFailed));
     }
 
     /// <summary>One connection string for the whole runtime: WAL is set by the migrator, busy timeout here.</summary>
@@ -477,6 +491,13 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             foreach (var property in entity.GetProperties())
             {
                 property.SetColumnName(SnakeCase.Convert(property.GetColumnName()));
+
+                // A stored value that cannot be read is refused by the column it came from, which a converter made
+                // by convention for every property of its type cannot know until it is told.
+                if (property.GetValueConverter() is IStoredColumnConverter stored)
+                {
+                    property.SetValueConverter(stored.ForColumn($"{entity.GetTableName()}.{property.GetColumnName()}"));
+                }
             }
 
             foreach (var key in entity.GetKeys())

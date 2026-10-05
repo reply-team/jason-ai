@@ -5,6 +5,7 @@ using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Logging;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Invocation;
 using Jason.Runtime.Routing;
@@ -43,12 +44,24 @@ public static class AttemptHandler
         new EventId(4, nameof(CommandFailed)),
         "The command of attempt {AttemptId} threw instead of reporting an outcome");
 
+    // The same event, for a command that threw while reading JSON: its line says what kind of failure and where, and
+    // the exception stays out of the log, because what the parser quoted is a person's text.
+    private static readonly Action<ILogger, string, string, Exception?> CommandFailedToParse = LoggerMessage.Define<string, string>(
+        LogLevel.Error,
+        new EventId(4, nameof(CommandFailed)),
+        "The command of attempt {AttemptId} threw instead of reporting an outcome: {Failure}");
+
     public static async Task RunAsync(IServiceScopeFactory scopes, ClaimedWork work, RunningAttemptRegistry registry, ILogger logger)
     {
         ArgumentNullException.ThrowIfNull(scopes);
         ArgumentNullException.ThrowIfNull(work);
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(logger);
+
+        // Everything the attempt logs from here to its verdict — including what the command's own services write,
+        // which know nothing of whose work it is — is written under the three ids, so that a log can be read for
+        // one campaign. Held to the end: the handler's task is the flow the scope follows.
+        using var attemptScope = AttemptLogScope.Begin(logger, work.CampaignPublicId, work.WorkItemPublicId, work.AttemptPublicId);
 
         var start = await StartAsync(scopes, work, logger).ConfigureAwait(false);
         if (start is not { } begun)
@@ -137,7 +150,15 @@ public static class AttemptHandler
         catch (Exception ex)
         {
             // A command that throws never started anything the runtime can observe, so it is a failed launch.
-            CommandFailed(logger, work.AttemptPublicId, ex);
+            if (ParseFailure.Is(ex))
+            {
+                CommandFailedToParse(logger, work.AttemptPublicId, ParseFailure.Describe(ex), null);
+            }
+            else
+            {
+                CommandFailed(logger, work.AttemptPublicId, ex);
+            }
+
             return new CommandOutcome.LaunchFailed(ex.Message, launch);
         }
     }

@@ -140,6 +140,14 @@ public class JournalWriterTests
         Assert.False(JournalKinds.IsWellFormed(new string('a', 65)));
     }
 
+    /// <summary>A kind is compared as written: one followed by a line break is another string, and not a kind.</summary>
+    [Fact]
+    public void A_kind_followed_by_a_line_break_is_not_well_formed()
+    {
+        Assert.True(JournalKinds.IsWellFormed("campaign_note"));
+        Assert.False(JournalKinds.IsWellFormed("campaign_note\n"));
+    }
+
     /// <summary>
     /// The rule behind the list above: a kind the runtime names is a kind no caller may write. A constant added
     /// without its <c>Reserved</c> entry would let a caller forge the runtime's own record through journal.append.

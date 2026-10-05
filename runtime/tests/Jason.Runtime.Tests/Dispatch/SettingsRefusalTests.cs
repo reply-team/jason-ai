@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Runtime.Configuration;
@@ -5,9 +6,12 @@ using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Notifications;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace Jason.Runtime.Tests.Dispatch;
 
@@ -39,6 +43,15 @@ public class SettingsRefusalTests
     /// dispatcher's seam alone would still be broken by this one.
     /// </summary>
     private const string InvalidPlugins = """{"Dispatcher":{"Enabled":false},"Plugins":{"Limits":{"MemoryMb":0}}}""";
+
+    /// <summary>Text where the dispatcher's switch wants true or false, standing in for anything a person might type.</summary>
+    private const string WrongTypeSentinel = "SENTINEL_D_YES";
+
+    /// <summary>
+    /// The edit with a value of the wrong type in it. It leaves the drain unwritten, so a section read again from
+    /// this file would carry the shipped ten seconds where the last settings that validated said one.
+    /// </summary>
+    private const string WrongType = """{"Dispatcher":{"TickSeconds":1,"Enabled":"SENTINEL_D_YES"}}""";
 
     private static readonly DateTime Noon = new(2026, 9, 14, 12, 0, 0, DateTimeKind.Utc);
 
@@ -131,6 +144,54 @@ public class SettingsRefusalTests
     }
 
     /// <summary>
+    /// The same edit with a value of the wrong type in it. The binder refuses text where a switch belongs before
+    /// any validator sees the section, and its refusal used to escape every reader that was ready for the
+    /// validator's: the loop's own wait threw, the host stopped the runtime with it, and the text — whatever was
+    /// typed, a token pasted onto the wrong line included — went into the log with every exception that carried
+    /// it. It is a refusal like any other now: said once, by the setting's path and the type it has to be, with
+    /// the last settings that validated still in force and the runtime still answering.
+    /// </summary>
+    [Fact]
+    public async Task A_setting_of_the_wrong_type_is_refused_like_any_other_and_stops_nothing()
+    {
+        var fixture = await RuntimeApiFixture.StartAsync(Ct, prepare: Settings(FastTick));
+        await using (fixture)
+        {
+            var settings = fixture.Resolve<LiveSettings<DispatcherOptions>>();
+            var status = fixture.Resolve<DispatcherStatus>();
+            var lifetime = fixture.Resolve<IHostApplicationLifetime>();
+            Assert.True(await DispatchHarness.FirstScanDoneAsync(status, Ct));
+
+            File.WriteAllText(fixture.Paths.UserSettingsFile, WrongType);
+
+            // Whichever comes first: the seam refusing the edit, or the runtime stopping because nothing caught it.
+            Assert.True(await DispatchHarness.EventuallyAsync(
+                () => settings.Refusals > 0 || lifetime.ApplicationStopping.IsCancellationRequested, Ct, 10000));
+            Assert.False(lifetime.ApplicationStopping.IsCancellationRequested, "The runtime stopped over a value of the wrong type in its settings file.");
+
+            // Three ticks on, the loop is still scanning and the runtime still answers.
+            var scans = status.Scans;
+            Assert.True(await DispatchHarness.EventuallyAsync(() => status.Scans >= scans + 3, Ct, 20000));
+            Assert.Equal(DispatcherState.Running, status.State);
+            await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+            var current = settings.Current;
+            Assert.True(current.Enabled);
+            Assert.Equal(1, current.TickSeconds);
+            Assert.Equal(1, current.DrainSeconds);
+            Assert.False(lifetime.ApplicationStopping.IsCancellationRequested);
+
+            await fixture.Runtime.StopAsync();
+            var logs = ReadLogs(fixture.Paths);
+            Assert.Equal(1, ErrorLines(logs, "settings were refused"));
+            Assert.Equal(1, ErrorLines(logs, "Dispatcher:Enabled could not be read as System.Boolean."));
+
+            // Nowhere: not in a message, not in a property, not in an exception written beside one.
+            Assert.DoesNotContain(WrongTypeSentinel, logs, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// Three sections are guarded now, and an operator told only that "settings were refused" would have the
     /// whole file to search. The complaint names the section it came from and the setting inside it, and it is
     /// still said once however many reads meet the same edit.
@@ -159,6 +220,236 @@ public class SettingsRefusalTests
             Assert.Equal(1, ErrorLines(logs, "settings were refused"));
             Assert.Contains("\"Section\":\"Plugins\"", logs, StringComparison.Ordinal);
             Assert.Equal(1, ErrorLines(logs, "Plugins:Limits:MemoryMb"));
+        }
+    }
+
+    /// <summary>
+    /// A map's entry of the wrong type: a notification channel whose switch is written as text. The binder leaves such
+    /// an entry out rather than refusing it, so the edit used to take the channel away with nothing said. It is refused
+    /// like any other value of the wrong type: the last settings that validated stay in force, and the log says which
+    /// setting and what type it has to be, never what was typed.
+    /// </summary>
+    [Fact]
+    public async Task A_map_entry_of_the_wrong_type_is_refused_and_the_last_good_settings_are_kept()
+    {
+        const string sentinel = "SENTINEL_D_MAP";
+        var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: Settings("""{"Dispatcher":{"Enabled":false},"Notifications":{"Plugins":{"fake-notifier":{"Enabled":true}}}}"""));
+        await using (fixture)
+        {
+            var notifications = fixture.Resolve<LiveSettings<NotificationsOptions>>();
+            Assert.True(notifications.Current.Plugins["fake-notifier"].Enabled);
+
+            File.WriteAllText(
+                fixture.Paths.UserSettingsFile,
+                """{"Dispatcher":{"Enabled":false},"Notifications":{"Plugins":{"fake-notifier":{"Enabled":"SENTINEL_D_MAP"}}}}""");
+            Assert.True(await TestOptions.RefusedAsync(notifications, Ct));
+
+            Assert.True(notifications.Current.Plugins["fake-notifier"].Enabled);
+            await fixture.Runtime.StopAsync();
+
+            var logs = ReadLogs(fixture.Paths);
+            var refused = logs.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => JsonNode.Parse(line)!)
+                .Where(line => (string?)line["@l"] == "Error" && (string?)line["Section"] == NotificationsOptions.Section)
+                .Select(line => (string?)line["Failure"])
+                .ToList();
+            Assert.Equal(["Notifications:Plugins:<key>:Enabled could not be read as System.Boolean."], refused);
+            Assert.DoesNotContain(sentinel, logs, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// A number edited into an object or a list. The binder kept the tick's default for it and said nothing, so a tick
+    /// of one second went to ten. It is refused: the last settings that validated stay in force, and the log names the
+    /// setting and its type, never what was typed.
+    /// </summary>
+    [Theory]
+    [InlineData("""["SENTINEL_D_SCALAR"]""")]
+    [InlineData("""{"x":"SENTINEL_D_SCALAR"}""")]
+    public async Task A_number_written_as_an_object_or_a_list_is_refused_and_the_last_good_settings_are_kept(string tick)
+    {
+        var fixture = await RuntimeApiFixture.StartAsync(Ct, prepare: Settings(FastTick));
+        await using (fixture)
+        {
+            var settings = fixture.Resolve<LiveSettings<DispatcherOptions>>();
+            Assert.Equal(1, settings.Current.TickSeconds);
+
+            File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"DrainSeconds":1,"TickSeconds":""" + tick + "}}");
+            Assert.True(await TestOptions.RefusedAsync(settings, Ct));
+
+            Assert.Equal(1, settings.Current.TickSeconds);
+            await fixture.Runtime.StopAsync();
+
+            var logs = ReadLogs(fixture.Paths);
+            var refused = logs.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => JsonNode.Parse(line)!)
+                .Where(line => (string?)line["@l"] == "Error" && (string?)line["Section"] == DispatcherOptions.Section)
+                .Select(line => (string?)line["Failure"])
+                .ToList();
+            Assert.Equal(["Dispatcher:TickSeconds could not be read as System.Int32."], refused);
+            Assert.DoesNotContain("SENTINEL", logs, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// A list edited into a shape the binder passes over — an object among the words of the command a role is launched
+    /// with, or the whole command written as one piece of text — used to change the command without a word: a word
+    /// gone, or the command gone. It is refused like any other value of the wrong type: the last settings that validated
+    /// stay in force, and the log names the setting and the type it has to be, never what was typed.
+    /// </summary>
+    [Theory]
+    [InlineData("""["agent-host",{"x":"SENTINEL_D_LIST"},"-p"]""", "Roles:DefaultEntryCommand:1 could not be read as System.String.")]
+    [InlineData("""      "SENTINEL_D_LIST -p"      """, "Roles:DefaultEntryCommand could not be read as a list of System.String.")]
+    public async Task A_list_the_binder_would_pass_over_is_refused_and_the_last_good_settings_are_kept(string command, string failure)
+    {
+        var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: Settings("""{"Dispatcher":{"Enabled":false},"Roles":{"DefaultEntryCommand":["agent-host"]}}"""));
+        await using (fixture)
+        {
+            var roles = fixture.Resolve<LiveSettings<RolesOptions>>();
+            Assert.Equal(["agent-host"], roles.Current.DefaultEntryCommand);
+
+            File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Roles":{"DefaultEntryCommand":""" + command + "}}");
+            Assert.True(await TestOptions.RefusedAsync(roles, Ct));
+
+            Assert.Equal(["agent-host"], roles.Current.DefaultEntryCommand);
+            await fixture.Runtime.StopAsync();
+
+            var logs = ReadLogs(fixture.Paths);
+            var refused = logs.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => JsonNode.Parse(line)!)
+                .Where(line => (string?)line["@l"] == "Error" && (string?)line["Section"] == RolesOptions.Section)
+                .Select(line => (string?)line["Failure"])
+                .ToList();
+            Assert.Equal([failure], refused);
+            Assert.DoesNotContain("SENTINEL", logs, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Every seam holds the settings the start validated before any edit can reach it. A seam keeps the last good
+    /// settings only once it has read some, and with no dispatch loop nothing read the roles' or the manager's at start:
+    /// a refused edit that reached one first found nothing to keep. Each section is edited into a value of the wrong
+    /// type before anything of the test reads it through its seam, and each seam still answers with what it had.
+    /// </summary>
+    [Theory]
+    [InlineData("Dispatcher", """{"Dispatcher":{"Enabled":false,"TickSeconds":"SENTINEL_D_SEAM"}}""")]
+    [InlineData("Roles", """{"Dispatcher":{"Enabled":false},"Roles":{"MaxSkillBytes":"SENTINEL_D_SEAM"}}""")]
+    [InlineData("Manager", """{"Dispatcher":{"Enabled":false},"Manager":{"ReviewSeconds":"SENTINEL_D_SEAM"}}""")]
+    [InlineData("Plugins", """{"Dispatcher":{"Enabled":false},"Plugins":{"Limits":{"TimeoutMs":"SENTINEL_D_SEAM"}}}""")]
+    [InlineData("Notifications", """{"Dispatcher":{"Enabled":false},"Notifications":{"QuietSeconds":"SENTINEL_D_SEAM"}}""")]
+    [InlineData("Update", """{"Dispatcher":{"Enabled":false},"Update":{"IntervalHours":"SENTINEL_D_SEAM"}}""")]
+    public async Task Every_seam_holds_the_settings_the_start_validated_before_an_edit_reaches_it(string section, string edit)
+    {
+        var fixture = await RuntimeApiFixture.StartAsync(Ct, prepare: Settings(RuntimeApiFixture.DispatcherOff));
+        await using (fixture)
+        {
+            var keeps = section switch
+            {
+                "Dispatcher" => KeepsAfterTheEdit<DispatcherOptions>(fixture),
+                "Roles" => KeepsAfterTheEdit<RolesOptions>(fixture),
+                "Manager" => KeepsAfterTheEdit<ManagerOptions>(fixture),
+                "Plugins" => KeepsAfterTheEdit<PluginsOptions>(fixture),
+                "Notifications" => KeepsAfterTheEdit<NotificationsOptions>(fixture),
+                _ => KeepsAfterTheEdit<UpdateOptions>(fixture),
+            };
+
+            File.WriteAllText(fixture.Paths.UserSettingsFile, edit);
+
+            Assert.True(await keeps(), $"The {section} seam had nothing to keep when a refused edit reached it.");
+        }
+    }
+
+    /// <summary>
+    /// The roles' seam, asked through the runtime's own answer about itself: with no dispatch loop it is the first thing
+    /// that reads the roles, and a refused edit that reached it first made <c>system.info</c> a server error — which a
+    /// caller reads as a runtime that is not there. It answers, with the roles that validated.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_roles_edit_before_anything_read_the_roles_leaves_the_runtime_answering_with_what_it_had()
+    {
+        var fixture = await RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: Settings("""{"Dispatcher":{"Enabled":false},"Roles":{"MaxSkillBytes":8192}}"""));
+        await using (fixture)
+        {
+            var monitor = fixture.Resolve<IOptionsMonitor<RolesOptions>>();
+            File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Roles":{"MaxSkillBytes":"SENTINEL_D_ROLES"}}""");
+            Assert.True(await DispatchHarness.EventuallyAsync(() => Refuses(monitor), Ct, 10000), "The edit never reached the runtime.");
+
+            var (status, body) = await fixture.PostAsync(Operations.SystemInfo, null, Ct);
+
+            Assert.True(status == System.Net.HttpStatusCode.OK, $"{Operations.SystemInfo} answered {(int)status}: {body}");
+            Assert.True(fixture.Resolve<LiveSettings<RolesOptions>>().TryCurrent(out var roles));
+            Assert.Equal(8192, roles.MaxSkillBytes);
+
+            await fixture.Runtime.StopAsync();
+            var logs = ReadLogs(fixture.Paths);
+            Assert.Equal(1, ErrorLines(logs, "Roles:MaxSkillBytes could not be read as System.Int32."));
+            Assert.DoesNotContain("SENTINEL", logs, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Waits, after the edit the caller then writes, until the section's settings are refused, without reading them
+    /// through the seam; then answers whether the seam still has settings to work from.
+    /// </summary>
+    private static Func<Task<bool>> KeepsAfterTheEdit<TOptions>(RuntimeApiFixture fixture)
+        where TOptions : class
+    {
+        var monitor = fixture.Resolve<IOptionsMonitor<TOptions>>();
+        var seam = fixture.Resolve<LiveSettings<TOptions>>();
+        return async () =>
+        {
+            Assert.True(await DispatchHarness.EventuallyAsync(() => Refuses(monitor), Ct, 10000), "The edit never reached the runtime.");
+            return seam.TryCurrent(out _);
+        };
+    }
+
+    /// <summary>Whether the section's settings are refused now, asked of the options system rather than of a seam.</summary>
+    private static bool Refuses<TOptions>(IOptionsMonitor<TOptions> monitor)
+        where TOptions : class
+    {
+        try
+        {
+            _ = monitor.CurrentValue;
+            return false;
+        }
+        catch (OptionsValidationException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// A channel written as <c>null</c>, live. Configuration cannot tell <c>null</c> from an empty object, and the binder
+    /// makes an entry for either with every setting of it at its default, so the edit names the channel the way
+    /// <c>{}</c> does and the runtime goes on answering. No entry from the file reaches the validator as nothing; what
+    /// the validator says of one is for an entry made some other way.
+    /// </summary>
+    [Fact]
+    public async Task A_channel_written_as_null_stops_nothing()
+    {
+        var fixture = await RuntimeApiFixture.StartAsync(Ct, prepare: Settings(RuntimeApiFixture.DispatcherOff));
+        await using (fixture)
+        {
+            var notifications = fixture.Resolve<LiveSettings<NotificationsOptions>>();
+            var lifetime = fixture.Resolve<IHostApplicationLifetime>();
+            Assert.Empty(notifications.Current.Plugins);
+
+            File.WriteAllText(fixture.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false},"Notifications":{"Plugins":{"fake-notifier":null}}}""");
+
+            // Whichever comes first: the edit in force, or the runtime stopping because something threw.
+            Assert.True(await DispatchHarness.EventuallyAsync(
+                () => (notifications.TryCurrent(out var current) && current.Plugins.ContainsKey("fake-notifier")) || lifetime.ApplicationStopping.IsCancellationRequested,
+                Ct,
+                10000));
+            Assert.False(lifetime.ApplicationStopping.IsCancellationRequested, "The runtime stopped over a channel written as null.");
+            Assert.Equal(0, notifications.Refusals);
+            await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
         }
     }
 

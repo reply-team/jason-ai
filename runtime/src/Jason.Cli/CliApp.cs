@@ -1,5 +1,7 @@
 using System.CommandLine;
 using Jason.Cli.Commands;
+using Jason.Cli.Doctor;
+using Jason.Cli.Logs;
 using Jason.Cli.Skills;
 using Jason.Cli.Status;
 using Jason.Cli.Uninstall;
@@ -12,7 +14,7 @@ namespace Jason.Cli;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Four names are not one-to-one with anything, and they are named here because this is where the rule is
+/// <b>Six names are not one-to-one with anything, and they are named here because this is where the rule is
 /// written.</b> <c>status</c> is a verb rather than a noun, because half of what it reports is not the
 /// runtime's to know: an executable on PATH, another vendor's CLI and whether it answers, files in a folder in
 /// the operator's home directory. No API operation can answer "am I ready to work?", because the runtime is
@@ -31,7 +33,22 @@ namespace Jason.Cli;
 /// will, because there is nothing for it to stand for.
 /// </para>
 /// <para>
-/// A guard holds the list to these: a fifth has to be added in the open rather than arriving as one more verb
+/// <c>logs</c> is the fifth. It reads the installation's log files, which the runtime writes and is never asked
+/// about: the answer it exists to give is the one a person needs when the runtime will not start, and a verb
+/// that asked the runtime where its logs are, or whether it is running, would fail exactly then. It stands for
+/// no operation, takes no subcommands, and never answers 3 — the runtime is not asked, so it cannot fail to be
+/// reached.
+/// </para>
+/// <para>
+/// <c>doctor</c> is the sixth. It collects one installation into one file a person can read before they share
+/// it, and half of that — the files, the status checks — is not the runtime's to know. Of the runtime it asks
+/// only for what the runtime says about itself and for the journal and work-item pages it counts, keeping
+/// their metadata and dropping their values. It stands for no operation, takes no subcommands, and never
+/// answers 3: a bundle is most wanted when the runtime does not answer, so not answering is written into the
+/// bundle rather than given as a reason there is none.
+/// </para>
+/// <para>
+/// A guard holds the list to these: a seventh has to be added in the open rather than arriving as one more verb
 /// somebody thought was obviously fine.
 /// </para>
 /// </remarks>
@@ -113,6 +130,8 @@ public static class CliApp
         root.Subcommands.Add(UpdateCommands.Build(env, actor));
         root.Subcommands.Add(SkillsCommands.Build(env));
         root.Subcommands.Add(StatusCommand.Build(env));
+        root.Subcommands.Add(LogsCommand.Build(env));
+        root.Subcommands.Add(DoctorCommand.Build(env));
         root.Subcommands.Add(UninstallCommand.Build(env));
 
         return root;

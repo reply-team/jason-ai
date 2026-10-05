@@ -375,11 +375,11 @@ public sealed partial class ExecutableResolver(ISearchPath searchPath)
     /// The shim's last line, exactly as cmd-shim writes it. The package is one segment — a scoped install
     /// therefore captures its scope here and is refused by name above rather than by accident.
     /// </summary>
-    [GeneratedRegex("""^endLocal & goto #_undefined_# 2>NUL \|\| title %COMSPEC% & "%_prog%" +"%dp0%\\node_modules\\(?<package>[^"\\/]+)\\(?<entry>[^"]+)" %\*$""")]
+    [GeneratedRegex("""^endLocal & goto #_undefined_# 2>NUL \|\| title %COMSPEC% & "%_prog%" +"%dp0%\\node_modules\\(?<package>[^"\\/]+)\\(?<entry>[^"]+)" %\*\z""")]
     private static partial Regex NpmShimCall();
 
     /// <summary>An npm package name as npm itself allows one, which is also everything a directory may be here.</summary>
-    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,213}$")]
+    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,213}\z")]
     private static partial Regex PackageName();
 
     /// <summary>

@@ -19,6 +19,9 @@ public class CampaignFlowEndToEndTests
     /// <summary>Generous: a cold CLI process on a loaded machine is still far quicker than this.</summary>
     private static readonly TimeSpan StepTimeout = TimeSpan.FromSeconds(60);
 
+    /// <summary>How much of the runtime's log a failing step carries in its message.</summary>
+    private const int LogTailLines = 40;
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -34,14 +37,14 @@ public class CampaignFlowEndToEndTests
             // Nothing is running yet: the runtime is launched in the background and start returns only once it
             // answers for itself.
             var started = await JasonAsync(root, "runtime", "start");
-            AssertSuccess(started);
+            AssertSuccess(started, root);
             var descriptor = ReadDescriptor(paths) ?? throw new InvalidOperationException("runtime start returned success without leaving a descriptor behind.");
             seenPids.Add(descriptor.Pid);
             Assert.Equal(descriptor.InstanceId, (string?)Json(started)["instance_id"]);
             Assert.NotEqual(Environment.ProcessId, descriptor.Pid);
             Assert.True(IsRunning(descriptor.Pid), "The runtime the descriptor names is not in the process table.");
 
-            var campaign = (string)Json(await Ok(JasonAsync(root, "campaign", "create", "--name", "Flow")))["id"]!;
+            var campaign = (string)Json(await Ok(root, "campaign", "create", "--name", "Flow"))["id"]!;
 
             var contacts = Path.Combine(root, "contacts.json");
             await File.WriteAllTextAsync(
@@ -54,13 +57,13 @@ public class CampaignFlowEndToEndTests
                 """,
                 Ct);
 
-            var batch = Json(await Ok(JasonAsync(root, "campaign", "add-contacts", campaign, "--file", contacts, "--match-by", "email")));
+            var batch = Json(await Ok(root, "campaign", "add-contacts", campaign, "--file", contacts, "--match-by", "email"));
             Assert.Equal(2, (int)batch["summary"]!["added"]!);
-            Assert.Equal("active", (string?)Json(await Ok(JasonAsync(root, "campaign", "start", campaign)))["status"]);
+            Assert.Equal("active", (string?)Json(await Ok(root, "campaign", "start", campaign))["status"]);
 
             // Stopping is graceful and complete: the acknowledgement names the instance, and the verb returns
             // only once the descriptor is gone and the process has left the process table.
-            var stopped = Json(await Ok(JasonAsync(root, "runtime", "stop")));
+            var stopped = Json(await Ok(root, "runtime", "stop"));
             Assert.True((bool)stopped["stopping"]!);
             Assert.Equal(descriptor.InstanceId, (string?)stopped["instance_id"]);
             Assert.False(File.Exists(paths.DescriptorFile));
@@ -71,17 +74,17 @@ public class CampaignFlowEndToEndTests
             Assert.Contains("\"code\":\"no_descriptor\"", status.Output, StringComparison.Ordinal);
 
             // Everything the campaign knew was on disk, so a fresh instance picks it up unchanged.
-            var again = await Ok(JasonAsync(root, "runtime", "start"));
+            var again = await Ok(root, "runtime", "start");
             var restarted = ReadDescriptor(paths)!;
             seenPids.Add(restarted.Pid);
             Assert.NotEqual(descriptor.InstanceId, restarted.InstanceId);
             Assert.Equal(restarted.InstanceId, (string?)Json(again)["instance_id"]);
 
-            Assert.Equal("active", (string?)Json(await Ok(JasonAsync(root, "campaign", "get", campaign)))["status"]);
-            var members = Json(await Ok(JasonAsync(root, "campaign", "list-contacts", campaign)));
+            Assert.Equal("active", (string?)Json(await Ok(root, "campaign", "get", campaign))["status"]);
+            var members = Json(await Ok(root, "campaign", "list-contacts", campaign));
             Assert.Equal(2, members["items"]!.AsArray().Count);
 
-            await Ok(JasonAsync(root, "runtime", "stop"));
+            await Ok(root, "runtime", "stop");
 
             var logs = string.Concat(await Task.WhenAll(Directory.GetFiles(paths.LogsDirectory).Select(file => ReadSharedAsync(file, Ct))));
             Assert.Contains("Shutdown requested through the API", logs, StringComparison.Ordinal);
@@ -130,17 +133,58 @@ public class CampaignFlowEndToEndTests
         }
     }
 
-    private static async Task<CliResult> Ok(Task<CliResult> step)
+    /// <summary>One CLI step that must succeed.</summary>
+    private static async Task<CliResult> Ok(string root, params string[] args)
     {
-        var result = await step;
-        AssertSuccess(result);
+        var result = await JasonAsync(root, args);
+        AssertSuccess(result, root);
         return result;
     }
 
-    private static void AssertSuccess(CliResult result) =>
+    /// <summary>
+    /// A step that fails says what the CLI printed and what the runtime logged. The CLI's own words are often only
+    /// "the runtime did not answer"; the reason is in the runtime's log, and on a CI runner nothing else survives the
+    /// run to be read afterwards.
+    /// </summary>
+    private static void AssertSuccess(CliResult result, string root) =>
         Assert.True(
             result.ExitCode == ExitCodes.Success && result.Error.Length == 0,
-            $"'jason {result.Command}' exited with {result.ExitCode}.{Environment.NewLine}stdout: {result.Output}{Environment.NewLine}stderr: {result.Error}");
+            $"'jason {result.Command}' exited with {result.ExitCode}.{Environment.NewLine}stdout: {result.Output}{Environment.NewLine}stderr: {result.Error}{Environment.NewLine}{RuntimeLogTail(root)}");
+
+    /// <summary>
+    /// The last lines of the newest runtime log under the data directory, read the way a writer still holding the file
+    /// allows. Building a failure message must never replace the failure, so a log that cannot be read is reported
+    /// as that instead of throwing.
+    /// </summary>
+    private static string RuntimeLogTail(string root)
+    {
+        var logs = new JasonPaths(root).LogsDirectory;
+        var newest = Directory.Exists(logs)
+            ? Directory.GetFiles(logs, "runtime-*.jsonl").Order(StringComparer.Ordinal).LastOrDefault()
+            : null;
+        if (newest is null)
+        {
+            return $"no log file under {logs}";
+        }
+
+        try
+        {
+            var lines = RuntimeLogs.ReadAllText(newest)
+                .Split('\n')
+                .Select(line => line.TrimEnd('\r'))
+                .Where(line => line.Length > 0)
+                .TakeLast(LogTailLines);
+            return $"last {LogTailLines} lines of {newest}:{Environment.NewLine}{string.Join(Environment.NewLine, lines)}";
+        }
+        catch (IOException exception)
+        {
+            return $"the log file {newest} could not be read: {exception.Message}";
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            return $"the log file {newest} could not be read: {exception.Message}";
+        }
+    }
 
     private static JsonObject Json(CliResult result) => JsonNode.Parse(result.Output)!.AsObject();
 
@@ -169,15 +213,27 @@ public class CampaignFlowEndToEndTests
         var error = process.StandardError.ReadToEndAsync(Ct);
         var command = string.Join(' ', args);
 
-        await process.WaitForExitAsync(Ct).WaitAsync(StepTimeout, Ct);
+        try
+        {
+            await process.WaitForExitAsync(Ct).WaitAsync(StepTimeout, Ct);
 
-        // The CLI has exited, so its streams must end with it. Waiting forever here is what a caller capturing
-        // the output would do, and a runtime still holding those pipes open would hang every one of them.
-        return new CliResult(
-            process.ExitCode,
-            (await output.WaitAsync(StepTimeout, Ct)).Trim(),
-            (await error.WaitAsync(StepTimeout, Ct)).Trim(),
-            command);
+            // The CLI has exited, so its streams must end with it. Waiting forever here is what a caller capturing
+            // the output would do, and a runtime still holding those pipes open would hang every one of them.
+            return new CliResult(
+                process.ExitCode,
+                (await output.WaitAsync(StepTimeout, Ct)).Trim(),
+                (await error.WaitAsync(StepTimeout, Ct)).Trim(),
+                command);
+        }
+        catch (TimeoutException timeout)
+        {
+            // A step that never finishes has said nothing yet, so the runtime's log is the only account there is of
+            // what it was waiting for.
+            throw new TimeoutException(
+                $"'jason {command}' did not finish within {StepTimeout} (the process {(process.HasExited ? "had" : "had not")} exited); " +
+                $"its stdout and stderr were not complete and are not shown.{Environment.NewLine}{RuntimeLogTail(root)}",
+                timeout);
+        }
     }
 
     private static RuntimeDescriptor? ReadDescriptor(JasonPaths paths)

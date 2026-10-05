@@ -28,10 +28,12 @@ public sealed class PluginService(
 {
     public const int MaxReasonLength = 2000;
 
-    private static readonly Action<ILogger, string, int, string?, Exception?> Activated = LoggerMessage.Define<string, int, string?>(
+    // The reason is free text typed by a person or an agent, so it goes to the journal and never to a log: the logs
+    // hold no value that arrived in a request body.
+    private static readonly Action<ILogger, string, int, Exception?> Activated = LoggerMessage.Define<string, int>(
         LogLevel.Information,
         new EventId(1, nameof(Activated)),
-        "Plugin reload activated snapshot {SnapshotId} with {Plugins} plugins; reason {Reason}");
+        "Plugin reload activated snapshot {SnapshotId} with {Plugins} plugins");
 
     private static readonly Action<ILogger, int, Exception?> Rejected = LoggerMessage.Define<int>(
         LogLevel.Information,
@@ -86,7 +88,7 @@ public sealed class PluginService(
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             registry.Replace(load.Snapshot, load.Report);
             activator.Activate(candidate.Snapshot);
-            Activated(logger, load.Snapshot.Id, load.Snapshot.Plugins.Count, reason, null);
+            Activated(logger, load.Snapshot.Id, load.Snapshot.Plugins.Count, null);
             return PluginMapper.ToDto(load.Snapshot, candidate.Snapshot.Id, load.Report, activated: true);
         }
         finally

@@ -119,8 +119,11 @@ an offline machine slower to admit it. `jason update check` waits exactly as lon
 | `Update:IntervalHours` | `24` | 1..168 | how often it asks after that |
 
 Settings live in `~/.jason/config/settings.json` or in `JASON_`-prefixed environment variables, like every other
-setting; they are read at each tick, so an edit applies without a restart. `Update:CheckEnabled=false` turns the
-outbound call off entirely.
+setting; they are read at each tick, so an edit applies without a restart. A live edit never stops the runtime: a
+refused edit keeps the last good settings and is logged by path and type, and a start with a malformed or
+mistyped file still fails, saying where — on stderr under `jason runtime run`, and after "It said:" in what
+`jason runtime start` answers: the line and byte of a malformed file, the setting's path and
+expected type for a mistyped one. `Update:CheckEnabled=false` turns the outbound call off entirely.
 
 **The feed must be `https`.** Plain `http` is allowed only on loopback, which exists so that a test can put a
 stub where the network would be; a manifest fetched over plain `http` on a network is one anybody in the way can

@@ -88,6 +88,22 @@ public class RuntimeStopCommandTests
     }
 
     [Fact]
+    public async Task An_api_error_whose_body_is_not_json_is_printed_as_an_envelope_and_exits_1()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new StringContent(string.Empty) });
+        var (env, output, _) = RuntimeVerbs.Environment(dir, handler, new FakeProcessControl());
+
+        var exit = await RuntimeStopCommand.RunAsync(env, human: false, Ct, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var envelope = RuntimeVerbs.Envelope(output.ToString());
+        Assert.Equal(CliErrors.RuntimeError, envelope.Code);
+        Assert.True(envelope.Retryable);
+    }
+
+    [Fact]
     public async Task Human_mode_names_the_instance_that_stopped()
     {
         using var dir = new TempPaths();

@@ -43,7 +43,8 @@ public sealed class PatternWarmUpTests
         var timing = TimingOut.Never();
         await using var api = await RuntimeApiFixture.StartAsync(Ct, configureServices: services => services.AddSingleton<PatternTiming>(timing));
 
-        var published = PatternWarmUp.PublishedSchemas().SelectMany(Patterns).ToHashSet(StringComparer.Ordinal);
+        // Found as the documents write them, and compared as the engine runs them, which is how a timing knows a pattern.
+        var published = PatternWarmUp.PublishedSchemas().SelectMany(Patterns).Select(TimingOut.AsCompiled).ToHashSet(StringComparer.Ordinal);
 
         Assert.NotEmpty(published);
         Assert.Subset(timing.Matched.ToHashSet(StringComparer.Ordinal), published);
