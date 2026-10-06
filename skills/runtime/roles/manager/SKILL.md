@@ -108,6 +108,37 @@ An answer is the person's word on the question, and the work that follows from i
 campaign whose questions were answered and whose manager did not act on them is a person who spoke and was not
 heard.
 
+## When a reply woke you
+
+`trigger` is `inbound_reply_observed` when the runtime's own read of the campaign's conversations found a thread that
+moved: somebody may have replied. The line names the thread, when it moved, the provider's `unread` and
+`has_meeting_intent`, and `contact_id` when exactly one person is pinned to it — never what anybody wrote, so the line
+is where to look, not what was said. One read can say several threads, and only the first woke you; read every line
+of the kind since your last review:
+
+```
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind inbound_reply_observed --since 2026-09-18T09:00:00Z
+```
+
+Knowing what a person wrote takes a read of the thread through the provider, and **not in this run**: a campaign runs
+one item at a time, so an item you create is claimed only after your run has ended. Queue the read — a
+`conversation.get` item naming the thread by the line's `thread` — and then the responder's item, at the same priority
+and naming the read the first create answered with. Work at one priority runs oldest first, so the responder runs after
+the read and reads the reply from its result:
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.get --input '{"thread":{"external_id":"501"},"limit":20,"offset":0}' --reason "read the reply the inbound sync saw" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-read-thread-501
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role responder --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --context '{"thread":"501","read":"wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE"}' --reason "a reply to answer" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-respond-501
+```
+
+Neither wakes you when it ends: a read that succeeded is not a trigger. Say in your note that you are watching both,
+and decide at your next review, when what they found is there to read. A thread the line names can have moved for a
+follow-up sent into it rather than for a reply; the read is how you tell.
+
+**The read itself is not yours to redo.** A `conversation.list` item made by `system:dispatcher` that failed is the
+runtime's own read: it is tried again on its own, later each time, from its first page. Do not create one in its
+place. What its error code says about the installation is still worth knowing, and asking about.
+
 ## What you may decide yourself
 
 The manager's own boundary is this, and nothing outside it:

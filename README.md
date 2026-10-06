@@ -349,10 +349,12 @@ jason workitem create <campaign-id> --kind ai_role --role researcher --execution
 jason rolenote get <campaign-id> researcher
 ```
 
-When a campaign is looked at, and by whom, is its own loop: a failure, a rejected approval or an
-effect somebody reported puts a **check-in** on the queue, and a cadence does it anyway when nothing
-has happened at all. What wakes a manager, how often one is woken, what it is told and what that
-costs are documented in **[docs/campaign-manager.md](docs/campaign-manager.md)**:
+When a campaign is looked at, and by whom, is its own loop: a failure, a rejected approval, an
+effect somebody reported or a reply in the campaign's conversations puts a **check-in** on the queue,
+and a cadence does it anyway when nothing has happened at all. Replies are found by reading each live
+campaign's conversations on a cadence (**[docs/inbound-sync.md](docs/inbound-sync.md)**). What wakes
+a manager, how often one is woken, what it is told and what that costs are documented in
+**[docs/campaign-manager.md](docs/campaign-manager.md)**:
 
 ```sh
 jason campaign update <campaign-id> --review-seconds 3600

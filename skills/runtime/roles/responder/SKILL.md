@@ -18,7 +18,9 @@ build, because every skill's do.
 **This build reads a reply only through the provider.** A `provider_op` item naming `conversation.list` or
 `conversation.get` does it, and its result carries the threads; no verb of Jason's reads a mailbox. So the reply
 you are asked about is in the brief, in such an item's result, or nowhere: if neither carries it, fail with a code
-rather than imagining one. What you can read is the person and what Jason has already done about them.
+rather than imagining one. When the brief names a `read` — the `conversation.get` item queued before you — the reply is
+that item's result: read it with `jason workitem get`, and if it has not succeeded, fail with a code rather than
+answer a reply you have not seen. What you can read is the person and what Jason has already done about them.
 
 ```
 jason contact get cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
