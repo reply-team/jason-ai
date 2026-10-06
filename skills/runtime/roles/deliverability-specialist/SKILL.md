@@ -35,8 +35,13 @@ campaign is paused, because not running is the harm. Give it a high `--priority`
 and say why with it; the reason is Jason's record and never reaches the provider.
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.pause --priority 100 --input '{"reason":{"code":"deliverability","note":"eight bounces from the new domain in an hour"}}' --reason "bounces climbing on the new domain"
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.pause --priority 100 --input '{"reason":{"code":"deliverability","note":"eight bounces from the new domain in an hour"}}' --reason "bounces climbing on the new domain" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-pause-bounces
 ```
+
+The key is built from your own work item's id, so a run that is cut short and runs again asks for the same pause
+rather than a second one: the same create answers with the item the first run made. Two different items in one run
+need two different keys, so name what makes each one different — the campaign, the reason — or the second is refused
+with `idempotency_key_reused`.
 
 The do-not-contact register is the one thing here that is about deliverability and is enforced: a suppressed
 person stops any work that would reach them before anything is sent. Failed items carry the code they failed with, which is where a

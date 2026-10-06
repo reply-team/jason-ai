@@ -46,6 +46,12 @@ public static class WorkItemRenderers
             Line("Result:", item.Result is null ? "none" : "present"),
         };
 
+        // Only for an item created under a key: the key its creator chose, which a repeat of that create sends again.
+        if (item.IdempotencyKey is { } key)
+        {
+            lines.Add(Line("Key:", key));
+        }
+
         var rendered = RenderText.Lines(lines);
         if (item.Attempts is null)
         {

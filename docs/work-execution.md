@@ -71,6 +71,48 @@ as `input_invalid` on the attempt rather than as a refused request.
 patchable. An `ai_role` item is untouched by all of this: its context is a brief, and nothing in the
 runtime reads the meaning of a brief.
 
+## Creating work twice
+
+A caller whose `workitem.create` timed out cannot tell a request that never arrived from an answer that
+never came back, and sending it again would create the work twice. So `workitem.create` — and
+`campaign.create` the same way — take an optional `idempotency_key`, a key the caller chooses:
+
+- **The same request again** answers 200 with the item the first one made, as it is now, and writes
+  nothing: no second item and no second `workitem_created` line.
+- **A different request under the same key** is refused with `idempotency_key_reused`, a 409 with
+  `retryable: false`, whose message names the item the key already belongs to. Sending it again cannot
+  make the two requests one; a different request needs a key of its own.
+- **No key, no change.** A create without one behaves exactly as it always has.
+
+**"The same request" is what it asks for, not how it was spelled.** The actor, the reason and the key are
+left out. Field order, white space, escapes, a field left out against one sent as `null`, white space the
+runtime trims from a name, an instant written in another offset and a number written another way (`1`,
+`1.0`, `1e0`) do not make two requests; any value that differs does — including a field sent as `0`
+against one left out, because what was sent is compared, not what the runtime would default it to. One
+exception keeps the comparison cheap: a number whose exponent is too long for a 64-bit integer is compared
+as it was written.
+
+**The key belongs to the item it created.** It is stored on the item's row and is unique within its
+campaign; a campaign's key is unique in the installation. It is not an entry in a cache, so it does not
+expire: a repeat a month later is answered the way one a second later is. A repeat is answered even when
+what the first request met has changed since — the campaign archived, the person taken out of it, a
+settings edit that would now refuse the same body — because the item was made, and the repeat is about
+that. A request that is not a repeat meets every check a request without a key does.
+
+The key is 1 to 128 characters once the white space around it is trimmed, and holds no control character
+and no half of a surrogate pair; anything else is refused as `validation_failed` with a detail on
+`idempotency_key`. No refusal quotes the key, and it never reaches the log or the journal.
+
+**Nothing makes a key up.** `jason workitem create` and `jason campaign create` send one only when
+`--idempotency-key` is given: a key the caller did not choose is one its own retry could not repeat. The
+practice is to give each create a key that could be repeated, and after a timeout or a lost answer to send
+the same command with the same key.
+
+**Three keys, kept apart.** This one is a caller's key for a create. A provider operation's invocation
+carries a key of its own — the work item's id, the same on every attempt — which the runtime composes into
+what the plugin receives (see [Provider operations](#provider-operations)). And `report.submit` takes a reporter's key for a
+report ([reports.md](reports.md)). None of them stands in for another.
+
 ## Lifecycle
 
 ```text
@@ -452,6 +494,7 @@ settings at all and are never refused for this reason.
 | `stale_attempt` | 409 | the attempt id is not the item's current running attempt |
 | `contact_not_member` | 409 | the contact is not an active member of the campaign |
 | `campaign_archived` | 409 | an archived campaign takes no new work |
+| `idempotency_key_reused` | 409 | a different request already created something under this key; it is final, and the message names what the key belongs to |
 | `result_too_large` | 400 | the result exceeds 1 MiB |
 | `result_invalid` | 400 | the result does not satisfy the `result_format` the item declared |
 | `role_exists` | 409 | a role of that name already exists |

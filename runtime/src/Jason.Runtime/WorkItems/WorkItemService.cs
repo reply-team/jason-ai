@@ -71,8 +71,79 @@ public sealed class WorkItemService(
     public async Task<WorkItemDto> CreateAsync(WorkItemCreateRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var item = await CreateCoreAsync(request, Actors.Resolve(request.Actor), lineage: null, cancellationToken).ConfigureAwait(false);
-        return WorkItemMapper.ToDto(item, item.CreatedAt, [], includeSnapshots: false);
+        var actor = Actors.Resolve(request.Actor);
+        if (request.IdempotencyKey is null)
+        {
+            var item = await CreateCoreAsync(request, actor, lineage: null, cancellationToken).ConfigureAwait(false);
+            return WorkItemMapper.ToDto(item, item.CreatedAt, [], includeSnapshots: false);
+        }
+
+        // A key is looked for after the request's own shape is checked — everything it says that no state can change —
+        // and before anything that reads today's state: a repeat of a create that succeeded answers with what it made,
+        // whatever has happened to the campaign, its people or the settings since. The checks are the ordinary ones,
+        // handed answers that refuse nothing that depends on state.
+        var errors = new ValidationErrors();
+        WorkItemValidation.ValidateCreate(request, roleExists: true, profileExists: true, killGraceMs: 0, _timing, errors);
+        var key = CreationKey.Read(request.IdempotencyKey, errors);
+        errors.ThrowIfAny();
+
+        // The context's size is part of the request's shape too, and it is measured before the request is named: a
+        // document past the cap is refused for what it is, and is never read whole to be hashed.
+        ContextRules.EnsureWithinLimits(request.Context ?? []);
+
+        var campaign = await CampaignService.LoadAsync(db, request.CampaignId, cancellationToken).ConfigureAwait(false);
+        var digest = CreationKey.Digest(request);
+        if (await MadeUnderAsync(campaign.Id, key!, digest, cancellationToken).ConfigureAwait(false) is { } made)
+        {
+            return made;
+        }
+
+        try
+        {
+            var item = await CreateCoreAsync(request with { IdempotencyKey = key }, actor, lineage: null, cancellationToken).ConfigureAwait(false);
+            return WorkItemMapper.ToDto(item, item.CreatedAt, [], includeSnapshots: false);
+        }
+        catch (DbUpdateException)
+        {
+            // Somebody else's create under the same key landed between the look above and this insert, and the
+            // database decided between them. Theirs is answered as a repeat would be; a refusal over anything else
+            // was never a race, and is what it was.
+            db.ChangeTracker.Clear();
+            if (await MadeUnderAsync(campaign.Id, key!, digest, cancellationToken).ConfigureAwait(false) is { } won)
+            {
+                return won;
+            }
+
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// The item a key already names in this campaign, as it is now, when <paramref name="digest"/> is the request that
+    /// made it; a refusal naming it when a different request did; null when the key names nothing yet.
+    /// </summary>
+    private async Task<WorkItemDto?> MadeUnderAsync(int campaignId, string key, string digest, CancellationToken cancellationToken)
+    {
+        var made = await db.WorkItems
+            .AsNoTracking()
+            .WithNavigation()
+            .Include(w => w.Attempts)
+            .FirstOrDefaultAsync(w => w.CampaignId == campaignId && w.IdempotencyKey == key, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (made is null)
+        {
+            return null;
+        }
+
+        if (!string.Equals(made.IdempotencyDigest, digest, StringComparison.Ordinal))
+        {
+            throw DomainErrors.IdempotencyKeyReused(made.PublicId);
+        }
+
+        // The create's own answer, about the item as it is now — its attempts included, and whether it is eligible read
+        // at this moment rather than at the one it was created in.
+        return WorkItemMapper.ToDto(made, clock.GetUtcNow().UtcDateTime, made.Attempts, includeSnapshots: false);
     }
 
     /// <summary>
@@ -146,6 +217,10 @@ public sealed class WorkItemService(
             ResultFormat = request.ResultFormat?.DeepClone(),
             CreatedAt = now,
             UpdatedAt = now,
+
+            // Only a caller's create carries a key, already read; the runtime's own work never does.
+            IdempotencyKey = request.IdempotencyKey,
+            IdempotencyDigest = request.IdempotencyKey is null ? null : CreationKey.Digest(request),
         };
 
         db.WorkItems.Add(item);

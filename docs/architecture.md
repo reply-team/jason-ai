@@ -1663,6 +1663,7 @@ original chat session.
 | DEC-MGR-002 | Management combines reactive triggers with scheduled proactive reconciliation. |
 | DEC-WORK-001 | Runtime manages heterogeneous work through a common conceptual envelope without forcing identical payloads/results. |
 | DEC-WORK-002 | Predetermined continuations proceed deterministically; semantic continuations become AI-role work. |
+| DEC-IDEM-001 | A caller's idempotency key is a property of the entity it created — stored on that row under a unique index, installation-wide for a campaign and campaign-wide for a work item — never a replay cache with a lifetime: the same key with the same request answers the same entity, with a different request a non-retryable conflict; neither the runtime nor the CLI ever derives a key — a caller gives one or there is none. |
 | DEC-AI-001 | Jason ships no AI client, model account, model-provider credentials, or mandatory interactive agent. |
 | DEC-AI-002 | Interactive AI agents are user-owned external clients that use skills and Jason CLI. |
 | DEC-AI-003 | Runtime-launched background AI work requires a supported unattended-capable Agent Host integration and execution profile. |

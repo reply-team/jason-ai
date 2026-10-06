@@ -40,8 +40,13 @@ how many people step 1 will go to. If the count has moved by the time it runs, n
 for the new number — a different population is a different decision, never an edit of the old one.
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.activate --input '{"expected":{"enrolled":240}}' --reason "the list is enrolled and the copy is approved"
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.activate --input '{"expected":{"enrolled":240}}' --reason "the list is enrolled and the copy is approved" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-activate-240
 ```
+
+Every item you create carries `--idempotency-key`, built from your own work item's id and what the item is for: if
+your run is cut short and runs again, the same create answers with the item the first run made instead of making a
+second. Two different items in one run need two different keys, so name what makes each one different — the account,
+the person — or the second is refused with `idempotency_key_reused`.
 
 **Whether you create the work or only describe it comes from the brief**, and from nothing else. When the brief
 asks for work to be created, create it: work items are the only form a plan takes here, and a dispatcher claims
@@ -50,7 +55,7 @@ does not say, ask rather than guess — raise a decision, say what you would cre
 plan.
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role researcher --context '{"brief":"who signs the contract at the ten largest accounts"}' --result-format '{"type":"object"}'
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role researcher --context '{"brief":"who signs the contract at the ten largest accounts"}' --result-format '{"type":"object"}' --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-research-signers
 jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --question "The brief asks for next week's horizon but does not say whether to create the work. Create six research items, or answer with the list?"
 jason rolenote set cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD planner --note '{"horizon":"research the ten largest before enrolling anybody","checked":"2026-09-21"}'
 ```

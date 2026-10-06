@@ -413,6 +413,39 @@ public sealed class DoctorComposerTests
         Assert.Equal(2, runtime.Requests.Count(request => request.Operation == Operations.WorkItemGet));
     }
 
+    /// <summary>
+    /// The key a caller created a work item with is the caller's text, and a bundle carries a work item only as the
+    /// closed set of facts it lists: an item answered with a key, listed or read as a recent failure, leaves no part of
+    /// the key in the bundle — with the journal flag on too, which adds nothing here because no journal line the runtime
+    /// writes carries a key. A campaign is never asked for at all.
+    /// </summary>
+    [Fact]
+    public async Task A_key_a_work_item_was_created_with_never_reaches_the_bundle()
+    {
+        const string Sentinel = "SENTINEL_DOCTORKEY_7f3c";
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.Fails = (operation, _) => operation switch
+        {
+            Operations.JournalList => Respond(
+                HttpStatusCode.OK,
+                new JsonObject { ["items"] = new JsonArray(Failed(runtime.Entry(0), 42)), ["next_cursor"] = null }.ToJsonString()),
+            Operations.WorkItemList => Respond(
+                HttpStatusCode.OK,
+                JsonSerializer.Serialize(new Page<WorkItemDto>([StubRuntime.Item(42, WorkItemStatus.Failed) with { IdempotencyKey = Sentinel }], null), JasonJson.Options)),
+            Operations.WorkItemGet => Respond(
+                HttpStatusCode.OK,
+                JsonSerializer.Serialize(StubRuntime.Item(42, WorkItemStatus.Failed) with { IdempotencyKey = Sentinel }, JasonJson.Options)),
+            _ => null,
+        };
+
+        var bundle = await ComposeAsync(dir, runtime, includeJournal: true);
+
+        Assert.Equal([StubRuntime.WorkItemId(42)], Section(bundle, "work_items")["recent_failures"]!.AsArray().Select(failure => Text(failure!["id"])));
+        Assert.DoesNotContain("DOCTORKEY", bundle.Document.ToJsonString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(runtime.Requests, request => request.Operation.StartsWith("campaign.", StringComparison.Ordinal));
+    }
+
     /// <summary>An item the journal says failed twice is one failure, read once.</summary>
     [Fact]
     public async Task An_item_the_journal_names_twice_is_read_once()

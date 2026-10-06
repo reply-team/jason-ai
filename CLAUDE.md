@@ -56,7 +56,8 @@ covered here.
   JSON is snake_case, enums are snake_case strings, timestamps are ISO-8601 UTC, public ids are
   prefixed ULIDs (`cmp_…`, `wi_…`, `att_…`, `rol_…`). Partial patches distinguish absent from null
   (`Optional<T>`); lists paginate with `limit`/`cursor`; every mutating request may carry `actor`
-  and `reason`.
+  and `reason`. `campaign.create` and `workitem.create` also take a caller's `idempotency_key`, kept on
+  the entity it created and never derived by the runtime or the CLI (`docs/work-execution.md`).
 - Work execution: work items move through one transition table (`WorkItemTransitions`) and end
   through one routine (`AttemptOutcomes`); never write a status elsewhere. The attempt id is the
   fencing token: executor operations change state through a single guarded UPDATE, never

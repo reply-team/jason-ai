@@ -27,6 +27,15 @@ internal static class VerbOptions
         Description = "Why this is done; recorded in the journal.",
     };
 
+    /// <summary>
+    /// The key a creating verb sends when, and only when, the caller gives one. Nothing here makes one up: a key the
+    /// caller did not choose is one its own retry could not repeat.
+    /// </summary>
+    public static Option<string?> IdempotencyKey() => new("--idempotency-key")
+    {
+        Description = "A key you choose for this create. Sending the same command again with the same key creates nothing new and answers with what the first one made; a different request under a key already used is refused.",
+    };
+
     public static Option<int?> Limit() => new("--limit")
     {
         Description = "How many items to return (the runtime defaults to 100, at most 1000).",

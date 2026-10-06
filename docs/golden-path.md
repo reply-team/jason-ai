@@ -100,11 +100,15 @@ campaign, and why it could not.
 ## 6. Create the work
 
 ```
-jason campaign create --name "Q3 LatAm founders"
+jason campaign create --name "Q3 LatAm founders" --idempotency-key q3-latam
 jason campaign add-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --file contacts.json --match-by email
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.enroll --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input "{\"campaign\":{\"external_id\":\"7\"},\"channel\":\"email\",\"collision\":\"skip\",\"start\":{\"position\":\"first_step\"},\"first_touch\":\"authored_delay\"}"
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.enroll --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input "{\"campaign\":{\"external_id\":\"7\"},\"channel\":\"email\",\"collision\":\"skip\",\"start\":{\"position\":\"first_step\"},\"first_touch\":\"authored_delay\"}" --idempotency-key q3-latam-enrol-marta
 ```
+
+Each create carries a key you chose. If an answer never comes back, send the same command with the same key: it
+answers with what the first one made rather than making it twice
+([work-execution.md](work-execution.md#creating-work-twice)).
 
 The arguments under `--input` are measured against the operation's own published document
 ([`docs/contracts/operations/`](contracts/operations)) when the item is created, so a mistake is caught here

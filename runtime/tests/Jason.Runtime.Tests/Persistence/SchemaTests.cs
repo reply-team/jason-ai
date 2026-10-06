@@ -21,7 +21,7 @@ public class SchemaTests
 
         Assert.Equal(
             ["id", "archived_at", "context_json", "created_at", "name", "public_id", "status", "updated_at", "execution_profile",
-             "manager_event_watermark", "manager_review_anchor", "manager_review_seconds"],
+             "manager_event_watermark", "manager_review_anchor", "manager_review_seconds", "idempotency_digest", "idempotency_key"],
             Names(connection, "SELECT name FROM pragma_table_info('campaigns')"));
         Assert.Equal(
             ["id", "public_id", "ts", "actor_type", "actor_id", "kind", "campaign_id", "key", "old_json", "new_json", "reason", "attempt_id", "work_item_id"],
@@ -58,7 +58,7 @@ public class SchemaTests
         Assert.Equal(
             [
                 "attempt_count", "campaign_id", "contact_id", "context_json", "created_at", "created_by_id", "created_by_type", "due_at",
-                "execution_profile", "finished_at", "heartbeat_seconds", "id", "kind", "last_error_json", "lineage_from_attempt_id",
+                "execution_profile", "finished_at", "heartbeat_seconds", "id", "idempotency_digest", "idempotency_key", "kind", "last_error_json", "lineage_from_attempt_id",
                 "lineage_profile_name", "lineage_profile_revision", "lineage_state", "max_attempts", "not_before", "operation",
                 "priority", "public_id", "result_format_json", "result_json", "retry_after", "role", "status", "timeout_seconds",
                 "updated_at",

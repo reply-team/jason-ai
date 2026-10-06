@@ -62,9 +62,10 @@ public static class WorkItemCommands
             Description = "The arguments of a provider operation, as a JSON object. Written into the context under input, the one key an operation's arguments travel in.",
         };
         var resultFormat = new Option<string?>("--result-format") { Description = "What the result should look like, as any JSON value." };
+        var idempotencyKey = VerbOptions.IdempotencyKey();
         var file = VerbOptions.File(
             "The object holds campaign_id, kind, role or operation, contact_id, execution_profile, priority, not_before, due_at, "
-            + "timeout_seconds, heartbeat_seconds, max_attempts, context and result_format.");
+            + "timeout_seconds, heartbeat_seconds, max_attempts, context, result_format and idempotency_key.");
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Arguments.Add(id);
@@ -82,6 +83,7 @@ public static class WorkItemCommands
         command.Options.Add(context);
         command.Options.Add(input);
         command.Options.Add(resultFormat);
+        command.Options.Add(idempotencyKey);
         command.Options.Add(file);
         command.Options.Add(reason);
         command.Options.Add(human);
@@ -103,6 +105,7 @@ public static class WorkItemCommands
                 .Set("max_attempts", parseResult.GetValue(maxAttempts))
                 .Set("context", Context(body, parseResult.GetValue(context), parseResult.GetValue(input)))
                 .Set("result_format", VerbOptions.Json(parseResult.GetValue(resultFormat), "--result-format"))
+                .Set("idempotency_key", parseResult.GetValue(idempotencyKey))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
 

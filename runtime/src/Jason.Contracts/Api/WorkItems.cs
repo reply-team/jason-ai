@@ -194,7 +194,10 @@ public sealed record WorkItemDto(
     DateTimeOffset? FinishedAt,
 
     /// <summary>Where this item's execution profile comes from when nothing more specific says.</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] LineageDto? Lineage = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] LineageDto? Lineage = null,
+
+    /// <summary>The key the item was created with, when its creator gave one; absent otherwise.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IdempotencyKey = null);
 
 /// <summary>A listing stays small: no context, no result, no attempts.</summary>
 public sealed record WorkItemSummaryDto(
@@ -235,7 +238,13 @@ public sealed record WorkItemCreateRequest(
     JsonObject? Context,
     JsonNode? ResultFormat,
     ActorRef? Actor,
-    string? Reason);
+    string? Reason,
+
+    /// <summary>
+    /// A key the caller chose, so that sending the same request again answers with the item it made rather than making
+    /// another. Scoped to the campaign; null means no key, and nothing ever makes one up.
+    /// </summary>
+    string? IdempotencyKey = null);
 
 public sealed record WorkItemGetRequest(string? WorkItemId, bool? IncludeSnapshots);
 

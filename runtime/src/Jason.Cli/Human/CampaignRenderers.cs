@@ -43,6 +43,12 @@ public static class CampaignRenderers
         {
             lines.Add(Line("Review:", string.Create(CultureInfo.InvariantCulture, $"every {seconds} s")));
         }
+
+        // Only for a campaign created under a key: the key its creator chose, which a repeat of that create sends again.
+        if (campaign.IdempotencyKey is { } key)
+        {
+            lines.Add(Line("Key:", key));
+        }
         lines.Add(Line("Context keys:", RenderText.Keys(campaign.Context)));
         lines.AddRange(RenderText.ExternalIds(campaign.ExternalIds));
         return RenderText.Lines(lines);

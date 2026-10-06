@@ -120,6 +120,15 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             campaign.Property(c => c.Context).HasColumnName("context_json").IsRequired().HasDefaultValueSql("'{}'");
             campaign.ToTable(t => t.HasCheckConstraint("ck_campaigns_context_json", "json_valid(context_json)"));
             campaign.Property(c => c.ManagerEventWatermark).HasDefaultValue(0);
+
+            // One key names one campaign, and the database is what says so: two creates deciding "is it free?" by
+            // looking would both see yes. A campaign made without a key is in nobody's way.
+            campaign.Property(c => c.IdempotencyKey).HasMaxLength(128);
+            campaign.Property(c => c.IdempotencyDigest).HasMaxLength(71);
+            campaign.HasIndex(c => c.IdempotencyKey)
+                .IsUnique()
+                .HasFilter("idempotency_key IS NOT NULL")
+                .HasDatabaseName("ix_campaigns_one_per_idempotency_key");
             campaign.HasMany(c => c.Members).WithOne(m => m.Campaign).HasForeignKey(m => m.CampaignId).OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -197,6 +206,14 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
                 t.HasCheckConstraint("ck_work_items_last_error_json", "last_error_json IS NULL OR json_valid(last_error_json)");
             });
             item.HasIndex(w => new { w.CampaignId, w.Status });
+
+            // One key names one item in its campaign; the same key in another campaign is another item.
+            item.Property(w => w.IdempotencyKey).HasMaxLength(128);
+            item.Property(w => w.IdempotencyDigest).HasMaxLength(71);
+            item.HasIndex(w => new { w.CampaignId, w.IdempotencyKey })
+                .IsUnique()
+                .HasFilter("idempotency_key IS NOT NULL")
+                .HasDatabaseName("ix_work_items_one_per_campaign_idempotency_key");
 
             // One open check-in per campaign, enforced where two scans cannot argue about it. A user back after
             // days offline finds one review waiting, not a pile — and the summon can be written as the ordinary

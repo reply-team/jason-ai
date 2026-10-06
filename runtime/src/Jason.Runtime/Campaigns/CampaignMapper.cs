@@ -23,7 +23,8 @@ public static class CampaignMapper
             campaign.ManagerReviewSeconds,
             Utc(campaign.CreatedAt),
             Utc(campaign.UpdatedAt),
-            campaign.ArchivedAt is { } archivedAt ? Utc(archivedAt) : null);
+            campaign.ArchivedAt is { } archivedAt ? Utc(archivedAt) : null,
+            campaign.IdempotencyKey);
     }
 
     public static CampaignSummaryDto ToSummary(Campaign campaign)

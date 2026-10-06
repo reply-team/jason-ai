@@ -15,7 +15,9 @@ namespace Jason.App.Tests.EndToEnd;
 /// launch, which its refusal quotes, a question a running role asks and its reason for asking, a person's answer and
 /// the reason for it, the reason a running work item was
 /// cancelled, an unloadable package's manifest, a refused setting, a setting of the wrong type, a reload's reason and
-/// a timestamp the request door cannot read. None of them may appear anywhere in the log, whole or in part.
+/// a timestamp the request door cannot read, and the keys a campaign and a work item were created with — made, repeated,
+/// sent again with a different request and once too long to be a key. None of them may appear anywhere in the log,
+/// whole or in part.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -79,6 +81,8 @@ public class LogInvariantTests
             ["a setting of the wrong type"] = SentinelPrefix + "TYPE_" + mark,
             ["a reload's reason"] = SentinelPrefix + "REASON_" + mark,
             ["a timestamp the door cannot read"] = SentinelPrefix + "SINCE_" + mark,
+            ["a campaign's idempotency key"] = SentinelPrefix + "CKEY_" + mark,
+            ["a work item's idempotency key"] = SentinelPrefix + "WKEY_" + mark,
 
             // A role name is lowercase with hyphens, and is what the message of an attempt the claim refuses quotes.
             ["a role nothing can launch"] = "sentinel-role-" + mark,
@@ -127,6 +131,19 @@ public class LogInvariantTests
             sentinels["a contact's email address"] + "@example.test",
             "--custom",
             Object("note", sentinels["a contact's custom field"])));
+
+        // A key a caller chose, on each creating verb: made, repeated, sent again with a different request, and once
+        // too long to be a key. The work item's goes into a campaign nobody starts, so nothing about it is ever run.
+        var keyedCampaign = await KeysAsync(
+            it,
+            sentinels["a campaign's idempotency key"],
+            key => ["campaign", "create", "--name", "Keyed", "--idempotency-key", key],
+            key => ["campaign", "create", "--name", "Keyed, but another", "--idempotency-key", key]);
+        await KeysAsync(
+            it,
+            sentinels["a work item's idempotency key"],
+            key => ["workitem", "create", keyedCampaign, "--kind", "ai_role", "--role", "researcher", "--idempotency-key", key],
+            key => ["workitem", "create", keyedCampaign, "--kind", "ai_role", "--role", "researcher", "--priority", "5", "--idempotency-key", key]);
 
         // A word where a moment belongs: the CLI hands it on as it was typed, so the runtime's own reading refuses it.
         var unreadable = await GoldenPath.JasonAsync(it, "journal", "list", "--since", sentinels["a timestamp the door cannot read"]);
@@ -394,6 +411,27 @@ public class LogInvariantTests
     /// one — the prefix every sentinel begins with, or the run's mark — found anywhere a whole sentinel does not
     /// account for it is named with the text around it, so a value cut short on its way into the log is a leak too.
     /// </summary>
+    /// <summary>
+    /// One creating verb under a key: made, then repeated and answered with what it made, then a different request under
+    /// the same key refused, then a key too long to be one refused. Each answer is checked as it comes, so a sentinel
+    /// missing from the log is one that went through the door and not one that never arrived.
+    /// </summary>
+    /// <returns>The id of what the key made.</returns>
+    private static async Task<string> KeysAsync(Installation it, string key, Func<string, string[]> make, Func<string, string[]> different)
+    {
+        var made = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, make(key))))["id"]!;
+        Assert.Equal(made, (string?)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, make(key))))["id"]);
+
+        var reused = await GoldenPath.JasonAsync(it, different(key));
+        Assert.Equal(ExitCodes.ApiError, reused.ExitCode);
+        Assert.Equal("idempotency_key_reused", (string?)GoldenPath.Json(reused)["error"]?["code"]);
+
+        var tooLong = await GoldenPath.JasonAsync(it, make(key + new string('k', 128)));
+        Assert.Equal(ExitCodes.ApiError, tooLong.ExitCode);
+        Assert.Equal("validation_failed", (string?)GoldenPath.Json(tooLong)["error"]?["code"]);
+        return made;
+    }
+
     private static void AssertNoSentinel(JasonPaths paths, List<JsonObject> events, string mark, Dictionary<string, string> sentinels)
     {
         var written = Directory.GetFiles(paths.LogsDirectory, "*", SearchOption.AllDirectories)

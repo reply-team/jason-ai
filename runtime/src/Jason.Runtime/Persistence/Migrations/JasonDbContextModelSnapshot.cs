@@ -287,6 +287,16 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("execution_profile");
 
+                    b.Property<string>("IdempotencyDigest")
+                        .HasMaxLength(71)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("idempotency_digest");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("idempotency_key");
+
                     b.Property<int>("ManagerEventWatermark")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
@@ -325,6 +335,11 @@ namespace Jason.Runtime.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_campaigns");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_campaigns_one_per_idempotency_key")
+                        .HasFilter("idempotency_key IS NOT NULL");
 
                     b.HasIndex("PublicId")
                         .IsUnique()
@@ -1356,6 +1371,16 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("heartbeat_seconds");
 
+                    b.Property<string>("IdempotencyDigest")
+                        .HasMaxLength(71)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("idempotency_digest");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("idempotency_key");
+
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1455,6 +1480,11 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.HasIndex("PublicId")
                         .IsUnique()
                         .HasDatabaseName("ix_work_items_public_id");
+
+                    b.HasIndex("CampaignId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_work_items_one_per_campaign_idempotency_key")
+                        .HasFilter("idempotency_key IS NOT NULL");
 
                     b.HasIndex("CampaignId", "Status")
                         .HasDatabaseName("ix_work_items_campaign_id_status");

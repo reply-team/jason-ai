@@ -39,11 +39,13 @@ public static class CampaignCommands
         var command = new Command("create", "Create a campaign.");
         var name = new Option<string?>("--name") { Description = "The campaign name." };
         var context = new Option<string?>("--context") { Description = "The initial campaign context, as a JSON object." };
-        var file = VerbOptions.File("The object holds name and context.");
+        var idempotencyKey = VerbOptions.IdempotencyKey();
+        var file = VerbOptions.File("The object holds name, context and idempotency_key.");
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
         command.Options.Add(name);
         command.Options.Add(context);
+        command.Options.Add(idempotencyKey);
         command.Options.Add(file);
         command.Options.Add(reason);
         command.Options.Add(human);
@@ -53,6 +55,7 @@ public static class CampaignCommands
             var body = await VerbOptions.BodyAsync(env, parseResult.GetValue(file), null, cancellationToken).ConfigureAwait(false);
             body.Set("name", parseResult.GetValue(name))
                 .Set("context", VerbOptions.Object(parseResult.GetValue(context), "--context"))
+                .Set("idempotency_key", parseResult.GetValue(idempotencyKey))
                 .Set("reason", parseResult.GetValue(reason))
                 .SetActor(ActorOption.Parse(parseResult.GetValue(actor)));
 

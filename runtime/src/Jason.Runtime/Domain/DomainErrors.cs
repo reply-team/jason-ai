@@ -20,6 +20,14 @@ public static class DomainErrors
 
     public static ConflictException ContactArchived(string id) => new("contact_archived", $"Contact '{id}' is archived.");
 
+    /// <summary>
+    /// A create under a key that already names an entity made by a different request. It names the entity and never
+    /// quotes the key, which is the caller's text; and it is final, because sending it again cannot make the two
+    /// requests the same.
+    /// </summary>
+    public static ConflictException IdempotencyKeyReused(string id) =>
+        new("idempotency_key_reused", $"This idempotency key already names '{id}', which a different request created; give a different request a key of its own.");
+
     public static InvalidRequestException ContextTooLarge(int limitBytes) =>
         new("context_too_large", string.Create(CultureInfo.InvariantCulture, $"The campaign context must serialize to at most {limitBytes} bytes."));
 

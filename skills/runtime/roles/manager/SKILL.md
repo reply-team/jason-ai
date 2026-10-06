@@ -124,10 +124,15 @@ The manager's own boundary is this, and nothing outside it:
 
 ```
 jason workitem update wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --priority 10 --reason "the reply is two days old"
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role researcher --context '{"account":"Analytical Engines","question":"which of the two sites is the target"}' --reason "the brief names neither site"
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role researcher --context '{"account":"Analytical Engines","question":"which of the two sites is the target"}' --reason "the brief names neither site" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-research-sites
 jason workitem cancel wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "superseded by the answer to dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD"
 jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"daily_cap":20}' --reason "the warm-up plan"
 ```
+
+**Give every item you create a key built from your own work item's id** and what the item is for, as above. If your
+run is cut short and this check-in runs again, the same create answers with the item the first run made instead of
+making a second; a create with no key would be made twice. Two different items in one run need two different keys, so
+name what makes each one different — the account, the person — or the second is refused with `idempotency_key_reused`.
 
 **Everything else is escalated.** Anything that changes who the campaign reaches, what it says or how much it
 spends, beyond what campaign context already permits, is a person's decision; so is anything you are not sure
@@ -181,7 +186,7 @@ campaign sending to everybody in it with a preview that names how many; and `enr
 out of the provider's campaign:
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.enroll --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"campaign":{"external_id":"7"},"channel":"email","collision":"skip","start":{"position":"first_step"},"first_touch":"authored_delay"}' --reason "the answer to dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD was to continue"
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.enroll --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"campaign":{"external_id":"7"},"channel":"email","collision":"skip","start":{"position":"first_step"},"first_touch":"authored_delay"}' --reason "the answer to dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD was to continue" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-enrol-after-answer
 ```
 
 You do not approve it. You created it; a person decides it.
@@ -202,7 +207,7 @@ time, so the provider's pause is claimed only once this run has ended — and it
 campaign, because its contract says it does.
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.pause --priority 100 --input '{"reason":{"code":"incident","note":"the wrong copy went out in step 2"}}' --reason "stop the provider sending before anything else"
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.pause --priority 100 --input '{"reason":{"code":"incident","note":"the wrong copy went out in step 2"}}' --reason "stop the provider sending before anything else" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-pause-incident
 jason campaign pause cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "incident: the wrong copy went out in step 2"
 jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --question "The wrong copy went out in step 2, so I paused the campaign here and asked the provider to pause it (wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE). Once that item has succeeded, is the provider's campaign stopped?" --option "it has stopped" --option "it is still sending" --reference work_item:wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE --reason "an incident pause a person should see land"
 ```

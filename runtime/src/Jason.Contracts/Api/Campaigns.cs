@@ -28,9 +28,16 @@ public sealed record CampaignDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? ReviewSeconds,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    DateTimeOffset? ArchivedAt);
+    DateTimeOffset? ArchivedAt,
 
-public sealed record CampaignCreateRequest(string? Name, JsonObject? Context, ActorRef? Actor, string? Reason);
+    /// <summary>The key the campaign was created with, when its creator gave one; absent otherwise.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IdempotencyKey = null);
+
+/// <summary>
+/// <c>idempotency_key</c> is a key the caller chose, so that sending the same request again answers with the campaign
+/// it made rather than making another. It is unique in the installation; null means no key, and nothing ever makes one up.
+/// </summary>
+public sealed record CampaignCreateRequest(string? Name, JsonObject? Context, ActorRef? Actor, string? Reason, string? IdempotencyKey = null);
 
 public sealed record CampaignGetRequest(string? CampaignId);
 

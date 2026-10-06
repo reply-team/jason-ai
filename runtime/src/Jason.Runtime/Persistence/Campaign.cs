@@ -54,6 +54,15 @@ public sealed class Campaign
 
     public DateTime? ArchivedAt { get; set; }
 
+    /// <summary>
+    /// The key the caller created this campaign with, trimmed, or null when it gave none. A property of the campaign
+    /// and not an entry in a cache: it lasts as long as the campaign does, and one key names one campaign.
+    /// </summary>
+    public string? IdempotencyKey { get; set; }
+
+    /// <summary>The <c>sha256:</c> of the request that created the campaign under its key, which a repeat must match.</summary>
+    public string? IdempotencyDigest { get; set; }
+
     public List<CampaignContact> Members { get; } = [];
 
     /// <summary>What plugins call this campaign. Loaded wherever the campaign is answered with, so an empty list means none.</summary>

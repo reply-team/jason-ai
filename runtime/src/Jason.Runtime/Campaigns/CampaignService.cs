@@ -33,12 +33,21 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         var errors = new ValidationErrors();
         ValidateName(request.Name, errors);
         ValidateReason(request.Reason, errors);
+        var key = CreationKey.Read(request.IdempotencyKey, errors);
         errors.ThrowIfAny();
 
         var name = request.Name!.Trim();
         var reason = NormalizeReason(request.Reason);
         var context = request.Context?.DeepClone().AsObject() ?? new JsonObject();
         ContextRules.EnsureWithinLimits(context);
+
+        // A key the caller has used before answers here, before anything is written: with the campaign it made, if
+        // this is the request that made it, and with a refusal if it is not.
+        var digest = key is null ? null : CreationKey.Digest(request);
+        if (key is not null && await MadeUnderAsync(key, digest!, cancellationToken).ConfigureAwait(false) is { } made)
+        {
+            return made;
+        }
 
         var now = clock.GetUtcNow().UtcDateTime;
         var campaign = new Campaign
@@ -49,12 +58,48 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
             Context = context,
             CreatedAt = now,
             UpdatedAt = now,
+            IdempotencyKey = key,
+            IdempotencyDigest = digest,
         };
 
+        // The line says a campaign was made and what it is called, as it always has; the key stays on the row.
         db.Campaigns.Add(campaign);
         journal.Append(db, actor, JournalKinds.CampaignCreated, campaign, key: "name", updated: JsonValue.Create(name), reason: reason);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException) when (key is not null)
+        {
+            // Somebody else's create under the same key landed between the look above and this insert: the database
+            // is what decides one key names one campaign. Theirs is answered as a repeat would be; a refusal over
+            // anything else was never a race, and is what it was.
+            db.ChangeTracker.Clear();
+            if (await MadeUnderAsync(key, digest!, cancellationToken).ConfigureAwait(false) is { } won)
+            {
+                return won;
+            }
+
+            throw;
+        }
+
         return CampaignMapper.ToDto(campaign);
+    }
+
+    /// <summary>
+    /// The campaign a key already names, as it is now, when <paramref name="digest"/> is the request that made it; a
+    /// refusal naming it when a different request did; null when the key names nothing yet.
+    /// </summary>
+    private async Task<CampaignDto?> MadeUnderAsync(string key, string digest, CancellationToken cancellationToken)
+    {
+        var made = await db.Campaigns
+            .Include(c => c.ExternalIds)
+            .FirstOrDefaultAsync(c => c.IdempotencyKey == key, cancellationToken)
+            .ConfigureAwait(false);
+
+        return made is null ? null
+            : string.Equals(made.IdempotencyDigest, digest, StringComparison.Ordinal) ? CampaignMapper.ToDto(made)
+            : throw DomainErrors.IdempotencyKeyReused(made.PublicId);
     }
 
     public async Task<CampaignDto> GetAsync(CampaignGetRequest request, CancellationToken cancellationToken)

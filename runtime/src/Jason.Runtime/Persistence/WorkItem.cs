@@ -91,5 +91,14 @@ public sealed class WorkItem
 
     public DateTime? FinishedAt { get; set; }
 
+    /// <summary>
+    /// The key the caller created this item with, trimmed, or null when it gave none. A property of the item and not
+    /// an entry in a cache: it lasts as long as the item does, and one key names one item in its campaign.
+    /// </summary>
+    public string? IdempotencyKey { get; set; }
+
+    /// <summary>The <c>sha256:</c> of the request that created the item under its key, which a repeat must match.</summary>
+    public string? IdempotencyDigest { get; set; }
+
     public List<Attempt> Attempts { get; } = [];
 }

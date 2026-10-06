@@ -27,6 +27,12 @@ public partial class InteractiveSkillTests
         // pack supersedes, and it has to be in the skill rather than only in a document nobody hands over.
         Assert.Contains("nothing else wakes the work", skill, StringComparison.Ordinal);
 
+        // A create whose answer was lost is sent again with the same key, never without one: the key is what makes
+        // the second send the first one's answer rather than a second campaign or a second enrolment. And nothing
+        // makes a key up, so a session that does not give one has none to repeat.
+        Assert.Contains("send the same command with the same key", skill, StringComparison.Ordinal);
+        Assert.Contains("Nothing makes a key up for you", skill, StringComparison.Ordinal);
+
         // And the three moments that are skills of their own, named so that a session knows they exist. A
         // session that met a parked approval, a stopped item or an effect produced outside Jason and had
         // never heard of them would improvise — which is the one thing this pack exists to prevent.

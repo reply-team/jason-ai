@@ -52,13 +52,13 @@ public class SkillSequenceTests
         await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: true);
 
         var printed = Prints("managed-campaign-work");
-        const string Create = "jason campaign create --name \"Q3 LatAm founders\"";
+        const string Create = "jason campaign create --name \"Q3 LatAm founders\" --idempotency-key q3-latam";
         const string Add = $"jason campaign add-contacts cmp_{Placeholder} --file contacts.json --match-by email";
         const string List = $"jason campaign list-contacts cmp_{Placeholder}";
         const string Work = $"jason workitem create cmp_{Placeholder} --kind provider_op --operation "
             + $"campaign.enroll --contact cnt_{Placeholder} --input \"{{\\\"campaign\\\":{{\\\"external_id\\\":"
             + "\\\"7\\\"},\\\"channel\\\":\\\"email\\\",\\\"collision\\\":\\\"skip\\\",\\\"start\\\":"
-            + "{\\\"position\\\":\\\"first_step\\\"},\\\"first_touch\\\":\\\"authored_delay\\\"}\"";
+            + "{\\\"position\\\":\\\"first_step\\\"},\\\"first_touch\\\":\\\"authored_delay\\\"}\" --idempotency-key q3-latam-enrol-marta";
         const string Start = $"jason campaign start cmp_{Placeholder}";
         const string Follow = $"jason workitem list --campaign cmp_{Placeholder}";
 
@@ -85,6 +85,10 @@ public class SkillSequenceTests
             GoldenPath.JasonAsync(it, [.. Substituted(Create, nothing)])))["id"]!;
         var ids = new Dictionary<string, string>(StringComparer.Ordinal) { ["cmp_"] = campaign };
 
+        // What the skill teaches about a lost answer: the same line again, key and all, answers with what the first
+        // one made rather than making it twice.
+        Assert.Equal(campaign, (string?)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(Create, nothing)])))["id"]);
+
         var added = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
             it, [.. Substituted(Add, ids, ("contacts.json", contacts))])));
         Assert.Equal(1, (int)added["summary"]!["added"]!);
@@ -100,6 +104,7 @@ public class SkillSequenceTests
         var item = (string)GoldenPath.Json(await GoldenPath.Ok(
             GoldenPath.JasonAsync(it, [.. Substituted(Work, ids)])))["id"]!;
         Assert.StartsWith("wi_", item, StringComparison.Ordinal);
+        Assert.Equal(item, (string?)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(Work, ids)])))["id"]);
 
         GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, [.. Substituted(Start, ids)]));
 
