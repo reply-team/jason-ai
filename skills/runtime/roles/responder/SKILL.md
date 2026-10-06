@@ -42,15 +42,20 @@ a yes or a no. Do not remove them, or archive them or the campaign, until the op
 cancels the record still waiting to run.
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation optout.record --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --priority 100 --input '{"channel":"email","statement":"please take me off your list","arrived_via":"reply","said_at":"2026-10-03T08:14:00Z","learned_at":"2026-10-03T08:20:00Z"}' --reason "they asked not to be contacted again"
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation optout.record --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --priority 100 --input '{"channel":"email","statement":"please take me off your list","arrived_via":"reply","said_at":"2026-10-03T08:14:00Z","learned_at":"2026-10-03T08:20:00Z"}' --reason "they asked not to be contacted again" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-optout
 ```
+
+The key, built from your own work item's id, is what keeps a run that is cut short and runs again from recording the
+same opt-out twice: the same create answers with the item the first run made. Two different items in one run need two
+different keys, so name what makes each one different — the person, the act — or the second is refused with
+`idempotency_key_reused`.
 
 Taking them out of the provider's campaign as well is a person's decision. Propose it as a `provider_op` item naming
 `enrollment.stop`, with the reason, and it waits for a person to approve it; the register holding them does not
 refuse it, because a stop is for exactly those people.
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation enrollment.stop --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","reason":{"code":"opted_out","note":"replied asking to be taken off the list"}}' --reason "they asked not to be contacted again"
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation enrollment.stop --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","reason":{"code":"opted_out","note":"replied asking to be taken off the list"}}' --reason "they asked not to be contacted again" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-stop
 ```
 
 An archived campaign takes no new work. If theirs is archived, record the opt-out through any active or paused

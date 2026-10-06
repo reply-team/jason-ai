@@ -2,7 +2,7 @@
 name: managed-campaign-work
 description: Use when an interactive agent session should turn an outbound objective into durable campaign work that Jason performs - creating a campaign, adding the people it is about, submitting managed provider operations and AI role work, and following what the runtime does with them.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Managed campaign work
@@ -12,7 +12,8 @@ the Jason CLI has not happened: it will not survive the session, will not be dis
 anybody, and will leave no history. This skill is the managed path — how to put work where the runtime can
 perform it, and what to do while it waits.
 
-**Status: verified** against Claude Code 2.1.278. It covers the operations this build publishes and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. It covers the operations this build
+publishes and nothing else.
 
 ## What you are responsible for, and what the runtime is
 
@@ -53,11 +54,16 @@ Setting one up is `operating-the-installation`, which is where plugins, routes, 
 A campaign, the people it is about, and then one work item per thing to be done.
 
 ```
-jason campaign create --name "Q3 LatAm founders"
+jason campaign create --name "Q3 LatAm founders" --idempotency-key q3-latam
 jason campaign add-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --file contacts.json --match-by email
 jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
+
+**Give every create a key you could send again.** `--idempotency-key` names that one create, in words you
+choose. If its answer never comes back — a timeout, a session that ended mid-command — send the same command with
+the same key: it answers with what the first one made, and nothing is made twice. A different request under a key
+you already used is refused with `idempotency_key_reused`; give it a key of its own. Nothing makes a key up for you.
 
 **The campaign's own people are `campaign list-contacts`.** `contact list` answers with everyone this runtime
 knows and takes no campaign at all, so `contact list --campaign …` is the spelling to expect yourself to reach
@@ -78,7 +84,7 @@ A managed provider operation is a work item whose `--operation` names a publishe
 carries that contract's arguments:
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.enroll --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input "{\"campaign\":{\"external_id\":\"7\"},\"channel\":\"email\",\"collision\":\"skip\",\"start\":{\"position\":\"first_step\"},\"first_touch\":\"authored_delay\"}"
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.enroll --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input "{\"campaign\":{\"external_id\":\"7\"},\"channel\":\"email\",\"collision\":\"skip\",\"start\":{\"position\":\"first_step\"},\"first_touch\":\"authored_delay\"}" --idempotency-key q3-latam-enrol-marta
 ```
 
 The arguments are validated when the item is created, so a refusal here is about what you asked for, not about
@@ -90,7 +96,7 @@ than guessing a field, because a guess is refused at `workitem.create` anyway.
 Work that needs a model rather than a provider is an `ai_role` item, named for the role that should do it:
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role researcher --context '{"account":"Analytical Engines","question":"which of the two sites is the target"}'
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role researcher --context '{"account":"Analytical Engines","question":"which of the two sites is the target"}' --idempotency-key q3-latam-research-ae
 ```
 
 Then follow the work:

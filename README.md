@@ -316,13 +316,17 @@ Campaigns, the people in them, and the work to be done about them are managed wi
 API operation:
 
 ```sh
-jason campaign create --name "Latin America"
+jason campaign create --name "Latin America" --idempotency-key latam-campaign
 jason campaign add-contacts <id> --file contacts.json --match-by email
 jason campaign start <id>
 jason role list
-jason workitem create <id> --kind ai_role --role researcher
+jason workitem create <id> --kind ai_role --role researcher --idempotency-key latam-research-1
 jason workitem list --campaign <id> --status failed --status expired
 ```
+
+`--idempotency-key` is optional: a create sent again with the same key answers with what the first one made
+instead of making it twice, and a different request under a key already used is refused
+([docs/work-execution.md](docs/work-execution.md#creating-work-twice)).
 
 Every verb prints the exact API response as compact JSON on stdout (add `--human` for a readable
 rendering). The runtime keeps its data under `~/.jason` (override with the `JASON_DATA_DIR`
