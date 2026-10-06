@@ -60,6 +60,7 @@ public class SettingsVocabularyTests
                 typeof(RoutesOptions),
                 typeof(UpdateOptions),
                 typeof(NotificationsOptions),
+                typeof(InboundOptions),
             });
     }
 

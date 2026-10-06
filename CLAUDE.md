@@ -100,6 +100,11 @@ covered here.
   declares that repeating it is safe or that a recovery read makes it safe. An activated load journals
   `plugins_reloaded`; there is no `plugin.invoke` operation.
   `docs/plugins.md` is the contract.
+- Inbound sync: a scan step between the lease enforcer and the summon reads each active campaign routed to a plugin
+  that reads conversations, and linked there, once per cadence — one `conversation.list` work item per page — and
+  writes one reserved `inbound_reply_observed` line per thread that moved — identifiers, moments and the provider's
+  flags, never a subject, a preview or a name — said once per campaign by a key. It interprets nothing; the line is a
+  default manager trigger. `docs/inbound-sync.md` is the contract.
 - Notifications: a parked approval and a raised question are notified as a pointer — counts and where to look —
   by a scan step after the dispatch, delivered off the scan and recorded in a reserved `notification_sent` line.
   `docs/notifications.md` is the contract.

@@ -38,4 +38,15 @@ public partial class RoleSkillTests
         Assert.Contains("the provider's half waits, and say so", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("rather than acting on it yourself", skill, StringComparison.Ordinal);
     }
+
+    /// <summary>A brief that names a read is a reply in that read's result, and a read that has not succeeded is no reply at all.</summary>
+    [Fact]
+    public void The_responder_reads_the_reply_from_the_read_its_brief_names()
+    {
+        var skill = Flattened("responder");
+
+        Assert.Contains("When the brief names a `read`", skill, StringComparison.Ordinal);
+        Assert.Contains("the reply is that item's result", skill, StringComparison.Ordinal);
+        Assert.Contains("if it has not succeeded, fail with a code rather than answer a reply you have not seen", skill, StringComparison.Ordinal);
+    }
 }

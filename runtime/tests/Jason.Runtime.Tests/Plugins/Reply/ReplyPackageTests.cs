@@ -27,7 +27,7 @@ public class ReplyPackageTests
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Empty(plugin.Problems);
         Assert.Equal(PluginKind.Provider, plugin.Kind);
-        Assert.Equal("0.2.2", plugin.Version);
+        Assert.Equal("0.2.3", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
         Assert.Equal(
             ["campaign.activate", "campaign.enroll", "campaign.get", "campaign.pause", "conversation.get", "conversation.list", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record"],
@@ -122,7 +122,7 @@ public class ReplyPackageTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("campaign_not_found", failed.Error.Code);
         Assert.Equal(ReplyPlugins.PluginId, result.Provenance.PluginId);
-        Assert.Equal("0.2.2", result.Provenance.Version);
+        Assert.Equal("0.2.3", result.Provenance.Version);
     }
 
     /// <summary>

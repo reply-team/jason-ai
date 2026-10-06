@@ -115,6 +115,13 @@ public static partial class JournalKinds
     /// </summary>
     public const string NotificationSent = "notification_sent";
 
+    /// <summary>
+    /// A read of a campaign's conversations found a thread that moved since the read began: the thread, the moment it
+    /// moved, the provider's own flags, and the person it belongs to where one is pinned. Never a subject, a preview or a
+    /// name. This is a trigger kind: a reply is the manager's to read, and only the runtime's own read may say one came.
+    /// </summary>
+    public const string InboundReplyObserved = "inbound_reply_observed";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -163,6 +170,7 @@ public static partial class JournalKinds
         DecisionAnswered,
         DecisionCancelled,
         NotificationSent,
+        InboundReplyObserved,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);

@@ -221,6 +221,7 @@ public static class JasonConfiguration
         services.AddSingleton<IValidateOptions<UpdateOptions>, BindingFailureValidator<UpdateOptions>>();
         services.AddSingleton<IValidateOptions<NotificationsOptions>, BindingFailureValidator<NotificationsOptions>>();
         services.AddSingleton<IValidateOptions<RoutesOptions>, BindingFailureValidator<RoutesOptions>>();
+        services.AddSingleton<IValidateOptions<InboundOptions>, BindingFailureValidator<InboundOptions>>();
 
         services.AddSingleton<IValidateOptions<RuntimeOptions>, RuntimeOptionsValidator>();
         services.AddSingleton<IValidateOptions<LoggingOptions>, LoggingOptionsValidator>();
@@ -239,6 +240,7 @@ public static class JasonConfiguration
         services.AddSingleton<IValidateOptions<PluginsOptions>>(new PluginsOptionsValidator(Installed));
         services.AddSingleton<IValidateOptions<RoutesOptions>>(new RoutesOptionsValidator(Installed));
         services.AddSingleton<IValidateOptions<UpdateOptions>, UpdateOptionsValidator>();
+        services.AddSingleton<IValidateOptions<InboundOptions>, InboundOptionsValidator>();
         services.AddSingleton<IValidateOptions<NotificationsOptions>>(new NotificationsOptionsValidator(Installed));
 
         Bound<RuntimeOptions>(services, configuration.GetSection(RuntimeOptions.Section), Installed).ValidateOnStart();
@@ -246,6 +248,7 @@ public static class JasonConfiguration
         Bound<DispatcherOptions>(services, configuration.GetSection(DispatcherOptions.Section), Installed).ValidateOnStart();
         Bound<RolesOptions>(services, configuration.GetSection(RolesOptions.Section), Installed).ValidateOnStart();
         Bound<UpdateOptions>(services, configuration.GetSection(UpdateOptions.Section), Installed).ValidateOnStart();
+        Bound<InboundOptions>(services, configuration.GetSection(InboundOptions.Section), Installed).ValidateOnStart();
 
         // The scalars and each named plugin's Enabled are bound; each binding is JSON, which the binder cannot make,
         // so it is read afterwards from the same section, the way a route's binding is.

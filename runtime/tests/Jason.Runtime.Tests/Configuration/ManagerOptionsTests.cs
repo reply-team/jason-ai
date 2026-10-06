@@ -61,7 +61,7 @@ public class ManagerOptionsTests
     }
 
     [Fact]
-    public void The_defaults_are_the_four_kinds_this_version_reacts_to()
+    public void The_defaults_are_the_five_kinds_this_version_reacts_to()
     {
         var options = new ManagerOptions();
 
@@ -71,6 +71,7 @@ public class ManagerOptionsTests
                 JournalKinds.ApprovalRejected,
                 JournalKinds.ExternalEffectReported,
                 JournalKinds.DecisionAnswered,
+                "inbound_reply_observed",
             ],
             options.Triggers);
         Assert.Equal(18_000, options.ReviewSeconds);
@@ -194,7 +195,7 @@ public class ManagerOptionsTests
     /// <summary>
     /// The narrowing, through the container that really composes it rather than through the helper alone: the
     /// binder appends to a list that already has values, so an installation asking for one trigger kind has to
-    /// end up with one and not with four.
+    /// end up with one and not with five.
     /// </summary>
     [Fact]
     public async Task A_narrowed_list_narrows_in_a_running_runtime()

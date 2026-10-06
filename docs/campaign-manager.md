@@ -44,6 +44,7 @@ line. These kinds summon a review:
 | `approval_rejected` | A person said no to a proposed effect. The decision is made; what is missing is the strategy that follows it. |
 | `external_effect_reported` | Something happened to this campaign that the runtime did not do. |
 | `decision_answered` | A person answered a question a role could not answer for itself. The role that asked has already ended, so this is what releases the work that follows. |
+| `inbound_reply_observed` | A thread in one of the campaign's conversations moved since the last read: somebody may have replied. The runtime's own read says so and interprets nothing; what the reply means, and what to do about it, is the manager's ([inbound sync](inbound-sync.md)). |
 
 **And what is deliberately not in the list.** `workitem_succeeded` is out: a review after every
 successful step is cost without judgment, and the work that needs looking at is the work that did not
@@ -311,7 +312,7 @@ of an attempt that ran on somebody's profile could have run on another without a
 
 | Setting | Default | Range | What it does |
 |---|---|---|---|
-| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered` | each must be a kind the runtime writes | which chronicle kinds summon a review |
+| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed` | each must be a kind the runtime writes | which chronicle kinds summon a review |
 | `Manager:ReviewSeconds` | `18000` | 300..604800 | the cadence, unless a campaign names its own |
 | `Manager:TimeoutSeconds` | `900` | 30..86400 | one check-in's budget |
 | `Manager:MaxAttempts` | `1` | 1..10 | how many failures a check-in is worth |
@@ -321,8 +322,14 @@ of an attempt that ran on somebody's profile could have run on another without a
 There is no `Manager:Enabled`: `Dispatcher:Enabled` already decides whether this runtime has a loop
 at all, and a runtime with no dispatcher summons nothing.
 
+How soon a reply wakes a manager is the inbound read's to say, not a manager setting: it reads each campaign's
+conversations every `Inbound:SyncSeconds` (900 by default), and looks `Inbound:LookbackSeconds` (14400 by default)
+behind its last read for a reply the provider took in late ([inbound sync](inbound-sync.md)).
+
 **A narrowed list replaces the default rather than adding to it.** An empty array in the file cannot
-be told from an absent key, so it reads as "unset" and the defaults apply.
+be told from an absent key, so it reads as "unset" and the defaults apply. A list narrowed before
+`inbound_reply_observed` existed does not hold it, so that installation is not woken by replies until
+the kind is added.
 
 **A narrowed list has to keep `decision_answered`.** Dropping any other kind narrows what a manager is
 woken for; dropping this one breaks something, because a question a person has answered is what
@@ -335,5 +342,6 @@ configuration — it is a legitimate thing to write — so it is said here inste
   chronicle or listing work.
 - **Anomaly rules and reconciliation.** Neither exists; a review is the only thing that notices
   anything.
-- **A second trigger vocabulary.** Reactive rules react to what the runtime already records. There is
-  no inbound-reply classifier here to react to, and none is invented.
+- **Knowing what a reply says.** The runtime records that a thread moved (`inbound_reply_observed`,
+  [inbound sync](inbound-sync.md)) and wakes the manager; it never reads or classifies the reply, and
+  nothing tells a person one came. Reading it, and deciding what it calls for, is the manager's.

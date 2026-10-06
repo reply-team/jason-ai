@@ -172,11 +172,14 @@ scan would consider.
 
 ## The claim rule
 
-Each tick, the dispatcher runs one scan in four short steps: **expire**, **enforce**, **summon**,
-**claim**. The third is the campaign-manager loop — where a campaign that something happened to, or that
-has not been looked at for long enough, gets a check-in put on the queue
-([docs/campaign-manager.md](campaign-manager.md) is the contract). It runs before the claim so that a
-check-in created this tick can be claimed this tick.
+Each tick, the dispatcher runs one scan in six short steps: **expire**, **enforce**, **sync**,
+**summon**, **claim**, **notify**. Sync reads each live campaign's conversations and says, in the
+chronicle, each thread that moved ([docs/inbound-sync.md](inbound-sync.md) is the contract). Summon is
+the campaign-manager loop — where a campaign that something happened to, or that has not been looked at
+for long enough, gets a check-in put on the queue ([docs/campaign-manager.md](campaign-manager.md) is the
+contract). Both run before the claim, so a read or a check-in created this tick can be claimed this tick,
+and sync runs before summon, so a reply it says wakes the manager in the same scan. Notify comes last,
+after the dispatch ([docs/notifications.md](notifications.md) is the contract).
 
 Claiming happens inside an immediate transaction, so two scans — or two runtimes — cannot both take
 the same item; the second waits, finds it taken and moves on. Within one scan the dispatcher takes:

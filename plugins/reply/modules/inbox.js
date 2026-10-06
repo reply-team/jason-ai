@@ -60,8 +60,11 @@ export function conversationList(input, context) {
     filter.source = "inbox";
   }
 
+  // The contract keeps the threads that moved at or after `since`; Reply's `from` keeps only those that moved after
+  // it, to the millisecond. So it is asked from one millisecond earlier, and a thread whose last activity is stamped
+  // exactly at `since` is listed.
   if (typeof input.args.since === "string") {
-    filter.from = input.args.since;
+    filter.from = new Date(Date.parse(input.args.since) - 1).toISOString();
   }
 
   const path = "/v3/inbox/threads/filter?top=" + input.args.limit + "&skip=" + input.args.offset;

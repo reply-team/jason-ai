@@ -28,6 +28,7 @@ public static class DispatcherModule
             .AddScoped<EntryCommandResolver>()
             .AddScoped<AgentPreflight>()
             .AddScoped<AgentLaunchPlanner>()
+            .AddScoped<InboundSync>()
             .AddScoped<Summoner>()
             .AddScoped<Claimer>()
             .AddScoped<Notifier>()
@@ -62,6 +63,7 @@ public static class DispatcherModule
         services.AddSingleton(Seam<DispatcherOptions>(DispatcherOptions.Section));
         services.AddSingleton(Seam<RolesOptions>(RolesOptions.Section));
         services.AddSingleton(Seam<ManagerOptions>(ManagerOptions.Section));
+        services.AddSingleton(Seam<InboundOptions>(InboundOptions.Section));
 
         // Named here because the summon creates work through the work-item service, and that service reads the
         // plugin section for a provider item's timeout floor. The plugin module registers the same seam; either
@@ -70,6 +72,9 @@ public static class DispatcherModule
 
         // The pool is sized once and the counters are one per process, so both outlive any request scope.
         services.AddSingleton<HandlerPool>();
+
+        // Which skipped campaigns have been said, once per campaign and reason in the life of the process.
+        services.AddSingleton<InboundSkips>();
         services.AddSingleton<ScanRunner>();
         return services.AddHostedService<DispatcherService>();
     }

@@ -63,6 +63,25 @@ public sealed class Campaign
     /// <summary>The <c>sha256:</c> of the request that created the campaign under its key, which a repeat must match.</summary>
     public string? IdempotencyDigest { get; set; }
 
+    /// <summary>
+    /// Where the next read of this campaign's conversations starts: the runtime's clock, never a provider's stamp. Set
+    /// when the campaign first goes live, and after each complete read to that read's start less the look-back, never
+    /// moving back. Null while a campaign has never been live.
+    /// </summary>
+    public DateTime? InboundWatermark { get; set; }
+
+    /// <summary>When the last read was started, or the last skip accounted; what the cadence is measured from.</summary>
+    public DateTime? InboundSyncedAt { get; set; }
+
+    /// <summary>The read still outstanding: the work item that lists the conversations, or null when none is.</summary>
+    public int? InboundSyncItemId { get; set; }
+
+    /// <summary>How far into the read's pages the outstanding read is; zero on its first page.</summary>
+    public int InboundOffset { get; set; }
+
+    /// <summary>How many reads in a row have ended without a result; the next one waits longer for each.</summary>
+    public int InboundFailures { get; set; }
+
     public List<CampaignContact> Members { get; } = [];
 
     /// <summary>What plugins call this campaign. Loaded wherever the campaign is answered with, so an empty list means none.</summary>

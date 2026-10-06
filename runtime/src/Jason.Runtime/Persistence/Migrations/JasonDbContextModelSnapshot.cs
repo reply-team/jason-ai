@@ -297,6 +297,30 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("idempotency_key");
 
+                    b.Property<int>("InboundFailures")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0)
+                        .HasColumnName("inbound_failures");
+
+                    b.Property<int>("InboundOffset")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0)
+                        .HasColumnName("inbound_offset");
+
+                    b.Property<int?>("InboundSyncItemId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("inbound_sync_item_id");
+
+                    b.Property<DateTime?>("InboundSyncedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("inbound_synced_at");
+
+                    b.Property<DateTime?>("InboundWatermark")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("inbound_watermark");
+
                     b.Property<int>("ManagerEventWatermark")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
@@ -340,6 +364,9 @@ namespace Jason.Runtime.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_campaigns_one_per_idempotency_key")
                         .HasFilter("idempotency_key IS NOT NULL");
+
+                    b.HasIndex("InboundSyncItemId")
+                        .HasDatabaseName("ix_campaigns_inbound_sync_item_id");
 
                     b.HasIndex("PublicId")
                         .IsUnique()
@@ -880,6 +907,9 @@ namespace Jason.Runtime.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_external_ids_contact_id_plugin_id_kind");
 
+                    b.HasIndex("PluginId", "Kind", "Value")
+                        .HasDatabaseName("ix_external_ids_plugin_kind_value");
+
                     b.ToTable("external_ids", t =>
                         {
                             t.HasCheckConstraint("ck_external_ids_one_entity", "(contact_id IS NOT NULL AND campaign_id IS NULL) OR (contact_id IS NULL AND campaign_id IS NOT NULL)");
@@ -970,6 +1000,11 @@ namespace Jason.Runtime.Persistence.Migrations
 
                     b.HasIndex("WorkItemId", "PublicId")
                         .HasDatabaseName("ix_journal_work_item_id_public_id");
+
+                    b.HasIndex("CampaignId", "Kind", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("ix_journal_campaign_kind_key")
+                        .HasFilter("kind = 'inbound_reply_observed'");
 
                     b.ToTable("journal", null, t =>
                         {
@@ -1529,6 +1564,15 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasConstraintName("fk_attempts_work_items_work_item_id");
 
                     b.Navigation("WorkItem");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.Campaign", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.WorkItem", null)
+                        .WithMany()
+                        .HasForeignKey("InboundSyncItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_campaigns_work_items_inbound_sync_item_id");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.CampaignContact", b =>

@@ -385,6 +385,28 @@ public sealed class ManagerOptionsValidator : IValidateOptions<ManagerOptions>
 }
 
 /// <summary>
+/// The inbound read's cadence and look-back, each within the bounds the page prints.
+/// </summary>
+public sealed class InboundOptionsValidator : IValidateOptions<InboundOptions>
+{
+    public ValidateOptionsResult Validate(string? name, InboundOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var failures = new List<string>();
+
+        OptionRules.Range(
+            failures,
+            "Inbound:SyncSeconds",
+            options.SyncSeconds,
+            InboundOptions.MinimumSyncSeconds,
+            InboundOptions.MaximumSyncSeconds);
+        OptionRules.Range(failures, "Inbound:LookbackSeconds", options.LookbackSeconds, 0, InboundOptions.MaximumLookbackSeconds);
+
+        return OptionRules.Result(failures);
+    }
+}
+
+/// <summary>
 /// The update check. The feed is held to the reader's own rule — https, or http on loopback — at start rather
 /// than at the first check: a feed the reader would refuse is a fact about the settings file, and the person
 /// who wrote it is at the keyboard now, not five minutes later when the first check logs a warning nobody reads.

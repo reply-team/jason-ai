@@ -112,7 +112,30 @@ public class ReplyConversationListTests
             await InvokeAsync(api, Input(limit: 20, offset: 0, pinned: "7", source: "inbound", since: "2026-10-01T00:00:00Z")));
 
         Assert.Equal(["501"], answer["items"]!.AsArray().Select(thread => (string)thread!["external_id"]!));
-        Assert.Equal("""{"sequenceIds":[7],"source":"inbox","from":"2026-10-01T00:00:00Z"}""", Assert.Single(account.Calls).Body);
+        Assert.Equal("""{"sequenceIds":[7],"source":"inbox","from":"2026-09-30T23:59:59.999Z"}""", Assert.Single(account.Calls).Body);
+    }
+
+    /// <summary>
+    /// The contract keeps the threads that moved at or after <c>since</c>, and Reply's <c>from</c> keeps only those
+    /// that moved after it, to the millisecond. So the package asks from one millisecond earlier, and a thread whose
+    /// last activity is stamped exactly at <c>since</c> is listed.
+    /// </summary>
+    [Theory]
+    [InlineData("2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z", "2026-09-30T23:59:59.999Z")]
+    [InlineData("2026-10-01T07:41:09.250Z", "2026-10-01T07:41:09.250Z", "2026-10-01T07:41:09.249Z")]
+    public async Task A_thread_that_moved_exactly_at_since_is_listed(string moved, string since, string from)
+    {
+        using var account = Planted();
+        account.WithThread(Thread(501, moved));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = ReplyOperations.Succeeded(
+            Operation,
+            await InvokeAsync(api, Input(limit: 20, offset: 0, pinned: "7", source: "inbound", since: since)));
+
+        Assert.Equal(["501"], answer["items"]!.AsArray().Select(thread => (string)thread!["external_id"]!));
+        Assert.Equal($$"""{"sequenceIds":[7],"source":"inbox","from":"{{from}}"}""", Assert.Single(account.Calls).Body);
     }
 
     // -------------------------------------------------------------------------------------------------------

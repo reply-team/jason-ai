@@ -25,4 +25,31 @@ public partial class RoleSkillTests
         Assert.Contains("`enrollment.stop`", skill, StringComparison.Ordinal);
         Assert.Contains("You do not approve it. You created it; a person decides it.", skill, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A reply wakes the manager with a line that names a thread and says nothing of what was written. The manager is
+    /// told to read every such line by its kind, to read the thread before deciding, and to leave the runtime's own read
+    /// to the runtime.
+    /// </summary>
+    [Fact]
+    public void The_manager_woken_by_a_reply_reads_the_lines_and_the_thread_and_leaves_the_read_to_the_runtime()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains("`trigger` is `inbound_reply_observed`", skill, StringComparison.Ordinal);
+        Assert.Contains("--kind inbound_reply_observed --since", skill, StringComparison.Ordinal);
+        Assert.Contains("--operation conversation.get", skill, StringComparison.Ordinal);
+        Assert.Contains("--role responder", skill, StringComparison.Ordinal);
+
+        // Not in its own run: an item it creates is claimed only after the run ends, the read before the responder, and
+        // what they found is read at the next review.
+        Assert.Contains("and **not in this run**", skill, StringComparison.Ordinal);
+        Assert.Contains("--context '{\"thread\":\"501\",\"read\":", skill, StringComparison.Ordinal);
+        Assert.Contains("decide at your next review", skill, StringComparison.Ordinal);
+        Assert.True(
+            skill.IndexOf("--operation conversation.get", StringComparison.Ordinal) < skill.IndexOf("--role responder", StringComparison.Ordinal),
+            "the read is queued before the responder");
+        Assert.Contains("**The read itself is not yours to redo.**", skill, StringComparison.Ordinal);
+        Assert.Contains("made by `system:dispatcher`", skill, StringComparison.Ordinal);
+    }
 }

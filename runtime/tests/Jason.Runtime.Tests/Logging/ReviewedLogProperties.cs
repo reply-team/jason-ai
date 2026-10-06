@@ -67,7 +67,8 @@ internal static class ReviewedLogProperties
 
         // LiveSettings: validator and binding sentences, which name a setting by its path and describe a refused text
         // by its length. ParseFailure: a read failure's type and where the reader stopped, and for a stored value the
-        // table and column the model names it by.
+        // table and column the model names it by. InboundSync: why a read's result is not a page, a closed word or the
+        // ParseFailure sentence.
         "Failure",
     };
 

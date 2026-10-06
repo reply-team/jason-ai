@@ -21,8 +21,8 @@ namespace Jason.Runtime.Configuration;
 /// (<see cref="ISettingsSeam"/>).
 /// </remarks>
 /// <param name="section">
-/// The section this seam guards, said in the complaint. Three of them are guarded, and an operator told only
-/// that "settings were refused" would not know which part of the file to open.
+/// The section this seam guards, said in the complaint. Several are guarded, and an operator told only that
+/// "settings were refused" would not know which part of the file to open.
 /// </param>
 public sealed class LiveSettings<TOptions>(
     IOptionsMonitor<TOptions> monitor,

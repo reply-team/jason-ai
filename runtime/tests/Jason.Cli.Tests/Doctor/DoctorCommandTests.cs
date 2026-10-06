@@ -583,8 +583,11 @@ public sealed class DoctorCommandTests
             StringComparison.Ordinal);
         Assert.Contains("a console that is not UTF-8 may show some characters differently; the JSON is the exact form", Flat(help), StringComparison.Ordinal);
 
-        // The allowlist and the never-list, each line as the code holds it.
+        // The allowlist and the never-list, each line as the code holds it, the inbound read's three settings among them.
         Assert.All(SettingsAllowlist.Default.Published, line => Assert.Contains(line, help, StringComparison.Ordinal));
+        Assert.Contains("Inbound:Enabled (true or false)", help, StringComparison.Ordinal);
+        Assert.Contains("Inbound:SyncSeconds (a 32-bit integer)", help, StringComparison.Ordinal);
+        Assert.Contains("Inbound:LookbackSeconds (a 32-bit integer)", help, StringComparison.Ordinal);
         Assert.All(DoctorComposer.NeverCarried, item => Assert.Contains(item, help, StringComparison.Ordinal));
 
         // The rewrites: the names, the unknown key, the exception text, the projected report.

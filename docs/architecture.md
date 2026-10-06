@@ -1610,6 +1610,11 @@ condition that requires semantic action.
 
 **Boundary:** the trigger is deterministic; the opportunity strategy is semantic.
 
+**In this build:** the synchronization is a scan step that reads each linked active campaign's conversations on a
+cadence and writes one `inbound_reply_observed` line for each thread that moved; that kind is a default manager
+trigger, so the line releases a manager check-in, which queues a read of the thread and the responder's work after
+it, and decides at its next review (`docs/inbound-sync.md`).
+
 ### 17.6 Scheduled campaign-management review
 
 **Trigger:** a configured management-review schedule becomes due despite no new transition
@@ -1663,6 +1668,7 @@ original chat session.
 | DEC-MGR-002 | Management combines reactive triggers with scheduled proactive reconciliation. |
 | DEC-WORK-001 | Runtime manages heterogeneous work through a common conceptual envelope without forcing identical payloads/results. |
 | DEC-WORK-002 | Predetermined continuations proceed deterministically; semantic continuations become AI-role work. |
+| DEC-SYNC-001 | Inbound sync is a deterministic scan step: for each active campaign routed to a plugin that reads conversations, and linked, it creates one read per cadence through the ordinary work-item routine and turns a completed read into `inbound_reply_observed` lines carrying identifiers, moments and the provider's own flags — never a subject, a preview or a name; it interprets nothing, and what a reply means is the manager's. |
 | DEC-IDEM-001 | A caller's idempotency key is a property of the entity it created — stored on that row under a unique index, installation-wide for a campaign and campaign-wide for a work item — never a replay cache with a lifetime: the same key with the same request answers the same entity, with a different request a non-retryable conflict; neither the runtime nor the CLI ever derives a key — a caller gives one or there is none. |
 | DEC-AI-001 | Jason ships no AI client, model account, model-provider credentials, or mandatory interactive agent. |
 | DEC-AI-002 | Interactive AI agents are user-owned external clients that use skills and Jason CLI. |

@@ -31,6 +31,7 @@ public sealed class JournalKindInventoryTests
         [JournalKinds.WorkItemFailed] = "the errors attempts ended with",
         [JournalKinds.ExternalIdPinned] = "provider identifiers",
         [JournalKinds.ExternalIdDiverged] = "provider identifiers",
+        [JournalKinds.InboundReplyObserved] = "provider identifiers",
         [JournalKinds.ExternalEffectReported] = "the effect, tool and operation a report names",
         [JournalKinds.NotificationSent] = "the failure text and receipts notification channels reported",
     };

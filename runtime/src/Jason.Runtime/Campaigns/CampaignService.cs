@@ -362,6 +362,10 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
         if (target == CampaignStatus.Active)
         {
             campaign.ManagerReviewAnchor = campaign.UpdatedAt;
+
+            // The inbound read starts from the first time only: what a person's conversations held before the campaign
+            // went live is history, while a reply that came in during a pause is still one the manager has not seen.
+            campaign.InboundWatermark ??= campaign.UpdatedAt;
         }
 
         journal.Append(

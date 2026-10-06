@@ -45,6 +45,11 @@ public sealed class ManagerOptions
         // person has answered releases nothing unless this is in force, and the role that asked has already
         // ended. An installation that narrows this list has to keep it.
         JournalKinds.DecisionAnswered,
+
+        // A thread in one of the campaign's conversations moved: somebody may have replied, and reading what they said
+        // is the manager's. An installation that narrowed this list before the kind existed is not woken by replies
+        // until it adds it.
+        JournalKinds.InboundReplyObserved,
     ];
 
     /// <summary>

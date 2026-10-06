@@ -51,11 +51,17 @@ public partial class CampaignManagerDocTests
         Assert.Contains($"`Manager:Priority` | `{defaults.Priority}` | -1000..1000", page, StringComparison.Ordinal);
         Assert.Contains($"`Manager:MaxEntriesPerScan` | `{defaults.MaxEntriesPerScan}` | 50..10000", page, StringComparison.Ordinal);
 
-        // And every kind the defaults hold is one the page publishes.
+        // And every kind the defaults hold is one the page publishes: a row of the table of what wakes a manager, and
+        // the default of the setting, in the order the runtime holds them.
         foreach (var kind in ManagerOptions.Default)
         {
-            Assert.Contains(kind, page, StringComparison.Ordinal);
+            Assert.Contains($"| `{kind}` |", page, StringComparison.Ordinal);
         }
+
+        Assert.Contains(
+            $"`Manager:Triggers` | {string.Join(", ", ManagerOptions.Default.Select(kind => $"`{kind}`"))} |",
+            page,
+            StringComparison.Ordinal);
         Assert.Contains("There is no `Manager:Enabled`", page, StringComparison.Ordinal);
     }
 

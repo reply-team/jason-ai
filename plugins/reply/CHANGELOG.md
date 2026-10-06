@@ -3,6 +3,14 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.2.3
+
+- `conversation.list` now lists a thread whose last activity is stamped exactly at `since`. The contract keeps the
+  threads that moved at or after `since`, and Reply's `from` keeps only those that moved after it, to the
+  millisecond, so the package passed the contract's inclusive bound as Reply's exclusive one and a thread stamped
+  at that very moment was left out. It now asks Reply from one millisecond before `since`.
+- Nothing else changes: the same calls, codes, classes and messages.
+
 ## 0.2.2
 
 - A call to Reply is given what is left of the invocation's budget less five seconds (never more than half of

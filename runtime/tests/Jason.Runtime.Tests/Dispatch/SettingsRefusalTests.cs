@@ -342,6 +342,7 @@ public class SettingsRefusalTests
     [InlineData("Plugins", """{"Dispatcher":{"Enabled":false},"Plugins":{"Limits":{"TimeoutMs":"SENTINEL_D_SEAM"}}}""")]
     [InlineData("Notifications", """{"Dispatcher":{"Enabled":false},"Notifications":{"QuietSeconds":"SENTINEL_D_SEAM"}}""")]
     [InlineData("Update", """{"Dispatcher":{"Enabled":false},"Update":{"IntervalHours":"SENTINEL_D_SEAM"}}""")]
+    [InlineData("Inbound", """{"Dispatcher":{"Enabled":false},"Inbound":{"SyncSeconds":"SENTINEL_D_SEAM"}}""")]
     public async Task Every_seam_holds_the_settings_the_start_validated_before_an_edit_reaches_it(string section, string edit)
     {
         var fixture = await RuntimeApiFixture.StartAsync(Ct, prepare: Settings(RuntimeApiFixture.DispatcherOff));
@@ -354,6 +355,7 @@ public class SettingsRefusalTests
                 "Manager" => KeepsAfterTheEdit<ManagerOptions>(fixture),
                 "Plugins" => KeepsAfterTheEdit<PluginsOptions>(fixture),
                 "Notifications" => KeepsAfterTheEdit<NotificationsOptions>(fixture),
+                "Inbound" => KeepsAfterTheEdit<InboundOptions>(fixture),
                 _ => KeepsAfterTheEdit<UpdateOptions>(fixture),
             };
 

@@ -562,7 +562,9 @@ internal static class Account
             .Where(thread => people is null || (thread["contact"]?["id"] is JsonValue id && people.Contains(id.GetValue<int>())))
             .Where(thread => sequences is null || (thread["sequence"]?["id"] is JsonValue sequence && sequences.Contains(sequence.GetValue<int>())))
             .Where(thread => source != "inbox" || (thread["messages"] as JsonArray ?? []).Any(message => message?["isOutbound"] is JsonValue outbound && !outbound.GetValue<bool>()))
-            .Where(thread => LastActivity(thread) >= since)
+            // Exclusive, as Reply's own is: read at Reply, a `from` one millisecond before a thread's last activity
+            // lists it and a `from` equal to it does not.
+            .Where(thread => LastActivity(thread) > since)
             .OrderByDescending(LastActivity)
             .Select(thread => (JsonNode)Listed(thread))
             .ToList();

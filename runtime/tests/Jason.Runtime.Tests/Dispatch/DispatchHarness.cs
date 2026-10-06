@@ -74,6 +74,9 @@ internal sealed class DispatchHarness : IDisposable
         // composes them too.
         services.AddSingleton<IOptionsMonitor<ManagerOptions>>(new TestOptionsMonitor<ManagerOptions>(manager ?? new ManagerOptions()));
         services.AddSingleton<IOptionsMonitor<PluginsOptions>>(new TestOptionsMonitor<PluginsOptions>(new PluginsOptions()));
+
+        // The inbound read, as the runtime ships it: on. With nothing routed it reads nothing, and says so once.
+        services.AddSingleton<IOptionsMonitor<InboundOptions>>(Inbound);
         services.AddSingleton(_dir.Paths);
         services.AddSingleton(Registry);
         services.AddSingleton(Status);
@@ -110,6 +113,13 @@ internal sealed class DispatchHarness : IDisposable
     }
 
     public FixedClock Clock { get; }
+
+    /// <summary>
+    /// The inbound read's settings, which a test may change between scans. The look-back is an hour here rather than
+    /// the shipped default, so the moments a test writes read in hours: what the tests hold is the arithmetic, which
+    /// the default does not change, and the default is held by the settings' own tests.
+    /// </summary>
+    public TestOptionsMonitor<InboundOptions> Inbound { get; } = new(new InboundOptions { LookbackSeconds = 3_600 });
 
     /// <summary>The notification settings the scan reads. Off until a test turns them on.</summary>
     public TestOptionsMonitor<NotificationsOptions> Notifications { get; } = new(new NotificationsOptions { Enabled = false });
@@ -221,6 +231,14 @@ internal sealed class DispatchHarness : IDisposable
         return await scope.ServiceProvider.GetRequiredService<Summoner>().SummonAsync(db, ct);
     }
 
+    /// <summary>Runs one inbound read step, in a scope of its own, the way the scan runs it.</summary>
+    public async Task<InboundReport> SyncAsync(CancellationToken ct)
+    {
+        using var scope = _provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        return await scope.ServiceProvider.GetRequiredService<InboundSync>().SyncAsync(db, ct);
+    }
+
     /// <summary>Claims whatever is ready and hands the claims back without dispatching them.</summary>
     public async Task<IReadOnlyList<ClaimedWork>> ClaimAsync(CancellationToken ct, int freeSlots = 4)
     {
@@ -328,6 +346,7 @@ internal sealed class DispatchHarness : IDisposable
     {
         private readonly ConcurrentQueue<string> _texts = new();
         private int _failNextJournalRead;
+        private int _failNextWorkItemRead;
 
         public IReadOnlyList<string> Texts => [.. _texts];
 
@@ -335,6 +354,9 @@ internal sealed class DispatchHarness : IDisposable
 
         /// <summary>The next query that reads the journal throws, as a database that went away would.</summary>
         public void FailNextJournalRead() => Interlocked.Exchange(ref _failNextJournalRead, 1);
+
+        /// <summary>The next query that reads work items throws, and the one after it does not.</summary>
+        public void FailNextWorkItemRead() => Interlocked.Exchange(ref _failNextWorkItemRead, 1);
 
         public override InterceptionResult<System.Data.Common.DbDataReader> ReaderExecuting(
             System.Data.Common.DbCommand command,
@@ -362,6 +384,12 @@ internal sealed class DispatchHarness : IDisposable
                 && Interlocked.Exchange(ref _failNextJournalRead, 0) == 1)
             {
                 throw new InvalidOperationException("The journal could not be read.");
+            }
+
+            if (command.CommandText.Contains("FROM \"work_items\"", StringComparison.Ordinal)
+                && Interlocked.Exchange(ref _failNextWorkItemRead, 0) == 1)
+            {
+                throw new InvalidOperationException("The work items could not be read.");
             }
         }
     }

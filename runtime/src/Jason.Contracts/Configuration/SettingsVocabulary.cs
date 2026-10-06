@@ -18,7 +18,7 @@ public static class SettingsVocabulary
     public static IReadOnlySet<string> Names { get; } = new[]
     {
         // The sections.
-        "Runtime", "Logging", "Dispatcher", "Manager", "Roles", "Plugins", "Routes", "Update", "Notifications",
+        "Runtime", "Logging", "Dispatcher", "Manager", "Roles", "Plugins", "Routes", "Update", "Notifications", "Inbound",
 
         // Runtime and Logging.
         "Port",
@@ -49,6 +49,9 @@ public static class SettingsVocabulary
 
         // Notifications; a named plugin's entry is Enabled and Binding, both above.
         "Toast", "QuietSeconds", "MaxWaitSeconds", "MinIntervalMinutes",
+
+        // Inbound; its switch is Enabled, above.
+        "SyncSeconds", "LookbackSeconds",
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>

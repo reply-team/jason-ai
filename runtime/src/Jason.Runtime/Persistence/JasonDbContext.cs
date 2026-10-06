@@ -130,6 +130,12 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
                 .HasFilter("idempotency_key IS NOT NULL")
                 .HasDatabaseName("ix_campaigns_one_per_idempotency_key");
             campaign.HasMany(c => c.Members).WithOne(m => m.Campaign).HasForeignKey(m => m.CampaignId).OnDelete(DeleteBehavior.Restrict);
+
+            // The read still outstanding is a work item that exists. Nothing cascades: a work item is never deleted, and
+            // the campaign's row is not where its life is decided.
+            campaign.Property(c => c.InboundOffset).HasDefaultValue(0);
+            campaign.Property(c => c.InboundFailures).HasDefaultValue(0);
+            campaign.HasOne<WorkItem>().WithMany().HasForeignKey(c => c.InboundSyncItemId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Contact>(contact =>
@@ -447,6 +453,9 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             // contact index ignores campaign pins and the campaign index ignores contact pins.
             pin.HasIndex(p => new { p.ContactId, p.PluginId, p.Kind }).IsUnique();
             pin.HasIndex(p => new { p.CampaignId, p.PluginId, p.Kind }).IsUnique();
+
+            // The inbound read finds the person a thread belongs to by the identifier the provider gave them.
+            pin.HasIndex(p => new { p.PluginId, p.Kind, p.Value }).HasDatabaseName("ix_external_ids_plugin_kind_value");
             pin.ToTable(t => t.HasCheckConstraint(
                 "ck_external_ids_one_entity",
                 "(contact_id IS NOT NULL AND campaign_id IS NULL) OR (contact_id IS NULL AND campaign_id IS NOT NULL)"));
@@ -489,6 +498,14 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
             // The summon reads one campaign's chronicle above an id, on every scan of every campaign.
             entry.HasIndex(e => new { e.CampaignId, e.Id }).HasDatabaseName("ix_journal_campaign_id_id");
+
+            // The inbound read says each observation once per campaign, and the database is what says so: the step looks
+            // the page's keys up here before it writes, and a second line under a key a campaign already holds is
+            // refused. Only that kind is indexed, so the largest table carries no index for every other line.
+            entry.HasIndex(e => new { e.CampaignId, e.Kind, e.Key })
+                .IsUnique()
+                .HasFilter("kind = 'inbound_reply_observed'")
+                .HasDatabaseName("ix_journal_campaign_kind_key");
             entry.Property(e => e.New).HasColumnName("new_json");
             entry.Property(e => e.Reason).HasMaxLength(2000);
 

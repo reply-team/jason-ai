@@ -8,15 +8,20 @@ using Microsoft.Extensions.Logging;
 
 namespace Jason.Runtime.Dispatch;
 
-/// <summary>What one scan did. Zeros are the normal answer: most ticks find nothing to do.</summary>
-public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0);
+/// <summary>
+/// What one scan did. Zeros are the normal answer: most ticks find nothing to do. <paramref name="Synced"/> counts the
+/// conversation reads the scan started and <paramref name="Observed"/> the threads it said had moved.
+/// </summary>
+public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0, int Synced = 0, int Observed = 0);
 
 /// <summary>
-/// One pass of the dispatcher: give up what is overdue, take back what is lost, summon a manager where a
-/// campaign wants one, hand out what is ready, and, last, say once that something waits for a person: after the
-/// dispatch, so nothing the notifier does can strand work already claimed. In that order and in short
-/// transactions, so no step holds the writer while another thinks. The summon is third because a check-in created now should be claimable now,
-/// and because a review of a lost attempt is summoned by the line that lost it. The scan hands
+/// One pass of the dispatcher: give up what is overdue, take back what is lost, read the live campaigns'
+/// conversations, summon a manager where a campaign wants one, hand out what is ready, and, last, say once that
+/// something waits for a person: after the dispatch, so nothing the notifier does can strand work already claimed.
+/// In that order and in short transactions, so no step holds the writer while another thinks. The read comes before
+/// the summon so that a reply it says wakes the manager in the same scan, and before the claim so that a read it
+/// starts is claimed in the same scan. The summon comes before the claim because a check-in created now should be
+/// claimable now, and after the lease enforcer because a review of a lost attempt is summoned by the line that lost it. The scan hands
 /// claims to the pool and returns; waiting for a handler is what would turn a dispatcher into a queue of one.
 /// Scans run one at a time: the free slots are read before anything is handed out, so two scans in flight would
 /// each claim a full pool's worth and the second could not place what it had already taken.
@@ -44,6 +49,16 @@ public sealed class ScanRunner(
         LogLevel.Information,
         new EventId(3, nameof(Lost)),
         "Dispatcher took back {Count} attempts nobody was looking after");
+
+    private static readonly Action<ILogger, int, Exception?> Synced = LoggerMessage.Define<int>(
+        LogLevel.Information,
+        new EventId(5, nameof(Synced)),
+        "Dispatcher started {Count} reads of campaign conversations");
+
+    private static readonly Action<ILogger, int, Exception?> Observed = LoggerMessage.Define<int>(
+        LogLevel.Information,
+        new EventId(6, nameof(Observed)),
+        "Dispatcher observed {Count} conversation threads that moved");
 
     private static readonly Action<ILogger, string, string, Exception?> Claimed = LoggerMessage.Define<string, string>(
         LogLevel.Information,
@@ -81,6 +96,7 @@ public sealed class ScanRunner(
         // would wait its whole bound for an attempt nothing was ever going to finish.
         var expired = await InScopeAsync<Expirer, int>((step, db) => step.ExpireAsync(db, ct)).ConfigureAwait(false);
         var lost = await InScopeAsync<LeaseEnforcer, int>((step, db) => step.EnforceAsync(db, ct)).ConfigureAwait(false);
+        var inbound = await InScopeAsync<InboundSync, InboundReport>((step, db) => step.SyncAsync(db, ct)).ConfigureAwait(false);
         var summoned = await InScopeAsync<Summoner, int>((step, db) => step.SummonAsync(db, ct)).ConfigureAwait(false);
         var claimed = status.State == DispatcherState.Running
             ? await InScopeAsync<Claimer, IReadOnlyList<ClaimedWork>>((step, db) => step.ClaimAsync(db, pool.FreeSlots, ct)).ConfigureAwait(false)
@@ -115,8 +131,18 @@ public sealed class ScanRunner(
             Lost(logger, lost, null);
         }
 
+        if (inbound.Synced > 0)
+        {
+            Synced(logger, inbound.Synced, null);
+        }
+
+        if (inbound.Observed > 0)
+        {
+            Observed(logger, inbound.Observed, null);
+        }
+
         Scanned(logger, status.Scans, expired, lost, summoned, claimed.Count, null);
-        return new ScanReport(expired, lost, summoned, claimed.Count, notified);
+        return new ScanReport(expired, lost, summoned, claimed.Count, notified, inbound.Synced, inbound.Observed);
     }
 
     private async Task<TResult> InScopeAsync<TStep, TResult>(Func<TStep, JasonDbContext, Task<TResult>> step)

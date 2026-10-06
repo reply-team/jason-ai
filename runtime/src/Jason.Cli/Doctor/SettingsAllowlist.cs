@@ -84,6 +84,7 @@ public sealed class SettingsAllowlist
         new("Notifications:Enabled", Kind.Switch),
         new("Notifications:Toast", Kind.Switch),
         new($"Notifications:Plugins:{AnyPlugin}:Enabled", Kind.Switch),
+        new("Inbound:Enabled", Kind.Switch),
 
         // And a word from a closed set, or a list of them.
         new("Logging:MinimumLevel", Kind.LogLevel),
@@ -133,6 +134,8 @@ public sealed class SettingsAllowlist
         new("Plugins:Invoker:KillGraceMs", Kind.Integer32),
         new("Plugins:Invoker:VersionCheckTimeoutMs", Kind.Integer32),
         new("Plugins:Invoker:LogLineBytes", Kind.Integer32),
+        new("Inbound:SyncSeconds", Kind.Integer32),
+        new("Inbound:LookbackSeconds", Kind.Integer32),
     ]);
 
     /// <summary>

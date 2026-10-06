@@ -265,6 +265,28 @@ public class ReplyStubTests
     // The call log
     // -------------------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// The inbox filter's <c>from</c> is exclusive, as Reply's was measured to be: a <c>from</c> one millisecond
+    /// before a thread's last activity lists it, and a <c>from</c> equal to it does not.
+    /// </summary>
+    [Theory]
+    [InlineData("2026-10-01T07:41:08.999Z", 1)]
+    [InlineData("2026-10-01T07:41:09.000Z", 0)]
+    public async Task The_inbox_filter_s_from_is_exclusive_as_reply_s_is(string from, int listed)
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.WithThread(ReplyConversationListTests.Thread(501, "2026-10-01T07:41:09Z"));
+        var body = new JsonObject { ["sequenceIds"] = new JsonArray(7), ["source"] = "inbox", ["from"] = from };
+
+        var (exit, stdout, _) = await account.RunAsync(
+            [.. Prefix, "api", "/v3/inbox/threads/filter?top=10&skip=0", "--method", "POST", "--body", "-"],
+            body.ToJsonString(),
+            Ct);
+
+        Assert.Equal(0, exit);
+        Assert.Equal(listed, JsonNode.Parse(stdout)!["data"]!["items"]!.AsArray().Count);
+    }
+
     [Fact]
     public async Task Every_call_is_recorded_before_it_runs()
     {

@@ -423,6 +423,7 @@ public class OptionsValidationTests
                 typeof(RoutesOptions),
                 typeof(UpdateOptions),
                 typeof(NotificationsOptions),
+                typeof(InboundOptions),
             },
             ValidatedSections(services).ToHashSet());
     }
