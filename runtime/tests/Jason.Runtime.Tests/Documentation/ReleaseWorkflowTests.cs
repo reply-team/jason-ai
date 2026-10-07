@@ -902,7 +902,7 @@ public class ReleaseWorkflowTests
     /// A single-file publish leaves SQLite's native library beside the executable unless it is told to bundle
     /// it, and the archive carries the executable alone. Such a build answers <c>--version</c> with 0 and
     /// <c>runtime status</c> with 3 and <c>no_descriptor</c> — both of the assertions this smoke test used to
-    /// make — and then dies on <c>runtime start</c> with a missing DLL. The one build this wave exists to
+    /// make — and then dies on <c>runtime start</c> with a missing DLL. The one build a release exists to
     /// deliver would have gone out green, which is why opening the database is now part of every one of these.
     /// </remarks>
     [Theory]

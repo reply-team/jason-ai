@@ -369,11 +369,14 @@ public static partial class ConfigShape
         /// <summary>
         /// Whether a key under this path is printed as typed, by the project's one key rule. The rule reads a whole
         /// path, so the key is judged in place: a number is an index only where a list's own path stands before it. A key
-        /// written like a placeholder is never one the code knows, whatever the rule says of a word spelled that way.
+        /// written like a placeholder is never one the code knows, whatever the rule says of a word spelled that way —
+        /// and nor is a key with colons in it, which the configuration system reads as several, when any one of them is
+        /// written like a placeholder: the rule writes a key it hides as the placeholder, so such a key would match its
+        /// own hidden form and be printed.
         /// </summary>
         private bool MayTravel(string parent, string key)
         {
-            if (KeyPlaceholder.Is(key))
+            if (key.Split(':').Any(KeyPlaceholder.Is))
             {
                 return false;
             }

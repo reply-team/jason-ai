@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
@@ -331,7 +332,7 @@ public class PluginServiceTests
         Assert.DoesNotContain(logs.All, line => line.Contains(ReloadReasonSentinel, StringComparison.Ordinal));
         Assert.DoesNotContain(
             logs.Lines.SelectMany(line => line.Scope.Values),
-            value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)!.Contains(ReloadReasonSentinel, StringComparison.Ordinal));
+            value => Convert.ToString(value, CultureInfo.InvariantCulture)!.Contains(ReloadReasonSentinel, StringComparison.Ordinal));
 
         var entries = await api.PostOkAsync<Page<JournalEntryDto>>(Operations.JournalList, new { Kind = JournalKinds.PluginsReloaded }, Ct);
         Assert.Equal(ReloadReasonSentinel, entries.Items[0].Reason);

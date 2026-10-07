@@ -32,7 +32,14 @@ public sealed class ProviderOpBudgetValidator(LiveSettings<PluginsOptions> plugi
             return ValidateOptionsResult.Success;
         }
 
-        var killGraceMs = plugins.Current.Invoker.KillGraceMs;
+        // A plugins' section that is itself refused says so in its own validator. Reading it here would throw that
+        // refusal out of this section's validation and hide the dispatcher's own; this rule waits for both to stand.
+        if (!plugins.TryCurrent(out var pluginsNow))
+        {
+            return ValidateOptionsResult.Success;
+        }
+
+        var killGraceMs = pluginsNow.Invoker.KillGraceMs;
         var floorSeconds = FloorSeconds(slowest.TimeoutMs, killGraceMs);
         if (defaults.TimeoutSeconds >= floorSeconds)
         {

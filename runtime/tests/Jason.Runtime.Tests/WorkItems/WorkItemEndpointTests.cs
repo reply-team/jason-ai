@@ -245,7 +245,7 @@ public class WorkItemEndpointTests
             new { CampaignId = campaign.Id, Kind = "ai_role", Role = "researcher", Context = new { brief = "as claimed" } },
             Ct);
 
-    /// <summary>Straight into the database behind the runtime: the dispatcher that would claim an item arrives later in this wave.</summary>
+    /// <summary>Straight into the database behind the runtime, as a claim would leave it, so the test needs no dispatcher.</summary>
     private static async Task SeedAttemptAsync(RuntimeApiFixture api, string workItemId)
     {
         await using var db = new JasonDbContext(JasonDbContext.CreateOptions(api.Paths.DatabaseFile));

@@ -47,8 +47,8 @@ public class SettingsVocabularyTests
     [Fact]
     public void Every_section_the_runtime_reads_is_one_the_walk_finds()
     {
+        // The sections the runtime reads are the subset; what the walk found has to hold every one of them.
         Assert.Superset(
-            new HashSet<Type>(Sections()),
             new HashSet<Type>
             {
                 typeof(RuntimeOptions),
@@ -61,7 +61,8 @@ public class SettingsVocabularyTests
                 typeof(UpdateOptions),
                 typeof(NotificationsOptions),
                 typeof(InboundOptions),
-            });
+            },
+            new HashSet<Type>(Sections()));
     }
 
     /// <summary>Configuration keys are matched without regard to case, and so is the vocabulary.</summary>

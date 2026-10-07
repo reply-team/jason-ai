@@ -34,12 +34,12 @@ public sealed class PatternWarmUp(PatternTiming timing, ILogger<PatternWarmUp> l
     private static readonly Action<ILogger, int, long, Exception?> Warmed = LoggerMessage.Define<int, long>(
         LogLevel.Debug,
         new EventId(1, nameof(Warmed)),
-        "Published schema patterns warmed: {Finished} in {Milliseconds} ms");
+        "Published schema patterns warmed: {Finished} in {DurationMs} ms");
 
     private static readonly Action<ILogger, int, int, long, Exception?> PartlyWarmed = LoggerMessage.Define<int, int, long>(
         LogLevel.Warning,
         new EventId(2, nameof(PartlyWarmed)),
-        "Published schema patterns warmed: {Finished}; {Unfinished} did not finish warming in {Milliseconds} ms and are left to a request's own second match");
+        "Published schema patterns warmed: {Finished}; {Unfinished} did not finish warming in {DurationMs} ms and are left to a request's own second match");
 
     /// <summary>Every schema this build publishes and the runtime applies: the operations' first, then the delivery family's.</summary>
     public static IEnumerable<JsonObject> PublishedSchemas() =>

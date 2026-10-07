@@ -102,6 +102,27 @@ public sealed class LogReaderTests
             LogReader.Tail(shuffled, new LogFilter(), 100).Events.Select(Message));
     }
 
+    /// <summary>
+    /// After <c>_999</c> a roll's number grows a digit, so its text sorts before the file it follows. The reader sorts
+    /// the files again itself, newest first, whatever order it is handed them in, and the newest of the two is the
+    /// thousandth roll.
+    /// </summary>
+    [Fact]
+    public void The_thousandth_roll_of_a_day_is_read_as_newer_than_the_nine_hundred_and_ninety_ninth()
+    {
+        using var tree = new TempTree();
+        Write(tree.Root, "runtime-20261002_999.jsonl", Event(At(1), "roll-999"));
+        Write(tree.Root, "runtime-20261002_1000.jsonl", Event(At(2), "roll-1000"));
+        var files = LogFiles.In(tree.Root);
+
+        foreach (var handed in new[] { files, [.. files.Reverse()], [.. files.OrderBy(file => file.Name, StringComparer.Ordinal)] })
+        {
+            var tail = LogReader.Tail(handed, new LogFilter(), 1);
+            Assert.Equal(["roll-1000"], tail.Events.Select(Message));
+            Assert.True(tail.LimitReached);
+        }
+    }
+
     [Fact]
     public void When_there_are_more_events_than_the_limit_the_newest_are_kept_and_the_result_says_so()
     {
@@ -171,10 +192,11 @@ public sealed class LogReaderTests
     // ---- reading backwards in blocks ---------------------------------------------------------------------------
 
     /// <summary>
-    /// How many bytes the reader takes from the end of a file at a time. The tests below put a block's first byte on a
-    /// chosen byte of the file, so they need to know where the blocks begin.
+    /// How many bytes the reader takes from the end of a file at a time, read from the reader rather than copied: the
+    /// tests below put a block's first byte on a chosen byte of the file, so they need to know where the blocks begin,
+    /// and a copy that drifted from the reader would stage every edge somewhere else and still pass.
     /// </summary>
-    private const int BlockBytes = 64 * 1024;
+    private const int BlockBytes = LogReader.BlockSize;
 
     /// <summary>
     /// A file of a thousand lines of one size, each a message made of <paramref name="unit"/> repeated, ended by
@@ -218,8 +240,10 @@ public sealed class LogReaderTests
 
     /// <summary>
     /// A character that is cut between two blocks is put back together before it is decoded. The file holds two-, three-
-    /// and four-byte characters as the runtime writes them, raw, and the block the reader takes second starts at each
-    /// position inside them in turn: on the second byte of a two-byte one, and on the second or the third of a longer one.
+    /// and four-byte characters as the runtime writes them, raw, and the block the reader takes first — the one that
+    /// starts a block's length from the end — starts at each position inside them in turn: on the second byte of a
+    /// two-byte one, the second or the third of a three-byte one, and the second, third or fourth of a four-byte one.
+    /// The block it takes second ends mid-character.
     /// The test says what it stages — a byte above 0x7F in the file, and a block that begins on a continuation byte —
     /// so a fixture that quietly went back to ASCII would fail here rather than pass for nothing.
     /// </summary>

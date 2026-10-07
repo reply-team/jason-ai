@@ -34,32 +34,39 @@ internal static class StoredValue
     /// </summary>
     private static readonly JsonDocumentOptions Documents = new() { AllowDuplicateProperties = false };
 
-    public static JsonObject Object(string text, string column) => Read(column, text, static text => Node(text)!.AsObject());
+    public static JsonObject Object(string text, string column) => Read(column, text, static text => Node(text)?.AsObject());
 
-    public static JsonArray Array(string text, string column) => Read(column, text, static text => Node(text)!.AsArray());
+    public static JsonArray Array(string text, string column) => Read(column, text, static text => Node(text)?.AsArray());
 
-    public static JsonNode Any(string text, string column) => Read(column, text, static text => Node(text)!);
+    public static JsonNode Any(string text, string column) => Read(column, text, static text => Node(text));
 
     public static T Typed<T>(string text, string column) => Read(column, text, static text =>
     {
         // The serializer hands a node inside a record on without reading it, so a key written twice there would pass
         // here and fail later: the text is read once as a document first, which refuses one at any depth.
         JsonDocument.Parse(text, Documents).Dispose();
-        return JsonSerializer.Deserialize<T>(text, JasonJson.Options)!;
+        return JsonSerializer.Deserialize<T>(text, JasonJson.Options);
     });
 
     private static JsonNode? Node(string text) => JsonNode.Parse(text, null, Documents);
 
-    private static T Read<T>(string column, string text, Func<string, T> read)
+    /// <summary>
+    /// The value, or the column's refusal. The literal null is valid JSON and reads as nothing, which no column here holds:
+    /// the runtime never writes it, and passed on it would fail later in whatever looked inside, without the column.
+    /// </summary>
+    private static T Read<T>(string column, string text, Func<string, T?> read)
     {
+        T? value;
         try
         {
-            return read(text);
+            value = read(text);
         }
         catch (Exception failure) when (failure is not UnreadableStoredValueException)
         {
             throw UnreadableStoredValueException.From(column, failure);
         }
+
+        return value is { } whole ? whole : throw UnreadableStoredValueException.Null(column);
     }
 }
 

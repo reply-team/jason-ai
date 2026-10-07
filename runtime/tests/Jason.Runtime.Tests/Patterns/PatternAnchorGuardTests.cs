@@ -27,7 +27,14 @@ namespace Jason.Runtime.Tests.Patterns;
 /// <para>
 /// A pattern is read for its anchors as the schema validator's rewrite reads one: a backslash takes the character after
 /// it as written, inside a class <c>$</c> is a member, and a <c>]</c> that comes first in a class is a member too rather
-/// than its end. A <c>new(</c> whose type is not written beside it is beyond the scan.
+/// than its end.
+/// </para>
+/// <para>
+/// What the source does not always show — a <c>new(</c> whose type is not written beside it, in an expression body, a
+/// <c>return</c> or a second declarator — the compiled assemblies do. Every <c>Regex</c> their code constructs, and
+/// every call of its static methods that take a pattern, is found in their IL, read from their files without loading
+/// them, and given a file and line by their symbols; each has to be one the scan read there, so a pattern written in a
+/// form the scan does not know fails by its file and line instead of being passed over.
 /// </para>
 /// </remarks>
 public sealed class PatternAnchorGuardTests
@@ -36,7 +43,7 @@ public sealed class PatternAnchorGuardTests
     /// How many literal patterns the scan reads in the tree today, as a floor: a scan that read fewer was not reading
     /// the tree it was pointed at, or has stopped reading a form it used to.
     /// </summary>
-    private const int PatternFloor = 47;
+    private const int PatternFloor = 46;
 
     private static readonly Regex Marker = new(
         @"\[GeneratedRegex\(|new\s+(?:System\.Text\.RegularExpressions\.)?Regex\s*\(|\bRegex\??\s+[A-Za-z_][A-Za-z0-9_]*\s*(?:\{[^{}]*\}\s*)?=\s*new\s*\(|(?<![A-Za-z0-9_.])(?:System\.Text\.RegularExpressions\.)?Regex\s*\.\s*(?<static>IsMatch|Match|Matches|Replace|Split|Count|EnumerateMatches|EnumerateSplits)\s*\(",
@@ -49,7 +56,8 @@ public sealed class PatternAnchorGuardTests
     private static readonly (string File, string Argument, string Reason)[] BuiltAtRunTime =
     [
         ("SchemaValidator.cs", "form", "a published schema's pattern, every anchoring $ of which the validator rewrites as \\z and every . outside a class as a class of all but the four line terminators before it compiles it, and which it refuses outright if it holds \\A, \\Z, \\z or \\G"),
-        ("IdentityRewriter.cs", "Pattern(facts, shortForm)", "names to find anywhere in a text, escaped and joined with this file's own fragments, which anchors nowhere"),
+        ("IdentityRewriter.cs", "Pattern(facts, shortForm, AfterName, AfterPath, withSid: true)", "names to find anywhere in a text, escaped and joined with this file's own fragments, which anchors nowhere"),
+        ("IdentityRewriter.cs", "Pattern(facts, shortForm, BeforeEscapedPair, BeforeEscapedPair, withSid: false)", "the same names, each found only before a percent escape, which anchors nowhere either"),
     ];
 
     [Fact]
@@ -69,6 +77,7 @@ public sealed class PatternAnchorGuardTests
         // holds, of each kind of literal and each form, in the files that are known to hold them.
         Assert.True(literals.Count >= PatternFloor, $"Only {literals.Count} patterns were read, fewer than the {PatternFloor} the tree holds; the source tree was not found or was not read.");
         AssertFound(literals, "ManifestRules.cs", @"^\d+\.\d+\.\d+\z");
+        AssertFound(literals, "PluginIds.cs", @"^[a-z][a-z0-9-]{1,63}\z");
         AssertFound(literals, "OutcomeValidator.cs", @"^[a-z][a-z0-9_]{0,63}\z");
         AssertFound(literals, "SnakeCase.cs", "([a-z0-9])([A-Z])");
         AssertFound(literals, "ExecutableResolver.cs", "^endLocal & goto #_undefined_# 2>NUL");
@@ -92,6 +101,17 @@ public sealed class PatternAnchorGuardTests
             problems.Add($"{stale.Count} pattern(s) the guard lets through are no longer where they were, so the leave each was given is spent:{Environment.NewLine}{string.Join(Environment.NewLine, stale)}");
         }
 
+        var compiled = CompiledCalls.ProductionAssemblies(root)
+            .SelectMany(assembly => CompiledCalls.In(assembly))
+            .Where(call => TakesAPattern(call.Target))
+            .ToList();
+        Assert.Contains(compiled, call => call.File?.EndsWith("/SchemaValidator.cs", StringComparison.Ordinal) == true);
+        var unscanned = Unscanned(compiled, found);
+        if (unscanned.Count > 0)
+        {
+            problems.Add($"{unscanned.Count} regular expression(s) the compiled runtime makes are not ones the scan read in its source, so their anchors were never read; write each where the scan reads it, as a literal after a marker it knows:{Environment.NewLine}{string.Join(Environment.NewLine, unscanned)}");
+        }
+
         var offences = literals
             .Where(pattern => LineBreakAnchors(pattern.Text).Count > 0)
             .Select(pattern => $"{pattern.File}({pattern.Line}): {pattern.Text} (holds {string.Join(" and ", LineBreakAnchors(pattern.Text).Distinct())})")
@@ -105,15 +125,18 @@ public sealed class PatternAnchorGuardTests
     }
 
     /// <summary>
-    /// The rewriter's pattern is let through because it anchors nowhere, and that is held here rather than taken on
-    /// trust: built for names that hold a dollar sign and the letter Z, what it compiles has no anchor of either kind.
+    /// The rewriter's patterns are let through because they anchor nowhere, and that is held here rather than taken on
+    /// trust: built for names that hold a dollar sign and the letter Z, what either of its searches compiles has no anchor
+    /// of either kind.
     /// </summary>
-    [Fact]
-    public void The_pattern_the_identity_rewriter_builds_anchors_nowhere()
+    [Theory]
+    [InlineData("_names")]
+    [InlineData("_beforeEscapes")]
+    public void The_patterns_the_identity_rewriter_builds_anchor_nowhere(string field)
     {
         var facts = new IdentityFacts(@"C:\Users\Z$a", "Z$a", "Z$MACHINE", "Z$DOMAIN", "S-1-5-21-1-2-3-1001") { DataDirectory = @"D:\Z$data" };
         var rewriter = new IdentityRewriter(facts, directory => directory + "$");
-        var names = typeof(IdentityRewriter).GetField("_names", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(rewriter);
+        var names = typeof(IdentityRewriter).GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(rewriter);
 
         var pattern = Assert.IsType<Regex>(names).ToString();
 
@@ -269,6 +292,49 @@ public sealed class PatternAnchorGuardTests
         Assert.Equal([(3, "^a\\.b\"c$"), (6, "^a\"b\\.$"), (9, "^c\\z")], patterns.Select(pattern => (pattern.Line, pattern.Text)));
     }
 
+    /// <summary>
+    /// The scan's reach is held by the compiled code: a target-typed <c>new(</c> in an expression body, which the source
+    /// scan does not read, is found in this file's own assembly by its file and line.
+    /// </summary>
+    [Fact]
+    public void A_pattern_the_source_scan_does_not_read_is_found_in_the_compiled_assembly_by_its_file_and_line()
+    {
+        var root = RepositoryRoot();
+        var path = Path.Combine(root, "runtime", "tests", "Jason.Runtime.Tests", "Patterns", "PatternAnchorGuardTests.cs");
+        var source = File.ReadAllText(path);
+        var file = Path.GetRelativePath(root, path).Replace('\\', '/');
+        var compiled = CompiledCalls.In(typeof(PatternAnchorGuardTests).Assembly.Location, type => type == typeof(PatternAnchorGuardTests).FullName)
+            .Where(call => TakesAPattern(call.Target))
+            .ToList();
+
+        var unscanned = Unscanned(compiled, [.. PatternsIn(source, file)]);
+
+        // The declaration is looked for in pieces, so the text looked for is not also the text of this lookup.
+        Assert.Equal([$"{file}({CSharpSource.LineOf(source, source.IndexOf("Regex " + nameof(Unwritten) + "(", StringComparison.Ordinal))}): Regex..ctor"], unscanned);
+    }
+
+    /// <summary>A pattern made where the source scan does not look: a target-typed <c>new(</c> in an expression body.</summary>
+    private static Regex Unwritten() => new("^unread$");
+
+    /// <summary>Whether a call makes a regular expression from a pattern: <c>Regex</c>'s constructor, or one of its static methods that take one.</summary>
+    private static bool TakesAPattern(CallTarget target) =>
+        target is { Namespace: "System.Text.RegularExpressions", Type: "Regex" }
+        && (target.Member == ".ctor"
+            || (!target.IsInstance && target.Member is "IsMatch" or "Match" or "Matches" or "Replace" or "Split" or "Count" or "EnumerateMatches" or "EnumerateSplits"));
+
+    /// <summary>
+    /// The compiled calls the scan did not read: each call's statement, by the lines the symbols give it, has to hold as
+    /// many patterns the scan found as it holds calls. A call the symbols give no line is never read.
+    /// </summary>
+    private static List<string> Unscanned(IEnumerable<CompiledCall> calls, List<Pattern> found) =>
+        [.. calls
+            .GroupBy(call => (call.File, call.StartLine, call.EndLine))
+            .Where(statement => statement.Key.File is null
+                || found.Count(pattern => string.Equals(pattern.File.Replace('\\', '/'), statement.Key.File, StringComparison.OrdinalIgnoreCase)
+                    && pattern.Line >= statement.Key.StartLine
+                    && pattern.Line <= statement.Key.EndLine) < statement.Count())
+            .SelectMany(statement => statement.Select(call => $"{call.File ?? call.Method}({call.StartLine}): {call.Target.Type}.{call.Target.Member}"))];
+
     private static void AssertFound(List<Pattern> found, string file, string start) =>
         Assert.True(
             found.Any(pattern => Path.GetFileName(pattern.File) == file && pattern.Text.StartsWith(start, StringComparison.Ordinal)),
@@ -344,7 +410,7 @@ public sealed class PatternAnchorGuardTests
     /// </summary>
     private static Pattern PatternOf(string source, string file, Match marker)
     {
-        var line = 1 + source.AsSpan(0, marker.Index).Count('\n');
+        var line = CSharpSource.LineOf(source, marker.Index);
         var position = 0;
         var at = marker.Index + marker.Length;
         if (marker.Groups["static"].Success)
@@ -358,7 +424,7 @@ public sealed class PatternAnchorGuardTests
             at++;
         }
 
-        if (at < source.Length && Literal(source, at, out var end) is { } text && ArgumentEndsAt(source, end))
+        if (at < source.Length && CSharpSource.Literal(source, at, out var end) is { } text && ArgumentEndsAt(source, end))
         {
             return new Pattern(file, line, text, Literal: true);
         }
@@ -370,13 +436,13 @@ public sealed class PatternAnchorGuardTests
     /// <summary>The index just past the comma that ends the argument starting at the index, or the end of the text.</summary>
     private static int NextArgument(string source, int at)
     {
-        var end = ArgumentEnd(source, at);
+        var end = CSharpSource.ArgumentEnd(source, at);
         return end < source.Length && source[end] == ',' ? end + 1 : source.Length;
     }
 
     /// <summary>The text of the argument starting at the index, trimmed, up to the comma or bracket that ends it.</summary>
     private static string ArgumentText(string source, int at) =>
-        at >= source.Length ? string.Empty : source[at..ArgumentEnd(source, at)].Trim();
+        at >= source.Length ? string.Empty : source[at..CSharpSource.ArgumentEnd(source, at)].Trim();
 
     /// <summary>Whether nothing but whitespace stands between the index and the comma or bracket that ends an argument.</summary>
     private static bool ArgumentEndsAt(string source, int at)
@@ -387,183 +453,6 @@ public sealed class PatternAnchorGuardTests
         }
 
         return at < source.Length && source[at] is ',' or ')' or ']';
-    }
-
-    /// <summary>
-    /// The index of the comma or closing bracket that ends the argument starting at the index, skipping nested brackets
-    /// and string and character literals; the end of the text where none does.
-    /// </summary>
-    private static int ArgumentEnd(string source, int at)
-    {
-        var depth = 0;
-        for (var index = at; index < source.Length; index++)
-        {
-            var character = source[index];
-            if (character is '"' or '@' or '$' or '\'' && Skip(source, index) is { } after)
-            {
-                index = after - 1;
-                continue;
-            }
-
-            switch (character)
-            {
-                case '(' or '[' or '{':
-                    depth++;
-                    break;
-                case ')' or ']' or '}' when depth == 0:
-                    return index;
-                case ')' or ']' or '}':
-                    depth--;
-                    break;
-                case ',' when depth == 0:
-                    return index;
-            }
-        }
-
-        return source.Length;
-    }
-
-    /// <summary>
-    /// The index just past the string or character literal that begins at the index — an interpolated one included,
-    /// which is never a pattern this guard reads but can stand where one is expected — or null where none begins there.
-    /// </summary>
-    private static int? Skip(string source, int index)
-    {
-        if (source[index] is '\'')
-        {
-            var close = index + 1 < source.Length && source[index + 1] is '\\' ? source.IndexOf('\'', index + 3) : source.IndexOf('\'', index + 2);
-            return close < 0 ? null : close + 1;
-        }
-
-        if (Literal(source, index, out var end) is not null)
-        {
-            return end;
-        }
-
-        var quote = index;
-        while (quote < source.Length && source[quote] is '$' or '@')
-        {
-            quote++;
-        }
-
-        if (quote == index || quote >= source.Length || source[quote] is not '"')
-        {
-            return null;
-        }
-
-        var quotes = 0;
-        while (quote + quotes < source.Length && source[quote + quotes] is '"')
-        {
-            quotes++;
-        }
-
-        if (quotes >= 3)
-        {
-            var close = source.IndexOf(new string('"', quotes), quote + quotes, StringComparison.Ordinal);
-            return close < 0 ? null : close + quotes;
-        }
-
-        var verbatim = source.AsSpan(index, quote - index).Contains('@');
-        for (var at = quote + 1; at < source.Length; at++)
-        {
-            if (!verbatim && source[at] is '\\')
-            {
-                at++;
-            }
-            else if (source[at] is '"')
-            {
-                if (verbatim && at + 1 < source.Length && source[at + 1] is '"')
-                {
-                    at++;
-                    continue;
-                }
-
-                return at + 1;
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// The text of the string literal that begins at the index — raw, verbatim or quoted — as the regular expression
-    /// engine receives it, and the index just past it; null where none begins there, an interpolated one included. A
-    /// quoted literal's own escapes are undone only as far as they change what a backslash before a character means.
-    /// </summary>
-    private static string? Literal(string source, int index, out int end)
-    {
-        end = index;
-        var verbatim = source.AsSpan(index).StartsWith("@\"", StringComparison.Ordinal);
-        var quote = verbatim ? index + 1 : index;
-        if (quote >= source.Length || source[quote] is not '"')
-        {
-            return null;
-        }
-
-        var quotes = 0;
-        while (quote + quotes < source.Length && source[quote + quotes] is '"')
-        {
-            quotes++;
-        }
-
-        var start = quote + quotes;
-        if (quotes >= 3)
-        {
-            var close = source.IndexOf(new string('"', quotes), start, StringComparison.Ordinal);
-            if (close < 0)
-            {
-                return null;
-            }
-
-            end = close + quotes;
-            return source[start..close].Trim();
-        }
-
-        if (quotes == 2 && !verbatim)
-        {
-            end = quote + 2;
-            return string.Empty;
-        }
-
-        var text = new StringBuilder();
-        for (var at = quote + 1; at < source.Length; at++)
-        {
-            var character = source[at];
-            if (verbatim && character is '"')
-            {
-                if (at + 1 < source.Length && source[at + 1] is '"')
-                {
-                    text.Append('"');
-                    at++;
-                    continue;
-                }
-
-                end = at + 1;
-                return text.ToString();
-            }
-
-            if (!verbatim && character is '"')
-            {
-                end = at + 1;
-                return text.ToString();
-            }
-
-            if (!verbatim && character is '\\' && at + 1 < source.Length && source[at + 1] is '\\' or '"')
-            {
-                text.Append(source[at + 1]);
-                at++;
-                continue;
-            }
-
-            if (!verbatim && character is '\n')
-            {
-                return null;
-            }
-
-            text.Append(character);
-        }
-
-        return null;
     }
 
     /// <summary>Every C# file of every production project, found from the repository's own marker.</summary>

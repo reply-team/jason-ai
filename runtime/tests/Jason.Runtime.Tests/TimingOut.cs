@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Operations;
 
@@ -28,7 +27,8 @@ namespace Jason.Runtime.Tests;
 /// A pattern is known here by the text of the compiled expression a match is handed, because that is all a match
 /// carries: it is what a real timeout names too, and it is the same on every path, since a warm-up, a load-time probe
 /// and a validation all compile the pattern as written into the one cached expression. That text is the pattern as
-/// the engine runs it, with every `$` that anchors written `\z` so it ends the value and nothing else; so
+/// the engine runs it, with every `$` that anchors written `\z` so it ends the value and nothing else, and every `.`
+/// outside a class written as a class of everything but the four line terminators; so
 /// <see cref="Matched"/> lists that form, <see cref="OnlyPattern"/> names it, and a test that starts from the pattern
 /// a document writes reads it through <see cref="AsCompiled"/>. The pattern as written is what problems and messages
 /// report, and it never passes through a timing.
@@ -66,15 +66,17 @@ public sealed class TimingOut(int times, Func<string, bool>? only = null) : Patt
     public IReadOnlyCollection<string> Matched => _matched;
 
     /// <summary>
-    /// The text a timing knows <paramref name="pattern"/> by: the expression the validator compiles from it, read by
-    /// having the validator compile it and match it once, so the form is the validator's own rather than a copy of its
-    /// rewrite.
+    /// The text a timing knows <paramref name="pattern"/> by: the expression the validator compiles from it, read from
+    /// the validator's own rewrite rather than a copy of it. Nothing is compiled and nothing is matched: a match here runs
+    /// inside the real timeout, often in a test's field initializer, where a cold engine that timed out would fail every
+    /// test of the class with nothing to say why — and it would warm the very cache the test is about.
     /// </summary>
     public static string AsCompiled(string pattern)
     {
-        var timing = Never();
-        SchemaValidator.Validate(JsonValue.Create(string.Empty), new JsonObject { ["pattern"] = pattern }, timing);
-        return timing.Matched.Single();
+        var form = SchemaValidator.EcmaForm(pattern, out var refused);
+        return refused is null
+            ? form
+            : throw new ArgumentException($"`{pattern}` is not a pattern the validator compiles: it writes `{refused}`.", nameof(pattern));
     }
 
     /// <summary>From now on the next <paramref name="count"/> matches time out: for a test that lets a runtime start first.</summary>

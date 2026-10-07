@@ -1360,6 +1360,54 @@ public sealed class DoctorComposerTests
 
         Assert.Equal("work_item_not_found", Text(workItems["incomplete"]));
         Assert.Equal(DoctorComposer.RecentFailures - 1, workItems["recent_failures"]!.AsArray().Count);
+        Assert.True(workItems["recent_failures_truncated"]!.GetValue<bool>());
+    }
+
+    /// <summary>
+    /// Failures may exist that were not read when one of the items the journal names could not be read, or was never
+    /// asked about because a read before it timed out: the list says it was cut short, though the journal named fewer
+    /// than it reads.
+    /// </summary>
+    [Theory]
+    [InlineData("all_read", false)]
+    [InlineData("second_times_out", true)]
+    [InlineData("second_fails", true)]
+    public async Task Recent_failures_say_they_were_cut_short_when_a_named_item_was_not_read(string scenario, bool truncated)
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.JournalTotal = 24;
+        runtime.Fails = (operation, call) =>
+            operation != Operations.WorkItemGet || call != 2 ? null
+            : scenario == "second_times_out" ? throw new TaskCanceledException("The request was canceled.", new TimeoutException())
+            : scenario == "second_fails" ? Envelope(HttpStatusCode.InternalServerError, "internal_error")
+            : null;
+
+        var workItems = Section(await ComposeAsync(dir, runtime), "work_items");
+
+        Assert.True(workItems["recent_failures"]!.AsArray().Count < DoctorComposer.RecentFailures);
+        Assert.Equal(truncated, workItems["recent_failures_truncated"]!.GetValue<bool>());
+    }
+
+    /// <summary>
+    /// The role-skills fact is rewritten only where it is made of withheld problems: a runtime that refuses no role keeps
+    /// the fact the status verb composed.
+    /// </summary>
+    [Fact]
+    public async Task A_role_skills_fact_with_no_refused_role_is_the_status_verbs_own()
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.Info = StubRuntime.EveryField(dir.Paths.Root) with
+        {
+            Skills = new SkillsInfo(Path.Combine(dir.Paths.Root, "skills", "roles"), 4096, [new DeployedRoleSkill("planner", 100, null)]),
+        };
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        var fact = Text(Section(bundle, "status")["checks"]!.AsArray().Single(each => Text(each!["name"]) == "role_skills")!["fact"]);
+        Assert.Contains("roles taught", fact, StringComparison.Ordinal);
+        Assert.DoesNotContain(DoctorComposer.Withheld, fact, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1696,6 +1744,9 @@ public sealed class DoctorComposerTests
 
         Assert.True(Encoding.UTF8.GetByteCount(listed.ToJsonString(new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })) <= DoctorComposer.PluginsBytes);
         Assert.Equal(listed.Count, bundle.Contents.Single(entry => entry.Name == "runtime").Items);
+
+        // The plugins take at most half of the section, so what system.info and the rest need is never left to luck.
+        Assert.InRange(DoctorComposer.PluginsBytes, 1, DoctorComposer.SectionBytes / 2);
     }
 
     /// <summary>On Windows a path is the same path in another case, and the runtime reporting this directory so reports this one.</summary>
@@ -1746,6 +1797,61 @@ public sealed class DoctorComposerTests
 
         Assert.True(Section(bundle, "runtime")["answered"]!.GetValue<bool>());
         Assert.NotEmpty(Section(bundle, "status")["checks"]!.AsArray());
+
+        using var verb = new TempPaths();
+        var again = Running(verb);
+        again.Fails = (operation, _) => operation == Operations.SystemInfo ? Respond(HttpStatusCode.OK, body) : null;
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["doctor", "--dry-run"], Machine(verb, again), Ct));
+    }
+
+    /// <summary>
+    /// An answer that leaves out a section every reader of <c>system.info</c> goes into is not a runtime's: a runtime
+    /// sends every one, and something else answering at the address may not. It is said to be unreadable, the readiness
+    /// checks read it as no answer, and a bundle is still written — read as an answer, the checks failed on it and the
+    /// verb wrote nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("nothing")]
+    [InlineData("no_database")]
+    [InlineData("empty_sections")]
+    [InlineData("no_roles")]
+    [InlineData("no_channels")]
+    [InlineData("no_migrations")]
+    public async Task A_system_info_without_a_section_its_readers_need_is_unreadable_and_still_gives_a_bundle(string variant)
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        var answer = variant == "nothing" ? new JsonObject() : JsonSerializer.SerializeToNode(StubRuntime.EveryField(dir.Paths.Root), JasonJson.Options)!.AsObject();
+        switch (variant)
+        {
+            case "no_database":
+                answer.Remove("database");
+                break;
+            case "empty_sections":
+                answer["database"] = new JsonObject();
+                answer["dispatcher"] = new JsonObject();
+                answer["plugins"] = new JsonObject();
+                answer["routes"] = new JsonObject();
+                break;
+            case "no_roles":
+                answer["skills"]!["roles"] = null;
+                break;
+            case "no_channels":
+                answer["notifications"]!["channels"] = null;
+                break;
+            case "no_migrations":
+                answer["database"]!["applied_migrations"] = null;
+                break;
+        }
+
+        var body = answer.ToJsonString();
+        runtime.Fails = (operation, _) => operation == Operations.SystemInfo ? Respond(HttpStatusCode.OK, body) : null;
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        Assert.Equal(DoctorComposer.UnreadableAnswer, Text(Section(bundle, "runtime")["reason"]));
+        var check = Section(bundle, "status")["checks"]!.AsArray().Single(each => Text(each!["name"]) == "runtime")!;
+        Assert.Contains("nothing answered there", Text(check["fact"]), StringComparison.Ordinal);
 
         using var verb = new TempPaths();
         var again = Running(verb);

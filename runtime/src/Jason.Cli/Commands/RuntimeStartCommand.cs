@@ -37,7 +37,7 @@ public static class RuntimeStartCommand
     /// <see cref="PollCeiling"/>: this is the one question whose answer decides whether a runtime is already
     /// there, and a busy one that is slow to answer should not be taken for a gone one.
     /// </summary>
-    private static readonly TimeSpan PreLaunchBound = TimeSpan.FromSeconds(5);
+    internal static readonly TimeSpan PreLaunchBound = TimeSpan.FromSeconds(5);
 
     public static async Task<int> RunAsync(CliEnvironment env, bool human, CancellationToken cancellationToken, TimeSpan? timeout = null, TimeSpan? poll = null)
     {
@@ -81,31 +81,44 @@ public static class RuntimeStartCommand
         var waited = timeout ?? DefaultTimeout;
         var elapsed = Stopwatch.StartNew();
 
-        // The last descriptor the new runtime published that never produced an answer, so that running out of
-        // time can say that it published one instead of saying it did not.
-        RuntimeDescriptor? unanswered = null;
+        // The last descriptor the new runtime published that never produced its answer, and what came back instead, so
+        // that what is said at the end says it published one, and what was seen of it, instead of saying it did not.
+        (RuntimeDescriptor Descriptor, Answer Answer)? unanswered = null;
         while (true)
         {
             var published = reader.Read();
             if (published is not null && !string.Equals(published.InstanceId, staleInstance, StringComparison.Ordinal))
             {
-                var left = waited - elapsed.Elapsed;
-                if (await ReportAsync(env, human, published, CallBound(left), cancellationToken).ConfigureAwait(false) == Answer.Reported)
+                // A question with no time left to put it in is not put: one cancelled before it is sent says nothing of
+                // the runtime, and taken for silence it said a runtime that was never asked did not answer.
+                var bound = CallBound(waited - elapsed.Elapsed);
+                var answer = bound > TimeSpan.Zero
+                    ? await ReportAsync(env, human, published, bound, cancellationToken).ConfigureAwait(false)
+                    : Answer.NotAsked;
+                if (answer == Answer.Reported)
                 {
                     return ExitCodes.Success;
                 }
 
-                unanswered = published;
+                // What was seen of a descriptor is kept over a question that was not put to it.
+                if (answer != Answer.NotAsked || unanswered?.Descriptor.InstanceId != published.InstanceId)
+                {
+                    unanswered = (published, answer);
+                }
             }
 
             if (child.HasExited)
             {
                 // In its own words where it said any: a runtime that refuses to start says why on the standard
-                // error it was started with, and that sentence is the one thing an operator can act on.
+                // error it was started with, and that sentence is the one thing an operator can act on. A runtime that
+                // published a descriptor first is said to have, and what was seen of it.
                 var said = child.Said;
+                var exited = unanswered is { } seen
+                    ? $"The runtime process exited with code {child.ExitCode} after publishing an endpoint descriptor at {seen.Descriptor.BaseUrl}, and {Observed(seen.Answer, seconds: null)}. "
+                    : $"The runtime process exited with code {child.ExitCode} before publishing an endpoint descriptor. ";
                 return Fail(
                     env,
-                    $"The runtime process exited with code {child.ExitCode} before publishing an endpoint descriptor. "
+                    exited
                     + (said.Length > 0 ? $"It said: {said} " : string.Empty)
                     + Evidence(env, earlierLogs, exited: true, said: said.Length > 0),
                     retryable: false);
@@ -117,13 +130,13 @@ public static class RuntimeStartCommand
                 // database after a backup. Said as what is known, with what to do about each outcome, and never
                 // `jason runtime run`, which keeps a runtime in the foreground and would block an agent for good.
                 var seconds = RuntimeStopCommand.Seconds(waited);
-                var message = unanswered is null
+                var message = unanswered is not { } seen
                     ? string.Create(
                         System.Globalization.CultureInfo.InvariantCulture,
                         $"The runtime process {child.Id} did not publish an endpoint descriptor within {seconds} s and is still running: it may still be starting. 'jason runtime status' answers once it has; if it never does, end process {child.Id}. ")
                     : string.Create(
                         System.Globalization.CultureInfo.InvariantCulture,
-                        $"The runtime process {child.Id} published an endpoint descriptor at {unanswered.BaseUrl} but did not answer within {seconds} s and is still running. 'jason runtime status' answers once it does; if it never does, end process {child.Id}. ");
+                        $"The runtime process {child.Id} published an endpoint descriptor at {seen.Descriptor.BaseUrl}, and {Observed(seen.Answer, seconds)}; it is still running. 'jason runtime status' answers once it does; if it never does, end process {child.Id}. ");
                 return Fail(env, message + Evidence(env, earlierLogs, exited: false, said: false), retryable: true);
             }
 
@@ -163,13 +176,44 @@ public static class RuntimeStartCommand
 
         /// <summary>
         /// The call was still unanswered when its bound ran out: something took the connection and said nothing.
-        /// Different from <see cref="Other"/>, where the descriptor can be taken as stale.
+        /// The one answer that says a process is holding the endpoint; after every other one but
+        /// <see cref="Reported"/> the descriptor can be taken as stale.
         /// </summary>
         PublishedButSilent,
 
-        /// <summary>No answer that is a runtime's: refused, a rejected token, another instance, an unreadable body.</summary>
-        Other,
+        /// <summary>Nothing took the call: the connection to the address was refused.</summary>
+        Unreachable,
+
+        /// <summary>What answered did not accept the token the descriptor holds.</summary>
+        TokenRefused,
+
+        /// <summary>What answered answered with an error status.</summary>
+        Failed,
+
+        /// <summary>What answered is another runtime instance than the one the descriptor names.</summary>
+        AnotherInstance,
+
+        /// <summary>What answered did not answer as a runtime does: its answer is not a runtime's account of itself.</summary>
+        Unreadable,
+
+        /// <summary>No question was put: the wait had run out by the time the descriptor was read.</summary>
+        NotAsked,
     }
+
+    /// <summary>
+    /// What was seen of a published descriptor that never produced its runtime's answer, as a clause that follows "and":
+    /// what came back, and never any of it. The time is said only of silence, and only where there is a wait to say.
+    /// </summary>
+    private static string Observed(Answer answer, string? seconds) => answer switch
+    {
+        Answer.PublishedButSilent => seconds is null ? "it did not answer" : $"it did not answer within {seconds} s",
+        Answer.Unreachable => "nothing took the call at that address",
+        Answer.TokenRefused => "what answered there did not accept the token the descriptor holds",
+        Answer.Failed => "what answered there answered with an error",
+        Answer.AnotherInstance => "what answered there is another runtime instance than the one the descriptor names",
+        Answer.Unreadable => "what answered there gave an answer that is not a runtime's",
+        _ => "the wait had run out before it could be asked whether it answers",
+    };
 
     /// <summary>
     /// What a single question may take: what is left of the wait, but never more than <see cref="PollCeiling"/>,
@@ -180,38 +224,59 @@ public static class RuntimeStartCommand
 
     /// <summary>
     /// Asks the runtime the descriptor names who it is, for no longer than <paramref name="bound"/>, and prints
-    /// the answer when it is the same instance. Anything else — no answer, a rejected token, a different
-    /// instance — means there is nothing running to report, and is not written anywhere: the caller is still
-    /// deciding, and its own answer comes later. A call that outlasts its bound is told apart from the rest,
-    /// because only that one says a process is holding the endpoint.
+    /// the answer when it is the same instance. Anything else — no answer, a refused connection, a rejected token, an
+    /// error, a different instance — means there is nothing running to report, and is not written anywhere: the caller
+    /// is still deciding, and its own answer comes later. Each is told apart, so that what the caller says at the end is
+    /// what was seen; and a call that outlasts its bound is the one that says a process is holding the endpoint.
     /// </summary>
     private static async Task<Answer> ReportAsync(CliEnvironment env, bool human, RuntimeDescriptor descriptor, TimeSpan bound, CancellationToken cancellationToken)
     {
-        using var unspoken = new StringWriter();
         using var own = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         own.CancelAfter(bound);
 
-        RuntimeResponse? response;
-        try
+        RuntimeResponse response;
+        using (var client = new RuntimeClient(descriptor, env.HttpHandler))
         {
-            (_, response) = await OperationRunner.SendAsync(env with { Out = unspoken }, Operations.SystemInfo, RequestBody.Empty(), own.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (own.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
-        {
-            // This call's own bound, and not the caller giving up: the caller's cancellation still propagates.
-            // The runner treats a cancelled token as the caller's, so the cancellation reaches here as thrown.
-            return Answer.PublishedButSilent;
+            try
+            {
+                response = await client.PostAsync(Operations.SystemInfo, own.Token).ConfigureAwait(false);
+            }
+            catch (HttpRequestException failure) when (failure.HttpRequestError == HttpRequestError.ConnectionError)
+            {
+                return Answer.Unreachable;
+            }
+            catch (HttpRequestException)
+            {
+                // Something took the call and answered in what is not HTTP, or ended its answer early: it was not nothing.
+                return Answer.Unreadable;
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // This call's own bound, or the client's, and not the caller giving up: the caller's cancellation still
+                // propagates. Either way the call was taken and not answered.
+                return Answer.PublishedButSilent;
+            }
         }
 
-        if (response is null || !response.IsSuccess)
+        if (response.StatusCode == 401)
         {
-            return Answer.Other;
+            return Answer.TokenRefused;
+        }
+
+        if (!response.IsSuccess)
+        {
+            return Answer.Failed;
         }
 
         var info = Parse(response);
-        if (info is null || !string.Equals(info.InstanceId, descriptor.InstanceId, StringComparison.Ordinal))
+        if (info is null)
         {
-            return Answer.Other;
+            return Answer.Unreadable;
+        }
+
+        if (!string.Equals(info.InstanceId, descriptor.InstanceId, StringComparison.Ordinal))
+        {
+            return Answer.AnotherInstance;
         }
 
         if (human)

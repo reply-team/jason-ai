@@ -6,7 +6,7 @@ using Jason.Runtime.Journal;
 namespace Jason.Runtime.Tests.Plugins;
 
 /// <summary>
-/// Which packages were active, at which digests, from when. The chronicle carries it because wave after wave the
+/// Which packages were active, at which digests, from when. The chronicle carries it because the
 /// question "what was running when this happened" is the one nobody can answer afterwards otherwise.
 /// </summary>
 public class PluginJournalTests

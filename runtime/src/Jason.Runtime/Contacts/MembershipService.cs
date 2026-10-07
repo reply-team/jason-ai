@@ -386,7 +386,11 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         return new AddContactsItemResult(index, AddContactsItemStatus.Added, contact.PublicId, contactCreated, MembershipState.Enrolled, null);
     }
 
-    /// <summary>At most two matches are fetched: one is a hit, two is enough to know the key is ambiguous.</summary>
+    /// <summary>
+    /// At most two matches are fetched: one is a hit, two is enough to know the key is ambiguous. Which two is decided by
+    /// the contact's own key, so the answer to the same rows is the same answer, and EF Core has no unordered set to warn
+    /// about taking a part of.
+    /// </summary>
     private async Task<List<Contact>> FindMatchesAsync(MatchKey key, string value, CancellationToken cancellationToken)
     {
         if (key is MatchKey.ByChannel byChannel)
@@ -396,6 +400,7 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
                 .Where(entry => entry.Channel == channel && entry.Value == value && entry.Contact!.ArchivedAt == null)
                 .Select(entry => entry.ContactId)
                 .Distinct()
+                .OrderBy(id => id)
                 .Take(2)
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
@@ -413,6 +418,7 @@ public sealed class MembershipService(JasonDbContext db, JournalWriter journal, 
         return await db.Contacts
             .FromSqlInterpolated($"SELECT * FROM contacts WHERE archived_at IS NULL AND CAST(json_extract(custom_json, {path}) AS TEXT) = {value}")
             .Include(contact => contact.Channels)
+            .OrderBy(contact => contact.Id)
             .Take(2)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);

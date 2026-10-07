@@ -212,15 +212,17 @@ public static class RuntimeHost
             runtime = await StartAsync(paths, options, cancellationToken).ConfigureAwait(false);
         }
         // A stored value the start could not read is a refusal too: its sentence names the column and says what to do,
-        // and it quotes nothing, so it can be said where a person will read it. So are settings the start cannot use:
-        // the file and the position, or the setting's path and its type, refused before there is a log to read.
-        catch (Exception refused) when (refused is RuntimeAlreadyRunningException or DataDirectoryUnusableException or UnreadableStoredValueException or InvalidSettingsException)
+        // and it quotes nothing, so it can be said where a person will read it — found however the host wrapped it, inside
+        // another failure or among several. So are settings the start cannot use: the file and the position, or the
+        // setting's path and its type, refused before there is a log to read.
+        catch (Exception refused) when (refused is RuntimeAlreadyRunningException or DataDirectoryUnusableException or InvalidSettingsException
+            || UnreadableStoredValueException.In(refused) is not null)
         {
             // Said where whoever started this can hear it. A detached runtime's own standard error is the null
             // device by now, and the reason it will not start used to go there.
             try
             {
-                await refusals.WriteLineAsync(refused.Message).ConfigureAwait(false);
+                await refusals.WriteLineAsync(UnreadableStoredValueException.In(refused)?.Message ?? refused.Message).ConfigureAwait(false);
                 await refusals.FlushAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (IOException)

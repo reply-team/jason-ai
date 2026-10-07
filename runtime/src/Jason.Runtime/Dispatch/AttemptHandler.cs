@@ -60,7 +60,8 @@ public static class AttemptHandler
 
         // Everything the attempt logs from here to its verdict — including what the command's own services write,
         // which know nothing of whose work it is — is written under the three ids, so that a log can be read for
-        // one campaign. Held to the end: the handler's task is the flow the scope follows.
+        // one campaign. Held to the end, and opened here because the claim's own scope closed before the pool was
+        // handed the work.
         using var attemptScope = AttemptLogScope.Begin(logger, work.CampaignPublicId, work.WorkItemPublicId, work.AttemptPublicId);
 
         var start = await StartAsync(scopes, work, logger).ConfigureAwait(false);

@@ -104,8 +104,9 @@ public sealed class ScanRunner(
 
         foreach (var work in claimed)
         {
-            // The scope closes with the line it is for. The handler opens its own, on the pool's task, because a
-            // scope follows the flow of the code that opened it and the pool does not run on the scan's.
+            // The scope closes with the line it is for, before the pool is handed the work. The pool's task would
+            // carry a scope still open when it started, but this one has closed by then — the scan's later lines
+            // are no attempt's — so the handler opens its own and holds it to the end.
             using (AttemptLogScope.Begin(logger, work.CampaignPublicId, work.WorkItemPublicId, work.AttemptPublicId))
             {
                 Claimed(logger, work.WorkItemPublicId, work.AttemptPublicId, null);

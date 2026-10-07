@@ -30,8 +30,9 @@ public sealed class PluginStartupLoader(
         new EventId(2, nameof(StartupFailed)),
         "The plugin load at startup failed; the runtime continues with no plugins active");
 
-    // The same event, for a load that gave out reading JSON — a campaign's route whose binding no longer parses: what
-    // kind of failure and where, and no exception, because what the parser quoted is what the binding held.
+    // The same event, for a load that gave out reading a stored value — a campaign's route whose binding no longer
+    // parses, or holds a key twice or a value of the wrong shape: the column, what kind of failure and where, and no
+    // exception, because what a reader quotes is what the binding held.
     private static readonly Action<ILogger, string, Exception?> StartupFailedToParse = LoggerMessage.Define<string>(
         LogLevel.Error,
         new EventId(2, nameof(StartupFailed)),

@@ -9,7 +9,7 @@ namespace Jason.Runtime.Tests.Reports;
 /// <summary>
 /// Every managed row in the database, folded into one string per table, so two censuses taken around an action
 /// can be compared as wholes. The tables come from the model rather than from a list kept here: a table a later
-/// wave adds is covered without anybody remembering to come back and name it.
+/// change adds is covered without anybody remembering to come back and name it.
 /// </summary>
 internal static class DatabaseCensus
 {
@@ -28,7 +28,7 @@ internal static class DatabaseCensus
             .Select(type => type.GetTableName())
 
             // An entity type mapped to no table has no rows to count. None exist today; the helper should not be
-            // the thing that breaks on the wave that introduces one.
+            // the thing that breaks on the change that introduces one.
             .Where(name => name is not null && !Excluded.Contains(name))
             .Select(name => name!)
             .Distinct(StringComparer.Ordinal)

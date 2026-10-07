@@ -116,9 +116,35 @@ public class PageClaimsTests
     public void The_pages_say_what_the_journal_flag_adds_in_the_composers_own_words(string page)
     {
         var text = Flat(Page(page.Split('/')));
+        var expected = Flat(DoctorComposer.JournalCarries);
 
-        Assert.Contains(Flat(DoctorComposer.JournalCarries), text, StringComparison.Ordinal);
-        Assert.DoesNotContain("contact fields, decisions", text, StringComparison.Ordinal);
+        Assert.True(
+            text.Contains(expected, StringComparison.Ordinal),
+            Drift(text, expected) is { } phrase
+                ? $"{page} does not say \"{phrase}\" where the composer's text says it, after the phrases before it."
+                : $"{page} says every phrase of the composer's text in its order, with something else between them.");
+        Assert.DoesNotContain("contact fields", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The first phrase of <paramref name="expected"/>, read as phrases between its commas, that <paramref name="text"/>
+    /// does not say after the phrases before it — missing, or out of order — or null where it says every one in order.
+    /// </summary>
+    private static string? Drift(string text, string expected)
+    {
+        var at = 0;
+        foreach (var phrase in expected.Split(", ", StringSplitOptions.None))
+        {
+            var found = text.IndexOf(phrase, at, StringComparison.Ordinal);
+            if (found < 0)
+            {
+                return phrase;
+            }
+
+            at = found + phrase.Length;
+        }
+
+        return null;
     }
 
     /// <summary>

@@ -1,9 +1,6 @@
 using System.Reflection;
-using System.Reflection.Emit;
 using System.Reflection.Metadata;
-using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
-using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 
@@ -20,8 +17,9 @@ namespace Jason.Runtime.Tests.Logging;
 /// Its reach is the source text of every production project under <c>runtime/src</c> whose compiled assembly
 /// references a logging library — Microsoft's logging abstractions or Serilog. The projects are found by looking, not
 /// from a list, so a project that starts to log is read from its first line; one whose assembly is not beside this test
-/// fails the scan. What an assembly references, and the constant strings it declares, are read from its metadata, so
-/// looking loads nothing into the process that runs these tests.
+/// fails the scan. What an assembly references, the constant strings it declares and the calls its code makes are read
+/// from its file — its metadata and its symbols — so looking loads nothing into the process that runs these tests: not
+/// the assembly, and not what its calls go into, the plugin host's engine among them.
 /// </para>
 /// <para>
 /// The reader takes a <c>LoggerMessage.Define</c> or <c>DefineScope</c>, a <c>[LoggerMessage]</c> attribute, a call
@@ -42,9 +40,12 @@ namespace Jason.Runtime.Tests.Logging;
 /// file holds, is left to the attribute the generator read it from.
 /// </para>
 /// <para>
-/// A marker named in a comment is read as a marker, as the pattern guard reads its own. Properties added any other
-/// way — an enricher, a log context — are beyond a template, and are held by the run of the real executable that reads
-/// its log back (<c>LogInvariantTests</c>, in the application's tests).
+/// A marker named in a comment is read as a marker, as the pattern guard reads its own. A property added to every line
+/// written while it is in force — Serilog's <c>ForContext</c>, <c>LogContext.PushProperty</c> and a diagnostic
+/// context's <c>Set</c> — names no hole any template has, so no template can be held to the list for it: none is used,
+/// and a call to one fails the scan by its file and line until what it adds has been reviewed. Properties added at
+/// configuration, by an enricher, are held by the run of the real executable that reads its log back
+/// (<c>LogInvariantTests</c>, in the application's tests).
 /// </para>
 /// </remarks>
 public sealed class LogTemplateInventoryTests
@@ -103,11 +104,6 @@ public sealed class LogTemplateInventoryTests
         "Write", "Verbose", "Debug", "Information", "Warning", "Error", "Fatal",
     };
 
-    private static readonly Dictionary<short, OpCode> Codes = typeof(OpCodes)
-        .GetFields(BindingFlags.Public | BindingFlags.Static)
-        .Select(field => (OpCode)field.GetValue(null)!)
-        .ToDictionary(code => code.Value);
-
     /// <summary>Every production project, with what its compiled assembly references.</summary>
     private static readonly Lazy<IReadOnlyList<Project>> Production = new(() => Projects(RepositoryRoot()));
 
@@ -134,10 +130,14 @@ public sealed class LogTemplateInventoryTests
             problems.Add($"The template of {unread.Count} logging call(s) could not be read: the scan reads a string literal or a constant string, and a call written another way is taught to it before its template is trusted:{Environment.NewLine}{string.Join(Environment.NewLine, unread)}");
         }
 
-        var compiled = scanned
-            .Select(project => Assembly.Load(new AssemblyName(project.Name)))
-            .SelectMany(assembly => CompiledCalls(assembly, Methods(assembly)))
-            .ToList();
+        var all = scanned.SelectMany(project => CompiledCalls.In(project.AssemblyFile)).ToList();
+        var compiled = LoggingCalls(all);
+
+        var enriching = Enriching(all);
+        if (enriching.Count > 0)
+        {
+            problems.Add($"{enriching.Count} call(s) add a property to every line written while they are in force, which names no hole of any template, so its value is held to nothing; review what each adds before it is let through:{Environment.NewLine}{string.Join(Environment.NewLine, enriching)}");
+        }
         var unfound = Unfound(compiled, sites);
         if (unfound.Count > 0)
         {
@@ -286,15 +286,15 @@ public sealed class LogTemplateInventoryTests
         var path = Path.Combine(root, "runtime", "tests", "Jason.Runtime.Tests", "Logging", "LogTemplateInventoryTests.cs");
         var source = File.ReadAllText(path);
         var file = Relative(root, path);
-        var calls = CompiledCalls(typeof(LogTemplateInventoryTests).Assembly, Methods(typeof(LogTemplateInventoryTests)));
+        var calls = LoggingCalls(CompiledCalls.In(typeof(LogTemplateInventoryTests).Assembly.Location, ThisClass));
 
         var unfound = Unfound(calls, SitesIn(source, file).ToList());
 
         // Each declaration is looked for in pieces, so the text looked for is not also the text of this lookup.
         Assert.Equal(
             [
-                $"{file}({LineOf(source, source.IndexOf("void " + nameof(PassedOver) + "(", StringComparison.Ordinal))}): LoggerExtensions.Log",
-                $"{file}({LineOf(source, source.IndexOf("> " + nameof(Grouped) + "(", StringComparison.Ordinal))}): ILogger.Information",
+                $"{file}({CSharpSource.LineOf(source, source.IndexOf("void " + nameof(PassedOver) + "(", StringComparison.Ordinal))}): LoggerExtensions.Log",
+                $"{file}({CSharpSource.LineOf(source, source.IndexOf("> " + nameof(Grouped) + "(", StringComparison.Ordinal))}): ILogger.Information",
             ],
             unfound);
     }
@@ -311,6 +311,39 @@ public sealed class LogTemplateInventoryTests
     public void The_holes_of_a_template_are_read_as_the_logger_reads_them(string template, string names) =>
         Assert.Equal(names.Split(' ', StringSplitOptions.RemoveEmptyEntries), Holes(template));
 
+    /// <summary>
+    /// The calls that add a property beside every line rather than through a template are found in the compiled
+    /// assembly too: this file's own assembly makes one of each, and the check names each by this file and its line.
+    /// </summary>
+    [Fact]
+    public void A_call_that_adds_a_property_beside_every_line_is_found_in_the_compiled_assembly_by_its_file_and_line()
+    {
+        var root = RepositoryRoot();
+        var path = Path.Combine(root, "runtime", "tests", "Jason.Runtime.Tests", "Logging", "LogTemplateInventoryTests.cs");
+        var source = File.ReadAllText(path);
+        var file = Relative(root, path);
+
+        var enriching = Enriching(CompiledCalls.In(typeof(LogTemplateInventoryTests).Assembly.Location, ThisClass));
+
+        // Each declaration is looked for in pieces, so the text looked for is not also the text of this lookup.
+        Assert.Equal(
+            [
+                $"{file}({CSharpSource.LineOf(source, source.IndexOf("IDisposable " + nameof(Pushed) + "(", StringComparison.Ordinal))}): LogContext.PushProperty",
+                $"{file}({CSharpSource.LineOf(source, source.IndexOf("ILogger " + nameof(Enriched) + "(", StringComparison.Ordinal))}): ILogger.ForContext",
+                $"{file}({CSharpSource.LineOf(source, source.IndexOf("void " + nameof(Diagnosed) + "(", StringComparison.Ordinal))}): IDiagnosticContext.Set",
+            ],
+            enriching.Order(StringComparer.Ordinal).ToList());
+    }
+
+    /// <summary>A property pushed onto the log context, which every line written while it is open carries.</summary>
+    private static IDisposable Pushed(string value) => Serilog.Context.LogContext.PushProperty("Pushed", value);
+
+    /// <summary>A logger that adds a property to every line written through it.</summary>
+    private static Serilog.ILogger Enriched(Serilog.ILogger logger, string value) => logger.ForContext("Enriched", value);
+
+    /// <summary>A property set on the request's diagnostic context, which its request line carries.</summary>
+    private static void Diagnosed(Serilog.IDiagnosticContext context, string value) => context.Set("Diagnosed", value);
+
     /// <summary>A logger's <c>Log</c> with nothing the reader can take: its level and its template are both handed in.</summary>
     private static void PassedOver(ILogger logger, LogLevel level, string template) => logger.Log(level, template);
 
@@ -325,7 +358,7 @@ public sealed class LogTemplateInventoryTests
         }
     }
 
-    private static IEnumerable<string> Unseen(List<CompiledCall> calls, string file, string member)
+    private static IEnumerable<string> Unseen(List<LogCall> calls, string file, string member)
     {
         if (!calls.Any(call => Path.GetFileName(call.File) == file && call.Member == member))
         {
@@ -375,8 +408,8 @@ public sealed class LogTemplateInventoryTests
     {
         foreach (var marker in Marker.Matches(source).Cast<Match>())
         {
-            var line = LineOf(source, marker.Index);
-            if (Arguments(source, marker.Index + marker.Length - 1) is not { } arguments)
+            var line = CSharpSource.LineOf(source, marker.Index);
+            if (CSharpSource.Arguments(source, marker.Index + marker.Length - 1) is not { } arguments)
             {
                 yield return new TemplateSite(file, line, null);
                 continue;
@@ -445,7 +478,7 @@ public sealed class LogTemplateInventoryTests
         var text = argument.Trim();
         if (text.Length > 0 && text[0] is '"' or '@')
         {
-            return Literal(text, 0, out var end) is { } literal && end == text.Length ? literal : null;
+            return CSharpSource.Literal(text, 0, out var end) is { } literal && end == text.Length ? literal : null;
         }
 
         return ConstantReference.IsMatch(text) ? Constant(text, file) : null;
@@ -460,7 +493,7 @@ public sealed class LogTemplateInventoryTests
     {
         var text = TypeArguments.Replace(argument, string.Empty).Trim();
         if (PairsOpening.Match(text) is not { Success: true } opening
-            || Arguments(text, opening.Length) is not { } elements
+            || CSharpSource.Arguments(text, opening.Length) is not { } elements
             || !elements.Any(element => element.Trim().Length > 0))
         {
             return null;
@@ -470,7 +503,7 @@ public sealed class LogTemplateInventoryTests
         foreach (var element in elements.Select(each => each.Trim()).Where(each => each.Length > 0))
         {
             if (PairOpening.Match(element) is not { Success: true } pair
-                || Arguments(element, pair.Length - 1) is not [var key, _]
+                || CSharpSource.Arguments(element, pair.Length - 1) is not [var key, _]
                 || Template(key, file) is not { } name)
             {
                 return null;
@@ -530,189 +563,10 @@ public sealed class LogTemplateInventoryTests
     }
 
     /// <summary>
-    /// The arguments of the call whose opening parenthesis is at the index, split at the commas that separate them
-    /// and nowhere inside a literal, a comment or a nested bracket, each without its comments; null when the call
-    /// never closes.
-    /// </summary>
-    private static List<string>? Arguments(string source, int open)
-    {
-        var arguments = new List<string>();
-        var current = new StringBuilder();
-        var depth = 0;
-        for (var at = open + 1; at < source.Length; at++)
-        {
-            var character = source[at];
-            if (character is '"' or '@' or '$' or '\'' && Skip(source, at) is { } after)
-            {
-                current.Append(source, at, after - at);
-                at = after - 1;
-                continue;
-            }
-
-            if (character is '/' && at + 1 < source.Length && source[at + 1] is '/' or '*')
-            {
-                var close = source[at + 1] is '/' ? source.IndexOf('\n', at) : source.IndexOf("*/", at + 2, StringComparison.Ordinal) + 1;
-                if (close <= 0)
-                {
-                    return null;
-                }
-
-                current.Append(' ');
-                at = close;
-                continue;
-            }
-
-            switch (character)
-            {
-                case '(' or '[' or '{':
-                    depth++;
-                    break;
-                case ')' or ']' or '}' when depth == 0:
-                    arguments.Add(current.ToString());
-                    return arguments;
-                case ')' or ']' or '}':
-                    depth--;
-                    break;
-                case ',' when depth == 0:
-                    arguments.Add(current.ToString());
-                    current.Clear();
-                    continue;
-            }
-
-            current.Append(character);
-        }
-
-        return null;
-    }
-
-    /// <summary>The index just past the string or character literal that begins at the index, or null where none begins there.</summary>
-    private static int? Skip(string source, int index)
-    {
-        if (source[index] is '\'')
-        {
-            var close = index + 1 < source.Length && source[index + 1] is '\\' ? source.IndexOf('\'', index + 3) : source.IndexOf('\'', index + 2);
-            return close < 0 ? null : close + 1;
-        }
-
-        if (Literal(source, index, out var end) is not null)
-        {
-            return end;
-        }
-
-        // An interpolated literal is never a template, but a call can carry one in another argument.
-        var quote = index;
-        while (quote < source.Length && source[quote] is '$' or '@')
-        {
-            quote++;
-        }
-
-        if (quote == index || quote >= source.Length || source[quote] is not '"')
-        {
-            return null;
-        }
-
-        for (var at = quote + 1; at < source.Length; at++)
-        {
-            if (source[at] is '\\')
-            {
-                at++;
-            }
-            else if (source[at] is '"')
-            {
-                return at + 1;
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// The text of the literal that begins at the index — raw, verbatim or quoted — and the index just past it; null
-    /// where no literal this reader reads begins there, an interpolated one included. A quoted literal's escapes are
-    /// undone only for a backslash and a quote, which is all a hole's name is read through.
-    /// </summary>
-    private static string? Literal(string source, int start, out int end)
-    {
-        end = start;
-        var verbatim = source.AsSpan(start).StartsWith("@\"", StringComparison.Ordinal);
-        var quote = verbatim ? start + 1 : start;
-        if (quote >= source.Length || source[quote] is not '"')
-        {
-            return null;
-        }
-
-        var quotes = 0;
-        while (quote + quotes < source.Length && source[quote + quotes] is '"')
-        {
-            quotes++;
-        }
-
-        if (quotes >= 3)
-        {
-            var close = source.IndexOf(new string('"', quotes), quote + quotes, StringComparison.Ordinal);
-            if (close < 0)
-            {
-                return null;
-            }
-
-            end = close + quotes;
-            return source[(quote + quotes)..close].Trim();
-        }
-
-        if (quotes == 2 && !verbatim)
-        {
-            end = quote + 2;
-            return string.Empty;
-        }
-
-        var text = new StringBuilder();
-        for (var at = quote + 1; at < source.Length; at++)
-        {
-            var character = source[at];
-            if (verbatim && character is '"')
-            {
-                if (at + 1 < source.Length && source[at + 1] is '"')
-                {
-                    text.Append('"');
-                    at++;
-                    continue;
-                }
-
-                end = at + 1;
-                return text.ToString();
-            }
-
-            if (!verbatim && character is '"')
-            {
-                end = at + 1;
-                return text.ToString();
-            }
-
-            if (!verbatim && character is '\\' && at + 1 < source.Length)
-            {
-                text.Append(source[at + 1] is '\\' or '"' ? source.AsSpan(at + 1, 1) : source.AsSpan(at, 2));
-                at++;
-                continue;
-            }
-
-            if (!verbatim && character is '\n')
-            {
-                return null;
-            }
-
-            text.Append(character);
-        }
-
-        return null;
-    }
-
-    private static int LineOf(string source, int index) => 1 + source.AsSpan(0, index).Count('\n');
-
-    /// <summary>
     /// The compiled calls the reader did not find: each call's statement, by the lines the symbols give it, has to hold
     /// as many sites the reader found as it holds calls. A call the symbols give no line is never found.
     /// </summary>
-    private static List<string> Unfound(IEnumerable<CompiledCall> calls, List<TemplateSite> sites) =>
+    private static List<string> Unfound(IEnumerable<LogCall> calls, List<TemplateSite> sites) =>
         calls
             .GroupBy(call => (call.File, call.StartLine, call.EndLine))
             .Where(statement => statement.Key.File is null
@@ -723,113 +577,41 @@ public sealed class LogTemplateInventoryTests
             .ToList();
 
     /// <summary>
-    /// Every call the IL of these methods of an assembly makes to a logging library's template or property methods — a
-    /// call, a constructor, or a method handed out as a delegate — with the file and lines the assembly's symbols give
-    /// the statement it is in. A file a source generator wrote is left out: no source file holds it, and the generator
-    /// wrote it from an attribute the reader reads.
+    /// The calls of these to a logging library's template or property methods — a call, a constructor, or a method
+    /// handed out as a delegate — each named by its type and member as a failure names it.
     /// </summary>
-    private static List<CompiledCall> CompiledCalls(Assembly assembly, IEnumerable<MethodBase> methods)
-    {
-        using var image = new PEReader(File.OpenRead(assembly.Location));
-        Assert.True(
-            image.TryOpenAssociatedPortablePdb(assembly.Location, path => File.Exists(path) ? File.OpenRead(path) : null, out var provider, out _) && provider is not null,
-            $"The symbols of {assembly.GetName().Name} were not found beside it, so its logging calls cannot be given a file and a line.");
-
-        using (provider)
-        {
-            var symbols = provider.GetMetadataReader();
-            var calls = new List<CompiledCall>();
-            foreach (var method in methods)
-            {
-                foreach (var (offset, target) in Calls(method))
-                {
-                    if (!IsLogging(target))
-                    {
-                        continue;
-                    }
-
-                    var member = $"{target.DeclaringType!.Name.Split('`')[0]}.{(target is ConstructorInfo ? "new" : target.Name)}";
-                    var point = symbols
-                        .GetMethodDebugInformation(MetadataTokens.MethodDefinitionHandle(method.MetadataToken & 0x00FFFFFF))
-                        .GetSequencePoints()
-                        .LastOrDefault(each => !each.IsHidden && each.Offset <= offset);
-                    if (point.Document.IsNil)
-                    {
-                        calls.Add(new CompiledCall(null, 0, 0, member, $"{method.DeclaringType?.FullName}.{method.Name}"));
-                        continue;
-                    }
-
-                    var document = symbols.GetString(symbols.GetDocument(point.Document).Name);
-                    if (!document.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase))
-                    {
-                        calls.Add(new CompiledCall(Relative(document), point.StartLine, point.EndLine, member, method.Name));
-                    }
-                }
-            }
-
-            return calls;
-        }
-    }
+    private static List<LogCall> LoggingCalls(IEnumerable<CompiledCall> calls) =>
+        [.. calls
+            .Where(call => IsLogging(call.Target))
+            .Select(call => new LogCall(call.File, call.StartLine, call.EndLine, $"{call.Target.Type}.{(call.Target.Member == ".ctor" ? "new" : call.Target.Member)}", call.Method))];
 
     /// <summary>
-    /// Whether a method is one a template, a scope's state or a property's name goes through: Microsoft's logging
+    /// Whether a call names one a template, a scope's state or a property's name goes through: Microsoft's logging
     /// methods and <c>LoggerMessage</c>, Serilog's write methods, and the making of a <c>LogEventProperty</c>.
     /// </summary>
-    private static bool IsLogging(MethodBase target) =>
-        target.DeclaringType is { } type
-        && ((type.Namespace == "Microsoft.Extensions.Logging" && TemplateMethods.Contains(target.Name))
-            || (type.Namespace is "Serilog" or "Serilog.Core" && SerilogMethods.Contains(target.Name))
-            || (type.FullName == "Serilog.Events.LogEventProperty" && target is ConstructorInfo));
+    private static bool IsLogging(CallTarget target) =>
+        (target.Namespace == "Microsoft.Extensions.Logging" && TemplateMethods.Contains(target.Member))
+        || (target.Namespace is "Serilog" or "Serilog.Core" && SerilogMethods.Contains(target.Member))
+        || (target.Namespace == "Serilog.Events" && target.Type == "LogEventProperty" && target.Member == ".ctor");
 
     /// <summary>
-    /// Every method and constructor with a body in an assembly, compiler-made ones included: a lambda, a local
-    /// function and an async method's state machine are methods of nested types the compiler wrote, and
-    /// <see cref="Assembly.GetTypes"/> lists nested types already.
+    /// The calls of these that add a property beside every line written while they are in force, each named by its file
+    /// and line, or the method it is in where the symbols give none.
     /// </summary>
-    private static IEnumerable<MethodBase> Methods(Assembly assembly) => assembly.GetTypes().SelectMany(Declared);
+    private static List<string> Enriching(IEnumerable<CompiledCall> calls) =>
+        [.. calls
+            .Where(call => AddsProperties(call.Target))
+            .Select(call => $"{call.File ?? call.Method}({call.StartLine}): {call.Target.Type}.{call.Target.Member}")];
 
-    /// <summary>Every method and constructor with a body in one type and in every type nested inside it.</summary>
-    private static IEnumerable<MethodBase> Methods(Type type) =>
-        Declared(type).Concat(type.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic).SelectMany(Methods));
+    /// <summary>Serilog's <c>ForContext</c>, on a logger or on the static one, <c>LogContext.PushProperty</c>, and a diagnostic context's <c>Set</c>.</summary>
+    private static bool AddsProperties(CallTarget target) =>
+        (target.Namespace is "Serilog" or "Serilog.Core" && target.Type is "ILogger" or "Logger" or "Log" && target.Member == "ForContext")
+        || (target.Namespace == "Serilog.Context" && target.Type == "LogContext" && target.Member == "PushProperty")
+        || (target.Namespace == "Serilog" && target.Type == "IDiagnosticContext" && target.Member == "Set");
 
-    private static IEnumerable<MethodBase> Declared(Type type)
-    {
-        const BindingFlags Own = BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
-        return type.GetMethods(Own).Cast<MethodBase>()
-            .Concat(type.GetConstructors(Own))
-            .Where(method => method.GetMethodBody() is not null);
-    }
-
-    /// <summary>Every method a body names through a method token, with the offset of the instruction that names it.</summary>
-    private static IEnumerable<(int Offset, MethodBase Target)> Calls(MethodBase method)
-    {
-        var il = method.GetMethodBody()!.GetILAsByteArray()!;
-        var typeArguments = method.DeclaringType is { IsGenericType: true } generic ? generic.GetGenericArguments() : null;
-        var methodArguments = method.IsGenericMethod ? method.GetGenericArguments() : null;
-        var at = 0;
-        while (at < il.Length)
-        {
-            var start = at;
-            var twoBytes = il[at] == 0xFE;
-            var code = Codes[twoBytes ? unchecked((short)(0xFE00 | il[at + 1])) : il[at]];
-            at += twoBytes ? 2 : 1;
-
-            if (code.OperandType == OperandType.InlineMethod)
-            {
-                yield return (start, method.Module.ResolveMethod(BitConverter.ToInt32(il, at), typeArguments, methodArguments)!);
-            }
-
-            at += code.OperandType switch
-            {
-                OperandType.InlineNone => 0,
-                OperandType.ShortInlineBrTarget or OperandType.ShortInlineI or OperandType.ShortInlineVar => 1,
-                OperandType.InlineVar => 2,
-                OperandType.InlineI8 or OperandType.InlineR => 8,
-                OperandType.InlineSwitch => 4 + (4 * BitConverter.ToInt32(il, at)),
-                _ => 4,
-            };
-        }
-    }
+    /// <summary>This class and every type nested in it, where the compiler writes its lambdas.</summary>
+    private static bool ThisClass(string type) =>
+        type == typeof(LogTemplateInventoryTests).FullName || type.StartsWith(typeof(LogTemplateInventoryTests).FullName + "/", StringComparison.Ordinal);
 
     /// <summary>
     /// Every production project under <c>runtime/src</c>: a directory holding a project file, whose assembly is the one
@@ -873,25 +655,6 @@ public sealed class LogTemplateInventoryTests
     /// <summary>A source file as the scan names it: from <c>runtime/</c> on, with forward slashes.</summary>
     private static string Relative(string root, string file) => Path.GetRelativePath(root, file).Replace('\\', '/');
 
-    /// <summary>
-    /// A document the symbols name, as the scan names a source file. The symbols hold the path the build saw — the
-    /// repository's own, or under the root a deterministic build maps it to — so it is read from the tree it is in.
-    /// </summary>
-    private static string Relative(string document)
-    {
-        var path = document.Replace('\\', '/');
-        foreach (var tree in new[] { "/runtime/src/", "/runtime/tests/" })
-        {
-            var at = path.LastIndexOf(tree, StringComparison.OrdinalIgnoreCase);
-            if (at >= 0)
-            {
-                return path[(at + 1)..];
-            }
-        }
-
-        return path;
-    }
-
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -907,7 +670,7 @@ public sealed class LogTemplateInventoryTests
     private sealed record TemplateSite(string File, int Line, string? Template);
 
     /// <summary>A compiled call to a logging method: the file and lines of its statement, or the method it is in where the symbols give none.</summary>
-    private sealed record CompiledCall(string? File, int StartLine, int EndLine, string Member, string Method);
+    private sealed record LogCall(string? File, int StartLine, int EndLine, string Member, string Method);
 
     /// <summary>A production project: where its source is, its assembly's name and file, and what that assembly references.</summary>
     private sealed record Project(string Directory, string Name, string AssemblyFile, IReadOnlyList<string> References);

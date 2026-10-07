@@ -214,7 +214,7 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
             return null;
         }
 
-        if (!TryText(root["id"], out var id) || !Identifier().IsMatch(id))
+        if (!TryText(root["id"], out var id) || !PluginIds.IsWellFormed(id))
         {
             Add(ProblemCodes.FieldInvalid, "id", "id is 2 to 64 characters of lowercase letters, digits and hyphens, starting with a letter.");
             return null;
@@ -849,18 +849,16 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
     }
 
     /// <summary>
-    /// Whether text could name a plugin — the rule a manifest's own <c>id</c> is held to, spelled once so that a
-    /// route naming a plugin and a package declaring one are measured against the same sentence.
+    /// Whether text could name a plugin — the rule a manifest's own <c>id</c> is held to, spelled once in the contracts
+    /// so that a route naming a plugin, a package declaring one and the client listing them are measured against the same
+    /// sentence.
     /// </summary>
-    internal static bool IsPluginId(string? text) => text is not null && Identifier().IsMatch(text);
+    internal static bool IsPluginId(string? text) => PluginIds.IsWellFormed(text);
 
     // Every name rule below ends at `\z` rather than `$`. `$` also matches immediately before a trailing line
     // break, so "NODE_OPTIONS\n" satisfied the name rule — and then missed a denylist that compares whole names,
     // and a grant that looks a name up by the whole of it. A manifest is a stranger's text; a name ends where the
     // string ends.
-    [GeneratedRegex(@"^[a-z][a-z0-9-]{1,63}\z")]
-    private static partial Regex Identifier();
-
     [GeneratedRegex(@"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?\z")]
     private static partial Regex SemanticVersion();
 

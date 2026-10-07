@@ -10,8 +10,9 @@ namespace Jason.Runtime.Logging;
 /// <remarks>
 /// The keys are the property names the log already uses for these ids, and the values are the public ids a person
 /// can type into a command. A line whose message template names one of them keeps its own value: the same id.
-/// A scope follows the flow of the code that opened it, so the claim opens its own around each line it writes
-/// and the handler opens another that it holds to the end — the pool runs the handler on a task of its own.
+/// The claim opens one around each line it writes and closes it before the pool is handed the work, so the scan's
+/// later lines carry no attempt. A task carries the scopes open when it started, but by the time the pool runs the
+/// handler the claim's has closed, so the handler opens another that it holds to the end.
 /// </remarks>
 public static class AttemptLogScope
 {

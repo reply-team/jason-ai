@@ -3,6 +3,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Cli.Discovery;
 using Jason.Cli.Http;
+using Jason.Contracts.Api;
+using Jason.Contracts.Json;
 
 namespace Jason.Cli;
 
@@ -90,25 +92,48 @@ public static class OperationRunner
     }
 
     /// <summary>
-    /// What an error response prints as: the body verbatim where the runtime composed it, and otherwise an envelope
-    /// that says what came back. A body that is not JSON is the server's own answer to a failure nothing caught —
-    /// empty, as often as not — and printed verbatim it gave an agent an exit code and nothing to read. A failure on
-    /// the runtime's side is worth trying again; a refusal of the request as it was is not.
+    /// What an error response prints as: the body verbatim where the runtime composed it — its error envelope, with a
+    /// code — and otherwise an envelope that says what came back and quotes none of it. A body that is not JSON is the
+    /// server's own answer to a failure nothing caught — empty, as often as not — and printed verbatim it gave an agent
+    /// an exit code and nothing to read; a body that is JSON in some other shape is another server's, such as one that
+    /// holds the port of a stale descriptor, and is no more the runtime's words. A failure on the server's side is worth
+    /// trying again; a refusal of the request as it was is not.
     /// </summary>
     public static string ErrorText(RuntimeResponse response)
     {
         ArgumentNullException.ThrowIfNull(response);
+        string what;
         try
         {
-            using var composed = JsonDocument.Parse(response.Body);
-            return response.Body;
+            var envelope = JsonSerializer.Deserialize<ErrorResponse>(response.Body, JasonJson.Options);
+            if (envelope?.Error is { Code.Length: > 0 })
+            {
+                return response.Body;
+            }
+
+            what = "not an error envelope";
         }
         catch (JsonException)
         {
-            return CliErrors.Serialize(
-                CliErrors.RuntimeError,
-                string.Create(CultureInfo.InvariantCulture, $"The runtime answered {response.StatusCode} with a body that is not JSON."),
-                retryable: response.StatusCode >= 500);
+            what = IsJson(response.Body) ? "not an error envelope" : "not JSON";
+        }
+
+        return CliErrors.Serialize(
+            CliErrors.RuntimeError,
+            string.Create(CultureInfo.InvariantCulture, $"The runtime answered {response.StatusCode} with a body that is {what}."),
+            retryable: response.StatusCode >= 500);
+    }
+
+    private static bool IsJson(string text)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(text);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 

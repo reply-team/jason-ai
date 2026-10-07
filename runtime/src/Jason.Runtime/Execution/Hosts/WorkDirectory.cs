@@ -11,9 +11,9 @@ namespace Jason.Runtime.Execution.Hosts;
 /// reads afterwards as a model that ignored it.
 /// </summary>
 /// <param name="Rescued">
-/// This attempt lost a race with a deployment and was saved by reading the tree a second time. It is on the
-/// report so a test can prove the second read ran at all — a race test that never exercised the rescue would
-/// pass for the wrong reason — and so the launcher can log that it happened.
+/// This attempt lost a race with a deployment and was taught by a later read of the tree, within the time a launch
+/// waits for a deployment. It is on the report so a test can prove a later read ran at all — a race test that never
+/// exercised the rescue would pass for the wrong reason. Nothing else reads it: the launcher does not log it.
 /// </param>
 public sealed record WorkDirectoryReport(string? RefusalCode, string? Message, RoleSkillDto? Skill = null, bool Rescued = false)
 {

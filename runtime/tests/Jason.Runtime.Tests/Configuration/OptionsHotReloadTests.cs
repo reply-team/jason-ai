@@ -145,7 +145,6 @@ public class OptionsHotReloadTests
     [Fact]
     public async Task A_settings_file_that_is_not_valid_JSON_is_reported_by_position_while_the_runtime_keeps_what_it_had()
     {
-        const string sentinel = "SENTINEL_A_MALFORMED";
         await using var fixture = await RuntimeApiFixture.StartAsync(
             Ct,
             prepare: paths => File.WriteAllText(paths.UserSettingsFile, """{"Dispatcher":{"Enabled":false,"TickSeconds":7}}"""));
@@ -153,8 +152,10 @@ public class OptionsHotReloadTests
         var monitor = fixture.Runtime.Services.GetRequiredService<IOptionsMonitor<DispatcherOptions>>();
         Assert.Equal(7, monitor.CurrentValue.TickSeconds);
 
-        // The second line, and a token that is not the start of a property name, so the position is not (0, 0).
-        File.WriteAllText(fixture.Paths.UserSettingsFile, "{\"Dispatcher\":{\"TickSeconds\":1,\n  " + sentinel);
+        // The second line, and a token that is not the start of a property name, so the position is not (0, 0). The
+        // parser's message quotes one byte of such a token, so text in it could not reach the log through that message
+        // anyway; the duplicate-key twin below, whose message names the key, is what holds that no message is written.
+        File.WriteAllText(fixture.Paths.UserSettingsFile, "{\"Dispatcher\":{\"TickSeconds\":1,\n  unquoted");
 
         var line = Assert.Single(await SettingsFileLinesAsync(fixture.Paths));
         Assert.Equal("Warning", (string?)line["@l"]);
@@ -162,7 +163,7 @@ public class OptionsHotReloadTests
         Assert.Equal("JsonException", (string?)line["ExceptionType"]);
         Assert.Equal(2, (int?)line["LineNumber"]);
         Assert.Equal(3, (int?)line["BytePositionInLine"]);
-        Assert.DoesNotContain(sentinel, RuntimeLogs(fixture.Paths), StringComparison.Ordinal);
+        Assert.Null(line["@x"]);
 
         // What the runtime works from is what it had.
         Assert.Equal(7, monitor.CurrentValue.TickSeconds);
@@ -179,21 +180,20 @@ public class OptionsHotReloadTests
     [Fact]
     public async Task A_settings_file_that_becomes_unreadable_while_the_runtime_starts_is_said_to_leave_it_on_defaults()
     {
-        const string sentinel = "SENTINEL_W_MALFORMED";
         using var dir = new TempDataDir();
 
         // Composing the host comes after the configuration is built and before any section is read into the options.
         var (runtime, line) = await StartEditedWhileStartingAsync(
             dir,
             """{"Dispatcher":{"Enabled":false,"TickSeconds":7}}""",
-            "{\"Dispatcher\":{\"TickSeconds\":1,\n  " + sentinel,
+            "{\"Dispatcher\":{\"TickSeconds\":1,\n  unquoted",
             asTheHostStarts: false);
         await using (runtime)
         {
             Assert.Equal(StartingAtPosition, (string?)line["@mt"]);
             Assert.Equal(2, (int?)line["LineNumber"]);
             Assert.Equal(3, (int?)line["BytePositionInLine"]);
-            Assert.DoesNotContain(sentinel, RuntimeLogs(dir.Paths), StringComparison.Ordinal);
+            Assert.Null(line["@x"]);
 
             // And that is what happened: the tick the file asked for is not the one in force, the shipped one is.
             var monitor = runtime.Services.GetRequiredService<IOptionsMonitor<DispatcherOptions>>();
@@ -211,18 +211,17 @@ public class OptionsHotReloadTests
     [Fact]
     public async Task A_settings_file_that_becomes_unreadable_as_the_host_makes_its_services_is_said_to_leave_it_on_defaults()
     {
-        const string sentinel = "SENTINEL_W_SERVICES";
         using var dir = new TempDataDir();
 
         var (runtime, line) = await StartEditedWhileStartingAsync(
             dir,
             """{"Dispatcher":{"Enabled":false,"MaxParallel":8,"TickSeconds":7}}""",
-            "{\"Dispatcher\":{\"MaxParallel\":8,\n  " + sentinel,
+            "{\"Dispatcher\":{\"MaxParallel\":8,\n  unquoted",
             asTheHostStarts: true);
         await using (runtime)
         {
             Assert.Equal(StartingAtPosition, (string?)line["@mt"]);
-            Assert.DoesNotContain(sentinel, RuntimeLogs(dir.Paths), StringComparison.Ordinal);
+            Assert.Null(line["@x"]);
 
             // And that is what runs: the pool is the shipped size, not the eight the file asked for.
             Assert.Equal(new DispatcherOptions().MaxParallel, runtime.Services.GetRequiredService<HandlerPool>().MaxParallel);
@@ -230,10 +229,14 @@ public class OptionsHotReloadTests
     }
 
     /// <summary>
-    /// And the same for a file the loader refuses by its content rather than its syntax, which has no position to say.
+    /// And the same for a file the loader refuses by its content rather than its syntax, which has no position to say,
+    /// at both moments. This is the edit whose message would carry what was typed — the loader names a key written
+    /// twice — so it is what shows that the message is not what is said, and that no exception is written under the line.
     /// </summary>
-    [Fact]
-    public async Task A_settings_file_refused_for_its_content_while_the_runtime_starts_is_said_to_leave_it_on_defaults()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_settings_file_refused_for_its_content_while_the_runtime_starts_is_said_to_leave_it_on_defaults(bool asTheHostStarts)
     {
         const string sentinel = "SENTINEL_W_KEY";
         using var dir = new TempDataDir();
@@ -242,11 +245,12 @@ public class OptionsHotReloadTests
             dir,
             """{"Dispatcher":{"Enabled":false,"TickSeconds":7}}""",
             "{\"Dispatcher\":{\"" + sentinel + "\":1,\"" + sentinel + "\":2}}",
-            asTheHostStarts: false);
+            asTheHostStarts);
         await using (runtime)
         {
             Assert.Equal(StartingWithoutPosition, (string?)line["@mt"]);
             Assert.Equal("FormatException", (string?)line["ExceptionType"]);
+            Assert.Null(line["@x"]);
             Assert.DoesNotContain(sentinel, RuntimeLogs(dir.Paths), StringComparison.Ordinal);
         }
     }
@@ -342,6 +346,7 @@ public class OptionsHotReloadTests
 
         var line = Assert.Single(await SettingsFileLinesAsync(fixture.Paths));
         Assert.DoesNotContain(sentinel, RuntimeLogs(fixture.Paths), StringComparison.Ordinal);
+        Assert.Null(line["@x"]);
         Assert.Equal("Warning", (string?)line["@l"]);
         Assert.Equal("FormatException", (string?)line["ExceptionType"]);
         Assert.Null(line["LineNumber"]);
@@ -358,10 +363,9 @@ public class OptionsHotReloadTests
     [Fact]
     public async Task A_settings_file_that_is_not_valid_JSON_stops_the_start_naming_the_file_and_the_position_and_never_the_content()
     {
-        const string sentinel = "SENTINEL_A_MALFORMED";
         using var dir = new TempDataDir();
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
-        File.WriteAllText(dir.Paths.UserSettingsFile, "{\"Dispatcher\":{\"TickSeconds\":1,\n  " + sentinel);
+        File.WriteAllText(dir.Paths.UserSettingsFile, "{\"Dispatcher\":{\"TickSeconds\":1,\n  unquoted");
 
         var failure = await Assert.ThrowsAsync<InvalidSettingsException>(() => RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct));
 
@@ -369,10 +373,12 @@ public class OptionsHotReloadTests
             $"Invalid Jason configuration: the settings file at '{dir.Paths.UserSettingsFile}' could not be read (JsonException at line 2, byte 3).",
             failure.Message);
         Assert.Null(failure.InnerException);
-        Assert.DoesNotContain(sentinel, failure.ToString(), StringComparison.Ordinal);
     }
 
-    /// <summary>The same refusal at start for a file the loader refuses by its content: the type, and the file.</summary>
+    /// <summary>
+    /// The same refusal at start for a file the loader refuses by its content: the type, and the file. The loader's
+    /// message here names the key, so this is the start's twin that would show it.
+    /// </summary>
     [Fact]
     public async Task A_settings_file_the_loader_refuses_for_its_content_stops_the_start_naming_the_file_and_the_type_alone()
     {
@@ -399,10 +405,9 @@ public class OptionsHotReloadTests
     [Fact]
     public async Task A_settings_file_that_is_not_valid_JSON_is_said_through_the_refusal_writer_and_never_its_content()
     {
-        const string sentinel = "SENTINEL_A_MALFORMED";
         using var dir = new TempDataDir();
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
-        File.WriteAllText(dir.Paths.UserSettingsFile, "{\"Dispatcher\":{\"TickSeconds\":1,\n  " + sentinel);
+        File.WriteAllText(dir.Paths.UserSettingsFile, "{\"Dispatcher\":{\"TickSeconds\":1,\n  unquoted");
 
         var said = await RefusedStartAsync(dir.Paths);
 
@@ -502,6 +507,26 @@ public class OptionsHotReloadTests
 
         // Once, though the dispatcher's settings read the plugins' through their seam and refuse with the same refusal.
         Assert.Equal(1, Occurrences(said, "Plugins:Limits:TimeoutMs could not be read as System.Int32."));
+    }
+
+    /// <summary>
+    /// The dispatcher's settings read the plugins' to hold one rule across the two; a start that cannot read the plugins'
+    /// still says what is wrong with the dispatcher's own, beside the plugins' own refusal, instead of one hiding the
+    /// other until the first is fixed.
+    /// </summary>
+    [Fact]
+    public async Task A_start_refused_for_the_plugins_settings_still_says_the_dispatchers_own_refusal()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        File.WriteAllText(
+            dir.Paths.UserSettingsFile,
+            """{"Dispatcher":{"Enabled":false,"TickSeconds":0},"Plugins":{"Limits":{"TimeoutMs":"SENTINEL_L_LATE"}}}""");
+
+        var said = await RefusedStartAsync(dir.Paths);
+
+        Assert.Contains("Plugins:Limits:TimeoutMs could not be read as System.Int32.", said, StringComparison.Ordinal);
+        Assert.Contains("Dispatcher:TickSeconds must be", said, StringComparison.Ordinal);
     }
 
     /// <summary>

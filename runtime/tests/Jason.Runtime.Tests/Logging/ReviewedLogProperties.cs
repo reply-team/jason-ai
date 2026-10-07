@@ -28,10 +28,14 @@ internal static class ReviewedLogProperties
         // Where a settings file stopped parsing: a line and a byte within it (RuntimeHost).
         "LineNumber", "BytePositionInLine",
 
-        // How many of the build's own patterns finished warming and how many did not, and in how many ms (PatternWarmUp).
-        "Finished", "Unfinished", "Milliseconds",
+        // How many of the build's own patterns finished warming and how many did not (PatternWarmUp); how long that took
+        // is a DurationMs, above.
+        "Finished", "Unfinished",
 
-        // Codes and closed words, and the envelope's level.
+        // Codes and closed words, and the envelope's level. A code is the runtime's own constant or a plugin outcome's
+        // code, which the outcome validator holds to a snake_case token of at most 64 characters before anything logs it
+        // (Code: Claimer, PluginInvoker, NotificationSender, UpdateChecker). Verdict is "succeeded", "unknown", or
+        // "failed" or "protocol_failure" followed by a closed failure class and such a code (PluginInvoker).
         "Code", "Codes", "Class", "Verdict", "Source", "Console", "Section", "Channel", "Activated", "Operation",
         "EnvName", "SourceContext", "EventId", "@l",
 

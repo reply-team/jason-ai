@@ -1,9 +1,12 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Runtime.Api;
 using Jason.Runtime.Hosting;
+using Microsoft.AspNetCore.Http;
 
 namespace Jason.Runtime.Tests.Logging;
 
@@ -60,6 +63,109 @@ public class RequestLineTests
         Assert.DoesNotContain(sentinel, logs, StringComparison.Ordinal);
         Assert.Equal("other", (string?)Assert.Single(lines)["RequestMethod"]);
     }
+
+    /// <summary>
+    /// A caller that goes away halfway through its body is answered by nobody, and its line says what happened: 499, the
+    /// status of a request its caller closed, and not the 200 that a response never written would otherwise keep. Nothing
+    /// of the half of the body that arrived reaches the log.
+    /// </summary>
+    [Fact]
+    public async Task A_request_whose_caller_went_away_mid_body_is_logged_as_closed_and_not_as_answered()
+    {
+        var route = Operations.Route(Operations.JournalList);
+        var (logs, lines) = await LoggedAsync(async (http, token) =>
+        {
+            var address = http.BaseAddress!;
+            using (var client = new TcpClient())
+            {
+                await client.ConnectAsync(address.Host, address.Port, Ct);
+                var head = $"POST {route} HTTP/1.1\r\nHost: {address.Authority}\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: 500\r\n\r\n{{\"since\":\"SENTINEL_HALF_A_BODY";
+                await client.GetStream().WriteAsync(Encoding.ASCII.GetBytes(head), Ct);
+                await client.GetStream().FlushAsync(Ct);
+
+                // The runtime is reading the body when the caller resets the connection.
+                await Task.Delay(300, Ct);
+                client.LingerState = new LingerOption(enable: true, seconds: 0);
+            }
+
+            // The line is written as the request ends, which is the runtime's to finish after the reset.
+            await Task.Delay(500, Ct);
+        });
+
+        var line = Assert.Single(lines, line => (string?)line["RequestPath"] == route);
+        Assert.Equal(499, (int?)line["StatusCode"]);
+        Assert.DoesNotContain("SENTINEL_HALF_A_BODY", logs, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The body read fails before the request is known to be closed: the server throws as the connection's input ends,
+    /// and cancels the request's token afterwards, from the thread pool, so on a busy machine the door's catch runs
+    /// first. The server learns that a caller is gone in one of two ways, and the read's failure says which. A premature
+    /// end — the body stopped short of the length its head announced — is how it reaches the door where the connection's
+    /// input simply ends (Windows, Linux). This test is that way; the token is never cancelled.
+    /// </summary>
+    [Fact]
+    public void A_body_that_stopped_short_of_its_announced_length_is_a_caller_gone_before_the_token_says_so()
+    {
+        var context = new DefaultHttpContext();
+        context.Request.ContentLength = 500;
+
+        Assert.False(context.RequestAborted.IsCancellationRequested);
+        Assert.True(OperationEndpoints.CallerWentAway(context, EndedEarly()));
+    }
+
+    /// <summary>
+    /// The other way: a reset, which is how the same abandoned request reaches the door where the connection's input
+    /// ends in a socket error (macOS). The caller is gone however its body was framed, so no announced length is needed;
+    /// and again the token is never cancelled.
+    /// </summary>
+    [Fact]
+    public void A_connection_the_caller_reset_is_a_caller_gone_before_the_token_says_so()
+    {
+        var chunked = new DefaultHttpContext();
+
+        Assert.False(chunked.RequestAborted.IsCancellationRequested);
+        Assert.True(OperationEndpoints.CallerWentAway(chunked, Reset()));
+    }
+
+    /// <summary>
+    /// What is not a caller gone: a body the caller finished that does not parse, a body over the server's limit, a
+    /// chunked body the server could not read, which has no announced length to have stopped short of, and a failure to
+    /// read that is neither of the server's two words for a gone caller. Each is answered, because whoever sent it may
+    /// still be there to read the answer.
+    /// </summary>
+    [Fact]
+    public void A_body_that_was_finished_or_refused_for_its_size_or_has_no_announced_length_is_answered()
+    {
+        var announced = new DefaultHttpContext();
+        announced.Request.ContentLength = 500;
+        var chunked = new DefaultHttpContext();
+
+        Assert.False(OperationEndpoints.CallerWentAway(announced, new System.Text.Json.JsonException("not JSON")));
+        Assert.False(OperationEndpoints.CallerWentAway(
+            announced,
+            new BadHttpRequestException("Request body too large.", StatusCodes.Status413PayloadTooLarge)));
+        Assert.False(OperationEndpoints.CallerWentAway(chunked, EndedEarly()));
+        Assert.False(OperationEndpoints.CallerWentAway(announced, new IOException("a read failed")));
+    }
+
+    /// <summary>A request whose token was cancelled is a caller gone, whatever the read threw.</summary>
+    [Fact]
+    public void A_request_whose_token_was_cancelled_is_a_caller_gone()
+    {
+        using var aborted = new CancellationTokenSource();
+        aborted.Cancel();
+        var context = new DefaultHttpContext { RequestAborted = aborted.Token };
+
+        Assert.True(OperationEndpoints.CallerWentAway(context, new System.Text.Json.JsonException("not JSON")));
+    }
+
+    private static BadHttpRequestException EndedEarly() =>
+        new("Unexpected end of request content.", StatusCodes.Status400BadRequest);
+
+    /// <summary>The server's own exception for a reset, over the socket's, as the door meets it on macOS.</summary>
+    private static Microsoft.AspNetCore.Connections.ConnectionResetException Reset() =>
+        new("Connection reset by peer", new System.Net.Sockets.SocketException((int)System.Net.Sockets.SocketError.ConnectionReset));
 
     /// <summary>
     /// Starts a runtime, sends what the test sends, stops it — stopping flushes and closes the file sink, so what is

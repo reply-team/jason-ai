@@ -56,21 +56,27 @@ public class ProtocolFailureTests
 
     /// <summary>
     /// The same holds for a document that is valid JSON and not an outcome: it is read by the typed reader, whose
-    /// message names the path it stopped at and can quote more, and that text goes into the attempt's error and no
-    /// further. The failure says it was this reader that refused, so the case is the one it is named for.
+    /// message names the path it stopped at, and that text goes into the attempt's error and no further. The reader
+    /// matches a name whatever its case and its path keeps the name as the child spelled it, so a name spelled oddly
+    /// is the child's own text inside the reader's message; the test shows that it is there, so a log line that
+    /// carried the message would carry it too. The failure says it was this reader that refused, so the case is the
+    /// one it is named for.
     /// </summary>
     [Fact]
     public async Task A_child_that_writes_json_that_is_not_an_outcome_is_not_quoted_in_any_log_line()
     {
+        const string spelled = "PrOtOcOl_VeRsIoN";
         var logs = new RecordingLogs();
-        await using var api = await StartAsync(Child("stdout", "{\"protocol_version\":\"" + Sentinel + "\"}"), logs: logs);
+        await using var api = await StartAsync(Child("stdout", "{\"" + spelled + "\":\"" + Sentinel + "\"}"), logs: logs);
 
         var result = await InvokeAsync(api);
 
         var failure = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
         Assert.Equal(ProtocolCodes.PluginMalformedOutcome, failure.Code);
         Assert.Contains("not an outcome document", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(spelled, failure.Message, StringComparison.Ordinal);
         Assert.Contains(logs.All, line => line.Contains(" ended: ", StringComparison.Ordinal));
+        Assert.False(logs.Mentions(spelled), "the reader's message, which quotes the child's output, reached the log");
         Assert.False(logs.Mentions(Sentinel), "the child's output reached the log");
     }
 

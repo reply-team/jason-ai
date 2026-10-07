@@ -613,6 +613,73 @@ public sealed class LogsCommandTests
         Assert.DoesNotContain("\"events\"", output, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A log file whose delete is still pending is gone, not unreadable. Deleted the older way — marked to go when its last
+    /// handle closes — while another handle holds it, it keeps its name in the directory on Windows until that handle
+    /// closes, and every open of it in the meantime is refused with the same error a file nobody may read gets; it is
+    /// skipped, and the files that are still there are read, rather than the whole answer refused for a file that no
+    /// longer exists. Deleted here that way, by a second handle that deletes on close while the first still holds the
+    /// file. The runtime's own retention, deleting while a reader shares deletion, leaves no name behind on a current
+    /// Windows, and elsewhere the name goes at once.
+    /// </summary>
+    [Fact]
+    public async Task A_log_file_deleted_while_another_program_holds_it_is_skipped_and_the_rest_is_read()
+    {
+        using var dir = new TempPaths();
+        var logs = LogsIn(dir);
+        var deleted = Write(logs, "runtime-20261002.jsonl", Event("2026-10-02T09:00:00.0000000Z", "deleted"));
+        Write(logs, "runtime-20261003.jsonl", Event(At(1), "kept"));
+
+        using var holder = new FileStream(deleted, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using (new FileStream(deleted, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1, FileOptions.DeleteOnClose))
+        {
+        }
+
+        var (exit, output, error) = await RunAsync(dir);
+
+        Assert.True(exit == ExitCodes.Success, $"jason logs exited {exit}: {output}{error}");
+        Assert.Equal(["kept"], Messages(Document(output)));
+    }
+
+    /// <summary>
+    /// And only that file is skipped. One this account may not read is refused with the same error by the same open, and
+    /// it is still a refusal: it is there, and an answer without it would be shorter than what was written.
+    /// </summary>
+    [Fact]
+    public async Task A_log_file_this_account_may_not_read_is_still_a_refusal()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Skip("The open is refused by an access rule only Windows is given here.");
+            return;
+        }
+
+        using var dir = new TempPaths();
+        var logs = LogsIn(dir);
+        var denied = new FileInfo(Write(logs, "runtime-20261002.jsonl", Event("2026-10-02T09:00:00.0000000Z", "denied")));
+        Write(logs, "runtime-20261003.jsonl", Event(At(1), "kept"));
+
+        var rule = new System.Security.AccessControl.FileSystemAccessRule(
+            System.Security.Principal.WindowsIdentity.GetCurrent().User!,
+            System.Security.AccessControl.FileSystemRights.ReadData,
+            System.Security.AccessControl.AccessControlType.Deny);
+        var security = denied.GetAccessControl();
+        security.AddAccessRule(rule);
+        denied.SetAccessControl(security);
+        try
+        {
+            var (exit, output, _) = await RunAsync(dir);
+
+            Assert.Equal(ExitCodes.ApiError, exit);
+            Assert.Equal("logs_unreadable", (string?)Document(output)["error"]!["code"]);
+        }
+        finally
+        {
+            security.RemoveAccessRule(rule);
+            denied.SetAccessControl(security);
+        }
+    }
+
     // ---- the runtime is never asked ----------------------------------------------------------------------------
 
     [Fact]

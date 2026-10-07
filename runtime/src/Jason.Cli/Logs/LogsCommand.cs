@@ -347,7 +347,7 @@ public static partial class LogsCommand
 
     /// <summary>
     /// The text with every character that does something other than show written out as the escape that names it:
-    /// control characters, and the format characters that reorder or hide text \u2014 a right-to-left override, a zero-width
+    /// control characters, and the format characters that reorder or hide text — a right-to-left override, a zero-width
     /// space, a byte-order mark. A value in a log line is whatever a program put there, and a person's terminal obeys
     /// what it is sent: a line break in a value would be a second line that no event wrote, an escape sequence would
     /// be a command to the terminal, and an override would make a line read in a different order than it was written.

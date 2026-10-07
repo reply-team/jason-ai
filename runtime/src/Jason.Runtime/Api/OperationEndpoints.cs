@@ -4,7 +4,9 @@ using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Logging;
+using Jason.Runtime.Persistence;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Connections;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -46,12 +48,15 @@ public static class OperationEndpoints
                 // is written whole by the host — on the request line and on the server's own line about a failure
                 // nothing caught — and the caller is left with an empty 500. The serializer's own words go back to
                 // the caller who wrote the body, as they always have; any other failure's message is not repeated.
-                // A caller that went away mid-body is not answered: there is nobody left to read it.
-                if (!context.RequestAborted.IsCancellationRequested)
+                // A caller that went away mid-body is not answered: there is nobody left to read it. Its request line says
+                // so, as the status of a request its caller closed, rather than keeping the 200 nothing ever wrote.
+                if (CallerWentAway(context, ex))
                 {
-                    await ErrorResults.WriteAsync(context, StatusCodes.Status400BadRequest, "invalid_request", Unreadable(ex), retryable: false).ConfigureAwait(false);
+                    context.Response.StatusCode = StatusCodes.Status499ClientClosedRequest;
+                    return;
                 }
 
+                await ErrorResults.WriteAsync(context, StatusCodes.Status400BadRequest, "invalid_request", Unreadable(ex), retryable: false).ConfigureAwait(false);
                 return;
             }
 
@@ -89,7 +94,15 @@ public static class OperationEndpoints
                     OperationFailed(logger, operation, ex);
                 }
 
-                await ErrorResults.WriteAsync(context, StatusCodes.Status500InternalServerError, "internal_error", "The runtime failed to perform the operation; see the runtime logs.", retryable: true).ConfigureAwait(false);
+                // A stored value this runtime cannot read fails every read of its row the same way until somebody repairs it,
+                // so it is not worth sending again, and the caller is told which column — never what it held.
+                var stored = UnreadableStoredValueException.In(ex);
+                await ErrorResults.WriteAsync(
+                    context,
+                    StatusCodes.Status500InternalServerError,
+                    "internal_error",
+                    stored?.Message ?? "The runtime failed to perform the operation; see the runtime logs.",
+                    retryable: stored is null).ConfigureAwait(false);
             }
         };
 
@@ -118,6 +131,21 @@ public static class OperationEndpoints
         using var document = JsonDocument.Parse(text, Bodies);
         return document.Deserialize<TRequest>(JasonJson.Options) ?? throw new JsonException("The request body must be a JSON object.");
     }
+
+    /// <summary>
+    /// Whether the caller is gone, so that nobody is left to read an answer. The request's token says so once it is
+    /// cancelled, but the server cancels it from the thread pool after the connection's input has ended, and the body
+    /// read fails as the input ends: on a busy machine the read's failure arrives first. So the failure itself is read,
+    /// by its type, for the server's two words for a gone caller. A premature end: the body stopped short of the length
+    /// its head announced — the server's 400 for an unexpected end of the content — where the input simply ended. A
+    /// reset: the server's own exception for a connection the caller reset, where the input ended in a socket error,
+    /// however the body was framed. A chunked body that merely stopped has no announced length to stop short of, a body
+    /// refused for its size is another status, and any other failure to read is neither word, so each is answered.
+    /// </summary>
+    internal static bool CallerWentAway(HttpContext context, Exception exception) =>
+        context.RequestAborted.IsCancellationRequested
+        || exception is ConnectionResetException
+        || (exception is BadHttpRequestException { StatusCode: StatusCodes.Status400BadRequest } && context.Request.ContentLength is not null);
 
     private const string NotValid = "The request body is not valid JSON for this operation.";
 

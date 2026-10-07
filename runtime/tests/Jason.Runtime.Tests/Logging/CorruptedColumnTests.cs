@@ -135,15 +135,39 @@ public sealed class CorruptedColumnTests
     }
 
     /// <summary>
+    /// A timestamp is read by the database provider itself, not by a converter of the runtime's, so a hand-edited one
+    /// fails with the provider's own parse error, whose message quotes the text. It is said as the read failure it is, by
+    /// its kind, and the text is not repeated.
+    /// </summary>
+    [Fact]
+    public async Task A_stored_timestamp_that_no_longer_parses_is_said_by_the_kind_of_failure_and_not_repeated()
+    {
+        var mark = Guid.NewGuid().ToString("N");
+        var stored = "SENTINEL_STORED_" + mark;
+
+        var (api, events) = await ScanUntilItFailsAsync(
+            (_, item) => $"UPDATE work_items SET created_at = {stored} WHERE public_id = {item}");
+        await using (api)
+        {
+            AssertNoMark(api.Paths, events, mark);
+            AssertSaidBy(events, ScanFailed, "FormatException");
+        }
+    }
+
+    /// <summary>
     /// A start that reads an unreadable column cannot go on — the dispatcher's recovery of what the last run left behind
     /// is the first thing it does — and the host says so in its own line, with the exception beside it. What that line
     /// and the refusal carry is the refusal's own sentence: the column, that its value cannot be read, and what to do.
+    /// The same for valid JSON of the wrong shape, which the database's check accepts and which fails in the reader with
+    /// something other than the parser's exception: a start survives it as a refusal, not as an exception nothing caught.
     /// </summary>
-    [Fact]
-    public async Task A_start_that_finds_an_unreadable_column_refuses_in_words_a_person_can_act_on_and_quotes_none_of_it()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_start_that_finds_an_unreadable_column_refuses_in_words_a_person_can_act_on_and_quotes_none_of_it(bool wrongShape)
     {
         var mark = Guid.NewGuid().ToString("N");
-        var stored = Unreadable(mark);
+        var stored = wrongShape ? "[]" : Unreadable(mark);
         using var dir = new TempDataDir();
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
         await File.WriteAllTextAsync(dir.Paths.UserSettingsFile, Settings, Ct);
@@ -177,6 +201,72 @@ public sealed class CorruptedColumnTests
         // And the host's own line is there, carrying that sentence: otherwise the absence of a leak would only be the
         // absence of the line.
         Assert.Contains(events, line => line["@x"]?.GetValue<string>().Contains("work_items.context_json", StringComparison.Ordinal) == true);
+    }
+
+    /// <summary>
+    /// However the host hands back the failure that stopped its start — as itself, or inside another, as when more than
+    /// one of its services failed — an unreadable stored value inside it is the refusal, said in its own sentence.
+    /// </summary>
+    [Fact]
+    public async Task A_start_stopped_by_an_unreadable_stored_value_inside_another_failure_still_refuses_in_its_sentence()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
+        await File.WriteAllTextAsync(dir.Paths.UserSettingsFile, Settings, Ct);
+        var stopped = new AggregateException(new InvalidOperationException("another service failed"), UnreadableStoredValueException.From("work_items.context_json", new System.Text.Json.JsonException("SENTINEL_WRAPPED")));
+        using var refusals = new StringWriter();
+        var options = TestRuntimeOptions.Quiet with
+        {
+            Refusals = refusals,
+            ConfigureServices = services =>
+            {
+                TestRuntimeOptions.TurnTheOutsideOff(services);
+                services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(new FailsToStart(stopped));
+            },
+        };
+
+        var exit = 0;
+        var escaped = await Record.ExceptionAsync(async () => exit = await RuntimeHost.RunAsync(dir.Paths, options, Ct));
+
+        Assert.Null(escaped);
+        Assert.Equal(1, exit);
+        Assert.Contains("work_items.context_json", refusals.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("SENTINEL_WRAPPED", refusals.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A read that meets a stored value this runtime cannot read is the runtime's failure, said by the column and never by
+    /// the value, and is not worth sending again: every read of that row fails the same way until somebody repairs it.
+    /// </summary>
+    [Fact]
+    public async Task A_read_that_meets_an_unreadable_stored_value_names_its_column_and_is_not_retryable()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: paths => File.WriteAllText(paths.UserSettingsFile, Settings));
+        var campaign = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Unreadable" }, Ct);
+        var created = await api.PostOkAsync<WorkItemDto>(
+            Operations.WorkItemCreate,
+            new { campaign_id = campaign.Id, kind = "ai_role", role = "researcher", context = new { brief = "x" } },
+            Ct);
+        using (var db = Open(api.Paths))
+        {
+            Corrupt(db, $"UPDATE work_items SET context_json = {"[]"} WHERE public_id = {created.Id}");
+        }
+
+        var (status, body) = await api.PostAsync(Operations.WorkItemGet, new { work_item_id = created.Id }, Ct);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, status);
+        var error = System.Text.Json.JsonSerializer.Deserialize<ErrorResponse>(body, Jason.Contracts.Json.JasonJson.Options)!.Error;
+        Assert.Equal("internal_error", error.Code);
+        Assert.False(error.Retryable);
+        Assert.Contains("work_items.context_json", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A hosted service that fails its start with the failure it is given.</summary>
+    private sealed class FailsToStart(Exception failure) : Microsoft.Extensions.Hosting.IHostedService
+    {
+        public Task StartAsync(CancellationToken cancellationToken) => Task.FromException(failure);
+
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     /// <summary>A value that starts like <c>null</c> and is not: the parser quotes it from the <c>n</c> to the end.</summary>

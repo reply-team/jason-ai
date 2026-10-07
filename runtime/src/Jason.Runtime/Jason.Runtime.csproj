@@ -21,8 +21,9 @@
     <ProjectReference Include="../Jason.Contracts/Jason.Contracts.csproj" />
   </ItemGroup>
 
-  <!-- The only friend assembly in this repository, for two internal test hooks, each there because what it holds
-       open cannot otherwise be proved except by racing, and a racing proof of an anti-race is worth nothing.
+  <!-- A friend assembly, for the numbers its tests read from the code rather than copy, and for two internal test
+       hooks, each there because what it holds open cannot otherwise be proved except by racing, and a racing proof
+       of an anti-race is worth nothing.
        WorkDirectory's renames a role's tree under a launch; PluginInvoker's keeps an envelope write in flight
        past the cancellation meant to end it. -->
   <ItemGroup>

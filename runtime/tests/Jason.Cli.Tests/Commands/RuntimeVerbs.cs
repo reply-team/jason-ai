@@ -87,6 +87,21 @@ internal static class RuntimeVerbs
 
     /// <summary>A launch that publishes a descriptor a moment later, the way a runtime coming up does.</summary>
     /// <summary>
+    /// A launch whose child has published its descriptor by the time the launch returns. For a test whose subject is
+    /// what the wait says when it runs out after a publish: with a short wait, a publish still to come races the wait,
+    /// and a busy machine lets the wait win, so the test meets "did not publish" instead of its subject. Nothing polls
+    /// before the launch returns, so the write meets no reader.
+    /// </summary>
+    public static Func<JasonPaths, IProcessHandle> PublishedAtLaunch(TempPaths dir, RuntimeDescriptor descriptor) =>
+        paths =>
+        {
+            _ = paths;
+            ArgumentNullException.ThrowIfNull(dir);
+            dir.WriteDescriptor(descriptor);
+            return new FakeProcessHandle(4242);
+        };
+
+    /// <summary>
     /// A launch whose child publishes its descriptor a moment later, so the CLI really does wait for one.
     /// </summary>
     /// <remarks>

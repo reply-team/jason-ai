@@ -93,8 +93,8 @@ public static partial class JournalKinds
     /// <summary>A plugin answered with a different identifier than the one already pinned; both are kept.</summary>
     public const string ExternalIdDiverged = "external_id_diverged";
 
-    /// <summary>Somebody reported an effect they performed outside Jason. The line names the report; the report
-    /// holds what they said.</summary>
+    /// <summary>Somebody reported an effect they performed outside Jason. The line carries the report's id, the effect,
+    /// tool and operation as they wrote them, and what it is about; the report holds the rest of what they said.</summary>
     public const string ExternalEffectReported = "external_effect_reported";
 
     /// <summary>A role asked a question it could not answer, and ended its attempt carrying the reference.</summary>

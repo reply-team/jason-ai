@@ -91,8 +91,8 @@ public class RoleSkillRulesTests : IDisposable
     }
 
     /// <summary>
-    /// One walk, and the file list is the one the total was measured from. Two walks can see two trees — this
-    /// wave's own installer renames these directories — and a total measured from a different walk than the
+    /// One walk, and the file list is the one the total was measured from. Two walks can see two trees — the
+    /// skills installer itself renames these directories — and a total measured from a different walk than the
     /// list is a measurement of something else.
     /// </summary>
     [Fact]

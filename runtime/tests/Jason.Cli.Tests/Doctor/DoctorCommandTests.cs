@@ -220,6 +220,7 @@ public sealed class DoctorCommandTests
     public async Task A_name_no_file_can_have_is_refused_before_anything_is_made(bool dryRun)
     {
         using var dir = new TempPaths();
+        var runtime = Running(dir);
 
         // A character the system refuses in a name and that is not a separator: '<' on Windows. Elsewhere a name may hold
         // anything but a separator and the null character, so it is the null character there.
@@ -227,10 +228,127 @@ public sealed class DoctorCommandTests
         var output = Path.Combine(dir.Paths.Root, "x", "y", $"bad{refused}name.json");
         var before = Tree(dir.Paths.Root);
 
-        var (exit, printed, _) = await RunAsync(dir, null, Plain with { DryRun = dryRun, Output = output });
+        var (exit, printed, _) = await RunAsync(dir, runtime, Plain with { DryRun = dryRun, Output = output });
 
         Assert.Equal(ExitCodes.ApiError, exit);
         Assert.Equal("doctor_output_unwritable", JsonSerializer.Deserialize<ErrorResponse>(printed, JasonJson.Options)!.Error.Code);
+        Assert.Equal(before, Tree(dir.Paths.Root));
+
+        // Before anything is made, and before anything is read: a plain run that went on to compose would ask the runtime,
+        // and its refusal to create the file would leave the same tree behind.
+        Assert.Empty(runtime.Requests);
+    }
+
+    /// <summary>
+    /// A device's name — <c>NUL</c>, <c>CON</c> — is no file, and is refused as a device rather than as a directory, which
+    /// it is not either.
+    /// </summary>
+    [Theory]
+    [InlineData("NUL", false)]
+    [InlineData("NUL", true)]
+    [InlineData("CON", false)]
+    public async Task A_device_name_is_refused_as_a_device_in_both_modes(string device, bool dryRun)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows answers for a device's name in every directory.");
+        using var dir = new TempPaths();
+
+        var (exit, printed, _) = await RunAsync(dir, null, Plain with { DryRun = dryRun, Output = device });
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = JsonSerializer.Deserialize<ErrorResponse>(printed, JasonJson.Options)!.Error;
+        Assert.Equal("doctor_output_unwritable", error.Code);
+        Assert.Contains($"'{device}' names a device, not a file", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("directory", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A run beside this one that refuses takes away the empty directories it made, and in the moment between this run's
+    /// making its directory and creating its file there, that can be this run's directory. It is made again and the bundle
+    /// is written; a run that says it wrote has a file where it says.
+    /// </summary>
+    [Fact]
+    public async Task A_directory_another_run_takes_away_before_the_file_is_created_is_made_again_and_written_into()
+    {
+        using var dir = new TempPaths();
+        var output = Path.Combine(dir.Paths.Root, "x", "y", "bundle.json");
+        var calls = 0;
+        DoctorCommand.BeforeCreate.Value = path =>
+        {
+            if (calls++ == 0)
+            {
+                // As the other run's cleanup would: the deepest first, each while it is empty.
+                Directory.Delete(Path.GetDirectoryName(path)!);
+                Directory.Delete(Path.Combine(dir.Paths.Root, "x"));
+            }
+        };
+
+        try
+        {
+            var (exit, printed, _) = await RunAsync(dir, null, Plain with { Output = output });
+
+            Assert.True(exit == ExitCodes.Success, printed);
+            Assert.Equal(output, Text(Json(printed)["path"]));
+            Assert.True(File.Exists(output));
+            Assert.Equal(2, calls);
+        }
+        finally
+        {
+            DoctorCommand.BeforeCreate.Value = null;
+        }
+    }
+
+    /// <summary>
+    /// The directories a refused run takes away are only the empty ones, and that is all that keeps it from taking a bundle
+    /// another run wrote into the same new directory in the meantime: that bundle, and its directory, are left as they are.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_run_leaves_a_directory_another_run_has_written_into_as_it_is()
+    {
+        using var dir = new TempPaths();
+        var output = Path.Combine(dir.Paths.Root, "x", "y", new string('a', 300) + ".json");
+        var other = Path.Combine(dir.Paths.Root, "x", "y", "another-runs-bundle.json");
+        DoctorCommand.BeforeCreate.Value = _ => File.WriteAllText(other, "another run's bundle");
+
+        try
+        {
+            var (exit, printed, _) = await RunAsync(dir, null, Plain with { Output = output });
+
+            Assert.Equal(ExitCodes.ApiError, exit);
+            Assert.Equal("doctor_output_unwritable", JsonSerializer.Deserialize<ErrorResponse>(printed, JasonJson.Options)!.Error.Code);
+            Assert.Equal("another run's bundle", File.ReadAllText(other));
+        }
+        finally
+        {
+            DoctorCommand.BeforeCreate.Value = null;
+        }
+    }
+
+    /// <summary>
+    /// When every name a second can have is taken — the default and the thousand numbered after it — a run refuses rather
+    /// than write over one, the dry run as the plain run, and leaves every file and directory as it was.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task With_every_name_of_the_second_taken_both_modes_refuse_and_nothing_is_written_over(bool dryRun)
+    {
+        using var dir = new TempPaths();
+        var doctor = Path.Combine(dir.Paths.LogsDirectory, "doctor");
+        Directory.CreateDirectory(doctor);
+        File.WriteAllText(Path.Combine(doctor, DefaultName + ".json"), "taken");
+        for (var number = 1; number <= DoctorCommand.MaxNumber; number++)
+        {
+            File.WriteAllText(Path.Combine(doctor, $"{DefaultName}-{number}.json"), "taken");
+        }
+
+        var before = Tree(dir.Paths.Root);
+
+        var (exit, printed, _) = await RunAsync(dir, null, Plain with { DryRun = dryRun });
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = JsonSerializer.Deserialize<ErrorResponse>(printed, JasonJson.Options)!.Error;
+        Assert.Equal("doctor_output_unwritable", error.Code);
+        Assert.Contains($"{DefaultName}-{DoctorCommand.MaxNumber}.json is taken", error.Message, StringComparison.Ordinal);
         Assert.Equal(before, Tree(dir.Paths.Root));
     }
 

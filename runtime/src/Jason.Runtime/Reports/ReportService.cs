@@ -259,8 +259,11 @@ public sealed class ReportService(JasonDbContext db, JournalWriter journal, Time
             .ConfigureAwait(false);
     }
 
-    /// <summary>Identifiers only. A journal line is a note about what happened, and the report is where what
-    /// was said is kept.</summary>
+    /// <summary>
+    /// What the journal line says of a report: its id, the effect, tool and operation as the reporter wrote them, and
+    /// the ids of the campaign, contact and work item it is about. The rest of what they said — the summary, the
+    /// provider and the account — is kept on the report.
+    /// </summary>
     private static JsonObject Names(Report report, Campaign? campaign, Contact? contact, WorkItem? item) => new()
     {
         ["id"] = report.PublicId,

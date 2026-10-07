@@ -38,8 +38,9 @@ public sealed class DispatcherService(
         new EventId(3, nameof(ScanFailed)),
         "Dispatcher scan failed; the loop continues");
 
-    // The same event, for a scan that gave out reading JSON — a stored column that no longer parses: what kind of
-    // failure and where, and no exception, because what the parser quoted is what the column held.
+    // The same event, for a scan that gave out reading a payload or a stored value — JSON that no longer parses, a key
+    // written twice, a name no enum has, a value of the wrong shape: the column where there is one, what kind of failure
+    // and where, and no exception, because what a reader quotes is what the column held.
     private static readonly Action<ILogger, string, Exception?> ScanFailedToParse = LoggerMessage.Define<string>(
         LogLevel.Error,
         new EventId(3, nameof(ScanFailed)),

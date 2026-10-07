@@ -1546,9 +1546,9 @@ public static class SchemaValidator
     /// A `$` that anchors is written `\z`, and a `.` outside a class is written as a class of everything but the four
     /// line terminators. In ECMA-262 `$` is the end of the value and nothing else, where .NET also lets it match just
     /// before a final newline, so `^[a-z]+$` would accept `"abc\n"`; and `.` excludes `\n`, `\r`, U+2028 and U+2029,
-    /// where .NET excludes only `\n`, so `^.+$` would accept `"abc\r"`. The engine's ECMAScript mode would settle both
-    /// but cannot be combined with the non-backtracking one, which is what keeps a hostile pattern linear, so the text
-    /// is rewritten instead.
+    /// where .NET excludes only `\n`, so `^.+$` would accept `"abc\r"`. No engine option settles either: the engine's
+    /// ECMAScript mode keeps .NET's reading of both `$` and `.`, and it cannot be combined with the non-backtracking
+    /// mode anyway, which is what keeps a hostile pattern linear. So the text is rewritten.
     /// </para>
     /// <para>
     /// `\A`, `\Z`, `\z` and `\G` are anchors in the engine and the letters A, Z, z and G in ECMA-262, and nothing
@@ -1559,12 +1559,13 @@ public static class SchemaValidator
     /// One pass over the pattern as its author wrote it, tracking only what decides these: a backslash takes the
     /// character after it as written, so `\$` is a dollar, `\.` is a dot and `\\$` is a backslash and then an anchor,
     /// and `\\Z` is a backslash and then a letter, not an escape; inside a class `$` and `.` are members, and a `]` that
-    /// comes first in a class (`[]a]`, `[^]a]`) is a member too rather than its end. A pattern the pass does not
-    /// understand — a lone backslash at the end, an unclosed class — is passed on as it is, and the compile reports it
-    /// as it always has.
+    /// comes first in a class (`[]a]`, `[^]a]`) is a member too rather than its end — as the compiling engine reads it,
+    /// which is .NET's rule and not ECMA-262's, where `[]` is an empty class. A pattern the pass does not understand — a
+    /// lone backslash at the end, an unclosed class — is passed on as it is, and the compile reports it as it always has.
+    /// Constructs only .NET has, such as `(?#...)`, are not tracked: a `[` inside one is read as the start of a class.
     /// </para>
     /// </remarks>
-    private static string EcmaForm(string pattern, out string? refused)
+    internal static string EcmaForm(string pattern, out string? refused)
     {
         refused = null;
         var builder = new StringBuilder(pattern.Length + 4);

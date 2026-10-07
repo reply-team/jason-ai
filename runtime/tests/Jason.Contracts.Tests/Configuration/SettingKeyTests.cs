@@ -115,6 +115,20 @@ public class SettingKeyTests
         Assert.Equal(expected, SettingKey.ShownPath(path, Installed));
     }
 
+    /// <summary>
+    /// Nobody writes a list of ten thousand settings by hand, so an index of five digits or more is not one: it is a
+    /// number somebody typed — a phone number, a PIN — that happens to stand where a list does, and is not shown.
+    /// </summary>
+    [Theory]
+    [InlineData("Manager:Triggers:9999", "Manager:Triggers:9999")]
+    [InlineData("Manager:Triggers:12345", "Manager:Triggers:<key>")]
+    [InlineData("Manager:Triggers:5551234567", "Manager:Triggers:<key>")]
+    [InlineData("Plugins:Grants:fake-provider:Env:12345", "Plugins:Grants:fake-provider:Env:<key>")]
+    public void An_index_is_shown_only_up_to_four_digits(string path, string expected)
+    {
+        Assert.Equal(expected, SettingKey.ShownPath(path, Installed));
+    }
+
     [Fact]
     public void A_path_is_shown_one_key_at_a_time()
     {

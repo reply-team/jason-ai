@@ -9,7 +9,7 @@ using Jason.Runtime.Tests;
 namespace Jason.App.Tests;
 
 /// <summary>
-/// The whole wave through the shipped executable: every step is a real <c>jason</c> process against an isolated
+/// The whole campaign flow through the shipped executable: every step is a real <c>jason</c> process against an isolated
 /// data directory, exactly as an agent or a script would run it. Nothing here is in-process, because
 /// <c>runtime start</c> resolves "the same executable" from the running process — in-process it would launch
 /// the test host instead of the runtime.
@@ -86,7 +86,7 @@ public class CampaignFlowEndToEndTests
 
             await Ok(root, "runtime", "stop");
 
-            var logs = string.Concat(await Task.WhenAll(Directory.GetFiles(paths.LogsDirectory).Select(file => ReadSharedAsync(file, Ct))));
+            var logs = string.Concat(Directory.GetFiles(paths.LogsDirectory).Select(RuntimeLogs.ReadAllText));
             Assert.Contains("Shutdown requested through the API", logs, StringComparison.Ordinal);
 
             // What each runtime found attached to it, read from the file as the file carries it. `runtime start`
@@ -144,12 +144,16 @@ public class CampaignFlowEndToEndTests
     /// <summary>
     /// A step that fails says what the CLI printed and what the runtime logged. The CLI's own words are often only
     /// "the runtime did not answer"; the reason is in the runtime's log, and on a CI runner nothing else survives the
-    /// run to be read afterwards.
+    /// run to be read afterwards. The message is put together only for a step that failed: reading the log for every
+    /// step that passed would cost every run a read of a file it never shows.
     /// </summary>
-    private static void AssertSuccess(CliResult result, string root) =>
-        Assert.True(
-            result.ExitCode == ExitCodes.Success && result.Error.Length == 0,
-            $"'jason {result.Command}' exited with {result.ExitCode}.{Environment.NewLine}stdout: {result.Output}{Environment.NewLine}stderr: {result.Error}{Environment.NewLine}{RuntimeLogTail(root)}");
+    private static void AssertSuccess(CliResult result, string root)
+    {
+        if (result.ExitCode != ExitCodes.Success || result.Error.Length != 0)
+        {
+            Assert.Fail($"'jason {result.Command}' exited with {result.ExitCode}.{Environment.NewLine}stdout: {result.Output}{Environment.NewLine}stderr: {result.Error}{Environment.NewLine}{RuntimeLogTail(root)}");
+        }
+    }
 
     /// <summary>
     /// The last lines of the newest runtime log under the data directory, read the way a writer still holding the file
@@ -159,16 +163,18 @@ public class CampaignFlowEndToEndTests
     private static string RuntimeLogTail(string root)
     {
         var logs = new JasonPaths(root).LogsDirectory;
-        var newest = Directory.Exists(logs)
-            ? Directory.GetFiles(logs, "runtime-*.jsonl").Order(StringComparer.Ordinal).LastOrDefault()
-            : null;
-        if (newest is null)
-        {
-            return $"no log file under {logs}";
-        }
-
+        string? newest = null;
         try
         {
+            // Listing the directory can fail as reading the file can, and either is reported rather than thrown.
+            newest = Directory.Exists(logs)
+                ? Directory.GetFiles(logs, "runtime-*.jsonl").Order(StringComparer.Ordinal).LastOrDefault()
+                : null;
+            if (newest is null)
+            {
+                return $"no log file under {logs}";
+            }
+
             var lines = RuntimeLogs.ReadAllText(newest)
                 .Split('\n')
                 .Select(line => line.TrimEnd('\r'))
@@ -178,11 +184,11 @@ public class CampaignFlowEndToEndTests
         }
         catch (IOException exception)
         {
-            return $"the log file {newest} could not be read: {exception.Message}";
+            return $"the log {newest ?? logs} could not be read: {exception.Message}";
         }
         catch (UnauthorizedAccessException exception)
         {
-            return $"the log file {newest} could not be read: {exception.Message}";
+            return $"the log {newest ?? logs} could not be read: {exception.Message}";
         }
     }
 
@@ -259,14 +265,6 @@ public class CampaignFlowEndToEndTests
         {
             return null;
         }
-    }
-
-    /// <summary>The runtime holds its log file open while it runs, so reading it has to accept that.</summary>
-    private static async Task<string> ReadSharedAsync(string file, CancellationToken cancellationToken)
-    {
-        await using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        return await reader.ReadToEndAsync(cancellationToken);
     }
 
     private static bool IsRunning(int pid)

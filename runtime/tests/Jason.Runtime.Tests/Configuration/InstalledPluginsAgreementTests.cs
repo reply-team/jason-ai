@@ -7,9 +7,10 @@ namespace Jason.Runtime.Tests.Configuration;
 
 /// <summary>
 /// The command-line client's list of installed plugins held to the runtime's. The client lists the directories itself
-/// because it cannot reference the runtime, so what it calls installed is a copy of what the runtime calls installed,
-/// and the two have to name the same plugins or a bundle describes a settings file by keys the runtime read as
-/// something else.
+/// because it cannot reference the runtime, so its listing is a copy of the runtime's, and the two have to name the same
+/// plugins or a bundle describes a settings file by keys the runtime read as something else. What an id has to be is not
+/// copied: both read it from the one rule in the contracts, so what is held here is the listing around it — which
+/// directories, and that each holds a manifest.
 /// </summary>
 public class InstalledPluginsAgreementTests
 {

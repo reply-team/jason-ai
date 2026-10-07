@@ -7,6 +7,7 @@ using Jason.Runtime.Execution;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Invocation;
+using Jason.Runtime.Tests.Integration;
 using Jason.Runtime.Tests.Plugins;
 using Jason.Runtime.Tests.Routing;
 using Microsoft.EntityFrameworkCore;
@@ -191,8 +192,51 @@ public class DispatcherLoggingTests
     }
 
     /// <summary>
-    /// The summoner's lines are about a campaign, not about an attempt, and name it themselves. Giving the
-    /// attempt's scope to the dispatcher in general would put an attempt on lines that have none.
+    /// The same for agent work. The launcher's two lines — the child started, the child ended — name the attempt
+    /// and the work item in their own messages and the campaign nowhere, so a log read for one campaign finds them
+    /// only through the scope the handler holds while the child runs. A real child, started by the real launcher from
+    /// a role's entry command, and the lines read from the file the real sink wrote.
+    /// </summary>
+    [Fact]
+    public async Task Every_line_of_a_role_launch_names_its_campaign_work_item_and_attempt()
+    {
+        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        var campaign = await host.CampaignAsync(Ct);
+        await host.RoleAsync("fake-succeed", Ct, "succeed");
+        var created = await host.CreateAsync(new { campaign_id = campaign, kind = "ai_role", role = "fake-succeed" }, Ct);
+
+        Assert.Equal(1, (await host.ScanAsync(Ct)).Claimed);
+
+        // The launch is written down after the child has ended, and the launcher's last line before that.
+        var item = await host.WaitAsync(created.Id, w => w.Attempts!.Any(a => a.Launch?.ExitCode is not null), Ct, "a recorded launch");
+        var attempt = Assert.Single(item.Attempts!);
+
+        // Stopping flushes and closes the rolling file sink, so what is on disk now is everything there is.
+        await host.Fixture.Runtime.StopAsync();
+        var lines = (await Task.WhenAll(
+                Directory.GetFiles(host.Paths.LogsDirectory, "*", SearchOption.AllDirectories).Select(file => File.ReadAllLinesAsync(file, Ct))))
+            .SelectMany(file => file)
+            .Select(line => JsonNode.Parse(line)!.AsObject())
+            .ToList();
+
+        var launched = new[]
+        {
+            Assert.Single(lines, line => (string?)line["@mt"] == "Attempt {AttemptId} of work item {WorkItemId} started as pid {Pid}"),
+            Assert.Single(lines, line => (string?)line["@mt"] == "Attempt {AttemptId} of work item {WorkItemId} ended with exit code {ExitCode}"),
+        };
+
+        Assert.All(launched, line =>
+        {
+            Assert.Equal(campaign, (string?)line["CampaignId"]);
+            Assert.Equal(created.Id, (string?)line["WorkItemId"]);
+            Assert.Equal(attempt.Id, (string?)line["AttemptId"]);
+        });
+    }
+
+    /// <summary>
+    /// The summoner's lines are about a campaign, not about an attempt, and name it in their own messages. The summon
+    /// runs here through the scan, the way the runtime runs it, so a scope the scan opened around it would show on its
+    /// lines; what is held is the exact text and that the scan gives the summon no scope.
     /// </summary>
     [Fact]
     public async Task The_summoners_lines_name_their_campaign_themselves_and_carry_no_attempt_scope()
@@ -200,14 +244,17 @@ public class DispatcherLoggingTests
         using var harness = new DispatchHarness(Noon, manager: new ManagerOptions { ReviewSeconds = 3_600 });
         var campaign = await SeedDueCampaignAsync(harness);
 
-        Assert.Equal(1, await harness.SummonAsync(Ct));
+        Assert.Equal(1, (await harness.Runner.ScanOnceAsync(Ct)).Summoned);
 
         var summoned = Assert.Single(harness.Logs.Lines, line => line.Message.StartsWith("Dispatcher summoned", StringComparison.Ordinal));
         Assert.Equal($"Dispatcher summoned a manager for campaign {campaign}: scheduled", summoned.Message);
         Assert.Empty(summoned.Scope);
     }
 
-    /// <summary>The same for the line that survives a failed summon: its campaign is in its message, and nowhere else.</summary>
+    /// <summary>
+    /// The same for the line that survives a failed summon, run through the scan too: its campaign is in its message,
+    /// and nowhere else.
+    /// </summary>
     [Fact]
     public async Task A_failed_summon_still_names_its_campaign_in_its_message_alone()
     {
@@ -215,7 +262,7 @@ public class DispatcherLoggingTests
         var campaign = await SeedDueCampaignAsync(harness);
         harness.InterfereOnceBeforeSaving(() => throw new InvalidOperationException("the writer was busy"));
 
-        Assert.Equal(0, await harness.SummonAsync(Ct));
+        Assert.Equal(0, (await harness.Runner.ScanOnceAsync(Ct)).Summoned);
 
         var failed = Assert.Single(harness.Logs.Lines, line => line.Message.StartsWith("The summon for campaign", StringComparison.Ordinal));
         Assert.Equal($"The summon for campaign {campaign} failed; the rest of the scan continues without it", failed.Message);

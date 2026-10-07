@@ -174,7 +174,7 @@ public class ProviderInterruptionTests
         Assert.Null(item.RetryAfter);
     }
 
-    /// <summary>Wave 3's behaviour, unchanged: an agent's lease is the runtime's own, and the code table decides.</summary>
+    /// <summary>The original behaviour, unchanged: an agent's lease is the runtime's own, and the code table decides.</summary>
     [Fact]
     public async Task An_agent_attempt_keeps_the_lease_behaviour_it_has_always_had()
     {

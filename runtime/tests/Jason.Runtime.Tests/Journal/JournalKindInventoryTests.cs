@@ -40,6 +40,12 @@ public sealed class JournalKindInventoryTests
     /// The kinds whose entries hold only metadata: ids, counts, statuses, attempt numbers, moments, codes, sizes and
     /// hashes, the names of fields that changed, and the names of roles, profiles and plugins.
     /// </summary>
+    /// <remarks>
+    /// <c>profile_created</c> also carries two strings its author wrote. <c>program</c> is a path: machine configuration
+    /// rather than anything about a person, covered by the bundle's rewrites of the home directory and the account's names
+    /// where it lies under home, and accepted as it is where it does not. <c>host_version_verified</c> is a version by
+    /// contract, written by a profile's author to say which host read it.
+    /// </remarks>
     private static readonly HashSet<string> MetadataOnly = new(StringComparer.Ordinal)
     {
         JournalKinds.CampaignStarted,
@@ -94,8 +100,15 @@ public sealed class JournalKindInventoryTests
             .GetFields(BindingFlags.Public | BindingFlags.Static)
             .Where(field => field.IsLiteral && field.FieldType == typeof(string))
             .Select(field => (string)field.GetRawConstantValue()!)
-            .Concat(JournalKinds.Reserved)
             .ToHashSet(StringComparer.Ordinal);
+
+        // A kind the runtime declares and does not reserve is one journal.append would let anybody write as if the
+        // runtime had, and one it reserves and does not declare is one no code of its own writes.
+        var unreserved = defined.Except(JournalKinds.Reserved).Order(StringComparer.Ordinal).ToList();
+        var undeclared = JournalKinds.Reserved.Except(defined).Order(StringComparer.Ordinal).ToList();
+        Assert.True(
+            unreserved.Count == 0 && undeclared.Count == 0,
+            $"The declared kinds and the reserved ones differ: declared and not reserved: {string.Join(", ", unreserved)}; reserved and not declared: {string.Join(", ", undeclared)}");
 
         var undecided = defined.Where(kind => !CarriesValues.ContainsKey(kind) && !MetadataOnly.Contains(kind)).Order(StringComparer.Ordinal).ToList();
         Assert.True(
@@ -104,9 +117,6 @@ public sealed class JournalKindInventoryTests
 
         var twice = CarriesValues.Keys.Where(MetadataOnly.Contains).Order(StringComparer.Ordinal).ToList();
         Assert.True(twice.Count == 0, $"{twice.Count} journal kind(s) are in both lists: {string.Join(", ", twice)}");
-
-        var stale = CarriesValues.Keys.Concat(MetadataOnly).Where(kind => !defined.Contains(kind)).Order(StringComparer.Ordinal).ToList();
-        Assert.True(stale.Count == 0, $"{stale.Count} listed kind(s) are not kinds the runtime defines: {string.Join(", ", stale)}");
 
         var unnamed = CarriesValues
             .Where(pair => !DoctorComposer.JournalCarries.Contains(pair.Value, StringComparison.Ordinal))

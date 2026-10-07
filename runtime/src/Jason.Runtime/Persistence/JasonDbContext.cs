@@ -58,10 +58,13 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
     /// </summary>
     /// <remarks>
     /// EF Core's own event for a query whose results failed to read is not raised. It writes the exception whole — into
-    /// its message and beside it — and when what failed is a stored JSON column that no longer parses, that text is the
-    /// parser's, which quotes what the column held. The exception still reaches the code that ran the query, and that
-    /// code's own line says what happened, a read failure by its kind and where the reader stopped: the event only
-    /// repeated it, and was the one place it was said whole. One event rather than EF Core's query category raised past
+    /// its message and beside it. A column a converter of the runtime's reads no longer brings a reader's words to it: the
+    /// converter refuses by the column's name and quotes nothing. A value the database provider converts itself, before
+    /// any converter runs, still does — a hand-edited timestamp fails with the provider's own parse error, which quotes
+    /// the text — and that is what this holds against. The exception still reaches the code that ran the query, and that
+    /// code's own line says what happened, a read failure by its kind: the event only repeated it, whole. A test pins the
+    /// event's absence, because with every converted column refusing quietly nothing else would show it had come back.
+    /// One event rather than EF Core's query category raised past
     /// Error in the logger, because that category also carries EF Core's warnings about how a query is written, and
     /// because an option of the context holds for whatever logger the context is given, not for the runtime's file alone.
     /// </remarks>

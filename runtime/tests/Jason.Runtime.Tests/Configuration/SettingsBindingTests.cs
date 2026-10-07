@@ -245,6 +245,73 @@ public class SettingsBindingTests
     }
 
     /// <summary>
+    /// Every section the runtime reads has a validator that refuses what its binding could not read, and each refuses
+    /// it by that section's path. A section whose validator went missing would start on the setting's default and
+    /// say nothing, so each is given a value of the wrong type here, read the way the runtime reads it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(MistypedInEverySection))]
+    public void A_mistyped_value_in_any_section_is_refused_by_that_sections_path(string section, string settings, string expected)
+    {
+        var refusal = section switch
+        {
+            RuntimeOptions.Section => Refusal<RuntimeOptions>(settings),
+            LoggingOptions.Section => Refusal<LoggingOptions>(settings),
+            DispatcherOptions.Section => Refusal<DispatcherOptions>(settings),
+            ManagerOptions.Section => Refusal<ManagerOptions>(settings),
+            RolesOptions.Section => Refusal<RolesOptions>(settings),
+            PluginsOptions.Section => Refusal<PluginsOptions>(settings),
+            UpdateOptions.Section => Refusal<UpdateOptions>(settings),
+            NotificationsOptions.Section => Refusal<NotificationsOptions>(settings),
+            RoutesOptions.Section => Refusal<RoutesOptions>(settings),
+            InboundOptions.Section => Refusal<InboundOptions>(settings),
+            _ => throw new ArgumentOutOfRangeException(nameof(section), section, "a section this test does not know"),
+        };
+
+        Assert.Equal([expected], refusal);
+    }
+
+    /// <summary>The theory above has a row for every section there is, so a section added later cannot be left out of it.</summary>
+    [Fact]
+    public void The_mistyped_value_theory_has_a_row_for_every_section()
+    {
+        var sections = typeof(RuntimeOptions).Assembly.GetTypes()
+            .Select(type => type.GetField("Section", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+            .Where(field => field is { IsLiteral: true } && field.FieldType == typeof(string))
+            .Select(field => (string)field!.GetRawConstantValue()!);
+
+        Assert.Equal(sections.Order(StringComparer.Ordinal), MistypedRows.Select(row => row.Section).Order(StringComparer.Ordinal));
+    }
+
+    public static TheoryData<string, string, string> MistypedInEverySection
+    {
+        get
+        {
+            var data = new TheoryData<string, string, string>();
+            foreach (var (section, settings, expected) in MistypedRows)
+            {
+                data.Add(section, settings, expected);
+            }
+
+            return data;
+        }
+    }
+
+    private static readonly (string Section, string Settings, string Expected)[] MistypedRows =
+    [
+        (RuntimeOptions.Section, """{"Runtime":{"Port":"SENTINEL"}}""", "Runtime:Port could not be read as System.Int32."),
+        (LoggingOptions.Section, """{"Logging":{"RetainedFileCountLimit":"SENTINEL"}}""", "Logging:RetainedFileCountLimit could not be read as System.Int32."),
+        (DispatcherOptions.Section, """{"Dispatcher":{"TickSeconds":"SENTINEL"}}""", "Dispatcher:TickSeconds could not be read as System.Int32."),
+        (ManagerOptions.Section, """{"Manager":{"MaxAttempts":"SENTINEL"}}""", "Manager:MaxAttempts could not be read as System.Int32."),
+        (RolesOptions.Section, """{"Roles":{"MaxStdoutBytes":"SENTINEL"}}""", "Roles:MaxStdoutBytes could not be read as System.Int32."),
+        (PluginsOptions.Section, """{"Plugins":{"Limits":{"TimeoutMs":"SENTINEL"}}}""", "Plugins:Limits:TimeoutMs could not be read as System.Int32."),
+        (UpdateOptions.Section, """{"Update":{"CheckEnabled":"SENTINEL"}}""", "Update:CheckEnabled could not be read as System.Boolean."),
+        (NotificationsOptions.Section, """{"Notifications":{"QuietSeconds":"SENTINEL"}}""", "Notifications:QuietSeconds could not be read as System.Int32."),
+        (RoutesOptions.Section, """{"Routes":{"Operations":"SENTINEL"}}""", "Routes:Operations could not be read as a map of Jason.Runtime.Configuration.RouteEntry."),
+        (InboundOptions.Section, """{"Inbound":{"SyncSeconds":"SENTINEL"}}""", "Inbound:SyncSeconds could not be read as System.Int32."),
+    ];
+
+    /// <summary>
     /// The binder writes the value before the path, so a value can imitate the very words the path and the type
     /// are read from. Only the binder's own last words are read, so the imitation is never taken for them.
     /// </summary>

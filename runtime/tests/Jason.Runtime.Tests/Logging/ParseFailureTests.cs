@@ -72,6 +72,21 @@ public class ParseFailureTests
         Assert.Equal(ParseFailure.Describe(failure), ParseFailure.Describe(aggregate));
     }
 
+    /// <summary>
+    /// An aggregate can hold a read failure that knows no position before one that does. The line is said by the one
+    /// that knows where its reader stopped, which is the one a person can find the place from; taking the first would
+    /// say the type alone.
+    /// </summary>
+    [Fact]
+    public void Of_two_read_failures_the_one_that_knows_where_its_reader_stopped_is_said()
+    {
+        var positioned = Assert.ThrowsAny<JsonException>(() => JsonDocument.Parse("{\n  \"a\": " + Sentinel + "\n}"));
+        var aggregate = new AggregateException(new JsonException("a message quoting " + Sentinel), positioned);
+
+        Assert.True(ParseFailure.Is(aggregate));
+        Assert.Equal("JsonException at line 2, byte 8", ParseFailure.Describe(aggregate));
+    }
+
     [Fact]
     public void A_read_failure_that_knows_no_position_is_said_by_its_type_alone()
     {
@@ -79,6 +94,22 @@ public class ParseFailureTests
 
         Assert.True(ParseFailure.Is(failure));
         Assert.Equal("JsonException", ParseFailure.Describe(failure));
+    }
+
+    /// <summary>
+    /// A value the database provider reads itself — a timestamp — fails with the provider's own exception, wrapped in the
+    /// one the reader of the row throws, and that message can quote the value: it is a read failure, said by its type.
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(FormatException))]
+    [InlineData(typeof(InvalidCastException))]
+    public void A_failure_of_a_value_the_provider_reads_is_a_read_failure_said_by_its_type(Type type)
+    {
+        var failure = (Exception)Activator.CreateInstance(type, "a message quoting " + Sentinel)!;
+        var wrapped = new InvalidOperationException("An exception occurred while reading a database value.", failure);
+
+        Assert.True(ParseFailure.Is(wrapped));
+        Assert.Equal(type.Name, ParseFailure.Describe(wrapped));
     }
 
     [Fact]

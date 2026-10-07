@@ -264,6 +264,11 @@ public class PatternTimingTests
     [InlineData("^.+$", @"^[^\n\r\u2028\u2029]+\z")]
     [InlineData(@"^[.]\.a$", @"^[.]\.a\z")]
     [InlineData(@"^a\\.$", @"^a\\[^\n\r\u2028\u2029]\z")]
+    [InlineData("^.*$", @"^[^\n\r\u2028\u2029]*\z")]
+    [InlineData("^a.?$", @"^a[^\n\r\u2028\u2029]?\z")]
+    [InlineData("^.{2}$", @"^[^\n\r\u2028\u2029]{2}\z")]
+    [InlineData("^(a.)$", @"^(a[^\n\r\u2028\u2029])\z")]
+    [InlineData("^(x|.)$", @"^(x|[^\n\r\u2028\u2029])\z")]
     [InlineData("^x", "^x")]
     public void Warming_and_probing_a_pattern_hand_the_engine_the_form_it_runs_and_not_the_pattern_as_written(string written, string compiled)
     {

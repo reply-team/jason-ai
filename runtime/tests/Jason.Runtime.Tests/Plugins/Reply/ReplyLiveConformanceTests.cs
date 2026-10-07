@@ -229,7 +229,7 @@ public class ReplyLiveConformanceTests
     /// Every other Reply test registers <see cref="ReplyPlugins.SearchPath"/>, which deliberately leaves the
     /// machine's <c>PATH</c> out so that a test can never reach the operator's real CLI, and asserts that what
     /// resolved lies inside the test tree. This class asserts the exact opposite, and it is the only place in
-    /// the wave where that is correct: the whole point here is to run the operator's own <c>reply</c>, against
+    /// the suite where that is correct: the whole point here is to run the operator's own <c>reply</c>, against
     /// the operator's own account. A resolution that landed on the stand-in instead would be a live test that
     /// proved nothing about the provider, so it fails here rather than reporting a green run.
     /// </remarks>

@@ -53,8 +53,9 @@ public sealed class Notifier(
         new EventId(5, nameof(Failed)),
         "The notifier failed; the scan's work was already handed out");
 
-    // The same event, for a notifier that gave out reading JSON — a journal line that no longer parses: what kind of
-    // failure and where, and no exception, because what the parser quoted is what the line held.
+    // The same event, for a notifier that gave out reading a stored value — a journal line that no longer parses, or holds
+    // a key twice or a value of the wrong shape: the column, what kind of failure and where, and no exception, because
+    // what a reader quotes is what the line held.
     private static readonly Action<ILogger, string, Exception?> FailedToParse = LoggerMessage.Define<string>(
         LogLevel.Warning,
         new EventId(5, nameof(Failed)),

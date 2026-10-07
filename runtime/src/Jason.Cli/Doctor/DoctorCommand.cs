@@ -224,6 +224,13 @@ public static class DoctorCommand
             return null;
         }
 
+        // A device's name — NUL, CON — is a name Windows answers for itself, in any directory, and is no file.
+        if (OperatingSystem.IsWindows() && full.StartsWith(@"\\.\", StringComparison.Ordinal))
+        {
+            refusal = $"'{output}' names a device, not a file, and nothing was written: --output takes the file to write, for example {Path.Join(Environment.CurrentDirectory, "jason-doctor.json")}.";
+            return null;
+        }
+
         if (Path.EndsInDirectorySeparator(output) || Path.GetFileName(full).Length == 0)
         {
             refusal = $"'{output}' names a directory, not a file, and nothing was written: --output takes the file to write, for example {Path.Join(full, "jason-doctor.json")}.";
@@ -289,7 +296,8 @@ public static class DoctorCommand
     /// <summary>
     /// Takes away the directories a run made for a file it then did not write, from the deepest up to the nearest one that
     /// was there before, each only while it is empty: a directory another run has written into since is left as it is,
-    /// and so is everything above it.
+    /// and so is everything above it. A run beside this one, into the same new directory, can still lose a directory it
+    /// had not yet written into; it makes the directory again before it refuses (<see cref="Write"/>).
     /// </summary>
     private static void Unmake(string directory, string? there)
     {
@@ -324,7 +332,24 @@ public static class DoctorCommand
         Written,
         Taken,
         Refused,
+
+        /// <summary>The directory the file was to go in was not there when it was created: another run had taken it away.</summary>
+        DirectoryGone,
     }
+
+    /// <summary>
+    /// How many times the directory is made again when it has gone between being made and the file's being created in it,
+    /// before that counts as a refusal. A run beside this one that refuses takes away the empty directories it made, and
+    /// can take this run's with them in that gap; nothing removes a directory twice for long.
+    /// </summary>
+    private const int Remakes = 2;
+
+    /// <summary>
+    /// Called just before each file is created, with its path, once its directory has been made. A test's only way into
+    /// the moment between the two, where another run can take the directory away or write into it: what is held there
+    /// cannot otherwise be shown except by racing two runs, and a race that a test may lose is no proof.
+    /// </summary>
+    internal static AsyncLocal<Action<string>?> BeforeCreate { get; } = new();
 
     private static int Write(CliEnvironment env, DoctorBundle bundle, string? named, string directory, string stem, bool human)
     {
@@ -341,18 +366,44 @@ public static class DoctorCommand
             return Refuse(env, human, code, message);
         }
 
-        try
+        // The file, created in a directory made for it, and the directory made again a couple of times where another run
+        // took it away in between.
+        Created Create(string path, out string? reason)
         {
-            Directory.CreateDirectory(directory);
-        }
-        catch (Exception failure) when (Unwritable(failure))
-        {
-            return Refused(CliErrors.DoctorOutputUnwritable, $"{named ?? Candidate(directory, stem, 0)} cannot be written: {failure.Message} Nothing was written.");
+            for (var made = 0; ; made++)
+            {
+                try
+                {
+                    Directory.CreateDirectory(directory);
+                }
+                catch (DirectoryNotFoundException) when (made < Remakes)
+                {
+                    // A directory above it was taken away while this one was being made.
+                    continue;
+                }
+                catch (Exception failure) when (Unwritable(failure))
+                {
+                    reason = failure.Message;
+                    return Created.Refused;
+                }
+
+                BeforeCreate.Value?.Invoke(path);
+                var created = TryCreate(path, bytes, out reason);
+                if (created != Created.DirectoryGone)
+                {
+                    return created;
+                }
+
+                if (made == Remakes)
+                {
+                    return Created.Refused;
+                }
+            }
         }
 
         if (named is not null)
         {
-            return TryCreate(named, bytes, out var reason) switch
+            return Create(named, out var reason) switch
             {
                 Created.Written => Written(env, bundle, named, bytes, human),
                 Created.Taken => Refused(CliErrors.DoctorOutputExists, $"Something was put at {named} while the bundle was composed, and a bundle is never written over anything. Nothing was written."),
@@ -363,7 +414,7 @@ public static class DoctorCommand
         for (var number = 0; number <= MaxNumber; number++)
         {
             var candidate = Candidate(directory, stem, number);
-            switch (TryCreate(candidate, bytes, out var reason))
+            switch (Create(candidate, out var reason))
             {
                 case Created.Written:
                     return Written(env, bundle, candidate, bytes, human);
@@ -374,7 +425,7 @@ public static class DoctorCommand
             }
         }
 
-        Unmake(directory, there);
+        // Every name is taken, so the directory holds every one of them: there is nothing this run made to take away.
         return AllTaken(env, human, directory, stem);
     }
 
@@ -407,7 +458,7 @@ public static class DoctorCommand
             }
 
             reason = failure.Message;
-            return Created.Refused;
+            return failure is DirectoryNotFoundException ? Created.DirectoryGone : Created.Refused;
         }
 
         try

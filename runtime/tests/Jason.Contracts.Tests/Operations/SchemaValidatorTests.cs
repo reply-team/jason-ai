@@ -161,16 +161,15 @@ public class SchemaValidatorTests
         Assert.Equal("pattern", problem.Reason);
     }
 
-    [Fact]
-    public void A_dollar_that_is_a_literal_character_is_left_alone()
+    /// <summary>Inside a class, and escaped: neither is an anchor, and both still anchor the real one at the end.</summary>
+    [Theory]
+    [InlineData("^a[$]b$")]
+    [InlineData(@"^a\$b$")]
+    public void A_dollar_that_is_a_literal_character_is_left_alone(string pattern)
     {
-        // Inside a class, and escaped: neither is an anchor, and both still anchor the real one at the end.
-        foreach (var pattern in new[] { "^a[$]b$", @"^a\$b$" })
-        {
-            Assert.Empty(CheckPattern(pattern, "a$b"));
-            Assert.Equal("pattern", Assert.Single(CheckPattern(pattern, "a$b\n")).Reason);
-            Assert.Equal("pattern", Assert.Single(CheckPattern(pattern, "ab")).Reason);
-        }
+        Assert.Empty(CheckPattern(pattern, "a$b"));
+        Assert.Equal("pattern", Assert.Single(CheckPattern(pattern, "a$b\n")).Reason);
+        Assert.Equal("pattern", Assert.Single(CheckPattern(pattern, "ab")).Reason);
     }
 
     [Fact]
@@ -312,6 +311,27 @@ public class SchemaValidatorTests
         {
             Assert.Equal("pattern", Assert.Single(CheckPattern("^.+$", "abc" + terminator)).Reason);
             Assert.Equal("pattern", Assert.Single(CheckPattern("^.+$", terminator + "abc")).Reason);
+        }
+    }
+
+    /// <summary>
+    /// The dot is the same class in every form it is written in: under each quantifier, counted, inside a group and as
+    /// one side of an alternation. Each form takes an ordinary character in the dot's place and refuses each of the four
+    /// line terminators there.
+    /// </summary>
+    [Theory]
+    [InlineData("^.*$", "ab", "a{0}b")]
+    [InlineData("^a.?$", "ab", "a{0}")]
+    [InlineData("^.{2}$", "ab", "a{0}")]
+    [InlineData("^(a.)$", "ab", "a{0}")]
+    [InlineData("^(x|.)$", "y", "{0}")]
+    public void A_dot_in_every_form_it_is_written_in_stops_at_each_line_terminator(string pattern, string accepted, string refused)
+    {
+        Assert.Empty(CheckPattern(pattern, accepted));
+
+        foreach (var terminator in new[] { "\n", "\r", "\u2028", "\u2029" })
+        {
+            Assert.Equal("pattern", Assert.Single(CheckPattern(pattern, refused.Replace("{0}", terminator, StringComparison.Ordinal))).Reason);
         }
     }
 

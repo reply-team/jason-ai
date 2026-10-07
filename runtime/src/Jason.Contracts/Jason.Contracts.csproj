@@ -11,4 +11,12 @@
          provider operation a work item could name, so they are read under a prefix of their own by DeliveryCatalog. -->
     <EmbeddedResource Include="..\..\..\docs\contracts\notifications\*.json" Link="Notifications\%(Filename)%(Extension)" />
   </ItemGroup>
+
+  <!-- Friend assemblies so the tests that use the shared pattern timing read the form a schema pattern is compiled in
+       from the validator's own rewrite, rather than learning it by compiling and matching the pattern under the real
+       timeout. Both compile that timing. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Jason.Contracts.Tests" />
+    <InternalsVisibleTo Include="Jason.Runtime.Tests" />
+  </ItemGroup>
 </Project>

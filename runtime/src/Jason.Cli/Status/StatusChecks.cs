@@ -220,7 +220,7 @@ internal static class StatusChecks
     }
 
     /// <summary>
-    /// The hole this wave exists to close, reported. A runtime that cannot teach its roles is not ready,
+    /// The skills the roles are taught from, reported. A runtime that cannot teach its roles is not ready,
     /// whatever else is true — and the check is not only presence: a deployment the launcher would refuse is
     /// worse than none, because it refuses every launch of that role rather than running it untaught.
     /// </summary>

@@ -42,8 +42,8 @@ public sealed record LogTail(IReadOnlyList<JsonObject> Events, bool LimitReached
 /// </remarks>
 public static class LogReader
 {
-    /// <summary>How much of a file is read at a time.</summary>
-    private const int BlockSize = 64 * 1024;
+    /// <summary>How much of a file is read at a time. Internal so that a test that stages a block's edge reads it here.</summary>
+    internal const int BlockSize = 64 * 1024;
 
     /// <summary>
     /// The longest line that is read. An event the runtime writes is a few hundred bytes; a line this long is a
@@ -132,6 +132,13 @@ public static class LogReader
             }
             catch (DirectoryNotFoundException)
             {
+                return;
+            }
+            catch (UnauthorizedAccessException) when (DeletePending.Is(file.Path))
+            {
+                // A file whose delete is still pending — deleted the older way while another handle holds it — keeps its
+                // name on Windows until the last handle closes. It is gone, not unreadable: a file nobody may read is
+                // still refused, by the caller.
                 return;
             }
 

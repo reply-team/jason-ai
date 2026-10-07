@@ -53,8 +53,7 @@ public class RoleEndpointTests
     }
 
     /// <summary>
-    /// The one verb that changes a role, reachable under its own name. Roles have no general update verb, and
-    /// this wave is not the one that gives them one.
+    /// The one verb that changes a role, reachable under its own name. Roles have no general update verb.
     /// </summary>
     [Fact]
     public async Task Set_profile_over_http_moves_the_policy_and_refuses_a_profile_nothing_answers()

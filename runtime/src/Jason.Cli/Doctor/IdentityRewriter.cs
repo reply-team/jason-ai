@@ -1,5 +1,7 @@
+using System.Buffers;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -62,6 +64,14 @@ namespace Jason.Cli.Doctor;
 /// <c>&lt;user&gt;-7</c> for an account called <c>desk</c>. A name that is empty is skipped: it would match everywhere.
 /// </para>
 /// <para>
+/// <b>And one for what a URL spells.</b> A name or a directory followed by the percent escapes of a character outside
+/// ASCII — a lead byte and the byte after it — is left by that search, because whether the word goes on depends on which
+/// character the escapes spell, and a pattern cannot read that. A second search finds exactly those, in what the first
+/// left, and reads the escapes: a letter or a digit goes on with the word and the name stays, as it would before the
+/// same letter written plainly; anything else — a no-break space, the curly apostrophe of "Ada's" — ends it, and the name
+/// is rewritten. Every other name the first search tried, at the same place or inside, it has already rewritten.
+/// </para>
+/// <para>
 /// A cap on the length of a text, <see cref="ExceptionText"/>, comes after this and not before: a cut through the
 /// middle of a path leaves half a name that nothing here would recognise. The cap reads its own marks back, so a mark
 /// that somebody wrote into a text on purpose is kept uncounted; the bounds of the sections of a bundle still hold its
@@ -105,16 +115,25 @@ public sealed class IdentityRewriter
     /// </summary>
     private const string BeforePath = @"(?:(?<![\p{L}\p{N}_])|(?<=\\[nrtbf""\\/])|(?<=\\u[0-9A-Fa-f]{4})|(?<=%[0-9A-Fa-f]{2}))";
 
+    /// <summary>
+    /// The percent escapes of a lead byte and the byte after it: how a URL writes a character outside ASCII, which may be
+    /// the next letter of a word in another alphabet or a space or a mark of punctuation.
+    /// </summary>
+    private const string EscapedPair = "%[C-Fc-f][0-9A-Fa-f]%[89A-Ba-b][0-9A-Fa-f]";
+
     /// <summary>Where a directory may end: where a name may, and never before an underscore, which would make it another folder's name.</summary>
-    private const string AfterPath = @"(?![\p{L}\p{N}_])(?!%[C-Fc-f][0-9A-Fa-f]%[89A-Ba-b][0-9A-Fa-f])";
+    private const string AfterPath = @"(?![\p{L}\p{N}_])(?!" + EscapedPair + ")";
 
     /// <summary>
-    /// Where a name may end: before anything that is not a letter or a digit — a percent sign among them — and not
-    /// before the percent escapes of a lead byte and the byte after it, which is how a URL writes the next letter of a
-    /// word in another alphabet. A percent sign and two hexadecimal digits that are not that are only a percent sign and
-    /// the start of a word: <c>Ada%Dev</c> is a name and a word.
+    /// Where a name may end in the first search: before anything that is not a letter or a digit — a percent sign among
+    /// them — and not before <see cref="EscapedPair"/>, which only the second search, reading the character it spells,
+    /// can decide. A percent sign and two hexadecimal digits that are not that are only a percent sign and the start of a
+    /// word: <c>Ada%Dev</c> is a name and a word.
     /// </summary>
-    private const string AfterName = @"(?![\p{L}\p{N}])(?!%[C-Fc-f][0-9A-Fa-f]%[89A-Ba-b][0-9A-Fa-f])";
+    private const string AfterName = @"(?![\p{L}\p{N}])(?!" + EscapedPair + ")";
+
+    /// <summary>Where a name or a directory ends in the second search: right before <see cref="EscapedPair"/>.</summary>
+    private const string BeforeEscapedPair = "(?=" + EscapedPair + ")";
 
     /// <summary>The shape of the identifier of an account that is a person's: a Windows one, or a work or Microsoft one, ending in the account or in the domain it belongs to.</summary>
     private const string AccountSid = "S-1-(?:5-21|12-1)(?:-[0-9]+){3,4}";
@@ -136,6 +155,9 @@ public sealed class IdentityRewriter
 
     private readonly Regex _names;
 
+    /// <summary>The second search: the same names and directories, each found only right before <see cref="EscapedPair"/>.</summary>
+    private readonly Regex _beforeEscapes;
+
     /// <summary>A rewriter for these names, with each directory's short form as this machine gives it.</summary>
     public IdentityRewriter(IdentityFacts facts)
         : this(facts, ShortPaths.Of)
@@ -154,7 +176,8 @@ public sealed class IdentityRewriter
         ArgumentNullException.ThrowIfNull(facts);
         ArgumentNullException.ThrowIfNull(shortForm);
 
-        _names = new Regex(Pattern(facts, shortForm), RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture);
+        _names = new Regex(Pattern(facts, shortForm, AfterName, AfterPath, withSid: true), RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture);
+        _beforeEscapes = new Regex(Pattern(facts, shortForm, BeforeEscapedPair, BeforeEscapedPair, withSid: false), RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture);
     }
 
     /// <summary>
@@ -240,7 +263,46 @@ public sealed class IdentityRewriter
         }
     }
 
-    private string RewriteText(string text) => text.Length == 0 ? text : _names.Replace(text, Mark);
+    private string RewriteText(string text)
+    {
+        if (text.Length == 0)
+        {
+            return text;
+        }
+
+        // The second search is only for a name before a percent escape, so text with no percent sign left skips it.
+        var first = _names.Replace(text, Mark);
+        return first.Contains('%', StringComparison.Ordinal)
+            ? _beforeEscapes.Replace(first, match => SpellsLetterOrDigit(first, match.Index + match.Length) ? match.Value : Mark(match))
+            : first;
+    }
+
+    /// <summary>
+    /// Whether the percent escapes at <paramref name="at"/> spell, in UTF-8, a letter or a digit — the next character of a
+    /// word. Escapes that spell any other character, or no whole character at all, do not.
+    /// </summary>
+    private static bool SpellsLetterOrDigit(string text, int at)
+    {
+        Span<byte> bytes = stackalloc byte[4];
+        var count = 0;
+        while (count < bytes.Length
+            && at + 2 < text.Length
+            && text[at] == '%'
+            && byte.TryParse(text.AsSpan(at + 1, 2), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var value))
+        {
+            bytes[count++] = value;
+            at += 3;
+            switch (Rune.DecodeFromUtf8(bytes[..count], out var rune, out _))
+            {
+                case OperationStatus.Done:
+                    return Rune.IsLetter(rune) || Rune.IsNumber(rune);
+                case OperationStatus.InvalidData:
+                    return false;
+            }
+        }
+
+        return false;
+    }
 
     private static string Mark(Match match) =>
         match.Groups[HomeGroup].Success ? HomeMark
@@ -257,7 +319,12 @@ public sealed class IdentityRewriter
     /// and the domain's names, longest first. Every whole path comes before every name, so a name inside a path never
     /// breaks it.
     /// </summary>
-    private static string Pattern(IdentityFacts facts, Func<string, string?> shortForm)
+    /// <param name="facts">The names.</param>
+    /// <param name="shortForm">The short form of a directory, where it has one.</param>
+    /// <param name="afterName">Where a name may end: <see cref="AfterName"/>, or <see cref="BeforeEscapedPair"/> for the second search.</param>
+    /// <param name="afterPath">Where a directory may end: <see cref="AfterPath"/>, or <see cref="BeforeEscapedPair"/> for the second search.</param>
+    /// <param name="withSid">Whether the identifier is among the alternatives: it ends wherever its shape does, so only the first search has it.</param>
+    private static string Pattern(IdentityFacts facts, Func<string, string?> shortForm, string afterName, string afterPath, bool withSid)
     {
         var alternatives = new List<string>();
 
@@ -291,12 +358,15 @@ public sealed class IdentityRewriter
             if (PathPattern(path) is { } pattern)
             {
                 // Windows paths are the same path in another case; elsewhere they are not.
-                alternatives.Add($"(?<{group}>{BeforePath}{(OperatingSystem.IsWindows() ? $"(?i:{pattern})" : pattern)}){AfterPath}");
+                alternatives.Add($"(?<{group}>{BeforePath}{(OperatingSystem.IsWindows() ? $"(?i:{pattern})" : pattern)}){afterPath}");
             }
         }
 
-        var sid = string.IsNullOrWhiteSpace(facts.Sid) ? AccountSid : $"{Regex.Escape(facts.Sid)}|{AccountSid}";
-        alternatives.Add($"(?<{SidGroup}>(?i:{sid}))");
+        if (withSid)
+        {
+            var sid = string.IsNullOrWhiteSpace(facts.Sid) ? AccountSid : $"{Regex.Escape(facts.Sid)}|{AccountSid}";
+            alternatives.Add($"(?<{SidGroup}>(?i:{sid}))");
+        }
 
         var names = new List<(string Group, string Name)>
         {
@@ -319,7 +389,7 @@ public sealed class IdentityRewriter
         // The sort is stable, so of two names of one length the account's comes before the machine's.
         foreach (var (group, name) in names.Where(known => !string.IsNullOrWhiteSpace(known.Name)).OrderByDescending(known => known.Name.Length))
         {
-            alternatives.Add($"(?<{group}>{BeforeName}(?i:{Spelled(name)}){AfterName})");
+            alternatives.Add($"(?<{group}>{BeforeName}(?i:{Spelled(name)}){afterName})");
         }
 
         var shorts = new[] { facts.User, folder }.Select(ShortAliasOf).OfType<ShortAlias>().Distinct().ToList();
@@ -331,7 +401,7 @@ public sealed class IdentityRewriter
             var aliases = shorts.Select(alias =>
                 $"(?:{Regex.Escape(alias.Stem)}|{Regex.Escape(alias.Stem[..Math.Min(2, alias.Stem.Length)])}[0-9A-F]{{4}})~[0-9]+"
                 + (alias.Extension.Length > 0 ? $"(?:\\.{Regex.Escape(alias.Extension)})?" : string.Empty));
-            alternatives.Add($"(?<{UserGroup}>{BeforeName}(?i:{string.Join('|', aliases)}){AfterName})");
+            alternatives.Add($"(?<{UserGroup}>{BeforeName}(?i:{string.Join('|', aliases)}){afterName})");
         }
 
         return string.Join('|', alternatives);

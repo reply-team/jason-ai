@@ -144,7 +144,8 @@ public partial class InteractiveSkillTests
     /// <summary>
     /// The skill says how many states there are in more than one place, and the headings are what a session
     /// actually walks. A count that disagreed with them is how this skill said nine for as long as it had ten:
-    /// a host told there are nine stops looking after the ninth, at the plugin that is unavailable.
+    /// a host told there are nine stops looking after the ninth, at the plugin that is unavailable. The count is
+    /// "the ten states"; a phrase such as "either of two states" counts nothing and is not held to it.
     /// </summary>
     [Fact]
     public void The_troubleshooting_skill_counts_its_states_the_way_its_headings_number_them()
@@ -172,6 +173,6 @@ public partial class InteractiveSkillTests
     [GeneratedRegex(@"^### (\d+)\. ", RegexOptions.Multiline)]
     private static partial Regex StateHeading();
 
-    [GeneratedRegex(@"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) states\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bthe (one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) states\b", RegexOptions.IgnoreCase)]
     private static partial Regex StateCount();
 }

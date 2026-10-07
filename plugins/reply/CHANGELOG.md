@@ -3,6 +3,12 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.2.4
+
+- The README states the provider's bound on inbound replies: Reply marks a contact finished at its first reply and
+  stops detecting that contact's later replies, so only a contact's first reply is read.
+- Nothing else changes: the same calls, codes, classes and messages.
+
 ## 0.2.3
 
 - `conversation.list` now lists a thread whose last activity is stamped exactly at `since`. The contract keeps the

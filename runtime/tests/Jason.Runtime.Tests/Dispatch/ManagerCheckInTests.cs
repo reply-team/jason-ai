@@ -176,7 +176,7 @@ public class ManagerCheckInTests
             triggered.Context.Select(pair => pair.Key));
 
         // The operations are guidance, in the brief where the role reads it — not a permission, which is why
-        // nothing else in this wave consults the list.
+        // nothing else in the runtime consults the list.
         var allowed = Assert.IsType<JsonArray>(triggered.Context["allowed_operations"]);
         Assert.Contains("workitem.create", allowed.Select(node => (string?)node));
         Assert.DoesNotContain("campaign.enroll", allowed.Select(node => (string?)node));
@@ -369,7 +369,7 @@ public class ManagerCheckInTests
         db.Campaigns.Add(campaign);
 
         // The manager is one of the nine roles the schema seeds, so nothing here has to invent it — which is
-        // itself part of what this wave leans on.
+        // itself part of what the check-in leans on.
         return campaign;
     }
 

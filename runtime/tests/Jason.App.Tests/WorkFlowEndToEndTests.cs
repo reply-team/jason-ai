@@ -14,7 +14,7 @@ namespace Jason.App.Tests;
 /// Work actually being done, through the shipped executable and nothing else: a runtime started in the
 /// background, a campaign filled from the command line, a role whose entry command is a real program, and a
 /// dispatcher ticking on its own clock that claims the work, launches that program, and records what it
-/// reported. Nothing here is in-process and nothing is driven by a test seam — this is the whole wave as a
+/// reported. Nothing here is in-process and nothing is driven by a test seam — this is the whole flow as a
 /// user would run it.
 /// </summary>
 public class WorkFlowEndToEndTests

@@ -53,6 +53,41 @@ public class MembershipEndpointTests
         Assert.Equal("no_match_key", result.Items[2].Error!.Code);
     }
 
+    /// <summary>
+    /// Matching a row reads at most two contacts, and a query that takes some rows of a set in no order is one EF Core
+    /// warns about every time it runs. An import is ordinary work and puts no warning in the log, by either kind of match
+    /// key. Read from the file the real sink wrote.
+    /// </summary>
+    [Fact]
+    public async Task An_import_by_either_kind_of_match_key_puts_no_warning_in_the_log()
+    {
+        await using var fixture = await RuntimeApiFixture.StartAsync(TestContext.Current.CancellationToken);
+        var campaignId = SeedCampaign(fixture);
+        var imports = new (string MatchBy, object Contact)[]
+        {
+            ("email", new { first_name = "Ada", channels = new[] { new { channel = "email", value = "ada@example.test" } } }),
+            ("custom:crm_id", new { first_name = "Grace", custom = new { crm_id = "G-1" } }),
+        };
+        foreach (var (matchBy, contact) in imports)
+        {
+            await fixture.PostOkAsync<AddContactsResult>(
+                Operations.CampaignAddContacts,
+                new { campaign_id = campaignId, match_by = matchBy, contacts = new[] { contact } },
+                TestContext.Current.CancellationToken);
+        }
+
+        // Stopping flushes and closes the rolling file sink, so what is on disk now is everything there is.
+        await fixture.Runtime.StopAsync();
+        var lines = Directory.GetFiles(fixture.Paths.LogsDirectory, "*", SearchOption.AllDirectories)
+            .SelectMany(File.ReadAllLines)
+            .Select(line => System.Text.Json.Nodes.JsonNode.Parse(line)!)
+            .ToList();
+
+        Assert.Contains(lines, line => ((string?)line["RequestPath"]) == Operations.Route(Operations.CampaignAddContacts));
+        Assert.DoesNotContain(lines, line => (string?)line["@l"] is "Warning" or "Error" or "Fatal"
+            && ((string?)line["SourceContext"])?.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal) == true);
+    }
+
     [Fact]
     public async Task A_membership_listing_embeds_the_whole_contact()
     {

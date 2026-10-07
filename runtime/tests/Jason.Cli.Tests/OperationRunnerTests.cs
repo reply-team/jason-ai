@@ -85,6 +85,32 @@ public class OperationRunnerTests
         Assert.Equal(string.Empty, error.ToString());
     }
 
+    /// <summary>
+    /// A body that is JSON and not the runtime's error envelope — another local server holding the port of a stale
+    /// descriptor answers in its own shape — is no more the runtime's words than one that is not JSON: it gets the same
+    /// envelope, saying what came back and quoting none of it, so an agent still has a code to branch on.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.BadGateway, "\"SENTINEL_STRING\"", true)]
+    [InlineData(HttpStatusCode.NotFound, "{\"title\":\"SENTINEL_TITLE\",\"status\":404}", false)]
+    [InlineData(HttpStatusCode.BadRequest, "{\"error\":{\"message\":\"SENTINEL_NO_CODE\"}}", false)]
+    [InlineData(HttpStatusCode.InternalServerError, "[\"SENTINEL_ARRAY\"]", true)]
+    public async Task An_error_whose_body_is_json_but_not_an_error_envelope_is_printed_as_an_envelope(HttpStatusCode status, string body, bool retryable)
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(status, body)));
+
+        var exit = await OperationRunner.RunAsync(env, "journal.list", RequestBody.Empty(), new RunOptions(Human: false), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(
+            "{\"error\":{\"code\":\"runtime_error\",\"message\":\"The runtime answered " + ((int)status).ToString(System.Globalization.CultureInfo.InvariantCulture)
+            + " with a body that is not an error envelope.\",\"retryable\":" + (retryable ? "true" : "false") + "}}" + System.Environment.NewLine,
+            output.ToString());
+        Assert.DoesNotContain("SENTINEL", output.ToString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_refusal_whose_body_is_not_json_is_not_worth_repeating_as_it_was()
     {

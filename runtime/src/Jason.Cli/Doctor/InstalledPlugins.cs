@@ -1,7 +1,7 @@
 using System.Collections.Frozen;
 using System.Security;
-using System.Text.RegularExpressions;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Plugins;
 
 namespace Jason.Cli.Doctor;
 
@@ -9,12 +9,13 @@ namespace Jason.Cli.Doctor;
 /// The plugins installed in a data directory, as a settings key that names one is told: by the name of its directory.
 /// </summary>
 /// <remarks>
-/// The same rule the runtime holds a key to — every directory directly under the plugins directory whose name does not
-/// start with a dot, that holds a manifest and is named the way a plugin's id has to be — listed here because the
-/// client cannot reference the runtime and a bundle is most wanted when the runtime is not running. A copy of a rule is
-/// only as good as the test that holds it to the original, and the runtime's tests do.
+/// The same rule the runtime holds a key to — every directory directly under the plugins directory that holds a manifest
+/// and is named the way a plugin's id has to be (<see cref="PluginIds"/>, the one spelling of that rule) — listed here
+/// because the client cannot reference the runtime and a bundle is most wanted when the runtime is not running. The
+/// listing is a copy of the runtime's, and a copy is only as good as the test that holds it to the original, which the
+/// runtime's tests are.
 /// </remarks>
-public static partial class InstalledPlugins
+public static class InstalledPlugins
 {
     /// <summary>The file whose presence makes a directory a package, as the runtime's plugin loader names it.</summary>
     private const string ManifestFileName = "plugin.yaml";
@@ -36,7 +37,7 @@ public static partial class InstalledPlugins
                 ? Directory.EnumerateDirectories(paths.PluginsDirectory)
                     .Where(directory => File.Exists(Path.Combine(directory, ManifestFileName)))
                     .Select(Path.GetFileName)
-                    .Where(name => name is not null && PluginId().IsMatch(name))
+                    .Where(PluginIds.IsWellFormed)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase)!
                 : None;
         }
@@ -45,11 +46,4 @@ public static partial class InstalledPlugins
             return None;
         }
     }
-
-    /// <summary>
-    /// What a plugin's id has to be, as a manifest's own <c>id</c> is held to it: a lowercase letter, then one to sixty-three
-    /// lowercase letters, digits or dashes. A name starting with a dot is never one.
-    /// </summary>
-    [GeneratedRegex(@"^[a-z][a-z0-9-]{1,63}\z")]
-    private static partial Regex PluginId();
 }

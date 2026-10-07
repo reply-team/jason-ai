@@ -9,7 +9,7 @@ namespace Jason.Contracts.Configuration;
 /// and what gets typed into the wrong place is often a secret — a token pasted where its name belonged — so only
 /// the names the code already knows travel as they were typed, and anything else is written <see cref="Hidden"/>.
 /// A name the code already knows is never one anybody had to keep to themselves. A number travels only as an index,
-/// right after the name of the list it indexes.
+/// under the list option's whole path.
 /// </summary>
 public static class SettingKey
 {
@@ -26,8 +26,12 @@ public static class SettingKey
         "apr", "att", "cmp", "cnt", "dec", "jrn", "ntf", "pin", "prf", "rol", "rpt", "rt", "rts", "snp", "sup", "wi",
     }.ToFrozenSet(StringComparer.Ordinal);
 
-    /// <summary>How long an index into a list can be: an index is an <see cref="int"/>, and ten digits hold every one.</summary>
-    private const int MaxIndexDigits = 10;
+    /// <summary>
+    /// How long an index into a list can be and still be shown. Nobody writes a settings list of ten thousand items by
+    /// hand, so a number of five digits or more where a list stands is one somebody typed — a phone number, a PIN — and
+    /// is written <see cref="Hidden"/> like any other key the code does not know.
+    /// </summary>
+    private const int MaxIndexDigits = 4;
 
     /// <summary>The key of a map, in <see cref="SettingsVocabulary.ListPaths"/>: any one key.</summary>
     private const string AnyKey = "*";
@@ -59,7 +63,7 @@ public static class SettingKey
 
     /// <summary>
     /// A whole path, <c>Section:Key:…</c> as the configuration system spells one, with each of its keys written the
-    /// way <see cref="Shown"/> writes it — except that a key of digits directly under the whole path of a list
+    /// way <see cref="Shown"/> writes it — except that a key of up to four digits directly under the whole path of a list
     /// (<see cref="SettingsVocabulary.ListPaths"/>), as in <c>Manager:Triggers:0</c>, is that list's index and is shown
     /// too. Anywhere else a number is a key a person chose, and no map in the settings is keyed by one: a plugin's
     /// id and an operation's name both start with a letter, while a number typed where a name belonged can be a

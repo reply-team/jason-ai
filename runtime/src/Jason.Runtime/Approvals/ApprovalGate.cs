@@ -141,7 +141,7 @@ public static class ApprovalGate
     /// <remarks>
     /// A row that somebody already answered keeps what they answered: only its status moves. The alternative is
     /// worse than untidy — a superseded row that read "approved by a person, because they checked the list"
-    /// would come to read "decided by the dispatcher, no reason", and the wave's whole promise is that every
+    /// would come to read "decided by the dispatcher, no reason", and the approvals' whole promise is that every
     /// decision names who made it. When the decision is ended rather than made, who ended it and when are what
     /// the journal line is for.
     /// </remarks>

@@ -324,6 +324,33 @@ public sealed class ConfigShapeTests
         Assert.DoesNotContain("\"value\"", described.ToJsonString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A key with colons in it is several keys to the configuration system, and one of them can be typed to look like a
+    /// placeholder. It is hidden as a whole, like a key typed as one: printed as typed it would show a placeholder that
+    /// stands for nothing hidden, and carry the value beneath it as if every key on the way had been shown.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"Notifications:Plugins:<key>:Enabled":true}""", "")]
+    [InlineData("""{"Notifications":{"Plugins:<key 2>:Enabled":true}}""", "Notifications")]
+    public void A_key_with_colons_and_a_placeholder_among_them_is_hidden_as_a_whole(string text, string parent)
+    {
+        var described = Describe(text);
+
+        var holder = parent.Length == 0 ? described["shape"]! : At(described["shape"]!, parent);
+        Assert.Equal(["<key>"], Names(holder));
+        Assert.DoesNotContain("\"value\"", described.ToJsonString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>An index of five digits or more is a number somebody typed, not a place in a list, and is not printed.</summary>
+    [Fact]
+    public void A_key_of_five_digits_where_a_list_stands_is_not_printed()
+    {
+        var described = Describe("""{"Manager":{"Triggers":{"12345":"workitem_failed","1234":"workitem_failed"}}}""");
+
+        Assert.Equal(["<key>", "1234"], Names(At(described["shape"]!, "Manager", "Triggers")));
+        Assert.DoesNotContain("12345", described.ToJsonString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void A_plugin_is_shown_by_its_id_only_where_it_is_installed()
     {

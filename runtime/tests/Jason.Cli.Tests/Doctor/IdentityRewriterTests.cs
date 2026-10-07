@@ -412,9 +412,26 @@ public sealed class IdentityRewriterTests
     public void A_name_followed_by_a_percent_sign_ends_there_unless_a_letter_goes_on_in_percent_escapes()
     {
         Assert.Equal("<user>%Dev <user>%Face <user>%Be <user>%20x <user>%", Rewritten(Windows, "Ada%Dev Ada%Face Ada%Be Ada%20x Ada%"));
-        Assert.Equal("Ada%C3%A9 Ada%E2%82%AC", Rewritten(Windows, "Ada%C3%A9 Ada%E2%82%AC"));
+        Assert.Equal("Ada%C3%A9 Ada%c3%a9", Rewritten(Windows, "Ada%C3%A9 Ada%c3%a9"));
         Assert.Equal("%D0%90%D0%B4%D0%B0%D0%BC", Rewritten(Long("Ада", @"C:\Users\Ада"), "%D0%90%D0%B4%D0%B0%D0%BC"));
         Assert.Equal("<user>%Dev", Rewritten(Long("Ада", @"C:\Users\Ада"), "%D0%90%D0%B4%D0%B0%Dev"));
+    }
+
+    /// <summary>
+    /// The escapes after a name are read as the character they spell, as the same character written plainly would be: a
+    /// letter or a digit goes on with the word and leaves the name where it is, and anything else — a no-break space, the
+    /// curly apostrophe of "Ada's", a dash, a currency sign — ends the word, and the name with it. The same holds after the
+    /// home directory.
+    /// </summary>
+    [Fact]
+    public void A_name_followed_by_percent_escapes_ends_there_unless_they_spell_a_letter_or_a_digit()
+    {
+        Assert.Equal(
+            "<user>%E2%80%99s <user>%C2%A0Lovelace <user>%E2%80%93x q=<user>%E2%80%99s+laptop <user>%E2%82%AC <user>%E2%80",
+            Rewritten(Windows, "Ada%E2%80%99s Ada%C2%A0Lovelace Ada%E2%80%93x q=Ada%E2%80%99s+laptop Ada%E2%82%AC Ada%E2%80"));
+        Assert.Equal("Ada%C3%A9 Ada%D9%A3 Ada%F0%9D%90%80", Rewritten(Windows, "Ada%C3%A9 Ada%D9%A3 Ada%F0%9D%90%80"));
+        Assert.Equal("file:///~%C2%A0/x", Rewritten(Windows, "file:///C:/Users/Ada%C2%A0/x"));
+        Assert.Equal("<user>%E2%80%99s", Rewritten(Long("Ада", @"C:\Users\Ада"), "%D0%90%D0%B4%D0%B0%E2%80%99s"));
     }
 
     /// <summary>

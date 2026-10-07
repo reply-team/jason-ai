@@ -129,6 +129,13 @@ internal static class SafeBinding
             return;
         }
 
+        // Only what the file wrote is walked. A section it left out holds nothing to refuse, and walking the declared
+        // types into it would never end for a type that holds one of its own; the file's own depth bounds the walk.
+        if (!section.Exists())
+        {
+            return;
+        }
+
         var shape = ShapeOf(type);
         if (shape == Shape.Other)
         {

@@ -23,8 +23,11 @@ internal enum ProcessHolder
 /// The rule that tells the runtime a descriptor describes from a process that merely has its id. A pid names a
 /// process only while that process lives; after a restart the id a descriptor recorded belongs to whatever the
 /// machine started next under it, and "that pid is running" answers yes about a stranger. The descriptor carries
-/// the moment the runtime started, and a process that started after it is somebody else's. Every verb that must
-/// decide whether a descriptor still has a runtime behind it asks here, so they cannot disagree.
+/// the moment the runtime started, and a process that started after it is somebody else's. The verbs that must
+/// decide whether a descriptor found on disk still has a runtime behind it — <c>runtime start</c>, before it
+/// launches over one, and <c>uninstall</c>, before it takes the installation away — ask here, so they cannot
+/// disagree. <c>runtime stop</c> asks something else: whether the runtime that has just acknowledged its shutdown
+/// has exited, and a bare "is that pid running" answers that.
 /// </summary>
 internal static class DescriptorProcess
 {

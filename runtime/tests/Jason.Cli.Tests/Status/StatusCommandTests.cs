@@ -82,7 +82,7 @@ public class StatusCommandTests
     }
 
     /// <summary>
-    /// The hole this wave exists to close. A role whose skill the launcher would refuse is worse than one with
+    /// The hole the role-skills check exists to close. A role whose skill the launcher would refuse is worse than one with
     /// no skill at all — it refuses every launch of that role rather than running it untaught — and the check
     /// re-reads the cap from the runtime rather than trusting the number an installer validated against.
     /// </summary>

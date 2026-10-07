@@ -502,6 +502,7 @@ settings at all and are never refused for this reason.
 | `result_invalid` | 400 | the result does not satisfy the `result_format` the item declared |
 | `role_exists` | 409 | a role of that name already exists |
 | `settings_unreadable` | 503 | the settings are invalid and none have validated since the runtime started; repair the file and call again |
+| `internal_error` | 500 | the runtime failed to perform the operation, and `retryable: true` — except where what failed is a value stored in the database that this runtime cannot read, written by another version of Jason or changed outside it: then the message names its column, never its value, and `retryable: false`, since every read of it fails the same way until it is restored or repaired |
 | `validation_timed_out` | 503, and attempt | a pattern a value is measured against did not finish matching in time, twice, so nothing was decided and nothing changed: send the request again. At the claim the attempt ends `transient`; over a plugin's answer, `ambiguous` |
 | `lease_expired` | attempt | the whole budget of the attempt was spent |
 | `heartbeat_missed` | attempt | nothing was heard for twice the heartbeat interval |

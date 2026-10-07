@@ -465,7 +465,7 @@ internal static class Behaviours
         var remembered = await NoteAsync(envelope, api).ConfigureAwait(false);
         // How much was recalled, never which keys. A note's key names are its content as much as its values
         // are, and this line ends up in the trace of a failed attempt — which is exactly where the rest of
-        // this wave takes care to put nothing.
+        // the runtime takes care to put nothing.
         await Diagnostics.WriteAsync(
             $"taught-by={taught ?? "nothing"} recalled={(remembered?.Count ?? 0).ToString(CultureInfo.InvariantCulture)}").ConfigureAwait(false);
 

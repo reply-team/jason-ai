@@ -109,7 +109,7 @@ public class AttemptProvenanceTests
     }
 
     /// <summary>
-    /// The invariant the whole wave is for: an attempt is a record of what happened, and nothing that happens
+    /// The invariant provenance is for: an attempt is a record of what happened, and nothing that happens
     /// afterwards may edit it. The world moves under a finished attempt in exactly three ways — the routes are
     /// changed, the plugins are reloaded, and the package on disk is edited — and all three are here.
     /// </summary>
@@ -318,7 +318,7 @@ public class AttemptProvenanceTests
 
     /// <summary>
     /// A runtime holding the two checked-in packages, sending work where the test says, and running whatever
-    /// command the test hands it in place of the one this wave has not built yet.
+    /// command the test hands it in place of a real one.
     /// </summary>
     /// <remarks>
     /// Handed back with the loop's own first scan already behind it. The wait is here, before this test has

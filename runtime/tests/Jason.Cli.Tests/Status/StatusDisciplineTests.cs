@@ -198,7 +198,7 @@ public partial class StatusDisciplineTests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This wave re-created the condition those guards exist to prevent. The PATH repair arrived as a method
+    /// A change to this verb once re-created the condition those guards exist to prevent. The PATH repair arrived as a method
     /// further down the checks' own file, outside the class the reader below slices, so the repair this verb
     /// had just gained was one no guard could see — and the count it asserts is a floor, so nothing went red.
     /// Three checks were also passing their line as a literal that happened to duplicate a constant beside

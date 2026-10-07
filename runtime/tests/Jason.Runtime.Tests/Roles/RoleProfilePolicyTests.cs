@@ -10,7 +10,7 @@ namespace Jason.Runtime.Tests.Roles;
 
 /// <summary>
 /// A role's execution profile says which host that kind of worker uses where the item and its campaign say
-/// nothing. Roles have no general update verb and this wave is not about roles, so the policy is moved by one
+/// nothing. Roles have no general update verb, so the policy is moved by one
 /// narrow verb of its own — which still has to hold the same rule the campaign's policy does: the name must be
 /// one something answers.
 /// </summary>

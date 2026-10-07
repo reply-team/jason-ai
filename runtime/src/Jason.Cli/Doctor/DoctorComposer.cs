@@ -715,6 +715,11 @@ public static partial class DoctorComposer
                 : CliErrors.StaleDescriptor);
         }
 
+        if (!IsWhole(info))
+        {
+            return NotAnswered(UnreadableAnswer);
+        }
+
         if (!string.Equals(info.InstanceId, descriptor.InstanceId, StringComparison.Ordinal))
         {
             return NotAnswered(CliErrors.StaleDescriptor);
@@ -754,6 +759,21 @@ public static partial class DoctorComposer
     }
 
     private static RuntimeRead NotAnswered(string reason) => new(new JsonObject { [Keys.Answered] = false, [Keys.Reason] = reason }, null, 0);
+
+    /// <summary>
+    /// Whether a <c>system.info</c> answer holds every section its readers go into: the database and its migrations, the
+    /// dispatcher, the plugins and the routes, and, where it says anything of role skills or of notifications, their lists.
+    /// A runtime always sends every one; something else answering at its address may not, and the contract's types do not
+    /// make a reader refuse what is missing. Such an answer is unreadable rather than a runtime's: read as one, the status
+    /// checks failed on it and no bundle was written.
+    /// </summary>
+    private static bool IsWhole(SystemInfoResponse info) =>
+        info.Database?.AppliedMigrations is not null
+        && info.Dispatcher is not null
+        && info.Plugins is not null
+        && info.Routes is not null
+        && (info.Skills is null || info.Skills.Roles is not null)
+        && (info.Notifications is null || info.Notifications.Channels is not null);
 
     private static PluginLine Plugin(PluginDto plugin)
     {
@@ -1361,7 +1381,9 @@ public static partial class DoctorComposer
             }
         }
 
-        return (failures, first ?? journal.Failure, journal.MoreFailed || journal.Truncated || journal.Failure is not null);
+        // Cut short wherever failures may exist that were not read: the journal named more, stopped partway or failed, or
+        // an item it named could not be read, or was not asked about once a read before it had timed out.
+        return (failures, first ?? journal.Failure, first is not null || journal.MoreFailed || journal.Truncated || journal.Failure is not null);
     }
 
     /// <summary>
@@ -1472,8 +1494,9 @@ public static partial class DoctorComposer
 
     /// <summary>
     /// What the status checks read through, inside a bundle: <c>system.info</c> as the bundle carries it, so a fact they
-    /// compose from it quotes nothing <see cref="SystemInfoWithheld"/> leaves out. An answer that is not an object passes
-    /// as it came, and the checks make of it what they make of it anywhere.
+    /// compose from it quotes nothing <see cref="SystemInfoWithheld"/> leaves out. An answer that cannot be read as one, or
+    /// that leaves out a section the checks go into (<see cref="IsWhole"/>), reaches them as no answer at all, which they
+    /// say as nothing having answered.
     /// </summary>
     private sealed class ProjectedSystemInfo(HttpMessageHandler inner) : DelegatingHandler(inner)
     {
@@ -1500,7 +1523,7 @@ public static partial class DoctorComposer
             }
 
             response.Content.Dispose();
-            if (answer is null)
+            if (answer is null || !IsWhole(answer))
             {
                 response.StatusCode = HttpStatusCode.BadGateway;
                 response.Content = new StringContent(string.Empty);

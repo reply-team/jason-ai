@@ -128,15 +128,13 @@ public class RuntimeStartCommandTests
     /// <summary>
     /// A runtime that stops before it has a log has two files of its own that it reads first, and either one can be
     /// the reason: the data directory it has to prepare, and the settings it has to read. Naming only the first
-    /// sent a person whose settings file was the cause to a directory that was fine — and never a value from
-    /// either, since the file may hold anything.
+    /// sent a person whose settings file was the cause to a directory that was fine. The sentence names the two
+    /// paths; this verb reads neither file.
     /// </summary>
     [Fact]
     public async Task A_child_that_died_before_logging_started_names_the_settings_file_beside_the_data_directory()
     {
         using var dir = new TempPaths();
-        Directory.CreateDirectory(dir.Paths.ConfigDirectory);
-        await File.WriteAllTextAsync(dir.Paths.UserSettingsFile, "{\"Dispatcher\":{\"TickSeconds\":1,\n  SENTINEL_S_MALFORMED", Ct);
         var processes = new FakeProcessControl { OnLaunch = RuntimeVerbs.DiesWith(exitCode: 1) };
         var (env, output, _) = RuntimeVerbs.Environment(dir, RuntimeVerbs.EchoesTheDescriptor(dir), processes);
 
@@ -150,7 +148,6 @@ public class RuntimeStartCommandTests
             + $"or the data directory at '{dir.Paths.Root}' cannot be prepared.",
             message,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("SENTINEL_S_MALFORMED", message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -379,7 +376,7 @@ public class RuntimeStartCommandTests
     public async Task A_runtime_that_publishes_and_never_answers_does_not_carry_start_past_its_wait()
     {
         using var dir = new TempPaths();
-        var processes = new FakeProcessControl { OnLaunch = RuntimeVerbs.PublishesAfterAWhile(dir, RuntimeVerbs.Descriptor("rt_NEW")) };
+        var processes = new FakeProcessControl { OnLaunch = RuntimeVerbs.PublishedAtLaunch(dir, RuntimeVerbs.Descriptor("rt_NEW")) };
         var (env, output, _) = RuntimeVerbs.Environment(dir, new Silent(), processes);
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -397,6 +394,73 @@ public class RuntimeStartCommandTests
         Assert.DoesNotContain("did not publish", envelope.Message, StringComparison.Ordinal);
         Assert.True(envelope.Retryable);
         Assert.Single(processes.Launches);
+    }
+
+    /// <summary>
+    /// A runtime that published its descriptor and was answered for by something else did answer, and saying it did not
+    /// would send a person looking for a hung process. When the wait runs out, the sentence says what came back — never
+    /// any of it — and keeps what to do about it.
+    /// </summary>
+    [Theory]
+    [InlineData("refused", "nothing took the call at that address")]
+    [InlineData("token", "what answered there did not accept the token the descriptor holds")]
+    [InlineData("error", "what answered there answered with an error")]
+    [InlineData("instance", "what answered there is another runtime instance than the one the descriptor names")]
+    [InlineData("unreadable", "what answered there gave an answer that is not a runtime's")]
+    [InlineData("not_http", "what answered there gave an answer that is not a runtime's")]
+    [InlineData("cut_short", "what answered there gave an answer that is not a runtime's")]
+    public async Task A_runtime_that_published_and_was_answered_for_otherwise_is_said_as_what_came_back(string answer, string said)
+    {
+        using var dir = new TempPaths();
+        var processes = new FakeProcessControl { OnLaunch = RuntimeVerbs.PublishedAtLaunch(dir, RuntimeVerbs.Descriptor("rt_NEW")) };
+        var handler = new FakeHandler(_ => answer switch
+        {
+            // The client's own word for each: a connection nothing took, an answer that is not HTTP, and one cut short.
+            // The last two were taken, so they are never "nothing took the call".
+            "refused" => throw new HttpRequestException(HttpRequestError.ConnectionError, "SENTINEL_REFUSED"),
+            "not_http" => throw new HttpRequestException(HttpRequestError.InvalidResponse, "SENTINEL_NOT_HTTP"),
+            "cut_short" => throw new HttpRequestException(HttpRequestError.ResponseEnded, "SENTINEL_CUT_SHORT"),
+            "token" => RuntimeVerbs.Response(System.Net.HttpStatusCode.Unauthorized, """{"error":{"code":"unauthorized","message":"SENTINEL_TOKEN","retryable":false}}"""),
+            "error" => RuntimeVerbs.Response(System.Net.HttpStatusCode.InternalServerError, """{"error":{"code":"internal_error","message":"SENTINEL_ERROR","retryable":true}}"""),
+            "instance" => RuntimeVerbs.Response(System.Net.HttpStatusCode.OK, RuntimeVerbs.InfoJson("rt_SENTINEL_OTHER")),
+            _ => RuntimeVerbs.Response(System.Net.HttpStatusCode.OK, "SENTINEL_BODY"),
+        });
+        var (env, output, _) = RuntimeVerbs.Environment(dir, handler, processes);
+
+        var exit = await RuntimeStartCommand.RunAsync(env, human: false, Ct, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var envelope = RuntimeVerbs.Envelope(output.ToString());
+        Assert.Contains($"published an endpoint descriptor at {RuntimeVerbs.BaseUrl}, and {said}", envelope.Message, StringComparison.Ordinal);
+        Assert.Contains("still running", envelope.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("did not answer", envelope.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("SENTINEL", envelope.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A descriptor read when the wait has already run out is not asked about: a question with no time left to put it
+    /// in says nothing of the runtime, and taking it for silence said a runtime that was never asked did not answer.
+    /// </summary>
+    [Fact]
+    public async Task A_runtime_that_published_as_the_wait_ran_out_is_said_not_to_have_been_asked()
+    {
+        using var dir = new TempPaths();
+        var processes = new FakeProcessControl
+        {
+            OnLaunch = _ =>
+            {
+                dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_NEW"));
+                return new FakeProcessHandle(4242);
+            },
+        };
+        var (env, output, _) = RuntimeVerbs.Environment(dir, RuntimeVerbs.NeverCalled(), processes);
+
+        var exit = await RuntimeStartCommand.RunAsync(env, human: false, Ct, TimeSpan.Zero, RuntimeVerbs.Poll);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var message = RuntimeVerbs.Envelope(output.ToString()).Message;
+        Assert.Contains($"published an endpoint descriptor at {RuntimeVerbs.BaseUrl}, and the wait had run out before it could be asked whether it answers", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("did not answer", message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -448,7 +512,14 @@ public class RuntimeStartCommandTests
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Single(processes.Launches);
         Assert.Contains("rt_NEW", output.ToString(), StringComparison.Ordinal);
-        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(15), $"the stale descriptor held the launch for {clock.Elapsed.TotalSeconds:F1} s");
+
+        // The bound, and a margin for everything else the start does here — the child publishes after a moment and
+        // is polled every few milliseconds — wide enough for a loaded machine and narrow enough that a question
+        // allowed twice the bound would not fit in it.
+        var margin = TimeSpan.FromSeconds(3);
+        Assert.True(
+            clock.Elapsed < RuntimeStartCommand.PreLaunchBound + margin,
+            $"the stale descriptor held the launch for {clock.Elapsed.TotalSeconds:F1} s, more than the {RuntimeStartCommand.PreLaunchBound.TotalSeconds:F0} s bound and a {margin.TotalSeconds:F0} s margin");
     }
 
     /// <summary>
@@ -566,7 +637,12 @@ public class RuntimeStartCommandTests
 
         Assert.True(clock.Elapsed < TimeSpan.FromSeconds(10), $"a child that exited after 0.5 s was found out after {clock.Elapsed.TotalSeconds:F1} s of a 30 s wait: {output}");
         Assert.Equal(ExitCodes.ApiError, exit);
-        Assert.Contains("exited with code 1", RuntimeVerbs.Envelope(output.ToString()).Message, StringComparison.Ordinal);
+        var message = RuntimeVerbs.Envelope(output.ToString()).Message;
+        Assert.Contains("exited with code 1", message, StringComparison.Ordinal);
+
+        // It had published one, and is not said to have exited before it did.
+        Assert.Contains($"after publishing an endpoint descriptor at {RuntimeVerbs.BaseUrl}, and it did not answer", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("before publishing", message, StringComparison.Ordinal);
     }
 
     /// <summary>A runtime that accepts the call and never answers it: it ends only when the caller's token does.</summary>

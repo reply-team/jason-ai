@@ -16,8 +16,13 @@ namespace Jason.Runtime.Persistence;
 /// </remarks>
 public sealed class UnreadableStoredValueException : Exception
 {
+    /// <remarks>
+    /// The sentence says only what is known: a value this version of the runtime did not write. That is a hand edit as
+    /// often as it is a newer version of Jason that wrote a value this one does not know, and for the second the remedy is
+    /// that version, not a repair that throws data away.
+    /// </remarks>
     private UnreadableStoredValueException(string column, string failure)
-        : base($"The value stored in {column} cannot be read ({failure}). The database was changed outside this runtime; that value has to be repaired or removed before the runtime can read it.")
+        : base($"The value stored in {column} cannot be read ({failure}). It was written by another version of Jason, or changed outside it; run the version that wrote it, or restore or repair that value, before this runtime can read it.")
     {
         Column = column;
         Failure = failure;
@@ -38,4 +43,39 @@ public sealed class UnreadableStoredValueException : Exception
 
     /// <summary>Text that names no value of the enum, which is not repeated: whoever edited the column could have typed anything.</summary>
     internal static UnreadableStoredValueException NotA(string column, string enumName) => new(column, $"not a stored {enumName}");
+
+    /// <summary>The JSON literal null, which is valid JSON and no value: a column that holds it holds nothing to read.</summary>
+    internal static UnreadableStoredValueException Null(string column) => new(column, "the JSON literal null");
+
+    /// <summary>
+    /// The unreadable stored value inside a failure, however it was wrapped — as an inner exception, or as one of an
+    /// aggregate's failures — or null where there is none.
+    /// </summary>
+    public static UnreadableStoredValueException? In(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        var pending = new Stack<Exception>();
+        pending.Push(exception);
+        while (pending.TryPop(out var current))
+        {
+            if (current is UnreadableStoredValueException stored)
+            {
+                return stored;
+            }
+
+            if (current is AggregateException aggregate)
+            {
+                foreach (var inner in aggregate.InnerExceptions.Reverse())
+                {
+                    pending.Push(inner);
+                }
+            }
+            else if (current.InnerException is { } inner)
+            {
+                pending.Push(inner);
+            }
+        }
+
+        return null;
+    }
 }

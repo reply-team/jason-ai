@@ -61,7 +61,10 @@ public static partial class LogFiles
                 }
                 catch (FileNotFoundException)
                 {
-                    // Gone since it was listed, or a link to nothing: not a file to read.
+                    // Gone since it was listed: not a file to read. Windows lists a file's size with its name, but
+                    // elsewhere the listing carries the name alone and the size is read from the file when it is asked
+                    // for, so the oldest file, removed by the runtime's retention between the two, is not there to
+                    // measure. The gap is between two calls to the system, which no test can open on purpose.
                 }
             }
         }

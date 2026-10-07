@@ -1,4 +1,5 @@
 using System.Text;
+using Jason.Contracts.Configuration;
 using Jason.Runtime.Configuration;
 using Microsoft.Extensions.Configuration;
 
@@ -58,6 +59,34 @@ public sealed class SafeBindingShapeTests
         Assert.Equal([expected], failures);
     }
 
+    /// <summary>
+    /// A class that holds one of its own: the walk follows what the file wrote and nothing it did not, so a section left
+    /// out ends it rather than a chain of absent sections walked without end, and a value written at any depth of the
+    /// chain is still read by its path and its type.
+    /// </summary>
+    [Fact]
+    public void A_class_that_holds_one_of_its_own_is_walked_as_deep_as_the_file_wrote_it_and_no_deeper()
+    {
+        var shallow = Bound("""{"Shapes":{"Limit":"7","Head":{"Value":1}}}""", out var none);
+        Assert.Null(none);
+        Assert.Equal(1, shallow.Head!.Value);
+        Assert.Null(shallow.Head.Next);
+
+        Bound("""{"Shapes":{"Head":{"Value":1,"Next":{"Value":2,"Next":{"Value":["SENTINEL"]}}}}}""", out var failures);
+
+        Assert.Equal([SettingKey.ShownPath("Shapes:Head:Next:Next:Value", new HashSet<string>()) + " could not be read as System.Int32."], failures);
+    }
+
+    /// <summary>A value computed from the others is no setting, and whatever is written where its name would be is not refused as one.</summary>
+    [Fact]
+    public void Whatever_is_written_onto_a_computed_value_is_not_refused_as_a_setting()
+    {
+        var shapes = Bound("""{"Shapes":{"Limit":"7","Summary":{"x":"SENTINEL"}}}""", out var failures);
+
+        Assert.Null(failures);
+        Assert.Equal("limit 7", shapes.Summary);
+    }
+
     private static Shapes Bound(string settings, out IReadOnlyList<string>? failures)
     {
         var configuration = new ConfigurationBuilder().AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(settings))).Build();
@@ -95,5 +124,18 @@ public sealed class SafeBindingShapeTests
         public List<int> Counts { get; set; } = [];
 
         public Dictionary<string, Mode> Modes { get; set; } = new(StringComparer.Ordinal);
+
+        public Node? Head { get; set; }
+
+        /// <summary>Computed from the others: there is nothing to set.</summary>
+        public string Summary => $"limit {Limit}";
+    }
+
+    /// <summary>A class that holds one of its own.</summary>
+    public sealed class Node
+    {
+        public int Value { get; set; }
+
+        public Node? Next { get; set; }
     }
 }

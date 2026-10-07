@@ -177,6 +177,44 @@ public class ConversionsTests
         Assert.True(offences.Count == 0, $"{offences.Count} of {columns.Count} columns refused the text the wrong way:{Environment.NewLine}{string.Join(Environment.NewLine, offences)}");
     }
 
+    /// <summary>
+    /// Valid JSON of the wrong shape — what the database's own check accepts — fails in whatever reads it, and not only
+    /// with the parser's exception: a list where an object belongs, an object where a list does, the literal null where a
+    /// value does. Whatever the reader threw, every such column refuses it as an unreadable stored value, by its name, so
+    /// the log sites and the start that recognise that exception say it, and nothing else escapes.
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(JsonObjectConverter), "[]")]
+    [InlineData(typeof(JsonObjectConverter), "\"SENTINEL_STORED\"")]
+    [InlineData(typeof(JsonObjectConverter), "null")]
+    [InlineData(typeof(JsonArrayConverter), "{}")]
+    [InlineData(typeof(JsonArrayConverter), "null")]
+    [InlineData(typeof(JsonNodeConverter), "null")]
+    [InlineData(typeof(JsonTextConverter<>), "[]")]
+    [InlineData(typeof(JsonTextConverter<>), "null")]
+    [InlineData(typeof(StringListConverter), "{}")]
+    [InlineData(typeof(StringListConverter), "null")]
+    public void Every_stored_column_refuses_json_of_the_wrong_shape_as_an_unreadable_stored_value(Type kind, string stored)
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var columns = db.Model.GetEntityTypes()
+            .SelectMany(entity => entity.GetProperties()
+                .Where(property => property.GetValueConverter() is { } converter
+                    && (converter.GetType() == kind || (converter.GetType().IsGenericType && converter.GetType().GetGenericTypeDefinition() == kind)))
+                .Select(property => (Name: $"{entity.GetTableName()}.{property.GetColumnName()}", Converter: property.GetValueConverter()!)))
+            .ToList();
+        Assert.NotEmpty(columns);
+
+        Assert.All(columns, column =>
+        {
+            var refused = Assert.IsType<UnreadableStoredValueException>(Record.Exception(() => column.Converter.ConvertFromProvider(stored)));
+            Assert.Equal(column.Name, refused.Column);
+            Assert.Null(refused.InnerException);
+            Assert.DoesNotContain("SENTINEL_STORED", refused.ToString(), StringComparison.Ordinal);
+        });
+    }
+
     [Fact]
     public void Json_context_round_trips_and_in_place_edits_are_detected()
     {
