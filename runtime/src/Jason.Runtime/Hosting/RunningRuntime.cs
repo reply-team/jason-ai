@@ -1,26 +1,32 @@
 using Jason.Contracts.Discovery;
 using Jason.Runtime.Discovery;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Serilog.Core;
 
 namespace Jason.Runtime.Hosting;
 
-/// <summary>A started runtime: the listening API, its descriptor, the instance lock and the logger, torn down in order.</summary>
+/// <summary>
+/// A started runtime: the listening API, its descriptor, the instance lock, the configuration and the logger, torn down
+/// in order.
+/// </summary>
 public sealed class RunningRuntime : IAsyncDisposable
 {
     private readonly WebApplication _app;
     private readonly JasonPaths _paths;
     private readonly InstanceLock _lock;
+    private readonly ConfigurationRoot _configuration;
     private readonly Logger _logger;
     private bool _stopped;
 
-    internal RunningRuntime(WebApplication app, RuntimeDescriptor descriptor, JasonPaths paths, InstanceLock instanceLock, Logger logger)
+    internal RunningRuntime(WebApplication app, RuntimeDescriptor descriptor, JasonPaths paths, InstanceLock instanceLock, ConfigurationRoot configuration, Logger logger)
     {
         _app = app;
         Descriptor = descriptor;
         _paths = paths;
         _lock = instanceLock;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -57,6 +63,11 @@ public sealed class RunningRuntime : IAsyncDisposable
             new DescriptorPublisher(_paths).Remove();
             _lock.Dispose();
             await _app.DisposeAsync().ConfigureAwait(false);
+
+            // The configuration watches the settings file, and that watch is an inotify instance on Linux: a per-user
+            // budget every process shares. Left to the finalizer, each runtime started and stopped in one process —
+            // every in-process test host — kept its watch until a collection happened to run.
+            _configuration.Dispose();
             _logger.Information("Runtime {InstanceId} stopped", Descriptor.InstanceId);
             await _logger.DisposeAsync().ConfigureAwait(false);
         }

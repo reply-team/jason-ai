@@ -274,7 +274,8 @@ public class OptionsValidationTests
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
         File.WriteAllText(dir.Paths.UserSettingsFile, """{"Runtime":{"Port":70000}}""");
 
-        var error = Assert.Throws<InvalidSettingsException>(() => JasonConfiguration.Load(JasonConfiguration.Build(dir.Paths, null)));
+        using var configuration = JasonConfiguration.Build(dir.Paths, null);
+        var error = Assert.Throws<InvalidSettingsException>(() => JasonConfiguration.Load(configuration));
 
         Assert.Contains("Runtime:Port must be between 0 and 65535; got 70000.", error.Message, StringComparison.Ordinal);
     }

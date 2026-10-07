@@ -9,7 +9,8 @@ public class JasonConfigurationTests
     public void Defaults_apply_when_nothing_is_configured()
     {
         using var dir = new TempDataDir();
-        var options = JasonConfiguration.Load(JasonConfiguration.Build(dir.Paths, shippedSettingsDirectory: null));
+        using var configuration = JasonConfiguration.Build(dir.Paths, shippedSettingsDirectory: null);
+        var options = JasonConfiguration.Load(configuration);
         Assert.Equal(0, options.Runtime.Port);
         Assert.Equal("Information", options.Logging.MinimumLevel);
         Assert.Equal(14, options.Logging.RetainedFileCountLimit);
@@ -25,7 +26,8 @@ public class JasonConfigurationTests
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
         File.WriteAllText(dir.Paths.UserSettingsFile, """{"Dispatcher":{"TickSeconds":3,"RetryDelaySeconds":0,"AiRole":{"MaxAttempts":2}}}""");
 
-        var options = JasonConfiguration.Load(JasonConfiguration.Build(dir.Paths, null));
+        using var configuration = JasonConfiguration.Build(dir.Paths, null);
+        var options = JasonConfiguration.Load(configuration);
 
         Assert.Equal(3, options.Dispatcher.TickSeconds);
         Assert.Equal(0, options.Dispatcher.RetryDelaySeconds);
@@ -43,7 +45,8 @@ public class JasonConfigurationTests
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
         File.WriteAllText(dir.Paths.UserSettingsFile, """{"Runtime":{"Port":2222}}""");
 
-        var options = JasonConfiguration.Load(JasonConfiguration.Build(dir.Paths, shipped));
+        using var configuration = JasonConfiguration.Build(dir.Paths, shipped);
+        var options = JasonConfiguration.Load(configuration);
 
         Assert.Equal(2222, options.Runtime.Port);
         Assert.Equal("Debug", options.Logging.MinimumLevel);
@@ -64,7 +67,7 @@ public class JasonConfigurationTests
         Environment.SetEnvironmentVariable(variable, "from the environment");
         try
         {
-            var configuration = JasonConfiguration.Build(dir.Paths, null);
+            using var configuration = JasonConfiguration.Build(dir.Paths, null);
 
             Assert.Equal("from the environment", configuration["Probe:Value"]);
             Assert.Equal("file", configuration["Probe:Only"]);
@@ -82,7 +85,8 @@ public class JasonConfigurationTests
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
         File.WriteAllText(dir.Paths.UserSettingsFile, """{"Runtime":{"Port":70000},"Logging":{"MinimumLevel":"Loud","RetainedFileCountLimit":0}}""");
 
-        var error = Assert.Throws<InvalidSettingsException>(() => JasonConfiguration.Load(JasonConfiguration.Build(dir.Paths, null)));
+        using var configuration = JasonConfiguration.Build(dir.Paths, null);
+        var error = Assert.Throws<InvalidSettingsException>(() => JasonConfiguration.Load(configuration));
 
         Assert.Contains("Runtime:Port", error.Message, StringComparison.Ordinal);
         Assert.Contains("Logging:MinimumLevel", error.Message, StringComparison.Ordinal);
@@ -102,7 +106,8 @@ public class JasonConfigurationTests
         Directory.CreateDirectory(dir.Paths.ConfigDirectory);
         File.WriteAllText(dir.Paths.UserSettingsFile, """{"Dispatcher":{"Enabled":"SENTINEL_E"}}""");
 
-        var error = Assert.Throws<InvalidSettingsException>(() => JasonConfiguration.Load(JasonConfiguration.Build(dir.Paths, null)));
+        using var configuration = JasonConfiguration.Build(dir.Paths, null);
+        var error = Assert.Throws<InvalidSettingsException>(() => JasonConfiguration.Load(configuration));
 
         Assert.Equal("Invalid Jason configuration: Dispatcher:Enabled could not be read as System.Boolean.", error.Message);
         Assert.Null(error.InnerException);

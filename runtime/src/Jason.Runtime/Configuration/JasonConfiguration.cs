@@ -1,6 +1,7 @@
 using Jason.Contracts.Discovery;
 using Jason.Runtime.Notifications;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -84,7 +85,11 @@ public static class JasonConfiguration
     /// load happens inside <c>Build</c>, and every later one happens after it.
     /// </para>
     /// </remarks>
-    public static IConfigurationRoot Build(JasonPaths paths, string? shippedSettingsDirectory, Action<SettingsFileFailure>? onReloadFailure = null)
+    /// <returns>
+    /// The configuration, owned by the caller: it watches the settings file, and on Linux that watch is an inotify
+    /// instance from a per-user limit every process shares, released only when the configuration is disposed.
+    /// </returns>
+    public static ConfigurationRoot Build(JasonPaths paths, string? shippedSettingsDirectory, Action<SettingsFileFailure>? onReloadFailure = null)
     {
         ArgumentNullException.ThrowIfNull(paths);
         var builder = new ConfigurationBuilder();
@@ -129,7 +134,7 @@ public static class JasonConfiguration
             }
         }
 
-        builder.AddJsonFile(source =>
+        builder.Add<SettingsFileSource>(source =>
         {
             source.Path = paths.UserSettingsFile;
             source.Optional = true;
@@ -150,13 +155,36 @@ public static class JasonConfiguration
             };
         });
         builder.AddEnvironmentVariables(EnvironmentPrefix);
-        var configuration = builder.Build();
+        var configuration = (ConfigurationRoot)builder.Build();
         started = true;
         return configuration;
     }
 
     /// <summary>A failure that has been reported, and the state of the file it was reported for.</summary>
     private sealed record ReportedFailure(SettingsFileFailure Failure, DateTime WrittenAt, long Length);
+
+    /// <summary>
+    /// The settings file's source, whose provider disposes the file provider it watches through. The framework's
+    /// provider leaves that to whoever made it, and nothing else holds it, so disposing the configuration left the
+    /// watch — an inotify instance on Linux — to the finalizer.
+    /// </summary>
+    private sealed class SettingsFileSource : JsonConfigurationSource
+    {
+        public override IConfigurationProvider Build(IConfigurationBuilder builder)
+        {
+            EnsureDefaults(builder);
+            return new SettingsFileProvider(this);
+        }
+    }
+
+    private sealed class SettingsFileProvider(SettingsFileSource source) : JsonConfigurationProvider(source)
+    {
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            (Source.FileProvider as IDisposable)?.Dispose();
+        }
+    }
 
     /// <summary>
     /// The pre-host load of what the host needs before it exists. Only the port and the logging settings are

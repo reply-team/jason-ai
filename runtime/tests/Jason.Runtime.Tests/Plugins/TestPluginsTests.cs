@@ -71,7 +71,7 @@ public class TestPluginsTests
         TestPlugins.Grant(dir.Paths, "fake", env: ["A"]);
         TestPlugins.Grant(dir.Paths, "other", exec: ["dotnet"], http: ["localhost:5555"]);
 
-        var configuration = JasonConfiguration.Build(dir.Paths, null);
+        using var configuration = JasonConfiguration.Build(dir.Paths, null);
         Assert.Equal(["A"], configuration.GetSection("Plugins:Grants:fake:Env").Get<string[]>()!);
         Assert.Equal(["dotnet"], configuration.GetSection("Plugins:Grants:other:Exec").Get<string[]>()!);
         Assert.Equal(["localhost:5555"], configuration.GetSection("Plugins:Grants:other:Http").Get<string[]>()!);
@@ -88,7 +88,8 @@ public class TestPluginsTests
         TestPlugins.Grant(dir.Paths, TestPlugins.FakeProviderId, exec: ["*"], env: ["FAKE_TOKEN"]);
 
         var options = new PluginsOptions();
-        JasonConfiguration.Build(dir.Paths, null).GetSection(PluginsOptions.Section).Bind(options);
+        using var configuration = JasonConfiguration.Build(dir.Paths, null);
+        configuration.GetSection(PluginsOptions.Section).Bind(options);
 
         Assert.Equal(["*"], options.Grants[TestPlugins.FakeProviderId].Exec);
         Assert.Equal(["FAKE_TOKEN"], options.Grants[TestPlugins.FakeProviderId].Env);

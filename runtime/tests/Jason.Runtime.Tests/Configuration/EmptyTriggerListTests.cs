@@ -134,7 +134,8 @@ public sealed class EmptyTriggerListTests
         File.WriteAllText(dir.Paths.UserSettingsFile, json);
         var options = new ManagerOptions();
 
-        ManagerOptions.Fill(JasonConfiguration.Build(dir.Paths, shippedSettingsDirectory: null).GetSection(ManagerOptions.Section), options);
+        using var configuration = JasonConfiguration.Build(dir.Paths, shippedSettingsDirectory: null);
+        ManagerOptions.Fill(configuration.GetSection(ManagerOptions.Section), options);
         return options;
     }
 

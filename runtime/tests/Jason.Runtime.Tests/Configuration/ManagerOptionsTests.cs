@@ -102,7 +102,8 @@ public class ManagerOptionsTests
         File.WriteAllText(dir.Paths.UserSettingsFile, """{"Manager":{"Triggers":["workitem_failed"]}}""");
 
         var options = new ManagerOptions();
-        ManagerOptions.Fill(JasonConfiguration.Build(dir.Paths, shippedSettingsDirectory: null).GetSection(ManagerOptions.Section), options);
+        using var configuration = JasonConfiguration.Build(dir.Paths, shippedSettingsDirectory: null);
+        ManagerOptions.Fill(configuration.GetSection(ManagerOptions.Section), options);
 
         // Nothing refuses it — it is a legitimate configuration — so this is the test that records the cost,
         // and the contract page is where somebody is told before they type it.
@@ -166,9 +167,8 @@ public class ManagerOptionsTests
         File.WriteAllText(dir.Paths.UserSettingsFile, """{"Manager":{"ReviewSeconds":600}}""");
 
         var options = new ManagerOptions();
-        ManagerOptions.Fill(
-            JasonConfiguration.Build(dir.Paths, shippedSettingsDirectory: null).GetSection(ManagerOptions.Section),
-            options);
+        using var configuration = JasonConfiguration.Build(dir.Paths, shippedSettingsDirectory: null);
+        ManagerOptions.Fill(configuration.GetSection(ManagerOptions.Section), options);
 
         Assert.Equal(ManagerOptions.Default, options.Triggers);
     }
@@ -184,9 +184,8 @@ public class ManagerOptionsTests
             """{"Manager":{"ReviewSeconds":600,"Triggers":["workitem_failed"],"MaxAttempts":2}}""");
 
         var options = new ManagerOptions();
-        ManagerOptions.Fill(
-            JasonConfiguration.Build(dir.Paths, shippedSettingsDirectory: null).GetSection(ManagerOptions.Section),
-            options);
+        using var configuration = JasonConfiguration.Build(dir.Paths, shippedSettingsDirectory: null);
+        ManagerOptions.Fill(configuration.GetSection(ManagerOptions.Section), options);
 
         Assert.Equal(600, options.ReviewSeconds);
 

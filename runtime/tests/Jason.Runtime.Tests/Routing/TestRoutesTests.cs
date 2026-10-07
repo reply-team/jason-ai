@@ -18,7 +18,7 @@ public class TestRoutesTests
 
         TestRoutes.WriteGlobal(dir.Paths, TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, new JsonObject { ["workspace"] = "west" }));
 
-        var configuration = JasonConfiguration.Build(dir.Paths, null);
+        using var configuration = JasonConfiguration.Build(dir.Paths, null);
         var options = RoutesOptions.Read(configuration.GetSection(RoutesOptions.Section));
 
         Assert.Equal(TestPlugins.FakeProviderId, options.Default!.Plugin);
@@ -41,7 +41,7 @@ public class TestRoutesTests
 
         foreach (var paths in new[] { first.Paths, second.Paths })
         {
-            var configuration = JasonConfiguration.Build(paths, null);
+            using var configuration = JasonConfiguration.Build(paths, null);
             Assert.Equal(["A"], configuration.GetSection($"Plugins:Grants:{TestPlugins.FakeProviderId}:Env").Get<string[]>()!);
             Assert.Equal(TestPlugins.FakeProviderId, configuration["Routes:Default:Plugin"]);
         }
@@ -56,7 +56,7 @@ public class TestRoutesTests
         TestRoutes.WriteGlobal(dir.Paths, TestRoutes.GlobalDefault(TestPlugins.FakeProviderId, new JsonObject { ["workspace"] = "west" }));
         TestRoutes.WriteGlobal(dir.Paths, TestRoutes.GlobalDefault(TestPlugins.OtherProviderId));
 
-        var configuration = JasonConfiguration.Build(dir.Paths, null);
+        using var configuration = JasonConfiguration.Build(dir.Paths, null);
         var options = RoutesOptions.Read(configuration.GetSection(RoutesOptions.Section));
 
         Assert.Equal(TestPlugins.OtherProviderId, options.Default!.Plugin);

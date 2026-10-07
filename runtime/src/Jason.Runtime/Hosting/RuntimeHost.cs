@@ -70,11 +70,25 @@ public static class RuntimeHost
             paths,
             options.ShippedSettingsDirectory,
             failure => ReportUnreadableSettings(logger, failure, Volatile.Read(ref settingsRead)));
-        var settings = JasonConfiguration.Load(configuration);
 
-        // The lock comes first: a second runtime must fail with RuntimeAlreadyRunningException, not with a
-        // sharing violation on the rolling log file the first runtime already holds open.
-        var instanceLock = InstanceLock.Acquire(paths);
+        // From here the configuration holds a watch on the settings file, so every way out of this start that does not
+        // hand it to the running runtime disposes it — a refused start included, which a test process repeats many times.
+        JasonSettings settings;
+        InstanceLock instanceLock;
+        try
+        {
+            settings = JasonConfiguration.Load(configuration);
+
+            // The lock comes first: a second runtime must fail with RuntimeAlreadyRunningException, not with a
+            // sharing violation on the rolling log file the first runtime already holds open.
+            instanceLock = InstanceLock.Acquire(paths);
+        }
+        catch
+        {
+            configuration.Dispose();
+            throw;
+        }
+
         WebApplication? app = null;
         try
         {
@@ -136,7 +150,7 @@ public static class RuntimeHost
             var descriptor = new DescriptorPublisher(paths).Publish(info, new Uri(address), token);
             logger.Information("Runtime API listening on {BaseUrl}; descriptor published at {Descriptor}", descriptor.BaseUrl, paths.DescriptorFile);
 
-            return new RunningRuntime(app, descriptor, paths, instanceLock, logger);
+            return new RunningRuntime(app, descriptor, paths, instanceLock, configuration, logger);
         }
         catch
         {
@@ -145,6 +159,7 @@ public static class RuntimeHost
                 await app.DisposeAsync().ConfigureAwait(false);
             }
 
+            configuration.Dispose();
             instanceLock.Dispose();
             if (logger is not null)
             {
@@ -267,7 +282,15 @@ public static class RuntimeHost
         Logger logger,
         out IReadOnlyList<Type> seams)
     {
-        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { Args = [], ContentRootPath = paths.Root });
+        // The builder sets up its default appsettings sources as it is created, with reload on change, and that starts a
+        // watch on the content root — the whole data directory, every subdirectory included — before the sources are
+        // cleared below; clearing them does not stop it. The one setting that decides it is read from these arguments
+        // at creation, and they outrank a DOTNET_ variable saying otherwise.
+        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
+        {
+            Args = ["--hostBuilder:reloadConfigOnChange=false"],
+            ContentRootPath = paths.Root,
+        });
 
         // The runtime's own settings come from the standalone configuration root below, so the web host reads no
         // ambient configuration: no DOTNET_/ASPNETCORE_ variables, no appsettings.json next to the binary. One
