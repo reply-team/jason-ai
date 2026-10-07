@@ -113,6 +113,69 @@ public partial class InteractiveSkillTests
         Assert.Contains("do not send somebody to the logs expecting to find what was actually sent to a provider", skill, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The four readings come before any diagnostic file, the dry run included. Said as advice, a host read
+    /// "Look here first" and ran <c>jason doctor --dry-run</c> as its very first command; the file is for what
+    /// the readings cannot explain, and nobody knows what that is before reading them.
+    /// </summary>
+    [Fact]
+    public void The_troubleshooting_skill_makes_its_four_readings_binding_before_any_doctor()
+    {
+        var skill = Flattened("troubleshooting-jason");
+
+        Assert.Contains(
+            "**Before any `jason doctor` — the dry run included — run these four readings, in this order. A diagnostic file is for what they cannot explain, and you cannot know that before you have read them.** Each one can end the investigation on its own, and each one makes the next easier to read.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("Four readings before you form an opinion.", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A person a notification sent because protective work failed arrives with campaign ids and no work item. The
+    /// failed items are named by the third reading, so it comes first there; and the paragraph sits after the four
+    /// readings it refers to and before the three that stay advice.
+    /// </summary>
+    [Fact]
+    public void The_troubleshooting_skill_says_what_to_read_when_a_notification_brought_the_person()
+    {
+        var skill = Flattened("troubleshooting-jason");
+        const string Paragraph =
+            "**When a notification brought them here.** A person may arrive because a notification said protective actions failed in campaigns it names by id. The failed and expired work items of those campaigns are the subject: the third reading above, once for each id it names, and without `--campaign` when it says there are more. Each item it lists is then read as this skill reads a failed item. The four readings are binding here too, before anything else; here the third comes before the second, because it is what names the items.";
+
+        var at = skill.IndexOf(Paragraph, StringComparison.Ordinal);
+        Assert.True(at >= 0, "the paragraph for a person a notification brought is not in the skill, word for word.");
+        Assert.True(at > skill.IndexOf("jason journal list --campaign", StringComparison.Ordinal), "the paragraph comes before the four readings it refers to.");
+        Assert.True(at < skill.IndexOf("Three further readings", StringComparison.Ordinal), "the paragraph comes after the readings that stay advice.");
+    }
+
+    /// <summary>
+    /// After the dry run, one question and nothing else. A host that offered a report instead, or beside the file, left
+    /// the person choosing between things they had not asked about, and wrote nothing they had.
+    /// </summary>
+    [Fact]
+    public void The_troubleshooting_skill_asks_one_question_after_the_dry_run_and_offers_nothing_else()
+    {
+        var skill = Flattened("troubleshooting-jason");
+
+        Assert.Contains(
+            "It writes nothing; it lists what a plain run would write, and where. **Then ask the person one question — may I write the file? — and stop. Offer no alternatives; a report written instead, or beside it, is not what they were asked about.** The bundle holds",
+            skill,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A conversation that already showed the dry run continues with "go ahead"; a host chooses by the description, so
+    /// the words a continuing conversation uses are there.
+    /// </summary>
+    [Fact]
+    public void The_troubleshooting_skill_is_chosen_by_the_words_a_continuing_conversation_uses()
+    {
+        Assert.Contains(
+            "collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.",
+            SkillFrontMatter.Read(SkillPack.Find("troubleshooting-jason").File).Top["description"],
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_troubleshooting_skill_tells_a_transient_end_from_a_refusal_and_from_a_lost_answer()
     {

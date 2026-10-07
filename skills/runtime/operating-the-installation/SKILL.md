@@ -2,7 +2,7 @@
 name: operating-the-installation
 description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, and installing Jason or taking it off again.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Operating the installation
@@ -11,7 +11,8 @@ This skill is about the installation, not about the work it performs. A person r
 Jason is up, why nothing is happening, what is installed, where work would go, or whether they are on the
 current version. Campaign work itself is `managed-campaign-work`.
 
-**Status: verified** against Claude Code 2.1.287. It covers what this build does and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. It covers what this build does and
+nothing else.
 
 Two things are true throughout and are easy to forget. **Nothing is registered until somebody asks**: Jason
 starts because you started it, or because somebody registered it to start at logon. And **no provider ships
@@ -128,9 +129,10 @@ the runtime by hand.
 
 ## Notifications
 
-When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — it tells them
-once, with a pointer: how many wait, and where to look. The toast, the operating system's own notification, is on by
-default and needs nothing set up; `jason runtime status --human` says on its `Notify:` line what each channel did last.
+When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — or when a
+protective action fails, it tells them once, with a pointer: how many, and where to look. The toast, the operating
+system's own notification, is on by default and needs nothing set up; `jason runtime status --human` says on its
+`Notify:` line what each channel did last.
 `Notifications:Enabled` set to `false` in `~/.jason/config/settings.json` turns all of it off, and
 `Notifications:Toast` set to `false` turns off the toast alone. `docs/notifications.md` says when a burst is said, and
 what a pointer never carries.

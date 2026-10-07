@@ -3,17 +3,22 @@ namespace Jason.App.Tests.Skills;
 public partial class InteractiveSkillTests
 {
     /// <summary>
-    /// The two skills that teach notifications are verified by the host that read them as they ship: the catalog's row
-    /// for each names that host, and the pack's own rule holds the row's digest to the text.
+    /// The two skills that teach notifications each said the pointer carries approvals and questions only, which stopped
+    /// being true when it began to carry failed protective work. A verified mark means a host read that exact body, so
+    /// with the sentence corrected each is a draft until a host reads the new one: the front matter and the body say
+    /// so, the catalog's bullet says so, and the catalog records no reading of it.
     /// </summary>
     [Theory]
-    [InlineData("approvals-and-questions", "Claude Code 2.1.289 (claude-opus-5) | 0.3.0")]
-    [InlineData("operating-the-installation", "Claude Code 2.1.287 (claude-opus-5) | 0.2.0")]
-    public void The_skills_that_teach_notifications_are_verified_by_the_host_that_read_them(string name, string reading)
+    [InlineData("approvals-and-questions")]
+    [InlineData("operating-the-installation")]
+    public void The_skills_that_teach_notifications_are_drafts_until_a_host_reads_their_new_sentence(string name)
     {
-        Assert.Equal("verified", SkillFrontMatter.Read(SkillPack.Find(name).File).Metadata.GetValueOrDefault("status"));
+        Assert.Equal("draft", SkillFrontMatter.Read(SkillPack.Find(name).File).Metadata.GetValueOrDefault("status"));
+        Assert.Contains("**Status: draft.** No agent host has read this text in the state it ships in.", Flattened(name), StringComparison.Ordinal);
+
         var catalog = File.ReadAllText(SkillPack.Catalog());
-        Assert.Contains($"| `{name}` | {reading} | `{SkillPack.BodyDigest(SkillPack.Find(name).File)}` |", catalog, StringComparison.Ordinal);
+        Assert.DoesNotContain($"| `{name}` | Claude Code", catalog, StringComparison.Ordinal);
+        Assert.Contains($"[`{name}`]({name}/SKILL.md) — **draft** until a host reads its new text.", catalog, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -44,10 +49,12 @@ public partial class InteractiveSkillTests
     {
         var skill = Flattened("approvals-and-questions");
 
-        // A notification brought them here: it says only how many wait, so both lists are read, and reacting to the
-        // notification approves nothing. A session that treated "you have 3 approvals" as the request would be
-        // deciding on a count.
-        Assert.Contains("A notification says only how many approvals and questions wait. When a person arrives because of one, list both — `jason approval list` and `jason decision list` — and present them as this skill says.", skill, StringComparison.Ordinal);
+        // A notification brought them here: it says how many wait, and may say protective actions failed, so both lists
+        // are read, the failed action goes to the skill that reads failures, and reacting to the notification approves
+        // nothing. A session that treated "you have 3 approvals" as the request would be deciding on a count; one that
+        // took the failed action for something to decide would put it in front of the person as a choice it is not.
+        Assert.Contains("A notification says how many approvals and questions wait, and may add that protective actions failed in campaigns it names by id. The approvals and questions are yours here: list both — `jason approval list` and `jason decision list` — and present them as this skill says; a failed action is not a decision, and `troubleshooting-jason` is where it is read.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("A notification says only how many approvals and questions wait.", skill, StringComparison.Ordinal);
         Assert.Contains("Nothing is approved by reacting to a notification: an approval is a person's decision, recorded as theirs.", skill, StringComparison.Ordinal);
 
         // The whole reason an approval exists is that a session is not entitled to answer it. A skill that

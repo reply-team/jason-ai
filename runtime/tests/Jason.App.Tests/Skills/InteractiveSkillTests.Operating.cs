@@ -2,6 +2,22 @@ namespace Jason.App.Tests.Skills;
 
 public partial class InteractiveSkillTests
 {
+    /// <summary>
+    /// When the pointer is sent: a person waited for, and a protective action that failed. A skill that named the first
+    /// alone would have a session tell a person that a notification about failed work cannot have come from Jason.
+    /// </summary>
+    [Fact]
+    public void The_operating_skill_says_a_failed_protective_action_is_told_as_well()
+    {
+        var skill = Flattened("operating-the-installation");
+
+        Assert.Contains(
+            "When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — or when a protective action fails, it tells them once, with a pointer: how many, and where to look.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("it tells them once, with a pointer: how many wait, and where to look.", skill, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_operating_skill_says_what_a_session_cannot_do_and_what_is_not_released_yet()
     {
