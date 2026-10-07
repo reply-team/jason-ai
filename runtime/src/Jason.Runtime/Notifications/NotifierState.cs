@@ -20,6 +20,7 @@ public sealed class NotifierState
     private Burst? _pending;
     private string? _inFlightId;
     private DateTime? _lastDeliveredAt;
+    private string? _deliveredThrough;
 
     public bool Started
     {
@@ -92,14 +93,33 @@ public sealed class NotifierState
         }
     }
 
-    /// <summary>Once per process: where to read from, the last delivery the watermark carried, and a burst to seed.</summary>
-    public void Start(int cursor, string? cursorPublicId, DateTime? lastDeliveredAt, Burst? seed)
+    /// <summary>
+    /// The line the last notification that reached anybody covered through: failed protective work is counted from the
+    /// line after it. Before any line was written it is where this process started reading, so history is not walked.
+    /// </summary>
+    public string? DeliveredThrough
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _deliveredThrough;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Once per process: where to read from, the last delivery the watermark carried, a burst to seed, and where the
+    /// count of failed protective work starts.
+    /// </summary>
+    public void Start(int cursor, string? cursorPublicId, DateTime? lastDeliveredAt, Burst? seed, string? deliveredThrough = null)
     {
         lock (_gate)
         {
             _cursor = cursor;
             _cursorPublicId = cursorPublicId;
             _lastDeliveredAt = lastDeliveredAt;
+            _deliveredThrough = deliveredThrough;
             _pending = seed;
             _started = true;
         }
@@ -152,7 +172,7 @@ public sealed class NotifierState
             }
 
             _pending = null;
-            request = new NotificationRequest(PublicId.New("ntf"), _cursorPublicId, _lastDeliveredAt, burst);
+            request = new NotificationRequest(PublicId.New("ntf"), _cursorPublicId, _lastDeliveredAt, burst, _deliveredThrough);
             _inFlightId = request.NotificationId;
             return true;
         }
@@ -199,6 +219,22 @@ public sealed class NotifierState
             if (_lastDeliveredAt is not { } last || at > last)
             {
                 _lastDeliveredAt = at;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A notification that covered through <paramref name="coveredThrough"/> reached somebody at this time: the floor
+    /// counts from here, and failed protective work is counted from the line after the one it covered.
+    /// </summary>
+    public void Delivered(DateTime at, string? coveredThrough)
+    {
+        lock (_gate)
+        {
+            if (_lastDeliveredAt is not { } last || at > last)
+            {
+                _lastDeliveredAt = at;
+                _deliveredThrough = coveredThrough;
             }
         }
     }

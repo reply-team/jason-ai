@@ -224,10 +224,10 @@ public static partial class DoctorComposer
     public const long HeaderBytes = 64L * 1024;
 
     /// <summary>
-    /// The most a bundle can be: the lists' budgets, one <see cref="SectionBytes"/> for each of the eight sections, the
+    /// The most a bundle can be: the lists' budgets, one <see cref="SectionBytes"/> for each of the nine sections, the
     /// header's budget, and a kilobyte for the names that hold them together.
     /// </summary>
-    public const long MaxBundleBytes = RecentErrorsBytes + SliceBytes + JournalEntriesBytes + (8 * SectionBytes) + HeaderBytes + 1024;
+    public const long MaxBundleBytes = RecentErrorsBytes + SliceBytes + JournalEntriesBytes + (9 * SectionBytes) + HeaderBytes + 1024;
 
     /// <summary>The most problem codes listed for one plugin; <c>problem_codes_truncated</c> says where there were more.</summary>
     public const int MaxProblemCodes = 20;
@@ -289,6 +289,7 @@ public static partial class DoctorComposer
     private const string Versions = "versions";
     private const string Status = "status";
     private const string Runtime = "runtime";
+    private const string Routes = "routes";
     private const string Config = "config";
     private const string Logs = "logs";
     private const string Journal = "journal";
@@ -331,6 +332,7 @@ public static partial class DoctorComposer
         "the database",
         "work/",
         "plugin packages",
+        "a route's account and its identity",
         "any setting or JASON_* value off the list",
         "journal values unless --include-journal: " + JournalCarries,
     ];
@@ -407,6 +409,7 @@ public static partial class DoctorComposer
             var runtime = await RuntimeAsync(reader, descriptor, env.Paths, cancellationToken).ConfigureAwait(false);
             var answered = runtime.Info is not null ? reader : null;
 
+            var routes = answered is null ? null : await RoutesAsync(answered, InstalledPlugins.Ids(env.Paths), cancellationToken).ConfigureAwait(false);
             var journal = answered is null ? null : await JournalAsync(answered, now, includeJournal, cancellationToken).ConfigureAwait(false);
             var workItems = answered is null ? null : await WorkItemsAsync(answered, journal, cancellationToken).ConfigureAwait(false);
             var versions = VersionsSection(runtime.Info);
@@ -421,6 +424,7 @@ public static partial class DoctorComposer
                 new(Versions, versions, versions.Count),
                 new(Status, JsonSerializer.SerializeToNode(status, Dialect)!, status.Checks.Count),
                 new(Runtime, runtime.Node, runtime.Plugins),
+                routes ?? new Section(Routes, NotReadSection(notRead), 0),
                 new(Config, config.Node, config.Items),
                 new(Logs, logs.Node, logs.Items),
                 journal?.Summary is { } summary ? new Section(Journal, summary, journal.Recent) : new Section(Journal, NotReadSection(notRead), 0),
@@ -686,6 +690,69 @@ public static partial class DoctorComposer
     internal sealed record VersionsLine(string Cli, string? Runtime, string? Api, string Os, string OsArchitecture, string ProcessArchitecture, string Dotnet);
 
     // ---- runtime -------------------------------------------------------------------------------------------------
+
+    /// <summary>One route as a bundle carries it: the operation, or <c>default</c>; the plugin; and whether it binds an account.</summary>
+    private sealed record RouteShown(string Operation, string PluginId, bool BindsAccount);
+
+    /// <summary>A campaign's own routes, by the campaign's public id.</summary>
+    private sealed record CampaignRoutesShown(string CampaignId, IReadOnlyList<RouteShown> Routes);
+
+    /// <summary>The routes in force, by the snapshots that froze them.</summary>
+    private sealed record RoutesShown(string RoutingSnapshotId, string PluginSnapshotId, IReadOnlyList<RouteShown> Global, IReadOnlyList<CampaignRoutesShown> Campaigns);
+
+    /// <summary>
+    /// Which plugin performs which operation, here and per campaign: the first question after whether the runtime is
+    /// running. Built by a projection that has no field for a binding or its identity, so nothing has to be taken out —
+    /// an account is withheld like a credential, and the identity with it, since a digest of a short account id is a
+    /// guess away from the account. An operation the catalogue does not know and a plugin this installation does not
+    /// hold are written as the settings write a key nobody chose; ids are written only when they are well formed.
+    /// </summary>
+    private static async Task<Section> RoutesAsync(Reader reader, IReadOnlySet<string> installed, CancellationToken cancellationToken)
+    {
+        var (routes, failure) = await reader.AskAsync<RoutesDto>(Operations.RouteList, new JsonObject(), cancellationToken).ConfigureAwait(false);
+        if (routes?.Global is null || routes.Campaigns is null)
+        {
+            return new Section(Routes, NotReadSection(failure ?? UnreadableAnswer), 0);
+        }
+
+        RouteShown Shown(string operation, RouteDto route) =>
+            new(operation, SettingKey.Shown(route.PluginId ?? string.Empty, installed), route.Binding is not null);
+
+        List<RouteShown> Rows(RouteDto? fallback, IReadOnlyDictionary<string, RouteDto>? operations)
+        {
+            var rows = new List<RouteShown>();
+            if (fallback is not null)
+            {
+                rows.Add(Shown("default", fallback));
+            }
+
+            foreach (var (operation, route) in operations ?? new Dictionary<string, RouteDto>())
+            {
+                if (route is not null)
+                {
+                    rows.Add(Shown(OperationShown(operation), route));
+                }
+            }
+
+            return rows;
+        }
+
+        var global = Rows(routes.Global.Default, routes.Global.Operations);
+        var campaigns = routes.Campaigns
+            .Where(campaign => campaign is not null)
+            .Select(campaign => new CampaignRoutesShown(SettingKey.Shown(campaign.CampaignId ?? string.Empty, installed), Rows(campaign.Default, campaign.Operations)))
+            .ToList();
+        var shown = new RoutesShown(
+            SettingKey.Shown(routes.RoutingSnapshotId ?? string.Empty, installed),
+            SettingKey.Shown(routes.PluginSnapshotId ?? string.Empty, installed),
+            global,
+            campaigns);
+        return new Section(Routes, JsonSerializer.SerializeToNode(shown, Dialect)!, global.Count + campaigns.Sum(campaign => campaign.Routes.Count));
+
+        // An operation is shown when the catalogue knows it; no plugin id or public id is an operation.
+        static string OperationShown(string operation) =>
+            Jason.Contracts.Operations.OperationCatalog.Knows(operation) ? operation : SettingKey.Hidden;
+    }
 
     /// <summary>The runtime section, the answer it was made from, how many plugins it lists, and whether the data directories agree.</summary>
     private sealed record RuntimeRead(JsonObject Node, SystemInfoResponse? Info, int Plugins, bool? Agrees = null);

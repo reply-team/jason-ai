@@ -146,31 +146,37 @@ public sealed class NotificationSender(
         }
 
         var (approvals, decisions) = await PendingAsync(ct).ConfigureAwait(false);
-        if (approvals == 0 && decisions == 0)
+        var failedWork = await FailedAsync(request, ct).ConfigureAwait(false);
+        if (approvals == 0 && decisions == 0 && failedWork.Count == 0)
         {
             status.NothingWaited(clock.GetUtcNow());
             return null;
         }
 
-        var message = NotificationComposer.Compose(approvals, decisions);
+        var message = NotificationComposer.Compose(approvals, decisions, failedWork.Count > 0 ? failedWork : null);
         var outcomes = await Task.WhenAll(channels.Resolve(settings.Current).Select(channel => DeliverAsync(channel, message, request.NotificationId, ct))).ConfigureAwait(false);
         var now = clock.GetUtcNow();
 
         // Kept before the line is written: somebody was told, and a line that then fails to write must not let the next
         // pointer follow at once.
-        if (outcomes.Any(outcome => outcome.Result == ChannelResult.Delivered))
+        var reached = outcomes.Any(outcome => outcome.Result == ChannelResult.Delivered);
+        if (reached)
         {
             progress.Reached = true;
-            state.Delivered(now.UtcDateTime);
+            state.Delivered(now.UtcDateTime, request.CoveredThrough);
         }
 
+        // Somebody was told what failed through the line this covers, so the next count starts after it; nobody was, so
+        // the window stays where it was and the next pointer counts these failures again with any new ones.
         var line = new NotificationLine(
             request.NotificationId,
             approvals,
             decisions,
             request.CoveredThrough,
             outcomes,
-            outcomes.Any(outcome => outcome.Result == ChannelResult.Delivered) ? now.UtcDateTime : request.LastDeliveredAt);
+            reached ? now.UtcDateTime : request.LastDeliveredAt,
+            failedWork.Count,
+            reached ? request.CoveredThrough : request.DeliveredThrough);
 
         await using (var scope = scopes.CreateAsyncScope())
         {
@@ -183,7 +189,7 @@ public sealed class NotificationSender(
         // The line carries the last delivery forward, so the state holds it whichever process last delivered.
         if (line.LastDeliveredAt is { } delivered)
         {
-            state.Delivered(delivered);
+            state.Delivered(delivered, line.DeliveredThrough);
         }
 
         status.Record(line, now);
@@ -194,6 +200,44 @@ public sealed class NotificationSender(
 
         return line;
     }
+
+    /// <summary>
+    /// Protective work that failed in the window this notification closes: after the line the last one that reached
+    /// anybody covered, through the line this one covers. Counted by item, campaigns in the order they first failed.
+    /// </summary>
+    private async Task<FailedProtectiveWork> FailedAsync(NotificationRequest request, CancellationToken ct)
+    {
+        var none = new FailedProtectiveWork(0, [], 0);
+        if (request.CoveredThrough is null)
+        {
+            return none;
+        }
+
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var upTo = await IdOfAsync(db, request.CoveredThrough, ct).ConfigureAwait(false);
+        int? after = request.DeliveredThrough is null ? 0 : await IdOfAsync(db, request.DeliveredThrough, ct).ConfigureAwait(false);
+        if (upTo is null || after is null)
+        {
+            // A window whose ends are not in the journal counts nothing rather than everything.
+            return none;
+        }
+
+        var failed = await ProtectiveFailureLines.Of(db)
+            .Where(e => e.Id > after && e.Id <= upTo)
+            .OrderBy(e => e.Id)
+            .Select(e => new { e.WorkItemId, Campaign = e.Campaign!.PublicId })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var campaigns = failed.Select(f => f.Campaign).Distinct(StringComparer.Ordinal).ToList();
+        return new FailedProtectiveWork(
+            failed.Select(f => f.WorkItemId).Distinct(StringComparer.Ordinal).Count(),
+            [.. campaigns.Take(NotificationComposer.MaxCampaignsNamed)],
+            Math.Max(0, campaigns.Count - NotificationComposer.MaxCampaignsNamed));
+    }
+
+    private static Task<int?> IdOfAsync(JasonDbContext db, string publicId, CancellationToken ct) =>
+        db.Journal.AsNoTracking().Where(e => e.PublicId == publicId).Select(e => (int?)e.Id).FirstOrDefaultAsync(ct);
 
     private async Task<(int Approvals, int Decisions)> PendingAsync(CancellationToken ct)
     {

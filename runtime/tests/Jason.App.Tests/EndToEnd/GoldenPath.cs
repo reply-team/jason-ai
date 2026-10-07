@@ -388,6 +388,10 @@ internal static class GoldenPath
     /// <summary>One CLI step: the shipped program, this installation's data directory, and everything it said.</summary>
     public static Task<CliResult> JasonAsync(Installation it, params string[] args) => RunAsync(it, "dotnet", [Assembly, .. args]);
 
+    /// <summary>The same step with variables of the test's own on top of the installation's, for this one command.</summary>
+    public static Task<CliResult> JasonAsync(Installation it, IReadOnlyDictionary<string, string> environment, params string[] args) =>
+        RunAsync(it, "dotnet", [Assembly, .. args], environment);
+
     /// <summary>
     /// The build's own launcher beside the assembly, which is what <c>dotnet run --project runtime/src/Jason.App</c>
     /// starts: a process whose path is that launcher rather than the muxer.
@@ -397,7 +401,11 @@ internal static class GoldenPath
     /// <summary>The same step, started from the build's own launcher rather than through the muxer.</summary>
     public static Task<CliResult> LauncherAsync(Installation it, params string[] args) => RunAsync(it, Launcher, args);
 
-    private static async Task<CliResult> RunAsync(Installation it, string program, IReadOnlyList<string> arguments)
+    private static async Task<CliResult> RunAsync(
+        Installation it,
+        string program,
+        IReadOnlyList<string> arguments,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         ArgumentNullException.ThrowIfNull(it);
         var args = arguments.SkipWhile(argument => argument == Assembly).ToArray();
@@ -427,6 +435,11 @@ internal static class GoldenPath
         // And the account it works in: the platform's own configuration variable, pointed at this test's store.
         // No vendor-named variable is ever set — none of them may enter the runtime in the first place.
         foreach (var (name, value) in it.Account.Variables)
+        {
+            start.Environment[name] = value;
+        }
+
+        foreach (var (name, value) in environment ?? new Dictionary<string, string>())
         {
             start.Environment[name] = value;
         }

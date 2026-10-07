@@ -100,10 +100,32 @@ public class PageClaimsTests
     private const string DiagnosticBundleDecision =
         "| DEC-DIAG-001 | A diagnostic bundle is shareable by construction. `jason doctor` composes it from the installation's files and the runtime's own metadata: "
         + "versions, the readiness report, configuration as shape with literal values only from one published allowlist, a bounded log slice under the logging invariant, "
-        + "plugin status, and journal and work-item metadata without values, with the home directory and the account's names rewritten; "
+        + "plugin status and routes — which plugin performs which operation, here and per campaign, never a binding's account or its identity — "
+        + "and journal and work-item metadata without values, with the home directory and the account's names rewritten; "
         + "journal values travel only on an explicit flag with a printed warning; it reaches no network and is never uploaded; it is listed before it is written. "
         + "`jason logs` reads the installation's files and asks the runtime nothing; `jason doctor` asks the runtime only through its API and never opens the database; "
         + "they are the fifth and sixth declared verb-map exceptions. |";
+
+    /// <summary>
+    /// The routes travel, and the pages that say what a bundle holds say so: the working notes name them among what the
+    /// runtime is asked, and the README says what a route is written as and that its account never is.
+    /// </summary>
+    [Fact]
+    public void The_pages_say_a_bundle_carries_the_routes_and_never_a_route_s_account()
+    {
+        var notes = Flat(Page("CLAUDE.md"));
+        var readme = Flat(Page("README.md"));
+
+        Assert.Contains(
+            "of the runtime it asks only what the runtime says about itself, its roles and routes, and the journal and work-item pages it counts",
+            notes,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "which plugin performs which operation, here and per campaign, by plugin id and operation name — never which account a route binds",
+            readme,
+            StringComparison.Ordinal);
+        Assert.Contains("the database, plugin packages, or a route's account and its identity", readme, StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// What <c>--include-journal</c> adds, said on each page in the composer's own text: the one the warning and the

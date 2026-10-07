@@ -51,13 +51,18 @@ public class ManagerOptionsTests
         Assert.Contains("Manager:Triggers[1] repeats Manager:Triggers[0];", failure, StringComparison.Ordinal);
     }
 
-    /// <summary>Cadence and nothing else is a configuration somebody may want, not a mistake.</summary>
+    /// <summary>
+    /// A list that names no kind is refused, however it came to be empty: a file can only write one by writing the key
+    /// with nothing in it, and a person who did that has said something the runtime cannot act on as written.
+    /// </summary>
     [Fact]
-    public void An_empty_trigger_list_is_allowed()
+    public void An_empty_trigger_list_is_refused()
     {
         var result = new ManagerOptionsValidator().Validate(null, new ManagerOptions { Triggers = [] });
 
-        Assert.True(result.Succeeded);
+        Assert.Equal(
+            ["Manager:Triggers is written but lists no trigger kind: leave it out for the defaults, or list the kinds."],
+            result.Failures ?? []);
     }
 
     [Fact]

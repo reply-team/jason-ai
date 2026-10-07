@@ -17,7 +17,12 @@ public sealed partial class NotificationsDocTests
     private static string Page() => Flat(Source("docs/notifications.md"));
 
     [Theory]
-    [InlineData("A notification is a pointer: how many approvals and questions are waiting, and where to look. It decides nothing, and nothing is approved by reacting to it.")]
+    [InlineData("A notification is a pointer: how many approvals and questions are waiting, how many protective actions failed, and where to look. It decides nothing, and nothing is approved by reacting to it.")]
+    [InlineData("Three things, and only these:")]
+    [InlineData("**a protective action that failed** — work the catalogue runs even in a paused campaign, recording an opt-out or pausing a campaign, that ended failed or expired, in a campaign of any status.")]
+    [InlineData("**What never travels:** the campaign's name, a contact's name or address, what an approval is about or its preview, a question's words or its options, the error a failed action ended with, the operation and its arguments, and any id of a work item or attempt. A campaign's public id travels only in the sentence about failed protective actions, at most three of them, to say where to look: an opaque `cmp_…` that names nothing by itself. The pointer is made from three counts, those ids, and nothing else.")]
+    [InlineData("A first start walks no history: a protective failure journaled before the first start that ever wrote a line is not counted by a pointer — the work-item list is where it shows.")]
+    [InlineData("A notification that reached nobody carries `delivered_through` forward unchanged, as it carries `last_delivered_at`, so the next one counts those failures again with any new ones. Neither key is sent to a channel: `delivered_through` is a position in the journal, and the count reaches a channel only as words in the message.")]
     [InlineData("Everything here is computed at a dispatcher scan from what the journal records, never from a timer inside the runtime, which ends at every sign-out.")]
     [InlineData("never less than two of the dispatcher's ticks")]
     [InlineData("Windows' Do not disturb is invisible to Jason: the notification goes to the notification center without a banner, and Jason records it delivered.")]
@@ -26,6 +31,11 @@ public sealed partial class NotificationsDocTests
     [InlineData("jason journal list --kind notification_sent")]
     [InlineData("`attempts` is written for every outcome but `not_attempted` — `delivered`, `silenced` and `failed` each say how many times the channel was tried.")]
     public void The_page_says_it(string sentence) => Assert.Contains(sentence, Page(), StringComparison.Ordinal);
+
+    /// <summary>Where a pointer about failed protective work sends a person, as the composer writes it.</summary>
+    [Fact]
+    public void The_page_shows_where_a_pointer_about_failed_work_sends_a_person() =>
+        Assert.Contains($"1 protective action failed in Jason, in cmp_01K…. {Jason.Runtime.Notifications.NotificationComposer.LookAtFailures}", Page(), StringComparison.Ordinal);
 
     /// <summary>The settings table is the code's own: every name the section binds, with its default.</summary>
     [Fact]
@@ -96,8 +106,16 @@ public sealed partial class NotificationsDocTests
     [InlineData("docs/release-and-update.md", "A toast comes only from a runtime in the person's own session")]
     [InlineData("docs/release-and-update.md", "a runtime that 0.1.0's logon task started in session 0 shows none")]
     [InlineData("docs/release-and-update.md", "| on Windows, the notification registration | after the runtime, so its next toast cannot write it back")]
-    [InlineData("CLAUDE.md", "Notifications: a parked approval and a raised question are notified as a pointer — counts and where to look — by a scan step after the dispatch, delivered off the scan and recorded in a reserved `notification_sent` line. `docs/notifications.md` is the contract.")]
+    [InlineData("CLAUDE.md", "Notifications: a parked approval, a raised question and failed protective work are notified as a pointer — counts and where to look — by a scan step after the dispatch, delivered off the scan and recorded in a reserved `notification_sent` line. `docs/notifications.md` is the contract.")]
     [InlineData("CLAUDE.md", "The delivery contract, `notification.send`, is a family of its own under `docs/contracts/notifications/`, embedded the same way and never in the operation catalog.")]
+    [InlineData("docs/contracts/notifications/notification.send.md", "sends **one pointer**: how many approvals and questions are waiting, whether protective actions failed, and where to look.")]
+    [InlineData("docs/contracts/notifications/notification.send.md", "What the plugin receives is `title`, `message` and the two counts, `approvals` and `decisions`. The message may also say that protective actions failed, and name up to three campaigns by public id — an opaque `cmp_…` that names nothing by itself. Nothing else about the work travels: no campaign's name, no contact, no subject, no question's words, no error.")]
+    [InlineData("docs/contracts/notifications/notification.send.json", "\"intent\": \"Put a pointer in front of a person: how many approvals and questions are waiting in Jason, whether protective actions failed, and where to look. Nothing else about the work travels.\"")]
+    [InlineData("plugins/ntfy/README.md", "**Nothing else about the work travels**: the runtime makes the pointer from counts and, when protective actions failed, at most three campaign ids, and docs/notifications.md says exactly what a pointer may carry.")]
+    [InlineData("plugins/README.md", "the delivery contract `notification.send`: Jason's pointer — the counts the runtime composes, and where to look — published to an ntfy topic.")]
+    [InlineData("plugins/ntfy/plugin.yaml", "description: Delivers Jason's notifications to an ntfy topic - the pointer the runtime composes, and nothing else.")]
+    [InlineData("docs/plugins.md", "A notification plugin carries Jason's pointer — how many approvals and questions are waiting, whether protective actions failed, and where to look — to a service a person reads.")]
+    [InlineData("docs/contracts/README.md", "put a pointer in front of a person: how many approvals and questions wait, whether protective actions failed, and where to look.")]
     public void The_pages_around_it_say_what_is_true_now(string page, string sentence) =>
         Assert.Contains(sentence, Flat(Source(page)), StringComparison.Ordinal);
 

@@ -34,11 +34,24 @@ public sealed partial class ExecService(HostServices services)
     /// </summary>
     public const string EnvNotAllowedCode = "exec_env_not_allowed";
 
-    /// <summary>How long a killed process is given to actually go away before the host stops waiting for it.</summary>
-    private static readonly TimeSpan KillGrace = TimeSpan.FromSeconds(5);
+    /// <summary>
+    /// The most a call's kill grace can be. The grace is this or half of what is left of the invocation when the call
+    /// is made, whichever is smaller; it is kept back from a call that asked for no timeout of its own, and it bounds
+    /// everything the host waits for once the program has ended — the program going, when it was killed, and the
+    /// reading of what it wrote.
+    /// </summary>
+    internal static readonly TimeSpan KillGraceCeiling = TimeSpan.FromSeconds(5);
+
+    private static readonly TimeSpan MinimumTimeout = TimeSpan.FromMilliseconds(1);
 
     public static IReadOnlySet<string> Allowed { get; } =
         new HashSet<string>(StringComparer.Ordinal) { "executable", "args", "stdin", "timeout_ms", "env" };
+
+    /// <summary>
+    /// Whether the program has ended within the time given. It is the one wait whose answer the host cannot
+    /// arrange from outside — a kill that does not take is the operating system's doing — so a test answers it.
+    /// </summary>
+    internal Func<Process, TimeSpan, bool> EndedWithin { get; init; } = static (process, grace) => process.WaitForExit(grace);
 
     public JsValue Invoke(Engine engine, JsValue[] args)
     {
@@ -72,18 +85,26 @@ public sealed partial class ExecService(HostServices services)
         var arguments = ArgumentReader.OptionalStrings(engine, options, "args", Function, MaxArgs, MaxArgsBytes);
         var stdin = ArgumentReader.OptionalString(engine, options, "stdin", Function, MaxStdinBytes);
         var environment = ReadEnvironment(engine, options);
-        var timeout = Budget(engine, options);
+        var asked = ArgumentReader.OptionalInt(engine, options, "timeout_ms", Function, 1, services.Limits.TimeoutMs);
+        var (timeout, grace) = Budget(services.Remaining(), asked is null ? null : TimeSpan.FromMilliseconds(asked.Value));
 
         services.Budget.Exec();
-        return JsJson.FromJson(engine, Run(executable, arguments, stdin, environment, timeout));
+        return JsJson.FromJson(engine, Run(executable, arguments, stdin, environment, timeout, grace));
     }
 
-    private TimeSpan Budget(Engine engine, JsonObject options)
+    /// <summary>
+    /// What one call may spend, from what is left of the invocation when it is made and the timeout the plugin
+    /// asked for, if any: how long the program may run, and how long the host then waits for it to end. A call that
+    /// asked for nothing runs for what is left less the grace, so a plugin is told its program timed out while it
+    /// still has time to answer for itself; a timeout the plugin asked for is its own, capped at what is left.
+    /// </summary>
+    internal static (TimeSpan Timeout, TimeSpan Grace) Budget(TimeSpan left, TimeSpan? asked)
     {
-        var remaining = services.Remaining();
-        var asked = ArgumentReader.OptionalInt(engine, options, "timeout_ms", Function, 1, services.Limits.TimeoutMs);
-        var wanted = asked is null ? remaining : TimeSpan.FromMilliseconds(asked.Value);
-        return wanted < remaining ? wanted : remaining;
+        var half = left / 2;
+        var grace = half < KillGraceCeiling ? half : KillGraceCeiling;
+        var wanted = asked ?? left - grace;
+        var timeout = wanted < left ? wanted : left;
+        return (timeout < MinimumTimeout ? MinimumTimeout : timeout, grace);
     }
 
     private static IReadOnlyList<KeyValuePair<string, string>> ReadEnvironment(Engine engine, JsonObject options)
@@ -107,7 +128,8 @@ public sealed partial class ExecService(HostServices services)
         IReadOnlyList<string> arguments,
         string? stdin,
         IReadOnlyList<KeyValuePair<string, string>> environment,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        TimeSpan grace)
     {
         var watch = Stopwatch.StartNew();
         var startInfo = ChildProcess.StartInfo(executable.Path);
@@ -163,6 +185,7 @@ public sealed partial class ExecService(HostServices services)
 
         using (process)
         {
+            var pid = process.Id;
             var stdout = new BoundedCapture(services.Limits.Exec.OutputBytes);
             var stderr = new BoundedCapture(services.Limits.Exec.OutputBytes);
 
@@ -185,22 +208,37 @@ public sealed partial class ExecService(HostServices services)
                 {
                     timedOut = true;
                     TryKill(process);
-                    WaitQuietly(process);
                 }
             }
 
-            // The wait for the pipes is bounded by the kill grace whether the program was ended or exited of
-            // its own accord. A program may leave something running that inherited its standard handles, and
-            // the read end only reports the end of the stream once every writer has let go of it: waiting for
-            // that would hold this call open for as long as the helper lived, and a program exiting cleanly
-            // says nothing about what it left behind. What was captured by then is what the plugin is told.
-            Settle(pumps);
-            Settle(written);
+            // From here the program has ended, or has been told to, and one grace bounds everything the host still
+            // waits for. A killed program is waited for first: when it is not seen to go, that is said once below,
+            // and the call still answers in time.
+            var ending = Stopwatch.StartNew();
+            var killUnconfirmed = timedOut && !EndedQuietly(process, grace);
+
+            // The wait for the pipes is bounded by what is left of the same grace whether the program was ended or
+            // exited of its own accord. A program may leave something running that inherited its standard handles,
+            // and the read end only reports the end of the stream once every writer has let go of it: waiting for
+            // that would hold this call open for as long as the helper lived, and a program exiting cleanly says
+            // nothing about what it left behind. What was captured by then is what the plugin is told — and a read
+            // that ran out after the program was seen to end is not a kill that failed.
+            Settle(pumps, grace - ending.Elapsed);
+            Settle(written, grace - ending.Elapsed);
 
             // The same letting go, said out loud: an abandoned pump keeps running, and what the plugin is told
             // must be what was captured by now rather than whatever the helper goes on writing afterwards.
             stdout.Freeze();
             stderr.Freeze();
+
+            if (killUnconfirmed)
+            {
+                // The process and the grace, and nothing the plugin wrote: what ran is on the exec line below.
+                services.Diagnostics.Host(
+                    "warn",
+                    "exec_kill_unconfirmed",
+                    new JsonObject { ["pid"] = pid, ["grace_ms"] = (long)grace.TotalMilliseconds });
+            }
 
             var exitCode = ExitCodeOf(process);
             var result = new JsonObject
@@ -256,14 +294,15 @@ public sealed partial class ExecService(HostServices services)
     }
 
     /// <summary>
-    /// Waits for one of the pipe tasks, giving up after the kill grace. The program has ended by the time this
-    /// is called, so anything still holding its pipes open is something it left behind rather than the program
-    /// itself. An abandoned task is left to finish on its own — its pipe ends when the last writer does — and
-    /// its failure is observed there rather than thrown here, where there is no longer anyone to tell.
+    /// Waits for one of the pipe tasks, giving up when what is left of the kill grace runs out. The program has
+    /// ended by the time this is called, so anything still holding its pipes open is something it left behind
+    /// rather than the program itself. An abandoned task is left to finish on its own — its pipe ends when the last
+    /// writer does — and its failure is observed there rather than thrown here, where there is no longer anyone to
+    /// tell.
     /// </summary>
-    private static void Settle(Task work)
+    private static void Settle(Task work, TimeSpan within)
     {
-        Task.WhenAny(work, Task.Delay(KillGrace)).GetAwaiter().GetResult();
+        Task.WhenAny(work, Task.Delay(within > TimeSpan.Zero ? within : TimeSpan.Zero)).GetAwaiter().GetResult();
         if (!work.IsCompleted)
         {
             work.ContinueWith(
@@ -301,15 +340,17 @@ public sealed partial class ExecService(HostServices services)
         }
     }
 
-    private static void WaitQuietly(Process process)
+    /// <summary>Whether a killed program is seen to end within the grace.</summary>
+    private bool EndedQuietly(Process process, TimeSpan grace)
     {
         try
         {
-            process.WaitForExit((int)KillGrace.TotalMilliseconds);
+            return EndedWithin(process, grace);
         }
         catch (SystemException)
         {
             // It is gone, or it will not go; either way the call is over and the plugin is told it timed out.
+            return false;
         }
     }
 

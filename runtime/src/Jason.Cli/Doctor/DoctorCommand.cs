@@ -699,6 +699,10 @@ public static class DoctorCommand
                                directory is this one. When it did not answer, the reason: {CliErrors.NoDescriptor}, {CliErrors.RuntimeUnreachable},
                                {CliErrors.Unauthorized}, {CliErrors.StaleDescriptor}, {DoctorComposer.TimedOut}, {DoctorComposer.NotAttempted}, or
                                {DoctorComposer.UnreadableAnswer} where it answered with something that is not system.info.
+              routes           which plugin performs which operation, here and per campaign: the routing and plugin
+                               snapshot ids, and each route by its operation or default, its plugin id and whether it
+                               binds an account — never which account or the identity that stands for it. An operation
+                               the catalogue does not know and a plugin not installed here are written as {SettingKey.Hidden}.
               config           the settings file and every JASON_* variable by shape — keys, types, lengths — with a
                                value only where the list below carries it.
               logs             the log files by name, size and time; the newest error and fatal events, at most {DoctorComposer.RecentErrors},

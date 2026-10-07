@@ -63,7 +63,7 @@ public sealed class DoctorComposerTests
 
         var bundle = await ComposeAsync(dir, runtime);
 
-        Assert.Equal(["bundle", "versions", "status", "runtime", "config", "logs", "journal", "work_items"], Keys(bundle.Document));
+        Assert.Equal(["bundle", "versions", "status", "runtime", "routes", "config", "logs", "journal", "work_items"], Keys(bundle.Document));
 
         var header = Section(bundle, "bundle");
         Assert.Equal(
@@ -95,7 +95,7 @@ public sealed class DoctorComposerTests
         Assert.Equal(bundle.NeverCarried, Strings(header["never_carried"]));
 
         // The listing is the sections after the header, each with the size it has in the file.
-        Assert.Equal(["versions", "status", "runtime", "config", "logs", "journal", "work_items"], bundle.Contents.Select(section => section.Name));
+        Assert.Equal(["versions", "status", "runtime", "routes", "config", "logs", "journal", "work_items"], bundle.Contents.Select(section => section.Name));
         Assert.Equal(bundle.Contents.Select(section => section.Name), header["contents"]!.AsArray().Select(entry => Text(entry!["name"])));
         AssertSizesAreTheFilesOwn(bundle);
     }
@@ -772,7 +772,7 @@ public sealed class DoctorComposerTests
 
         var bundle = await ComposeAsync(dir, runtime, includeJournal: true);
 
-        Assert.Equal(["bundle", "versions", "status", "runtime", "config", "logs", "journal", "work_items", "journal_entries"], Keys(bundle.Document));
+        Assert.Equal(["bundle", "versions", "status", "runtime", "routes", "config", "logs", "journal", "work_items", "journal_entries"], Keys(bundle.Document));
         var section = Section(bundle, "runtime");
         Assert.Equal(["answered", "reason"], Keys(section));
         Assert.False(section["answered"]!.GetValue<bool>());
@@ -780,6 +780,7 @@ public sealed class DoctorComposerTests
 
         Assert.Null(Section(bundle, "versions")["runtime"]);
         Assert.Null(Section(bundle, "versions")["api"]);
+        Assert.Equal("runtime_did_not_answer", Text(Section(bundle, "routes")["not_read"]));
         Assert.Equal("runtime_did_not_answer", Text(Section(bundle, "journal")["not_read"]));
         Assert.Equal("runtime_did_not_answer", Text(Section(bundle, "work_items")["not_read"]));
         Assert.Equal("runtime_did_not_answer", Text(Section(bundle, "journal_entries")["not_read"]));
@@ -842,6 +843,7 @@ public sealed class DoctorComposerTests
         Assert.True(runtime["answered"]!.GetValue<bool>());
         Assert.Null(runtime["plugins"]);
         Assert.Equal(DoctorComposer.TimedOut, Text(runtime["incomplete"]));
+        Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "routes")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "journal")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "work_items")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "journal_entries")["not_read"]));
@@ -865,6 +867,7 @@ public sealed class DoctorComposerTests
         var runtime = Section(bundle, "runtime");
         Assert.False(runtime["answered"]!.GetValue<bool>());
         Assert.Equal(DoctorComposer.NotAttempted, Text(runtime["reason"]));
+        Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "routes")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "journal")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "work_items")["not_read"]));
     }
@@ -899,6 +902,7 @@ public sealed class DoctorComposerTests
 
         Assert.Equal(DoctorComposer.TimedOut, Text(Section(bundle, "runtime")["incomplete"]));
         Assert.DoesNotContain(runtime.Requests, request => request.Operation is Operations.JournalList or Operations.WorkItemList or Operations.WorkItemGet);
+        Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "routes")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "journal")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "work_items")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "journal_entries")["not_read"]));
@@ -922,6 +926,126 @@ public sealed class DoctorComposerTests
         Assert.Equal(1, runtime.Requests.Count(request => request.Operation is Operations.PluginList or Operations.JournalList or Operations.WorkItemList));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "work_items")["not_read"]));
     }
+
+    // ---- the routes: which plugin performs which operation, never an account -----------------------------------------
+
+    /// <summary>
+    /// Which plugin performs which operation, here and per campaign, is the first question after whether the runtime is
+    /// running, and the bundle answers it — by plugin id and operation name, and whether a route binds an account, never
+    /// which account or the identity that stands for it: a hash of a short account id is a guess away from the account.
+    /// An operation the catalogue does not know and a plugin this installation does not hold are written as a key nobody
+    /// chose, as the settings are.
+    /// </summary>
+    [Fact]
+    public async Task The_routes_section_says_which_plugin_performs_which_operation_and_never_which_account()
+    {
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(Path.Combine(dir.Paths.PluginsDirectory, "reply"));
+        File.WriteAllText(Path.Combine(dir.Paths.PluginsDirectory, "reply", "plugin.yaml"), "id: reply");
+        var runtime = Running(dir);
+        var routes = new JsonObject
+        {
+            ["routing_snapshot_id"] = RoutingSnapshot,
+            ["plugin_snapshot_id"] = PluginSnapshot,
+            ["global"] = new JsonObject
+            {
+                ["default"] = Route("reply", new JsonObject { ["account"] = "SENTINEL_ROUTE_ACCOUNT" }, RouteIdentity),
+                ["operations"] = new JsonObject
+                {
+                    ["campaign.get"] = Route("SENTINEL_PLUGIN", null, null),
+                    ["SENTINEL_OPERATION"] = Route("reply", null, null),
+                },
+            },
+            ["campaigns"] = new JsonArray(new JsonObject
+            {
+                ["campaign_id"] = RoutedCampaign,
+                ["default"] = null,
+                ["operations"] = new JsonObject { ["optout.record"] = Route("reply", new JsonObject { ["account"] = "SENTINEL_CAMPAIGN_ACCOUNT" }, null) },
+            }),
+        };
+        runtime.Fails = (operation, _) => operation == Operations.RouteList ? Respond(HttpStatusCode.OK, routes.ToJsonString()) : null;
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        var section = Section(bundle, "routes");
+        Assert.Equal(
+            new JsonObject
+            {
+                ["routing_snapshot_id"] = RoutingSnapshot,
+                ["plugin_snapshot_id"] = PluginSnapshot,
+                ["global"] = new JsonArray(
+                    Row("default", "reply", true),
+                    Row("campaign.get", SettingKey.Hidden, false),
+                    Row(SettingKey.Hidden, "reply", false)),
+                ["campaigns"] = new JsonArray(new JsonObject
+                {
+                    ["campaign_id"] = RoutedCampaign,
+                    ["routes"] = new JsonArray(Row("optout.record", "reply", true)),
+                }),
+            }.ToJsonString(),
+            section.ToJsonString());
+        Assert.Equal(4, bundle.Contents.Single(entry => entry.Name == "routes").Items);
+
+        var file = bundle.Serialize();
+        foreach (var withheld in (string[])["SENTINEL_ROUTE_ACCOUNT", "SENTINEL_CAMPAIGN_ACCOUNT", RouteIdentity, "SENTINEL_PLUGIN", "SENTINEL_OPERATION"])
+        {
+            Assert.DoesNotContain(withheld, file, StringComparison.Ordinal);
+        }
+
+        // And the promise is published where a person reads what a bundle never holds: the header and the help.
+        Assert.Contains("a route's account and its identity", DoctorComposer.NeverCarried);
+    }
+
+    /// <summary>
+    /// An id is written only when it is well formed. A campaign id or a snapshot id the runtime sent in any other shape is
+    /// a value nobody vouched for, and it is written as the settings write a key nobody chose.
+    /// </summary>
+    [Fact]
+    public async Task A_campaign_or_snapshot_id_that_is_not_well_formed_is_written_as_a_key_nobody_chose()
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        var routes = new JsonObject
+        {
+            ["routing_snapshot_id"] = "SENTINEL_RTS",
+            ["plugin_snapshot_id"] = "SENTINEL_SNP",
+            ["global"] = new JsonObject { ["default"] = null, ["operations"] = new JsonObject() },
+            ["campaigns"] = new JsonArray(new JsonObject
+            {
+                ["campaign_id"] = "SENTINEL_CAMPAIGN_ID",
+                ["default"] = Route("reply", null, null),
+                ["operations"] = new JsonObject(),
+            }),
+        };
+        runtime.Fails = (operation, _) => operation == Operations.RouteList ? Respond(HttpStatusCode.OK, routes.ToJsonString()) : null;
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        var section = Section(bundle, "routes");
+        Assert.Equal(SettingKey.Hidden, Text(section["routing_snapshot_id"]));
+        Assert.Equal(SettingKey.Hidden, Text(section["plugin_snapshot_id"]));
+        Assert.Equal(SettingKey.Hidden, Text(section["campaigns"]![0]!["campaign_id"]));
+        var file = bundle.Serialize();
+        foreach (var unvouched in (string[])["SENTINEL_RTS", "SENTINEL_SNP", "SENTINEL_CAMPAIGN_ID"])
+        {
+            Assert.DoesNotContain(unvouched, file, StringComparison.Ordinal);
+        }
+    }
+
+    private const string RoutingSnapshot = "rts_01J4ZQ8X5W3V2T1S0R9Q8P7N6A";
+
+    private const string PluginSnapshot = "snp_01J4ZQ8X5W3V2T1S0R9Q8P7N6B";
+
+    private const string RoutedCampaign = "cmp_01J4ZQ8X5W3V2T1S0R9Q8P7N6C";
+
+    /// <summary>What route.list says stands for the bound account: a digest no bundle may carry.</summary>
+    private const string RouteIdentity = "sha256:5e7a11e1d5e7a11e1d5e7a11e1d5e7a11e1d5e7a11e1d5e7a11e1d5e7a11e1d";
+
+    private static JsonObject Route(string pluginId, JsonObject? binding, string? identity) =>
+        new() { ["plugin_id"] = pluginId, ["binding"] = binding, ["binding_identity"] = identity };
+
+    private static JsonObject Row(string operation, string pluginId, bool bindsAccount) =>
+        new() { ["operation"] = operation, ["plugin_id"] = pluginId, ["binds_account"] = bindsAccount };
 
     // ---- loopback only, and what is never carried ---------------------------------------------------------------
 
@@ -1681,11 +1805,11 @@ public sealed class DoctorComposerTests
 
         var bundle = await ComposeAsync(dir, Running(dir), identity: new IdentityFacts(@"C:\Users\" + user, user, machine, null, null));
 
-        Assert.Equal(["bundle", "versions", "status", "runtime", "config", "logs", "journal", "work_items"], Keys(bundle.Document));
+        Assert.Equal(["bundle", "versions", "status", "runtime", "routes", "config", "logs", "journal", "work_items"], Keys(bundle.Document));
         Assert.Equal(
             ["~", "<data>", "<runtime_data>", "<user>", "<machine>", "<domain>", "<sid>"],
             Section(bundle, "bundle").Where(member => member.Key.EndsWith("_written_as", StringComparison.Ordinal)).Select(member => Text(member.Value)));
-        Assert.Equal(["versions", "status", "runtime", "config", "logs", "journal", "work_items"], bundle.Contents.Select(section => section.Name));
+        Assert.Equal(["versions", "status", "runtime", "routes", "config", "logs", "journal", "work_items"], bundle.Contents.Select(section => section.Name));
 
         var failure = bundle.Document["logs"]!.AsObject().First(member => member.Value is JsonArray { Count: 1 } list && list[0]!["@mt"] is not null).Value![0]!.AsObject();
         var capped = failure.Select(member => member.Value).OfType<JsonValue>().Select(value => value.GetValue<string>()).Single(text => text.StartsWith("System.Exception", StringComparison.Ordinal));
@@ -1779,6 +1903,7 @@ public sealed class DoctorComposerTests
 
         Assert.Equal([Operations.SystemInfo], runtime.Requests.Select(request => request.Operation));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "runtime")["reason"]));
+        Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "routes")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "journal")["not_read"]));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "work_items")["not_read"]));
     }

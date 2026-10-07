@@ -87,6 +87,34 @@ public class StartRefusalTests
         Assert.Null(GoldenPath.ReadDescriptor(it.Paths));
     }
 
+    /// <summary>
+    /// The trigger list emptied by a variable rather than by the file. The configuration reads an empty variable as a
+    /// list that is written and names no kind, whichever way the variable's name is spelled, and the start is refused in
+    /// the runtime's own sentence, as for the file.
+    /// </summary>
+    [Theory]
+    [InlineData("JASON_Manager__Triggers")]
+    [InlineData("JASON_MANAGER__TRIGGERS")]
+    public async Task An_empty_trigger_list_set_by_a_variable_refuses_the_start(string variable)
+    {
+        using var it = GoldenPath.Create("start-empty-triggers");
+
+        var result = await GoldenPath.JasonAsync(it, new Dictionary<string, string> { [variable] = string.Empty }, "runtime", "start");
+        if (result.ExitCode == 0)
+        {
+            // A runtime that took the empty list for the defaults started; nothing this test began is left running.
+            await GoldenPath.StopAsync(it);
+        }
+
+        Assert.True(result.ExitCode == 1, $"The start answered {result.ExitCode}: {result.Output} {result.Error}");
+        var message = GoldenPath.Json(result)["error"]?["message"]?.GetValue<string>() ?? string.Empty;
+        Assert.Contains(
+            "It said: Invalid Jason configuration: Manager:Triggers is written but lists no trigger kind: leave it out for the defaults, or list the kinds.",
+            message,
+            StringComparison.Ordinal);
+        Assert.Null(GoldenPath.ReadDescriptor(it.Paths));
+    }
+
     /// <summary>What a person typed into the settings file, which no answer may repeat.</summary>
     private const string Sentinel = "SENTINEL_START_SETTINGS";
 

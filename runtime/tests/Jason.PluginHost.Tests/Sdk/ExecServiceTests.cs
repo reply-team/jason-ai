@@ -30,6 +30,12 @@ public sealed class ExecServiceTests : IDisposable
 
     private static string Lines(JsonObject result) => result["stdout"]!.GetValue<string>().ReplaceLineEndings("\n");
 
+    /// <summary>A kill that took, or no kill at all, is never said to have failed — whatever the reading of the pipes did.</summary>
+    private static void NoKillWentUnconfirmed(SdkHarness harness) =>
+        Assert.True(
+            !harness.Lines.Any(line => line["message"]?.GetValue<string>() == "exec_kill_unconfirmed"),
+            $"A kill that took was said to have failed: {harness.Stderr}");
+
     /// <summary>
     /// The engine's memory budget counts what a script allocates, not what it is still holding. Reading the same
     /// answer four times over spends it four times, even though each answer is thrown away before the next one
@@ -120,6 +126,7 @@ public sealed class ExecServiceTests : IDisposable
 
         Assert.True(result["timed_out"]!.GetValue<bool>());
         Assert.True(result["duration_ms"]!.GetValue<long>() < 10_000, "the kill did not wait for the program");
+        NoKillWentUnconfirmed(harness);
     }
 
     /// <summary>
@@ -140,6 +147,7 @@ public sealed class ExecServiceTests : IDisposable
         var result = await call.WaitAsync(TimeSpan.FromSeconds(20), token);
 
         Assert.True(result["timed_out"]!.GetValue<bool>());
+        NoKillWentUnconfirmed(harness);
     }
 
     /// <summary>
@@ -161,6 +169,7 @@ public sealed class ExecServiceTests : IDisposable
 
         Assert.Equal(0, result["exit_code"]!.GetValue<int>());
         Assert.False(result["timed_out"]!.GetValue<bool>());
+        NoKillWentUnconfirmed(harness);
     }
 
     [Fact]

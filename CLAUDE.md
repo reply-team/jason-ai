@@ -104,8 +104,8 @@ covered here.
   writes one reserved `inbound_reply_observed` line per thread that moved — identifiers, moments and the provider's
   flags, never a subject, a preview or a name — said once per campaign by a key. It interprets nothing; the line is a
   default manager trigger. `docs/inbound-sync.md` is the contract.
-- Notifications: a parked approval and a raised question are notified as a pointer — counts and where to look —
-  by a scan step after the dispatch, delivered off the scan and recorded in a reserved `notification_sent` line.
+- Notifications: a parked approval, a raised question and failed protective work are notified as a pointer —
+  counts and where to look — by a scan step after the dispatch, delivered off the scan and recorded in a reserved `notification_sent` line.
   `docs/notifications.md` is the contract.
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for
   people, stderr is diagnostics only. Exit codes: 0 success, 1 understood and refused (an API
@@ -118,8 +118,9 @@ covered here.
   installation's files — deploying skills, replacing the executable — rather than ask the runtime
   anything; `jason logs` reads the installation's log files, which the runtime writes and is never
   asked about; and `jason doctor` collects one installation into one file, half of which is not the
-  runtime's to know — of the runtime it asks only what the runtime says about itself and the journal
-  and work-item pages it counts, keeping their metadata and dropping their values. `status`, `logs` and
+  runtime's to know — of the runtime it asks only what the runtime says about itself, its roles and
+  routes, and the journal and work-item pages it counts, keeping their metadata and dropping their
+  values. `status`, `logs` and
   `doctor` exit 0 or 1 and **never 3** — `logs` never asks the runtime, and for the other two "I could
   not ask the runtime" is an answer rather than a reason there is none — and the body of `status`
   carries `ready` so an agent branches on the body, never on the code. `uninstall` removes skills only

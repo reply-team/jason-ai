@@ -1,4 +1,4 @@
-// The ntfy reference plugin: Jason's pointer - how many approvals and questions wait, and where to look - published
+// The ntfy reference plugin: Jason's pointer - the counts the runtime composes, and where to look - published
 // to an ntfy topic. It is sent as JSON to the server's root, so the topic travels in the body and the host's log line
 // about the call names the root and not the topic.
 export function invoke(operation, input, context) {

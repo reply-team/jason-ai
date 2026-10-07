@@ -25,7 +25,9 @@ public sealed class NotificationLineTests
             ChannelOutcome.NotAttempted("toast", ChannelKinds.Toast, NotAttemptedReasons.NoDesktop, "session 0"),
             ChannelOutcome.Silenced("toast", ChannelKinds.Toast, SilencedReasons.DisabledForApplication),
         ],
-        At);
+        At,
+        2,
+        "jrn_delivered");
 
     [Fact]
     public void The_line_is_the_published_shape()
@@ -33,7 +35,7 @@ public sealed class NotificationLineTests
         var expected = JsonNode.Parse("""
             {
               "notification_id": "ntf_one",
-              "counts": { "approvals": 3, "decisions": 1 },
+              "counts": { "approvals": 3, "decisions": 1, "protective_failures": 2 },
               "covered_through": "jrn_covered",
               "channels": [
                 { "channel": "toast", "kind": "toast", "outcome": "delivered", "attempts": 1 },
@@ -41,7 +43,8 @@ public sealed class NotificationLineTests
                 { "channel": "toast", "kind": "toast", "outcome": "not_attempted", "reason": "no_desktop", "detail": "session 0" },
                 { "channel": "toast", "kind": "toast", "outcome": "silenced", "reason": "disabled_for_application", "attempts": 1 }
               ],
-              "last_delivered_at": "2026-10-01T09:06:00.000Z"
+              "last_delivered_at": "2026-10-01T09:06:00.000Z",
+              "delivered_through": "jrn_delivered"
             }
             """);
 

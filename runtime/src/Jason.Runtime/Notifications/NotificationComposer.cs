@@ -3,41 +3,77 @@ using System.Globalization;
 namespace Jason.Runtime.Notifications;
 
 /// <summary>
-/// What a notification says, made from two integers and nothing else. That is half of why nothing about the work —
-/// a campaign, a contact, a subject, a question's words — can reach a channel: this signature has nowhere to take
-/// it from.
+/// What a notification says, made from three counts and, for failed protective work, at most three campaign public ids
+/// — opaque ids that name nothing by themselves — and nothing else. That is half of why nothing about the work — a
+/// campaign's name, a contact, a subject, a question's words, an error — can reach a channel: this signature has
+/// nowhere to take it from.
 /// </summary>
 public static class NotificationComposer
 {
     public const string Title = "Jason";
 
+    /// <summary>How many campaigns a pointer names where protective work failed; the rest are counted.</summary>
+    public const int MaxCampaignsNamed = 3;
+
     /// <summary>Where to look. Plain text: a toast shows backticks as backticks.</summary>
     public const string Look = "Ask your agent what Jason is waiting for, or run jason approval list and jason decision list.";
 
-    /// <exception cref="ArgumentOutOfRangeException">A count is negative, or both are zero: nothing waiting is never composed.</exception>
-    public static NotificationMessage Compose(int approvals, int decisions)
+    /// <summary>Where to look when protective work failed and nothing waits.</summary>
+    public const string LookAtFailures = "Ask your agent what failed, or run jason workitem list --status failed --status expired.";
+
+    /// <summary>Where to look when protective work failed and something waits as well.</summary>
+    public const string LookAtBoth =
+        "Ask your agent what failed and what Jason is waiting for, or run jason workitem list --status failed --status expired, jason approval list and jason decision list.";
+
+    /// <exception cref="ArgumentOutOfRangeException">A count is negative, or every count is zero: nothing to say is never composed.</exception>
+    public static NotificationMessage Compose(int approvals, int decisions, FailedProtectiveWork? failed = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(approvals);
         ArgumentOutOfRangeException.ThrowIfNegative(decisions);
-        if (approvals == 0 && decisions == 0)
+        var failures = failed?.Count ?? 0;
+        ArgumentOutOfRangeException.ThrowIfNegative(failures);
+        if (approvals == 0 && decisions == 0 && failures == 0)
         {
             throw new ArgumentOutOfRangeException(nameof(approvals), "Nothing is waiting, so there is nothing to say.");
         }
 
-        var parts = new List<string>(2);
-        if (approvals > 0)
+        var sentences = new List<string>(2);
+        if (approvals > 0 || decisions > 0)
         {
-            parts.Add(Count(approvals, "approval", "approvals"));
+            var parts = new List<string>(2);
+            if (approvals > 0)
+            {
+                parts.Add(Count(approvals, "approval", "approvals"));
+            }
+
+            if (decisions > 0)
+            {
+                parts.Add(Count(decisions, "question", "questions"));
+            }
+
+            var verb = approvals + decisions == 1 ? "is" : "are";
+            sentences.Add($"{string.Join(" and ", parts)} {verb} waiting in Jason.");
         }
 
-        if (decisions > 0)
+        if (failures > 0)
         {
-            parts.Add(Count(decisions, "question", "questions"));
+            sentences.Add(Failed(failed!));
         }
 
-        var verb = approvals + decisions == 1 ? "is" : "are";
-        var summary = $"{string.Join(" and ", parts)} {verb} waiting in Jason.";
-        return new NotificationMessage(Title, summary, Look, approvals, decisions);
+        var look = failures == 0 ? Look : approvals + decisions == 0 ? LookAtFailures : LookAtBoth;
+        return new NotificationMessage(Title, string.Join(" ", sentences), look, approvals, decisions, failures);
+    }
+
+    /// <summary>"2 protective actions failed in Jason, in cmp_… and cmp_…." — the campaigns by public id, three at most.</summary>
+    private static string Failed(FailedProtectiveWork failed)
+    {
+        var named = failed.Campaigns.Take(MaxCampaignsNamed).ToList();
+        var places = failed.MoreCampaigns > 0 ? $"{string.Join(", ", named)} and {failed.MoreCampaigns.ToString(CultureInfo.InvariantCulture)} more"
+            : named.Count == 0 ? null
+            : named.Count == 1 ? named[0]
+            : $"{string.Join(", ", named.Take(named.Count - 1))} and {named[^1]}";
+        var count = Count(failed.Count, "protective action", "protective actions");
+        return places is null ? $"{count} failed in Jason." : $"{count} failed in Jason, in {places}.";
     }
 
     private static string Count(int count, string one, string many) =>
@@ -48,7 +84,13 @@ public static class NotificationComposer
 /// One pointer: a title, a summary of the counts, and where to look. A toast shows the title, then the summary and
 /// where to look as two lines; a channel that carries one line sends <see cref="Text"/>.
 /// </summary>
-public sealed record NotificationMessage(string Title, string Summary, string Look, int Approvals, int Decisions)
+public sealed record NotificationMessage(string Title, string Summary, string Look, int Approvals, int Decisions, int ProtectiveFailures = 0)
 {
     public string Text => $"{Summary} {Look}";
 }
+
+/// <summary>
+/// Protective work that failed since the last pointer that reached anybody: how many items, the campaigns they were in
+/// by public id in the order they first failed, and how many more campaigns there were past those named.
+/// </summary>
+public sealed record FailedProtectiveWork(int Count, IReadOnlyList<string> Campaigns, int MoreCampaigns);

@@ -7,18 +7,22 @@ the contract for the `Notifications` section of the settings, the toast, notific
 
 ## 1. What notifies, and what does not
 
-Two things, and only these:
+Three things, and only these:
 
 - **an approval parked at a claim** — a provider operation that needs a person's yes before it runs
   ([work-execution.md](work-execution.md));
 - **a question a role raised** — an AI role that could not answer something itself and asked
-  ([campaign-manager.md](campaign-manager.md)).
+  ([campaign-manager.md](campaign-manager.md));
+- **a protective action that failed** — work the catalogue runs even in a paused campaign, recording an opt-out or
+  pausing a campaign, that ended failed or expired, in a campaign of any status. A paused campaign's manager is not
+  summoned ([campaign-manager.md](campaign-manager.md)), so a pointer is how such a failure reaches a person.
 
-Nothing else notifies: not an answer, not an approval given or refused, not a review, not finished work. A person who
-answers a question is not told that they answered it.
+Nothing else notifies: not an answer, not an approval given or refused, not a review, not finished work, not other work
+that failed, and not a protective action somebody cancelled — a cancellation is a decision. A person who answers a
+question is not told that they answered it.
 
-A notification is a pointer: how many approvals and questions are waiting, and where to look. It decides nothing, and
-nothing is approved by reacting to it. An approval is a person's decision, recorded as theirs, made where they read
+A notification is a pointer: how many approvals and questions are waiting, how many protective actions failed, and
+where to look. It decides nothing, and nothing is approved by reacting to it. An approval is a person's decision, recorded as theirs, made where they read
 what they are approving — through their agent, or `jason approval list` and `jason approval approve`.
 
 ## 2. When
@@ -52,12 +56,25 @@ Jason
 Ask your agent what Jason is waiting for, or run jason approval list and jason decision list.
 ```
 
-The title, how many approvals and questions are waiting **at the moment it is sent** — counted then, so a burst
-answered before it was said says nothing at all — and where to look. That is every field.
+And where a protective action failed:
+
+```text
+Jason
+1 protective action failed in Jason, in cmp_01K….
+Ask your agent what failed, or run jason workitem list --status failed --status expired.
+```
+
+The title; how many approvals and questions are waiting **at the moment it is sent** — counted then, so a burst
+answered before it was said says nothing at all; how many protective actions failed **since the last notification that
+reached anybody** — counted from that one's line, so a notification that reached nobody leaves its failures for the
+next; and where to look. Past three campaigns, the rest are counted: "… in cmp_…, cmp_…, cmp_… and 2 more." That is
+every field.
 
 **What never travels:** the campaign's name, a contact's name or address, what an approval is about or its preview, a
-question's words or its options, and any id of a campaign, work item or attempt. The pointer is made from two integers
-and nothing else. A campaign's name is the plainest example of why: it is often a customer's name or a deal, written
+question's words or its options, the error a failed action ended with, the operation and its arguments, and any id of a
+work item or attempt. A campaign's public id travels only in the sentence about failed protective actions, at most three
+of them, to say where to look: an opaque `cmp_…` that names nothing by itself. The pointer is made from three counts,
+those ids, and nothing else. A campaign's name is the plainest example of why: it is often a customer's name or a deal, written
 by the person for themselves, and a notification is read by whoever can see the screen, the phone or, on a public
 ntfy server, the topic.
 
@@ -100,15 +117,24 @@ wakes a manager:
 ```json
 {
   "notification_id": "ntf_01K…",
-  "counts": { "approvals": 3, "decisions": 1 },
+  "counts": { "approvals": 3, "decisions": 1, "protective_failures": 0 },
   "covered_through": "jrn_01K…",
   "channels": [
     { "channel": "toast", "kind": "toast", "outcome": "delivered", "attempts": 1 },
     { "channel": "ntfy", "kind": "plugin", "outcome": "failed", "code": "notification_unreachable", "class": "transient", "attempts": 2 }
   ],
-  "last_delivered_at": "2026-10-01T09:06:00.000Z"
+  "last_delivered_at": "2026-10-01T09:06:00.000Z",
+  "delivered_through": "jrn_01K…"
 }
 ```
+
+`counts.protective_failures` is how many protective actions failed in the window this notification closed: after the
+line `delivered_through` names — the line the last notification that reached anybody covered through — up to
+`covered_through`. A notification that reached nobody carries `delivered_through` forward unchanged, as it carries
+`last_delivered_at`, so the next one counts those failures again with any new ones. Neither key is sent to a channel:
+`delivered_through` is a position in the journal, and the count reaches a channel only as words in the message. A
+first start walks no history: a protective failure journaled before the first
+start that ever wrote a line is not counted by a pointer — the work-item list is where it shows.
 
 A notification is a pointer. Each channel's outcome is one of `delivered`; `failed`, with its code and class — a
 server still unreachable after its one retry is failed, and so is a delivery whose input the runtime's own half of the
@@ -130,9 +156,9 @@ times the channel was tried.
 
 A transient failure is tried once more, thirty seconds later, and nothing else is ever repeated: a pointer that may
 have arrived is not sent twice. Three cases write no line — every channel off (nothing is read at all), nothing waiting
-by the time it is sent, and a runtime that stops while it sends, whose successor reads the same lines and sends once.
+and no protective action failed by the time it is sent, and a runtime that stops while it sends, whose successor reads the same lines and sends once.
 One case writes a line though nothing reached anybody: channels exist and none could, which moves the watermark so the
-same lines are not said again.
+same lines are not said again — except failed protective work, whose window moves only when somebody was reached.
 
 ```sh
 jason journal list --kind notification_sent

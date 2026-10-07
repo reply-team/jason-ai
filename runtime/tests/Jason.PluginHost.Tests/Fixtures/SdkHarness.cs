@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Scripting;
@@ -15,7 +16,11 @@ public sealed class SdkHarness : IDisposable
 {
     private readonly StringWriter _stderr = new();
 
-    public SdkHarness(string packageRoot, Action<InvocationBuilder>? configure = null, TimeSpan? remaining = null)
+    public SdkHarness(
+        string packageRoot,
+        Action<InvocationBuilder>? configure = null,
+        TimeSpan? remaining = null,
+        Func<Process, TimeSpan, bool>? endedWithin = null)
     {
         Invocation = InvocationFactory.Create(packageRoot, "echo.run", configure: configure);
         Diagnostics = new HostDiagnostics(
@@ -32,7 +37,8 @@ public sealed class SdkHarness : IDisposable
 
         Engine = EngineFactory.Create(Invocation.Limits, new PackageModuleLoader(packageRoot), CancellationToken.None);
         Http = new HttpService(Services);
-        Engine.SetValue("host", HostObject.Build(Engine, Services, new ExecService(Services), Http, new EnvService(Services), new LogService(Services)));
+        var exec = endedWithin is null ? new ExecService(Services) : new ExecService(Services) { EndedWithin = endedWithin };
+        Engine.SetValue("host", HostObject.Build(Engine, Services, exec, Http, new EnvService(Services), new LogService(Services)));
     }
 
     public Engine Engine { get; }

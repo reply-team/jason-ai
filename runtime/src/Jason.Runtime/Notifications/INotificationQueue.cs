@@ -11,6 +11,8 @@ public interface INotificationQueue
 
 /// <summary>
 /// One notification to send: its id, the journal line it covers through (a public <c>jrn_</c> id), the last time a
-/// notification reached anybody, and the burst it is about. It carries no counts: those are read at send time.
+/// notification reached anybody, the burst it is about, and the line the last notification that reached anybody
+/// covered through — where its count of failed protective work starts. It carries no counts: those are read at send
+/// time.
 /// </summary>
-public sealed record NotificationRequest(string NotificationId, string? CoveredThrough, DateTime? LastDeliveredAt, Burst Burst);
+public sealed record NotificationRequest(string NotificationId, string? CoveredThrough, DateTime? LastDeliveredAt, Burst Burst, string? DeliveredThrough = null);

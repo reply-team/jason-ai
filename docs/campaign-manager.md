@@ -312,7 +312,7 @@ of an attempt that ran on somebody's profile could have run on another without a
 
 | Setting | Default | Range | What it does |
 |---|---|---|---|
-| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed` | each must be a kind the runtime writes | which chronicle kinds summon a review |
+| `Manager:Triggers` | `workitem_failed`, `approval_rejected`, `external_effect_reported`, `decision_answered`, `inbound_reply_observed` | at least one kind, each a kind the runtime writes | which chronicle kinds summon a review |
 | `Manager:ReviewSeconds` | `18000` | 300..604800 | the cadence, unless a campaign names its own |
 | `Manager:TimeoutSeconds` | `900` | 30..86400 | one check-in's budget |
 | `Manager:MaxAttempts` | `1` | 1..10 | how many failures a check-in is worth |
@@ -326,8 +326,12 @@ How soon a reply wakes a manager is the inbound read's to say, not a manager set
 conversations every `Inbound:SyncSeconds` (900 by default), and looks `Inbound:LookbackSeconds` (14400 by default)
 behind its last read for a reply the provider took in late ([inbound sync](inbound-sync.md)).
 
-**A narrowed list replaces the default rather than adding to it.** An empty array in the file cannot
-be told from an absent key, so it reads as "unset" and the defaults apply. A list narrowed before
+**A narrowed list replaces the default rather than adding to it.** Leaving the key out keeps the
+defaults; a list written with no kind in it — an empty array, `null`, an empty object, or an empty
+`JASON_Manager__Triggers` — is refused, at a start and at a live edit, which keeps the list in force:
+"Manager:Triggers is written but lists no trigger kind: leave it out for the defaults, or list the
+kinds." It used to read as the defaults, the opposite of what whoever wrote it meant, without a word.
+The key is read without regard to case, as every setting is. A list narrowed before
 `inbound_reply_observed` existed does not hold it, so that installation is not woken by replies until
 the kind is added.
 

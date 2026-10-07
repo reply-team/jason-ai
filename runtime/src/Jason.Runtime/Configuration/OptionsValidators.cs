@@ -342,11 +342,20 @@ public sealed partial class RolesOptionsValidator : IValidateOptions<RolesOption
 /// </summary>
 public sealed class ManagerOptionsValidator : IValidateOptions<ManagerOptions>
 {
+    /// <summary>The refusal of a list written with no kind in it, as the start, a live edit and the manager page say it.</summary>
+    public const string EmptyTriggers = "Manager:Triggers is written but lists no trigger kind: leave it out for the defaults, or list the kinds.";
+
     public ValidateOptionsResult Validate(string? name, ManagerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
         var failures = new List<string>();
         var first = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        if (options.Triggers.Count == 0)
+        {
+            // Only a list the file wrote with nothing in it is empty here: one it left out is the defaults.
+            failures.Add(EmptyTriggers);
+        }
 
         for (var index = 0; index < options.Triggers.Count; index++)
         {

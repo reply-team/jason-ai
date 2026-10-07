@@ -13,29 +13,44 @@ namespace Jason.PluginHost.Tests.Fixtures;
 /// </summary>
 public sealed class LoopbackHttpServer : IDisposable
 {
-    private readonly HttpListener _listener = new();
+    /// <summary>How many ports the server tries before it gives up: each one was free a moment before it was tried.</summary>
+    private const int Attempts = 8;
+
+    private readonly HttpListener _listener;
     private readonly CancellationTokenSource _stopping = new();
     private readonly Task _serving;
 
     public LoopbackHttpServer()
+        : this(FreePort)
     {
-        Port = FreePort();
-        Host = "127.0.0.1";
-        _listener.Prefixes.Add(BaseUrl);
-        try
-        {
-            _listener.Start();
-        }
-        catch (HttpListenerException)
-        {
-            // Windows reserves 'localhost' for every user but not always a literal address; either is loopback.
-            _listener.Prefixes.Clear();
-            Host = "localhost";
-            _listener.Prefixes.Add(BaseUrl);
-            _listener.Start();
-        }
+    }
 
-        _serving = Task.Run(ServeAsync);
+    /// <summary>A server on the first port <paramref name="choosePort"/> names that it can listen on.</summary>
+    internal LoopbackHttpServer(Func<int> choosePort)
+    {
+        // A free port is found by binding one and letting it go, so a test running beside this one can take it before
+        // the server listens. A start that fails closes its listener, so every try is a new one. Windows reserves
+        // 'localhost' for every user but not always a literal address; either is loopback.
+        for (var attempt = 1; ; attempt++)
+        {
+            var port = choosePort();
+            foreach (var host in (string[])["127.0.0.1", "localhost"])
+            {
+                var listener = new HttpListener();
+                listener.Prefixes.Add(string.Create(CultureInfo.InvariantCulture, $"http://{host}:{port}/"));
+                try
+                {
+                    listener.Start();
+                    (_listener, Port, Host) = (listener, port, host);
+                    _serving = Task.Run(ServeAsync);
+                    return;
+                }
+                catch (HttpListenerException) when (attempt < Attempts || host != "localhost")
+                {
+                    listener.Close();
+                }
+            }
+        }
     }
 
     public int Port { get; }
@@ -65,7 +80,7 @@ public sealed class LoopbackHttpServer : IDisposable
         _stopping.Dispose();
     }
 
-    private static int FreePort()
+    internal static int FreePort()
     {
         using var probe = new TcpListener(IPAddress.Loopback, 0);
         probe.Start();

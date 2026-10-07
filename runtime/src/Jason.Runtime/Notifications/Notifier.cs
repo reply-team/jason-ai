@@ -146,6 +146,7 @@ public sealed class Notifier(
             }
 
             var (coveredThrough, lastDeliveredAt) = NotificationLine.ReadWatermark(last.New);
+            var deliveredThrough = NotificationLine.ReadDeliveredThrough(last.New);
             var covered = coveredThrough is null
                 ? null
                 : await db.Journal.AsNoTracking()
@@ -161,11 +162,11 @@ public sealed class Notifier(
             var head = await NewestAsync(db, ct).ConfigureAwait(false);
             if (head is null || head.Value.Id <= resume)
             {
-                state.Start(resume, covered?.PublicId ?? last.PublicId, lastDeliveredAt, seed: null);
+                state.Start(resume, covered?.PublicId ?? last.PublicId, lastDeliveredAt, seed: null, deliveredThrough);
                 return;
             }
 
-            state.Start(head.Value.Id, head.Value.PublicId, lastDeliveredAt, await FoldAsync(db, resume, head.Value.Id, ct).ConfigureAwait(false));
+            state.Start(head.Value.Id, head.Value.PublicId, lastDeliveredAt, await FoldAsync(db, resume, head.Value.Id, ct).ConfigureAwait(false), deliveredThrough);
             return;
         }
 
@@ -174,7 +175,8 @@ public sealed class Notifier(
         var waiting = await db.Approvals.AsNoTracking().CountAsync(a => a.Status == ApprovalStatus.Pending, ct).ConfigureAwait(false)
             + await db.Decisions.AsNoTracking().CountAsync(d => d.Status == DecisionStatus.Pending, ct).ConfigureAwait(false);
         var now = clock.GetUtcNow().UtcDateTime;
-        state.Start(newestLine?.Id ?? 0, newestLine?.PublicId, lastDeliveredAt: null, seed: waiting > 0 ? new Burst(1, now, now) : null);
+        // No line was ever written: failed protective work is counted from the newest line now, and history is not walked.
+        state.Start(newestLine?.Id ?? 0, newestLine?.PublicId, lastDeliveredAt: null, seed: waiting > 0 ? new Burst(1, now, now) : null, deliveredThrough: newestLine?.PublicId);
     }
 
     /// <summary>The newest line of the journal: one seek on its primary key.</summary>
@@ -200,7 +202,21 @@ public sealed class Notifier(
             .Select(g => new { Lines = g.Count(), Oldest = g.Min(e => e.Ts), Newest = g.Max(e => e.Ts) })
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
-        return folded is null || folded.Lines == 0 ? null : new Burst(folded.Lines, folded.Oldest, folded.Newest);
+        var failed = await ProtectiveFailureLines.Of(db)
+            .Where(e => e.Id > after && e.Id <= upTo)
+            .GroupBy(e => 1)
+            .Select(g => new { Lines = g.Count(), Oldest = g.Min(e => e.Ts), Newest = g.Max(e => e.Ts) })
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+        var asked = folded is null || folded.Lines == 0 ? null : new Burst(folded.Lines, folded.Oldest, folded.Newest);
+        var protective = failed is null || failed.Lines == 0 ? null : new Burst(failed.Lines, failed.Oldest, failed.Newest);
+        return asked is null ? protective
+            : protective is null ? asked
+            : new Burst(
+                asked.Lines + protective.Lines,
+                protective.Oldest < asked.Oldest ? protective.Oldest : asked.Oldest,
+                protective.Newest > asked.Newest ? protective.Newest : asked.Newest);
     }
 
     private async Task ReadAsync(JasonDbContext db, CancellationToken ct)
@@ -220,7 +236,14 @@ public sealed class Notifier(
         }
 
         var newest = lines[^1];
-        state.Advance(newest.Id, newest.PublicId, lines.Where(line => Triggers.Contains(line.Kind)).Select(line => line.Ts));
+
+        // A failed or expired line wakes a notification only when its work was protective, which the line alone does not
+        // say: the same predicate the sender counts with decides, over this batch.
+        var oldest = lines[0].Id;
+        var protective = lines.Any(line => ProtectiveFailureLines.Kinds.Contains(line.Kind))
+            ? (await ProtectiveFailureLines.Of(db).Where(e => e.Id >= oldest && e.Id <= newest.Id).Select(e => e.Id).ToListAsync(ct).ConfigureAwait(false)).ToHashSet()
+            : new HashSet<int>();
+        state.Advance(newest.Id, newest.PublicId, lines.Where(line => Triggers.Contains(line.Kind) || protective.Contains(line.Id)).Select(line => line.Ts));
         if (lines.Count < ReadBatch)
         {
             return;

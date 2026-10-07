@@ -29,8 +29,7 @@ public sealed class ManagerOptions
     /// <summary>
     /// The chronicle kinds that summon a review. Each must be one the runtime writes itself: a kind a caller
     /// can append is a kind anything could forge, and a rule keyed on one would be a rule anybody could fire.
-    /// An empty list is a deliberate configuration in code — review on the cadence and on nothing else —
-    /// though the file cannot express one; <see cref="Fill"/> says why.
+    /// A list that names no kind is refused; <see cref="Fill"/> says how a file comes to write one.
     /// </summary>
     public List<string> Triggers { get; set; } = [.. Default];
 
@@ -89,10 +88,12 @@ public sealed class ManagerOptions
     /// file is what is in force.
     /// </summary>
     /// <remarks>
-    /// An empty array in the file cannot be told from an absent key — configuration represents neither — so it
-    /// reads as "unset" and the defaults apply. Reviewing on the cadence alone is therefore not something the
-    /// file can say; nothing in this version needs it to. A value of the wrong type is recorded for the validator
-    /// to refuse, as it is in every bound section, rather than thrown.
+    /// The defaults apply only where the file does not write the key. An empty array, a <c>null</c>, an empty
+    /// object or an empty variable each leave the key in the configuration with nothing under it, and a list
+    /// written that way stays empty, for the validator to refuse: whoever wrote it said something about the list
+    /// that is not a list, and taking it for the defaults gave them the opposite of a manager woken for nothing,
+    /// without a word. The key is matched without regard to case, as the binder matches it. A value of the wrong
+    /// type is recorded for the validator to refuse, as it is in every bound section, rather than thrown.
     /// </remarks>
     public static void Fill(IConfigurationSection section, ManagerOptions options)
     {
@@ -103,7 +104,8 @@ public sealed class ManagerOptions
 
         // No key of this section is one a person chooses, so no plugin's id can be in a path of it.
         SafeBinding.Bind(section, options, SafeBinding.NoInstalledPlugins);
-        if (options.Triggers.Count == 0)
+        var written = section.GetChildren().Any(child => string.Equals(child.Key, nameof(Triggers), StringComparison.OrdinalIgnoreCase));
+        if (!written)
         {
             options.Triggers = [.. Default];
         }

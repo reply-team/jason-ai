@@ -11,8 +11,8 @@ namespace Jason.Runtime.Notifications;
 /// it carries forward.
 /// </summary>
 /// <remarks>
-/// It names no campaign, work item or attempt, so it never wakes a manager; and it holds two integers and the
-/// channels' outcomes, never what the notification said.
+/// It names no campaign, work item or attempt, so it never wakes a manager; and it holds three counts, two journal
+/// positions and the channels' outcomes, never what the notification said.
 /// </remarks>
 public sealed record NotificationLine(
     string NotificationId,
@@ -20,9 +20,17 @@ public sealed record NotificationLine(
     int Decisions,
     string? CoveredThrough,
     IReadOnlyList<ChannelOutcome> Channels,
-    DateTime? LastDeliveredAt)
+    DateTime? LastDeliveredAt,
+    int ProtectiveFailures = 0,
+    string? DeliveredThrough = null)
 {
     public const string CoveredThroughKey = "covered_through";
+
+    /// <summary>
+    /// The line the last notification that reached anybody covered through, carried forward by one that reached nobody:
+    /// where the next count of failed protective work starts.
+    /// </summary>
+    public const string DeliveredThroughKey = "delivered_through";
 
     public const string LastDeliveredAtKey = "last_delivered_at";
 
@@ -60,10 +68,11 @@ public sealed record NotificationLine(
         return new JsonObject
         {
             ["notification_id"] = NotificationId,
-            ["counts"] = new JsonObject { ["approvals"] = Approvals, ["decisions"] = Decisions },
+            ["counts"] = new JsonObject { ["approvals"] = Approvals, ["decisions"] = Decisions, ["protective_failures"] = ProtectiveFailures },
             [CoveredThroughKey] = CoveredThrough,
             ["channels"] = channels,
             [LastDeliveredAtKey] = LastDeliveredAt is { } at ? Format(at) : null,
+            [DeliveredThroughKey] = DeliveredThrough,
         };
     }
 
@@ -108,8 +117,20 @@ public sealed record NotificationLine(
             Number(counts["decisions"]),
             coveredThrough,
             outcomes,
-            lastDeliveredAt);
+            lastDeliveredAt,
+            Number(counts["protective_failures"]),
+            ReadDeliveredThrough(line));
     }
+
+    /// <summary>
+    /// Where a start counts failed protective work from: the line the last notification that reached anybody covered
+    /// through. A line written before the key existed starts the window at what it covered itself, so history is not
+    /// walked; a line that carries the key with no value starts it at the beginning of a journal that was empty then.
+    /// </summary>
+    public static string? ReadDeliveredThrough(JsonNode? payload) =>
+        payload is not JsonObject line ? null
+        : line.ContainsKey(DeliveredThroughKey) ? Text(line[DeliveredThroughKey])
+        : Text(line[CoveredThroughKey]);
 
     /// <summary>What a start needs from the last line: where it covered through, and the last delivery it carried.</summary>
     public static (string? CoveredThrough, DateTime? LastDeliveredAt) ReadWatermark(JsonNode? payload)

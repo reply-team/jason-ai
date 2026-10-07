@@ -149,6 +149,7 @@ public partial class CampaignManagerDocTests
         Assert.Contains("A line whose actor is a **person** is never passed over", page, StringComparison.Ordinal);
         Assert.Contains("tell a person from a process holding that person's own command line", page, StringComparison.Ordinal);
         Assert.Contains($"A narrowed list has to keep `{JournalKinds.DecisionAnswered}`", page, StringComparison.Ordinal);
+        Assert.Contains($"is refused, at a start and at a live edit, which keeps the list in force: \"{ManagerOptionsValidator.EmptyTriggers}\"", page, StringComparison.Ordinal);
 
         // How the cause names a decision: an identifier lookup, never a line's meaning.
         Assert.Contains("remembers the chronicle line its answer wrote", page, StringComparison.Ordinal);

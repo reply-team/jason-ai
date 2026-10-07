@@ -5,4 +5,7 @@
   <ItemGroup>
     <ProjectReference Include="../Jason.Contracts/Jason.Contracts.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Jason.PluginHost.Tests" />
+  </ItemGroup>
 </Project>
