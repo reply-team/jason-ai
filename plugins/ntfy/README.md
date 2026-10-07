@@ -11,9 +11,9 @@ publishes the pointer the runtime composes —
 > 3 approvals and 1 question are waiting in Jason. Ask your agent what Jason is waiting for, or run jason approval
 > list and jason decision list.
 
-— with the title `Jason`, to one topic, as JSON to the server's root. **Nothing about the work travels**: no campaign,
-no contact, no subject, no question's words. The runtime makes the pointer from two counts, and you read what waits on
-your own machine.
+— with the title `Jason`, to one topic, as JSON to the server's root. **Nothing else about the work travels**: the
+runtime makes the pointer from counts and, when protective actions failed, at most three campaign ids, and
+docs/notifications.md says exactly what a pointer may carry.
 
 The topic travels in the body rather than in the path, so the line the plugin host writes about the call in
 `~/.jason/work/plugins/pin_…/stderr.log` names the server's root and not your topic.

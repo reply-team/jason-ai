@@ -43,7 +43,8 @@ docs/contracts/
 
 One more document is published here, and it is not a canonical operation:
 [`notifications/notification.send.json`](notifications/notification.send.md), what a notification plugin is invoked
-for — put a pointer in front of a person, how many approvals and questions wait and where to look. It is a family of
+for — put a pointer in front of a person: how many approvals and questions wait, whether protective actions failed,
+and where to look. It is a family of
 its own, under `notifications/` rather than `operations/`, read by its own catalog. The operation catalog has no notion
 of kind: a document dropped among the operations would become a provider operation a work item could name, a route
 could carry and a lease would be sized for. So it has none of an operation's level-one fields — no reach, no approval,

@@ -1,9 +1,9 @@
 manifest_version: 1
 id: ntfy
-version: 1.0.0
+version: 1.0.1
 kind: notification
 name: ntfy
-description: Delivers Jason's notifications to an ntfy topic - how many approvals and questions wait, and where to look, nothing else.
+description: Delivers Jason's notifications to an ntfy topic - the pointer the runtime composes, and nothing else.
 homepage: https://github.com/reply-team/jason-ai/tree/main/plugins/ntfy
 contracts:
   protocol: [1]

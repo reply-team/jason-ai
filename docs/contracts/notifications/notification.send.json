@@ -1,7 +1,7 @@
 {
   "id": "notification.send",
   "version": 1,
-  "intent": "Put a pointer in front of a person: how many approvals and questions are waiting in Jason, and where to look. Nothing about the work itself travels.",
+  "intent": "Put a pointer in front of a person: how many approvals and questions are waiting in Jason, whether protective actions failed, and where to look. Nothing else about the work travels.",
   "input_schema": {
     "type": "object",
     "properties": {

@@ -380,7 +380,7 @@ was actually started is on the record rather than inferred from the name.
 | `executable` | required string, at most 256 characters, a granted name |
 | `args` | at most 256 strings, at most 1 MiB together |
 | `stdin` | string of at most 1 MiB, written and then closed |
-| `timeout_ms` | 1 .. the invocation's `timeout_ms`, then clamped to what is left of the budget; default: what is left |
+| `timeout_ms` | 1 .. the invocation's `timeout_ms`, then clamped to what is left of the budget; default: what is left, less the kill grace |
 | `env` | at most 32 entries, names `^[A-Za-z_][A-Za-z0-9_]*$`, never `JASON_*` and never a loader or interpreter hook, values at most 4096 bytes, for this child only |
 
 The child's working directory is the invocation directory, and it inherits the plugin host's own
@@ -392,12 +392,19 @@ as `exec_env_not_allowed`: `LD_*`, `DYLD_*`, `COMPlus_*`,
 `COMSPEC` and `SHELL` among them. Ordinary variables of the same runtimes — `NODE_ENV`,
 `DOTNET_NOLOGO`, `PYTHONUNBUFFERED` — are yours to set. `stdout` and
 `stderr` are captured up to `Plugins:Exec:OutputBytes` (4 MiB) each, the first bytes kept and the
-crossing flagged in `truncated`. On a timeout the whole process tree is killed and the call
-**returns** with `timed_out: true` rather than throwing — the plugin decides what that means, usually
-`ambiguous`. Reading the output is bounded by that same five-second grace however the program ended:
-a program may leave a helper running that inherited its pipes, an exit of its own accord says nothing
-about what it left behind, and the call comes back with whatever was captured rather than waiting for
-a handle the program it ran no longer holds. A granted program that will not start at all is an answer too: `exit_code: -1` with the
+crossing flagged in `truncated`. A call's **kill grace** is the smaller of 5 s and half of what is
+left of the budget when the call is made — with 20 s left, a call without `timeout_ms` runs for 15 s
+and keeps a grace of 5 s; with 4 s left, 2 s and 2 s. Kept back from a call that asked for no timeout,
+it means the plugin is told its program timed out while it still has time to answer for itself. On a
+timeout the whole process tree is killed and the call **returns** with `timed_out: true` rather than
+throwing — the plugin decides what that means, usually `ambiguous`. The grace bounds everything the
+host waits for once the program has ended — the killed program going, and the reading of the output
+however the program ended: a program may leave a helper running that inherited its pipes, an exit of
+its own accord says nothing about what it left behind, and the call comes back with whatever was
+captured rather than waiting for a handle the program it ran no longer holds. A killed program that is
+not seen to end within the grace is said once, as an `exec_kill_unconfirmed` line with its process id
+and the grace in milliseconds, and the call still returns `timed_out: true`; a read that ran out after
+the program was seen to end is not a kill that failed, and says nothing. A granted program that will not start at all is an answer too: `exit_code: -1` with the
 reason in `stderr`, and an `exec_launch_failed` line on stderr. At most `Plugins:Exec:MaxCalls` (64)
 calls per invocation; the next fails `exec_limit`. Every call is logged as one `exec` line:
 executable, what the runtime resolved that name to (`launch`), arguments, exit code, duration, timed
@@ -933,7 +940,7 @@ identifier of a kind the operation never declared or carrying a control characte
 
 `source` is `host` or `plugin`; `data` and `truncated` appear only when they apply. The host's own
 messages are `invocation_rejected`, `digest_unverified`, `env_probe`, `exec`, `exec_launch_failed`,
-`http`, `http_failed` and `log_truncated`. The runtime copies the stream, redacted, to
+`exec_kill_unconfirmed`, `http`, `http_failed` and `log_truncated`. The runtime copies the stream, redacted, to
 `stderr.log` in the invocation directory and keeps the last 4096 characters as the trace that travels
 with a protocol failure. It is read in fixed chunks and copied line by line, up to
 `Plugins:Invoker:StderrBytes` (4 MiB); past that the file ends with a single `[stderr truncated]`
@@ -1086,8 +1093,8 @@ account of it, is in [docs/routing.md](routing.md).
 
 ## 14. Writing a notification plugin
 
-A notification plugin carries Jason's pointer — how many approvals and questions are waiting, and where to look — to
-a service a person reads. It is invoked for one thing, the delivery contract
+A notification plugin carries Jason's pointer — how many approvals and questions are waiting, whether protective
+actions failed, and where to look — to a service a person reads. It is invoked for one thing, the delivery contract
 [`notification.send`](contracts/notifications/notification.send.md), by the runtime's own notifier, and only when an
 operator has named it under `Notifications:Plugins:<id>` ([docs/notifications.md](notifications.md) §8). No work item
 names it and no route reaches it. [`plugins/ntfy`](../plugins/ntfy/README.md) is the reference.
