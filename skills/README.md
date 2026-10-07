@@ -69,8 +69,10 @@ These are the rules both verbs keep:
   taught with `--roles-only` stays that way, and a harness installed from one source is not updated from
   another. A directory source is recorded as its full path, so `update` finds it from anywhere.
 - **Nothing is written until the whole tree is known to be deliverable.** The runtime refuses to launch
-  a role whose skill names itself differently from its directory, or whose tree is over
-  `Roles:MaxSkillBytes`. A deployment that wrote such a tree would turn a role with no skill — which
+  a role whose skill file is a link, cannot be read, gives itself no name or names itself differently from
+  its directory, or whose tree is over `Roles:MaxSkillBytes`;
+  [docs/release-and-update.md](../docs/release-and-update.md#and-what-it-says-about-the-skills-it-will-teach-from)
+  lists each by its code. A deployment that wrote such a tree would turn a role with no skill — which
   runs untaught — into a role whose *every* launch is refused, which is strictly worse. So the install
   validates the whole source first and refuses the whole deployment, naming the skill and the reason.
   The cap comes from the running runtime, because it is a live setting; where no runtime answers, the
