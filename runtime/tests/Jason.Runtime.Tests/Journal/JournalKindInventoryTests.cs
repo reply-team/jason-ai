@@ -43,8 +43,8 @@ public sealed class JournalKindInventoryTests
     /// <remarks>
     /// <c>profile_created</c> also carries two strings its author wrote. <c>program</c> is a path: machine configuration
     /// rather than anything about a person, covered by the bundle's rewrites of the home directory and the account's names
-    /// where it lies under home, and accepted as it is where it does not. <c>host_version_verified</c> is a version by
-    /// contract, written by a profile's author to say which host read it.
+    /// where it lies under home, and accepted as it is where it does not. <c>host_version_verified</c> is a version, held to
+    /// a version's shape when it is written, by a profile's author to say which host read it.
     /// </remarks>
     private static readonly HashSet<string> MetadataOnly = new(StringComparer.Ordinal)
     {

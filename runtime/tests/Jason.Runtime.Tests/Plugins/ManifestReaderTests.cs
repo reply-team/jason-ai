@@ -197,7 +197,9 @@ public class ManifestReaderTests : IDisposable
         var result = ManifestReader.Read(manifest, "fake", NewPackage(manifest, "fake"), Bounds, timing);
 
         Assert.True(result.IsValid, string.Join("; ", result.Problems.Select(p => $"{p.Path}: {p.Code}")));
-        Assert.Equal(2, timing.Calls);
+
+        // The short probe, timed out and tried once more warm; then the long probe.
+        Assert.Equal(3, timing.Calls);
     }
 
     /// <summary>

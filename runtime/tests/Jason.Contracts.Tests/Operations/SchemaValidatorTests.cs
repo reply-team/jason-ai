@@ -200,16 +200,24 @@ public class SchemaValidatorTests
         Assert.Equal("pattern", Assert.Single(CheckPattern(@"^[\]$]$", "$\n")).Reason);
     }
 
+    /// <summary>
+    /// A class that begins with `]` has no single meaning: ECMA-262 reads `[]` as a class of nothing and `[^]` as any
+    /// character, the engine reads the bracket as a member. So it is refused, and the bracket is written escaped — which
+    /// both read as a member, with the class still open after it.
+    /// </summary>
     [Fact]
-    public void A_closing_bracket_first_in_a_class_is_a_member_of_it()
+    public void A_closing_bracket_first_in_a_class_is_refused_and_written_escaped_is_a_member()
     {
-        Assert.Empty(CheckPattern("^[]a$]$", "]"));
-        Assert.Empty(CheckPattern("^[]a$]$", "$"));
-        Assert.Equal("pattern", Assert.Single(CheckPattern("^[]a$]$", "$\n")).Reason);
+        Assert.Equal("schema_pattern_invalid", Assert.Single(SchemaValidator.CheckDialect(Patterned("^[]a$]$"))).Reason);
+        Assert.Equal("schema_pattern_invalid", Assert.Single(SchemaValidator.CheckDialect(Patterned("^[^]a$]$"))).Reason);
 
-        Assert.Empty(CheckPattern("^[^]a$]$", "b"));
-        Assert.Equal("pattern", Assert.Single(CheckPattern("^[^]a$]$", "]")).Reason);
-        Assert.Equal("pattern", Assert.Single(CheckPattern("^[^]a$]$", "b\n")).Reason);
+        Assert.Empty(CheckPattern(@"^[\]a$]$", "]"));
+        Assert.Empty(CheckPattern(@"^[\]a$]$", "$"));
+        Assert.Equal("pattern", Assert.Single(CheckPattern(@"^[\]a$]$", "$\n")).Reason);
+
+        Assert.Empty(CheckPattern(@"^[^\]a$]$", "b"));
+        Assert.Equal("pattern", Assert.Single(CheckPattern(@"^[^\]a$]$", "]")).Reason);
+        Assert.Equal("pattern", Assert.Single(CheckPattern(@"^[^\]a$]$", "b\n")).Reason);
     }
 
     [Fact]
@@ -235,7 +243,7 @@ public class SchemaValidatorTests
     /// <c>\A</c>, <c>\Z</c>, <c>\z</c> and <c>\G</c> are anchors to the engine that runs the patterns and the letters A,
     /// Z, z and G to ECMA-262, which is the dialect JSON Schema names. A pattern written with one means one thing to
     /// its author and another to the runtime, and either could be the one the author had in mind, so the dialect
-    /// refuses the escape rather than choose.
+    /// refuses the escape rather than choose. The refusal names the escape and never the pattern around it.
     /// </summary>
     [Theory]
     [InlineData(@"^[a-z]+\Z", @"\Z")]
@@ -253,7 +261,7 @@ public class SchemaValidatorTests
 
         Assert.Equal("/pattern", problem.Pointer);
         Assert.Equal("schema_pattern_invalid", problem.Reason);
-        Assert.Contains($"`{pattern}`", problem.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(pattern, problem.Message, StringComparison.Ordinal);
         Assert.Contains($"`{escape}`", problem.Message, StringComparison.Ordinal);
         Assert.Contains("ECMA-262", problem.Message, StringComparison.Ordinal);
     }
@@ -348,9 +356,9 @@ public class SchemaValidatorTests
         Assert.Empty(CheckPattern("^[^.]+$", "abc"));
         Assert.Equal("pattern", Assert.Single(CheckPattern("^[^.]+$", "a.c")).Reason);
 
-        // A class that opens with a closing bracket keeps going, so the dot after it is still a member of it.
-        Assert.Empty(CheckPattern("^[]a.]+$", "]a."));
-        Assert.Equal("pattern", Assert.Single(CheckPattern("^[]a.]+$", "x")).Reason);
+        // A class that opens with an escaped closing bracket keeps going, so the dot after it is still a member of it.
+        Assert.Empty(CheckPattern(@"^[\]a.]+$", "]a."));
+        Assert.Equal("pattern", Assert.Single(CheckPattern(@"^[\]a.]+$", "x")).Reason);
     }
 
     [Fact]

@@ -276,6 +276,6 @@ public class ProfileLaunchTests
     private static async Task ProfileAsync(FakeHostRuntime host, string name, string program) =>
         await host.Fixture.PostOkAsync<ExecutionProfileDto>(
             Operations.ProfileCreate,
-            new { name, host = "claude_code", program, deny = new[] { "Write" }, host_version_verified = "stand-in" },
+            new { name, host = "claude_code", program, deny = new[] { "Write" }, host_version_verified = "0.0.0-stand-in" },
             Ct);
 }

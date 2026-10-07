@@ -45,6 +45,14 @@ public static class ProblemCodes
     /// <summary>Environmental: the version command did not answer with a version.</summary>
     public const string ExecutableVersionCheckFailed = "executable_version_check_failed";
 
+    /// <summary>
+    /// Environmental, and only at a start: a binding pattern did not finish its probe on a warm engine, twice, on the
+    /// start's second load as on its first. Nobody is there to send a reload at a start, so the machine's state is not
+    /// taken for the package's fault: the plugin loads <c>unavailable</c> and the rest of the load stands. A reload,
+    /// where an operator is there to send it again, refuses the package as <c>field_invalid</c> instead.
+    /// </summary>
+    public const string ProbeTimedOut = "probe_timed_out";
+
     public const string HostInvalid = "host_invalid";
     public const string VariableNameInvalid = "variable_name_invalid";
     public const string VariableReserved = "variable_reserved";
@@ -71,6 +79,7 @@ public static class ProblemCodes
         ExecutableNotRunnable,
         ExecutableIncompatible,
         ExecutableVersionCheckFailed,
+        ProbeTimedOut,
     };
 
     public static bool IsEnvironmental(string code) => Environmental.Contains(code);

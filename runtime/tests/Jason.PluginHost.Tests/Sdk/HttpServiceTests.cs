@@ -17,15 +17,32 @@ public sealed class HttpServiceTests : IDisposable
         _package.Dispose();
     }
 
+    /// <summary>
+    /// A request's budget here is sized for the worst scheduling, not for the loopback round trip: these tests are about
+    /// what a request carries and what comes back, and a machine running every test project at once has held a cold
+    /// loopback answer past five seconds. The test whose subject is the time passes its own <c>timeout_ms</c>.
+    /// </summary>
     private SdkHarness Harness(Action<InvocationBuilder>? configure = null) =>
         new(_package.Root, builder =>
         {
             builder.Grants = new InvocationGrants(null, new HttpGrants([_server.HostKey]), null);
+            builder.Limits = InvocationFactory.DefaultLimits with
+            {
+                TimeoutMs = 60_000,
+                Http = InvocationFactory.DefaultLimits.Http with { TimeoutMs = 30_000 },
+            };
             configure?.Invoke(builder);
         });
 
     private static JsonObject Request(SdkHarness harness, string request) =>
         (JsonObject)JsJson.ToJson(harness.Engine, harness.Evaluate("host.http(" + request + ")"))!;
+
+    /// <summary>The answer, held to its status first, with the whole answer — an error included — in the failure.</summary>
+    private static JsonObject Answered(JsonObject response, int status = 200)
+    {
+        Assert.True(response["status"]?.GetValue<int>() == status, $"Expected status {status}; the request answered {response.ToJsonString()}");
+        return response;
+    }
 
     private static string Quote(string value) => JsonValue.Create(value)!.ToJsonString();
 
@@ -47,9 +64,9 @@ public sealed class HttpServiceTests : IDisposable
     {
         using var harness = Harness();
 
-        var response = Request(
+        var response = Answered(Request(
             harness,
-            $"{{ method: \"POST\", url: {Quote(_server.Url("/echo"))}, headers: {{ \"Content-Type\": \"application/json\" }}, body: \"{{\\\"a\\\":1}}\" }}");
+            $"{{ method: \"POST\", url: {Quote(_server.Url("/echo"))}, headers: {{ \"Content-Type\": \"application/json\" }}, body: \"{{\\\"a\\\":1}}\" }}"));
 
         var echo = (JsonObject)JsonNode.Parse(response["body"]!.GetValue<string>())!;
         Assert.Equal("POST", echo["method"]!.GetValue<string>());

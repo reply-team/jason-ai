@@ -157,19 +157,23 @@ public sealed class PatternTimeoutAtActivationTests
         Assert.Equal(2, timing.TimedOut);
     }
 
-    /// <summary>Once more and only once: a probe that still cannot finish fails the start closed, as any package problem does.</summary>
+    /// <summary>
+    /// Once more and only once: a probe that still cannot finish on the second load holds back its own package, as
+    /// <c>unavailable</c> with <c>probe_timed_out</c>, and the load stands; it no longer empties the start.
+    /// </summary>
     [Fact]
-    public async Task A_start_whose_binding_probe_cannot_finish_twice_over_fails_closed_after_one_more_load()
+    public async Task A_start_whose_binding_probe_cannot_finish_twice_over_loads_the_package_unavailable_after_one_more_load()
     {
         var probing = new TimingOut(int.MaxValue) { OnlyPattern = ProbedPattern };
 
         await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: Install, configureServices: services => services.AddSingleton<PatternTiming>(probing));
 
         var plugins = api.Resolve<PluginRegistry>();
-        Assert.Null(plugins.Snapshot.Find(PluginId));
-        Assert.False(plugins.LastReload!.Activated);
-        var problem = Assert.Single(Assert.Single(plugins.LastReload.Candidates).Problems);
-        Assert.Equal(("field_invalid", "binding#/properties/workspace/pattern"), (problem.Code, problem.Path));
+        Assert.True(plugins.LastReload!.Activated);
+        var held = plugins.Snapshot.Find(PluginId)!;
+        Assert.Equal(Jason.Contracts.Plugins.PluginStatus.Unavailable, held.Status);
+        var problem = Assert.Single(held.Problems);
+        Assert.Equal(("probe_timed_out", "binding#/properties/workspace/pattern"), (problem.Code, problem.Path));
 
         // Two loads, each probing once and once more warm.
         Assert.Equal(4, probing.TimedOut);

@@ -86,20 +86,19 @@ covered here.
   different value is recorded beside it as a divergence and the attempt still succeeds. Provenance
   is written at the claim and completed at the end; nothing rewrites it. `docs/routing.md` is the
   contract.
-- Plugins: a package is `~/.jason/plugins/<id>/` with `plugin.yaml`, `main.js` and optional modules;
-  the directory name is the id. The manifest is validated against one fixed vocabulary of problem
-  codes — package problems reject the whole reload and keep the previous snapshot, the four
-  `executable_*` ones are environmental and only make that plugin `unavailable`. Every package has a
-  `sha256:` content digest that the child recomputes before it runs anything. The invocation goes to
-  the child on stdin, exactly one outcome comes back on stdout, diagnostics are JSON Lines on stderr,
-  and the exit code says only whether the protocol completed (0 outcome, 2 usage, 3 rejected,
-  4 host failure). Declaration is not permission: capabilities are requested by the manifest and
-  granted under `Plugins:Grants:<id>`, resolved and frozen at each load. A failure carries one of
-  four classes — `transient` is retried, `permanent` and `validation` are final, and `ambiguous` says
-  the provider may already have acted, so it is repeated only where the operation's own contract
-  declares that repeating it is safe or that a recovery read makes it safe. An activated load journals
-  `plugins_reloaded`; there is no `plugin.invoke` operation.
-  `docs/plugins.md` is the contract.
+- Plugins: a package is `~/.jason/plugins/<id>/` with `plugin.yaml`, `main.js` and optional modules; the
+  directory name is the id. The manifest is validated against one fixed vocabulary of problem codes —
+  package problems reject the whole reload and keep the previous snapshot, the four `executable_*` ones
+  and, at a start only, `probe_timed_out` are environmental and only make that plugin `unavailable`.
+  Every package has a `sha256:` content digest that the child recomputes before it runs anything. The
+  invocation goes to the child on stdin, exactly one outcome comes back on stdout, diagnostics are JSON
+  Lines on stderr, and the exit code says only whether the protocol completed (0 outcome, 2 usage, 3
+  rejected, 4 host failure). Declaration is not permission: capabilities are requested by the manifest
+  and granted under `Plugins:Grants:<id>`, resolved and frozen at each load. A failure carries one of
+  four classes — `transient` is retried, `permanent` and `validation` are final, and `ambiguous` says the
+  provider may already have acted, so it is repeated only where the operation's own contract declares
+  that repeating it is safe or that a recovery read makes it safe. An activated load journals
+  `plugins_reloaded`; there is no `plugin.invoke` operation. `docs/plugins.md` is the contract.
 - Inbound sync: a scan step between the lease enforcer and the summon reads each active campaign routed to a plugin
   that reads conversations, and linked there, once per cadence — one `conversation.list` work item per page — and
   writes one reserved `inbound_reply_observed` line per thread that moved — identifiers, moments and the provider's

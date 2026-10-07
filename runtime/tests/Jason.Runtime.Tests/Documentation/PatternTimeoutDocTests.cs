@@ -16,7 +16,7 @@ public sealed partial class PatternTimeoutDocTests
 {
     /// <summary>
     /// Where a pattern's time is decided, and only where: the build's own patterns at start, a plugin's binding patterns
-    /// at load. A result_format pattern is not probed, and the page says what bounds it instead.
+    /// at load. A result_format pattern is probed when the item is written, and the page says so.
     /// </summary>
     [Fact]
     public void The_dialect_says_where_a_pattern_s_time_is_decided_and_that_a_timeout_is_never_a_verdict()
@@ -28,7 +28,7 @@ public sealed partial class PatternTimeoutDocTests
             readme,
             StringComparison.Ordinal);
         Assert.Contains(
-            "A `result_format` schema's patterns are checked against the dialect when the item is written but not probed, so a slow one is bounded only by that work item's own timeout and attempt count.",
+            "A work item's `result_format` schema is probed the same way when the item is written, and when a patch names it, and a pattern that still cannot finish is refused there as `schema_pattern_invalid`, final: the schema has to change.",
             readme,
             StringComparison.Ordinal);
         Assert.Contains("[`docs/notifications.md`](../notifications.md) say each in place.", readme, StringComparison.Ordinal);
@@ -102,7 +102,7 @@ public sealed partial class PatternTimeoutDocTests
         Assert.Contains("under the dialect's own code, `pattern_timed_out`, rather than a route problem", page, StringComparison.Ordinal);
         Assert.Contains("Beside a route that really is wrong, it is left out of the 409, which names only what is wrong.", page, StringComparison.Ordinal);
         Assert.Contains("reported as `field_invalid` at `binding#/properties/<name>/pattern` with a message naming `pattern_timed_out`", page, StringComparison.Ordinal);
-        Assert.Contains("so a pattern slow only on a long value passes the probe and times out here", page, StringComparison.Ordinal);
+        Assert.Contains("so a pattern slow only on a long value is refused at load", page, StringComparison.Ordinal);
         Assert.DoesNotContain("It can only be a busy machine's cold engine", page, StringComparison.Ordinal);
     }
 
@@ -128,7 +128,7 @@ public sealed partial class PatternTimeoutDocTests
             Flat(Source("docs/contracts/README.md")),
             StringComparison.Ordinal);
         Assert.Contains(
-            "including a pattern that cannot finish matching a short probe within the dialect's 100 ms on a warm engine, twice | `field_invalid` |",
+            "including a pattern that cannot finish matching the short probe or the 64 KiB one within the dialect's 100 ms on a warm engine, twice | `field_invalid` |",
             Source("docs/plugins.md"),
             StringComparison.Ordinal);
     }
@@ -148,7 +148,15 @@ public sealed partial class PatternTimeoutDocTests
             routing,
             StringComparison.Ordinal);
         Assert.Contains(
-            "a load whose only problems are of these two kinds is built once more, whole, on the now warm engine, and only a second such load leaves the registries empty",
+            "a load whose only problems are of these two kinds is built once more, whole, on the now warm engine, and a package whose probe still cannot finish on that second load loads `unavailable` with `probe_timed_out`",
+            routing,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "every claim on them ends `plugin_unavailable` at check 4, before a binding is measured at check 7, until the next load measures them",
+            routing,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "A binding of an available plugin no pattern could finish measuring on the second load still leaves the registries empty",
             routing,
             StringComparison.Ordinal);
         Assert.Contains(

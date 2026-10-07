@@ -106,6 +106,6 @@ public class RoleMemoryTests
     private static async Task ProfileAsync(FakeHostRuntime host, string name) =>
         await host.Fixture.PostOkAsync<ExecutionProfileDto>(
             Operations.ProfileCreate,
-            new { name, host = "claude_code", program = ProfileFixture.Program, host_version_verified = "stand-in" },
+            new { name, host = "claude_code", program = ProfileFixture.Program, host_version_verified = "0.0.0-stand-in" },
             Ct);
 }

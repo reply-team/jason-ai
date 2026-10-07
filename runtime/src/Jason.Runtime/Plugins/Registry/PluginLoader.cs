@@ -53,7 +53,15 @@ public sealed class PluginLoader(
         new EventId(4, nameof(GrantsResolved)),
         "Plugin {Id} granted {Exec} executables, {Http} hosts, {Env} variables");
 
-    public async Task<LoadResult> LoadAsync(SnapshotSource source, CancellationToken cancellationToken)
+    public Task<LoadResult> LoadAsync(SnapshotSource source, CancellationToken cancellationToken) =>
+        LoadAsync(source, probeTimeoutsHoldOnlyThePlugin: false, cancellationToken);
+
+    /// <summary>
+    /// A load. With <paramref name="probeTimeoutsHoldOnlyThePlugin"/>, a package whose only problems are binding probes
+    /// that did not finish loads <c>unavailable</c> with <see cref="ProblemCodes.ProbeTimedOut"/> instead of refusing the
+    /// load: the start's second load, where nobody is there to send a reload, and nothing else.
+    /// </summary>
+    public async Task<LoadResult> LoadAsync(SnapshotSource source, bool probeTimeoutsHoldOnlyThePlugin, CancellationToken cancellationToken)
     {
         PluginsOptions settings;
         try
@@ -88,7 +96,7 @@ public sealed class PluginLoader(
                 continue;
             }
 
-            var (loaded, plugin) = await LoadCandidateAsync(candidate, bounds, settings, environment, cancellationToken).ConfigureAwait(false);
+            var (loaded, plugin) = await LoadCandidateAsync(candidate, bounds, settings, environment, probeTimeoutsHoldOnlyThePlugin, cancellationToken).ConfigureAwait(false);
             candidates.Add(loaded);
             if (plugin is not null)
             {
@@ -160,6 +168,7 @@ public sealed class PluginLoader(
         ManifestBounds bounds,
         PluginsOptions settings,
         Dictionary<string, string> environment,
+        bool probeTimeoutsHoldOnlyThePlugin,
         CancellationToken cancellationToken)
     {
         string yaml;
@@ -172,7 +181,7 @@ public sealed class PluginLoader(
             return (Invalid(candidate, null, ProblemCodes.PackageUnreadable, PackageScanner.ManifestFileName, exception.Message), null);
         }
 
-        var read = ManifestReader.Read(yaml, candidate.Name, candidate.Path, bounds, _timing);
+        var read = ManifestReader.Read(yaml, candidate.Name, candidate.Path, bounds, _timing, probeTimeoutsHoldOnlyThePlugin);
         if (read.Manifest is null)
         {
             return (new CandidateReport(candidate.Name, null, CandidateStatus.Invalid, read.Problems), null);
@@ -197,7 +206,10 @@ public sealed class PluginLoader(
         GrantsResolved(logger, manifest.Id, grants.Exec.Count, grants.Http.Count, grants.Env.Count, null);
 
         var executables = await ResolveExecutablesAsync(manifest, grants, settings, environment, cancellationToken).ConfigureAwait(false);
-        var problems = new List<ManifestProblem>(grants.Warnings);
+        // A manifest read with problems is one the start's second load kept for its unfinished probes alone: those come
+        // first, environmental, and hold the plugin back like any other.
+        var problems = new List<ManifestProblem>(read.Problems);
+        problems.AddRange(grants.Warnings);
         problems.AddRange(executables.Select(executable => executable.Problem).OfType<ManifestProblem>());
 
         // A warning about a grant says something about the settings, not about whether the plugin can run.

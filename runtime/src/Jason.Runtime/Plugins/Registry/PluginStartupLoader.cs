@@ -43,15 +43,17 @@ public sealed class PluginStartupLoader(
         try
         {
             await using var scope = scopes.CreateAsyncScope();
-            var (load, candidate) = await BuildAsync(scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
+            var (load, candidate) = await BuildAsync(scope.ServiceProvider, probeTimeoutsHoldOnlyThePlugin: false, cancellationToken).ConfigureAwait(false);
             if (Unmeasured(load, candidate))
             {
                 // Nothing in the load was found wrong — only a binding pattern that could not finish its probe, or a
                 // binding a pattern could not finish measuring: this machine's cost at this moment, never a verdict. A
                 // reload answers those in its own terms, but at startup nobody is there to send it again, and failing
                 // closed would leave every provider item to fail `no_route` until somebody did. So the whole load is
-                // built once more, on an engine that is warm by now, and only a second such load fails closed.
-                (load, candidate) = await BuildAsync(scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
+                // built once more, on an engine that is warm by now. A package whose probe still cannot finish then
+                // holds back only itself, as `unavailable` with `probe_timed_out`, and the rest of the load stands; a
+                // route set held back by a binding of an available plugin no pattern could measure still fails closed.
+                (load, candidate) = await BuildAsync(scope.ServiceProvider, probeTimeoutsHoldOnlyThePlugin: true, cancellationToken).ConfigureAwait(false);
             }
 
             if (load.Snapshot is null)
@@ -102,10 +104,10 @@ public sealed class PluginStartupLoader(
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>One load and, where it produced a plugin set, the route set that load would activate with it.</summary>
-    private static async Task<(LoadResult Load, RouteCandidate? Candidate)> BuildAsync(IServiceProvider services, CancellationToken cancellationToken)
+    private static async Task<(LoadResult Load, RouteCandidate? Candidate)> BuildAsync(IServiceProvider services, bool probeTimeoutsHoldOnlyThePlugin, CancellationToken cancellationToken)
     {
         var load = await services.GetRequiredService<PluginLoader>()
-            .LoadAsync(SnapshotSource.Startup, cancellationToken)
+            .LoadAsync(SnapshotSource.Startup, probeTimeoutsHoldOnlyThePlugin, cancellationToken)
             .ConfigureAwait(false);
 
         var candidate = load.Snapshot is null

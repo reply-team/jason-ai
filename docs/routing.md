@@ -265,15 +265,22 @@ the operator wrote it:
 | a global operation override | `Routes:Operations:<operation>` |
 | a campaign route | `campaign:<cmp_…>/routes/<operation>`, or `campaign:<cmp_…>/routes/default` |
 
-The load at startup takes the same path: a runtime started with a bad route reports it in the startup
-report and leaves **both** registries empty, rather than running with plugins and no routes. A pattern that
-could not finish is judged by where it happened. At a busy **start**, a binding probe that timed out twice, or a
-binding no pattern could finish measuring (§7), is not yet known to be bad — the engine may simply have been cold —
-and nobody is there to send a reload again: a load whose only problems are of these two kinds is built once more,
-whole, on the now warm engine, and only a second such load leaves the registries empty, reported as
-`field_invalid` or under `pattern_timed_out` and repaired by `jason plugin reload`. At a **live reload** the engine
-is warm, so a binding pattern whose probe times out twice is at fault: the package is refused, as any package
-problem is, and the previous snapshot stays active.
+The load at startup takes the same path: a runtime started with a bad route reports it in the startup report and
+leaves **both** registries empty, rather than running with plugins and no routes. A pattern that could not finish
+is judged by where it happened. At a busy **start**, a binding probe that timed out twice, or a binding no pattern
+could finish measuring (§7), is not yet known to be bad — the engine may simply have been cold — and nobody is
+there to send a reload again: a load whose only problems are of these two kinds is built once more, whole, on the
+now warm engine, and a package whose probe still cannot finish on that second load loads `unavailable` with
+`probe_timed_out` (docs/plugins.md), while the rest of the load stands. Routes to such a plugin are frozen with
+their bindings unmeasured: everything before the measurement is still checked — the plugin is known, performs the
+operation, speaks its contract, and the binding names no credential and fits its bound — and every claim on them
+ends `plugin_unavailable` at check 4, before a binding is measured at check 7, until the next load measures them. A
+binding of an available plugin no pattern could finish measuring on the second load still leaves the registries
+empty, reported under `pattern_timed_out` and repaired by `jason plugin reload`: that plugin passes check 4, so a
+route activated with it unmeasured would have its binding measured again at every claim, each a double timeout,
+until the item's attempts ran out — the start fails closed instead. At a **live reload** the engine is warm, so a
+binding pattern whose probe times out twice is at fault: the package is refused, as any package problem is, and the
+previous snapshot stays active.
 
 **An archived campaign's routes are ignored.** History must never stand between an operator and an
 uninstall: the campaign will never dispatch again, so what its route named no longer has to exist.
@@ -343,18 +350,20 @@ structure, so the runtime carries the validator's own sentence through verbatim 
 came from. It arrives as the same rejected reload, because an operator who mistypes a route must get one
 answer — and never a 500, which would say the runtime broke rather than the edit.
 
-**A binding no pattern could finish measuring is none of these.** Where a pattern of the plugin's binding
-schema did not finish matching, twice, nothing was found wrong with the binding: it is not
-`route_binding_invalid`. Alone, it leaves nothing written or activated, and `route.set`, `route.unset` and
-`plugin.reload` answer `validation_timed_out`, 503, `retryable: true` — send the request again; the detail names
-the route the way the operator wrote it, under the dialect's own code, `pattern_timed_out`, rather than a route
-problem. Beside a route that really is wrong, it is left out of the 409, which names only what is wrong. The start
-builds such a set once more instead (§6). Usually it is a busy machine's cold engine, but not always: a plugin's
-binding patterns are probed on a warm engine when its package loads — a pattern that cannot finish there has
-already refused its package, reported as `field_invalid` at `binding#/properties/<name>/pattern` with a message
-naming `pattern_timed_out` — yet the probe is a short string and a binding may be up to 64 KiB, so a pattern slow
-only on a long value passes the probe and times out here. Either way the answer is the same: never a refusal of the
-binding.
+**A binding no pattern could finish measuring is none of these.** Where a pattern of the plugin's binding schema did not
+finish matching, twice, nothing was found wrong with the binding: it is not `route_binding_invalid`. Alone, it leaves
+nothing written or activated, and `route.set`, `route.unset` and `plugin.reload` answer `validation_timed_out`, 503,
+`retryable: true` — send the request again; the detail names the route the way the operator wrote it, under the
+dialect's own code, `pattern_timed_out`, rather than a route problem. A route to a plugin that loaded `unavailable` with
+`probe_timed_out` (§6) is the one exception: its binding is never measured, so a route write naming that plugin, or one
+made while such a route is active, is accepted rather than answered 503. Beside a route that really is wrong, it is left
+out of the 409, which names only what is wrong. The start builds such a set once more instead (§6). Usually it is a busy
+machine's cold engine, but not always: a plugin's binding patterns are probed on a warm engine when its package loads —
+a pattern that cannot finish there has already refused its package, reported as `field_invalid` at
+`binding#/properties/<name>/pattern` with a message naming `pattern_timed_out` — and its probes are a short string and
+the same string repeated to 64 KiB, the longest binding a route can carry, so a pattern slow only on a long value is
+refused at load; a value of other characters can still cost a pattern more than either probe did, and that times out
+here. Either way the answer is the same: never a refusal of the binding.
 
 **Two facts about the order that would otherwise surprise you:**
 

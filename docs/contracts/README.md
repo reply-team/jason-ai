@@ -227,29 +227,86 @@ Six details worth knowing before you write a schema:
   was outside the range the schema set. Whether a number is a whole one, for `type: integer`, is not a comparison
   and is decided for any number, however large.
 - **The same code validates untrusted schemas**, because a plugin's `binding` schema comes from its manifest.
-  Patterns compile without backtracking and run under a match timeout, which rules out lookaround and
-  backreferences. `$` matches only at the end, as ECMA-262 has it; .NET's reading, which also accepts a final
-  newline, is not the one used. `.` matches any character except the four line terminators, `\n`, `\r`, U+2028 and
-  U+2029, as in ECMA-262; .NET's leaves out only `\n`. `\A`, `\Z`, `\z` and `\G` are outside the vocabulary and are
-  refused as `schema_pattern_invalid`, because ECMA-262 reads them as the letters A, Z, z and G and the engine reads
-  them as anchors. Until a pattern grammar is published, the classes `\d`, `\w` and `\s` and the word boundary `\b`
-  follow the engine rather than ECMA-262: `\d`, for one, accepts the digits of other scripts. `$ref` resolves only inside its own
-  document and never in a loop; nesting stops at 32 levels; a schema over 64 KiB is refused unread.
+  A pattern is read against [the pattern grammar](#the-pattern-grammar) below, and compiles without backtracking
+  under a match timeout. `$ref` resolves only inside its own document and never in a loop; nesting stops at 32
+  levels; a schema over 64 KiB is refused unread.
 - **The build's own patterns are warmed when the runtime starts, and a plugin's binding patterns are decided when its
   package loads, on a warm engine; at a work item a timeout is never a verdict on the value, and what happens then
-  depends on where it happened.** Every match runs under a published 100 ms, and with matching linear in the input
-  the only costs that can run past it are a cold engine's — building its automaton, compiling its code — and a
-  pathological pattern's. The runtime matches the patterns of these documents once when it starts. A plugin's
-  binding patterns are probed against a short string when its package loads, and one that still cannot finish on a
-  warm engine refuses the package: the reload reports it as `field_invalid` at `binding#/properties/<name>/pattern`,
-  the code a manifest gives every dialect problem in its binding schema, with a message that names the cause,
-  `pattern_timed_out`. A `result_format` schema's patterns are checked against the dialect when the item is written
-  but not probed, so a slow one is bounded only by that work item's own timeout and attempt count. A match that times
-  out anywhere is tried once more at once. A second timeout is reported as `pattern_timed_out`, and nothing has been
-  decided: a request is answered `validation_timed_out`, retryable; at the claim the attempt ends `transient`; over a
-  plugin's answer the plugin has run, so the attempt is `ambiguous` and the operation's own repeat rule decides.
+  depends on where it happened.** Every match runs under a published 100 ms, and with matching linear in the input the
+  only costs that can run past it are a cold engine's — building its automaton, compiling its code — and a pathological
+  pattern's. The runtime matches the patterns of these documents once when it starts. A plugin's binding patterns are
+  probed when its package loads, against a short string and against the same string repeated to 64 KiB, the longest
+  binding a route can carry, and one that still cannot finish on a warm engine refuses the package: the reload reports
+  it as `field_invalid` at `binding#/properties/<name>/pattern`, the code a manifest gives every dialect problem in its
+  binding schema, with a message that names the cause, `pattern_timed_out`. A work item's `result_format` schema is
+  probed the same way when the item is written, and when a patch names it, and a pattern that still cannot finish is
+  refused there as `schema_pattern_invalid`, final: the schema has to change. A string in an answer longer than 64 KiB
+  is held only by that work item's own timeout and attempt count. A match that times out anywhere is tried once more at
+  once. A second timeout is reported as `pattern_timed_out`, and nothing has been decided: a request is answered
+  `validation_timed_out`, retryable; at the claim the attempt ends `transient`; over a plugin's answer the plugin has
+  run, so the attempt is `ambiguous` and the operation's own repeat rule decides.
   [`docs/work-execution.md`](../work-execution.md), [`docs/routing.md`](../routing.md) and
   [`docs/notifications.md`](../notifications.md) say each in place.
+
+### The pattern grammar
+
+A pattern means what ECMA-262, the dialect JSON Schema names, says it means, and the engine that runs it reads some
+of the same text differently. So every construct a pattern may write is in this table, outside a character class
+and inside one. It is admitted as written where the two readings agree; rewritten to the engine's spelling of
+ECMA-262's meaning where they differ and one can be written; and refused as `schema_pattern_invalid` where they
+differ and none can, or where the engine cannot run it without backtracking. A construct the table does not name
+is refused as unknown. A refusal names the construct and the character it starts at, and never quotes the pattern;
+a problem about a value — `pattern`, or `pattern_timed_out` — quotes the pattern, because the pattern is the rule
+the value has to meet. ECMA-262 has been the dialect all along; this table is how the runtime holds a pattern to it.
+
+| Construct | Outside a class | Inside a class | Why |
+|---|---|---|---|
+| any character no other row names | admitted | admitted | itself, in both readings |
+| `^` | admitted | admitted | the start of the value; first in a class, the class's negation; elsewhere in a class, itself |
+| `$` | `\z` | admitted | ECMA-262's end is the end of the value, where the engine's also matches before a final line feed; in a class, itself |
+| `.` | `[^\n\r\u2028\u2029]` | admitted | ECMA-262 leaves out the four line terminators, where the engine leaves out only the line feed; in a class, itself |
+| `\|` | admitted | admitted | the same in both readings; in a class, itself |
+| `(` … `)` | admitted | admitted | the same in both readings; in a class, itself |
+| `(?:` … `)` | admitted | — | the same in both readings |
+| `(?=`, `(?!` | refused | — | the engine that runs patterns cannot run it without backtracking, which keeps a hostile pattern linear |
+| `(?<=`, `(?<!` | refused | — | the engine that runs patterns cannot run it without backtracking, which keeps a hostile pattern linear |
+| `(?<`name`>`, `(?'`name`'` | refused | — | a name serves nothing in a pattern that only accepts or refuses a value |
+| `(?>` | refused | — | the engine's own; ECMA-262 has none |
+| `(?(` | refused | — | the engine's own; ECMA-262 has none |
+| `(?#` | refused | — | the engine's own; ECMA-262 has none |
+| `(?i`, `(?m`, `(?n`, `(?s`, `(?x`, `(?-` | refused | — | the engine's own; a schema's pattern carries no flags, and ECMA-262 reads it only with one |
+| any other `(?` | refused | — | neither reading has it |
+| `*`, `+`, `?`, each also followed by `?` | admitted | admitted | the same in both readings; in a class, itself |
+| `{n}`, `{n,}`, `{n,m}`, each also followed by `?` | admitted | admitted | the same in both readings; in a class, itself |
+| `{` that starts no counted quantifier, and `}` | refused | admitted | only ECMA-262's older grammar reads it as itself; write `\{` or `\}`; in a class, itself |
+| `]` outside a class | admitted | — | itself, in both readings |
+| `[` … `]`, `[^` … `]` | admitted | admitted | the same in both readings; in a class, `[` is itself |
+| `[]`, `[^]` | refused | — | ECMA-262 reads `[]` as a class of nothing and `[^]` as any character, where the engine reads the `]` as a member; write `\]` for a bracket in a class |
+| a `[` never closed | refused | — | neither reading has it |
+| `a-z` | — | admitted | the same in both readings |
+| a range with `\d`, `\w` or `\s` at either end | — | refused | ECMA-262's older grammar reads it as three members, where the engine reads it its own way |
+| `-[` | — | refused | the engine's own; in ECMA-262 the `[` is a member |
+| `\d` | `[0-9]` | `0-9` | ECMA-262's digits are the ten ASCII ones, where the engine's are every script's |
+| `\D` | `[^0-9]` | refused | its complement of ECMA-262's digits; in a class, a complement cannot be written as members |
+| `\w` | `[A-Za-z0-9_]` | `A-Za-z0-9_` | ECMA-262's word characters are ASCII letters, digits and `_`, where the engine's are every script's |
+| `\W` | `[^A-Za-z0-9_]` | refused | its complement of ECMA-262's word characters; in a class, a complement cannot be written as members |
+| `\s` | `[\t\n\v\f\r \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]` | `\t\n\v\f\r \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF` | ECMA-262's white space and line terminators: U+FEFF is one, U+0085 is not, the other way round from the engine |
+| `\S` | `[^\t\n\v\f\r \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]` | refused | its complement of ECMA-262's white space; in a class, a complement cannot be written as members |
+| `\b`, `\B` | refused | refused | a boundary between word characters, which the two readings define differently; in a class ECMA-262 reads `\b` as a backspace |
+| `\A`, `\Z`, `\z`, `\G` | refused | refused | ECMA-262 reads it as the letter, the engine as an anchor; write the letter without the backslash, or `^` and `$` for the start and the end |
+| `\p{`…`}`, `\P{`…`}` | refused | refused | a schema's pattern carries no flags, and ECMA-262 reads it only with one |
+| `\1` to `\9`, `\k` | refused | refused | the engine that runs patterns cannot run it without backtracking, which keeps a hostile pattern linear; in a class ECMA-262 reads a digit or a letter |
+| `\0` followed by a digit | refused | refused | ECMA-262's older grammar reads an octal escape, the engine its own |
+| `\0` followed by no digit | admitted | admitted | the same in both readings |
+| `\t`, `\n`, `\v`, `\f`, `\r` | admitted | admitted | the same in both readings |
+| `\x` followed by two hex digits | admitted | admitted | the same in both readings |
+| `\u` followed by four hex digits | admitted | admitted | the same in both readings |
+| `\x` or `\u` without exactly its hex digits, and `\u{` | refused | refused | a code point in braces needs a flag a schema's pattern does not have; otherwise neither reading has it |
+| `\c` | refused | refused | the two readings do not agree on its letters |
+| `\e`, `\a` | refused | refused | the engine's own; ECMA-262 reads the letter |
+| `\` before one of `^ $ \ . * + ? ( ) [ ] { } \| / -` | admitted | admitted | that character itself, in both readings |
+| `\` before any other character | refused | refused | the two readings do not agree on what it means, or neither has it |
+| `\` at the end | refused | refused | neither reading has it |
 
 ## Versioning
 

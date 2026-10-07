@@ -84,7 +84,7 @@ internal static partial class WorkItemValidation
         // same field twice for a single mistake.
         if (request.Kind != WorkItemKind.ProviderOp)
         {
-            ValidateResultFormat(request.ResultFormat, errors);
+            ValidateResultFormat(request.ResultFormat, timing, errors);
         }
 
         ValidateReason(request.Reason, errors);
@@ -125,10 +125,14 @@ internal static partial class WorkItemValidation
     /// The shape an answer must have, as a schema in the dialect this build publishes — the same one operation
     /// contracts are written in, so there is one shape language here and not two. It is a schema rather than a
     /// free-form sketch because the runtime enforces it when the answer arrives: a shape nothing can check is a
-    /// request an executor may satisfy with a paragraph, and this is where that stops being possible.
+    /// request an executor may satisfy with a paragraph, and this is where that stops being possible. Its patterns are
+    /// probed here too, as a plugin's binding patterns are when its package loads: one that cannot finish matching the
+    /// probes on a warm engine, twice, is refused now, where its author can fix it, rather than left to time out against
+    /// the answer at the end of the work.
     /// </summary>
-    public static void ValidateResultFormat(JsonNode? resultFormat, ValidationErrors errors)
+    public static void ValidateResultFormat(JsonNode? resultFormat, PatternTiming timing, ValidationErrors errors)
     {
+        ArgumentNullException.ThrowIfNull(timing);
         ArgumentNullException.ThrowIfNull(errors);
         if (resultFormat is null)
         {
@@ -152,7 +156,15 @@ internal static partial class WorkItemValidation
             return;
         }
 
-        foreach (var problem in SchemaValidator.CheckDialect(schema))
+        var problems = SchemaValidator.CheckDialect(schema);
+
+        // Only a schema the dialect can run is probed: a pattern it refuses has nothing to time.
+        if (problems.Count == 0)
+        {
+            problems = SchemaValidator.ProbePatterns(schema, timing);
+        }
+
+        foreach (var problem in problems)
         {
             errors.Add(
                 string.IsNullOrEmpty(problem.Pointer) ? "result_format" : $"result_format{problem.Pointer}",

@@ -301,11 +301,26 @@ internal static partial class ProfileValidation
         }
     }
 
+    /// <summary>
+    /// A host version is a version: three numbers, and a pre-release after `-` if any. It is journaled as metadata on that
+    /// understanding, so free text is refused rather than recorded; build metadata after `+` takes no part in a version's
+    /// order and could carry anything, so it is refused too. Blank is no version at all, and is stored as none.
+    /// </summary>
     private static void ValidateHostVersion(string? hostVersion, ValidationErrors errors)
     {
-        if (hostVersion is not null && hostVersion.Trim().Length > ProfileService.MaxHostVersionLength)
+        if (string.IsNullOrWhiteSpace(hostVersion))
+        {
+            return;
+        }
+
+        var trimmed = hostVersion.Trim();
+        if (trimmed.Length > ProfileService.MaxHostVersionLength)
         {
             errors.Add("host_version_verified", "too_long", string.Create(CultureInfo.InvariantCulture, $"host_version_verified must be at most {ProfileService.MaxHostVersionLength} characters."));
+        }
+        else if (trimmed.Contains('+', StringComparison.Ordinal) || !Contracts.Update.SemanticVersion.TryParse(trimmed, out _))
+        {
+            errors.Add("host_version_verified", "version_invalid", "host_version_verified must be a version such as 2.1.289: three numbers, and a pre-release after '-' if any.");
         }
     }
 

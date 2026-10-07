@@ -397,7 +397,7 @@ public sealed class WorkItemService(
             }
             else
             {
-                WorkItemValidation.ValidateResultFormat(request.ResultFormat.Value, errors);
+                WorkItemValidation.ValidateResultFormat(request.ResultFormat.Value, _timing, errors);
             }
         }
 

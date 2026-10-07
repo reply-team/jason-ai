@@ -19,7 +19,16 @@ public static class ManifestReader
         Read(yamlText, directoryName, packageRoot, bounds, PatternTiming.Default);
 
     /// <summary>The same read, with the binding schema's patterns probed under <paramref name="timing"/>.</summary>
-    public static ManifestReadResult Read(string yamlText, string directoryName, string packageRoot, ManifestBounds bounds, PatternTiming timing)
+    public static ManifestReadResult Read(string yamlText, string directoryName, string packageRoot, ManifestBounds bounds, PatternTiming timing) =>
+        Read(yamlText, directoryName, packageRoot, bounds, timing, probeTimeoutsHoldOnlyThePlugin: false);
+
+    /// <summary>
+    /// The same read, where a manifest whose only problems are binding probes that did not finish is a plugin held back by
+    /// this machine rather than a broken package: with <paramref name="probeTimeoutsHoldOnlyThePlugin"/> those problems are
+    /// read as <see cref="ProblemCodes.ProbeTimedOut"/>, environmental, and the manifest is kept. The start's second load
+    /// reads this way; nothing else does.
+    /// </summary>
+    public static ManifestReadResult Read(string yamlText, string directoryName, string packageRoot, ManifestBounds bounds, PatternTiming timing, bool probeTimeoutsHoldOnlyThePlugin)
     {
         ArgumentNullException.ThrowIfNull(yamlText);
         ArgumentException.ThrowIfNullOrWhiteSpace(directoryName);
@@ -46,6 +55,13 @@ public static class ManifestReader
 
         var rules = new ManifestRules(root, directoryName, packageRoot, bounds, timing);
         var manifest = rules.Build();
+        if (probeTimeoutsHoldOnlyThePlugin && rules.Problems.Count > 0 && rules.Problems.All(problem => problem.Unmeasured))
+        {
+            return new ManifestReadResult(
+                manifest,
+                [.. rules.Problems.Select(problem => new ManifestProblem(ProblemCodes.ProbeTimedOut, problem.Path, problem.Message))]);
+        }
+
         return new ManifestReadResult(rules.Problems.Count == 0 ? manifest : null, rules.Problems);
     }
 }

@@ -113,7 +113,7 @@ public class ManagerLoopTests
                 host = "claude_code",
                 program = ProfileFixture.Program,
                 deny = new[] { "Write" },
-                host_version_verified = "stand-in",
+                host_version_verified = "0.0.0-stand-in",
             },
             Ct);
 
@@ -263,7 +263,7 @@ public class ManagerLoopTests
                 host = "claude_code",
                 program = ProfileFixture.Program,
                 deny = new[] { "Write" },
-                host_version_verified = "stand-in",
+                host_version_verified = "0.0.0-stand-in",
             },
             Ct);
 

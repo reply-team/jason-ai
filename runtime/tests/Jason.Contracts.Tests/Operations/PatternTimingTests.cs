@@ -211,7 +211,9 @@ public class PatternTimingTests
         var timing = new TimingOut(1);
 
         Assert.Empty(SchemaValidator.ProbePatterns(Schema(Channel), timing));
-        Assert.Equal(2, timing.Calls);
+
+        // The short probe, timed out and tried once more warm; then the long probe.
+        Assert.Equal(3, timing.Calls);
     }
 
     [Fact]
@@ -223,10 +225,11 @@ public class PatternTimingTests
     /// <summary>
     /// A warm-up is worth what a later validation gains from it, so every path that matches a pattern — the warm-up, the
     /// load-time probe and a validation — is handed the one expression compiled from the pattern as written, the one
-    /// whose `$` ends the value. What those paths say about the pattern quotes it as its author wrote it.
+    /// whose `$` ends the value. A problem about a value quotes the pattern as its author wrote it, never the rewrite,
+    /// because the pattern is the rule the value has to meet; a refusal of the pattern itself quotes it not at all.
     /// </summary>
     [Fact]
-    public void Warming_probing_and_validating_a_pattern_meet_one_compiled_expression_and_quote_the_pattern_as_written()
+    public void Warming_probing_and_validating_a_pattern_meet_one_compiled_expression_and_only_a_value_problem_quotes_the_pattern()
     {
         // Never seen by this process before, so the warm-up is what compiles it.
         var written = "^" + Guid.NewGuid().ToString("N") + "$";
@@ -245,13 +248,10 @@ public class PatternTimingTests
 
         var unmeasured = Assert.Single(SchemaValidator.Validate(JsonValue.Create("x"), schema, TimingOut.Always()));
         var refused = Assert.Single(SchemaValidator.ProbePatterns(schema, TimingOut.Always()));
-        Assert.All(
-            new[] { unmeasured.Message, refused.Message },
-            message =>
-            {
-                Assert.Contains($"`{written}`", message, StringComparison.Ordinal);
-                Assert.DoesNotContain(@"\z", message, StringComparison.Ordinal);
-            });
+        Assert.Contains($"`{written}`", unmeasured.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"\z", unmeasured.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(written[1..^1], refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"\z", refused.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -35,7 +35,7 @@ A revision holds:
 | `args` | what this profile adds after the arguments the runtime composes |
 | `deny` | what the launched agent may not do, in the host's own vocabulary |
 | `cli_command` | the bare command word the agent calls home with; defaults to the runtime's own executable name |
-| `host_version_verified` | the host version this profile was proven against. Recorded and reported; not enforced |
+| `host_version_verified` | the host version this profile was proven against, as a version such as `2.1.289`: three numbers, and a pre-release after `-` if any. Recorded and reported; not enforced. A profile stored before the version shape was required keeps what it has; a write that names the field is held to it |
 
 **A profile cannot hold a credential, because there is nowhere to put one.** No environment field, no
 secret field, no free-form bag. The host a profile names was installed and authenticated by a person,

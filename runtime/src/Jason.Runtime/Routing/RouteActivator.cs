@@ -185,6 +185,16 @@ public sealed class RouteActivator(
             bindingIdentity = measured.Identity;
         }
 
+        // A plugin that loaded unavailable because its binding probe never finished at the start has a binding schema no
+        // binding can be measured against on this machine now; the binding is frozen as written and left unmeasured. Nothing
+        // acts on it: every claim asks availability at check 4, before it measures a binding at check 7, and the next load
+        // measures it as it measures everything. Only this plugin's routes, and only the measurement: what is checked above
+        // still refuses. A route to any other unavailable plugin is measured, because its patterns can answer.
+        if (ProbeTimedOut(plugin))
+        {
+            return null;
+        }
+
         var failures = RouteChecks.BindingProblems(plugin, binding, timing);
         if (SchemaValidator.Verdicts(failures) is { Count: > 0 } wrong)
         {
@@ -436,6 +446,15 @@ public sealed class RouteActivator(
     private static string Setting(string failure) => SettingsFailure.Name(RoutesOptions.Section, failure);
 
     private static string Where(string pointer) => pointer.Length == 0 ? string.Empty : pointer + ": ";
+
+    /// <summary>
+    /// Whether the plugin loaded unavailable because a binding probe did not finish at the start. The plugin's own problem
+    /// is the mark, and the snapshot that carries it is immutable, so a route and the reason its binding went unmeasured
+    /// cannot come apart.
+    /// </summary>
+    private static bool ProbeTimedOut(LoadedPlugin plugin) =>
+        plugin.Status == PluginStatus.Unavailable
+        && plugin.Problems.Any(problem => problem.Code == Plugins.Manifest.ProblemCodes.ProbeTimedOut);
 }
 
 /// <summary>Why one route cannot be used, in the vocabulary of <see cref="RouteProblemCodes"/>.</summary>

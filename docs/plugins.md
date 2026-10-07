@@ -125,7 +125,7 @@ binding:                         # optional; a schema, in the published dialect,
 | a variable that decides what a program loads | never; the same names `host.exec` refuses — `LD_*`, `DYLD_*`, `COMPlus_*`, `CORECLR_*`, `DOTNET_STARTUP_HOOKS`, `NODE_OPTIONS`, `PYTHONPATH`, `JAVA_TOOL_OPTIONS`, `PATH` and the rest listed under `host.exec` below. A granted variable is copied into every child the plugin starts, so being handed one and setting one end in the same place | `field_invalid` |
 | `limits.timeout_ms` | 1000 .. `Plugins:Limits:MaxTimeoutMs` (3 600 000 by default) | `field_invalid` |
 | `limits.memory_mb` | 16 .. `Plugins:Limits:MaxMemoryMb` (512 by default) | `field_invalid` |
-| `binding` | optional; a schema of `type: object` in the dialect of `docs/contracts/`, at most 64 KiB. A problem inside it is located as `binding#<json pointer>` — including a pattern that cannot finish matching a short probe within the dialect's 100 ms on a warm engine, twice | `field_invalid` |
+| `binding` | optional; a schema of `type: object` in the dialect of `docs/contracts/`, at most 64 KiB. A problem inside it is located as `binding#<json pointer>` — including a pattern that cannot finish matching the short probe or the 64 KiB one within the dialect's 100 ms on a warm engine, twice | `field_invalid` |
 | a field a `binding` declares, at any depth | never named like a credential — any of `token`, `secret`, `password`, `passwd`, `api_key`, `apikey`, `credential`, `private_key`, `authorization`, `bearer`, `cookie`, matched case-insensitively anywhere in the name and with every separator ignored, so `x-api-key`, `API.KEY` and `api key` are all that same name | `binding_secret_like` |
 
 `binding` says what an installation has to tell this plugin before it can act — which account, which
@@ -213,10 +213,13 @@ with its problems rather than passing over it in silence. A set that loads is a 
 whole — the alternative is a runtime that quietly runs with one plugin missing.
 
 **Environmental problems** — `executable_missing`, `executable_not_runnable`,
-`executable_incompatible`, `executable_version_check_failed` — are about the machine rather than the
-package. They make that one plugin `status: unavailable` with its problems listed, and change nothing
-else: the set still activates and the other plugins stay usable. An autostarted runtime sees a
-different search path than a shell does, and one uninstalled vendor tool must not empty the registry.
+`executable_incompatible`, `executable_version_check_failed`, and at a start only `probe_timed_out`
+— are about the machine rather than the package. They make that one plugin `status: unavailable`
+with its problems listed, and change nothing else: the set still activates and the other plugins
+stay usable. An autostarted runtime sees a different search path than a shell does, and one
+uninstalled vendor tool must not empty the registry. `probe_timed_out` is a binding pattern that did
+not finish its load-time probe on either of a start's two loads (below); a live reload refuses such
+a package as `field_invalid` instead.
 
 A problem's `path` is the place inside the manifest — `kind`, `capabilities.http.hosts[1]`,
 `capabilities.exec.executables[0].name` — or `(root)` when the document is not a mapping,
@@ -230,11 +233,16 @@ The load at startup follows exactly the same path. If the candidate set has a pa
 runtime **still starts**, with an empty active snapshot and the diagnostics on record — a broken
 plugin must never stand between you and your campaigns, and an empty registry is honest rather than
 half-working. One case is loaded once more first: when the only thing wrong is a binding pattern
-whose load-time probe timed out twice (reported as `field_invalid`, naming `pattern_timed_out`), the
-start builds the whole load again on the now warm engine, because a cold engine on a busy machine is not
-yet a fault in the package; only if the second load is held back the same way does the runtime start
-empty. A live `jason plugin reload` is not repeated. `jason runtime status --human` says which of the
-two it is:
+whose load-time probe timed out twice (reported as `field_invalid`, naming `pattern_timed_out`), or
+a route set held back only by bindings no pattern could finish measuring (docs/routing.md §6), the
+start builds the whole load again on the now warm engine, because a cold engine on a busy machine is
+not yet a fault in the package. A package whose probe still cannot finish on that second load loads
+`unavailable` with `probe_timed_out`, and the rest of the load stands: its routes are kept with
+their bindings unmeasured, and work on them ends `plugin_unavailable` until a reload measures them.
+A start and a reload differ here on purpose: at a start nobody is there to send the load again, and
+a busy machine is not the package's fault; at a reload the engine is warm and an operator is there,
+so the package is refused as `field_invalid` and the previous snapshot is kept. A live `jason plugin
+reload` is not repeated. `jason runtime status --human` says which of the two it is:
 
 ```text
 Plugins:    1 active · snapshot snp_01J4… · loaded 2026-09-14 12:00:00 UTC

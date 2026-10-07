@@ -187,18 +187,21 @@ public sealed class PatternAnchorGuardTests
 
     /// <summary>
     /// What the validator does with a dollar, a dot and the four escapes is what the dialect's page tells a schema's
-    /// author, read with its line breaks flattened because the page wraps where the column runs out.
+    /// author: the grammar's own rows for them stand in the page's table as the grammar renders them. The whole table is
+    /// held row by row where the grammar lives; this keeps the three this guard is about in view here.
     /// </summary>
     [Fact]
-    public void The_dialect_page_says_what_the_validator_does_with_a_dollar_a_dot_and_the_four_escapes()
+    public void The_dialect_page_publishes_the_grammars_rows_for_a_dollar_a_dot_and_the_four_escapes()
     {
-        var text = File.ReadAllText(Path.Combine(RepositoryRoot(), "docs", "contracts", "README.md"));
-        var page = string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        var page = File.ReadAllLines(Path.Combine(RepositoryRoot(), "docs", "contracts", "README.md"));
+        var rows = PatternGrammar.Table()
+            .Where(line => line.StartsWith("| `$` |", StringComparison.Ordinal)
+                || line.StartsWith("| `.` |", StringComparison.Ordinal)
+                || line.StartsWith(@"| `\A`", StringComparison.Ordinal))
+            .ToList();
 
-        Assert.Contains("`$` matches only at the end, as ECMA-262 has it; .NET's reading, which also accepts a final newline, is not the one used.", page, StringComparison.Ordinal);
-        Assert.Contains("`.` matches any character except the four line terminators, `\\n`, `\\r`, U+2028 and U+2029, as in ECMA-262", page, StringComparison.Ordinal);
-        Assert.Contains("`\\A`, `\\Z`, `\\z` and `\\G` are outside the vocabulary and are refused as `schema_pattern_invalid`, because ECMA-262 reads them as the letters A, Z, z and G and the engine reads them as anchors.", page, StringComparison.Ordinal);
-        Assert.Contains("the classes `\\d`, `\\w` and `\\s` and the word boundary `\\b` follow the engine rather than ECMA-262", page, StringComparison.Ordinal);
+        Assert.Equal(3, rows.Count);
+        Assert.All(rows, row => Assert.Contains(row, page));
     }
 
     /// <summary>

@@ -262,8 +262,10 @@ public static class ProviderOpPreflight
                 $"The route for '{contract.Id}' names plugin '{route.PluginId}', which the active plugin set does not hold.");
         }
 
-        // Asked here and nowhere in activation: a package that cannot run on this machine is an environment's
-        // problem, and refusing every route to it would answer a missing program with a rejected reload.
+        // Refused here and nowhere in activation: a package that cannot run on this machine is an environment's
+        // problem, and refusing every route to it would answer a missing program with a rejected reload. Activation
+        // reads one environmental code, `probe_timed_out`, only to leave such a plugin's bindings unmeasured; it refuses
+        // nothing for it, and this check, before the binding is measured below, is what every claim on its routes meets.
         if (RouteChecks.Unavailable(plugin))
         {
             return Refused(
