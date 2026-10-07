@@ -2,7 +2,7 @@
 name: approvals-and-questions
 description: Use when a person asks what Jason is waiting for them to decide, or arrives because a notification said approvals or questions are waiting, or tells you to decide something Jason has parked - list the approvals and the questions waiting on a person, present each in their own words, and record their decision as theirs.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Approvals and questions
@@ -15,8 +15,8 @@ are confident, not when they told you earlier to handle things, not when work is
 runtime refuses a decision that does not name a person, and that refusal is the floor of this rule
 rather than the whole of it.
 
-**Status: verified** against Claude Code 2.1.289. It covers the two waiting things this build publishes and nothing
-else.
+**Status: draft.** No agent host has read this text in the state it ships in. It covers the two waiting things this
+build publishes and nothing else.
 
 ## The two things that wait, and how they differ
 
@@ -58,10 +58,11 @@ what is still open, and both take `--campaign` and `--work-item` to narrow to on
 ## When a notification brought them here
 
 A person may arrive because Jason told them something is waiting: a toast on their desktop, or a message from a
-notification plugin on their phone. A notification says only how many approvals and questions wait. When a person
-arrives because of one, list both — `jason approval list` and `jason decision list` — and present them as this skill
-says. It names no item, so do not guess which one it meant, and the counts may already be smaller: something may have
-been answered since it was sent.
+notification plugin on their phone. A notification says how many approvals and questions wait, and may add that
+protective actions failed in campaigns it names by id. The approvals and questions are yours here: list both —
+`jason approval list` and `jason decision list` — and present them as this skill says; a failed action is not a
+decision, and `troubleshooting-jason` is where it is read. It names no item, so do not guess which one it meant,
+and the counts may already be smaller: something may have been answered since it was sent.
 
 Nothing is approved by reacting to a notification: an approval is a person's decision, recorded as theirs. Dismissing
 a toast, or reading the message, decides nothing; what decides is the person's word on that item, once they have read

@@ -1,6 +1,6 @@
 ---
 name: troubleshooting-jason
-description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the ten states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor.
+description: Use when work in Jason has stopped, failed or seems stuck and a person wants to know why - read the runtime, the work item's error code and the chronicle, tell the ten states apart, and name the repair that is safe; when none of them explains it, collect the installation's diagnostic file with jason doctor — including when the person says go ahead with the diagnostic file, write it, or collect the diagnostics.
 metadata:
   status: draft
 ---
@@ -17,8 +17,9 @@ nothing else.
 
 ## Look here first, in this order
 
-Four readings before you form an opinion. Each one can end the investigation on its own, and each one makes
-the next easier to read.
+**Before any `jason doctor` — the dry run included — run these four readings, in this order. A diagnostic file
+is for what they cannot explain, and you cannot know that before you have read them.** Each one can end the
+investigation on its own, and each one makes the next easier to read.
 
 **Is the runtime answering at all?** If it is not, nothing anywhere is being claimed, and every item in the
 installation looks stuck for the same reason.
@@ -48,6 +49,12 @@ only reading that shows you a sequence rather than a snapshot.
 jason journal list --work-item wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --human
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --since 2026-09-18T09:00:00Z
 ```
+
+**When a notification brought them here.** A person may arrive because a notification said protective actions
+failed in campaigns it names by id. The failed and expired work items of those campaigns are the subject: the
+third reading above, once for each id it names, and without `--campaign` when it says there are more. Each item
+it lists is then read as this skill reads a failed item. The four readings are binding here too, before anything
+else; here the third comes before the second, because it is what names the items.
 
 Three further readings answer the states a work item alone cannot tell you about: what is parked on a
 person's decision, what question a role has asked and nobody has answered, and what somebody has told Jason
@@ -262,7 +269,9 @@ jason doctor
 ```
 
 **Run the dry run first and show the person what it lists**, because the file is theirs to share or not. It
-writes nothing; it lists what a plain run would write, and where. The bundle holds the versions; whether the
+writes nothing; it lists what a plain run would write, and where. **Then ask the person one question — may I
+write the file? — and stop. Offer no alternatives; a report written instead, or beside it, is not what they
+were asked about.** The bundle holds the versions; whether the
 runtime answered and what it says about itself; the shape of the settings — keys, types and lengths, with a
 value only for the settings its own list names; the work items counted by kind and status, and the newest
 failures by their codes; recent errors and a bounded slice of the logs; and the chronicle's metadata — how
