@@ -448,6 +448,9 @@ every stop before it runs, and its work waits while its Jason campaign is paused
   whether it is unread, and the order is the provider's, the one that moved last first; what needs
   answering first is a judgement this read does not make, and Reply's categories travel under `vendor`
   untranslated.
+- **Only a contact's first reply is read.** Reply marks a contact finished in its sequence at its first
+  reply and stops detecting that contact's later replies, so `conversation.list` never lists them and
+  Jason's inbound sync says a contact's first reply only.
 - **A thread whose whole history is longer than `Plugins:Exec:OutputBytes` cannot be read at all.** Reply
   sends the history with the thread, so `conversation.get` fails `provider_answer_too_large` for it however
   small a page it asks for.

@@ -93,14 +93,14 @@
 #     someone else owns.
 #   +p = with a mandatory preview naming the population, not counting it.
 #
-# Policy may raise the class; nothing may lower it. Every raise sets approval_departs: true and
+# Policy may raise the class and never lower it. Every raise sets approval_departs: true and
 # states approval_reason at the operation.
 #
-# THE PROTECTIVE FLOOR, which is not a lowering: an operation whose non-performance is itself the
-# harm — stopping sending, recording that somebody said stop, opening a privacy request, recording
-# an event that already happened outside our control — derives `auto` whatever its reversibility.
-# Waiting for permission to stop is the destructive choice. The restart direction of every such
-# pair is never `auto`.
+# THE PROTECTIVE FLOOR, the catalogue's one checked lowering, never policy's: an operation whose
+# non-performance is itself the harm — stopping sending, recording that somebody said stop, opening
+# a privacy request, recording an event that already happened outside our control — derives `auto`
+# whatever its reversibility. Waiting for permission to stop is the destructive choice. The restart
+# direction of every such pair is never `auto`.
 #
 # ---------------------------------------------------------------------------------------------
 # THE TWO STANDING OBLIGATIONS
