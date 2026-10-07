@@ -1606,7 +1606,11 @@ public sealed class DoctorComposerTests
                 ("notifications.channels[].detail", WithheldAs.Dropped),
                 ("notifications.channels[].presence_detail", WithheldAs.DroppedUnlessOwnWord),
                 ("skills.problem", WithheldAs.ReplacedByWord),
+                ("skills.problem_code", WithheldAs.ReplacedUnlessOwnWord),
+                ("skills.problem_exception", WithheldAs.ReplacedUnlessOwnWord),
                 ("skills.roles[].problem", WithheldAs.ReplacedByWord),
+                ("skills.roles[].problem_code", WithheldAs.ReplacedUnlessOwnWord),
+                ("skills.roles[].problem_exception", WithheldAs.ReplacedUnlessOwnWord),
                 ("update.release_notes_url", WithheldAs.Dropped),
             ],
             DoctorComposer.SystemInfoWithheld.Select(field => (field.Path, field.How)));
@@ -1632,7 +1636,7 @@ public sealed class DoctorComposerTests
         var sentinels = new[]
         {
             "SENTINEL_CHANNEL_DETAIL", "SENTINEL_SECOND_DETAIL", "SENTINEL_THIRD_DETAIL", "SENTINEL_PRESENCE_DETAIL", "SENTINEL_ROLE_PROBLEM", "SENTINEL_SKILLS_PROBLEM",
-            "SENTINEL_RELEASE_NOTES",
+            "SENTINEL_RELEASE_NOTES", "SENTINEL_ROLE_CODE", "SENTINEL_ROLE_EXCEPTION", "SENTINEL_SKILLS_CODE", "SENTINEL_SKILLS_EXCEPTION",
         };
         AssertAbsent(bundle, sentinels);
         Assert.Contains("session 0", Section(bundle, "status").ToJsonString(), StringComparison.Ordinal);
@@ -2039,15 +2043,52 @@ public sealed class DoctorComposerTests
             Skills = new SkillsInfo(
                 Path.Combine(dir.Paths.Root, "skills", "roles"),
                 4096,
-                [new DeployedRoleSkill("researcher", 100, "SENTINEL_ROLE_PROBLEM: access denied"), new DeployedRoleSkill("planner", 100, "SENTINEL_OTHER_PROBLEM: in use")],
+                [
+                    new DeployedRoleSkill("researcher", 100, "SENTINEL_ROLE_PROBLEM: access denied", Jason.Contracts.Skills.SkillProblemCodes.SkillTooLarge),
+                    new DeployedRoleSkill("planner", 100, "SENTINEL_OTHER_PROBLEM: in use", Jason.Contracts.Skills.SkillProblemCodes.SkillFileMissing),
+                ],
                 null),
         };
 
         var bundle = await ComposeAsync(dir, runtime);
 
+        // How many, and which: the codes are the closed set's words, so they travel where the sentences do not.
         var fact = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "role_skills")!;
-        Assert.Equal(DoctorComposer.Withheld + " (2)", Text(fact["fact"]));
+        Assert.Equal(DoctorComposer.Withheld + " (2: skill_too_large, skill_file_missing)", Text(fact["fact"]));
         AssertAbsent(bundle, "SENTINEL_ROLE_PROBLEM", "SENTINEL_OTHER_PROBLEM");
+    }
+
+    /// <summary>
+    /// A skill problem's code and the word for a refusal travel as written when they are words of their closed sets, and
+    /// are withheld when they are anything else: a runtime that is not this build cannot put text through these keys.
+    /// </summary>
+    [Fact]
+    public async Task A_skill_problem_s_code_travels_when_it_is_one_of_the_set_s_words_and_is_withheld_otherwise()
+    {
+        using var dir = new TempPaths();
+        var runtime = Running(dir);
+        runtime.Info = StubRuntime.EveryField(dir.Paths.Root) with
+        {
+            Skills = new SkillsInfo(
+                Path.Combine(dir.Paths.Root, "skills", "roles"),
+                4096,
+                [
+                    new DeployedRoleSkill("researcher", null, "SENTINEL_ROLE_PROBLEM: denied", Jason.Contracts.Skills.SkillProblemCodes.RoleDirectoryUnreadable, "UnauthorizedAccessException"),
+                    new DeployedRoleSkill("planner", null, "SENTINEL_OTHER_PROBLEM: denied", "SENTINEL_STRANGE_CODE", "SENTINEL_STRANGE_EXCEPTION"),
+                ],
+                null),
+        };
+
+        var bundle = await ComposeAsync(dir, runtime);
+
+        var roles = Section(bundle, "runtime")["system_info"]!["skills"]!["roles"]!.AsArray();
+        Assert.Equal(("role_directory_unreadable", "UnauthorizedAccessException"), (Text(roles[0]!["problem_code"]), Text(roles[0]!["problem_exception"])));
+        Assert.Equal((DoctorComposer.Withheld, DoctorComposer.Withheld), (Text(roles[1]!["problem_code"]), Text(roles[1]!["problem_exception"])));
+        AssertAbsent(bundle, "SENTINEL_ROLE_PROBLEM", "SENTINEL_OTHER_PROBLEM", "SENTINEL_STRANGE_CODE", "SENTINEL_STRANGE_EXCEPTION");
+
+        // And the status fact names only the code it may: the strange one is counted, not named.
+        var fact = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "role_skills")!;
+        Assert.Equal(DoctorComposer.Withheld + " (2: role_directory_unreadable)", Text(fact["fact"]));
     }
 
     /// <summary>A data directory the runtime reports as no full path names nothing, and no word that spells it is rewritten.</summary>
@@ -2413,8 +2454,13 @@ internal sealed class StubRuntime(string dataDir) : HttpMessageHandler
         new SkillsInfo(
             Path.Combine(dataDir, "skills", "roles"),
             4096,
-            [new DeployedRoleSkill("researcher", 100, "SENTINEL_ROLE_PROBLEM: access denied"), new DeployedRoleSkill("planner", 100, null)],
-            "SENTINEL_SKILLS_PROBLEM: the directory could not be read"),
+            [
+                new DeployedRoleSkill("researcher", 100, "SENTINEL_ROLE_PROBLEM: access denied", "SENTINEL_ROLE_CODE", "SENTINEL_ROLE_EXCEPTION"),
+                new DeployedRoleSkill("planner", 100, null),
+            ],
+            "SENTINEL_SKILLS_PROBLEM: the directory could not be read",
+            "SENTINEL_SKILLS_CODE",
+            "SENTINEL_SKILLS_EXCEPTION"),
         new NotificationsInfo(
             true,
             [

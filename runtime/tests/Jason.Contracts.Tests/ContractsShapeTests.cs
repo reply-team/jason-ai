@@ -177,7 +177,8 @@ public class ContractsShapeTests
 
         Assert.EndsWith(
             "\"skills\":{\"role_skills_directory\":\"/data/skills/roles\",\"max_skill_bytes\":1048576,"
-                + "\"roles\":[{\"role\":\"researcher\",\"bytes\":4096,\"problem\":null}],\"problem\":null},\"notifications\":null}",
+                + "\"roles\":[{\"role\":\"researcher\",\"bytes\":4096,\"problem\":null,\"problem_code\":null,\"problem_exception\":null}],"
+                + "\"problem\":null,\"problem_code\":null,\"problem_exception\":null},\"notifications\":null}",
             JsonSerializer.Serialize(info, JasonJson.Options),
             StringComparison.Ordinal);
 
@@ -220,11 +221,17 @@ public class ContractsShapeTests
     [Fact]
     public void A_role_that_could_not_be_measured_carries_a_problem_and_no_byte_count()
     {
-        var skills = new SkillsInfo("/data/skills/roles", 4096, [new DeployedRoleSkill("researcher", null, "it moved while it was being read")]);
+        var skills = new SkillsInfo(
+            "/data/skills/roles",
+            4096,
+            [new DeployedRoleSkill("researcher", null, "it moved while it was being read", Jason.Contracts.Skills.SkillProblemCodes.RoleDirectoryChanged)]);
 
+        // The code beside the sentence, and the refusal's word where the operating system refused — here it did not.
         Assert.Equal(
             "{\"role_skills_directory\":\"/data/skills/roles\",\"max_skill_bytes\":4096,"
-                + "\"roles\":[{\"role\":\"researcher\",\"bytes\":null,\"problem\":\"it moved while it was being read\"}],\"problem\":null}",
+                + "\"roles\":[{\"role\":\"researcher\",\"bytes\":null,\"problem\":\"it moved while it was being read\","
+                + "\"problem_code\":\"role_directory_changed\",\"problem_exception\":null}],"
+                + "\"problem\":null,\"problem_code\":null,\"problem_exception\":null}",
             JsonSerializer.Serialize(skills, JasonJson.Options));
     }
 

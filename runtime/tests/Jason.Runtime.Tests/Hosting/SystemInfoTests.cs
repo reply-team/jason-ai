@@ -404,6 +404,15 @@ public class SystemInfoTests
                 Assert.True(
                     status == HttpStatusCode.OK,
                     $"system.info answered {(int)status} while a role directory was being renamed under it: {body}");
+
+                // Whatever the race left it to say about a role, it says with a code of the closed set.
+                var listed = System.Text.Json.Nodes.JsonNode.Parse(body)!["skills"]!["roles"]!.AsArray();
+                foreach (var role in listed.Where(role => role!["problem"] is not null))
+                {
+                    Assert.True(
+                        role!["problem_code"]?.GetValue<string>() is { } code && SkillProblemCodes.All.Contains(code),
+                        $"A problem without a code of its own: {role.ToJsonString()}");
+                }
             }
         }
         finally

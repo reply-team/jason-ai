@@ -220,6 +220,13 @@ internal static class StatusChecks
     }
 
     /// <summary>
+    /// A skill problem's sentence with its code after it, in brackets, where the runtime gave one: the code is what a
+    /// reader of a bundle has where the sentence is withheld, and what a reader of this fact can search for. A runtime
+    /// from before the codes gives none, and its sentence stands alone.
+    /// </summary>
+    private static string Coded(string problem, string? code) => code is null ? problem : $"{problem} [{code}]";
+
+    /// <summary>
     /// The skills the roles are taught from, reported. A runtime that cannot teach its roles is not ready,
     /// whatever else is true — and the check is not only presence: a deployment the launcher would refuse is
     /// worse than none, because it refuses every launch of that role rather than running it untaught.
@@ -233,7 +240,7 @@ internal static class StatusChecks
 
         if (skills.Problem is { } problem)
         {
-            return new StatusCheck("role_skills", true, CheckState.Failed, problem, null);
+            return new StatusCheck("role_skills", true, CheckState.Failed, Coded(problem, skills.ProblemCode), null);
         }
 
         // A roster that could not be read is not an empty roster. Turning one into the other made this check
@@ -261,7 +268,12 @@ internal static class StatusChecks
         var refused = skills.Roles.Where(role => role.Problem is not null).ToList();
         if (refused.Count > 0)
         {
-            return new StatusCheck("role_skills", true, CheckState.Failed, string.Join(" ", refused.Select(role => role.Problem)), Repair.Reinstall);
+            return new StatusCheck(
+                "role_skills",
+                true,
+                CheckState.Failed,
+                string.Join(" ", refused.Select(role => Coded(role.Problem!, role.ProblemCode))),
+                Repair.Reinstall);
         }
 
         var untaught = seeded.Except(deployed).Order(StringComparer.Ordinal).ToList();

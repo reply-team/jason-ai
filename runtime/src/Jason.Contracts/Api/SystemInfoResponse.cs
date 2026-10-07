@@ -65,11 +65,18 @@ public sealed record NotificationChannelInfo(
 /// this operation cannot fail: an applier resuming an update asks it precisely when a machine is in a bad
 /// state, and a 500 here reads to that caller as a runtime that is not there at all.
 /// </param>
+/// <param name="ProblemCode">The problem's code from <see cref="Skills.SkillProblemCodes"/>; null when there is none.</param>
+/// <param name="ProblemException">
+/// Where the operating system refused, the closed word that names the refusal, from
+/// <see cref="Skills.SkillProblemCodes.Exceptions"/>; null otherwise.
+/// </param>
 public sealed record SkillsInfo(
     string RoleSkillsDirectory,
     int MaxSkillBytes,
     IReadOnlyList<DeployedRoleSkill> Roles,
-    string? Problem = null);
+    string? Problem = null,
+    string? ProblemCode = null,
+    string? ProblemException = null);
 
 /// <summary>One directory under the role root, as the launcher would find it.</summary>
 /// <param name="Bytes">
@@ -81,7 +88,12 @@ public sealed record SkillsInfo(
 /// and the case it does not refuse but nobody meant: a directory with no <c>SKILL.md</c>, which is copied and
 /// teaches a host nothing.
 /// </param>
-public sealed record DeployedRoleSkill(string Role, long? Bytes, string? Problem);
+/// <param name="ProblemCode">The problem's code from <see cref="Skills.SkillProblemCodes"/>; null when there is none.</param>
+/// <param name="ProblemException">
+/// Where the operating system refused, the closed word that names the refusal, from
+/// <see cref="Skills.SkillProblemCodes.Exceptions"/>; null otherwise.
+/// </param>
+public sealed record DeployedRoleSkill(string Role, long? Bytes, string? Problem, string? ProblemCode = null, string? ProblemException = null);
 
 /// <summary>
 /// What the database is, and what this start did to it: every migration that has been applied, the ones this

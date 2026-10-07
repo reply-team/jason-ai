@@ -367,10 +367,12 @@ The launcher puts two things in that directory before the child starts:
   a ceiling; and the role has no file-writing tool at all).
 - `.claude/skills/<role>/`, a copy of `~/.jason/skills/roles/<role>/` when the role has one. Files
   only; a link is neither copied nor followed. A skill that cannot be given to the role fails the
-  attempt with `role_skill_invalid` before the child starts — whether because its `SKILL.md` names
-  something other than the role, which a host answers by ignoring the skill without saying so, or
-  because it is past `Roles:MaxSkillBytes`. Either way the role would do the job untaught, at the
-  price of a real launch, with only a log line to show for it. A role with no skill directory
+  attempt with `role_skill_invalid` before the child starts — because its `SKILL.md` is a link, cannot
+  be read, gives itself no name or names something other than the role, which a host answers by
+  ignoring the skill without saying so, or because it is past `Roles:MaxSkillBytes`;
+  [release-and-update.md](release-and-update.md#and-what-it-says-about-the-skills-it-will-teach-from)
+  lists each by its code. Any of them, and the role would do the job untaught, at the price of a real
+  launch, with only a log line to show for it. A role with no skill directory
   launches normally; nothing was configured, so nothing is missing, and its brief travels in the
   envelope either way.
 

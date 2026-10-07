@@ -19,6 +19,7 @@ using Jason.Contracts.Execution;
 using Jason.Contracts.Json;
 using Jason.Contracts.Notifications;
 using Jason.Contracts.Plugins;
+using Jason.Contracts.Skills;
 
 namespace Jason.Cli.Doctor;
 
@@ -57,20 +58,31 @@ public enum WithheldAs
     /// where it reported none, so a reader tells a withheld value from no value.
     /// </summary>
     ReplacedByWord,
+
+    /// <summary>
+    /// The field travels as written when its value is one of its own closed set's words, and is replaced by
+    /// <see cref="DoctorComposer.Withheld"/> otherwise; null stays null.
+    /// </summary>
+    ReplacedUnlessOwnWord,
 }
 
 /// <summary>One field of the runtime's answer that a bundle withholds, and how.</summary>
 /// <param name="Path">The field's path inside <c>system.info</c>, <c>[]</c> standing for each item of a list.</param>
 /// <param name="How">How it is left out.</param>
-public sealed record WithheldField(string Path, WithheldAs How)
+/// <param name="Words">The closed set whose words travel as written, for the rules that keep a field's own words.</param>
+public sealed record WithheldField(string Path, WithheldAs How, IReadOnlyList<string>? Words = null)
 {
     /// <summary>The field as the bundle names it: its path, and how it is left out where that is not simply by its absence.</summary>
     public string Described => How switch
     {
         WithheldAs.DroppedUnlessOwnWord => $"{Path}, unless it is one of the runtime's own words",
         WithheldAs.ReplacedByWord => $"{Path}, as \"{DoctorComposer.Withheld}\"",
+        WithheldAs.ReplacedUnlessOwnWord => $"{Path}, as \"{DoctorComposer.Withheld}\" unless it is one of its own closed set's words",
         _ => Path,
     };
+
+    /// <summary>Whether a value is one of this field's own words.</summary>
+    public bool IsOwnWord(string? text) => text is not null && Words is { } words && words.Contains(text, StringComparer.Ordinal);
 }
 
 /// <summary>A composed bundle: the document to write, and what a person is told about it before and after it is written.</summary>
@@ -349,9 +361,13 @@ public static partial class DoctorComposer
     public static IReadOnlyList<WithheldField> SystemInfoWithheld { get; } =
     [
         new("notifications.channels[].detail", WithheldAs.Dropped),
-        new("notifications.channels[].presence_detail", WithheldAs.DroppedUnlessOwnWord),
+        new("notifications.channels[].presence_detail", WithheldAs.DroppedUnlessOwnWord, ChannelPresence.Details),
         new("skills.problem", WithheldAs.ReplacedByWord),
+        new("skills.problem_code", WithheldAs.ReplacedUnlessOwnWord, SkillProblemCodes.All),
+        new("skills.problem_exception", WithheldAs.ReplacedUnlessOwnWord, SkillProblemCodes.Exceptions),
         new("skills.roles[].problem", WithheldAs.ReplacedByWord),
+        new("skills.roles[].problem_code", WithheldAs.ReplacedUnlessOwnWord, SkillProblemCodes.All),
+        new("skills.roles[].problem_exception", WithheldAs.ReplacedUnlessOwnWord, SkillProblemCodes.Exceptions),
         new("update.release_notes_url", WithheldAs.Dropped),
     ];
 
@@ -500,26 +516,54 @@ public static partial class DoctorComposer
 
     /// <summary>
     /// The readiness report as a bundle carries it: a role-skills fact made of withheld problems — the status checks join
-    /// a refused role's problem text, one after another — is one closed value and how many, <c>withheld (2)</c>, never the
-    /// word repeated. Everything else is as the status verb composed it.
+    /// a refused role's problem text, one after another, each with its code after it — is one closed value, how many, and
+    /// the codes that are the set's words, <c>withheld (2: skill_too_large, skill_file_missing)</c>, never the word
+    /// repeated. Everything else is as the status verb composed it.
     /// </summary>
     private static StatusReport Projected(StatusReport report) =>
         report with
         {
             Checks = [.. report.Checks.Select(check =>
-                check.Name == RoleSkillsCheck && WithheldCount(check.Fact) is > 0 and var count
-                    ? check with { Fact = string.Create(CultureInfo.InvariantCulture, $"{Withheld} ({count})") }
+                check.Name == RoleSkillsCheck && WithheldSummary(check.Fact) is { } summary
+                    ? check with { Fact = summary }
                     : check)],
         };
 
     /// <summary>The status check whose subject is the role skills, and whose fact quotes their problems.</summary>
     private const string RoleSkillsCheck = "role_skills";
 
-    /// <summary>How many withheld problems a fact is made of, and nothing else; zero when it says anything more.</summary>
-    private static int WithheldCount(string fact)
+    /// <summary>
+    /// A fact made only of withheld problems, each with its code in brackets where it has one, as one closed value: how
+    /// many, and the codes that are words of the set. Null when the fact says anything more.
+    /// </summary>
+    private static string? WithheldSummary(string fact)
     {
         var words = fact.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        return words.Length > 0 && words.All(word => word == Withheld) ? words.Length : 0;
+        var count = 0;
+        var codes = new List<string>();
+        for (var index = 0; index < words.Length; index++)
+        {
+            if (words[index] != Withheld)
+            {
+                return null;
+            }
+
+            count++;
+            if (index + 1 < words.Length && words[index + 1] is ['[', .. var inner, ']'])
+            {
+                var code = new string(inner);
+                if (SkillProblemCodes.All.Contains(code, StringComparer.Ordinal))
+                {
+                    codes.Add(code);
+                }
+
+                index++;
+            }
+        }
+
+        return count == 0 ? null
+            : codes.Count == 0 ? string.Create(CultureInfo.InvariantCulture, $"{Withheld} ({count})")
+            : string.Create(CultureInfo.InvariantCulture, $"{Withheld} ({count}: {string.Join(", ", codes)})");
     }
 
     /// <summary>One section before the rewrite: its name, its content and how many things it holds.</summary>
@@ -872,14 +916,14 @@ public static partial class DoctorComposer
 
         foreach (var field in SystemInfoWithheld)
         {
-            Withhold(systemInfo, field.Path.Split('.'), field.How);
+            Withhold(systemInfo, field.Path.Split('.'), field);
         }
 
         return systemInfo;
     }
 
     /// <summary>Leaves out the field a path names as it says, a key ending in <c>[]</c> standing for every item of the list it names.</summary>
-    private static void Withhold(JsonNode? node, ReadOnlySpan<string> path, WithheldAs how)
+    private static void Withhold(JsonNode? node, ReadOnlySpan<string> path, WithheldField how)
     {
         if (path.IsEmpty || node is not JsonObject members)
         {
@@ -910,14 +954,16 @@ public static partial class DoctorComposer
         }
     }
 
-    private static void Leave(JsonObject members, string key, WithheldAs how)
+    private static void Leave(JsonObject members, string key, WithheldField field)
     {
         var text = members[key] is JsonValue value && value.TryGetValue(out string? held) ? held : null;
-        switch (how)
+        switch (field.How)
         {
-            case WithheldAs.DroppedUnlessOwnWord when text is not null && ChannelPresence.Details.Contains(text, StringComparer.Ordinal):
+            case WithheldAs.DroppedUnlessOwnWord when field.IsOwnWord(text):
                 break;
-            case WithheldAs.ReplacedByWord:
+            case WithheldAs.ReplacedUnlessOwnWord when members[key] is null || field.IsOwnWord(text):
+                break;
+            case WithheldAs.ReplacedByWord or WithheldAs.ReplacedUnlessOwnWord:
                 members[key] = members[key] is null ? null : Withheld;
                 break;
             default:

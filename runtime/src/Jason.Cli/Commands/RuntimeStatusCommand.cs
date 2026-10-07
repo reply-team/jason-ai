@@ -3,6 +3,7 @@ using System.Text.Json;
 using Jason.Cli.Discovery;
 using Jason.Cli.Http;
 using Jason.Contracts.Api;
+using Jason.Contracts.Skills;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Contracts.Notifications;
@@ -171,7 +172,7 @@ public static class RuntimeStatusCommand
 
         if (skills.Problem is { } problem)
         {
-            return problem;
+            return skills.ProblemCode is { } code ? $"{problem} [{code}]" : problem;
         }
 
         var cap = string.Create(CultureInfo.InvariantCulture, $"cap {skills.MaxSkillBytes} bytes");
@@ -180,11 +181,27 @@ public static class RuntimeStatusCommand
             return $"no role skills deployed · every role would launch untaught · {cap}";
         }
 
-        var refused = skills.Roles.Count(role => role.Problem is not null);
-        var taught = Plural(skills.Roles.Count - refused, "role");
-        return refused == 0
-            ? $"{taught} taught · {cap}"
-            : string.Create(CultureInfo.InvariantCulture, $"{taught} taught · {refused} would be refused · {cap}");
+        // A directory with no SKILL.md is copied and teaches the host nothing; the launcher does not refuse it, so it is
+        // not counted with the roles a launch would refuse. A runtime from before the codes cannot tell them apart, and
+        // every problem it reports is counted as a refusal, as it always was.
+        var nothing = skills.Roles.Count(role => role.ProblemCode == SkillProblemCodes.SkillFileMissing);
+        var refused = skills.Roles.Where(role => role.Problem is not null && role.ProblemCode != SkillProblemCodes.SkillFileMissing).ToList();
+        var parts = new List<string> { $"{Plural(skills.Roles.Count - refused.Count - nothing, "role")} taught" };
+        if (refused.Count > 0)
+        {
+            var codes = refused.Select(role => role.ProblemCode).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
+            parts.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"{refused.Count} would be refused{(codes.Count > 0 ? $" ({string.Join(", ", codes)})" : string.Empty)}"));
+        }
+
+        if (nothing > 0)
+        {
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"{nothing} {(nothing == 1 ? "teaches" : "teach")} nothing"));
+        }
+
+        parts.Add(cap);
+        return string.Join(" · ", parts);
     }
 
     /// <summary>

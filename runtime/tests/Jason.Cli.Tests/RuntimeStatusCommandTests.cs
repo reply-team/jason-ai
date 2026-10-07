@@ -6,6 +6,7 @@ using Jason.Cli.Tests.Commands;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Skills;
 
 namespace Jason.Cli.Tests;
 
@@ -392,6 +393,56 @@ public class RuntimeStatusCommandTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains("Dispatcher: unknown", output.ToString(), StringComparison.Ordinal);
+    }
+
+    private static string InfoJson(SkillsInfo skills) => JsonSerializer.Serialize(
+        JsonSerializer.Deserialize<SystemInfoResponse>(InfoJson("rt_LIVE"), JasonJson.Options)! with { Skills = skills },
+        JasonJson.Options);
+
+    /// <summary>
+    /// What the runtime will teach its roles, counted: a role a launch would refuse is not a role that teaches nothing —
+    /// a directory with no SKILL.md is copied and the host learns nothing from it, and the launcher does not refuse it —
+    /// so the two are counted apart, and the refusals are named by their codes.
+    /// </summary>
+    public static TheoryData<string, string> SkillLines => new()
+    {
+        {
+            "refused and teaching nothing",
+            "Skills:     1 role taught · 1 would be refused (skill_too_large) · 1 teaches nothing · cap 4096 bytes"
+        },
+        { "teaching nothing alone", "Skills:     0 roles taught · 2 teach nothing · cap 4096 bytes" },
+        { "the directory unreadable", "Skills:     The role skills directory could not be read: denied [skills_directory_unreadable]" },
+        { "a runtime without codes", "Skills:     1 role taught · 1 would be refused · cap 4096 bytes" },
+    };
+
+    [Theory]
+    [MemberData(nameof(SkillLines))]
+    public async Task Human_mode_counts_refused_roles_apart_from_roles_that_teach_nothing(string state, string expected)
+    {
+        var skills = state switch
+        {
+            "refused and teaching nothing" => new SkillsInfo("/r", 4096,
+            [
+                new DeployedRoleSkill("a", 10, null),
+                new DeployedRoleSkill("b", 5000, "Too large.", SkillProblemCodes.SkillTooLarge),
+                new DeployedRoleSkill("c", 3, "No SKILL.md.", SkillProblemCodes.SkillFileMissing),
+            ]),
+            "teaching nothing alone" => new SkillsInfo("/r", 4096,
+            [
+                new DeployedRoleSkill("a", 3, "No SKILL.md.", SkillProblemCodes.SkillFileMissing),
+                new DeployedRoleSkill("b", 3, "No SKILL.md.", SkillProblemCodes.SkillFileMissing),
+            ]),
+            "the directory unreadable" => new SkillsInfo("/r", 4096, [], "The role skills directory could not be read: denied", SkillProblemCodes.SkillsDirectoryUnreadable, "UnauthorizedAccessException"),
+            _ => new SkillsInfo("/r", 4096, [new DeployedRoleSkill("a", 10, null), new DeployedRoleSkill("b", 5000, "Too large.")]),
+        };
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(Descriptor);
+        var (env, output, _) = Environment(dir, new FakeHandler(_ => Response(HttpStatusCode.OK, InfoJson(skills))));
+
+        var exit = await RuntimeStatusCommand.RunAsync(env, human: true, CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains(expected, output.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

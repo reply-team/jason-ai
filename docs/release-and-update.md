@@ -151,17 +151,38 @@ from — `<data>/skills/roles` — as it is at the moment it is asked:
 {
   "role_skills_directory": "/home/you/.jason/skills/roles",
   "max_skill_bytes": 1048576,
-  "roles": [{ "role": "researcher", "bytes": 4096, "problem": null }],
-  "problem": null
+  "roles": [{ "role": "researcher", "bytes": 4096, "problem": null, "problem_code": null, "problem_exception": null }],
+  "problem": null,
+  "problem_code": null,
+  "problem_exception": null
 }
 ```
 
 The cap is reported because it is a live setting rather than a constant, and something that deploys into that
 directory has to validate against the number this runtime will actually enforce: a deployment measured against
 the wrong cap is refused at every launch of that role. A `problem` on a role is why a launch would not be
-taught it — the two refusals the launcher makes, and the case it does not refuse but nobody meant, a directory
+taught it — the refusals the launcher makes, and the case it does not refuse but nobody meant, a directory
 with no `SKILL.md`, which is copied and teaches a host nothing. `bytes` is `null` when the directory could not
 be measured at all, which is not the same as a skill of no bytes.
+
+Every `problem` comes with a `problem_code` from a closed set, and, where the operating system refused, a
+`problem_exception` naming the refusal by one of `UnauthorizedAccessException`, `IOException`,
+`ArgumentException` or `other`. The sentence says what is wrong and what to do; the code says which problem it
+is, and is what a diagnostic bundle carries, because the bundle withholds the sentence — it can carry an
+operating system's message.
+
+| code | what is wrong | a launch of the role |
+|---|---|---|
+| `skills_directory_unreadable` | the role skills directory is there and cannot be listed | not asked: a launch reads its own role's directory |
+| `role_directory_unreadable` | the operating system refused part of the role's directory | fails: `executor_launch_failed` |
+| `role_directory_too_deep` | the role's directory nests deeper than a skill is read | fails: `executor_launch_failed` |
+| `role_directory_changed` | the role's directory moved while it was being read, as a deployment does | refused after reading it again: `role_skill_unreadable` |
+| `skill_file_missing` | the directory holds no `SKILL.md`: it is copied, and the host learns nothing from it | no; it teaches nothing |
+| `skill_file_is_link` | `SKILL.md` is a link, which a launch does not copy | refused: `role_skill_invalid` |
+| `skill_file_unreadable` | `SKILL.md` could not be read, or the operating system would not say what it is | refused: `role_skill_invalid` |
+| `skill_name_missing` | `SKILL.md` gives itself no name: no front matter, no name in it, or an empty one | refused: `role_skill_invalid` |
+| `skill_name_mismatch` | the skill names itself something other than the role | refused: `role_skill_invalid` |
+| `skill_too_large` | the skill's tree is over `Roles:MaxSkillBytes` | refused: `role_skill_invalid` |
 
 **Nothing here is cached.** The role skills directory is read at every launch, so a deployment is live the
 moment it lands and there is nothing to reload. That is also why this section reports what is on disk now

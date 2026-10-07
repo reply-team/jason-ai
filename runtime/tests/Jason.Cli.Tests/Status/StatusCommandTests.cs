@@ -94,7 +94,7 @@ public class StatusCommandTests
         Running(dir, skills: new SkillsInfo(
             "/data/skills/roles",
             4096,
-            [new DeployedRoleSkill("researcher", 5000, "The skill in '/data/skills/roles/researcher' is 5000 bytes and Roles:MaxSkillBytes allows 4096.")]));
+            [new DeployedRoleSkill("researcher", 5000, "The skill in '/data/skills/roles/researcher' is 5000 bytes and Roles:MaxSkillBytes allows 4096.", SkillProblemCodes.SkillTooLarge)]));
 
         var exit = await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
 
@@ -103,6 +103,43 @@ public class StatusCommandTests
         Assert.True(skills.Required);
         Assert.Equal(CheckState.Failed, skills.State);
         Assert.Contains("Roles:MaxSkillBytes", skills.Fact, StringComparison.Ordinal);
+
+        // The code after the sentence, in the fact both the JSON and the human rendering carry.
+        Assert.EndsWith(" [skill_too_large]", skills.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>The skills directory itself unreadable: the one sentence, and its code after it.</summary>
+    [Fact]
+    public async Task A_skills_directory_that_cannot_be_listed_is_said_with_its_code()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir, skills: new SkillsInfo(
+            "/data/skills/roles",
+            4096,
+            [],
+            "The role skills directory could not be read: denied",
+            SkillProblemCodes.SkillsDirectoryUnreadable,
+            "UnauthorizedAccessException"));
+
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var skills = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Equal("The role skills directory could not be read: denied [skills_directory_unreadable]", skills.Fact);
+    }
+
+    /// <summary>A runtime from before the codes reports a problem without one, and the fact is the sentence alone, as it was.</summary>
+    [Fact]
+    public async Task A_problem_from_a_runtime_that_gives_no_code_is_the_sentence_alone()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir, skills: new SkillsInfo("/data/skills/roles", 4096, [new DeployedRoleSkill("researcher", 5000, "Too large.")]));
+
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        var skills = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Equal("Too large.", skills.Fact);
     }
 
     /// <summary>And a seeded role nothing has taught is the same failure by omission.</summary>
@@ -140,7 +177,7 @@ public class StatusCommandTests
         Running(dir, skills: new SkillsInfo(
             "/data/skills/roles",
             1048576,
-            [new DeployedRoleSkill("researcher", 12, "'/data/skills/roles/researcher' holds no SKILL.md, so a launch copies what is there and the host loads no skill from it.")]));
+            [new DeployedRoleSkill("researcher", 12, "'/data/skills/roles/researcher' holds no SKILL.md, so a launch copies what is there and the host loads no skill from it.", SkillProblemCodes.SkillFileMissing)]));
 
         var exit = await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
 
@@ -148,6 +185,7 @@ public class StatusCommandTests
         Assert.Equal(ExitCodes.ApiError, exit);
         Assert.Equal(CheckState.Failed, skills.State);
         Assert.Contains("holds no SKILL.md", skills.Fact, StringComparison.Ordinal);
+        Assert.EndsWith(" [skill_file_missing]", skills.Fact, StringComparison.Ordinal);
 
         // A plain install, not --force. Overwriting is not what repairs a directory missing its SKILL.md,
         // and --force overwrites every edited file in every root of the plan — so printing it here would

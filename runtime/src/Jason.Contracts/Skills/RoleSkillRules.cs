@@ -21,8 +21,17 @@ public sealed class RoleSkillTooDeep(string path, int depth)
 public sealed class RoleSkillTreeChanged(string path, Exception cause)
     : IOException($"'{path}' moved while it was being read.", cause);
 
-/// <summary>Why a role's skill cannot be given to the role, in the words the launcher refuses with.</summary>
-public sealed record RoleSkillProblem(string Message);
+/// <summary>
+/// Why a role's skill cannot be given to the role: its code from <see cref="SkillProblemCodes"/>, the sentence the
+/// launcher refuses with, and — where the operating system refused — the closed word that names the refusal.
+/// </summary>
+public sealed record RoleSkillProblem(string Code, string Message, string? Exception = null);
+
+/// <summary>
+/// The name a skill file gives itself, or, when it gives none, why: the code from <see cref="SkillProblemCodes"/> and,
+/// where the operating system refused, the word that names the refusal.
+/// </summary>
+public sealed record SkillName(string? Value, string? Code = null, string? Exception = null);
 
 /// <summary>
 /// One reading of one role directory: what is in it, how large it is, and what is wrong with it — all from a
@@ -82,7 +91,15 @@ public static class RoleSkillRules
     /// One walk: the files, their total, and the two refusals in the order the launcher applies them — the
     /// name first, the size second.
     /// </summary>
-    public static RoleSkillReading Read(string roleDirectory, string role, int maxSkillBytes)
+    public static RoleSkillReading Read(string roleDirectory, string role, int maxSkillBytes) =>
+        Read(roleDirectory, role, maxSkillBytes, LinkTargetOf);
+
+    /// <summary>
+    /// The same, with the question "is this path a link, and to what" asked through <paramref name="linkTarget"/>
+    /// for the skill file: the one answer a test cannot arrange on a real file system is the operating system
+    /// refusing to say.
+    /// </summary>
+    internal static RoleSkillReading Read(string roleDirectory, string role, int maxSkillBytes, Func<string, string?> linkTarget)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(roleDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(role);
@@ -94,20 +111,14 @@ public static class RoleSkillRules
 
         var introduction = Path.Combine(roleDirectory, SkillFile);
         var hasSkillFile = File.Exists(introduction);
-        if (hasSkillFile && Named(introduction) is var named && named != role)
+        if (hasSkillFile && Name(introduction, linkTarget) is var name && name.Value != role)
         {
-            // A host answers this mismatch by ignoring the skill and saying nothing, and an agent that was
-            // never taught its job reads afterwards as a model that refused to do it. Reported here instead,
-            // where it can be read: a skill is looked up by the directory it lives in, and must name itself
-            // the same way.
-            return new RoleSkillReading(
-                true,
-                true,
-                [],
-                0,
-                new RoleSkillProblem(
-                    $"The skill in '{roleDirectory}' names itself '{named ?? "nothing"}', and role '{role}' looks its skill up as '{role}'. A host answers that mismatch by ignoring the skill without reporting it."),
-                []);
+            // A host answers a skill it cannot match to the role by ignoring it and saying nothing, and an agent
+            // that was never taught its job reads afterwards as a model that refused to do it. Reported here
+            // instead, where it can be read — and by why the name did not match, because each reason has its own
+            // repair: a link is replaced, an unreadable file is opened up, a missing name is written, and only a
+            // wrong one is renamed.
+            return new RoleSkillReading(true, true, [], 0, Unmatched(roleDirectory, role, name), []);
         }
 
         var files = Files(roleDirectory);
@@ -125,6 +136,7 @@ public static class RoleSkillRules
                 files,
                 bytes,
                 new RoleSkillProblem(
+                    SkillProblemCodes.SkillTooLarge,
                     string.Create(
                         CultureInfo.InvariantCulture,
                         $"The skill in '{roleDirectory}' is {bytes} bytes and Roles:MaxSkillBytes allows {maxSkillBytes}, so it cannot be given to the role. Trim the skill, or raise Roles:MaxSkillBytes.")),
@@ -176,19 +188,60 @@ public static class RoleSkillRules
         return bytes;
     }
 
+    /// <summary>The problem for a skill whose name does not match its role, in the words for why it does not.</summary>
+    private static RoleSkillProblem Unmatched(string roleDirectory, string role, SkillName name) => name.Code switch
+    {
+        SkillProblemCodes.SkillFileIsLink => new(
+            SkillProblemCodes.SkillFileIsLink,
+            $"The skill file in '{roleDirectory}' is a link, and a launch copies no link, so a host would find no skill there. Replace the link with the file itself: a deployment never writes one."),
+        SkillProblemCodes.SkillFileUnreadable => new(
+            SkillProblemCodes.SkillFileUnreadable,
+            $"The skill file in '{roleDirectory}' could not be read, so no host could load the skill from it. Let the account the runtime runs as read it.",
+            name.Exception),
+        SkillProblemCodes.SkillNameMissing => new(
+            SkillProblemCodes.SkillNameMissing,
+            $"The skill in '{roleDirectory}' gives itself no name: its {SkillFile} has no front matter that names it, and role '{role}' looks its skill up as '{role}'. A host answers that by ignoring the skill without reporting it. Write `name: {role}` in its front matter."),
+        _ => new(
+            SkillProblemCodes.SkillNameMismatch,
+            $"The skill in '{roleDirectory}' names itself '{name.Value}', and role '{role}' looks its skill up as '{role}'. A host answers that mismatch by ignoring the skill without reporting it. Name the skill '{role}', or deploy it as the role it names."),
+    };
+
     /// <summary>
     /// The name a skill gives itself, or null. Front matter is the first block between two <c>---</c> lines; a
     /// file without one names nothing, which a host answers exactly as it answers a wrong name — it loads no
-    /// skill — so both are treated the same way. A file that is a link names nothing either: it is not copied,
-    /// so what a host would read is not what was inspected here.
+    /// skill. A file that is a link names nothing either: it is not copied, so what a host would read is not what
+    /// was inspected here.
     /// </summary>
-    public static string? Named(string skillFile)
+    public static string? Named(string skillFile) => Name(skillFile, LinkTargetOf).Value;
+
+    /// <summary>
+    /// The name a skill gives itself, and when it gives none, why — decided here rather than by each caller, because
+    /// the reasons have different repairs: a link is replaced with the file, a file the system will not open or will
+    /// not describe is opened up to the account, and front matter with no name has one written into it.
+    /// </summary>
+    public static SkillName Name(string skillFile) => Name(skillFile, LinkTargetOf);
+
+    internal static SkillName Name(string skillFile, Func<string, string?> linkTarget)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(skillFile);
 
-        if (IsLink(skillFile))
+        // Not a link and not unreadable are two questions here, though the walk asks them as one: a file the operating
+        // system will not describe is not a link, and saying so would send the operator to replace a file that is
+        // there with itself.
+        try
         {
-            return null;
+            if (linkTarget(skillFile) is not null)
+            {
+                return new SkillName(null, SkillProblemCodes.SkillFileIsLink);
+            }
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        {
+            throw new RoleSkillTreeChanged(skillFile, exception);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return new SkillName(null, SkillProblemCodes.SkillFileUnreadable, SkillProblemCodes.ExceptionWord(exception));
         }
 
         string[] lines;
@@ -207,12 +260,13 @@ public static class RoleSkillRules
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            return null;
+            return new SkillName(null, SkillProblemCodes.SkillFileUnreadable, SkillProblemCodes.ExceptionWord(exception));
         }
 
+        var missing = new SkillName(null, SkillProblemCodes.SkillNameMissing);
         if (lines.Length == 0 || lines[0].Trim() != "---")
         {
-            return null;
+            return missing;
         }
 
         foreach (var line in lines.Skip(1))
@@ -228,10 +282,10 @@ public static class RoleSkillRules
             }
 
             var value = line["name:".Length..].Trim().Trim('"', '\'');
-            return value.Length == 0 ? null : value;
+            return value.Length == 0 ? missing : new SkillName(value);
         }
 
-        return null;
+        return missing;
     }
 
     private static void Walk(string directory, List<string> files, int depth)
@@ -287,7 +341,7 @@ public static class RoleSkillRules
     {
         try
         {
-            return new FileInfo(path).LinkTarget is not null || new DirectoryInfo(path).LinkTarget is not null;
+            return LinkTargetOf(path) is not null;
         }
         catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
         {
@@ -298,6 +352,9 @@ public static class RoleSkillRules
             return true;
         }
     }
+
+    /// <summary>Where a link at this path points, as a file or as a directory; null when it is no link.</summary>
+    private static string? LinkTargetOf(string path) => new FileInfo(path).LinkTarget ?? new DirectoryInfo(path).LinkTarget;
 
     /// <summary>
     /// One file's length. A file that cannot be read counts as nothing, which is what this has always done;

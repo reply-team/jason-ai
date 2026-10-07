@@ -126,7 +126,13 @@ public static class SystemModule
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            return new SkillsInfo(root, maxSkillBytes, [], $"The role skills directory could not be read: {exception.Message}");
+            return new SkillsInfo(
+                root,
+                maxSkillBytes,
+                [],
+                $"The role skills directory could not be read: {exception.Message}",
+                SkillProblemCodes.SkillsDirectoryUnreadable,
+                SkillProblemCodes.ExceptionWord(exception));
         }
 
         Array.Sort(directories, StringComparer.Ordinal);
@@ -155,17 +161,27 @@ public static class SystemModule
                     continue;
                 }
 
-                roles.Add(new DeployedRoleSkill(
-                    role,
-                    reading.Bytes,
-                    reading.Problem?.Message
-                        ?? (reading.HasSkillFile
-                            ? null
-                            : $"'{directory}' holds no {RoleSkillRules.SkillFile}, so a launch copies what is there and the host loads no skill from it.")));
+                roles.Add(reading.Problem is { } problem
+                    ? new DeployedRoleSkill(role, reading.Bytes, problem.Message, problem.Code, problem.Exception)
+                    : reading.HasSkillFile
+                        ? new DeployedRoleSkill(role, reading.Bytes, null)
+                        : new DeployedRoleSkill(
+                            role,
+                            reading.Bytes,
+                            $"'{directory}' holds no {RoleSkillRules.SkillFile}, so a launch copies what is there and the host loads no skill from it.",
+                            SkillProblemCodes.SkillFileMissing));
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
             {
-                roles.Add(new DeployedRoleSkill(role, null, $"It could not be read: {exception.Message}"));
+                // A tree too deep or one that moved has a code of its own; anything else the operating system refused
+                // is named by the word for the refusal as well.
+                var code = SkillProblemCodes.OfUnreadable(exception);
+                roles.Add(new DeployedRoleSkill(
+                    role,
+                    null,
+                    $"It could not be read: {exception.Message}",
+                    code,
+                    code == SkillProblemCodes.RoleDirectoryUnreadable ? SkillProblemCodes.ExceptionWord(exception) : null));
             }
         }
 
