@@ -3,22 +3,21 @@ namespace Jason.App.Tests.Skills;
 public partial class InteractiveSkillTests
 {
     /// <summary>
-    /// The two skills that teach notifications each said the pointer carries approvals and questions only, which stopped
-    /// being true when it began to carry failed protective work. A verified mark means a host read that exact body, so
-    /// with the sentence corrected each is a draft until a host reads the new one: the front matter and the body say
-    /// so, the catalog's bullet says so, and the catalog records no reading of it.
+    /// The two skills that teach notifications are verified by the host that read them as they ship: the front matter,
+    /// the body and the catalog's bullet say so, the catalog's row for each names that host, and the pack's own rule
+    /// holds the row's digest to the text.
     /// </summary>
     [Theory]
-    [InlineData("approvals-and-questions")]
-    [InlineData("operating-the-installation")]
-    public void The_skills_that_teach_notifications_are_drafts_until_a_host_reads_their_new_sentence(string name)
+    [InlineData("approvals-and-questions", "Claude Code 2.1.293 (claude-opus-5) | 0.5.0")]
+    [InlineData("operating-the-installation", "Claude Code 2.1.293 (claude-opus-5) | 0.5.0")]
+    public void The_skills_that_teach_notifications_are_verified_by_the_host_that_read_them(string name, string reading)
     {
-        Assert.Equal("draft", SkillFrontMatter.Read(SkillPack.Find(name).File).Metadata.GetValueOrDefault("status"));
-        Assert.Contains("**Status: draft.** No agent host has read this text in the state it ships in.", Flattened(name), StringComparison.Ordinal);
+        Assert.Equal("verified", SkillFrontMatter.Read(SkillPack.Find(name).File).Metadata.GetValueOrDefault("status"));
+        Assert.Contains("**Status: verified** against Claude Code 2.1.293.", Flattened(name), StringComparison.Ordinal);
 
         var catalog = File.ReadAllText(SkillPack.Catalog());
-        Assert.DoesNotContain($"| `{name}` | Claude Code", catalog, StringComparison.Ordinal);
-        Assert.Contains($"[`{name}`]({name}/SKILL.md) — **draft** until a host reads its new text.", catalog, StringComparison.Ordinal);
+        Assert.Contains($"| `{name}` | {reading} | `{SkillPack.BodyDigest(SkillPack.Find(name).File)}` |", catalog, StringComparison.Ordinal);
+        Assert.Contains($"[`{name}`]({name}/SKILL.md) — **verified.**", catalog, StringComparison.Ordinal);
     }
 
     /// <summary>
