@@ -100,6 +100,31 @@ function Install-Jason {
         }
     }
 
+    # A file another program holds open - a scanner reading the executable that was just run or just unpacked - can be
+    # neither renamed nor removed until it lets go. Such a file is tried again for 10 seconds, every quarter of a second,
+    # as jason itself does; held means a sharing or a lock violation and nothing else, and any other refusal is thrown at
+    # once. True once the act went through, false when the file was still held at the end.
+    function Held([scriptblock] $act) {
+        $deadline = [DateTime]::UtcNow.AddSeconds(10)
+        while ($true) {
+            try {
+                & $act
+                return $true
+            } catch {
+                if (@(-2147024864, -2147024863) -notcontains $_.Exception.HResult) { throw }
+                if ([DateTime]::UtcNow -ge $deadline) { return $false }
+                Start-Sleep -Milliseconds 250
+            }
+        }
+    }
+
+    # A path as a sentence says it to a person: from ~ where it is inside the home directory.
+    function FromHome([string] $path) {
+        $root = $HOME.TrimEnd('\')
+        if ($path.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) { return '~' + $path.Substring($root.Length) }
+        return $path
+    }
+
     $tmp = Join-Path ([IO.Path]::GetTempPath()) "jason-install-$([Guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Path $tmp | Out-Null
     try {
@@ -162,9 +187,41 @@ function Install-Jason {
             # steps aside, the new one moves in, and the old one is removed once nothing runs it.
             New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
             $previous = Join-Path $InstallDir 'jason.previous.exe'
-            if (Test-Path -LiteralPath $previous) { Remove-Item -LiteralPath $previous -Force -ErrorAction SilentlyContinue }
-            if (Test-Path -LiteralPath $target) { Move-Item -LiteralPath $target -Destination $previous -Force }
-            Move-Item -LiteralPath (Join-Path $unpacked 'jason.exe') -Destination $target
+            $held = 'is held open by another program; it was tried for 10 seconds.'
+
+            # What an earlier install left is cleared first, and waited for while something holds it: moving onto it
+            # would refuse a held file and a file a jason still runs from in the same words. Any other refusal - that
+            # jason still running - is left to the step below, which reports it as it always has.
+            $cleared = $true
+            if (Test-Path -LiteralPath $previous) {
+                try { $cleared = Held { Remove-Item -LiteralPath $previous -Force -ErrorAction Stop } } catch { }
+            }
+            if (-not $cleared) { throw "'$(FromHome $previous)' $held Nothing was installed: run this script again once it is free." }
+
+            if (Test-Path -LiteralPath $target) {
+                if (-not (Held { Move-Item -LiteralPath $target -Destination $previous -Force -ErrorAction Stop })) {
+                    throw "'$(FromHome $target)' $held Nothing was installed: run this script again once it is free."
+                }
+            }
+
+            # The new one moves in. Where it cannot, the old one goes back first, so that nothing was installed is
+            # still true when the script says so.
+            $fresh = Join-Path $unpacked 'jason.exe'
+            $moved = $false
+            try {
+                $moved = Held { Move-Item -LiteralPath $fresh -Destination $target -ErrorAction Stop }
+            } catch {
+                $refusal = $_
+                if (Test-Path -LiteralPath $previous) { try { [void](Held { Move-Item -LiteralPath $previous -Destination $target -ErrorAction Stop }) } catch { } }
+                throw $refusal
+            }
+            if (-not $moved) {
+                if (-not (Test-Path -LiteralPath $previous)) { throw "The downloaded jason.exe $held Nothing was installed: run this script again." }
+                $back = $false
+                try { $back = Held { Move-Item -LiteralPath $previous -Destination $target -ErrorAction Stop } } catch { }
+                if ($back) { throw "The downloaded jason.exe $held The jason that was installed is back at '$(FromHome $target)'; nothing was installed: run this script again." }
+                throw "The downloaded jason.exe $held The jason that was installed is at '$(FromHome $previous)': move it back to '$(FromHome $target)' by hand."
+            }
             if (Test-Path -LiteralPath $previous) { Remove-Item -LiteralPath $previous -Force -ErrorAction SilentlyContinue }
 
             Write-Host "Installed Jason $started to $target"
