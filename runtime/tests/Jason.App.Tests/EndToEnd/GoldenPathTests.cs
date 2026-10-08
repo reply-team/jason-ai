@@ -39,7 +39,9 @@ public class GoldenPathTests
             .WithContact(Person, Address, FirstName);
 
         await GoldenPath.WriteSettingsAsync(it, new SettingsShape());
-        await GoldenPath.StartAsync(it);
+
+        // The documented first step, held to the verb's own wait: the one start in this suite that is not patient.
+        await GoldenPath.StartAsDocumentedAsync(it);
         GoldenPath.InstallReplyPackage(it);
         var loaded = await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: true);
         GoldenPath.AssertTheStandInAnswered(Assert.Single(loaded["plugins"]!.AsArray())!.AsObject());

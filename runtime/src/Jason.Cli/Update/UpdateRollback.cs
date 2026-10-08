@@ -4,7 +4,9 @@ using System.Text.Json.Nodes;
 using Jason.Cli.Commands;
 using Jason.Cli.Discovery;
 using Jason.Cli.Process;
+using Jason.Cli.Uninstall;
 using Jason.Contracts.Api;
+using Jason.Contracts.Files;
 using Jason.Contracts.Json;
 using Jason.Contracts.Update;
 
@@ -36,6 +38,15 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
 {
     /// <summary>Everything the rollback did, in order, for the caller to print.</summary>
     public List<string> Steps { get; } = [];
+
+    /// <summary>
+    /// How long a move of the executable waits for another program to let go of it, and how often it tries: the uninstall's
+    /// own rule. A test holds it short.
+    /// </summary>
+    internal HeldFileRule HeldFiles { get; init; } = InstallationRemovers.HeldFiles;
+
+    /// <summary>How a pause between two tries is taken: <see cref="HeldFileRetry.Sleep"/> outside a test, which counts them.</summary>
+    internal Action<TimeSpan, CancellationToken> Pause { get; init; } = HeldFileRetry.Sleep;
 
     public async Task<UpdateLedger> RollBackAsync(CancellationToken cancellationToken)
     {
@@ -252,14 +263,16 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             // And the name may be taken all the same, by an earlier rollback of the same version in the same
             // moment, so the one that is free is taken instead.
             var aside = FreeAside(ledger);
+            const string Aside = "moving the installed executable aside";
+            var stillToRestore = $"Nothing has been put back yet. {ledger.PreviousPath} is still the executable to restore by hand.";
             OnDisk(
-                "moving the installed executable aside",
+                Aside,
                 ledger.InstallPath,
-                $"Nothing has been put back yet. {ledger.PreviousPath} is still the executable to restore by hand.",
+                stillToRestore,
                 () =>
                 {
                     Directory.CreateDirectory(update.Replaced);
-                    File.Move(ledger.InstallPath, aside);
+                    ExecutableMove.Run(env, HeldFiles, clock, Pause, Aside, ledger.InstallPath, stillToRestore, () => File.Move(ledger.InstallPath, aside));
                 });
 
             Say($"moved {ledger.ToVersion} aside to {aside}");
@@ -277,11 +290,13 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             }
         }
 
+        const string Back = "putting the previous executable back";
+        var empty = $"The install path is empty: copy {ledger.PreviousPath} there by hand.";
         OnDisk(
-            "putting the previous executable back",
+            Back,
             ledger.InstallPath,
-            $"The install path is empty: copy {ledger.PreviousPath} there by hand.",
-            () => File.Move(ledger.PreviousPath, ledger.InstallPath));
+            empty,
+            () => ExecutableMove.Run(env, HeldFiles, clock, Pause, Back, ledger.PreviousPath, empty, () => File.Move(ledger.PreviousPath, ledger.InstallPath)));
 
         Say($"put {ledger.FromVersion} back");
     }

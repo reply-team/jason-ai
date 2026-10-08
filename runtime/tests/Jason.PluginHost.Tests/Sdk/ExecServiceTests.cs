@@ -11,6 +11,9 @@ public sealed class ExecServiceTests : IDisposable
 {
     private const string Cli = "fake-cli";
 
+    /// <summary>An invocation long enough that no call in a test whose subject is not time runs short of it.</summary>
+    private const int UnhurriedMs = 60_000;
+
     private readonly TempPackage _package = new();
 
     public void Dispose() => _package.Dispose();
@@ -48,9 +51,12 @@ public sealed class ExecServiceTests : IDisposable
         const string OneCall = "host.exec({ executable: \"" + Cli + "\", args: [\"spew\", \"200000\"] }).stdout.length";
         const string Narrow = "let seen = 0; for (let i = 0; i < 4; i++) { seen = " + OneCall + "; } seen;";
 
-        using var once = Harness(builder => builder.Limits = builder.Limits with { MemoryBytes = 16 * 1024 * 1024 });
-        using var over = Harness(builder => builder.Limits = builder.Limits with { MemoryBytes = 16 * 1024 * 1024 });
-        using var raised = Harness(builder => builder.Limits = builder.Limits with { MemoryBytes = 64 * 1024 * 1024 });
+        // The memory budget is the subject, so time is kept out of it. A call that names no timeout gets what is left of
+        // the invocation less the kill grace, which under the default ten seconds is about five for one call and less for
+        // each of four in a row; a program started on a loaded machine has been seen to need more than that.
+        using var once = Harness(builder => builder.Limits = builder.Limits with { MemoryBytes = 16 * 1024 * 1024, TimeoutMs = UnhurriedMs });
+        using var over = Harness(builder => builder.Limits = builder.Limits with { MemoryBytes = 16 * 1024 * 1024, TimeoutMs = UnhurriedMs });
+        using var raised = Harness(builder => builder.Limits = builder.Limits with { MemoryBytes = 64 * 1024 * 1024, TimeoutMs = UnhurriedMs });
 
         // One answer fits the budget comfortably, and nothing is kept between the calls below either.
         Assert.Equal(200_000, (int)once.Evaluate(OneCall).AsNumber());

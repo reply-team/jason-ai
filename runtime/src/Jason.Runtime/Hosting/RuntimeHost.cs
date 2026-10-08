@@ -70,6 +70,7 @@ public static class RuntimeHost
             paths,
             options.ShippedSettingsDirectory,
             failure => ReportUnreadableSettings(logger, failure, Volatile.Read(ref settingsRead)));
+        options.ConfigurationBuilt?.Invoke(configuration);
 
         // From here the configuration holds a watch on the settings file, so every way out of this start that does not
         // hand it to the running runtime disposes it — a refused start included, which a test process repeats many times.

@@ -79,22 +79,53 @@ public class EndToEndTests
             var descriptor = await WaitForDescriptorAsync(paths, expectedNot: null, runtime);
             await File.WriteAllTextAsync(paths.UserSettingsFile, "{\"Dispatcher\":{\"Enabled\":false},\"Roles\":{\"MaxSkillBytes\":\"" + sentinel + "\"}}", Ct);
 
-            // Long past the settings file's own reload delay; whether the edit had arrived is read from the log below.
-            await Task.Delay(TimeSpan.FromSeconds(2), Ct);
-            var (exit, output) = await StatusAsync(paths);
-
-            Assert.Equal(ExitCodes.Success, exit);
-            Assert.Equal(descriptor.InstanceId, JsonSerializer.Deserialize<SystemInfoResponse>(output, JasonJson.Options)!.InstanceId);
+            await AnsweringUntilRefusedAsync(paths, descriptor.InstanceId);
         }
         finally
         {
             await runtime.StopAsync();
         }
 
-        var logs = string.Join('\n', Directory.EnumerateFiles(paths.LogsDirectory, "runtime-*.jsonl").Select(RuntimeLogs.ReadAllText));
-        Assert.Contains("Roles:MaxSkillBytes could not be read as System.Int32.", logs, StringComparison.Ordinal);
+        var logs = Logs(paths);
+        Assert.Contains(RolesRefusal, logs, StringComparison.Ordinal);
         Assert.DoesNotContain(sentinel, logs, StringComparison.Ordinal);
     }
+
+    /// <summary>What the runtime logs when the roles edit above is refused.</summary>
+    private const string RolesRefusal = "Roles:MaxSkillBytes could not be read as System.Int32.";
+
+    /// <summary>
+    /// Asks the runtime about itself until its log says the roles edit was refused, within
+    /// <see cref="EndToEnd.GoldenPath.Step"/>, and holds every answer to being this runtime's. Asking is what reads the
+    /// roles, and the edit reaches them only once the settings file's reload has run, so the refusal is said on the first
+    /// question after that. A fixed two seconds before one question stood here: long past the reload's own delay on an idle
+    /// machine, and no more than that on a loaded one.
+    /// </summary>
+    private static async Task AnsweringUntilRefusedAsync(JasonPaths paths, string instanceId)
+    {
+        var deadline = DateTime.UtcNow.Add(EndToEnd.GoldenPath.Step);
+        while (true)
+        {
+            var (exit, output) = await StatusAsync(paths);
+            Assert.Equal(ExitCodes.Success, exit);
+            Assert.Equal(instanceId, JsonSerializer.Deserialize<SystemInfoResponse>(output, JasonJson.Options)!.InstanceId);
+            if (Logs(paths).Contains(RolesRefusal, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Assert.True(
+                DateTime.UtcNow < deadline,
+                $"The runtime's log did not say the roles edit was refused within {EndToEnd.GoldenPath.Step.TotalSeconds:F0} s.");
+            await Task.Delay(100, Ct);
+        }
+    }
+
+    /// <summary>Every runtime log file in the data directory, read beside the runtime still writing it.</summary>
+    private static string Logs(JasonPaths paths) =>
+        Directory.Exists(paths.LogsDirectory)
+            ? string.Join('\n', Directory.EnumerateFiles(paths.LogsDirectory, "runtime-*.jsonl").Select(RuntimeLogs.ReadAllText))
+            : string.Empty;
 
     private static async Task<RuntimeDescriptor> WaitForDescriptorAsync(JasonPaths paths, string? expectedNot, RuntimeProcess process)
     {

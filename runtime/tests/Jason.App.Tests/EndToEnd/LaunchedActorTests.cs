@@ -48,7 +48,7 @@ public class LaunchedActorTests
 
         try
         {
-            AssertOk(await JasonAsync(root, null, "runtime", "start"));
+            AssertOk(await StartRuntimeAsync(root));
 
             var profile = Json(await JasonAsync(
                 root,
@@ -155,7 +155,7 @@ public class LaunchedActorTests
             $"'jason {result.Command}' exited with {result.ExitCode}.{Environment.NewLine}stdout: {result.Output}{Environment.NewLine}stderr: {result.Error}");
 
     /// <summary>One CLI step, optionally run as a launched executor would be: the attempt in the environment.</summary>
-    private static async Task<CliResult> JasonAsync(string root, string? attemptId, params string[] args)
+    private static async Task<CliResult> JasonAsync(string root, string? attemptId, TimeSpan within, params string[] args)
     {
         var start = new ProcessStartInfo("dotnet")
         {
@@ -183,13 +183,24 @@ public class LaunchedActorTests
         var output = process.StandardOutput.ReadToEndAsync(Ct);
         var error = process.StandardError.ReadToEndAsync(Ct);
 
-        await process.WaitForExitAsync(Ct).WaitAsync(StepTimeout, Ct);
+        await process.WaitForExitAsync(Ct).WaitAsync(within, Ct);
         return new CliResult(
             process.ExitCode,
-            (await output.WaitAsync(StepTimeout, Ct)).Trim(),
-            (await error.WaitAsync(StepTimeout, Ct)).Trim(),
+            (await output.WaitAsync(within, Ct)).Trim(),
+            (await error.WaitAsync(within, Ct)).Trim(),
             string.Join(' ', args));
     }
+
+    /// <summary>The same step within <see cref="StepTimeout"/>.</summary>
+    private static Task<CliResult> JasonAsync(string root, string? attemptId, params string[] args) => JasonAsync(root, attemptId, StepTimeout, args);
+
+    /// <summary>A real start for a test whose subject is not the start (<see cref="EndToEnd.PatientStart"/>).</summary>
+    private static Task<CliResult> StartRuntimeAsync(string root) =>
+        EndToEnd.PatientStart.RunAsync(
+            new JasonPaths(root),
+            within => JasonAsync(root, null, within, "runtime", "start"),
+            () => JasonAsync(root, null, "runtime", "status"),
+            result => (result.ExitCode, result.Output));
 
     private static void Delete(string root)
     {

@@ -45,6 +45,28 @@ public class PageClaimsTests
     }
 
     /// <summary>
+    /// The pages say what an executable another program holds open meets: the update's and the rollback's moves, and the
+    /// Windows installer's, wait for it, and the wait they name is the uninstall's own rule's.
+    /// </summary>
+    [Fact]
+    public void The_pages_say_how_long_a_held_executable_is_waited_for()
+    {
+        var wait = Jason.Cli.Uninstall.InstallationRemovers.HeldFiles.WaitInWords;
+
+        Assert.Contains(
+            $"On Windows an executable another program holds open — a scanner reading the one just run or just downloaded — is tried again for {wait} first; one still held then is named from `~`, with how long it was tried, and that refusal is retryable",
+            Flat(Page("docs", "release-and-update.md")),
+            StringComparison.Ordinal);
+
+        var install = Flat(Page("docs", "INSTALL.md"));
+        Assert.Contains($"On Windows, `install.ps1` waits up to {wait} for a file another program holds open", install, StringComparison.Ordinal);
+        Assert.Contains(
+            "if the new `jason.exe` cannot move in, it puts the one you had back — or, when it cannot, says where it is — so an install that fails never leaves you without the version you started with.",
+            install,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A release teaches itself with git, over the network, at its published tag: "a shell, and nothing else" was
     /// true of installing it and not of teaching it.
     /// </summary>

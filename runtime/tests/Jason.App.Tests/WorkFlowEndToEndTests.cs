@@ -67,7 +67,7 @@ public class WorkFlowEndToEndTests
 
         try
         {
-            AssertSuccess(await JasonAsync(root, "runtime", "start"));
+            AssertSuccess(await StartRuntimeAsync(root));
             var descriptor = ReadDescriptor(paths) ?? throw new InvalidOperationException("runtime start returned success without leaving a descriptor behind.");
             seenPids.Add(descriptor.Pid);
             Assert.NotEqual(Environment.ProcessId, descriptor.Pid);
@@ -415,7 +415,7 @@ public class WorkFlowEndToEndTests
     private static JsonObject Json(CliResult result) => JsonNode.Parse(result.Output)!.AsObject();
 
     /// <summary>One CLI step: the shipped executable, the isolated data directory, and everything it said.</summary>
-    private static async Task<CliResult> JasonAsync(string root, params string[] args)
+    private static async Task<CliResult> JasonAsync(string root, TimeSpan within, params string[] args)
     {
         var start = new ProcessStartInfo("dotnet")
         {
@@ -439,13 +439,24 @@ public class WorkFlowEndToEndTests
         var error = process.StandardError.ReadToEndAsync(Ct);
         var command = string.Join(' ', args);
 
-        await process.WaitForExitAsync(Ct).WaitAsync(StepTimeout, Ct);
+        await process.WaitForExitAsync(Ct).WaitAsync(within, Ct);
         return new CliResult(
             process.ExitCode,
-            (await output.WaitAsync(StepTimeout, Ct)).Trim(),
-            (await error.WaitAsync(StepTimeout, Ct)).Trim(),
+            (await output.WaitAsync(within, Ct)).Trim(),
+            (await error.WaitAsync(within, Ct)).Trim(),
             command);
     }
+
+    /// <summary>The same step within <see cref="StepTimeout"/>.</summary>
+    private static Task<CliResult> JasonAsync(string root, params string[] args) => JasonAsync(root, StepTimeout, args);
+
+    /// <summary>A real start for a test whose subject is not the start (<see cref="EndToEnd.PatientStart"/>).</summary>
+    private static Task<CliResult> StartRuntimeAsync(string root) =>
+        EndToEnd.PatientStart.RunAsync(
+            new JasonPaths(root),
+            within => JasonAsync(root, within, "runtime", "start"),
+            () => JasonAsync(root, "runtime", "status"),
+            result => (result.ExitCode, result.Output));
 
     private static RuntimeDescriptor? ReadDescriptor(JasonPaths paths)
     {

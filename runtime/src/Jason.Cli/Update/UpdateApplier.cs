@@ -4,8 +4,10 @@ using System.Text.Json.Nodes;
 using Jason.Cli.Commands;
 using Jason.Cli.Discovery;
 using Jason.Cli.Process;
+using Jason.Cli.Uninstall;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Files;
 using Jason.Contracts.Json;
 using Jason.Contracts.Update;
 
@@ -50,6 +52,15 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
     /// <summary>Everything the applier did, in order, for the caller to print.</summary>
     public List<string> Steps { get; } = [];
+
+    /// <summary>
+    /// How long a move of the executable waits for another program to let go of it, and how often it tries: the uninstall's
+    /// own rule. A test holds it short.
+    /// </summary>
+    internal HeldFileRule HeldFiles { get; init; } = InstallationRemovers.HeldFiles;
+
+    /// <summary>How a pause between two tries is taken: <see cref="HeldFileRetry.Sleep"/> outside a test, which counts them.</summary>
+    internal Action<TimeSpan, CancellationToken> Pause { get; init; } = HeldFileRetry.Sleep;
 
     /// <summary>
     /// Runs an update from wherever it stands: a fresh one from the feed, or the one a ledger says is in flight.
@@ -383,11 +394,20 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
                 });
 
             SameVolume(ledger.InstallPath, ledger.PreviousPath);
+            const string Aside = "moving the installed executable aside";
             OnDisk(
-                "moving the installed executable aside",
+                Aside,
                 ledger.InstallPath,
                 $"Nothing has been replaced yet. Make sure this account may write to {Path.GetDirectoryName(ledger.InstallPath)}, then run `jason update apply` again.",
-                () => File.Move(ledger.InstallPath, ledger.PreviousPath, overwrite: true));
+                () => ExecutableMove.Run(
+                    env,
+                    HeldFiles,
+                    clock,
+                    Pause,
+                    Aside,
+                    ledger.InstallPath,
+                    "Nothing has been replaced yet. Run `jason update apply` again once the file is free.",
+                    () => File.Move(ledger.InstallPath, ledger.PreviousPath, overwrite: true)));
             Say(UpdateStep.Kept, "the installed executable is put aside");
         }
 
@@ -408,11 +428,13 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             }
 
             SameVolume(ledger.StagedPath, ledger.InstallPath);
+            const string InPlace = "putting the new executable in place";
+            var remedy = $"There is nothing at the install path until this succeeds: run `jason update apply` again, from {Path.Combine(update.Applier, ReleaseAssets.ExecutableName)} if `jason` is no longer on your PATH, or put {ledger.PreviousPath} back by hand.";
             OnDisk(
-                "putting the new executable in place",
+                InPlace,
                 ledger.InstallPath,
-                $"There is nothing at the install path until this succeeds: run `jason update apply` again, from {Path.Combine(update.Applier, ReleaseAssets.ExecutableName)} if `jason` is no longer on your PATH, or put {ledger.PreviousPath} back by hand.",
-                () => File.Move(ledger.StagedPath, ledger.InstallPath));
+                remedy,
+                () => ExecutableMove.Run(env, HeldFiles, clock, Pause, InPlace, ledger.StagedPath, remedy, () => File.Move(ledger.StagedPath, ledger.InstallPath)));
             Say(UpdateStep.Swapped, $"{ledger.ToVersion} is at the install path");
         }
 

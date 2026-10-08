@@ -94,17 +94,32 @@ public sealed class UpdateException : Exception
     }
 
     public UpdateException(string code, string message)
-        : base(message) => Code = code;
+        : this(code, message, null)
+    {
+    }
 
     public UpdateException(string code, string message, Exception? innerException)
-        : base(message, innerException) => Code = code;
+        : base(message, innerException)
+    {
+        Code = code;
+        Retryable = code == UpdateCodes.ArtifactUnreachable;
+    }
+
+    /// <summary>The same, saying for itself whether trying again could work, where its code alone does not decide it.</summary>
+    public UpdateException(string code, string message, Exception? innerException, bool retryable)
+        : base(message, innerException)
+    {
+        Code = code;
+        Retryable = retryable;
+    }
 
     /// <summary>Lowercase snake_case, as every error code in this product is.</summary>
     public string Code { get; } = UpdateCodes.ArtifactUnreachable;
 
     /// <summary>
     /// Whether trying again could work. A download that did not arrive is worth repeating; an archive that is
-    /// not what it claimed to be is not, because the same bytes will fail the same way.
+    /// not what it claimed to be is not, because the same bytes will fail the same way. A file refused because
+    /// another program held it open is worth repeating too, once that program lets go.
     /// </summary>
-    public bool Retryable => Code == UpdateCodes.ArtifactUnreachable;
+    public bool Retryable { get; }
 }

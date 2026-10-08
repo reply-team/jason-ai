@@ -110,6 +110,69 @@ public sealed class SettingsWatchReleaseTests
         Assert.Equal(before, after);
     }
 
+    /// <summary>
+    /// A start refused before the host is built gives the settings file's watch back: a test process refuses starts many
+    /// times over, and a watch left behind by each would be spent from the account's budget until the process ends.
+    /// </summary>
+    [Theory]
+    [InlineData("another runtime holds the data directory")]
+    [InlineData("a setting is the wrong type")]
+    public async Task A_start_refused_before_the_host_is_built_gives_back_the_settings_file_watch(string refusal)
+    {
+        using var data = new TempDataDir();
+        RunningRuntime? first = null;
+        if (refusal == "another runtime holds the data directory")
+        {
+            first = await RuntimeHost.StartAsync(data.Paths, TestRuntimeOptions.Quiet, Ct);
+        }
+        else
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(data.Paths.UserSettingsFile)!);
+            await File.WriteAllTextAsync(data.Paths.UserSettingsFile, """{"Dispatcher":{"MaxParallel":"many"}}""", Ct);
+        }
+
+        try
+        {
+            IConfigurationRoot? built = null;
+            var options = TestRuntimeOptions.Quiet with { ConfigurationBuilt = configuration => built = configuration };
+
+            await Assert.ThrowsAnyAsync<Exception>(() => RuntimeHost.StartAsync(data.Paths, options, Ct));
+
+            var watched = SettingsFileProvider(Assert.IsAssignableFrom<IConfigurationRoot>(built), data.Paths);
+            Assert.Throws<ObjectDisposedException>(() => watched.Provider.Watch(watched.Path));
+        }
+        finally
+        {
+            if (first is not null)
+            {
+                await first.StopAsync();
+            }
+        }
+    }
+
+    /// <summary>And so does one refused once the host is built: here, by a service of its own that will not start.</summary>
+    [Fact]
+    public async Task A_start_refused_by_the_host_gives_back_the_settings_file_watch()
+    {
+        using var data = new TempDataDir();
+        IConfigurationRoot? built = null;
+        var options = TestRuntimeOptions.Quiet with
+        {
+            ConfigureServices = services =>
+            {
+                TestRuntimeOptions.TurnTheOutsideOff(services);
+                services.AddHostedService<RefusesToStart>();
+            },
+            ConfigurationBuilt = configuration => built = configuration,
+        };
+
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => RuntimeHost.StartAsync(data.Paths, options, Ct));
+        Assert.Equal("this service refuses to start", refused.Message);
+
+        var watched = SettingsFileProvider(Assert.IsAssignableFrom<IConfigurationRoot>(built), data.Paths);
+        Assert.Throws<ObjectDisposedException>(() => watched.Provider.Watch(watched.Path));
+    }
+
     /// <summary>The settings file's provider and the path it watches the file by, relative to its root.</summary>
     private static (PhysicalFileProvider Provider, string Path) SettingsFileProvider(IConfigurationRoot configuration, JasonPaths paths)
     {
@@ -133,6 +196,14 @@ public sealed class SettingsWatchReleaseTests
                 return false;
             }
         });
+
+    /// <summary>A service of the host's that throws when the host starts it.</summary>
+    private sealed class RefusesToStart : IHostedService
+    {
+        public Task StartAsync(CancellationToken cancellationToken) => throw new InvalidOperationException("this service refuses to start");
+
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
 
     /// <summary>A service of the host's that throws when the host disposes it.</summary>
     private sealed class RefusesToBeDisposed : IHostedService, IAsyncDisposable

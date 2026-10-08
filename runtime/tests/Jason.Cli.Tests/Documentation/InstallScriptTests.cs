@@ -275,6 +275,22 @@ public partial class InstallScriptTests
     /// Expand-Archive hands the zip's mark of the web on to what it unpacks, and an executable carrying it is
     /// stopped by SmartScreen the first time it runs. The mark is cleared after unpacking and before installing.
     /// </summary>
+    /// <summary>
+    /// install.ps1 waits out a file another program holds open by the numbers jason itself waits by: PowerShell has no way
+    /// to read the uninstall's rule, so its two literals are held to that rule here.
+    /// </summary>
+    [Fact]
+    public void Install_ps1_waits_out_a_held_file_by_the_uninstalls_rule()
+    {
+        var rule = Jason.Cli.Uninstall.InstallationRemovers.HeldFiles;
+        var script = Code("install.ps1");
+
+        Assert.Contains(FormattableString.Invariant($"$deadline = [DateTime]::UtcNow.AddSeconds({rule.Wait.TotalSeconds})"), script, StringComparison.Ordinal);
+        Assert.Contains(FormattableString.Invariant($"Start-Sleep -Milliseconds {rule.Interval.TotalMilliseconds}"), script, StringComparison.Ordinal);
+        Assert.False(rule.AccessDeniedCounts);
+        Assert.Contains("if (@(-2147024864, -2147024863) -notcontains $_.Exception.HResult) { throw }", script, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Install_ps1_clears_the_mark_of_the_web()
     {

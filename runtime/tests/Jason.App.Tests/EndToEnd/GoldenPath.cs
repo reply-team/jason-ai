@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -239,11 +240,40 @@ internal static class GoldenPath
         Copy(Path.Combine(TestTree, "Fixtures", "plugins", PluginId), it.Paths.PluginPackageDirectory(PluginId));
     }
 
-    /// <summary>Starts the runtime the way the walkthrough starts it, and remembers which process that is.</summary>
+    /// <summary>
+    /// Starts the runtime for a test whose subject is not the start, and remembers which process that is. A runtime still
+    /// starting when the verb gave up is waited for (<see cref="PatientStart"/>).
+    /// </summary>
     public static async Task<RuntimeDescriptor> StartAsync(Installation it)
     {
         ArgumentNullException.ThrowIfNull(it);
-        AssertSuccess(await JasonAsync(it, "runtime", "start"));
+        AssertSuccess(await PatientStart.RunAsync(
+            it.Paths,
+            within => RunAsync(it, "dotnet", [Assembly, "runtime", "start"], within: within),
+            () => JasonAsync(it, "runtime", "status"),
+            result => (result.ExitCode, result.Output)));
+        return Started(it);
+    }
+
+    /// <summary>
+    /// Starts the runtime as the walkthrough documents it, held to the verb's own wait: the one start in this suite that a
+    /// start creeping past its documented 30 s fails rather than waits for. It says in the test's output how long it took.
+    /// </summary>
+    public static async Task<RuntimeDescriptor> StartAsDocumentedAsync(Installation it)
+    {
+        ArgumentNullException.ThrowIfNull(it);
+        var clock = Stopwatch.StartNew();
+        var result = await JasonAsync(it, "runtime", "start");
+        TestContext.Current.TestOutputHelper?.WriteLine(string.Create(
+            CultureInfo.InvariantCulture,
+            $"jason runtime start, as documented: answered with exit {result.ExitCode} after {clock.Elapsed.TotalSeconds:F1} s."));
+        AssertSuccess(result);
+        return Started(it);
+    }
+
+    /// <summary>The descriptor a successful start left, remembered as this installation's runtime.</summary>
+    private static RuntimeDescriptor Started(Installation it)
+    {
         var descriptor = ReadDescriptor(it.Paths)
             ?? throw new InvalidOperationException("runtime start returned success without leaving a descriptor behind.");
         it.Pid = descriptor.Pid;
@@ -405,7 +435,8 @@ internal static class GoldenPath
         Installation it,
         string program,
         IReadOnlyList<string> arguments,
-        IReadOnlyDictionary<string, string>? environment = null)
+        IReadOnlyDictionary<string, string>? environment = null,
+        TimeSpan? within = null)
     {
         ArgumentNullException.ThrowIfNull(it);
         var args = arguments.SkipWhile(argument => argument == Assembly).ToArray();
@@ -451,11 +482,12 @@ internal static class GoldenPath
         var error = process.StandardError.ReadToEndAsync(Ct);
         var command = string.Join(' ', args);
 
-        await process.WaitForExitAsync(Ct).WaitAsync(Step, Ct);
+        var budget = within ?? Step;
+        await process.WaitForExitAsync(Ct).WaitAsync(budget, Ct);
         return new CliResult(
             process.ExitCode,
-            (await output.WaitAsync(Step, Ct)).Trim(),
-            (await error.WaitAsync(Step, Ct)).Trim(),
+            (await output.WaitAsync(budget, Ct)).Trim(),
+            (await error.WaitAsync(budget, Ct)).Trim(),
             command);
     }
 

@@ -36,4 +36,10 @@ public sealed record RuntimeHostOptions(
     /// descriptor is refused in a moment rather than in ten seconds.
     /// </summary>
     internal Jason.Contracts.Files.HeldFileRule? DescriptorPublishing { get; init; }
+
+    /// <summary>
+    /// Handed the configuration as soon as it is built, before anything can refuse the start. A refused start returns no
+    /// runtime to ask, so this is how a test sees that it gave the configuration, and the settings file's watch, back.
+    /// </summary>
+    internal Action<Microsoft.Extensions.Configuration.IConfigurationRoot>? ConfigurationBuilt { get; init; }
 }

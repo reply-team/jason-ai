@@ -29,6 +29,14 @@ internal static class RuntimeVerbs
     /// <summary>For the tests whose subject is the wait running out.</summary>
     public static TimeSpan ShortTimeout => TimeSpan.FromMilliseconds(300);
 
+    /// <summary>
+    /// For the tests whose subject is what the first question to a published runtime brought back, which end on the wait
+    /// as well. The question is put only while the wait has time left, and a loaded machine has held the verb's first read
+    /// past a short wait, which then says the runtime was never asked, or never published. So this is the short wait's
+    /// tenfold: each such case costs it in full.
+    /// </summary>
+    public static TimeSpan AskedTimeout => TimeSpan.FromSeconds(3);
+
     public static TimeSpan Poll => TimeSpan.FromMilliseconds(20);
 
     public static RuntimeDescriptor Descriptor(string instanceId, int pid = Pid) =>

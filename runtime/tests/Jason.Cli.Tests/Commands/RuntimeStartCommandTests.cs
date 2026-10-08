@@ -380,16 +380,16 @@ public class RuntimeStartCommandTests
         var (env, output, _) = RuntimeVerbs.Environment(dir, new Silent(), processes);
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
-        var exit = await RuntimeStartCommand.RunAsync(env, human: false, Ct, TimeSpan.FromSeconds(1), RuntimeVerbs.Poll);
+        var exit = await RuntimeStartCommand.RunAsync(env, human: false, Ct, RuntimeVerbs.AskedTimeout, RuntimeVerbs.Poll);
         clock.Stop();
 
-        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5), $"start with a 1 s wait returned after {clock.Elapsed.TotalSeconds:F1} s, exit {exit}: {output}");
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(7), $"start with a 3 s wait returned after {clock.Elapsed.TotalSeconds:F1} s, exit {exit}: {output}");
         Assert.Equal(ExitCodes.ApiError, exit);
         var envelope = RuntimeVerbs.Envelope(output.ToString());
         Assert.Equal(CliErrors.RuntimeStartFailed, envelope.Code);
         Assert.Contains("published an endpoint descriptor", envelope.Message, StringComparison.Ordinal);
         Assert.Contains($"at {RuntimeVerbs.BaseUrl}", envelope.Message, StringComparison.Ordinal);
-        Assert.Contains("did not answer within 1 s", envelope.Message, StringComparison.Ordinal);
+        Assert.Contains("did not answer within 3 s", envelope.Message, StringComparison.Ordinal);
         Assert.Contains("process 4242", envelope.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("did not publish", envelope.Message, StringComparison.Ordinal);
         Assert.True(envelope.Retryable);
@@ -427,7 +427,7 @@ public class RuntimeStartCommandTests
         });
         var (env, output, _) = RuntimeVerbs.Environment(dir, handler, processes);
 
-        var exit = await RuntimeStartCommand.RunAsync(env, human: false, Ct, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll);
+        var exit = await RuntimeStartCommand.RunAsync(env, human: false, Ct, RuntimeVerbs.AskedTimeout, RuntimeVerbs.Poll);
 
         Assert.Equal(ExitCodes.ApiError, exit);
         var envelope = RuntimeVerbs.Envelope(output.ToString());

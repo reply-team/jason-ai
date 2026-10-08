@@ -66,7 +66,7 @@ public class ResearcherRoleTests
 
         try
         {
-            AssertOk(await JasonAsync(root, "runtime", "start"));
+            AssertOk(await StartRuntimeAsync(root));
 
             AssertOk(await JasonAsync(root, "profile", "create", "local-host", "--host", "claude_code", "--program", StandInHost));
             var campaign = (string)Json(await JasonAsync(root, "campaign", "create", "--name", "Researched"))["id"]!;
@@ -156,7 +156,7 @@ public class ResearcherRoleTests
 
         try
         {
-            AssertOk(await JasonAsync(root, "runtime", "start"));
+            AssertOk(await StartRuntimeAsync(root));
             AssertOk(await JasonAsync(root, "profile", "create", "local-host", "--host", "claude_code", "--program", StandInHost));
             var campaign = (string)Json(await JasonAsync(root, "campaign", "create", "--name", "Refused"))["id"]!;
             AssertOk(await JasonAsync(root, "campaign", "start", campaign));
@@ -248,7 +248,7 @@ public class ResearcherRoleTests
             result.ExitCode == 0,
             $"'jason {result.Command}' exited with {result.ExitCode}.{Environment.NewLine}stdout: {result.Output}{Environment.NewLine}stderr: {result.Error}");
 
-    private static async Task<CliResult> JasonAsync(string root, params string[] args)
+    private static async Task<CliResult> JasonAsync(string root, TimeSpan within, params string[] args)
     {
         var start = new ProcessStartInfo("dotnet")
         {
@@ -272,13 +272,24 @@ public class ResearcherRoleTests
         var output = process.StandardOutput.ReadToEndAsync(Ct);
         var error = process.StandardError.ReadToEndAsync(Ct);
 
-        await process.WaitForExitAsync(Ct).WaitAsync(StepTimeout, Ct);
+        await process.WaitForExitAsync(Ct).WaitAsync(within, Ct);
         return new CliResult(
             process.ExitCode,
-            (await output.WaitAsync(StepTimeout, Ct)).Trim(),
-            (await error.WaitAsync(StepTimeout, Ct)).Trim(),
+            (await output.WaitAsync(within, Ct)).Trim(),
+            (await error.WaitAsync(within, Ct)).Trim(),
             string.Join(' ', args));
     }
+
+    /// <summary>The same step within <see cref="StepTimeout"/>.</summary>
+    private static Task<CliResult> JasonAsync(string root, params string[] args) => JasonAsync(root, StepTimeout, args);
+
+    /// <summary>A real start for a test whose subject is not the start (<see cref="EndToEnd.PatientStart"/>).</summary>
+    private static Task<CliResult> StartRuntimeAsync(string root) =>
+        EndToEnd.PatientStart.RunAsync(
+            new JasonPaths(root),
+            within => JasonAsync(root, within, "runtime", "start"),
+            () => JasonAsync(root, "runtime", "status"),
+            result => (result.ExitCode, result.Output));
 
     private static void Delete(string root)
     {

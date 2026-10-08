@@ -40,6 +40,11 @@ failure of the tool or of your machine, and it is worth saying that way to whoev
 Each script works out your platform, downloads the archive for it, **verifies its SHA-256 before unpacking**,
 installs the executable under your own account, and puts that directory on your PATH.
 
+On Windows, `install.ps1` waits up to 10 seconds for a file another program holds open — a virus scanner reading
+the executable it has just unpacked or run — before it gives up and says which file. And if the new `jason.exe`
+cannot move in, it puts the one you had back — or, when it cannot, says where it is — so an install that fails never
+leaves you without the version you started with.
+
 | Default install directory | Platform |
 |---|---|
 | `~/.local/bin/jason` | macOS, Linux |

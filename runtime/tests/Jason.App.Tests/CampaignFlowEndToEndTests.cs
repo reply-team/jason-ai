@@ -36,7 +36,7 @@ public class CampaignFlowEndToEndTests
         {
             // Nothing is running yet: the runtime is launched in the background and start returns only once it
             // answers for itself.
-            var started = await JasonAsync(root, "runtime", "start");
+            var started = await StartRuntimeAsync(root);
             AssertSuccess(started, root);
             var descriptor = ReadDescriptor(paths) ?? throw new InvalidOperationException("runtime start returned success without leaving a descriptor behind.");
             seenPids.Add(descriptor.Pid);
@@ -74,7 +74,8 @@ public class CampaignFlowEndToEndTests
             Assert.Contains("\"code\":\"no_descriptor\"", status.Output, StringComparison.Ordinal);
 
             // Everything the campaign knew was on disk, so a fresh instance picks it up unchanged.
-            var again = await Ok(root, "runtime", "start");
+            var again = await StartRuntimeAsync(root);
+            AssertSuccess(again, root);
             var restarted = ReadDescriptor(paths)!;
             seenPids.Add(restarted.Pid);
             Assert.NotEqual(descriptor.InstanceId, restarted.InstanceId);
@@ -195,7 +196,7 @@ public class CampaignFlowEndToEndTests
     private static JsonObject Json(CliResult result) => JsonNode.Parse(result.Output)!.AsObject();
 
     /// <summary>One CLI step: the shipped executable, the isolated data directory, and everything it said.</summary>
-    private static async Task<CliResult> JasonAsync(string root, params string[] args)
+    private static async Task<CliResult> JasonAsync(string root, TimeSpan within, params string[] args)
     {
         var start = new ProcessStartInfo("dotnet")
         {
@@ -221,14 +222,14 @@ public class CampaignFlowEndToEndTests
 
         try
         {
-            await process.WaitForExitAsync(Ct).WaitAsync(StepTimeout, Ct);
+            await process.WaitForExitAsync(Ct).WaitAsync(within, Ct);
 
             // The CLI has exited, so its streams must end with it. Waiting forever here is what a caller capturing
             // the output would do, and a runtime still holding those pipes open would hang every one of them.
             return new CliResult(
                 process.ExitCode,
-                (await output.WaitAsync(StepTimeout, Ct)).Trim(),
-                (await error.WaitAsync(StepTimeout, Ct)).Trim(),
+                (await output.WaitAsync(within, Ct)).Trim(),
+                (await error.WaitAsync(within, Ct)).Trim(),
                 command);
         }
         catch (TimeoutException timeout)
@@ -236,11 +237,22 @@ public class CampaignFlowEndToEndTests
             // A step that never finishes has said nothing yet, so the runtime's log is the only account there is of
             // what it was waiting for.
             throw new TimeoutException(
-                $"'jason {command}' did not finish within {StepTimeout} (the process {(process.HasExited ? "had" : "had not")} exited); " +
+                $"'jason {command}' did not finish within {within} (the process {(process.HasExited ? "had" : "had not")} exited); " +
                 $"its stdout and stderr were not complete and are not shown.{Environment.NewLine}{RuntimeLogTail(root)}",
                 timeout);
         }
     }
+
+    /// <summary>The same step within <see cref="StepTimeout"/>.</summary>
+    private static Task<CliResult> JasonAsync(string root, params string[] args) => JasonAsync(root, StepTimeout, args);
+
+    /// <summary>A real start for a test whose subject is not the start (<see cref="EndToEnd.PatientStart"/>).</summary>
+    private static Task<CliResult> StartRuntimeAsync(string root) =>
+        EndToEnd.PatientStart.RunAsync(
+            new JasonPaths(root),
+            within => JasonAsync(root, within, "runtime", "start"),
+            () => JasonAsync(root, "runtime", "status"),
+            result => (result.ExitCode, result.Output));
 
     private static RuntimeDescriptor? ReadDescriptor(JasonPaths paths)
     {
