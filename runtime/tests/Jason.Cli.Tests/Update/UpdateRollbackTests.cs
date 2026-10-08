@@ -26,6 +26,32 @@ public class UpdateRollbackTests
     }
 
     /// <summary>
+    /// A runtime that stopped but could not remove its descriptor has stopped, so the rollback goes on and puts the
+    /// previous executable back; it used to refuse as "would not stop". The stop's line about the descriptor reaches
+    /// standard error.
+    /// </summary>
+    [Fact]
+    public async Task A_rollback_goes_on_past_a_runtime_that_stopped_but_left_its_descriptor_behind()
+    {
+        using var installation = await UpdatedAsync();
+        installation.LeavesItsDescriptorOnStop = true;
+
+        var rollback = installation.Rollback();
+        var back = await rollback.RollBackAsync(Ct);
+
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+        Assert.Equal(installation.From, back.ToVersion);
+
+        // Started, by the runtime it launched: another instance than the one whose descriptor was left behind.
+        Assert.Contains(rollback.Steps, step => step.StartsWith("started ", StringComparison.Ordinal));
+        Assert.Contains(
+            $"Its endpoint descriptor at '{installation.Paths.DescriptorFile}' was left behind: the runtime could not remove it.",
+            installation.Error.ToString(),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("would not stop", installation.Error.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// PB2's case, and the one that made the amendment: the verb is typed long after the update finished, and
     /// everything it needs comes from the record that update left behind.
     /// </summary>
@@ -462,6 +488,31 @@ public class UpdateRollbackTests
         Assert.Equal(installation.From.ToString(), installation.Installed());
         Assert.Contains(rollback.Steps, step => step.Contains("no runtime answered", StringComparison.Ordinal));
         Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(10), $"the rollback waited on the real clock for {elapsed.Elapsed}");
+    }
+
+    /// <summary>
+    /// A descriptor the stopped runtime left behind is not the started runtime's. A rollback that read any descriptor
+    /// as its start said "started" at once, over a leftover, while the runtime it launched never came up; it says it
+    /// started only once a runtime of another instance has published, and otherwise what it says when none answers.
+    /// </summary>
+    [Fact]
+    public async Task A_rollback_does_not_take_a_descriptor_left_behind_for_its_own_start()
+    {
+        using var installation = await UpdatedAsync();
+        installation.LeavesItsDescriptorOnStop = true;
+
+        // Whatever is started from here on comes up and never listens, so the only descriptor there is the leftover.
+        installation.StartsButNeverServes = true;
+
+        var clock = new FixedClock(new DateTimeOffset(2026, 9, 20, 4, 30, 0, TimeSpan.Zero));
+        var rollback = installation.Rollback(clock);
+        var rolling = rollback.RollBackAsync(Ct);
+        await DriveAsync(clock, rolling);
+
+        await rolling;
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+        Assert.DoesNotContain(rollback.Steps, step => step.StartsWith("started ", StringComparison.Ordinal));
+        Assert.Contains(rollback.Steps, step => step.Contains("no runtime answered", StringComparison.Ordinal));
     }
 
     /// <summary>

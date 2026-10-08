@@ -1,4 +1,5 @@
 using Jason.Cli;
+using Jason.Cli.Uninstall;
 
 namespace Jason.Cli.Tests.Uninstall;
 
@@ -69,6 +70,8 @@ public class UninstallVerbTests
     [InlineData("Never touched")]
     [InlineData("another account's logon registration")]
     [InlineData("including the task an earlier version registered as Jason")]
+    [InlineData("A file another program holds open is tried again for up to 10 seconds before it is reported;")]
+    [InlineData("elsewhere than Windows an open file does not stop the removal.")]
     public async Task The_help_page_publishes_what_it_removes_and_what_it_never_touches(string published)
     {
         using var dir = new TempPaths();
@@ -81,6 +84,18 @@ public class UninstallVerbTests
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Contains(published, output.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>The wait the help page publishes is the remover's own, not a number written down beside it.</summary>
+    [Fact]
+    public async Task The_wait_the_help_page_publishes_is_the_removers_rule()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["uninstall", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
+
+        Assert.Contains($"tried again for up to {InstallationRemovers.HeldFiles.WaitInWords} before it is reported", output.ToString(), StringComparison.Ordinal);
     }
 
     /// <summary>

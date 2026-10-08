@@ -62,10 +62,12 @@ public static class OperationRunner
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(body);
 
-        var descriptor = new DescriptorReader(env.Paths).Read();
-        if (descriptor is null)
+        var reader = new DescriptorReader(env.Paths);
+        var look = reader.Look();
+        if (look.Descriptor is not { } descriptor)
         {
-            return (Fail(env, CliErrors.NoDescriptor, $"No runtime endpoint descriptor at '{env.Paths.DescriptorFile}'. Is the runtime running?"), null);
+            // A descriptor closed to this account does not open on a retry; a missing one appears once a runtime starts.
+            return (Fail(env, CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied), null);
         }
 
         using var client = new RuntimeClient(descriptor, env.HttpHandler);
@@ -137,9 +139,9 @@ public static class OperationRunner
         }
     }
 
-    private static int Fail(CliEnvironment env, string code, string message)
+    private static int Fail(CliEnvironment env, string code, string message, bool retryable = true)
     {
-        env.Out.WriteLine(CliErrors.Serialize(code, message, retryable: true));
+        env.Out.WriteLine(CliErrors.Serialize(code, message, retryable));
         return ExitCodes.RuntimeUnavailable;
     }
 }

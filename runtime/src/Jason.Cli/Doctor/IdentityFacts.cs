@@ -46,11 +46,19 @@ public sealed record IdentityFacts(string Home, string User, string Machine, str
     /// </summary>
     public static IdentityFacts ForThisMachine() =>
         new(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ThisAccountsHome(),
             Environment.UserName,
             Read(() => Environment.MachineName) ?? string.Empty,
             Read(() => Environment.UserDomainName),
             ThisAccountsSid());
+
+    /// <summary>
+    /// The home directory a bundle writes paths from — the one the environment names, or this account's — read alone, for
+    /// a sentence that writes a path from home. The account's names are not read for it.
+    /// </summary>
+    public static string HomeFor(IdentityFacts? named) => named?.Home ?? ThisAccountsHome();
+
+    private static string ThisAccountsHome() => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
     // Both of these throw when the system has no answer, and a diagnostic that cannot start is of no use to anyone.
     private static string? Read(Func<string> name)

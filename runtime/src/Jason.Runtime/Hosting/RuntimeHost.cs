@@ -147,10 +147,22 @@ public static class RuntimeHost
 
             var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()?.Addresses.FirstOrDefault()
                 ?? throw new InvalidOperationException("Kestrel started without reporting a listening address.");
-            var descriptor = new DescriptorPublisher(paths).Publish(info, new Uri(address), token);
+            var publisher = new DescriptorPublisher(paths) { Publishing = options.DescriptorPublishing ?? DescriptorPublisher.PublishRule };
+            RuntimeDescriptor descriptor;
+            try
+            {
+                descriptor = publisher.Publish(info, new Uri(address), token, cancellationToken);
+            }
+            catch (DescriptorUnpublishableException unpublishable)
+            {
+                // The path and a closed phrase, never the exception: its sentence is said where the start was asked for.
+                logger.Error("The runtime did not start: its endpoint descriptor at {Descriptor} could not be published: {Why}", paths.DescriptorFile, unpublishable.Why);
+                throw;
+            }
+
             logger.Information("Runtime API listening on {BaseUrl}; descriptor published at {Descriptor}", descriptor.BaseUrl, paths.DescriptorFile);
 
-            return new RunningRuntime(app, descriptor, paths, instanceLock, configuration, logger);
+            return new RunningRuntime(app, descriptor, paths, publisher, instanceLock, configuration, logger);
         }
         catch
         {
@@ -229,8 +241,10 @@ public static class RuntimeHost
         // A stored value the start could not read is a refusal too: its sentence names the column and says what to do,
         // and it quotes nothing, so it can be said where a person will read it — found however the host wrapped it, inside
         // another failure or among several. So are settings the start cannot use: the file and the position, or the
-        // setting's path and its type, refused before there is a log to read.
+        // setting's path and its type, refused before there is a log to read. And so is an endpoint descriptor that could not be
+        // put in place, the last step of a start: without it no client could find this runtime.
         catch (Exception refused) when (refused is RuntimeAlreadyRunningException or DataDirectoryUnusableException or InvalidSettingsException
+            or DescriptorUnpublishableException
             || UnreadableStoredValueException.In(refused) is not null)
         {
             // Said where whoever started this can hear it. A detached runtime's own standard error is the null

@@ -29,6 +29,15 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
     public HashSet<string> Locked { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Paths another program holds open for the whole of the wait, failed the way this machine's remover fails them once
+    /// the wait is over.
+    /// </summary>
+    public HashSet<string> HeldOpen { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Paths the operating system refuses with an access-denied: a permission, or a file marked read-only.</summary>
+    public HashSet<string> Denied { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Whether the file operations really happen. Off by default: most of these tests are about what was
     /// <em>asked</em>, and a test that wants the tree afterwards says so rather than every test risking it.
     /// </summary>
@@ -194,6 +203,20 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
         if (Locked.Contains(path))
         {
             throw new IOException($"The process cannot access the file '{path}' because it is being used by another process.");
+        }
+
+        if (HeldOpen.Contains(path))
+        {
+            throw new Jason.Cli.Uninstall.HeldOpen(
+                path,
+                verb is "directory.remove_if_empty" or "tree.remove" or "extracted.remove",
+                InstallationRemovers.HeldFiles,
+                new IOException($"The process cannot access the file '{path}' because it is being used by another process.", unchecked((int)0x80070020)));
+        }
+
+        if (Denied.Contains(path))
+        {
+            throw new UnauthorizedAccessException($"Access to the path '{path}' is denied.");
         }
 
         Calls.Add($"{verb} {path}");

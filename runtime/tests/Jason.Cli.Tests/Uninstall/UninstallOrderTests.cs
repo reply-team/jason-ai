@@ -109,6 +109,38 @@ public class UninstallOrderTests
     }
 
     /// <summary>
+    /// A runtime that stopped but could not remove its descriptor — a program held it — has stopped. The verb used to
+    /// read the descriptor left behind as a runtime that "did not stop", refuse, and leave the installation as it was.
+    /// It goes on now, and the stop's line saying the descriptor was left behind reaches the verb's standard error as
+    /// the diagnostic it is.
+    /// </summary>
+    [Fact]
+    public async Task A_runtime_that_stopped_but_left_its_descriptor_behind_does_not_hold_the_verb_up()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var log = new StepLog();
+        var processes = new FakeProcessControl();
+        var handler = new FakeHandler(_ =>
+        {
+            // The process goes; the descriptor stays, as one held by another program does.
+            log.Add("system.shutdown");
+            processes.RunningPids.Remove(RuntimeVerbs.Pid);
+            return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"));
+        });
+        var errors = new StringWriter();
+
+        var (exit, output, remover) = await RunAsync(dir, log, handler, processes: processes, everything: true, errors: errors);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Stopped the runtime.", output.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(CliErrors.RuntimeStillRunning, output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("path.remove", log.Steps);
+        Assert.NotEmpty(remover.Calls);
+        Assert.Contains($"Its endpoint descriptor at '{dir.Paths.DescriptorFile}' was left behind: the runtime could not remove it.", errors.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Nor is one that went between the plan and the question, with its process gone too — which is the one
     /// case the old reading of exit 3 was written for, and still carries on.
     /// </summary>
@@ -536,8 +568,8 @@ public class UninstallOrderTests
     {
         log.Add("system.shutdown");
 
-        // Both signs of life, because that is what `runtime stop` waits for: a descriptor deleted by a
-        // process that is still in the table is a runtime that is still going.
+        // As a runtime does: it removes its descriptor and then leaves the process table. `runtime stop` waits for the
+        // second; a process still in the table is a runtime that is still going.
         File.Delete(dir.Paths.DescriptorFile);
         processes.RunningPids.Remove(RuntimeVerbs.Pid);
         return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"));
@@ -571,6 +603,7 @@ public class UninstallOrderTests
     /// that is ours, and the data directory on the explicit word.
     /// </param>
     /// <param name="running">Whether the pid the descriptor names is in the process table.</param>
+    /// <param name="errors">The verb's standard error, for a test that reads it on its own.</param>
     private static async Task<(int Exit, StringWriter Output, RecordingRemover Remover)> RunAsync(
         TempPaths dir,
         StepLog log,
@@ -578,10 +611,11 @@ public class UninstallOrderTests
         RecordingRegistrar? registrar = null,
         FakeProcessControl? processes = null,
         bool everything = false,
-        bool running = true)
+        bool running = true,
+        StringWriter? errors = null)
     {
         var output = new StringWriter();
-        var error = new StringWriter();
+        var error = errors ?? new StringWriter();
         var install = Path.Combine(dir.Paths.Root + "-install", "jason");
         var remover = new RecordingRemover(log)
         {

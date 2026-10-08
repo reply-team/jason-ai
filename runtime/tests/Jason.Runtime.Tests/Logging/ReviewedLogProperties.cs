@@ -42,6 +42,11 @@ internal static class ReviewedLogProperties
         // The kind of update feed, "default" or "configured", never its address (UpdateChecker).
         "Feed",
 
+        // Why the endpoint descriptor could not be published or removed: one of the closed phrases of
+        // DescriptorUnpublishableException and DescriptorPublisher.Why, whose only number is a rule's wait, never an
+        // exception's message (RuntimeHost, RunningRuntime).
+        "Why",
+
         // The type name of a failure to read the settings file, never its message (RuntimeHost).
         "ExceptionType",
 

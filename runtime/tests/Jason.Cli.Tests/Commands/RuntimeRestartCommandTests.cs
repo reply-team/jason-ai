@@ -55,6 +55,48 @@ public class RuntimeRestartCommandTests
         Assert.DoesNotContain("stopping", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A runtime that stopped but could not remove its descriptor has stopped. A restart used to time out there and
+    /// start nothing; it starts the new instance now, and the stop's line about the descriptor reaches standard error.
+    /// The old descriptor's address answers nothing, so the start replaces it as it replaces any stale one.
+    /// </summary>
+    [Fact]
+    public async Task A_runtime_that_stopped_but_left_its_descriptor_behind_is_restarted()
+    {
+        using var dir = new TempPaths();
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_OLD"));
+        var stopped = false;
+        var handler = new FakeHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("system.shutdown", StringComparison.Ordinal))
+            {
+                // The process goes; the descriptor stays, as one held by another program does.
+                stopped = true;
+                return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_OLD"));
+            }
+
+            var current = new Jason.Cli.Discovery.DescriptorReader(dir.Paths).Read();
+            if (current is null || (stopped && current.InstanceId == "rt_OLD"))
+            {
+                throw new HttpRequestException("connection refused");
+            }
+
+            return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.InfoJson(current.InstanceId));
+        });
+        var processes = new FakeProcessControl { OnLaunch = RuntimeVerbs.PublishesAfterAWhile(dir, RuntimeVerbs.Descriptor("rt_NEW")) };
+        var (env, output, error) = RuntimeVerbs.Environment(dir, handler, processes);
+
+        var exit = await RuntimeRestartCommand.RunAsync(env, human: false, Ct, RuntimeVerbs.Timeout, RuntimeVerbs.Poll);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Single(processes.Launches);
+        Assert.Contains("rt_NEW", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains(
+            $"Its endpoint descriptor at '{dir.Paths.DescriptorFile}' was left behind: the runtime could not remove it.",
+            error.ToString(),
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_stop_that_fails_leaves_the_runtime_alone_and_reports_why()
     {

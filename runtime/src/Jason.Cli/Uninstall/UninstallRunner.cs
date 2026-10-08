@@ -2,6 +2,7 @@ using System.Globalization;
 using Jason.Cli.Autostart;
 using Jason.Cli.Commands;
 using Jason.Cli.Discovery;
+using Jason.Cli.Doctor;
 using Jason.Cli.Process;
 using Jason.Contracts.Skills;
 
@@ -260,7 +261,7 @@ public static class UninstallRunner
             }
             catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
             {
-                problems.Add($"'{entry}' could not be removed: {exception.Message}");
+                problems.Add(NotRemoved(env, entry, exception));
                 failed = true;
             }
         }
@@ -289,9 +290,19 @@ public static class UninstallRunner
         }
         catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
         {
-            problems.Add($"'{plan.DataDirectory}' could not be removed: {exception.Message}");
+            problems.Add(NotRemoved(env, plan.DataDirectory, exception));
         }
     }
+
+    /// <summary>
+    /// The line for a removal that failed. A file held open past the wait has a sentence of its own, with its path written
+    /// from the home directory the diagnostic bundle writes paths from, and without the operating system's message, which
+    /// repeats the absolute path. Any other failure is said as the operating system put it.
+    /// </summary>
+    private static string NotRemoved(CliEnvironment env, string path, Exception exception) =>
+        exception is HeldOpen held
+            ? held.Said(IdentityFacts.HomeFor(env.Identity))
+            : $"'{path}' could not be removed: {exception.Message}";
 
     /// <summary>
     /// The data directory's entries, split into what this product keeps there — <see cref="Contracts.Discovery.JasonPaths.OwnEntries"/>
@@ -394,7 +405,7 @@ public static class UninstallRunner
         }
         catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
         {
-            problems.Add($"'{executable}' could not be removed: {exception.Message}");
+            problems.Add(NotRemoved(env, executable, exception));
             return;
         }
 
@@ -410,7 +421,7 @@ public static class UninstallRunner
             {
                 previousLeft = previous;
                 problems.Add(
-                    $"'{previous}' could not be removed: {exception.Message} It is the executable an earlier install "
+                    $"{NotRemoved(env, previous, exception)} It is the executable an earlier install "
                     + "replaced while it was running, and something may be running it still.");
             }
         }
@@ -430,7 +441,7 @@ public static class UninstallRunner
             }
             catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
             {
-                problems.Add($"'{directory}' could not be removed: {exception.Message}");
+                problems.Add(NotRemoved(env, directory, exception));
             }
         }
 
@@ -465,7 +476,7 @@ public static class UninstallRunner
         catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
         {
             problems.Add(
-                $"'{extracted}' could not be removed: {exception.Message} It holds only native libraries this "
+                $"{NotRemoved(env, extracted, exception)} It holds only native libraries this "
                 + "build unpacked; another copy of this build still running would be holding one of them.");
             return;
         }
@@ -486,7 +497,7 @@ public static class UninstallRunner
         }
         catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
         {
-            problems.Add($"'{parent}' could not be removed: {exception.Message}");
+            problems.Add(NotRemoved(env, parent, exception));
         }
     }
 
@@ -638,7 +649,7 @@ public static class UninstallRunner
                     // One file at a time, as the steps after this one do. This caught only its own refusals, which
                     // this machine's remover never raises: a file held open or marked read-only escaped to the
                     // catch-all, the count of what had already gone was lost, and nothing after it was attempted.
-                    problems.Add(exception is RemovalRefused ? exception.Message : $"'{file.Path}' could not be removed: {exception.Message}");
+                    problems.Add(exception is RemovalRefused ? exception.Message : NotRemoved(env, file.Path, exception));
                     remaining++;
                 }
             }
@@ -660,7 +671,7 @@ public static class UninstallRunner
             }
             catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
             {
-                problems.Add(exception is RemovalRefused ? exception.Message : $"'{record}' could not be removed: {exception.Message}");
+                problems.Add(exception is RemovalRefused ? exception.Message : NotRemoved(env, record, exception));
                 continue;
             }
 
@@ -676,7 +687,7 @@ public static class UninstallRunner
                 }
                 catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
                 {
-                    problems.Add($"'{directory}' could not be removed: {exception.Message}");
+                    problems.Add(NotRemoved(env, directory, exception));
                 }
             }
         }
@@ -687,7 +698,7 @@ public static class UninstallRunner
     /// </summary>
     /// <remarks>
     /// Through <c>jason runtime stop</c> rather than beside it. That verb already asks <c>system.shutdown</c>
-    /// and waits for both signs of life — the descriptor and the pid — and a second implementation of "is it
+    /// and waits for the acknowledged process to end, and a second implementation of "is it
     /// really gone" is a second thing to be wrong about at the one moment being wrong is expensive. Its
     /// output goes to a writer of this command's own, because it prints an acknowledgement meant for somebody
     /// who typed <c>stop</c>, and what reaches this verb's caller is this verb's own report.

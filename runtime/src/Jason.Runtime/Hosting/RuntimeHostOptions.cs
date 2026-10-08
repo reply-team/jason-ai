@@ -28,4 +28,12 @@ public sealed record RuntimeHostOptions(
     HttpMessageHandler? FeedHandler = null,
     Action<IServiceCollection>? ConfigureServices = null,
     TextWriter? Refusals = null,
-    ConsoleAtStart? ConsoleAtStart = null);
+    ConsoleAtStart? ConsoleAtStart = null)
+{
+    /// <summary>
+    /// How long publishing the endpoint descriptor waits for a reader to let go; null means
+    /// <see cref="Discovery.DescriptorPublisher.PublishRule"/>. A test holds it short, so a start refused by a held
+    /// descriptor is refused in a moment rather than in ten seconds.
+    /// </summary>
+    internal Jason.Contracts.Files.HeldFileRule? DescriptorPublishing { get; init; }
+}

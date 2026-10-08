@@ -1,8 +1,10 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using Jason.Cli.Doctor;
 using Jason.Cli.Process;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Files;
 
 namespace Jason.Cli.Uninstall;
 
@@ -15,6 +17,36 @@ public sealed class RemovalRefused(string code, string message) : Exception(mess
 {
     /// <summary>The snake_case code the error envelope carries, so an agent branches on one shape.</summary>
     public string Code { get; } = code;
+}
+
+/// <summary>
+/// A file another program held open for the whole of the uninstall's wait, or a directory that a program held, or a file
+/// inside it.
+/// </summary>
+/// <remarks>
+/// An <see cref="IOException"/>, as the refusal it stands for was, so every step that reported that one reports this.
+/// Its sentence leaves the operating system's message out: that message repeats the absolute path, and says nothing the
+/// sentence does not.
+/// </remarks>
+public sealed class HeldOpen(string target, bool isDirectory, HeldFileRule rule, Exception? held = null)
+    : IOException(Sentence(target, isDirectory, rule), held)
+{
+    /// <summary>The path the removal was asked for.</summary>
+    public string Target { get; } = target;
+
+    /// <summary>Whether the removal was a directory's, which a file anywhere inside it can hold.</summary>
+    public bool IsDirectory { get; } = isDirectory;
+
+    /// <summary>The rule the removal was tried under.</summary>
+    public HeldFileRule Rule { get; } = rule;
+
+    /// <summary>The sentence, with the path written from the home directory: <c>~</c> and the rest, where it is inside it.</summary>
+    public string Said(string home) => Sentence(IdentityRewriter.FromHome(Target, home), IsDirectory, Rule);
+
+    private static string Sentence(string path, bool isDirectory, HeldFileRule rule) =>
+        isDirectory
+            ? $"'{path}' or a file in it is held open by another program; it was tried for {rule.WaitInWords}."
+            : $"'{path}' is held open by another program; it was tried for {rule.WaitInWords}.";
 }
 
 /// <summary>
@@ -135,6 +167,13 @@ public sealed record ExecutableOutcome(bool Removed, string? MovedTo, string? No
 public static class InstallationRemovers
 {
     /// <summary>
+    /// How long a file another program holds open is tried again before it is reported, and how often: ten seconds, every
+    /// quarter of a second, and only for a sharing or lock violation. An access-denied is a permission or a read-only
+    /// file, which waiting does not change, so it is reported at once.
+    /// </summary>
+    public static HeldFileRule HeldFiles { get; } = new(TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(250), AccessDeniedCounts: false);
+
+    /// <summary>
     /// This machine's. The file operations are what they look like; taking a directory off this account's
     /// PATH is the installer's own act read backwards and arrives with the rules that describe it.
     /// </summary>
@@ -142,7 +181,23 @@ public static class InstallationRemovers
     /// The key under <c>HKEY_CURRENT_USER</c> whose <c>Path</c> this reads and edits on Windows. Always
     /// <c>Environment</c>, except in a test that points it at a key of its own.
     /// </param>
-    public static IInstallationRemover ForThisMachine(string pathKey = UserPathValue.EnvironmentKey) => new MachineRemover(pathKey);
+    public static IInstallationRemover ForThisMachine(string pathKey = UserPathValue.EnvironmentKey) =>
+        new MachineRemover(pathKey, HeldFiles, TimeProvider.System, HeldFileRetry.Sleep);
+
+    /// <summary>
+    /// The same, under a rule, a clock and a pause of a test's own, so a wait can be held short or its pauses counted. A
+    /// test that needs the running image's step without being the running image also says which file is, where it is moved
+    /// aside, and what starts the cleanup, so no cleanup process is started for a file a test made.
+    /// </summary>
+    internal static IInstallationRemover ForThisMachine(
+        string pathKey,
+        HeldFileRule rule,
+        TimeProvider clock,
+        Action<TimeSpan, CancellationToken> pause,
+        Func<string, bool>? runningImage = null,
+        string? temporaryDirectory = null,
+        Func<string, int?>? startCleanup = null) =>
+        new MachineRemover(pathKey, rule, clock, pause, runningImage, temporaryDirectory, startCleanup);
 
     /// <summary>
     /// Moves an executable out of its directory into <see cref="AsideDirectory"/>, having first started what
@@ -253,8 +308,36 @@ public static class InstallationRemovers
         return Path.Combine(Path.GetDirectoryName(installed) ?? installed, "." + name);
     }
 
-    private sealed class MachineRemover(string pathKey) : IInstallationRemover
+    /// <summary>
+    /// This machine's remover. Every removal it makes — a file's delete, the running image's move aside, a directory's
+    /// delete — goes through <c>Held</c>: tried again while another program holds the file, and a <see cref="HeldOpen"/>
+    /// once the rule's wait is over. The call is what is tried again, not the step it is part of.
+    /// </summary>
+    private sealed class MachineRemover(
+        string pathKey,
+        HeldFileRule rule,
+        TimeProvider clock,
+        Action<TimeSpan, CancellationToken> pause,
+        Func<string, bool>? runningImage = null,
+        string? temporaryDirectory = null,
+        Func<string, int?>? startCleanup = null) : IInstallationRemover
     {
+        private readonly Func<string, bool> _runningImage = runningImage ?? IsRunningImage;
+
+        private readonly Func<string, int?> _startCleanup = startCleanup ?? StartCleanup;
+
+        /// <summary>One removal, tried again while another program holds what it removes.</summary>
+        /// <param name="path">What the removal is asked for, which the refusal names.</param>
+        /// <param name="isDirectory">Whether it is a directory's, which a file anywhere inside it can hold.</param>
+        /// <param name="removal">The one call.</param>
+        private void Held(string path, bool isDirectory, Action removal)
+        {
+            if (HeldFileRetry.Run(removal, rule, clock, pause) is { } held)
+            {
+                throw new HeldOpen(path, isDirectory, rule, held);
+            }
+        }
+
         // A process cannot delete its own image on Windows. Everywhere else the directory entry goes and the
         // file lives on until the last handle closes, which is exactly what is wanted.
         public bool CanRemoveRunningImage => !OperatingSystem.IsWindows();
@@ -268,7 +351,7 @@ public static class InstallationRemovers
             // the commonest case there is -- a root somebody had already cleared out by hand.
             if (File.Exists(path))
             {
-                File.Delete(path);
+                Held(path, isDirectory: false, () => File.Delete(path));
             }
         }
 
@@ -318,13 +401,17 @@ public static class InstallationRemovers
                 return new ExecutableOutcome(true, null, "It was already gone.");
             }
 
-            if (CanRemoveRunningImage || !IsRunningImage(path))
+            if (CanRemoveRunningImage || !_runningImage(path))
             {
-                File.Delete(path);
+                Held(path, isDirectory: false, () => File.Delete(path));
                 return new ExecutableOutcome(true, null, null);
             }
 
-            return InstallationRemovers.MoveAside(path, Path.GetTempPath(), (from, to) => File.Move(from, to), StartCleanup);
+            return InstallationRemovers.MoveAside(
+                path,
+                temporaryDirectory ?? Path.GetTempPath(),
+                (from, to) => Held(from, isDirectory: false, () => File.Move(from, to)),
+                _startCleanup);
         }
 
         /// <summary>
@@ -459,10 +546,7 @@ public static class InstallationRemovers
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(directory);
 
-            if (Directory.Exists(directory))
-            {
-                Directory.Delete(directory, recursive: true);
-            }
+            Held(directory, isDirectory: true, () => DeleteTree(directory));
         }
 
         private static string Trimmed(string path) => path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -482,8 +566,15 @@ public static class InstallationRemovers
             }
 
             // Never recursive. Something arriving between the check above and this call keeps the directory,
-            // which is the answer this verb wants: a directory holding somebody else's file stays.
-            Directory.Delete(path, recursive: false);
+            // which is the answer this verb wants: a directory holding somebody else's file stays. A directory that is
+            // somebody's working directory, or open in a window, is held like a file and waited for the same way.
+            Held(path, isDirectory: true, () =>
+            {
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, recursive: false);
+                }
+            });
             return true;
         }
 
@@ -491,6 +582,15 @@ public static class InstallationRemovers
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
+            Held(path, isDirectory: true, () => DeleteTree(path));
+        }
+
+        /// <summary>
+        /// A directory and everything under it, if it is there. Asked again after each try a held file failed, by which time
+        /// what was not held is already gone.
+        /// </summary>
+        private static void DeleteTree(string path)
+        {
             if (Directory.Exists(path))
             {
                 Directory.Delete(path, recursive: true);

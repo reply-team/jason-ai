@@ -145,6 +145,17 @@ public sealed class FakeInstallation : HttpMessageHandler
     public bool RefusesToStop { get; set; }
 
     /// <summary>
+    /// Whether the runtime stops and leaves its descriptor behind, as one does when another program holds the file:
+    /// the process goes, the address answers nothing, and the file stays.
+    /// </summary>
+    public bool LeavesItsDescriptorOnStop { get; set; }
+
+    private int _starts;
+
+    /// <summary>The instance the runtime here is: <c>rt_FAKE</c> for the first start, and an id of its own for each after.</summary>
+    public string InstanceId => _starts <= 1 ? "rt_FAKE" : $"rt_FAKE{_starts}";
+
+    /// <summary>
     /// Whether a drain really ends the work in flight. A runtime whose children outlive the bound is the case
     /// the drain's own give-up exists for, and it never ran while the drain here zeroed the count.
     /// </summary>
@@ -368,9 +379,13 @@ public sealed class FakeInstallation : HttpMessageHandler
                 }
 
                 Running = false;
-                File.Delete(Paths.DescriptorFile);
+                if (!LeavesItsDescriptorOnStop)
+                {
+                    File.Delete(Paths.DescriptorFile);
+                }
+
                 OnStop?.Invoke();
-                return Json(new ShutdownResponse("rt_FAKE", 77, Stopping: true));
+                return Json(new ShutdownResponse(InstanceId, 77, Stopping: true));
 
             case "system.info":
                 return Json(Info());
@@ -388,7 +403,7 @@ public sealed class FakeInstallation : HttpMessageHandler
     private SystemInfoResponse Info() => new(
         ServesVersion ?? Installed(),
         "v1",
-        "rt_FAKE",
+        InstanceId,
         77,
         DateTimeOffset.UnixEpoch,
         Paths.Root,
@@ -418,11 +433,14 @@ public sealed class FakeInstallation : HttpMessageHandler
 
     private void Publish()
     {
+        // Each start is an instance of its own, as on a machine: a descriptor left behind by the last one names that
+        // one, and the next names itself.
+        _starts++;
         Directory.CreateDirectory(Paths.RunDirectory);
         File.WriteAllText(
             Paths.DescriptorFile,
             JsonSerializer.Serialize(
-                new RuntimeDescriptor("v1", Installed(), "rt_FAKE", 77, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch),
+                new RuntimeDescriptor("v1", Installed(), InstanceId, 77, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch),
                 JasonJson.Options));
     }
 

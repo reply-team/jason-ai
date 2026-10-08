@@ -35,8 +35,8 @@ public static class UninstallCommand
     /// What this verb will and will not touch, printed in help. A destructive verb whose boundaries are only
     /// in a design note is one somebody runs without knowing them.
     /// </summary>
-    private const string Boundaries =
-        """
+    private static readonly string Boundaries =
+        $"""
         Removed, in this order, each step reported:
           1. the logon registration, first, so a logon part-way through cannot start what is going: this
              account's, on Windows including the task an earlier version registered as Jason
@@ -47,6 +47,9 @@ public static class UninstallCommand
           5. the PATH entry, only where the installer wrote it and its directory holds nothing but Jason:
              the marked block in a login profile; on Windows, the entry in this account's Path
           6. the executable, its install directory, and the native libraries it unpacked on first run
+
+        A file another program holds open is tried again for up to {InstallationRemovers.HeldFiles.WaitInWords} before it is reported;
+        elsewhere than Windows an open file does not stop the removal.
 
         Kept unless --purge-data:  the data directory. --purge-data removes what Jason keeps there, and the
                                    directory once nothing else is in it; it prints what will be deleted and

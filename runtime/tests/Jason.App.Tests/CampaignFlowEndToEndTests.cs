@@ -61,8 +61,8 @@ public class CampaignFlowEndToEndTests
             Assert.Equal(2, (int)batch["summary"]!["added"]!);
             Assert.Equal("active", (string?)Json(await Ok(root, "campaign", "start", campaign))["status"]);
 
-            // Stopping is graceful and complete: the acknowledgement names the instance, and the verb returns
-            // only once the descriptor is gone and the process has left the process table.
+            // Stopping is graceful and complete: the acknowledgement names the instance, the verb returns only once
+            // the process has left the process table, and the runtime removed its descriptor before it exited.
             var stopped = Json(await Ok(root, "runtime", "stop"));
             Assert.True((bool)stopped["stopping"]!);
             Assert.Equal(descriptor.InstanceId, (string?)stopped["instance_id"]);

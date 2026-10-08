@@ -587,6 +587,10 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
 
     private async Task StartAsync(UpdateLedger ledger, CancellationToken cancellationToken)
     {
+        // A descriptor already there before the launch is the stopped runtime's, left behind when it could not remove
+        // it, and is no sign that anything started. Only one naming another instance is, as `jason runtime start` reads it.
+        var before = new DescriptorReader(env.Paths).Read()?.InstanceId;
+
         var processes = env.Processes ?? RuntimeProcessControl.Instance;
         using var child = processes.Launch(env.Paths, [ledger.InstallPath]);
 
@@ -595,7 +599,7 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
         var poll = TimeSpan.FromMilliseconds(200);
         while (waited < limit)
         {
-            if (new DescriptorReader(env.Paths).Read() is not null)
+            if (new DescriptorReader(env.Paths).Read() is { } published && !string.Equals(published.InstanceId, before, StringComparison.Ordinal))
             {
                 Say($"started {ledger.FromVersion}");
                 return;

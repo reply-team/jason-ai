@@ -468,6 +468,46 @@ public sealed class IdentityRewriter
     }
 
     /// <summary>
+    /// A path as a sentence written for a person gives it: <c>~</c> and the rest where the path is the home directory or
+    /// inside it, by the rule this rewriter decides that by, and the path as it is anywhere else.
+    /// </summary>
+    public static string FromHome(string path, string home)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(home);
+
+        if (!Inside(path, home))
+        {
+            return path;
+        }
+
+        // Past as many of the path's components as the home directory has, separators and all; the rest is kept as it was
+        // written. Inside has said the path has at least that many, so this ends.
+        var components = Components(home).Length;
+        var at = 0;
+        for (var passed = 0; passed < components;)
+        {
+            while (at < path.Length && path[at] is '\\' or '/')
+            {
+                at++;
+            }
+
+            var start = at;
+            while (at < path.Length && path[at] is not ('\\' or '/'))
+            {
+                at++;
+            }
+
+            if (!string.IsNullOrWhiteSpace(path[start..at]))
+            {
+                passed++;
+            }
+        }
+
+        return HomeMark + path[at..];
+    }
+
+    /// <summary>
     /// Whether a directory is the home directory or inside it, component by component, without regard to case where paths
     /// have none. A home directory that is only a root holds nothing here, as it matches nothing.
     /// </summary>

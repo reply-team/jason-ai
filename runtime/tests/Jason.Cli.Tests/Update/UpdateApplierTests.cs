@@ -334,6 +334,29 @@ public class UpdateApplierTests
         Assert.Equal(installation.From.ToString(), installation.Installed());
     }
 
+    /// <summary>
+    /// A runtime that stopped but could not remove its descriptor has stopped: its process is gone, so nothing is
+    /// replaced under a runtime that is using the file. The update used to refuse there as "would not stop"; it goes
+    /// on to the swap and the start, and the stop's line about the descriptor reaches standard error.
+    /// </summary>
+    [Fact]
+    public async Task An_update_goes_on_past_a_runtime_that_stopped_but_left_its_descriptor_behind()
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+        installation.LeavesItsDescriptorOnStop = true;
+
+        var ledger = await installation.Applier().ApplyAsync(Request(installation), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(installation.To.ToString(), installation.Installed());
+        Assert.True(installation.Running, "the update left no runtime running");
+        Assert.Contains(
+            $"Its endpoint descriptor at '{installation.Paths.DescriptorFile}' was left behind: the runtime could not remove it.",
+            installation.Error.ToString(),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("would not stop", installation.Error.ToString(), StringComparison.Ordinal);
+    }
+
     private static UpdateRequest Request(FakeInstallation installation) =>
         new(installation.Feed, null, TimeSpan.FromSeconds(5));
 }

@@ -14,7 +14,7 @@ public class DescriptorPublisherTests
         var publisher = new DescriptorPublisher(dir.Paths);
         var info = RuntimeInfo.Create();
 
-        var descriptor = publisher.Publish(info, new Uri("http://127.0.0.1:54321/"), "secret-token");
+        var descriptor = publisher.Publish(info, new Uri("http://127.0.0.1:54321/"), "secret-token", TestContext.Current.CancellationToken);
 
         Assert.True(File.Exists(dir.Paths.DescriptorFile));
         Assert.True(FilePermissions.IsRestrictedToCurrentUser(dir.Paths.DescriptorFile));
@@ -32,9 +32,9 @@ public class DescriptorPublisherTests
     {
         using var dir = new TempDataDir();
         var publisher = new DescriptorPublisher(dir.Paths);
-        publisher.Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "first");
+        publisher.Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "first", TestContext.Current.CancellationToken);
 
-        publisher.Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:2"), "second");
+        publisher.Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:2"), "second", TestContext.Current.CancellationToken);
 
         var json = File.ReadAllText(dir.Paths.DescriptorFile);
         Assert.Contains("\"token\":\"second\"", json, StringComparison.Ordinal);
@@ -47,7 +47,7 @@ public class DescriptorPublisherTests
     {
         using var dir = new TempDataDir();
         var publisher = new DescriptorPublisher(dir.Paths);
-        publisher.Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "t");
+        publisher.Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "t", TestContext.Current.CancellationToken);
 
         publisher.Remove();
         publisher.Remove();
@@ -59,7 +59,7 @@ public class DescriptorPublisherTests
     public void The_run_directory_is_restricted_to_the_current_user()
     {
         using var dir = new TempDataDir();
-        new DescriptorPublisher(dir.Paths).Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "t");
+        new DescriptorPublisher(dir.Paths).Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "t", TestContext.Current.CancellationToken);
         Assert.True(FilePermissions.IsRestrictedToCurrentUser(dir.Paths.RunDirectory));
     }
 }

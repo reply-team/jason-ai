@@ -10,8 +10,9 @@ namespace Jason.Cli.Commands;
 
 /// <summary>
 /// <c>jason runtime stop</c>: ask the runtime to shut down, then wait until it really is gone. The verb only
-/// returns success once the descriptor has been removed and the process has left the process table, so a
-/// script may start the next runtime on the very next line.
+/// returns success once the acknowledged process has left the process table, so a script may start the next runtime
+/// on the very next line. The runtime removes its endpoint descriptor before it exits; one it could not remove is said
+/// on standard error, and the stop still succeeds, because the runtime it stopped is gone.
 /// </summary>
 public static class RuntimeStopCommand
 {
@@ -22,10 +23,11 @@ public static class RuntimeStopCommand
     {
         ArgumentNullException.ThrowIfNull(env);
 
-        var descriptor = new DescriptorReader(env.Paths).Read();
-        if (descriptor is null)
+        var reader = new DescriptorReader(env.Paths);
+        var look = reader.Look();
+        if (look.Descriptor is not { } descriptor)
         {
-            env.Out.WriteLine(CliErrors.Serialize(CliErrors.NoDescriptor, $"No runtime endpoint descriptor at '{env.Paths.DescriptorFile}'. Is the runtime running?", retryable: true));
+            env.Out.WriteLine(CliErrors.Serialize(CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied));
             return ExitCodes.RuntimeUnavailable;
         }
 
@@ -51,6 +53,11 @@ public static class RuntimeStopCommand
         if (await WaitForExitAsync(env, pid, waited, poll ?? DefaultPoll, cancellationToken).ConfigureAwait(false))
         {
             env.Out.WriteLine(human ? $"Runtime stopped (instance {instanceId}, pid {pid})." : response.Body);
+            if (LeftBehind(env, instanceId) is { } note)
+            {
+                env.Error.WriteLine(note);
+            }
+
             return ExitCodes.Success;
         }
 
@@ -61,14 +68,19 @@ public static class RuntimeStopCommand
         return ExitCodes.ApiError;
     }
 
-    /// <summary>Gone means both signs of life are gone: no endpoint descriptor, and no process behind the pid.</summary>
+    /// <summary>
+    /// Gone means the acknowledged process has ended, by that alone. Whether a process is running can be wrong only
+    /// towards "running", where its pid has been reused, never towards "gone". The descriptor is not waited for: the
+    /// runtime removes it before it exits, and one still there afterwards is one it could not remove, which a program
+    /// holding it may keep there for as long as it likes.
+    /// </summary>
     private static async Task<bool> WaitForExitAsync(CliEnvironment env, int pid, TimeSpan timeout, TimeSpan poll, CancellationToken cancellationToken)
     {
         var processes = env.Processes ?? RuntimeProcessControl.Instance;
         var elapsed = Stopwatch.StartNew();
         while (true)
         {
-            if (!File.Exists(env.Paths.DescriptorFile) && !processes.IsRunning(pid))
+            if (!processes.IsRunning(pid))
             {
                 return true;
             }
@@ -80,6 +92,36 @@ public static class RuntimeStopCommand
 
             await Task.Delay(poll, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// What a descriptor still there after the stopped runtime has gone says, read once: nothing where there is none; a
+    /// runtime started since where it names another instance; and otherwise, named or unreadable, the stopped runtime's
+    /// own, which it could not remove. A holder's handle does not stop the read. The CLI cannot tell a held descriptor
+    /// from a read-only one, so the line names both and sends the person to the runtime's log, which says which.
+    /// </summary>
+    private static string? LeftBehind(CliEnvironment env, string instanceId)
+    {
+        if (!File.Exists(env.Paths.DescriptorFile))
+        {
+            return null;
+        }
+
+        var look = new DescriptorReader(env.Paths).Look();
+        if (look.Descriptor is { } other && !string.Equals(other.InstanceId, instanceId, StringComparison.Ordinal))
+        {
+            return $"A runtime with another instance id, '{other.InstanceId}', has started since; this stop ended only the one it acknowledged.";
+        }
+
+        // Gone between the two looks: removed after all, and nothing to say.
+        if (look.Descriptor is null && !look.Denied && !File.Exists(env.Paths.DescriptorFile))
+        {
+            return null;
+        }
+
+        return $"Its endpoint descriptor at '{env.Paths.DescriptorFile}' was left behind: the runtime could not remove it. "
+            + "Another program may be holding it, or it may be read-only; the runtime's log says which. A CLI reading it "
+            + "finds no runtime at its address and says so, and the next start replaces it once the file is free.";
     }
 
     private static ShutdownResponse? Parse(string body)

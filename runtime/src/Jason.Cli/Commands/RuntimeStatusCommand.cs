@@ -20,10 +20,11 @@ public static class RuntimeStatusCommand
     {
         ArgumentNullException.ThrowIfNull(env);
 
-        var descriptor = new DescriptorReader(env.Paths).Read();
-        if (descriptor is null)
+        var reader = new DescriptorReader(env.Paths);
+        var look = reader.Look();
+        if (look.Descriptor is not { } descriptor)
         {
-            return Fail(env, CliErrors.NoDescriptor, $"No runtime endpoint descriptor at '{env.Paths.DescriptorFile}'. Is the runtime running?", retryable: true);
+            return Fail(env, CliErrors.NoDescriptor, reader.NoRuntime(look), retryable: !look.Denied);
         }
 
         using var client = new RuntimeClient(descriptor, env.HttpHandler);
