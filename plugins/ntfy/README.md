@@ -13,7 +13,8 @@ publishes the pointer the runtime composes —
 
 — with the title `Jason`, to one topic, as JSON to the server's root. **Nothing else about the work travels**: the
 runtime makes the pointer from counts and, when protective actions failed, at most three campaign ids, and
-docs/notifications.md says exactly what a pointer may carry.
+the delivery contract, [`notification.send`](../../docs/contracts/notifications/notification.send.md), says
+exactly what a pointer may carry.
 
 The topic travels in the body rather than in the path, so the line the plugin host writes about the call in
 `~/.jason/work/plugins/pin_…/stderr.log` names the server's root and not your topic.
@@ -72,9 +73,9 @@ An ntfy server with access control takes a bearer token. The package reads one v
 returns it.
 
 1. Grant it: `"ntfy": { "Http": ["your.host"], "Env": ["NTFY_TOKEN"] }`.
-2. Put `NTFY_TOKEN` in the environment of the runtime — not of your shell. A runtime started at logon has the
-   account's logon environment, not your shell's profile ([`release-and-update.md`](../../docs/release-and-update.md)
-   §8), so set it as a user environment variable there.
+2. Put `NTFY_TOKEN` in the environment of the runtime — not of your shell. A runtime started at logon — by a
+   logon task, a LaunchAgent or a `systemd --user` unit — has the account's logon environment, not your shell's
+   profile, so set it as a user environment variable there.
 
 ## Your own server, in four steps
 

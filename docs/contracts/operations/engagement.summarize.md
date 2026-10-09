@@ -6,8 +6,7 @@ explains it. Where the two seem to differ, the document is right and this page i
 > **This version runs it.** A work item naming this operation is measured against the argument schema below when
 > it is written, routed to a plugin at the claim, performed in a plugin-host process, and answered — and the
 > answer is measured against the result schema before it becomes the item's result. It reaches a plugin only
-> where a route sends it: without one the item fails at the claim with `no_route`
-> ([docs/routing.md](../../routing.md)).
+> where a route sends it: without one the item fails at the claim with `no_route`.
 
 ## What it is for
 

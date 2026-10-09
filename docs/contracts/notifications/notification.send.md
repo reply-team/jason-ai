@@ -6,8 +6,7 @@ it. Where the two seem to differ, the document is right and this page is a bug.
 > **A delivery contract, not a canonical operation.** It is published beside the operations under
 > [`../operations/`](../operations/) and never among them: no work item names it, no route carries it, and no
 > approval, preflight or repeat rule applies to it. A notification plugin is invoked for it only by the runtime's own
-> notifier, when an operator has named that plugin in the `Notifications` section of the settings
-> ([docs/notifications.md](../../notifications.md)).
+> notifier, when an operator has named that plugin in the `Notifications` section of the settings.
 
 ## What it is for
 

@@ -3,6 +3,13 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.2.5
+
+- The README no longer sends a reader to pages this repository does not carry: it says in place that an
+  approval belongs to the operation's contract, and names `jason route resolve` for which route a claim would
+  take.
+- Nothing else changes: the same calls, codes, classes and messages.
+
 ## 0.2.4
 
 - The README states the provider's bound on inbound replies: Reply marks a contact finished at its first reply and

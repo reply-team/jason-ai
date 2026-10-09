@@ -6,7 +6,7 @@ explains it. Where the two seem to differ, the document is right and this page i
 > **This version runs it**, and it writes: a work item naming this operation is measured against the argument
 > schema below when it is written, routed to a plugin at the claim, and performed against a real provider account
 > — a contact may be created and a list may be changed. It reaches a plugin only where a route sends it: without
-> one the item fails at the claim with `no_route` ([docs/routing.md](../../routing.md)).
+> one the item fails at the claim with `no_route`.
 
 ## What it is for
 

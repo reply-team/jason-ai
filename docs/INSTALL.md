@@ -15,10 +15,7 @@ Teaching it (§4) is a fetch of its own: a release takes its skills from this re
 network, at the tag it was published as. A machine without `git` or without the network teaches it from a
 checkout instead, with `--source`.
 
-**From source (§3):** the .NET SDK version pinned in `global.json` at the repository root. `dotnet --version`
-must satisfy it; the SDK resolves the pin itself and will tell you if it cannot.
-
-Either way you also need a directory you can write to, and — if you want an agent harness taught — that
+You also need a directory you can write to, and — if you want an agent harness taught — that
 harness installed, so §4 has somewhere to deploy.
 
 ---
@@ -34,8 +31,9 @@ irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 
 ```
 
 Both lines install the **latest release**. A repository with no published release has no latest, so if they
-answer 404 there is nothing to install from and §3 is the way in. That is a fact about the repository, not a
-failure of the tool or of your machine, and it is worth saying that way to whoever asked you to install it.
+answer 404 there is nothing to install yet — and nothing in this repository to build instead (§3). That is a fact
+about the repository, not a failure of the tool or of your machine, and it is worth saying that way to whoever
+asked you to install it.
 
 Each script works out your platform, downloads the archive for it, **verifies its SHA-256 before unpacking**,
 installs the executable under your own account, and puts that directory on your PATH.
@@ -56,9 +54,9 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 - `--version X.Y.Z` installs a particular release instead of the latest. The script checks that the manifest
   it gets back is the release you asked for, rather than trusting the feed to have answered the question you
   put to it.
-- `--install-dir <path>` installs somewhere else — into a directory of its own, for the reason §3 gives.
+- `--install-dir <path>` installs somewhere else — into a directory of its own, for the reason below.
 - `--no-modify-path` leaves your PATH alone. Then `jason` is only typeable by its full path until you put it
-  on the PATH yourself — see §3, which has the same problem for the same reason.
+  on the PATH yourself, as below.
 
 A one-liner takes them like this:
 
@@ -72,42 +70,11 @@ curl -fsSL https://github.com/reply-team/jason-ai/releases/download/v0.1.0/insta
 
 These install 0.1.0 with 0.1.0's own script: a pinned install fetches the script from the release it installs.
 
-Confirm what landed:
+**A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
+nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
+account's Path already names — the entry stays, and so does everything else it puts on the PATH.
 
-```sh
-jason --version
-```
-
-On Windows the PowerShell you installed from is told about the new PATH entry. On macOS and Linux the script ran
-in a shell of its own, so the one you typed it into has not heard: open a new terminal, or type it by its full
-path — `~/.local/bin/jason --version`.
-
-A started runtime asks the release feed whether a newer version exists five minutes after it starts, and once a
-day after that: one `GET`, carrying nothing about you or your work
-([`release-and-update.md`](release-and-update.md) §4). `Update:CheckEnabled` set to `false` in
-`~/.jason/config/settings.json` turns that off.
-
----
-
-## 3. Build from source
-
-From the repository root:
-
-```sh
-dotnet publish runtime/src/Jason.App -c Release -r <rid> --self-contained -p:PublishSingleFile=true
-```
-
-`<rid>` is your platform's runtime identifier — `win-x64`, `linux-x64`, `osx-arm64`. The single file it
-produces is the whole product: the CLI, the runtime service and the plugin host are three modes of one
-executable, chosen from its arguments. Copy it into **a directory of its own** — one that holds nothing else —
-call it `jason` (`jason.exe` on Windows), and put that directory on your PATH. Copy that file alone: the `.pdb`
-files beside it are debugging symbols, and a directory that holds them as well is not one of its own.
-
-A directory of its own because `jason uninstall` takes a directory's PATH entry off only where the directory
-holds nothing but Jason. Copied into a directory other programs share — on Windows, the `WindowsApps` folder
-every account's Path already names — the entry stays, and so does everything else it puts on the PATH.
-
-**Putting it on the PATH yourself.** No installer ran, so nothing did this for you. On Windows, add its
+**Putting it on the PATH yourself.** With `--no-modify-path` nothing did this for you. On Windows, add its
 directory to your account's `Path`; on macOS and Linux, append an `export` line to the one profile a login shell
 of yours reads — `~/.zprofile` for `zsh`; for `bash` the first of `~/.bash_profile`, `~/.bash_login` and
 `~/.profile` that exists, because bash never reads `~/.profile` once one of the others does; `~/.profile` for
@@ -120,10 +87,36 @@ terminal gets it; an agent running one command at a time in a non-interactive ch
 written the profile but will not see it in its own next command. If you are an agent, carry the `export` half
 of that line yourself, or call the executable by its full path until a new login shell exists.
 
-A build from source is also why §4 below passes `--source .`: the skill packs are pinned to a tag derived
-from the build's own version, and a build from a working tree is a development version whose tag has not been
-published. `--source .` says "take the packs out of this checkout", which is what you want when you are
-standing in it.
+Confirm what landed:
+
+```sh
+jason --version
+```
+
+On Windows the PowerShell you installed from is told about the new PATH entry. On macOS and Linux the script ran
+in a shell of its own, so the one you typed it into has not heard: open a new terminal, or type it by its full
+path — `~/.local/bin/jason --version`.
+
+A started runtime asks the release feed whether a newer version exists five minutes after it starts, and once a
+day after that, at the default settings: one `GET`, carrying nothing about you or your work — it identifies only
+the runtime's version, including its build. `Update:CheckEnabled` set to `false` in
+`~/.jason/config/settings.json` turns that off.
+
+---
+
+## 3. Build from source
+
+The runtime's source is not published, so there is nothing in this repository to build: a release (§2) is the way
+in. A person with access to that source builds the executable by its repository's own guide, and then needs two
+things from this page.
+
+- **The executable alone, in a directory of its own, on the PATH by hand** — as §2 says for `--install-dir` and
+  `--no-modify-path`. Copy that file alone: the `.pdb` files beside it are debugging symbols, and a directory that
+  holds them as well is not one of its own.
+- **`--source` when you teach it** (§4). The skill packs are pinned to a tag derived from the build's own version,
+  and a build from a working tree is a development version whose tag has not been published. `--source <checkout>`
+  says "take the packs out of this checkout of this repository", which is what you want when you are standing in
+  it.
 
 ---
 
@@ -211,7 +204,7 @@ A check reports a fact and, where there is one, the command that repairs it. Mos
 commands. One is not: putting an executable on a PATH is the shell's own act, so the `path` check prints the
 line your platform needs — a PowerShell line on Windows, an `sh` line elsewhere, the same line this product's
 own installer writes — which you type rather than hand back to `jason`. Typed twice, it changes nothing the
-second time. Read §3's note about login shells before you type it.
+second time. Read §2's note about login shells before you type it.
 
 A shell that started before the installer put Jason on this account's PATH does not see it — and an agent's
 commands usually run in exactly such a shell, because each one inherits the environment the agent itself
@@ -257,8 +250,9 @@ The registration carries the data directory it was made under, and nothing super
 runtime that stops stays stopped until somebody starts it. It needs no administrator rights anywhere, and it
 is this account's alone: on a machine several people sign in to, each registers their own. On Windows the
 runtime then runs in your own session when you sign in, shows no window on Windows 11 24H2 and later, and ends
-when you sign out. [`docs/release-and-update.md`](release-and-update.md) §8 says what each
-platform registers and what only a hand check can prove.
+when you sign out. On Windows that is a logon task named for this account; on macOS a LaunchAgent,
+`ai.jason.runtime`; on Linux a `systemd --user` unit, `jason.service`. `jason runtime autostart status` says what
+is registered.
 
 ---
 
@@ -314,7 +308,9 @@ jason uninstall --force
 ```
 
 **The data directory is kept.** It holds the database, the settings, the plugins, the logs and the work
-directories — the record of what you did — and the verb says in one line that it kept it and where. To remove
+directories — the record of what you did — and the copies an update keeps — the executable it replaced and the
+copy of itself that applied it, under `update/` — so a copy of the program stays there after an uninstall until
+`--purge-data` removes it; and the verb says in one line that it kept it and where. To remove
 that as well you have to say so: `--human` prints what will be deleted and asks before anything at all is
 removed — and a no removes nothing at all — and when nobody is there to be asked the word is said in advance:
 

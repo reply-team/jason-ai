@@ -6,7 +6,7 @@ it. Where the two seem to differ, the document is right and this page is a bug.
 > **This version runs it**, and it writes: a work item naming this operation is measured against the argument schema
 > below when it is written, parked for a person at the claim, and — once a person approves it — performed against a
 > real provider account. **The provider's campaign starts sending.** It reaches a plugin only where a route sends it:
-> without one the item fails at the claim with `no_route` ([docs/routing.md](../../routing.md)).
+> without one the item fails at the claim with `no_route`.
 
 ## What it is for
 

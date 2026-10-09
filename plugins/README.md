@@ -7,10 +7,10 @@ runtime starts from its own executable. Official and community plugins use the s
 **A provider plugin here is reached because a route sends work to it.** A `provider_op` work item is
 routed at the claim to the plugin an operator named for that campaign and operation, and to the
 account their binding names; without a route it fails at the claim with `no_route`, and nothing falls
-back to whichever other plugin happens to implement the operation. [docs/routing.md](../docs/routing.md)
-is that side of it; [docs/plugins.md](../docs/plugins.md) §13 lists what is still missing. A
-notification plugin is reached because the `Notifications` settings name it, never by a route
-([docs/notifications.md](../docs/notifications.md)).
+back to whichever other plugin happens to implement the operation. An operator writes routes with
+`jason route set`; [docs/plugins.md](../docs/plugins.md) §13 lists what is still missing. A
+notification plugin is reached because the `Notifications` settings name it, never by a route (its
+contract is [`notification.send`](../docs/contracts/notifications/notification.send.md)).
 
 This directory is the plugin marketplace of the repository. Each plugin lives in its own folder:
 
@@ -30,8 +30,7 @@ The index so far:
 
 **Writing one?** [docs/plugins.md](../docs/plugins.md) is the author's guide — package layout, every
 manifest rule and its problem code, the Host SDK with every limit, capabilities and grants, the
-invocation protocol, and how to test a package locally. The design behind it is in
-[docs/architecture.md](../docs/architecture.md).
+invocation protocol, and how to test a package locally.
 
 **What to implement** is §7 of that guide, "Implementing a canonical operation": the operations
 themselves are published under [docs/contracts/](../docs/contracts/README.md), one document each,
@@ -40,5 +39,6 @@ four rules that hold whatever the operation — the recovery read on a repeated 
 failure's identifiers go, answering in the operation's own vocabulary, and working by a pin — are
 under "What the runtime holds you to" in that same section.
 
-`runtime/tests/fixtures/plugins/fake-provider/` is a complete, valid package that exercises every SDK
-function. It is a **test fixture**, not a marketplace plugin — copy its shape, not its manifest.
+[`ntfy/`](ntfy/README.md) is the smallest complete package to copy the shape of, and
+[`reply/`](reply/README.md) the one that implements every published operation. The stand-in package the
+runtime's own tests drive is not published.

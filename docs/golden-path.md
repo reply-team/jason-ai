@@ -11,12 +11,9 @@ different package and a different route, and the sequence is the same.
 
 ## What you need
 
-- **The `jason` executable.** Build it from this repository (`dotnet publish runtime/src/Jason.App -c Release -r
-  <rid> --self-contained -p:PublishSingleFile=true`), copy the single file it produces alone into a directory of
-  its own, and put that directory on your `PATH`: `jason status`, run by its full path, prints the line that does
-  it for your platform. [`docs/INSTALL.md`](INSTALL.md) §3 says why the directory must hold nothing else.
-  Everything below then reads as written. *(The tests put nothing on a `PATH`: they run the same program as
-  `dotnet jason.dll`, which is the repository's own development command.)*
+- **The `jason` executable**, installed from a release as [`docs/INSTALL.md`](INSTALL.md) §2 describes, and on
+  your `PATH`. Everything below then reads as written. *(The tests put nothing on a `PATH`: they run the same
+  program as `dotnet jason.dll`, built from the runtime's source.)*
 - **The Reply CLI**, installed and signed in, if you are following this against a real account. It owns the
   credential; Jason never sees one. *(The tests run against a stand-in that answers like it, so nothing in CI
   touches a real account.)*
@@ -107,8 +104,7 @@ jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operat
 ```
 
 Each create carries a key you chose. If an answer never comes back, send the same command with the same key: it
-answers with what the first one made rather than making it twice
-([work-execution.md](work-execution.md#creating-work-twice)).
+answers with what the first one made rather than making it twice.
 
 The arguments under `--input` are measured against the operation's own published document
 ([`docs/contracts/operations/`](contracts/operations)) when the item is created, so a mistake is caught here
@@ -165,9 +161,9 @@ working keep working.
 
 ## Where to go next
 
-- [`docs/routing.md`](routing.md) — routes, bindings, and the twelve checks a claim makes in one published order.
-- [`docs/work-execution.md`](work-execution.md) — the work item's lifecycle, its statuses and its attempts.
 - [`docs/plugins.md`](plugins.md) — writing a package for another provider.
+- [`docs/contracts/`](contracts/README.md) — the operations themselves, one document each, and what a plugin has to
+  demonstrate.
 - [`skills/runtime/`](../skills/runtime) — the same ground, written for an AI agent to drive. Five skills,
   one per moment somebody asks for something: `managed-campaign-work` turns an objective into durable work;
   `approvals-and-questions` presents what is waiting on a person; `operating-the-installation` covers the
