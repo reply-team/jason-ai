@@ -3,6 +3,18 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.2.6
+
+- `campaign.enroll` reads a person's participation before enrolling anybody who existed before the call, not only on
+  a repeated attempt: Reply's bulk add moves a person already in the sequence forward to a later start step, and
+  refuses a re-add at the same step with a generic error after assigning the sequence's sending account. Such a
+  person now answers `already_enrolled` or fails `collision_refused`, as the arguments asked, and nothing is written.
+- `enrollment.list` fails `campaign_not_found` for a sequence this account does not hold. Reply answers that page
+  with an empty list; its count is what refuses, and the package read the refusal as an unknown total.
+- `conversation.list` with `source: all` lists the threads Reply files as sent as well as its inbox; it read the inbox
+  alone, because Reply's filter with no source is the inbox. A page past the first 1000 threads of each is refused.
+- Nothing else changes: the same codes, classes and messages for every other ending.
+
 ## 0.2.5
 
 - The README no longer sends a reader to pages this repository does not carry: it says in place that an

@@ -5,12 +5,20 @@
 // arranged around that.
 //
 // The order, and why it is what it is. The provider's own contact is ensured first, because a sequence holds
-// Reply's contacts and because a participation cannot be read for a person who has no identifier yet. On any
-// attempt after the first the two declared recovery reads are made, in the document's own order — the prior run's
-// outcome for this person, then the campaign's live state — and when the participation is already there that
-// reading is the answer and nothing is written. Only where there is still a write ahead is Reply's opt-out
-// register read, because an opt-out that arrived after the enrollment already landed would otherwise turn a
-// finished send into a permanent failure. Then, and only then, the enrolment.
+// Reply's contacts and because a participation cannot be read for a person who has no identifier yet. Then the
+// participation is read — on any attempt after the first, and on a first attempt too for anybody who existed before
+// this call — and after it the campaign's live state, in the document's own order. Only where there is still a
+// write ahead is Reply's opt-out register read, because an opt-out that arrived after the enrollment already
+// landed would otherwise turn a finished send into a permanent failure. Then, and only then, the enrolment.
+//
+// **Why a first attempt reads too.** Reply's bulk add never says that a person already takes part. Measured on a
+// live account, a re-add at the same start step is refused with the generic `invalidInput` — after assigning the
+// sequence's sending account to that person all the same — and a re-add at a step ahead answers `added` and moves
+// them there, skipping the steps between: a send the approved preview never named. So for a person who existed
+// before the call — a pin, or a contact the import matched — the participation is read before anything is
+// written, and a participation found decides the answer by the collision policy: `skip` answers
+// `already_enrolled`, `refuse` fails `collision_refused`, and nothing is written either way. A person this very
+// call created takes part in nothing, and is not read for.
 //
 // **The first recovery read has no true counterpart in v3.** The document asks for "the per-item outcome of the
 // prior run under this idempotency key", and Reply has neither an idempotency key nor a per-run ledger. The
@@ -27,7 +35,7 @@
 // second order would be plainly false.
 import { call } from "./cli.js";
 import { callOf, describe, fail, lostAnswerRow, observe, refusalRow, statusRow } from "./errors.js";
-import { ADDRESS_FIELD, ensureContact, refuseIfSuppressed } from "./contacts.js";
+import { ADDRESS_FIELD, ensureKnown, refuseIfSuppressed } from "./contacts.js";
 import { lookup } from "./reading.js";
 
 const OPERATION = "campaign.enroll";
@@ -91,16 +99,19 @@ export function campaignEnroll(input, context) {
   // the argument named it and this operation pins it — so it travels with any failure the ensure meets,
   // including the lost answer to the import, which is this operation's one ambiguous ending from before the
   // person has an identifier at all.
-  const ensured = ensureContact(OPERATION, context, input, { campaign: sequence });
+  const known = ensureKnown(OPERATION, context, input, { campaign: sequence });
+  const ensured = known.id;
 
   // What this package now knows Reply calls our two entities. It travels out with a failure as well as with an
   // answer, because after a lost answer the pins are the only trace of what the attempt did — and without the
   // contact's one the next attempt has nobody to read the prior outcome for.
   const learned = { contact: ensured, campaign: sequence };
 
-  // The first declared recovery read, made as a call rather than reasoned about, on every attempt after the
-  // first. It is what makes one crash cost one enrollment rather than two.
-  const already = context && context.attempt_number > 1 && participates(context, sequence, ensured, learned);
+  // The participation, read as a call rather than reasoned about: on every attempt after the first, where it is the
+  // first declared recovery read and makes one crash cost one enrollment rather than two; and on a first attempt
+  // for a person who existed before this call, because Reply's bulk add would otherwise decide for them.
+  const repeated = Boolean(context && context.attempt_number > 1);
+  const already = (repeated || known.existed) && participates(context, sequence, ensured, learned);
 
   // The second, and on the first attempt the only read there is: the sequence itself. It answers whether this
   // was a send, whether the campaign will take an enrollment at all, and — for a numbered start position — the
@@ -109,10 +120,22 @@ export function campaignEnroll(input, context) {
   const live = isLive(read);
 
   if (already) {
-    // The document's own instruction: answer from that reading when the effect already happened. Nothing else
-    // is weighed — not the collision policy, whose subject is a participation that existed before this call,
-    // and not the opt-out register, because there is no write ahead for it to forbid.
-    return enrollment(contact.id, "already_enrolled", live, learned);
+    // On a repeated attempt, the document's own instruction: answer from that reading when the effect already
+    // happened, whatever the collision policy — after a lost answer the participation may well be this work
+    // item's own. On a first attempt the participation existed before the call, and the policy decides. Either
+    // way the opt-out register is not read, because there is no write ahead for it to forbid.
+    if (repeated || input.args.collision === "skip") {
+      return enrollment(contact.id, "already_enrolled", live, learned);
+    }
+
+    fail(
+      OPERATION,
+      {
+        call: callOf("GET", sequencePath(sequence) + "/contacts/" + ensured),
+        row: "collision_refused",
+        reason: "this person already takes part in the sequence, and the call asked to be refused rather than decide.",
+      },
+      learned);
   }
 
   if (read.isArchived === true) {

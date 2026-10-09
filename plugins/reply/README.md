@@ -178,11 +178,11 @@ creates people.
 | Call | Mark | What it is for |
 |---|---|---|
 | `GET /v3/sequences/{id}` | read | The sequence itself: what `campaign.get` answers from, the live-state read before an enrollment, and the state read before a pause or a start. |
-| `GET /v3/sequences/{id}/contacts/{contact_id}` | read | Whether this person already takes part: `campaign.enroll`'s first recovery read, and what `enrollment.stop` reads before it removes anything. |
+| `GET /v3/sequences/{id}/contacts/{contact_id}` | read | Whether this person already takes part: `campaign.enroll`'s first recovery read and, before any enrolment of a contact that existed before the call, whether it already takes part; and what `enrollment.stop` reads before it removes anything. |
 | `GET /v3/sequences/{id}/contacts` | read | One page of the people a sequence holds: what `enrollment.list` answers from. |
 | `GET /v3/sequences/{id}/contacts/count` | read | How many people the sequence holds: `enrollment.list`'s total, and the population `campaign.activate` checks before it starts. |
 | `POST /v3/sequences/{id}/stats` | read | A sequence's counts over one window: what `engagement.summarize` answers from. A `POST` that changes nothing. |
-| `POST /v3/inbox/threads/filter` | read | One page of inbox threads, by person or by sequence: what `conversation.list` answers from. A `POST` that changes nothing. |
+| `POST /v3/inbox/threads/filter` | read | One page of one of Reply's thread buckets, by person or by sequence: what `conversation.list` answers from — the inbox alone for `inbound`, the inbox and the sent threads merged for `all`. A `POST` that changes nothing. |
 | `GET /v3/inbox/threads/{id}` | read | One thread with its whole history: `conversation.get`'s header. |
 | `GET /v3/inbox/threads/{id}/messages` | read | One page of a thread's messages: what `conversation.get` answers from. |
 | `GET /v3/contacts/{id}/statuses` | read | The opt-out register, and by the same call whether a pin still resolves. |
@@ -228,11 +228,11 @@ This operation is one read and nothing else, so the ambiguous ending above canno
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
-| The identifier is not a Reply sequence number, or Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. |
+| The identifier is not a Reply sequence number, or Reply's count of the sequence's participants answers 404 `sequenceContact.sequenceNotFound` — the page itself answers an empty list for a sequence this account does not hold, so the count is what tells the two apart. | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. |
 | Reply answers 403 with its own code `sequenceContact.forbidden`: the account's role may not read a sequence's people. | `feature_unavailable` | permanent | A role or a plan that includes it. Signing in again changes nothing. Any other 403 is `unauthorized` above. |
 | Reply's answer was longer than `Plugins:Exec:OutputBytes` lets a plugin read from a program, so it was cut off. | `provider_answer_too_large` | permanent | Ask for a smaller `limit`, or raise `Plugins:Exec:OutputBytes`. |
 
-A refusal of the count alone is not a failure: the page is answered and `total` is null.
+Any other refusal of the count is not a failure: the page is answered and `total` is null.
 
 ### `engagement.summarize`
 
@@ -249,6 +249,7 @@ A refusal of the count alone is not a failure: the page is answered and `total` 
 |---|---|---|---|
 | The work item names a person and no Reply contact identifier is pinned for them. Nothing is called. | `contact_not_linked` | permanent | A write that ensures the contact — `list_membership.add` or `campaign.enroll` — is what links them. A read creates nobody. |
 | The pinned contact identifier, or the campaign's, is not a Reply number at all. Nothing is called. | `provider_call_failed` | permanent | The pin is wrong; the trace says which. |
+| `source: all` asks for a page past the first 1000 threads: `offset` plus `limit` over 1000. Nothing is called. | `provider_call_failed` | permanent | Ask for `source: inbound`, which Reply pages without this bound, or for a page within the first 1000. |
 | Reply answers 403 with its own code `inboxThread.forbidden`: the inbox is not available to this user or team. | `feature_unavailable` | permanent | A plan or a role that includes the inbox. Any other 403 is `unauthorized` above. |
 | Reply's answer was longer than `Plugins:Exec:OutputBytes` lets a plugin read from a program. | `provider_answer_too_large` | permanent | Ask for a smaller `limit`, or raise `Plugins:Exec:OutputBytes`. |
 
@@ -347,6 +348,19 @@ every stop before it runs, and its work waits while its Jason campaign is paused
 
 ## What it cannot do
 
+- **An enrolment never moves or re-adds a person already in the sequence.** Reply's bulk add, given a contact who is
+  already taking part, moves them forward to a later start step — skipping the steps between — and refuses a re-add
+  at the same step with a generic error that does not say why, after assigning the sequence's sending account to that
+  contact all the same. So before it enrols anybody who existed before the call — a pinned contact, or one the import
+  matched by address — the package reads that person's participation, and answers `already_enrolled` for
+  `collision: skip` or fails `collision_refused` for `collision: refuse` without writing anything. A participation
+  that appears between that read and the add is the one race left; Reply then does what is described above.
+- **`conversation.list` with `source: all` reads Reply's inbox and its sent threads, and merges them.** Reply's thread
+  filter has no value for "every thread": with no source it answers the inbox — threads with an inbound message —
+  and `sent` answers the threads whose latest message is outbound. The package asks for both from the first thread,
+  merges them by last activity and lists a thread found in both once, so a page with `source: all` can reach at most
+  the first 1000 threads of each (`offset + limit` up to 1000, Reply's largest page); a page further in is refused
+  rather than guessed at. `source: inbound` is one read and has no such bound.
 - **An opt-out at Reply is a yes or a no.** What they said, where it arrived and when are Jason's record, carried
   by the work item; none of it reaches Reply, whose contact holds only its opt-out flag.
 - **A person Reply holds under another address is not found by this one.** The lookup compares the address the
@@ -402,7 +416,8 @@ every stop before it runs, and its work waits while its Jason campaign is paused
 - **A hand-driven invocation gets no recovery read.** The repeat path is reached by
   `context.attempt_number`, which the runtime raises; an invocation made by hand through the plugin host
   ([docs/plugins.md](../../docs/plugins.md) §12) that leaves it out is a first attempt, and a first attempt
-  writes. Say `"attempt_number": 2` in the envelope to exercise the reading.
+  writes — unless the person already takes part, which a first attempt reads for anybody who existed before the
+  call. Say `"attempt_number": 2` in the envelope to exercise the reading.
 - **A repeat with `collision: refuse` against an existing participation answers `already_enrolled`, not
   `collision_refused`.** The recovery read comes first and the document's instruction is to answer from it
   when the effect already happened, so that instruction wins over the collision policy — and it has to,

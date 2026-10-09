@@ -23,7 +23,7 @@ export const CALLS = {
   },
   "GET /v3/sequences/{id}/contacts/{contact_id}": {
     "kind": "read",
-    "note": "Whether this person already takes part in the sequence: campaign.enroll's first recovery read, and the participation enrollment.stop reads before it removes anything."
+    "note": "Whether this person already takes part in the sequence: campaign.enroll's first recovery read, the read it makes before enrolling anybody who existed before the call, and the participation enrollment.stop reads before it removes anything."
   },
   "GET /v3/sequences/{id}/contacts": {
     "kind": "read",
@@ -39,7 +39,7 @@ export const CALLS = {
   },
   "POST /v3/inbox/threads/filter": {
     "kind": "read",
-    "note": "One page of inbox threads, by person or by sequence: what conversation.list answers from. A POST, and a read all the same."
+    "note": "One page of one of Reply's thread buckets, by person or by sequence: what conversation.list answers from — the inbox alone for inbound threads, the inbox and the sent threads merged for every thread. A POST, and a read all the same."
   },
   "GET /v3/inbox/threads/{id}": {
     "kind": "read",
@@ -192,7 +192,7 @@ export const ROWS = {
     },
     "enrollment.list": {
       "campaign_not_found": {
-        "when": "404 on `GET /v3/sequences/{id}/contacts`, where Reply's own code is `sequenceContact.sequenceNotFound`, or an identifier that is not a Reply sequence number at all, which is refused without a call.",
+        "when": "404 on `GET /v3/sequences/{id}/contacts/count`, where Reply's own code is `sequenceContact.sequenceNotFound` — the page itself answers an empty list for a sequence this account does not hold, so the count is what tells the two apart — or an identifier that is not a Reply sequence number at all, which is refused without a call.",
         "code": "campaign_not_found",
         "class": "permanent",
         "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
@@ -248,6 +248,12 @@ export const ROWS = {
         "code": "provider_call_failed",
         "class": "permanent",
         "note": "The identifier this read would filter by names nothing a Reply account could hold, so nothing was asked. The pin is wrong; the attempt's trace says which one."
+      },
+      "call_could_not_be_built": {
+        "when": "`source` is `all` and `offset` plus `limit` passes 1000. Every thread is Reply's inbox and its sent threads, read from the first thread each and merged, and one read reaches at most 1000. Decided before any call.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "A page that far into every thread cannot be merged from two reads, so it is refused rather than guessed at. Ask for `source: inbound`, which Reply pages without that bound, or for a page within the first 1000 threads."
       },
       "feature_not_included": {
         "when": "403 with Reply's own code `inboxThread.forbidden`: the inbox is not available to this user or team. Any other 403 is the shared `unauthorized` row.",
@@ -334,7 +340,7 @@ export const ROWS = {
         "note": "The sequence will not take an enrollment: it is archived, or it holds no step to send. Un-archiving it at Reply, or giving it a step, is what makes the work item runnable — so it fails rather than waiting."
       },
       "collision_refused": {
-        "when": "`args.collision` is `refuse` and the bulk enrol answers the per-item word `contactAlreadyInSequence` against this person. Under `skip` the same word is the successful answer `already_enrolled` instead.",
+        "when": "`args.collision` is `refuse` and this person already takes part in the sequence: found by the participation read a first attempt makes for anybody who existed before the call, or answered by the bulk enrol as the per-item word `contactAlreadyInSequence`. Under `skip` the same reading is the successful answer `already_enrolled` instead.",
         "code": "collision_refused",
         "class": "permanent",
         "note": "This person already takes part in the sequence and the call asked to be refused rather than to decide. Choose another collision policy if a second participation is what was meant."
