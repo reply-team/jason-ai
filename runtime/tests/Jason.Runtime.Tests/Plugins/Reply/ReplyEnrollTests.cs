@@ -77,8 +77,10 @@ public class ReplyEnrollTests
         // The pin is the whole of it: nothing is imported, nothing is created, and the address this person
         // carries reaches Reply nowhere at all — which is what stops two spellings of one address ever becoming
         // two people, and what keeps an enrollment from going to somebody else of the same name.
+        // A pinned person existed before this call, so whether they already take part is read first — even on a
+        // first attempt — and only then the campaign, the opt-out register and the enrolment.
         Assert.Equal("enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal([LiveState, Statuses, Bulk], Paths(account));
+        Assert.Equal([Participation, LiveState, Statuses, Bulk], Paths(account));
         Assert.DoesNotContain(Address, Everything(account), StringComparison.OrdinalIgnoreCase);
         Assert.Equal([1001], account.EnrolledIn(Sequence));
     }
@@ -183,14 +185,17 @@ public class ReplyEnrollTests
 
         var result = await InvokeAsync(api, Input(pinned: Ensured, collision: "refuse"), Ct);
 
-        // The caller asked to be refused rather than to have the decision taken for them, and Reply says which
-        // person it would not take and why inside a 200. Deciding here — enrolling again, or reporting success
-        // — would be the plugin answering a question the call deliberately left to a person.
+        // The caller asked to be refused rather than to have the decision taken for them. Reply's bulk add never
+        // says a person already takes part — it refuses the same step with a generic word, after assigning the
+        // sequence's sending account all the same — so the participation is read before anything is written, and
+        // the refusal is decided from that read. Nothing reaches the bulk add, and the participation is untouched.
         var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
         Assert.Equal("collision_refused", failed.Error.Code);
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
-        Assert.Contains(Bulk, Paths(account));
+        Assert.Equal([Participation, LiveState], Paths(account));
         Assert.Equal([1001], account.EnrolledIn(Sequence));
+        Assert.Null(Assert.Single(account.Enrollments)!["emailAccountId"]);
+        NamesNobody(failed);
     }
 
     [Fact]
@@ -205,11 +210,157 @@ public class ReplyEnrollTests
 
         var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured, collision: "skip"), Ct));
 
-        // The same per-item word, the other policy: leave the participation alone and say so. It is a success
-        // because the caller asked for exactly this outcome, and the status distinguishes it from an enrollment
-        // this call made — which is what a caller counting sends has to know.
+        // The same read, the other policy: leave the participation alone and say so. It is a success because the
+        // caller asked for exactly this outcome, and the status distinguishes it from an enrollment this call
+        // made — which is what a caller counting sends has to know. Nothing is written, and with no write ahead
+        // the opt-out register is not read either.
         Assert.Equal("already_enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Single(account.Enrollments);
+        Assert.Equal([Participation, LiveState], Paths(account));
+        Assert.Null(Assert.Single(account.Enrollments)!["emailAccountId"]);
+    }
+
+    /// <summary>
+    /// A start step ahead of the person's own is what Reply's bulk add would move them to, skipping the steps between,
+    /// and answer `added` — a send the approved preview never named. Whatever the step asked for, a participation found
+    /// before the write decides the answer by the policy, and the person stays where they were.
+    /// </summary>
+    [Theory]
+    [InlineData("skip", "already_enrolled")]
+    [InlineData("refuse", "collision_refused")]
+    public async Task A_start_step_ahead_of_a_person_already_taking_part_moves_nobody(string collision, string answered)
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11, 12, 13)
+            .WithContact(1001, Address, FirstName)
+            .WithEnrollment(Sequence, 1001, stepId: 11, stepName: "1");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await InvokeAsync(api, Input(pinned: Ensured, collision: collision, start: Step(3)), Ct);
+
+        var status = result.Outcome is InvocationOutcome.Failed failed
+            ? NamesNobody(failed).Error.Code
+            : Succeeded(result)["items"]![0]!["status"]!.GetValue<string>();
+        Assert.Equal(answered, status);
+        Assert.DoesNotContain(Bulk, Paths(account));
+        var participation = Assert.Single(account.Enrollments)!;
+        Assert.Equal(11, participation["currentStep"]!["stepId"]!.GetValue<int>());
+    }
+
+    /// <summary>
+    /// A person with no pin whom Reply's import matched by address existed before this call as much as a pinned one
+    /// did, and is read the same way before anything else is written.
+    /// </summary>
+    [Fact]
+    public async Task A_person_the_import_matched_by_address_is_read_before_an_enrolment_like_a_pinned_one()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
+            .WithContact(1001, Address, FirstName)
+            .WithEnrollment(Sequence, 1001);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = Succeeded(await InvokeAsync(api, Input(), Ct));
+
+        Assert.Equal("already_enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
+        Assert.Equal(["POST /v3/contacts/import", Participation, LiveState], Paths(account));
+        Assert.Null(Assert.Single(account.Enrollments)!["emailAccountId"]);
+    }
+
+    /// <summary>
+    /// The same person under `refuse`: the read decides the refusal, nothing is written, and the failure — whose
+    /// message and details an attempt keeps — names nobody: neither the address the import matched nor the name.
+    /// </summary>
+    [Fact]
+    public async Task A_person_the_import_matched_is_refused_from_the_read_and_the_failure_names_nobody()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
+            .WithContact(1001, Address, FirstName)
+            .WithEnrollment(Sequence, 1001);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var failed = Assert.IsType<InvocationOutcome.Failed>((await InvokeAsync(api, Input(collision: "refuse"), Ct)).Outcome);
+
+        Assert.Equal("collision_refused", failed.Error.Code);
+        Assert.Equal(["POST /v3/contacts/import", Participation, LiveState], Paths(account));
+        NamesNobody(failed);
+    }
+
+    /// <summary>
+    /// The live guard's run, against the stand-in. It reads the campaign before anything else, so a live sequence stops
+    /// it there — no enrolment is asked for — and a sequence nobody started is run through to the end, writing nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("active", true)]
+    [InlineData("new", false)]
+    public async Task The_live_guard_run_reads_the_campaign_first_and_stops_at_a_live_one(string status, bool stopped)
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 LatAm founders", status, false, 11)
+            .WithContact(1001, Address, FirstName)
+            .WithEnrollment(Sequence, 1001);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var run = ReplyLiveConformanceTests.LeavesAParticipantAloneAsync(
+            (operation, input) => ReplyOperations.InvokeAsync(api, operation, input, Ct),
+            Sequence.ToString(CultureInfo.InvariantCulture),
+            Ensured);
+
+        if (stopped)
+        {
+            var refused = await Assert.ThrowsAnyAsync<Exception>(() => run);
+            Assert.Contains("nothing was enrolled", refused.Message, StringComparison.Ordinal);
+            Assert.Equal([LiveState], Paths(account));
+            return;
+        }
+
+        await run;
+        Assert.Equal(LiveState, Paths(account)[0]);
+        Assert.DoesNotContain(Bulk, Paths(account));
+    }
+
+    /// <summary>
+    /// A person this very call created takes part in nothing yet, so on a first attempt there is no participation to
+    /// read: the import, the campaign, the opt-out register and the enrolment, in that order.
+    /// </summary>
+    [Fact]
+    public async Task A_person_this_call_created_is_enrolled_without_a_participation_read()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = Succeeded(await InvokeAsync(api, Input(), Ct));
+
+        Assert.Equal("enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
+        Assert.Equal(["POST /v3/contacts/import", LiveState, Statuses, Bulk], Paths(account));
+    }
+
+    /// <summary>
+    /// An import status this version has no word for is read as a person who existed: the participation read costs one
+    /// call, and skipping it for somebody already enrolled would cost a send.
+    /// </summary>
+    [Fact]
+    public async Task An_import_status_this_version_does_not_know_is_read_as_a_person_who_existed()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
+            .WithContact(1001, Address, FirstName)
+            .WithEnrollment(Sequence, 1001)
+            .Answers("POST", "/v3/contacts/import", 200, """{"items":[{"id":1001,"status":"merged","error":null}],"added":0,"updated":0,"skipped":0,"failed":0}""");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = Succeeded(await InvokeAsync(api, Input(), Ct));
+
+        Assert.Equal("already_enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
+        Assert.Contains(Participation, Paths(account));
+        Assert.DoesNotContain(Bulk, Paths(account));
     }
 
     [Fact]
@@ -453,8 +604,9 @@ public class ReplyEnrollTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Contains("condition", failed.Error.Details!["reason"]!.GetValue<string>(), StringComparison.Ordinal);
 
-        // The sequence was read and nothing else happened: the call could not be built, so it was not made.
-        Assert.Equal([LiveState], Paths(account));
+        // The person's participation and the sequence were read and nothing else happened: the call could not be
+        // built, so it was not made.
+        Assert.Equal([Participation, LiveState], Paths(account));
         Assert.Empty(account.EnrolledIn(Sequence));
     }
 
@@ -477,7 +629,7 @@ public class ReplyEnrollTests
         // The code alone is the one every refusal of the package's own shares, so it says nothing about which
         // rule was broken. An operator gets the reason or gets nothing they can act on.
         Assert.Contains("no single step is step 2", failed.Error.Details!["reason"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.Equal([LiveState], Paths(account));
+        Assert.Equal([Participation, LiveState], Paths(account));
         Assert.Empty(account.EnrolledIn(Sequence));
     }
 
@@ -502,7 +654,7 @@ public class ReplyEnrollTests
         // And it says where the chain actually ended, so an operator can see the position they asked for was
         // past it rather than being told only that something went wrong.
         Assert.Contains("chain ends at", failed.Error.Details!["reason"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.Equal([LiveState], Paths(account));
+        Assert.Equal([Participation, LiveState], Paths(account));
         Assert.Empty(account.EnrolledIn(Sequence));
     }
 
@@ -685,7 +837,7 @@ public class ReplyEnrollTests
         var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
         Assert.Equal("campaign_not_enrollable", failed.Error.Code);
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
-        Assert.Equal([LiveState], Paths(account));
+        Assert.Equal([Participation, LiveState], Paths(account));
     }
 
     [Fact]
@@ -726,7 +878,7 @@ public class ReplyEnrollTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal(Ensured, failed.Error.ExternalIds!["contact"]!.GetValue<string>());
         Assert.Equal("7", failed.Error.ExternalIds?["campaign"]?.GetValue<string>());
-        Assert.Equal([LiveState, Statuses], Paths(account));
+        Assert.Equal([Participation, LiveState, Statuses], Paths(account));
         Assert.Empty(account.EnrolledIn(Sequence));
     }
 
@@ -896,6 +1048,21 @@ public class ReplyEnrollTests
         };
 
     private static JsonObject Step(int position) => new() { ["position"] = "step", ["step"] = position };
+
+    /// <summary>
+    /// A failure says nothing of the person it is about: an attempt keeps its message and details, and neither may
+    /// carry the address, the first name or the last name. The rejected text goes into the failure message whole.
+    /// </summary>
+    private static InvocationOutcome.Failed NamesNobody(InvocationOutcome.Failed failed)
+    {
+        var said = failed.Error.Message + "\n" + (failed.Error.Details?.ToJsonString() ?? string.Empty);
+        foreach (var personal in new[] { Address, FirstName, LastName })
+        {
+            Assert.False(said.Contains(personal, StringComparison.OrdinalIgnoreCase), $"The failure names the person ({personal}): {said}");
+        }
+
+        return failed;
+    }
 
     /// <summary>A bulk enrolment that took the call and refused this one person, in the shape Reply uses.</summary>
     private static JsonObject NotProcessed(string slug) => new()

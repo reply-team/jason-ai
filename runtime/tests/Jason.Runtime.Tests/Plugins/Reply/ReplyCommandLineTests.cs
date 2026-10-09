@@ -234,8 +234,9 @@ internal static class ReplyOperations
 
     /// <summary>
     /// Every call those operations make against a planted account, in order: one read for the campaign;
-    /// then the ensure, the suppression read and the add; then the ensure, the live-state read, the suppression
-    /// read and the enrollment. A test that asserts a rule over "every call" asserts this list first, so a rule
+    /// then the ensure, the suppression read and the add; then the ensure — which finds the person the add
+    /// created — the participation read for a person who existed, the live-state read, the suppression read
+    /// and the enrollment. A test that asserts a rule over "every call" asserts this list first, so a rule
     /// that held because nothing ran fails instead.
     /// </summary>
     public static IReadOnlyList<string> EveryCall =>
@@ -245,6 +246,7 @@ internal static class ReplyOperations
         $"GET /v3/contacts/{Ensured}/statuses",
         $"POST /v3/contact-lists/{List}/add-contacts",
         "POST /v3/contacts/import",
+        $"GET /v3/sequences/{Sequence}/contacts/{Ensured}",
         $"GET /v3/sequences/{Sequence}",
         $"GET /v3/contacts/{Ensured}/statuses",
         $"POST /v3/sequences/{Sequence}/contact-links/bulk",

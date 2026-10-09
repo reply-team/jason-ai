@@ -45,10 +45,10 @@ public class ReplyConversationListTests
         var outcome = Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
         Assert.Null(outcome.ExternalIds);
 
-        var call = Assert.Single(account.Calls);
-        Assert.Equal($"{FilterPath}?top=20&skip=0", call.Path);
-        Assert.Equal("""{"contactIds":[1001]}""", call.Body);
-        Assert.Equal(["--json", "-q", "api", $"{FilterPath}?top=20&skip=0", "--method", "POST", "--body", "-"], call.Args);
+        // Every thread is two of Reply's buckets, the inbox and the sent threads, each read from its first thread.
+        Assert.Equal([$"{FilterPath}?top=20&skip=0", $"{FilterPath}?top=20&skip=0"], account.Calls.Select(call => call.Path));
+        Assert.Equal(["""{"contactIds":[1001],"source":"inbox"}""", """{"contactIds":[1001],"source":"sent"}"""], account.Calls.Select(call => call.Body));
+        Assert.Equal(["--json", "-q", "api", $"{FilterPath}?top=20&skip=0", "--method", "POST", "--body", "-"], account.Calls[0].Args);
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public class ReplyConversationListTests
         Assert.Equal(["501"], ReplyOperations.Succeeded(Operation, linking)["items"]!.AsArray().Select(thread => (string)thread!["external_id"]!));
         Assert.Equal("""{"campaign":"7"}""", Assert.IsType<InvocationOutcome.Succeeded>(linking.Outcome).ExternalIds!.ToJsonString());
         Assert.Null(Assert.IsType<InvocationOutcome.Succeeded>(linked.Outcome).ExternalIds);
-        Assert.All(account.Calls, call => Assert.Equal("""{"sequenceIds":[7]}""", call.Body));
+        Assert.All(account.Calls, call => Assert.Contains(call.Body, new[] { """{"sequenceIds":[7],"source":"inbox"}""", """{"sequenceIds":[7],"source":"sent"}""" }));
     }
 
     [Fact]
@@ -241,6 +241,138 @@ public class ReplyConversationListTests
 
         Assert.True(pages[0] < 100, $"the first page held {pages[0]} threads, so nothing was cut");
         Assert.Equal(Enumerable.Range(0, Threads).Reverse().Select(at => (5000 + at).ToString(CultureInfo.InvariantCulture)), seen);
+    }
+
+    // -------------------------------------------------------------------------------------------------------
+    // Every thread: Reply's inbox and its sent threads, merged
+    // -------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Reply's filter has no bucket for every thread: with no source it answers the inbox, threads with an inbound
+    /// message. A thread whose messages are all outbound is in the sent bucket only, and `all` lists it.
+    /// </summary>
+    [Fact]
+    public async Task Every_thread_lists_the_sent_ones_too_in_one_order_of_last_activity()
+    {
+        using var account = Planted();
+        account.WithThread(Thread(501, "2026-10-03T07:41:09Z"));
+        account.WithThread(Thread(502, "2026-10-02T18:02:44Z", inbound: false));
+        account.WithThread(Thread(503, "2026-10-01T10:00:00Z"));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(limit: 20, offset: 0, pinned: "7")));
+
+        Assert.Equal(["501", "502", "503"], answer["items"]!.AsArray().Select(thread => (string)thread!["external_id"]!));
+        Assert.False((bool)answer["has_more"]!);
+    }
+
+    /// <summary>A thread with an inbound message and an outbound reply after it is in both buckets, and listed once.</summary>
+    [Fact]
+    public async Task A_thread_in_both_buckets_is_listed_once()
+    {
+        using var account = Planted();
+        account.WithThread(Answered(Thread(501, "2026-10-03T07:41:09Z"), "2026-10-03T09:00:00Z"));
+        account.WithThread(Thread(502, "2026-10-02T18:02:44Z"));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(limit: 20, offset: 0, pinned: "7")));
+
+        Assert.Equal(["501", "502"], answer["items"]!.AsArray().Select(thread => (string)thread!["external_id"]!));
+    }
+
+    /// <summary>
+    /// A page of every thread is a slice of the merged order, so both buckets are read from their first thread up to the
+    /// page's end: the offset counts the merged threads, not either bucket's.
+    /// </summary>
+    [Fact]
+    public async Task A_page_of_every_thread_is_a_slice_of_the_merged_order()
+    {
+        using var account = Planted();
+        account.WithThread(Thread(501, "2026-10-04T10:00:00Z"));
+        account.WithThread(Thread(502, "2026-10-03T10:00:00Z", inbound: false));
+        account.WithThread(Thread(503, "2026-10-02T10:00:00Z"));
+        account.WithThread(Thread(504, "2026-10-01T10:00:00Z", inbound: false));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var middle = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(limit: 2, offset: 1, pinned: "7")));
+        Assert.Equal(["502", "503"], middle["items"]!.AsArray().Select(thread => (string)thread!["external_id"]!));
+        Assert.True((bool)middle["has_more"]!);
+        Assert.All(account.Calls, call => Assert.Equal($"{FilterPath}?top=3&skip=0", call.Path));
+
+        var last = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(limit: 2, offset: 3, pinned: "7")));
+        Assert.Equal(["504"], last["items"]!.AsArray().Select(thread => (string)thread!["external_id"]!));
+        Assert.False((bool)last["has_more"]!);
+    }
+
+    /// <summary>
+    /// One read reaches a thousand threads, Reply's largest page, so a page of every thread that ends past the first
+    /// thousand cannot be merged from two reads and is refused before anything is asked. One that ends at it is read.
+    /// </summary>
+    [Theory]
+    [InlineData(990, 20, true)]
+    [InlineData(980, 20, false)]
+    public async Task A_page_of_every_thread_past_the_first_thousand_is_refused_before_anything_is_asked(int offset, int limit, bool refused)
+    {
+        using var account = Planted();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await InvokeAsync(api, Input(limit: limit, offset: offset, pinned: "7"));
+
+        if (!refused)
+        {
+            ReplyOperations.Succeeded(Operation, result);
+            Assert.All(account.Calls, call => Assert.Equal($"{FilterPath}?top=1000&skip=0", call.Path));
+            return;
+        }
+
+        var error = ReplyOperations.Failed(Operation, result);
+        Assert.Equal("provider_call_failed", error.Code);
+        Assert.Equal(FailureClass.Permanent, error.Class);
+        Assert.Contains("1000", (string?)error.Details!["reason"], StringComparison.Ordinal);
+        Assert.Empty(account.Calls);
+    }
+
+    /// <summary>
+    /// One bucket holds more than the page reaches and the other holds nothing: the merge is then exactly the page's
+    /// reach long, and only that bucket's own word says there is more.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_bucket_with_more_than_the_page_says_so_though_the_other_is_empty(bool inbox)
+    {
+        using var account = Planted();
+        account.WithThread(Thread(501, "2026-10-03T10:00:00Z", inbound: inbox));
+        account.WithThread(Thread(502, "2026-10-02T10:00:00Z", inbound: inbox));
+        account.WithThread(Thread(503, "2026-10-01T10:00:00Z", inbound: inbox));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(limit: 2, offset: 0, pinned: "7")));
+
+        Assert.Equal(["501", "502"], answer["items"]!.AsArray().Select(thread => (string)thread!["external_id"]!));
+        Assert.True((bool)answer["has_more"]!);
+    }
+
+    /// <summary>A planted thread with an outbound reply after its inbound message, so its latest message is outbound.</summary>
+    private static JsonObject Answered(JsonObject thread, string at)
+    {
+        thread["lastActivityDate"] = at;
+        thread["messages"]!.AsArray().Add(new JsonObject
+        {
+            ["channel"] = thread["channel"]!.DeepClone(),
+            ["messageId"] = $"<r{thread["id"]}@mail.example.com>",
+            ["isOutbound"] = true,
+            ["date"] = at,
+            ["fromAddress"] = "sdr@vendor.example",
+            ["subject"] = thread["subject"]?.DeepClone(),
+            ["body"] = "Thursday works.",
+        });
+        return thread;
     }
 
     // -------------------------------------------------------------------------------------------------------

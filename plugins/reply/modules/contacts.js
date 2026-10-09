@@ -60,11 +60,21 @@ function compact(request) {
  * happens and a pin is the only trace a lost answer leaves behind.
  */
 export function ensureContact(operation, context, input, learned) {
+  return ensureKnown(operation, context, input, learned).id;
+}
+
+/**
+ * The same identifier as `ensureContact`, and whether Reply held this person before the call: a pin, or a contact
+ * the import matched rather than created. A person this call created takes part in nothing yet; one who existed
+ * may already be anywhere, which is what `campaign.enroll` has to know before it writes. An import status this
+ * version has no word for counts as a person who existed — reading costs a call, guessing wrong costs a send.
+ */
+export function ensureKnown(operation, context, input, learned) {
   const contact = input.contacts[0];
   const pinned = pinOf(operation, contact, learned);
 
   if (pinned !== null) {
-    return pinned;
+    return { id: pinned, existed: true };
   }
 
   const channel = channelOf(operation, contact, input.args.channel, learned);
@@ -72,7 +82,7 @@ export function ensureContact(operation, context, input, learned) {
   // The one rule that decides which path: Reply's import will not take an item without a first name.
   return typeof contact.first_name === "string" && contact.first_name.length > 0
     ? imported(operation, context, contact, channel, learned)
-    : created(operation, context, contact, channel, learned);
+    : { id: created(operation, context, contact, channel, learned), existed: false };
 }
 
 /**
@@ -273,7 +283,7 @@ function imported(operation, context, contact, channel, learned) {
     fail(operation, seen, learned);
   }
 
-  return String(first.id);
+  return { id: String(first.id), existed: first.status !== "created" };
 }
 
 // The path for a person Reply's import will not take. It needs only an address — and it answers no code at all

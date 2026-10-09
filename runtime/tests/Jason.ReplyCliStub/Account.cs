@@ -437,13 +437,14 @@ internal static class Account
     /// The people a sequence holds, a page at a time, most recently added first, in the shape a live account
     /// answered: the key order it used, the address included — a read that must never map it has to be shown one —
     /// an empty last name where the person has none, and the date added with an offset and two fractional digits
-    /// rather than in UTC. Built from the enrollments this account keeps, so somebody enrolled is somebody listed.
+    /// rather than in UTC. Built from the enrollments this account keeps, so somebody enrolled is somebody listed. A
+    /// sequence the account does not hold answers an empty page, as a live account did: only its count refuses.
     /// </summary>
     private static (int, JsonNode?) SequenceContacts(string root, string sequenceId, string query)
     {
         if (Find(root, SequencesFile, sequenceId) is null)
         {
-            return (404, Problem(404, "Not Found", "sequenceContact.sequenceNotFound", $"This account holds no sequence {sequenceId}."));
+            return (200, new JsonObject { ["items"] = new JsonArray(), ["hasMore"] = false });
         }
 
         var contacts = Read(root, ContactsFile);
@@ -553,7 +554,16 @@ internal static class Account
         }
 
         var sequences = Identifiers(body, "sequenceIds");
-        var source = Text(filter, "source");
+
+        // Reply's predefined buckets, as its documentation names them and a live account answered: no source is the
+        // inbox — the threads with at least one inbound message — and `sent` is the threads whose latest message is
+        // outbound. There is no bucket for every thread. `unread` and `aiDraft` are Reply's too, and this stand-in
+        // does not model them.
+        var source = filter["source"] is null ? "inbox" : Text(filter, "source");
+        if (source is not ("inbox" or "sent"))
+        {
+            return Invalid("/source", $"'{source}' is not a source this stand-in answers.");
+        }
         var since = DateTimeOffset.TryParse(Text(filter, "from"), CultureInfo.InvariantCulture, DateTimeStyles.None, out var from)
             ? from
             : DateTimeOffset.MinValue;
@@ -561,7 +571,7 @@ internal static class Account
         var matched = Records(root, ThreadsFile)
             .Where(thread => people is null || (thread["contact"]?["id"] is JsonValue id && people.Contains(id.GetValue<int>())))
             .Where(thread => sequences is null || (thread["sequence"]?["id"] is JsonValue sequence && sequences.Contains(sequence.GetValue<int>())))
-            .Where(thread => source != "inbox" || (thread["messages"] as JsonArray ?? []).Any(message => message?["isOutbound"] is JsonValue outbound && !outbound.GetValue<bool>()))
+            .Where(thread => source == "inbox" ? Inbound(thread) : LatestOutbound(thread))
             // Exclusive, as Reply's own is: read at Reply, a `from` one millisecond before a thread's last activity
             // lists it and a `from` equal to it does not.
             .Where(thread => LastActivity(thread) > since)
@@ -612,6 +622,16 @@ internal static class Account
         var page = new JsonArray([.. messages.Skip(skip).Take(top).Select(entry => entry!.DeepClone())]);
         return (200, new JsonObject { ["items"] = page, ["hasMore"] = messages.Count > skip + page.Count });
     }
+
+    /// <summary>Whether a thread holds at least one message the other side wrote.</summary>
+    private static bool Inbound(JsonObject thread) =>
+        (thread["messages"] as JsonArray ?? []).Any(message => message?["isOutbound"] is JsonValue outbound && !outbound.GetValue<bool>());
+
+    /// <summary>Whether a thread's latest message is one this side wrote.</summary>
+    private static bool LatestOutbound(JsonObject thread) =>
+        (thread["messages"] as JsonArray ?? []).OfType<JsonObject>()
+            .OrderBy(message => DateTimeOffset.TryParse(Text(message, "date"), CultureInfo.InvariantCulture, DateTimeStyles.None, out var at) ? at : DateTimeOffset.MinValue)
+            .LastOrDefault()?["isOutbound"] is JsonValue outbound && outbound.GetValue<bool>();
 
     private static DateTimeOffset LastActivity(JsonObject thread) =>
         DateTimeOffset.TryParse(Text(thread, "lastActivityDate"), CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)
@@ -677,9 +697,43 @@ internal static class Account
             ["callStatus"] = contact?["callStatus"]?.DeepClone() ?? JsonValue.Create("none"),
             ["meetingStatus"] = contact?["meetingStatus"]?.DeepClone() ?? JsonValue.Create("none"),
             ["emailDisposition"] = enrollment["emailDisposition"]?.DeepClone(),
-            ["emailAccountId"] = 77,
+            ["emailAccountId"] = SendingAccount,
             ["linkedInAccountId"] = null,
         };
+    }
+
+    /// <summary>The stand-in's one mailbox, which it answers as a participation's sending account.</summary>
+    private const int SendingAccount = 77;
+
+    /// <summary>Where an asked-for start step sits in the sequence's chain, counting from 1; none asked is the first.</summary>
+    private static int Position(JsonObject sequence, JsonNode? startStepId) =>
+        startStepId is JsonValue value && value.TryGetValue<int>(out var id) ? StepPosition(sequence, id) : 1;
+
+    /// <summary>Where a participation stands: a position planted as a number, or the step it names.</summary>
+    private static int Standing(JsonObject sequence, JsonNode? currentStep) => currentStep switch
+    {
+        JsonValue number when number.TryGetValue<int>(out var position) => position,
+        JsonObject step when step["stepId"] is JsonValue id && id.TryGetValue<int>(out var stepId) => StepPosition(sequence, stepId),
+        _ => int.MaxValue,
+    };
+
+    /// <summary>A step's position in the chain its steps form from the one with no parent; one not in it is past the end.</summary>
+    private static int StepPosition(JsonObject sequence, int stepId)
+    {
+        var steps = (sequence["steps"] as JsonArray ?? []).OfType<JsonObject>().ToList();
+        var at = steps.FirstOrDefault(step => step["parentId"] is null);
+        for (var position = 1; at is not null && position <= steps.Count; position++)
+        {
+            var id = at["id"]!.GetValue<int>();
+            if (id == stepId)
+            {
+                return position;
+            }
+
+            at = steps.FirstOrDefault(step => step["parentId"] is JsonValue parent && parent.TryGetValue<int>(out var parentId) && parentId == id);
+        }
+
+        return int.MaxValue;
     }
 
     private static (int, JsonNode?) Enroll(string root, string sequenceId, string? body)
@@ -736,10 +790,30 @@ internal static class Account
             {
                 notProcessed[key] = Failure("contactOptedOut", $"Contact {key} has opted out.");
             }
-            else if (enrollments.OfType<JsonObject>().Any(entry =>
-                entry["sequenceId"]!.GetValue<int>() == number && entry["contactId"]!.GetValue<int>() == contactId))
+            else if (enrollments.OfType<JsonObject>().FirstOrDefault(entry =>
+                entry["sequenceId"]!.GetValue<int>() == number && entry["contactId"]!.GetValue<int>() == contactId) is { } taking)
             {
-                notProcessed[key] = Failure("contactAlreadyInSequence", $"Contact {key} already takes part in sequence {sequenceId}.");
+                // Reply's bulk add, given a person already taking part, never says so. Measured on a live account: a
+                // start step ahead of theirs moves them there and answers `added`, skipping the steps between; the
+                // same step is refused with the generic `invalidInput` — and that refused add still assigned the
+                // contact's sending account. A step behind theirs was never observed: refusing it like the same step
+                // is this stand-in's assumption, not Reply's documented behaviour, and no test states it as Reply's.
+                var asked = Position(sequence, Request(body)?["startStepId"]);
+                var current = Standing(sequence, taking["currentStep"]);
+                if (asked > current)
+                {
+                    taking["currentStep"] = new JsonObject
+                    {
+                        ["stepId"] = Request(body)!["startStepId"]!.DeepClone(),
+                        ["displayName"] = asked.ToString(CultureInfo.InvariantCulture),
+                    };
+                    added.Add(contactId);
+                }
+                else
+                {
+                    taking["emailAccountId"] = SendingAccount;
+                    notProcessed[key] = Failure("invalidInput", "Contact could not be added to sequence");
+                }
             }
             else
             {

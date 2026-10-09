@@ -96,9 +96,18 @@ function person(row) {
 }
 
 // Reply's own count of the people in the sequence, or null when it refused to count them. A refusal of the count
-// alone does not cost the page that was already read: the document lets `total` be null for exactly that.
+// alone does not cost the page that was already read: the document lets `total` be null for exactly that. Except
+// one: for a sequence this account does not hold, Reply answers the page with an empty list and only the count says
+// so, with its 404 `sequenceContact.sequenceNotFound` — and that is the campaign not being found, not a total
+// nobody would give.
 function count(context, sequence, learned) {
-  const answer = call(context, "GET", "/v3/sequences/" + sequence + "/contacts/count", undefined, learned, OPERATION);
+  const path = "/v3/sequences/" + sequence + "/contacts/count";
+  const answer = call(context, "GET", path, undefined, learned, OPERATION);
+  if (answer.code === 404 && answer.data !== null && typeof answer.data === "object"
+      && typeof answer.data.code === "string" && answer.data.code.toLowerCase() === "sequencecontact.sequencenotfound") {
+    fail(OPERATION, observe(callOf("GET", path), answer, "campaign_not_found"), undefined);
+  }
+
   const counted = answer.code === 200 && answer.data !== null && typeof answer.data === "object" ? answer.data.count : undefined;
 
   return typeof counted === "number" && isFinite(counted) && counted >= 0 && counted <= 2147483647 && Math.floor(counted) === counted

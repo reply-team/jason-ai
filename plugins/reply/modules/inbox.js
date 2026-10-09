@@ -56,18 +56,65 @@ export function conversationList(input, context) {
     learned = pinned ? undefined : { campaign: sequence };
   }
 
-  if (input.args.source === "inbound") {
-    filter.source = "inbox";
-  }
-
   // The contract keeps the threads that moved at or after `since`; Reply's `from` keeps only those that moved after
   // it, to the millisecond. So it is asked from one millisecond earlier, and a thread whose last activity is stamped
   // exactly at `since` is listed.
-  if (typeof input.args.since === "string") {
-    filter.from = new Date(Date.parse(input.args.since) - 1).toISOString();
+  const from = typeof input.args.since === "string" ? new Date(Date.parse(input.args.since) - 1).toISOString() : undefined;
+
+  const result = { items: [], has_more: false, vendor: { ordering: "last_activity_desc" } };
+  let threads;
+  let more;
+
+  if (input.args.source === "inbound") {
+    // One of Reply's own buckets, paged at Reply.
+    const page = readPage(context, bucket(filter, "inbox", from), input.args.limit, input.args.offset, learned);
+    threads = page.threads;
+    more = page.more;
+  } else {
+    // Every thread. Reply's filter has no bucket for that — with no source it answers the inbox, the threads with an
+    // inbound message — so the inbox and the threads whose latest message is outbound are read, each from its first
+    // thread, and merged: by last activity, newest first, then by identifier, a thread found in both listed once.
+    // A page further in than one read of each can reach is refused rather than guessed at.
+    const reach = input.args.offset + input.args.limit;
+    if (reach > MERGE_REACH) {
+      fail(LIST, {
+        call: null,
+        row: "call_could_not_be_built",
+        reason: "source all reads Reply's inbox and its sent threads from the first thread each and merges them, and one read reaches at most "
+          + MERGE_REACH + " threads, so offset plus limit may not pass " + MERGE_REACH + ".",
+      }, learned);
+    }
+
+    const inbox = readPage(context, bucket(filter, "inbox", from), reach, 0, learned);
+    const sent = readPage(context, bucket(filter, "sent", from), reach, 0, learned);
+    const merged = merge(inbox.threads, sent.threads);
+    threads = merged.slice(input.args.offset, reach);
+    more = inbox.more || sent.more || merged.length > reach;
   }
 
-  const path = "/v3/inbox/threads/filter?top=" + input.args.limit + "&skip=" + input.args.offset;
+  const filled = fill(threads, result);
+  result.items = filled.items;
+  result.has_more = more || filled.cut;
+
+  return learned === undefined ? { result: result } : { result: result, external_ids: learned };
+}
+
+// How far one read of a bucket reaches: v3's largest page.
+const MERGE_REACH = 1000;
+
+// The filter with one of Reply's buckets and the lower bound, in the order the provider is asked them.
+function bucket(filter, source, from) {
+  const asked = Object.assign({}, filter, { source: source });
+  if (from !== undefined) {
+    asked.from = from;
+  }
+
+  return asked;
+}
+
+// One page of a bucket, read and mapped; any refusal ends the operation in its own words.
+function readPage(context, filter, top, skip, learned) {
+  const path = "/v3/inbox/threads/filter?top=" + top + "&skip=" + skip;
   const known = callOf("POST", path);
   const answer = call(context, "POST", path, filter, learned, LIST);
 
@@ -89,12 +136,24 @@ export function conversationList(input, context) {
     fail(LIST, observe(known, answer, lostAnswerRow(known)), learned);
   }
 
-  const result = { items: [], has_more: false, vendor: { ordering: "last_activity_desc" } };
-  const filled = fill(threads, result);
-  result.items = filled.items;
-  result.has_more = page.hasMore === true || filled.cut;
+  return { threads: threads, more: page.hasMore === true };
+}
 
-  return learned === undefined ? { result: result } : { result: result, external_ids: learned };
+// Two buckets as one list: newest activity first, then the larger identifier, and a thread in both once.
+function merge(first, second) {
+  const seen = {};
+  const all = [];
+  for (const thread of first.concat(second)) {
+    if (!Object.prototype.hasOwnProperty.call(seen, thread.external_id)) {
+      seen[thread.external_id] = true;
+      all.push(thread);
+    }
+  }
+
+  return all.sort((a, b) => {
+    const moved = Date.parse(b.last_activity_at) - Date.parse(a.last_activity_at);
+    return moved !== 0 ? moved : Number(b.external_id) - Number(a.external_id);
+  });
 }
 
 export function conversationGet(input, context) {

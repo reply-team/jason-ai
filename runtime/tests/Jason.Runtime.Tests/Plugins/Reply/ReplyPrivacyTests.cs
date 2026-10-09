@@ -255,7 +255,8 @@ public class ReplyPrivacyTests
         Assert.Contains(Address, answered[3], StringComparison.Ordinal);
 
         // And nowhere else. A read sends identifiers, a window and a page, so the requests themselves hold none of it.
-        Assert.Equal(6, account.Calls.Count);
+        // Every thread is two of Reply's buckets, so the list of threads is two of these calls.
+        Assert.Equal(7, account.Calls.Count);
         foreach (var call in account.Calls)
         {
             var sent = string.Join(' ', call.Args) + call.Path + (call.Body ?? string.Empty);

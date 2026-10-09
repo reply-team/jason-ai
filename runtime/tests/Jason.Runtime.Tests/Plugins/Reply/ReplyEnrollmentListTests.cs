@@ -75,12 +75,49 @@ public class ReplyEnrollmentListTests
 
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(limit: 10, offset: 0, supplied: "7")));
 
+        // Reply answers the page of a sequence the account does not hold with an empty list, as a live account did;
+        // only the count refuses, and its refusal is the campaign not being found rather than a total nobody gave.
         Assert.Equal("campaign_not_found", error.Code);
         Assert.Equal("sequenceContact.sequenceNotFound", (string?)error.Details!["provider_code"]);
 
-        // The provider has just denied the link, so it is not recorded, and nothing is counted after the refusal.
+        // The provider has just denied the link, so it is not recorded.
         Assert.Null(error.ExternalIds);
-        Assert.Single(account.Calls);
+        Assert.Equal([$"GET {ListPath}?top=10&skip=0", $"GET {CountPath}"], account.Calls.Select(call => call.Method + " " + call.Path));
+    }
+
+    /// <summary>
+    /// Only Reply's own `sequenceContact.sequenceNotFound` on the count says the sequence is missing. A 404 that says
+    /// anything else — another code, or no body at all — is a count refused like any other: the page stands, the total
+    /// is unknown, and nothing fails.
+    /// </summary>
+    [Theory]
+    [InlineData("route.notFound")]
+    [InlineData(null)]
+    public async Task A_count_404_that_is_not_reply_s_missing_sequence_leaves_the_total_null_and_the_page_answered(string? code)
+    {
+        using var account = Planted(people: 2);
+        account.Answers("GET", CountPath, 404, code is null ? string.Empty : Problem(404, code));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(limit: 10, offset: 0, pinned: "7")));
+
+        Assert.Null(answer["total"]);
+        Assert.Equal(2, answer["items"]!.AsArray().Count);
+    }
+
+    /// <summary>A sequence the account holds with nobody in it is an empty page with a total of nought, not a missing one.</summary>
+    [Fact]
+    public async Task A_campaign_the_provider_holds_with_nobody_in_it_is_an_empty_page_counted_nought()
+    {
+        using var account = Planted(people: 0);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(limit: 10, offset: 0, pinned: "7")));
+
+        Assert.Equal(0, answer["total"]!.GetValue<int>());
+        Assert.Empty(answer["items"]!.AsArray());
     }
 
     [Fact]

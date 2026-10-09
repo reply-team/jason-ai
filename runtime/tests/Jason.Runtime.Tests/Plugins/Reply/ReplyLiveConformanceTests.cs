@@ -64,9 +64,16 @@ public class ReplyLiveConformanceTests
     /// <summary>The sequence that is read and enrolled into. A live identifier is never guessed at.</summary>
     private const string SequenceKey = "JASON_LIVE_REPLY_SEQUENCE";
 
+    /// <summary>
+    /// A contact already taking part in that sequence, by Reply's own identifier. Named only for the guard below,
+    /// which must run against a sequence nobody has started: if the guard were wrong, its write would land there.
+    /// </summary>
+    private const string ParticipantKey = "JASON_LIVE_REPLY_PARTICIPANT";
+
     private const string CampaignGet = "campaign.get";
     private const string MembershipAdd = "list_membership.add";
     private const string Enroll = "campaign.enroll";
+    private const string EnrollmentList = "enrollment.list";
 
     private const string ContactId = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
     private const string CampaignId = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
@@ -81,6 +88,9 @@ public class ReplyLiveConformanceTests
     private const string TheList = "It names the live Reply list this run adds the recipient to.";
 
     private const string TheSequence = "It names the live Reply sequence this run reads and enrolls into.";
+
+    private const string TheParticipant =
+        "It names, by Reply's contact identifier, a person already taking part in that sequence; the sequence must be one nobody has started.";
 
     /// <summary>
     /// The flags A1 forbids, held to here as well as offline: a key on a command line, a verbose mode that
@@ -197,6 +207,76 @@ public class ReplyLiveConformanceTests
         Assert.Equal(live, repeat["campaign_live"]!.GetValue<bool>());
 
         await AssertNothingLeakedAsync(api, recipient, result, again);
+    }
+
+    /// <summary>
+    /// Reply's bulk add never says that a person already takes part: it moves them to a later start step, or refuses
+    /// the same step with a generic word after assigning the sequence's sending account. So before enrolling anybody
+    /// who existed, the package reads the participation, and one found decides the answer by the policy, with nothing
+    /// written. This is that, live, for a contact already in a sequence nobody has started: `skip` answers
+    /// `already_enrolled`, `refuse` fails `collision_refused`, no bulk add is started, and the participation reads
+    /// the same afterwards as before.
+    /// </summary>
+    [Fact]
+    public async Task A_live_enrollment_of_a_person_already_taking_part_writes_nothing_under_either_policy()
+    {
+        var profile = Require(ProfileKey, TheProfile);
+        var sequence = Require(SequenceKey, TheSequence);
+        var participant = Require(ParticipantKey, TheParticipant);
+
+        await using var api = await StartAgainstTheMachineAsync(Ct);
+
+        await LeavesAParticipantAloneAsync((operation, input) => InvokeAsync(api, operation, input, profile, Ct), sequence, participant);
+
+        // No bulk add was started at all: the host's own record of every program it ran is the evidence.
+        Assert.DoesNotContain(ExecArguments(api.Paths), command => command.Any(argument => argument.Contains("/contact-links/bulk", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// The guard's run, against whichever account <paramref name="invoke"/> reaches. The campaign is read first, and a
+    /// live one stops it before any enrolment: the run is meant for a sequence nobody has started, where a guard that
+    /// failed would write without sending, and naming a live sequence by mistake must not become a send. Then the
+    /// participation is read, both policies are asked for, and the participation is read again, unchanged.
+    /// </summary>
+    internal static async Task LeavesAParticipantAloneAsync(
+        Func<string, JsonObject, Task<PluginInvocationResult>> invoke,
+        string sequence,
+        string participant)
+    {
+        var read = await invoke(CampaignGet, CampaignGetInput(sequence));
+        Assert.True(
+            read.Outcome is InvocationOutcome.Succeeded,
+            $"The campaign could not be read, so nothing was enrolled: {(read.Outcome as InvocationOutcome.Failed)?.Error.Code ?? read.Outcome.GetType().Name}.");
+        var status = Succeeded(CampaignGet, read)["campaign"]!["status"]!.GetValue<string>();
+        Assert.True(
+            status != "live",
+            $"The sequence is {status} at the provider. This run is only for a sequence nobody has started, so nothing was enrolled.");
+
+        var before = Participation(Succeeded(EnrollmentList, await invoke(EnrollmentList, EnrollmentListInput(sequence))), participant);
+
+        // The address is never sent for a pinned person; the contract's projection still carries a channel value.
+        var skip = Succeeded(Enroll, await invoke(Enroll, EnrollInput(sequence, "participant@example.invalid", pinned: participant)));
+        Assert.Equal("already_enrolled", Assert.Single(skip["items"]!.AsArray())!["status"]!.GetValue<string>());
+
+        var refused = Assert.IsType<InvocationOutcome.Failed>(
+            (await invoke(Enroll, EnrollInput(sequence, "participant@example.invalid", pinned: participant, collision: "refuse"))).Outcome);
+        Assert.Equal("collision_refused", refused.Error.Code);
+
+        var after = Participation(Succeeded(EnrollmentList, await invoke(EnrollmentList, EnrollmentListInput(sequence))), participant);
+        Assert.True(JsonNode.DeepEquals(before, after), $"The participation changed: {before.ToJsonString()} became {after.ToJsonString()}.");
+    }
+
+    /// <summary>The participant's row of a sequence's people, reduced to what an enrolment could change.</summary>
+    private static JsonObject Participation(JsonObject page, string participant)
+    {
+        var row = Assert.Single(page["items"]!.AsArray(), item => (string?)item!["external_id"] == participant)!;
+        return new JsonObject
+        {
+            ["status"] = row["status"]!.DeepClone(),
+            ["current_step"] = row["current_step"]?.DeepClone(),
+            ["current_step_id"] = row["vendor"]!["current_step_id"]?.DeepClone(),
+            ["added_at"] = row["added_at"]?.DeepClone(),
+        };
     }
 
     // -------------------------------------------------------------------------------------------------------
@@ -395,6 +475,17 @@ public class ReplyLiveConformanceTests
         ["campaign"] = Campaign(),
     };
 
+    private static JsonObject EnrollmentListInput(string sequence) => new()
+    {
+        ["args"] = new JsonObject
+        {
+            ["campaign"] = new JsonObject { ["external_id"] = sequence },
+            ["limit"] = 100,
+            ["offset"] = 0,
+        },
+        ["campaign"] = Campaign(),
+    };
+
     private static JsonObject MembershipInput(string list, string recipient, string? pinned = null) => new()
     {
         ["args"] = new JsonObject
@@ -407,7 +498,7 @@ public class ReplyLiveConformanceTests
         ["idempotency_key"] = WorkItemId,
     };
 
-    private static JsonObject EnrollInput(string sequence, string recipient, string? pinned = null) => new()
+    private static JsonObject EnrollInput(string sequence, string recipient, string? pinned = null, string collision = "skip") => new()
     {
         ["args"] = new JsonObject
         {
@@ -416,7 +507,7 @@ public class ReplyLiveConformanceTests
 
             // Skip rather than refuse, because a controlled recipient already in the sequence from an earlier
             // run is the ordinary case here and is not a reason to fail.
-            ["collision"] = "skip",
+            ["collision"] = collision,
             ["start"] = new JsonObject { ["position"] = "first_step" },
             ["first_touch"] = "authored_delay",
         },
