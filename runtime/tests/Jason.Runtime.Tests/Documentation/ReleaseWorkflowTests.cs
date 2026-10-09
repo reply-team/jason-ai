@@ -770,7 +770,7 @@ public class ReleaseWorkflowTests
         var stop = note.IndexOf("`jason runtime stop` once", StringComparison.Ordinal);
         var started = note.IndexOf("then `jason runtime start` (or sign in again, with autostart enabled)", StringComparison.Ordinal);
         Assert.True(enable >= 0 && denied > enable && stop > denied && started > stop, $"the acts are not named in order: {note}");
-        Assert.Contains("https://github.com/reply-team/jason-ai/blob/v0.2.0/docs/release-and-update.md", note, StringComparison.Ordinal);
+        Assert.DoesNotContain("release-and-update", note, StringComparison.Ordinal);
         Assert.DoesNotContain("{{", note, StringComparison.Ordinal);
     }
 

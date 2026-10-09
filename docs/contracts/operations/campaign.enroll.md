@@ -7,7 +7,7 @@ it. Where the two seem to differ, the document is right and this page is a bug.
 > place — every other published operation runs through them — and this operation's approval is `confirm_once`,
 > so an item naming it is parked at the claim for a person to decide: `approval_required`, no attempt, and a
 > record of exactly what would be enrolled. Approving releases it to the next scan, and nothing runs but the
-> subject that was approved. See `docs/work-execution.md` §Approvals.
+> subject that was approved.
 
 ## What it is for
 

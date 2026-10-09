@@ -24,7 +24,8 @@ routed to a plugin, the whole input below is composed and validated, the plugin 
 document states, and its answer is measured against the output schema before it becomes the item's
 result; the repeat rule below is what the runtime reads when such an attempt ends ambiguously.
 [`docs/plugins.md`](../plugins.md) §7 is the same material from the plugin author's side, with a worked
-example; [`docs/routing.md`](../routing.md) is how an operation reaches a plugin at all.
+example. An operation reaches a plugin only where a route sends it; without one, the item fails at the claim
+with `no_route`.
 
 ```
 docs/contracts/
@@ -215,7 +216,6 @@ Six details worth knowing before you write a schema:
 - **An explicit `null` satisfies `required`.** Saying null is saying something; only an absent property is missing.
   That is a rule about a property *inside* a document being validated, and it is not the rule about the work item's
   reserved `context.input` key, where an absent key and a JSON null read alike — neither is a set of arguments.
-  `docs/work-execution.md` states that one.
 - **`additionalProperties: false` sees only its own object.** It is evaluated against the properties named in the
   same schema object, and does not see properties contributed by an adjacent `$ref` or by an `allOf` branch. A
   2020-12 validator evaluates it against everything annotated at that location, so a schema that combines
@@ -246,8 +246,6 @@ Six details worth knowing before you write a schema:
   once. A second timeout is reported as `pattern_timed_out`, and nothing has been decided: a request is answered
   `validation_timed_out`, retryable; at the claim the attempt ends `transient`; over a plugin's answer the plugin has
   run, so the attempt is `ambiguous` and the operation's own repeat rule decides.
-  [`docs/work-execution.md`](../work-execution.md), [`docs/routing.md`](../routing.md) and
-  [`docs/notifications.md`](../notifications.md) say each in place.
 
 ### The pattern grammar
 
@@ -324,16 +322,13 @@ A route to a plugin whose family versions do not contain the operation's version
 route is activated, as `route_contract_incompatible`, and again at the claim as
 `contract_incompatible`: the plan a run is handed has to be true of the package in front of it.
 Compatibility windows and deprecation policy are not settled yet and are deliberately not
-implied here (DEF-OPS-002; `docs/routing.md` §12 lists it beside this version's other limitations).
+implied here.
 
-## Running the fixtures
+## The fixtures
 
-Every file under `fixtures/` is executed by a test, which is what keeps these documents and the runtime honest.
-From the repository root:
-
-```
-dotnet test --project runtime/tests/Jason.Contracts.Tests -- --filter-class "Jason.Contracts.Tests.OperationContracts.FixtureTests"
-```
+Every file under `fixtures/` is executed by the runtime's own tests, which is what keeps these documents and the
+runtime honest: a fixture that stops holding fails the runtime's build, so a fixture published here is one the
+runtime released with it agrees with. Read them as worked examples of the contract.
 
 An **input fixture** is `{operation, version, case, input, expect}`, where `expect` is either the string `"valid"`
 or `{"invalid": [ … ]}`. An **outcome fixture** is `{operation, version, case, outcome, expect}`, where `outcome`
@@ -383,5 +378,6 @@ this runtime validates and executes. Where they disagree, these documents decide
 of the catalogue it was copied from under
 `l1.contract_version`, together with the family and the operation's name there. Jason implements a small, strict
 subset of it, and [`divergence-from-l1.md`](divergence-from-l1.md) records every place the two differ, why, and
-whether the difference is something the catalogue should take back. The catalogue is in this repository now, so
-feedback travels through this repository's issues.
+whether the difference is something the catalogue should take back. The catalogue is in this repository now;
+until this repository takes issues, feedback on it goes where the README's
+[Getting help](../../README.md#getting-help) says.

@@ -3,6 +3,8 @@ bin/
 obj/
 artifacts/
 publish/
+# ...but not what a release publishes to the public repository.
+!.github/publish/
 *.binlog
 
 # Test and coverage results

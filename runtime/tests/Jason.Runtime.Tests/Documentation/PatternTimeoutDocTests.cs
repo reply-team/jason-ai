@@ -31,7 +31,11 @@ public sealed partial class PatternTimeoutDocTests
             "A work item's `result_format` schema is probed the same way when the item is written, and when a patch names it, and a pattern that still cannot finish is refused there as `schema_pattern_invalid`, final: the schema has to change.",
             readme,
             StringComparison.Ordinal);
-        Assert.Contains("[`docs/notifications.md`](../notifications.md) say each in place.", readme, StringComparison.Ordinal);
+        Assert.Contains(
+            "over a plugin's answer the plugin has run, so the attempt is `ambiguous` and the operation's own repeat rule decides.",
+            readme,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("say each in place", readme, StringComparison.Ordinal);
         Assert.Contains(
             "The exception is a branch no pattern could finish measuring: unless a measured branch has already decided the combinator, its `pattern_timed_out` is passed up as it stands, at its own pointer",
             readme,

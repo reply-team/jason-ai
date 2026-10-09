@@ -881,7 +881,8 @@ public class ReleaseAndUpdateDocTests
         Assert.Contains($"asks the release feed whether a newer version exists {minutes} after it starts, and {interval} after that", section, StringComparison.Ordinal);
         Assert.Contains("one `GET`, carrying nothing about you or your work", section, StringComparison.Ordinal);
         Assert.Contains($"`{UpdateOptions.Section}:{nameof(UpdateOptions.CheckEnabled)}` set to `false`", section, StringComparison.Ordinal);
-        Assert.Contains("[`release-and-update.md`](release-and-update.md) §4", section, StringComparison.Ordinal);
+        Assert.Contains("it identifies only the runtime's version, including its build", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("release-and-update.md", section, StringComparison.Ordinal);
     }
 
     /// <summary>

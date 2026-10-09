@@ -1,38 +1,46 @@
 # jason-ai
 
-**The Jason AI runtime** — a local-first, vendor-neutral SDR domain runtime that
-turns your own AI agents, installed SDR skills, and external execution providers into a
-durable outbound-sales operation.
+**Jason AI** — an AI SDR harness: a local-first, vendor-neutral SDR domain runtime, distributed as one
+self-contained executable per platform, with open skills, contracts and plugins, that turns your own AI agents,
+installed SDR skills, and external execution providers into a durable outbound-sales operation.
 
-> **Status: early implementation.** This repository publishes the product's
-> [target architecture](docs/architecture.md) and the runtime as it stands: one executable that
-> hosts the local Runtime API, a CLI that talks to it, and a database layer that migrates itself
-> on start. The runtime now manages campaigns, their context and their append-only journal, a
-> contact directory with campaign membership, a suppression list, and **work items: units of work
-> inside a campaign that a deterministic dispatcher claims under a lease and hands to a role's
-> entry command, which reports back through the API** — all through the CLI and the Runtime API.
-> **Plugin packages** are validated against the manifest schema, listed with their content digest
-> and their requested-versus-granted capabilities, and swapped in atomically by an explicit reload;
-> the plugin host runs one invocation of a package's JavaScript in its own process under the Host
-> SDK. **Canonical operation contracts** are published under [`docs/contracts/`](docs/contracts) —
-> one machine-readable document per operation, embedded into the runtime that enforces it — and a
-> work item naming a provider operation is measured against its contract when it is created: an
-> operation this build publishes no contract for, or arguments that do not satisfy one, are refused
-> there and then. **Provider operations now run through routed plugins**: a route says which plugin
-> performs an operation for a campaign and which account of that provider it works in, the claim
-> decides everything that could refuse the work before a child process exists, the plugin performs it
-> in its own process, and what ran is pinned to the attempt — the package, its digest, both snapshots
-> and the account by identity. **No provider is built in.** One arrives as a plugin, and a fresh
-> runtime routes nothing anywhere until somebody writes a route
-> ([docs/routing.md](docs/routing.md)); an operation that needs a person's approval is parked until a
-> person decides, and nothing runs but what they approved. **The first such plugin is in this repository**:
-> [`plugins/reply/`](plugins/reply/README.md) performs all eleven published operations against a Reply
-> account through the Reply CLI, which owns the credential — so an operator installs that CLI, signs in
-> with it, copies the package into `~/.jason/plugins/`, grants it that one program, and writes the
-> route. **One run of the whole of it** — an empty installation brought to a routed plugin, one enrolment
-> approved by a person and performed against the provider, and the history it leaves — is written up in
-> [docs/golden-path.md](docs/golden-path.md), and every command on that page is executed by a test. The runtime
-> is being built in the open, one self-contained increment at a time; no dates, no roadmap promises.
+> **Alpha.** Jason is early software: it does what this page says, and what it does changes from one release to the
+> next.
+>
+> **Approve real sends only in a test team.** Work that reaches real people waits for a person's approval; give it
+> only in a provider account you keep for testing, never in the one your company sells from.
+>
+> **What leaves your machine:** what the plugins you install send to their providers, and what the AI agents you
+> configure Jason to start send to theirs; the runtime's check for a newer release — five minutes after it starts
+> and then once a day, at the default settings, a single `GET` that identifies only the runtime's version, including
+> its build (`Update:CheckEnabled` set to `false` turns it off); and the requests you start yourself — the install
+> scripts, `jason update`, and `jason skills install` and `update`, which fetch from this repository. Nothing else,
+> and no telemetry: the file `jason doctor` writes stays on your machine unless you send it.
+
+What runs today is one executable that hosts the local Runtime API, a CLI that talks to it, and a database layer
+that migrates itself on start. The runtime manages campaigns, their context and their append-only journal, a contact
+directory with campaign membership, a suppression list, and **work items: units of work inside a campaign that a
+deterministic dispatcher claims under a lease and hands to a role's entry command, which reports back through the
+API** — all through the CLI and the Runtime API. **Plugin packages** are validated against the manifest schema,
+listed with their content digest and their requested-versus-granted capabilities, and swapped in atomically by an
+explicit reload; the plugin host runs one invocation of a package's JavaScript in its own process under the Host
+SDK. **Canonical operation contracts** are published under [`docs/contracts/`](docs/contracts) — one
+machine-readable document per operation, embedded into the runtime that enforces it — and a work item naming a
+provider operation is measured against its contract when it is created: an operation this build publishes no
+contract for, or arguments that do not satisfy one, are refused there and then. **Provider operations run through
+routed plugins**: a route says which plugin performs an operation for a campaign and which account of that provider
+it works in, the claim decides everything that could refuse the work before a child process exists, the plugin
+performs it in its own process, and what ran is pinned to the attempt — the package, its digest, both snapshots and
+the account by identity. **No provider is built in.** One arrives as a plugin, and a fresh runtime routes nothing
+anywhere until somebody writes a route: work with no route fails at the claim with `no_route`. An operation that
+needs a person's approval is parked until a person decides, and nothing runs but what they approved. **The first
+such plugin is in this repository**: [`plugins/reply/`](plugins/reply/README.md) performs all eleven published
+operations against a Reply account through the Reply CLI, which owns the credential — so an operator installs that
+CLI, signs in with it, copies the package into `~/.jason/plugins/`, grants it that one program, and writes the
+route. **One run of the whole of it** — an empty installation brought to a routed plugin, one enrolment approved by
+a person and performed against the provider, and the history it leaves — is written up in
+[docs/golden-path.md](docs/golden-path.md), and every command on that page is executed by a test. Releases arrive
+one self-contained increment at a time; no dates, no roadmap promises.
 
 ## What this is
 
@@ -68,21 +76,27 @@ agent environments you already own and have authenticated.
 
 ## Architecture
 
-The complete product vision and target architecture — components, state authority, the
-durable work model, AI roles and execution profiles, canonical operations, the JavaScript
-plugin host, accepted decisions, invariants, and the register of deliberately unresolved
-design — lives in **[docs/architecture.md](docs/architecture.md)**.
+One executable, three modes: the runtime service, which owns campaign and work state in SQLite and is the only thing
+that writes it; the CLI, a pure client of the runtime's loopback API; and the plugin host, a short-lived process in
+which a plugin's JavaScript runs, so that it never runs inside the long-lived runtime. The runtime's design and its
+source are not published. What a person, an agent or a plugin author needs from them is here:
+[docs/INSTALL.md](docs/INSTALL.md), [docs/plugins.md](docs/plugins.md), the contracts under
+[docs/contracts/](docs/contracts/README.md), and the skills under [`skills/`](skills).
 
 ## Repository layout
 
 | Path | Contents |
 |---|---|
-| `runtime/` | All C#: the solution, `src/Jason.App` (the single executable; picks CLI, runtime-service or plugin-host mode from its arguments), `src/Jason.Cli`, `src/Jason.Runtime`, `src/Jason.PluginHost`, `src/Jason.Contracts`, and `tests/` |
 | `plugins/` | Plugin marketplace: one folder per plugin with its manifest and JavaScript |
 | `skills/runtime/` | Skills that teach an agent to operate Jason: the interactive ones, and one per launched role |
 | `skills/business/` | Skills that teach an agent the SDR profession, independently of any provider or runtime |
 | `.claude-plugin/` | The skills marketplace: offers both packs to an agent harness by relative path. Distinct from `plugins/`, which is the plugin marketplace |
-| `docs/` | Maintained documentation |
+| `docs/` | The install manual, the first-use walkthrough, the plugin author's guide and the operation contracts |
+| `install/` | The install scripts every release attaches, and the update feed's schema |
+| `VERSION` | The runtime version this tree describes |
+
+The runtime's source is not here. Each release attaches the runtime for every platform, built from that source at the
+release's version, and this tree is published from the same release.
 
 ## Installing
 
@@ -97,15 +111,14 @@ irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 
 Each script works out your platform, verifies the download's SHA-256 before unpacking it, installs the
 executable under your own account — `~/.local/bin` on macOS and Linux, `%LOCALAPPDATA%\Programs\jason` on
 Windows — and puts that directory on your PATH unless you pass `--no-modify-path`. Nothing needs administrator
-rights. Both lines install the **latest release**, and a repository with no published release has no latest:
-if they answer 404 there is nothing to install from, and [docs/INSTALL.md](docs/INSTALL.md) §3 — one file built
-from this checkout, put on your PATH — is the way in.
+rights. Both lines install the **latest release**. If they answer 404 there is no published release to install
+yet: that is a fact about this repository, not a failure of your machine, and there is nothing here to build
+instead ([docs/INSTALL.md](docs/INSTALL.md) §3).
 
 **[docs/INSTALL.md](docs/INSTALL.md)** is the whole of it in order — what you need, from a release, from
 source, teaching it, asking whether it can work, starting it, and taking it off again — written to be
-followed by a person or an agent without reading anything else first.
-`docs/release-and-update.md` is the contract for what a release publishes and how a running runtime finds out
-that a newer one exists:
+followed by a person or an agent without reading anything else first. A running runtime finds out by itself that
+a newer release exists, and these ask and act:
 
 ```sh
 jason update check
@@ -133,10 +146,10 @@ Install Jason on this machine and tell me whether it can start work.
 Follow docs/INSTALL.md in this repository, in order, from section 2.
 
 1. Run the install one-liner for this platform. If the one-liner itself answers 404, there is no
-   published release yet. That is a fact about the repository and not a failure of anything, so
-   build from source as section 3 describes rather than stopping to report it. If it installs, or
-   says Jason is already installed, go on to step 2: a 404 from anything else you look up is not
-   that answer.
+   published release yet. That is a fact about the repository and not a failure of anything, and
+   there is nothing in it to build instead: stop and report exactly that. If it installs, or says
+   Jason is already installed, go on to step 2: a 404 from anything else you look up is not that
+   answer.
 2. Teach the runtime its roles before you judge it. Run this first and read where it says it
    would write:
    jason skills install --roles-only --dry-run --source .
@@ -148,7 +161,7 @@ Follow docs/INSTALL.md in this repository, in order, from section 2.
    3, and "the runtime did not answer" is one of its answers rather than an error.
 4. For each required check that is not ok, run the repair it prints. A repair that is a jason
    command you can run as it stands. The path check's repair is a line for this machine's own
-   shell instead; read section 3's note about login shells before you run it, because a profile
+   shell instead; read section 2's note about login shells before you run it, because a profile
    you append to is read by a login shell and not by your next non-interactive command.
    Optional checks are reported, not repaired: their repairs write what the rule below does not
    allow, into your agent's configuration or into what starts at logon.
@@ -159,14 +172,12 @@ Change nothing on this machine except what these steps write: the executable and
 directory; this account's PATH entry for it; Jason's data directory, which is where the role
 skills go; the system's temporary directory, which the installer downloads into; the directory
 the executable unpacks its native libraries into when it first runs, which is under the
-temporary directory on Windows and under ~/.net in this home directory on macOS and Linux; and,
-only if you build from source, the checkout's own build output and what the .NET SDK writes
-into this home directory as it builds — its package cache, and a first-run setup that may add
-its own tools directory to this account's PATH. Nothing in your own agent's configuration:
+temporary directory on Windows and under ~/.net in this home directory on macOS and Linux.
+Nothing in your own agent's configuration:
 without --roles-only, jason skills install would put skills there too, and that is mine to
 decide, so ask.
-Do not install anything else. Do not leave a long-running process behind other than through
-jason runtime start.
+Do not install anything else, and do not build anything. Do not leave a long-running process
+behind other than through jason runtime start.
 ```
 
 ### Can this installation start work?
@@ -285,15 +296,7 @@ has to be said in advance, because there is nobody there to be asked. Like `stat
 operation behind it: removing Jason from a machine is not something the runtime performs or is asked about.
 [docs/INSTALL.md](docs/INSTALL.md) §7 is the fuller account.
 
-## Building from source
-
-Requires the .NET SDK version pinned in `global.json`. From the repository root:
-
-```sh
-dotnet build runtime/Jason.slnx
-dotnet test --solution runtime/Jason.slnx
-dotnet run --project runtime/src/Jason.App -- --version
-```
+## Using it
 
 `jason runtime start` launches the runtime in the background and prints the instance it ended up
 talking to; `jason runtime stop` asks that instance to shut down and returns only once it has
@@ -305,8 +308,8 @@ To have the runtime start when you log on, register it once. It carries the data
 registered under, and nothing supervises it afterwards — a runtime that stops stays stopped until
 somebody starts it. It needs no administrator rights: on Windows it registers from an ordinary
 prompt, on a standard account too, one task per account, and the runtime then runs in your session
-and ends when you sign out. `docs/release-and-update.md` §8 says what each platform registers, what it costs, and what only a
-hand check can prove.
+and ends when you sign out. On Windows that is a logon task named for your account, on macOS a LaunchAgent, on
+Linux a `systemd --user` unit; `jason runtime autostart status` says which is registered.
 
 ```sh
 jason runtime autostart enable
@@ -327,22 +330,19 @@ jason workitem list --campaign <id> --status failed --status expired
 ```
 
 `--idempotency-key` is optional: a create sent again with the same key answers with what the first one made
-instead of making it twice, and a different request under a key already used is refused
-([docs/work-execution.md](docs/work-execution.md#creating-work-twice)).
+instead of making it twice, and a different request under a key already used is refused.
 
 Every verb prints the exact API response as compact JSON on stdout (add `--human` for a readable
 rendering). The runtime keeps its data under `~/.jason` (override with the `JASON_DATA_DIR`
 environment variable).
 
-How work items are claimed, launched and reported on — the lifecycle, the launch envelope an
-executor is handed, the operations it reports through, and the settings that pace all of it — is
-documented in **[docs/work-execution.md](docs/work-execution.md)**.
+A work item moves through one set of statuses: a dispatcher claims it under a lease, with at most one live
+attempt at a time, and whatever performs it reports what happened through the same API; `jason workitem get
+<id> --human` shows its attempts and how each ended.
 
-Which agent host runs a piece of AI work — the profile that names it, the revisions that make an
-attempt's record of it permanent, the order the choice is made in, what a launched agent finds in its
-work directory, what a role remembers between runs, and every reason AI work can be blocked while
-everything else keeps running — is documented in
-**[docs/execution-profiles.md](docs/execution-profiles.md)**:
+Which agent host runs a piece of AI work is named by an **execution profile**, and each attempt keeps the
+revision of the profile it ran under; when no profile can run a piece of AI work it waits, blocked, and
+everything else keeps running:
 
 ```sh
 jason profile create local-claude --host claude_code --program claude   --deny Write --host-version-verified 2.1.275
@@ -354,9 +354,8 @@ jason rolenote get <campaign-id> researcher
 When a campaign is looked at, and by whom, is its own loop: a failure, a rejected approval, an
 effect somebody reported or a reply in the campaign's conversations puts a **check-in** on the queue,
 and a cadence does it anyway when nothing has happened at all. Replies are found by reading each live
-campaign's conversations on a cadence (**[docs/inbound-sync.md](docs/inbound-sync.md)**). What wakes
-a manager, how often one is woken, what it is told and what that costs are documented in
-**[docs/campaign-manager.md](docs/campaign-manager.md)**:
+campaign's conversations on a cadence. How often a manager looks at a campaign when nothing has happened is the
+campaign's own setting:
 
 ```sh
 jason campaign update <campaign-id> --review-seconds 3600
@@ -388,9 +387,9 @@ The canonical operations a plugin implements — one document per operation, the
 written in, the published argument and answer fixtures, and where Jason's strict subset departs from
 the vendor-neutral contract it is seeded from — are in **[docs/contracts/](docs/contracts/README.md)**.
 
-Which plugin performs an operation for a campaign, which account of that provider it works in, every
-reason a claim refuses provider work, and what is recorded about a run, are in
-**[docs/routing.md](docs/routing.md)**:
+Which plugin performs an operation for a campaign, and which account of that provider it works in, is a
+**route**. A claim checks everything that could refuse provider work before a child process exists and refuses
+with that reason's own code; what ran is recorded on the attempt:
 
 ```sh
 jason route set --campaign <id> --plugin acme-provider --binding '{"workspace":"latam"}'
@@ -427,8 +426,7 @@ jason decision answer <decision-id> --answer "pause it" --actor human:you@exampl
 
 Effects that never went through Jason at all — something a person or an agent did with its own CLI, an
 MCP tool or by hand — are told to Jason afterwards and kept as the reporter's assertion, never as work
-Jason performed. What admitting one establishes, what it deliberately does not, and how reports are
-read back are in **[docs/reports.md](docs/reports.md)**:
+Jason performed. They are read back like this:
 
 ```sh
 jason report submit --actor human:you@example.com --effect email_sent --tool reply-cli \
@@ -437,11 +435,17 @@ jason report submit --actor human:you@example.com --effect email_sent --tool rep
 jason report list --campaign <campaign-id> --human
 ```
 
+## Building from source
+
+The runtime's source is not published, so there is nothing in this repository to build. A person with access to it
+builds by that repository's own guide. A build from source knows no published tag, so it takes its skills from a
+checkout of this repository with `--source` ([docs/INSTALL.md](docs/INSTALL.md) §3 and §4).
+
 ## Ecosystem
 
 | Repository | Role |
 |---|---|
-| `reply-team/jason-ai` (this repo) | Product entry point: the Runtime, Jason CLI, plugin host, the official Reply plugin, and the runtime and business skills |
+| `reply-team/jason-ai` (this repo) | Product entry point: the runtime and business skills, the official plugins, the operation contracts, the install path, and every release of the runtime — the executable for each platform; the runtime's source is not published |
 | [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) | Reply.io provider CLI: auth, profiles, teams, full API v3 access, and the Reply-specific skills |
 | [`reply-team/reply-mcp`](https://github.com/reply-team/reply-mcp) | Remote MCP server exposing curated Reply tools to MCP-capable agents |
 | [`reply-team/reply-skills`](https://github.com/reply-team/reply-skills) | **Formerly** the home of the skills packs. Both halves now live here: the runtime skills in [`skills/runtime`](skills/runtime), re-authored around the Runtime API, and the business skills in [`skills/business`](skills/business), moved across unchanged and then held to this repository's own guards. The Reply-specific half belongs with `reply-cli` |
@@ -451,8 +455,14 @@ jason report list --campaign <campaign-id> --human
 “Jason AI” is used descriptively here; the repository identity is `jason-ai`. Final public
 product naming may change — the architecture does not depend on it.
 
+## Getting help
+
+Jason is in alpha, and this repository takes no issues yet. If something does not work, write to
+**support@reply.io**: what you ran, what it answered, and — if you choose to — the file `jason doctor` wrote. Read
+that file before you send it; [When something is wrong](#when-something-is-wrong) says what it holds and what only
+`--include-journal` adds. A vulnerability goes the way [SECURITY.md](SECURITY.md) says.
+
 ## License
 
-Everything in this repository outside `runtime/` is MIT ([LICENSE](LICENSE)): the skills, the contracts, the
-plugins, the documentation and the install scripts. The runtime under `runtime/` is proprietary
-([runtime/LICENSE](runtime/LICENSE)); its binaries ship with their licence inside each release archive.
+Everything in this repository is MIT ([LICENSE](LICENSE)). The runtime binaries attached to each release are
+licensed separately: the licence ships inside every archive, beside the executable.

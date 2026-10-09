@@ -206,7 +206,7 @@ public sealed class NtfyPackageTests
         Assert.Equal(PluginKind.Notification, plugin.Manifest.Kind);
 
         // The content digest covers every file in the package, its README included, so the version moves with it.
-        Assert.Equal("1.0.1", plugin.Manifest.Version);
+        Assert.Equal("1.0.2", plugin.Manifest.Version);
         Assert.Contains(DeliveryContract.CurrentVersion, plugin.Manifest.Contracts.Operations);
         Assert.Equal(["ntfy.sh"], plugin.Manifest.Capabilities.Http!.Hosts);
     }

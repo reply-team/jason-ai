@@ -1,6 +1,6 @@
 manifest_version: 1
 id: ntfy
-version: 1.0.1
+version: 1.0.2
 kind: notification
 name: ntfy
 description: Delivers Jason's notifications to an ntfy topic - the pointer the runtime composes, and nothing else.

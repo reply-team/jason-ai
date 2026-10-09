@@ -27,13 +27,7 @@ public sealed class DescriptorHeldTests
         var publisher = new DescriptorPublisher(dir.Paths);
         publisher.Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "first", TestContext.Current.CancellationToken);
         var reader = Reader(dir.Paths.DescriptorFile);
-        var letGo = Task.Run(
-            async () =>
-            {
-                await Task.Delay(Moment);
-                await reader.DisposeAsync();
-            },
-            TestContext.Current.CancellationToken);
+        var letGo = LetGoAfter(Moment, reader.Dispose);
 
         try
         {
@@ -193,13 +187,7 @@ public sealed class DescriptorHeldTests
         var publisher = new DescriptorPublisher(dir.Paths);
         publisher.Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "first", TestContext.Current.CancellationToken);
         var reader = Reader(dir.Paths.DescriptorFile);
-        var letGo = Task.Run(
-            async () =>
-            {
-                await Task.Delay(Moment);
-                await reader.DisposeAsync();
-            },
-            TestContext.Current.CancellationToken);
+        var letGo = LetGoAfter(Moment, reader.Dispose);
 
         DescriptorRemoval removal;
         try
@@ -275,5 +263,34 @@ public sealed class DescriptorHeldTests
         using var dir = new TempDataDir();
         Assert.Equal(new HeldFileRule(TimeSpan.FromSeconds(2), TimeSpan.FromMilliseconds(50), AccessDeniedCounts: false), DescriptorPublisher.RemoveRule);
         Assert.Equal("another program held it for 2 seconds", new DescriptorPublisher(dir.Paths).Why(DescriptorRemoval.Held));
+    }
+
+    /// <summary>
+    /// Lets go after a moment, on a thread of its own. The wait under test blocks the test's own thread, and a release
+    /// queued to the thread pool can be held back past that wait's whole budget while a loaded suite keeps the pool busy,
+    /// and the test would then fail with the product doing exactly what its rule says.
+    /// </summary>
+    private static Task LetGoAfter(TimeSpan moment, Action letGo)
+    {
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                Thread.Sleep(moment);
+                letGo();
+                done.SetResult();
+            }
+            catch (Exception exception)
+            {
+                done.SetException(exception);
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "let go of a held file",
+        };
+        thread.Start();
+        return done.Task;
     }
 }

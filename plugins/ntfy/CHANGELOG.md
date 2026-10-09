@@ -2,6 +2,13 @@
 
 This package versions independently of the Jason runtime, under SemVer.
 
+## 1.0.2
+
+The README says what a pointer may carry by pointing at the delivery contract, `notification.send`, and says in
+place which environment a runtime started at logon reads, rather than pointing at pages this repository does not
+publish. What the package does is unchanged; the version moves because the package's content digest covers its
+README.
+
 ## 1.0.1
 
 The README and the manifest's description no longer restate what the runtime makes a pointer from. The README says

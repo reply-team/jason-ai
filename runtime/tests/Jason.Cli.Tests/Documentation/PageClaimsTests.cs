@@ -282,7 +282,7 @@ public class PageClaimsTests
     /// </summary>
     [Theory]
     [InlineData("docs/INSTALL.md", "Copy that file alone: the `.pdb` files beside it are debugging symbols")]
-    [InlineData("docs/golden-path.md", "copy the single file it produces alone into a directory of its own")]
+    [InlineData("docs/golden-path.md", "installed from a release as [`docs/INSTALL.md`](INSTALL.md) §2 describes")]
     public void The_pages_say_to_copy_the_executable_alone(string page, string said)
     {
         var text = Flat(Page(page.Split('/')));
@@ -313,13 +313,31 @@ public class PageClaimsTests
         Assert.Contains("Connectors in your agent's SDR work are yours to use.", Flat(readme[..fence]), StringComparison.Ordinal);
     }
 
-    /// <summary>The prompt, byte for byte, is the one the real-host runs read; its digest is held here.</summary>
+    /// <summary>
+    /// The prompt, byte for byte, is held here by its digest: a change to it is a deliberate one, and a real host reads the
+    /// changed prompt again before it is relied on.
+    /// </summary>
     [Fact]
     public void The_install_prompt_is_the_text_the_hosts_read_and_names_no_connector()
     {
         var prompt = Fenced(Page("README.md"), "```text\nInstall Jason on this machine");
         Assert.DoesNotContain("connector", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(PromptDigest, "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(prompt))));
+    }
+
+    /// <summary>
+    /// The runtime's source is not published, so the prompt never sends an agent to build it: a 404 from the one-liner
+    /// is reported, and nothing is built.
+    /// </summary>
+    [Fact]
+    public void The_install_prompt_builds_nothing()
+    {
+        var prompt = Fenced(Page("README.md"), "```text\nInstall Jason on this machine");
+
+        Assert.DoesNotContain("from source", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(".NET SDK", prompt, StringComparison.Ordinal);
+        Assert.Contains("do not build anything", prompt, StringComparison.Ordinal);
+        Assert.Contains("stop and report exactly that", prompt, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -355,8 +373,8 @@ public class PageClaimsTests
         Assert.Contains("notifications reach you", rows);
     }
 
-    /// <summary>The digest of the README's prompt as the real-host runs read it.</summary>
-    private const string PromptDigest = "sha256:725e55a1b19d56e258aeb3ad16402c60521b36bbea8ea50b0b2230ef71850b7c";
+    /// <summary>The digest of the README's prompt.</summary>
+    private const string PromptDigest = "sha256:ab8f5a1fb688de67808caa1986110482c5aaffe0222ed33d86786f53ab008332";
 
     /// <summary>
     /// The text between the line that opens a fence and the next line that is exactly three backticks, each line

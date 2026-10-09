@@ -1,0 +1,12 @@
+.claude-plugin/
+.gitattributes
+CODEOWNERS
+LICENSE
+README.md
+docs/INSTALL.md
+docs/contracts/
+docs/golden-path.md
+docs/plugins.md
+install/
+plugins/
+skills/

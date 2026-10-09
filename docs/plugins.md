@@ -6,8 +6,8 @@ is ever called on your behalf, so this document is the whole contract.
 
 A `provider_op` work item reaches a plugin because a **route** sends it there: which plugin performs an
 operation for a campaign, and which account of that plugin it works in, is configured rather than
-built in, and never guessed. That side of it belongs to whoever operates an installation and is
-documented in [docs/routing.md](routing.md); this document is the author's guide.
+built in, and never guessed. That side of it belongs to whoever operates an installation, with
+`jason route set`; this document is the author's guide.
 
 ## 1. What a plugin is
 
@@ -234,7 +234,7 @@ runtime **still starts**, with an empty active snapshot and the diagnostics on r
 plugin must never stand between you and your campaigns, and an empty registry is honest rather than
 half-working. One case is loaded once more first: when the only thing wrong is a binding pattern
 whose load-time probe timed out twice (reported as `field_invalid`, naming `pattern_timed_out`), or
-a route set held back only by bindings no pattern could finish measuring (docs/routing.md §6), the
+a route set held back only by bindings no pattern could finish measuring, the
 start builds the whole load again on the now warm engine, because a cold engine on a busy machine is
 not yet a fault in the package. A package whose probe still cannot finish on that second load loads
 `unavailable` with `probe_timed_out`, and the rest of the load stands: its routes are kept with
@@ -518,7 +518,8 @@ refused when it is created, and the arguments it carries are measured against th
 there and then; at the claim the item is routed to a plugin, the whole input below is composed and
 validated, and your answer is measured against the operation's output schema before it becomes the
 item's result. Which plugin a campaign's work goes to, and which account of it, is an operator's
-business rather than yours: [docs/routing.md](routing.md) is that page.
+business rather than yours: a route names it, and work with no route fails at the claim with `no_route`
+before your package is started.
 
 Listing an operation nobody publishes a contract for is not a manifest error — the rule there is only
 that the name is well formed. It is simply an operation no work item can ever name.
@@ -753,11 +754,10 @@ says what each operation maps onto, what the provider will not answer, and which
 checked against a live account; its `modules/errors.js` is the whole error table written as data, so
 the mapping can be read rather than traced through code.
 
-`runtime/tests/fixtures/plugins/fake-provider/` is the shorter one: the first three published operations
-against a stand-in vendor program, with no provider to understand first — the provider-contact precondition,
-the recovery read, the neutral-to-vendor mapping, and a binding that names the account it acts in. It
-is a test fixture rather than a marketplace package. `other-provider/` beside it implements two of those
-three, because a provider that covers part of the catalog is the ordinary case rather than an error.
+There is no shorter published example of a canonical operation: the stand-in package the runtime's own tests
+drive against a stand-in vendor program is a test fixture, and it is not published. For the shape of a package
+alone — a manifest, a grant, one call and every outcome its contract defines — `plugins/ntfy/` is the smallest
+complete one, though it implements the delivery contract (§14) rather than an operation.
 
 ## 8. Failure classes
 
@@ -1024,11 +1024,9 @@ first, since `host.env` reads the process's own environment. The outcome comes b
 JSON object, the diagnostics on stderr as JSON Lines, and the exit code says whether the protocol
 completed.
 
-**The shape to copy.** `runtime/tests/fixtures/plugins/fake-provider/` in this repository is a
-complete, valid package — manifest, `main.js`, and a local module under `modules/` — that exercises
-every SDK function, every kind of failure, and the first three published operations against a
-stand-in vendor program. It is a test fixture rather than a marketplace plugin, and it is the fastest way to
-see a working one.
+**The shape to copy.** `plugins/ntfy/` in this repository is the smallest complete, valid package —
+manifest, `main.js`, a grant and every outcome its contract defines; `plugins/reply/` adds local modules
+under `modules/` and implements every published operation. Read either before you write your own.
 
 **Against the published vectors.** The argument and answer fixtures under `docs/contracts/fixtures/`
 are the operations' own examples; §7 says how to drive one through the host by hand.
@@ -1078,25 +1076,22 @@ are the operations' own examples; §7 says how to drive one through the host by 
 - **Invocation directories are kept.** `~/.jason/work/plugins/<invocation_id>/` holds `stderr.log`
   and nothing else, and nothing is cleaned up in this version.
 - **One installed version per id**, because the id is the directory name. Two plugins may implement
-  the same operation; which one a campaign uses is a routing question, answered in
-  [docs/routing.md](routing.md).
+  the same operation; which one a campaign uses is a routing question: a route names the plugin, per
+  campaign or for the whole installation.
 - **Notification plugins are not routed**: a route to one is refused at activation with
   `route_plugin_kind_not_invocable`; they are reached through the `Notifications` settings instead (§14).
 - **No install verbs, no signing, no trust model.** Installing is copying a directory.
 
-The design behind all of this — the plugin model, the trust boundary, and what is deliberately left
-open — is in [docs/architecture.md](architecture.md), §14 and §16.5. The operations themselves, with
-their schemas, fixtures and the dialect they are written in, are in
-[docs/contracts/](contracts/README.md). How work items reach an executor is in
-[docs/work-execution.md](work-execution.md); which plugin a campaign's work is sent to, and which
-account of it, is in [docs/routing.md](routing.md).
+The operations themselves, with their schemas, fixtures and the dialect they are written in, are in
+[docs/contracts/](contracts/README.md). Nothing else is part of the contract: Jason's own design notes are
+not published, and this guide and those documents are the whole of what a plugin is held to.
 
 ## 14. Writing a notification plugin
 
 A notification plugin carries Jason's pointer — how many approvals and questions are waiting, whether protective
 actions failed, and where to look — to a service a person reads. It is invoked for one thing, the delivery contract
 [`notification.send`](contracts/notifications/notification.send.md), by the runtime's own notifier, and only when an
-operator has named it under `Notifications:Plugins:<id>` ([docs/notifications.md](notifications.md) §8). No work item
+operator has named it under `Notifications:Plugins:<id>`. No work item
 names it and no route reaches it. [`plugins/ntfy`](../plugins/ntfy/README.md) is the reference.
 
 **The manifest.** `kind: notification`; `contracts.operations` lists the versions of the delivery contract it speaks,

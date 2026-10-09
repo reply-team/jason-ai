@@ -44,7 +44,7 @@ public sealed partial class SkillProblemCodesDocTests
     [InlineData("docs/work-execution.md", "because its `SKILL.md` is a link, cannot be read, gives itself no name or names something other than the role")]
     [InlineData("docs/work-execution.md", "[release-and-update.md](release-and-update.md#and-what-it-says-about-the-skills-it-will-teach-from) lists each by its code")]
     [InlineData("skills/README.md", "a role whose skill file is a link, cannot be read, gives itself no name or names itself differently from its directory")]
-    [InlineData("skills/README.md", "[docs/release-and-update.md](../docs/release-and-update.md#and-what-it-says-about-the-skills-it-will-teach-from) lists each by its code")]
+    [InlineData("skills/README.md", "`jason status` reports each of these in a sentence that ends with its code")]
     public void The_pages_that_say_why_a_launch_is_refused_name_every_reason(string page, string sentence) =>
         Assert.Contains(sentence, System.Text.RegularExpressions.Regex.Replace(Source(page), @"\s+", " "), StringComparison.Ordinal);
 

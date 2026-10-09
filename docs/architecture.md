@@ -1,18 +1,19 @@
 # jason-ai — product vision and target architecture
 
 > **Status: target architecture.** This document describes the intended design of the
-> open-source Jason AI runtime. It is **not** an implementation-status report and **not** a
-> release promise. Nothing described here should be assumed to exist until the repository
-> contains it. The project is delivered incrementally and in the open; this document
-> deliberately contains no roadmap, milestones, or delivery order.
+> Jason AI runtime and the harness around it. It is **not** an implementation-status report and
+> **not** a release promise. Nothing described here should be assumed to exist until the repository
+> contains it. The project is delivered incrementally; this document deliberately contains no
+> roadmap, milestones, or delivery order.
 >
-> This is a *derived public document*: a maintained internal architecture record is the
-> decision source, and this adaptation is kept aligned with it.
+> This is a *derived document*: a maintained internal architecture record is the decision source,
+> and this adaptation is kept aligned with it. It lives with the runtime's source in
+> `reply-team/jason-internal` and is not published.
 
 ## 1. About this document
 
-This is the comprehensive product and high-level architecture vision for the open-source
-Jason AI runtime (working name; see [naming](#naming)). It defines:
+This is the comprehensive product and high-level architecture vision for the Jason AI runtime
+(working name; see [naming](#naming)). It defines:
 
 - the product boundary and the problem it solves;
 - the high-level components and their responsibilities;
@@ -44,15 +45,15 @@ identifiers that contain `ADP` keep their names because identifiers are stable.
 
 ### Naming
 
-“Jason AI” is used descriptively in this document (“the open-source Jason AI runtime”). The
+“Jason AI” is used descriptively in this document (“the Jason AI runtime”). The
 repository identity is `jason-ai`. Final public product naming and branding are a separate
 decision and may change; nothing in the architecture depends on the name.
 
 ## 2. Executive architecture statement
 
-Open-source Jason AI is a **local-first, vendor-neutral, open-source SDR domain runtime**
-that turns a user's existing AI agents, installed SDR skills, and external execution
-providers into a durable operational system.
+Jason AI is a **local-first, vendor-neutral SDR domain runtime**, distributed as closed-source
+binaries with open skills, contracts and plugins, that turns a user's existing AI agents, installed
+SDR skills, and external execution providers into a durable operational system.
 
 It is not an LLM, an AI client, a prompt library, a thin scheduler, or a self-hosted clone
 of Reply.io. It is the missing system around user-owned AI intelligence:
@@ -67,10 +68,10 @@ of Reply.io. It is the missing system around user-owned AI intelligence:
 5. human-facing CLI and UI surfaces over the same authoritative local Runtime API.
 
 Reply is the default, commercially important execution provider, but not a mandatory
-dependency of the open-source runtime. The runtime, its state, its contracts, and its
+dependency of the runtime. The runtime, its state, its contracts, and its
 orchestration remain vendor-neutral. Reply's hosted capabilities (sending, data, inbox, and
 other services) remain commercial Reply services reached through the official Reply plugin
-and Reply CLI; the open-source core contains no artificial license gate.
+and Reply CLI; the core contains no artificial license gate.
 
 The system combines deterministic continuity with semantic autonomy:
 
@@ -108,9 +109,10 @@ operations.
 
 The public ecosystem consists of these components, which users should meet as one product:
 
-- `reply-team/jason-ai` — this repository: the intended main public entry point for the
-  open-source product, holding the runtime, the plugin marketplace, and the runtime and
-  business skills (`skills/runtime`, `skills/business`);
+- `reply-team/jason-ai` — the product entry point, holding the plugin marketplace, the runtime
+  and business skills (`skills/runtime`, `skills/business`), the contracts, the documentation,
+  the install path and the runtime's releases; the runtime's source lives in
+  `reply-team/jason-internal` (private), the source of truth for all of it;
 - [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) — Reply authentication,
   profiles, team context, skill installation for its own Reply-specific skills, and broad
   API v3 access;
@@ -148,7 +150,7 @@ External open-source systems — agent-enabled CRM products, lightweight local a
 runtimes — demonstrate two relevant trends: durable domain agents are becoming first-class
 workers rather than chat decorations, and successful open-source agent products present one
 visible entry point. These examples validate the direction but are not architecture
-templates. Open-source Jason AI is neither a complete CRM containing one agent nor a generic
+templates. Jason AI is neither a complete CRM containing one agent nor a generic
 agent shell without SDR expertise. Its differentiator is the combination of an SDR domain
 kernel, rich skills, user-owned agents, and replaceable provider execution.
 
@@ -179,7 +181,7 @@ None of the layers is sufficient alone:
 - tools without skills have hands but little domain judgment;
 - skills without Runtime reason well but cannot guarantee durable correctness;
 - Runtime without user-owned AI and skills has continuity but lacks semantic intelligence;
-- hard-wiring Runtime to one vendor would sacrifice legitimate open-source vendor neutrality.
+- hard-wiring Runtime to one vendor would sacrifice legitimate vendor neutrality.
 
 ### 4.2 Guiding principles
 
@@ -1076,7 +1078,7 @@ unresolved.
 The installer or bootstrap configuration can register Reply as the global default plugin.
 Runtime core does not contain an implicit rule that an absent route means Reply. This
 preserves both goals: a zero-effort Reply-connected default experience, and genuine vendor
-neutrality in the open-source Runtime.
+neutrality in the Runtime.
 
 ### 13.4 Fail-closed behavior
 
@@ -1343,14 +1345,14 @@ combinations that can be built, signed, and tested.
 
 ### 15.5 Main product entry point
 
-This repository is intended to be the primary marketed public entry point: a new user should
-see one coherent product and guided start rather than discovering several repositories in
-the correct order. Two legitimate installation paths:
+`reply-team/jason-ai` is the primary marketed public entry point: a new user should see one
+coherent product and guided start rather than discovering several repositories in the correct
+order. Two legitimate installation paths:
 
 - **Reply-connected path** — Reply CLI detects the platform, installs Jason and relevant
   skills, configures the Reply plugin, and connects the user's Reply account/profile;
-- **standalone OSS path** — a user or their coding agent installs Jason from the public
-  repository or platform release assets without requiring Reply CLI.
+- **standalone path** — a user or their coding agent installs Jason from the public
+  repository's release assets without requiring Reply CLI.
 
 Reply CLI is a convenient installer, authentication surface, and default provider tool — not
 a licensing gate around Runtime. A standalone install never silently implies a Reply
@@ -1370,7 +1372,9 @@ distributable binaries. CI builds and tests supported self-contained assets and 
 versioned GitHub Release artifacts with integrity metadata, release notes, and the platform
 signing or notarization required for Windows and macOS. GitHub Releases can serve as the
 binary store. This mechanism describes artifact integrity and update compatibility; it does
-not impose a roadmap, and public source increments are not atomic product releases.
+not impose a roadmap, and source increments are not atomic product releases. The private
+repository's pipeline publishes each release in the public repository, together with the open set
+at that version, through a pull request a person reviews.
 
 ### 15.8 Update responsibility
 
@@ -1397,7 +1401,7 @@ The repository is organised by deliverable, not by one language's convention, be
 carries the runtime, the plugin marketplace and the skills together:
 
 ```text
-jason-ai/
+jason-internal/
 ├── runtime/               all C#: Jason.slnx, Directory.Build.props
 │   ├── src/Jason.App      the single published executable; routes its arguments into the
 │   │                      cli, runtime-service and plugin-host modes
@@ -1413,9 +1417,14 @@ jason-ai/
 │                          relative path. A different thing from plugins/ above — that one holds
 │                          JavaScript that executes provider operations, this one holds no code
 ├── docs/                  maintained documentation
+├── install/               the install scripts and the update feed's schema
 ├── global.json            pins the .NET SDK; commands run from the repository root
 └── README.md  CLAUDE.md  LICENSE
 ```
+
+The public repository, `reply-team/jason-ai`, holds `plugins/`, `skills/`, `.claude-plugin/`,
+`install/`, three pages and the contracts directory under `docs/`, and the root files a release
+publishes (`.github/publish/open-set.txt` lists them all); this repository holds all of it.
 
 Project references enforce two invariants at compile time: the CLI can only reach the runtime
 through the Runtime API (INV-API-001, INV-AUTH-002), and the runtime library references neither
@@ -1650,10 +1659,11 @@ original chat session.
 
 | ID | Accepted decision |
 |---|---|
-| DEC-PROD-001 | The product is open-source Jason AI: a local-first, vendor-neutral SDR domain runtime and coherent product shell. |
+| DEC-PROD-001 | The product is Jason AI, an AI SDR harness: a local-first, vendor-neutral SDR domain runtime distributed as closed-source binaries, together with open skills, contracts, plugins, documentation and install path, presented as one coherent product. |
 | DEC-PROD-002 | The product combines deterministic Runtime, skill-guided AI reasoning, and provider execution plugins. |
-| DEC-OSS-001 | Runtime, contracts, skills, and the public plugin mechanism remain open source; hosted provider capabilities remain external services. |
+| DEC-OSS-002 | Contracts, skills, the public plugin mechanism, documentation and the install path are open (MIT) and published in `reply-team/jason-ai`; the runtime's source is not published and its binaries are released there under the runtime's own licence; hosted provider capabilities remain external services. |
 | DEC-ENTRY-001 | `reply-team/jason-ai` is the intended primary public product entry point. |
+| DEC-REPO-001 | Two repositories, resolving DEF-REPO-001. `reply-team/jason-internal` (private) is the source of truth for the whole product including the open set; `reply-team/jason-ai` (public) is the product entry point, a release-aligned published copy of the open set, and the binary store. Publication is release-triggered, deterministic, and lands through a reviewed pull request; the public repository never describes a runtime that has not been released. |
 | DEC-REPLY-001 | Reply is the configured ready-to-use default provider and commercial execution path, not a hard-coded dependency. |
 | DEC-TOPO-001 | One user-scoped Runtime installation manages multiple logically isolated business campaigns for one OS user. |
 | DEC-STATE-001 | Runtime API is the only supported external boundary for authoritative Jason state. |
@@ -1700,7 +1710,7 @@ original chat session.
 | DEC-ADP-007 | Plugin packages and candidate routes are activated by explicit, validated, atomic Runtime-controlled reload. |
 | DEC-PLAT-001 | Runtime is implemented in .NET and distributed as platform-specific self-contained builds. |
 | DEC-DATA-001 | EF Core is selected; Dapper is excluded; Native AOT is deferred until compatible and low-risk. |
-| DEC-INSTALL-001 | Standalone OSS and Reply-assisted installation are both legitimate paths to the same user Runtime. |
+| DEC-INSTALL-001 | Standalone and Reply-assisted installation are both legitimate paths to the same user Runtime. |
 | DEC-UPDATE-001 | Runtime may advertise updates; a short-lived CLI/installer performs controlled replacement. |
 | DEC-INFRA-001 | Docker, server database, message broker, and vendor-specific background services are not required by the local architecture. |
 | DEC-DOC-001 | This document describes the complete target vision without releases, milestones, implementation order, or backlog decomposition. |
@@ -1762,6 +1772,7 @@ architecture is explicitly revised with new evidence.
 | SUP-STATE-001 | Goals, plans, work items, schedules, and execution history as authoritative Markdown/YAML files. | SQLite-backed Runtime state accessed through Runtime API. |
 | SUP-STATE-002 | Skills or agents operating a parallel file-based durable runtime. | No parallel skills-only Markdown runtime mode. |
 | SUP-ORCH-001 | A daemon that scans workspaces and infers readiness/status from files. | A deterministic domain Runtime owns readiness and state transactionally. |
+| SUP-OSS-001 | Runtime, contracts, skills, and the public plugin mechanism remain open source; hosted provider capabilities remain external services. | DEC-OSS-002: the contracts, skills, plugin mechanism, documentation and install path are open; the runtime's source is not published. |
 
 ### 20.2 Rejected under the accepted architecture
 
@@ -1838,7 +1849,6 @@ are visible — none of them should be read as settled or implemented.
 | DEF-DIST-001 | Exact supported OS/architecture matrix, signing/notarization pipeline, installer behavior. | Platform-specific self-contained builds and GitHub release assets remain selected. |
 | DEF-UPDATE-001 | Staging layout, drain timeout, backup format, migration health checks, rollback, repair. | Runtime does not self-replace; a short-lived control process owns updates. |
 | DEF-PRODUCT-001 | Golden path, onboarding narrative, product success criteria, demonstration flow. | The complete architecture remains independent of delivery order. |
-| DEF-REPO-001 | Final repository/component ownership and packaging across the ecosystem repositories. | `jason-ai` remains the primary product entry point; users should see one coherent product. |
 | DEF-PLAN-001 | Backlog decomposition, implementation sequence, technical spikes, testing strategy, delivery governance. | This vision is the source input and contains no roadmap. |
 
 ## 22. Assumptions and known risks
@@ -1854,7 +1864,7 @@ are visible — none of them should be read as settled or implemented.
 | ASM-PROC-001 | Per-invocation child-process startup is insignificant relative to provider/network latency. | Pooling or another worker model may be justified by measurement. |
 | ASM-AGENT-001 | Users adopting Jason generally already possess or will configure an AI agent environment. | Deterministic software remains usable, but the agent-first value proposition weakens. |
 | ASM-REPLY-001 | Reply API/CLI covers enough practical SDR operations to make the official plugin valuable. | The golden path needs narrower claims or additional provider capability. |
-| ASM-OSS-001 | Community extensibility is valuable even if custom plugin creation remains an advanced workflow. | The plugin ecosystem may remain primarily Reply-owned, reducing practical vendor-neutral value. |
+| ASM-OSS-001 | Extensibility by others — plugins and skills written against the published mechanism — is valuable even if custom plugin creation remains an advanced workflow. | The plugin ecosystem may remain primarily Reply-owned, reducing practical vendor-neutral value. |
 
 ### 22.2 Known risks and tensions
 
@@ -1877,7 +1887,7 @@ are visible — none of them should be read as settled or implemented.
 
 | Term | Meaning in this document | Must not be confused with |
 |---|---|---|
-| Open-source Jason AI | The complete local-first OSS product direction described here. | Reply's hosted Jason AI SDR product or a self-hosted Reply clone. |
+| Jason AI | The complete local-first product direction described here: a runtime distributed as binaries, and the open skills, contracts, plugins and install path around it. | Reply's hosted Jason AI SDR product or a self-hosted Reply clone. |
 | Jason Runtime | The one long-running user-scoped deterministic domain process. | Dispatcher alone, Plugin Host, agent host, or a Reply service. |
 | Runtime API | The supported authoritative boundary around Jason state and behavior. | SQLite, CLI command syntax, or a provider API. |
 | Jason CLI | Short-lived administrative and business client of Runtime API. | Reply CLI. |
@@ -1907,7 +1917,7 @@ provider** versus **AI model provider**.
 
 ## 24. Closing synthesis
 
-Open-source Jason AI is designed to make a user's existing AI agents operationally durable
+Jason AI is designed to make a user's existing AI agents operationally durable
 without claiming ownership of those agents or hard-coding one execution vendor.
 
 Runtime provides the deterministic local domain, state authority, lifecycle, safety,

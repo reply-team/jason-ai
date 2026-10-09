@@ -8,7 +8,7 @@ deleted after inspection, unless it is meant as the release.
 -->
 
 Jason {{version}}: the runtime, the CLI and the plugin host, one self-contained executable per platform, built
-from the tag `v{{version}}` by the tests that passed at it.
+from the runtime's source at `v{{version}}` — which is not published — by the tests that passed there.
 
 ## Assets
 
@@ -60,8 +60,7 @@ If this machine ran 0.1.0 with autostart enabled, run `jason runtime autostart e
 ordinary prompt — if that answers Access is denied, follow its message first — then `jason runtime stop` once, then
 `jason runtime start` (or sign in again, with autostart enabled). 0.1.0's logon task started a runtime that outlives a
 sign-out and holds the data directory; until it stops, the runtime this version starts at sign-in finds the directory
-taken and exits. [`docs/release-and-update.md`](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md)
-§8 says why.
+taken and exits.
 
 ## Checking a download by hand
 

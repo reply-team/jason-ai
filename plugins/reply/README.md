@@ -109,7 +109,6 @@ jason route resolve --campaign cmp_… --operation list_membership.add --human
 **There is deliberately no global `route set`.** A global route is a setting, frozen by the same explicit
 act that freezes the plugins it names, so the only way to write one is to edit `settings.json` and
 reload; the CLI refuses `route set` without `--campaign` and says where a global route lives instead.
-[docs/routing.md](../../docs/routing.md) §3 and §4 are the two halves of that.
 
 **And three things that are not true yet.** There is **no install verb**: installing is copying a
 directory, and nothing reads it until a reload. There is **no signing and no publisher identity**: the
@@ -367,8 +366,8 @@ every stop before it runs, and its work waits while its Jason campaign is paused
   approval, so the claim parks the item as `awaiting_approval` with a record of exactly what would be
   enrolled, and nothing reaches Reply until somebody answers — `jason approval list`, then
   `jason approval approve`. Editing the work after the decision parks it again rather than sending
-  something nobody approved. [docs/work-execution.md](../../docs/work-execution.md) §Approvals is the
-  contract; the operation can also be driven through the plugin host by hand, which
+  something nobody approved. The approval belongs to the operation's contract, not to this package; the
+  operation can also be driven through the plugin host by hand, which
   [docs/plugins.md](../../docs/plugins.md) §7 and §12 say how to do.
 - **`campaign.get` answers no counts.** `counts` is `{}`, which is the contract's way of saying the
   provider reports none: a Reply sequence carries no people counts of its own, and the one count Reply
@@ -476,5 +475,6 @@ absorbed by releasing the package, with no runtime release involved.
   and what this version of the mechanism cannot do.
 - [docs/contracts/](../../docs/contracts/README.md) — the operations themselves: one document each, with
   the schemas, the published fixtures and the conformance list a plugin has to demonstrate.
-- [docs/routing.md](../../docs/routing.md) — which plugin performs an operation for a campaign, which
-  account it works in, and every reason a claim refuses provider work.
+- `jason route resolve --campaign <id> --operation <name> --human` — which plugin and which account a claim
+  would use for a campaign's operation, and why; a claim refuses provider work with its reason's own code,
+  `no_route` when nothing routes it.
