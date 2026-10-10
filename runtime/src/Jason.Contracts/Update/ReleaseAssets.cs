@@ -66,6 +66,23 @@ public static class ReleaseAssets
     public static string ExecutableName { get; } = OperatingSystem.IsWindows() ? "jason.exe" : "jason";
 
     /// <summary>
+    /// The notices an archive carries beside the executable, by the names the archive gives them: the runtime's licence
+    /// and the third-party notices. Releases from 0.2.0 to 0.5.0 carry the first alone.
+    /// </summary>
+    public static IReadOnlyList<string> Notices { get; } = ["LICENSE", "THIRD-PARTY-NOTICES"];
+
+    /// <summary>
+    /// The name a notice is kept under beside the executable, wherever the executable is - installed, staged or kept for a
+    /// rollback: prefixed, so that a directory other tools share holds no bare <c>LICENSE</c> of Jason's, and so that the
+    /// uninstall can remove it by name.
+    /// </summary>
+    public static string NoticeFileName(string notice) => "jason-" + notice;
+
+    /// <summary>A notice's path beside an executable.</summary>
+    public static string NoticeBeside(string executable, string notice) =>
+        Path.Combine(Path.GetDirectoryName(executable) ?? string.Empty, NoticeFileName(notice));
+
+    /// <summary>
     /// Whether a name read from a feed is a file name and nothing else: ASCII letters, digits, dot, dash and
     /// underscore, starting with a letter or a digit.
     /// </summary>

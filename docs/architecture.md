@@ -1419,7 +1419,7 @@ jason-internal/
 ├── docs/                  maintained documentation
 ├── install/               the install scripts and the update feed's schema
 ├── global.json            pins the .NET SDK; commands run from the repository root
-└── README.md  CLAUDE.md  LICENSE
+└── README.md  CLAUDE.md  LICENSE  LICENSE-RUNTIME.md  THIRD-PARTY-NOTICES
 ```
 
 The public repository, `reply-team/jason-ai`, holds `plugins/`, `skills/`, `.claude-plugin/`,

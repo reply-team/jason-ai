@@ -18,20 +18,129 @@ public class UpdateStagerTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>
+    /// The executable, and each notice the archive carries beside it, staged under the name it is kept under beside the
+    /// executable. Nothing else comes out.
+    /// </summary>
     [Fact]
-    public async Task A_staged_release_is_the_one_file_a_release_carries()
+    public async Task A_staged_release_is_the_executable_and_the_notices_its_archive_carries()
     {
         using var dir = new TempTree();
-        using var release = new FakeRelease(Next);
+        var asset = ReleaseAssets.For(FakeRelease.Rid);
+        using var release = new FakeRelease(Next, archive: FakeRelease.ArchiveOf(asset,
+        [
+            new FakeRelease.Entry(ReleaseAssets.ExecutableName, "jason 0.2.0"),
+            new FakeRelease.Entry("LICENSE", "the licence"),
+            new FakeRelease.Entry("THIRD-PARTY-NOTICES", "the notices"),
+            new FakeRelease.Entry("README.md", "not a notice"),
+        ]));
 
         var staged = await StageAsync(release, dir);
 
         Assert.Equal(Path.Combine(dir.Root, "update", "staged", "0.2.0", ReleaseAssets.ExecutableName), staged);
-        Assert.True(File.Exists(staged));
-
-        // The licence travelled in the archive and is not what an update installs: one file comes out.
-        Assert.Equal([ReleaseAssets.ExecutableName], Directory.EnumerateFiles(Path.GetDirectoryName(staged)!).Select(Path.GetFileName));
+        Assert.Equal(
+            new Dictionary<string, string>
+            {
+                [ReleaseAssets.ExecutableName] = "jason 0.2.0",
+                ["jason-LICENSE"] = "the licence",
+                ["jason-THIRD-PARTY-NOTICES"] = "the notices",
+            },
+            Staged(staged));
     }
+
+    /// <summary>A release from before 0.6.0 carries its licence alone, and an archive may carry no notice at all.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_release_without_a_notice_stages_none_of_that_name(bool licence)
+    {
+        using var dir = new TempTree();
+        var asset = ReleaseAssets.For(FakeRelease.Rid);
+        FakeRelease.Entry[] entries = licence
+            ? [new(ReleaseAssets.ExecutableName, "jason 0.2.0"), new("LICENSE", "the licence")]
+            : [new(ReleaseAssets.ExecutableName, "jason 0.2.0")];
+        using var release = new FakeRelease(Next, archive: FakeRelease.ArchiveOf(asset, entries));
+
+        var staged = await StageAsync(release, dir);
+
+        var expected = new Dictionary<string, string> { [ReleaseAssets.ExecutableName] = "jason 0.2.0" };
+        if (licence)
+        {
+            expected["jason-LICENSE"] = "the licence";
+        }
+
+        Assert.Equal(expected, Staged(staged));
+    }
+
+    /// <summary>
+    /// A notice is taken by the rule the executable is taken by: an entry whose whole name is the notice's, a regular
+    /// file, the first such entry. Under either name, a path, a directory, a link and another case of the name are
+    /// ignored, and of two regular entries the first is staged.
+    /// </summary>
+    [Theory]
+    [InlineData("LICENSE", "nested")]
+    [InlineData("THIRD-PARTY-NOTICES", "nested")]
+    [InlineData("LICENSE", "parent")]
+    [InlineData("THIRD-PARTY-NOTICES", "parent")]
+    [InlineData("LICENSE", "absolute")]
+    [InlineData("THIRD-PARTY-NOTICES", "absolute")]
+    [InlineData("LICENSE", "directory")]
+    [InlineData("THIRD-PARTY-NOTICES", "directory")]
+    [InlineData("LICENSE", "link")]
+    [InlineData("THIRD-PARTY-NOTICES", "link")]
+    [InlineData("LICENSE", "case")]
+    [InlineData("THIRD-PARTY-NOTICES", "case")]
+    [InlineData("LICENSE", "dot-slash")]
+    [InlineData("THIRD-PARTY-NOTICES", "dot-slash")]
+    [InlineData("LICENSE", "duplicate")]
+    [InlineData("THIRD-PARTY-NOTICES", "duplicate")]
+    [InlineData("LICENSE", "link, then the file")]
+    [InlineData("THIRD-PARTY-NOTICES", "link, then the file")]
+    public async Task A_notice_is_taken_only_as_the_first_regular_entry_of_exactly_its_name(string notice, string kind)
+    {
+        using var dir = new TempTree();
+        var asset = ReleaseAssets.For(FakeRelease.Rid);
+        var other = notice == "LICENSE" ? "THIRD-PARTY-NOTICES" : "LICENSE";
+        FakeRelease.Entry[] hostile = kind switch
+        {
+            "nested" => [new("x/" + notice, "hostile")],
+            "parent" => [new("../" + notice, "hostile")],
+            "absolute" => [new("/" + notice, "hostile")],
+            "directory" => [new(notice, string.Empty, FakeRelease.EntryKind.Directory)],
+            "link" => [new(notice, other, FakeRelease.EntryKind.SymbolicLink)],
+            "case" => [new(notice.ToLowerInvariant(), "hostile")],
+            "dot-slash" => [new("./" + notice, "hostile")],
+            "duplicate" => [new(notice, "the first"), new(notice, "the second")],
+            "link, then the file" => [new(notice, other, FakeRelease.EntryKind.SymbolicLink), new(notice, "the first")],
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
+        using var release = new FakeRelease(Next, archive: FakeRelease.ArchiveOf(asset,
+        [
+            new FakeRelease.Entry(ReleaseAssets.ExecutableName, "jason 0.2.0"),
+            new FakeRelease.Entry(other, "the other notice"),
+            .. hostile,
+        ]));
+
+        var staged = await StageAsync(release, dir);
+
+        var expected = new Dictionary<string, string>
+        {
+            [ReleaseAssets.ExecutableName] = "jason 0.2.0",
+            [ReleaseAssets.NoticeFileName(other)] = "the other notice",
+        };
+        if (kind is "duplicate" or "link, then the file")
+        {
+            expected[ReleaseAssets.NoticeFileName(notice)] = "the first";
+        }
+
+        Assert.Equal(expected, Staged(staged));
+        Assert.True(Directory.EnumerateFiles(dir.Root).ToList() is [], $"an archive with {kind} put a file outside the staged directory");
+    }
+
+    /// <summary>Every file in the staged directory, by name, with its text.</summary>
+    private static Dictionary<string, string> Staged(string executable) =>
+        Directory.EnumerateFiles(Path.GetDirectoryName(executable)!)
+            .ToDictionary(file => Path.GetFileName(file), File.ReadAllText, StringComparer.Ordinal);
 
     /// <summary>The download is fetched from the feed's own directory, so a feed cannot say where to download from.</summary>
     [Fact]
@@ -86,8 +195,8 @@ public class UpdateStagerTests
     }
 
     /// <summary>
-    /// Every hostile archive shape, and the answer to all of them is the same: take the one entry whose whole
-    /// name is the executable, and ignore the rest. There is no path to sanitise because no path is ever used.
+    /// Every hostile archive shape, and the answer to all of them is the same: take the entries whose whole names are
+    /// the executable's and the notices', and ignore the rest. There is no path to sanitise because no path is ever used.
     /// </summary>
     [Theory]
     [MemberData(nameof(HostileArchives))]
@@ -109,10 +218,11 @@ public class UpdateStagerTests
         var executable = await StageAsync(release, dir);
         Assert.Equal($"content of {ReleaseAssets.ExecutableName}", File.ReadAllText(executable));
 
-        // And nothing else came out anywhere: not beside it, not above it.
+        // And nothing else came out anywhere: not beside it but its notices, not above it.
+        string[] notices = [.. ReleaseAssets.Notices.Where(entries.Contains).Select(ReleaseAssets.NoticeFileName)];
         Assert.Equal(
-            [ReleaseAssets.ExecutableName],
-            Directory.EnumerateFiles(Path.GetDirectoryName(executable)!).Select(Path.GetFileName));
+            [ReleaseAssets.ExecutableName, .. notices],
+            Directory.EnumerateFiles(Path.GetDirectoryName(executable)!).Select(Path.GetFileName).OrderBy(name => name == ReleaseAssets.ExecutableName ? 0 : 1).ThenBy(name => name, StringComparer.Ordinal));
         Assert.True(
             Directory.EnumerateFiles(dir.Root).ToList() is [],
             $"an archive with {what} put a file where nothing but the staged executable should be");

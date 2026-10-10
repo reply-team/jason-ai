@@ -1,6 +1,7 @@
 using Jason.Cli.Discovery;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Skills;
+using Jason.Contracts.Update;
 
 namespace Jason.Cli.Uninstall;
 
@@ -79,8 +80,18 @@ public static class UninstallReader
             purgeData,
             env.Paths.Root,
             notificationKeys,
-            registryUnreadable);
+            registryUnreadable,
+            Notices(executable));
     }
+
+    /// <summary>
+    /// The notice files the installer keeps beside the executable, by exactly their names there, where they are present.
+    /// Nothing else is taken for them: a <c>LICENSE</c> in a directory other tools share is another tool's.
+    /// </summary>
+    private static IReadOnlyList<string> Notices(string? executable) =>
+        executable is null
+            ? []
+            : [.. ReleaseAssets.Notices.Select(notice => ReleaseAssets.NoticeBeside(executable, notice)).Where(File.Exists)];
 
     /// <summary>
     /// The keys of the toast's registration present in this account; where the registry cannot be read, none and why —

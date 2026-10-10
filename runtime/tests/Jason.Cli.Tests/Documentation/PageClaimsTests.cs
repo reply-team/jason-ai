@@ -275,6 +275,75 @@ public class PageClaimsTests
     }
 
     /// <summary>
+    /// Beside every install command a person or an agent is handed, the same sentence says that installing is accepting
+    /// the runtime's licence, linked as each place can link it: within the tree on the pages a reader reads in it, at the
+    /// release's own tag in the release's notes, and at <c>main</c> in the prompt, which is pasted outside the tree and
+    /// installs the latest release.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md", "[LICENSE-RUNTIME.md](LICENSE-RUNTIME.md)")]
+    [InlineData("docs/INSTALL.md", "[LICENSE-RUNTIME.md](../LICENSE-RUNTIME.md)")]
+    [InlineData(".github/release-notes-template.md", "<https://github.com/reply-team/jason-ai/blob/v{{version}}/LICENSE-RUNTIME.md>")]
+    public void Every_page_with_the_install_line_says_installing_is_accepting_the_licence(string page, string link)
+    {
+        var text = Page(page.Split('/'));
+        var sentence = $"By installing Jason you accept the Jason Runtime Licence: {link}. If you do not accept it, do not install Jason.";
+
+        var oneLiner = text.IndexOf("install.ps1 | iex", StringComparison.Ordinal);
+        Assert.True(oneLiner > 0, $"{page} has no one-liner.");
+        var said = Flat(text).IndexOf(sentence, StringComparison.Ordinal);
+        Assert.True(said > Flat(text[..oneLiner]).Length, $"{page} does not say, after its one-liners: {sentence}");
+    }
+
+    [Fact]
+    public void The_install_prompt_says_installing_is_accepting_the_licence_at_main()
+    {
+        Assert.Contains(
+            "By installing Jason you accept the Jason Runtime Licence: <https://github.com/reply-team/jason-ai/blob/main/LICENSE-RUNTIME.md>. If you do not accept it, do not install Jason.",
+            Flat(Prompt()),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The pages that say what an install leaves say it keeps the two notice files beside the executable, under the names
+    /// it keeps them as; that a run over the installed version writes one that is missing; and that a person who places
+    /// the executable by hand keeps them too. The uninstall's pages say the files go with it, by name.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md", "with its licence and the third-party notices beside it, as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`")]
+    [InlineData("docs/INSTALL.md", "with its licence and the third-party notices beside it, as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`")]
+    [InlineData("README.md", "every archive carries the licence and the third-party notices, and an install keeps both beside the executable as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`")]
+    [InlineData("docs/INSTALL.md", "unless a licence file is missing beside the executable")]
+    [InlineData(".github/release-notes-template.md", "unless a licence file is missing beside the executable")]
+    [InlineData(".github/release-notes-template.md", "If you then put the executable in place by hand, keep `LICENSE` and `THIRD-PARTY-NOTICES` beside it, named `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`.")]
+    [InlineData("docs/INSTALL.md", "nothing but the executable, its two notice files (`jason-LICENSE`, `jason-THIRD-PARTY-NOTICES`) and the `jason.previous.exe` an upgrade can leave beside it")]
+    [InlineData("docs/INSTALL.md", "on macOS and Linux it removes those two files by name from a directory other tools share")]
+    [InlineData("README.md", "holds nothing but Jason — the executable, its two notice files and what an upgrade left beside it")]
+    [InlineData("docs/release-and-update.md", "holds nothing but Jason — the executable, its two notice files and what an upgrade left beside it")]
+    [InlineData("docs/release-and-update.md", "beside the executable only the executable and its two notice files")]
+    public void The_pages_say_where_the_notice_files_are_kept_and_that_they_go(string page, string said) =>
+        Assert.Contains(said, Flat(Page(page.Split('/'))), StringComparison.Ordinal);
+
+    /// <summary>
+    /// Every archive carries <c>THIRD-PARTY-NOTICES</c> beside the executable and <c>LICENSE</c>, and each page that says
+    /// what an archive holds says so: a page that listed the other two "and nothing else" would tell a reader the
+    /// notices were never given to them.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/release-and-update.md", "**An archive holds the executable, `LICENSE` and `THIRD-PARTY-NOTICES`, and nothing else.**")]
+    [InlineData("docs/release-and-update.md", "| `jason-win-x64.zip` | the Windows executable, `LICENSE` (the runtime's licence) and `THIRD-PARTY-NOTICES` |")]
+    [InlineData("docs/release-and-update.md", "| `jason-linux-x64.tar.gz` | the Linux executable, `LICENSE` (the runtime's licence) and `THIRD-PARTY-NOTICES` |")]
+    [InlineData("docs/release-and-update.md", "| `jason-osx-arm64.tar.gz` | the macOS (Apple silicon) executable, `LICENSE` (the runtime's licence) and `THIRD-PARTY-NOTICES` |")]
+    [InlineData(".github/release-notes-template.md", "Each archive holds the executable, `LICENSE` (the runtime's licence; the repository's MIT does not cover the runtime) and `THIRD-PARTY-NOTICES`, nothing else.")]
+    public void The_pages_say_every_archive_carries_the_notices(string page, string said)
+    {
+        var text = Flat(Page(page.Split('/')));
+
+        Assert.Contains(said, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("holds the executable and `LICENSE`", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A build from source leaves debugging symbols beside the executable, and §3 says to copy the executable alone.
     /// A directory that holds the <c>.pdb</c> files as well is not one the uninstall takes for Jason's own, so a
     /// reader who copied the whole publish folder would keep both its PATH entry and the directory. The golden path
@@ -374,7 +443,7 @@ public class PageClaimsTests
     }
 
     /// <summary>The digest of the README's prompt.</summary>
-    private const string PromptDigest = "sha256:ab8f5a1fb688de67808caa1986110482c5aaffe0222ed33d86786f53ab008332";
+    private const string PromptDigest = "sha256:2f2eed5c109e4cdb0d37037d942c5af42f256f8f9190cfe402c6027fc0e1779b";
 
     /// <summary>
     /// The text between the line that opens a fence and the next line that is exactly three backticks, each line

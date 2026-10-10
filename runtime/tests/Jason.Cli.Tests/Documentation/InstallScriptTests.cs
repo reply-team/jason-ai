@@ -15,7 +15,8 @@ namespace Jason.Cli.Tests.Documentation;
 /// environment of their own and a feed of their own and read what it does; they run on Windows, because the
 /// script refuses any other platform before it does anything else. <c>install.sh</c> has no such luck — the
 /// machine that runs this suite may have no <c>sh</c> at all, and the one Windows has is Git Bash, which the
-/// script refuses by name — so its rules stay shape guards, and the ubuntu job is what runs it.
+/// script refuses by name — so its rules here stay shape guards, and the ubuntu job is what runs it. What the two
+/// scripts do with the licence is run on each script's own platforms, in <see cref="InstallNoticesTests"/>.
 /// </para>
 /// <para>
 /// The proof that a script installs a real archive and answers with the right version is the CI job that runs
@@ -245,14 +246,18 @@ public partial class InstallScriptTests
         Assert.Contains("0.0.1", stderr, StringComparison.Ordinal);
     }
 
-    /// <summary>The same rule in <c>install.sh</c>: compared, and compared before the archive is downloaded.</summary>
+    /// <summary>
+    /// The same rule in <c>install.sh</c>: compared, and compared before the archive is downloaded. The download is a
+    /// function, written above the steps and called from two of them, so what is read is the first call.
+    /// </summary>
     [Fact]
     public void Install_sh_compares_the_manifest_with_the_version_that_was_asked_for()
     {
         var lines = Code("install.sh").Split('\n');
         var compared = Array.FindIndex(lines, line => line.Contains("\"$LATEST\"", StringComparison.Ordinal) && line.Contains("\"$VERSION\"", StringComparison.Ordinal));
-        var downloaded = Array.FindIndex(lines, line => line.Contains("fetch \"$ASSET\"", StringComparison.Ordinal));
+        var downloaded = Array.FindIndex(lines, line => line.Trim() == "download_archive");
 
+        Assert.Contains(lines, line => line.Contains("fetch \"$ASSET\"", StringComparison.Ordinal));
         Assert.True(compared >= 0, "install.sh never compares the manifest's version with the one --version asked for.");
         Assert.True(downloaded > compared, "install.sh downloads the archive before checking that the manifest names the version that was asked for.");
         Assert.Contains(lines, line => line.Contains("fail ", StringComparison.Ordinal) && line.Contains("$VERSION", StringComparison.Ordinal) && line.Contains("$LATEST", StringComparison.Ordinal));
@@ -322,11 +327,12 @@ public partial class InstallScriptTests
     /// The unpacked executable is asked for its version before it is renamed into place, so that nothing that
     /// does not start is ever installed over something that did — a Linux without the ICU library the runtime
     /// needs, say, where the program aborts before it prints anything. In the text: the last <c>--version</c>
-    /// before the install rename comes after the unpack.
+    /// before the executable's own rename into place comes after the executable's own unpack. Those two lines are
+    /// named whole: each script now also unpacks and renames its notice files, in functions above the steps.
     /// </summary>
     [Theory]
-    [InlineData("install.sh", "tar -x", "mv -f")]
-    [InlineData("install.ps1", "Expand-Archive", "Move-Item")]
+    [InlineData("install.sh", "tar -xzf \"$TMP/$ASSET\" -C \"$TMP/unpacked\" jason", "mv -f \"$INSTALL_DIR/jason.installing.$$\" \"$TARGET\"")]
+    [InlineData("install.ps1", "$unpacked = Expand-Checked (Get-CheckedArchive)", "Move-Item -LiteralPath $fresh -Destination $target")]
     public void The_unpacked_executable_is_started_before_it_is_installed(string script, string unpack, string install)
     {
         var code = Code(script);
@@ -541,7 +547,7 @@ public partial class InstallScriptTests
         try { Invoke-Expression (Get-Content -LiteralPath '@SCRIPT@' -Raw) } catch { }
 
         "ErrorActionPreference=$ErrorActionPreference"
-        foreach ($name in 'rid', 'asset', 'base', 'repositoryUrl', 'fromWeb', 'tmp', 'latest', 'target', 'installed', 'archive', 'expected', 'actual', 'unpacked', 'started', 'previous', 'directory', 'userPath', 'entries') {
+        foreach ($name in 'rid', 'asset', 'base', 'repositoryUrl', 'licenceBase', 'core', 'fromWeb', 'tmp', 'latest', 'target', 'installed', 'archive', 'expected', 'actual', 'unpacked', 'started', 'previous', 'directory', 'userPath', 'entries') {
             if (Test-Path "Variable:$name") { "left behind: $name" }
         }
         if (Test-Path Function:Install-Jason) { "left behind: Install-Jason" }

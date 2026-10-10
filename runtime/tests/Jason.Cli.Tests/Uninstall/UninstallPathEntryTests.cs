@@ -404,9 +404,15 @@ public class UninstallPathEntryTests
         Assert.Contains(Path.Combine(home, ".zprofile"), note, StringComparison.Ordinal);
     }
 
-    /// <summary>What <c>install.sh</c> writes into an install directory is the executable, and nothing else.</summary>
+    /// <summary>
+    /// What <c>install.sh</c> writes into an install directory is the executable and its two notice files, and nothing
+    /// else: a bare <c>LICENSE</c> is another tool's.
+    /// </summary>
     [Theory]
     [InlineData(new[] { "jason" }, true)]
+    [InlineData(new[] { "jason", "jason-LICENSE", "jason-THIRD-PARTY-NOTICES" }, true)]
+    [InlineData(new[] { "jason", "jason-LICENSE", "LICENSE" }, false)]
+    [InlineData(new[] { "jason", "jason-license" }, false)]
     [InlineData(new string[0], true)]
     [InlineData(new[] { "jason", "claude", "uv" }, false)]
     [InlineData(new[] { "jason", "jason.exe" }, false)]
@@ -459,6 +465,9 @@ public class UninstallPathEntryTests
     [Theory]
     [InlineData(new[] { "jason.exe" }, true)]
     [InlineData(new[] { "JASON.EXE", "jason.previous.exe" }, true)]
+    [InlineData(new[] { "jason.exe", "jason-LICENSE", "jason-THIRD-PARTY-NOTICES", "jason.previous.exe" }, true)]
+    [InlineData(new[] { "jason.exe", "JASON-LICENSE" }, true)]
+    [InlineData(new[] { "jason.exe", "jason-LICENSE", "LICENSE" }, false)]
     [InlineData(new string[0], true)]
     [InlineData(new[] { "jason.exe", "python.exe" }, false)]
     [InlineData(new[] { "winget.exe", "jason.exe", "Microsoft.DesktopAppInstaller_8wekyb3d8bbwe" }, false)]

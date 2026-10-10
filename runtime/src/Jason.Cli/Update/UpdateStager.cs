@@ -7,16 +7,16 @@ namespace Jason.Cli.Update;
 
 /// <summary>
 /// The first step of an update: fetch the archive a manifest names for this platform, prove it is the file the
-/// manifest described, and take the one executable out of it.
+/// manifest described, and take the executable out of it, with the notices the archive carries beside it.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Everything here treats the archive as hostile, because it arrives over the network from a page this process
 /// did not write. The digest is computed while the bytes are written, so nothing unverified is ever unpacked;
-/// the name of the file that comes out is composed from this platform, never from the archive; and exactly one
-/// entry is taken — by name, with every other entry ignored rather than filtered. Ignoring is what kills the
-/// whole family of "zip slip" tricks outright: there is no path to sanitise, because no path from the archive
-/// is ever used.
+/// the names of the files that come out are composed from this platform, never from the archive; and the entries
+/// taken are the executable and the notices — each by name, with every other entry ignored rather than filtered.
+/// Ignoring is what kills the whole family of "zip slip" tricks outright: there is no path to sanitise, because no
+/// path from the archive is ever used.
 /// </para>
 /// <para>
 /// A download is bounded in size and in time. A feed that answers with an endless stream must cost this process
@@ -33,7 +33,7 @@ public sealed class UpdateStager(HttpClient client)
 
     /// <summary>
     /// Downloads the artifact this platform needs, verifies it and unpacks the executable, leaving the staged
-    /// directory holding exactly that file.
+    /// directory holding exactly that file and the notices the archive carries beside it.
     /// </summary>
     /// <returns>The path of the staged executable.</returns>
     /// <exception cref="UpdateException">The download failed, or what arrived was not what the manifest described.</exception>
@@ -162,45 +162,72 @@ public sealed class UpdateStager(HttpClient client)
     }
 
     /// <summary>
-    /// Takes the one entry this platform's release is supposed to carry, and ignores everything else in the
-    /// archive — including anything whose name is a path.
+    /// Takes the entries this platform's release is supposed to carry — the executable, which it must, and each notice
+    /// beside it, which it may — and ignores everything else in the archive, including anything whose name is a path.
+    /// A notice is staged beside the executable under the name it is kept under there.
     /// </summary>
+    /// <remarks>
+    /// One rule for each of them: the first regular file whose whole name is the one wanted. A directory, a link and an
+    /// entry whose name is a path are never taken, and a second entry of the same name is ignored like any other.
+    /// </remarks>
     private static void Unpack(string archive, string asset, string destination)
     {
-        var wanted = ReleaseAssets.ExecutableName;
+        var wanted = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [ReleaseAssets.ExecutableName] = destination,
+        };
+        foreach (var notice in ReleaseAssets.Notices)
+        {
+            wanted[notice] = ReleaseAssets.NoticeBeside(destination, notice);
+        }
+
+        var taken = new HashSet<string>(StringComparer.Ordinal);
         if (asset.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
         {
             using var zip = ZipFile.OpenRead(archive);
 
             // FullName and not Name: an entry called `..\jason.exe` has the name `jason.exe`, and matching on
-            // that would take it. The whole name must be the file this build is looking for.
-            var entry = zip.Entries.FirstOrDefault(e => string.Equals(e.FullName, wanted, StringComparison.Ordinal))
-                ?? throw Missing(asset, wanted);
-
-            using var source = entry.Open();
-            using var file = File.Create(destination);
-            source.CopyTo(file);
-            return;
-        }
-
-        using var compressed = File.OpenRead(archive);
-        using var gzip = new GZipStream(compressed, CompressionMode.Decompress);
-        using var tar = new TarReader(gzip);
-        while (tar.GetNextEntry() is { } entry)
-        {
-            if (entry.EntryType is not (TarEntryType.RegularFile or TarEntryType.V7RegularFile)
-                || !string.Equals(entry.Name, wanted, StringComparison.Ordinal))
+            // that would take it. The whole name must be the file this build is looking for. A directory's whole name
+            // ends with a slash, and a link is what a Unix zip tool marks as one in the entry's mode.
+            foreach (var entry in zip.Entries)
             {
-                continue;
-            }
+                if (!wanted.TryGetValue(entry.FullName, out var path) || IsZipLink(entry) || !taken.Add(entry.FullName))
+                {
+                    continue;
+                }
 
-            using var file = File.Create(destination);
-            entry.DataStream!.CopyTo(file);
-            return;
+                using var source = entry.Open();
+                using var file = File.Create(path);
+                source.CopyTo(file);
+            }
+        }
+        else
+        {
+            using var compressed = File.OpenRead(archive);
+            using var gzip = new GZipStream(compressed, CompressionMode.Decompress);
+            using var tar = new TarReader(gzip);
+            while (tar.GetNextEntry() is { } entry)
+            {
+                if (entry.EntryType is not (TarEntryType.RegularFile or TarEntryType.V7RegularFile)
+                    || !wanted.TryGetValue(entry.Name, out var path)
+                    || !taken.Add(entry.Name))
+                {
+                    continue;
+                }
+
+                using var file = File.Create(path);
+                entry.DataStream!.CopyTo(file);
+            }
         }
 
-        throw Missing(asset, wanted);
+        if (!taken.Contains(ReleaseAssets.ExecutableName))
+        {
+            throw Missing(asset, ReleaseAssets.ExecutableName);
+        }
     }
+
+    /// <summary>Whether a zip entry is a link: the file type in the Unix mode a zip tool keeps in the high half of its attributes.</summary>
+    private static bool IsZipLink(ZipArchiveEntry entry) => ((entry.ExternalAttributes >> 16) & 0xF000) == 0xA000;
 
     private static UpdateException Missing(string asset, string wanted) => new(
         UpdateCodes.ArtifactUnexpected,

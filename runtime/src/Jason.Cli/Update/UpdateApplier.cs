@@ -24,10 +24,11 @@ public sealed record UpdateRequest(Uri Feed, SemanticVersion? Version, TimeSpan 
 /// <remarks>
 /// <para>
 /// The order is staged, drained, stopped, kept, swapped, started, healthy, complete. Between <c>kept</c> and
-/// <c>swapped</c> the install path is <b>empty</b> — the old executable has been moved aside and the new one is
-/// not in place yet — and that window is one rename wide. It is also the one window a person cannot get out of
-/// by typing <c>jason update</c>, because there is no <c>jason</c> on the PATH to type: the way out is the copy
-/// of the applier under the data directory, or putting <c>previous/</c> back by hand. Both are on the page.
+/// <c>swapped</c> the install path is <b>empty</b> — the old executable has been moved aside, its notices after it,
+/// and the new one is not in place yet — and that window is a few renames wide. It is also the one window a person
+/// cannot get out of by typing <c>jason update</c>, because there is no <c>jason</c> on the PATH to type: the way
+/// out is the copy of the applier under the data directory, or putting <c>previous/</c> back by hand. Both are on
+/// the page.
 /// </para>
 /// <para>
 /// Health is asked of the runtime rather than of the file. A file that prints the right version proves that a
@@ -394,6 +395,22 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
                 });
 
             SameVolume(ledger.InstallPath, ledger.PreviousPath);
+
+            // What an earlier update kept beside its executable goes before this one's executable takes its place, so the
+            // kept directory never holds one version's executable beside another's notices. Here, and not with the moves
+            // below: until the executable has moved, every notice in the kept directory is the earlier update's.
+            OnDisk(
+                "clearing what an earlier update kept",
+                update.Previous,
+                $"Nothing has been replaced yet. Make sure {update.Root} is a directory this account can write to, then run `jason update apply` again.",
+                () =>
+                {
+                    foreach (var notice in ReleaseAssets.Notices)
+                    {
+                        File.Delete(ReleaseAssets.NoticeBeside(ledger.PreviousPath, notice));
+                    }
+                });
+
             const string Aside = "moving the installed executable aside";
             OnDisk(
                 Aside,
@@ -411,8 +428,31 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             Say(UpdateStep.Kept, "the installed executable is put aside");
         }
 
+        // Its notices follow it, each a move of its own that a resumed update finds done or does: once the executable has
+        // moved, every notice still beside the install path is the one that belongs to it.
+        foreach (var notice in ReleaseAssets.Notices)
+        {
+            var installed = ReleaseAssets.NoticeBeside(ledger.InstallPath, notice);
+            if (File.Exists(installed))
+            {
+                const string NoticeAside = "moving the installed notices aside";
+                OnDisk(
+                    NoticeAside,
+                    installed,
+                    EmptyInstallPath(ledger),
+                    () => ExecutableMove.Run(env, HeldFiles, clock, Pause, NoticeAside, installed, EmptyInstallPath(ledger), () => File.Move(installed, ReleaseAssets.NoticeBeside(ledger.PreviousPath, notice), overwrite: true)));
+            }
+        }
+
         return ledger;
     }
+
+    /// <summary>
+    /// The way out of the one window this design cannot avoid, where the install path holds no executable: the update
+    /// again, from the applier's own copy when <c>jason</c> is not there to type, or the kept executable put back by hand.
+    /// </summary>
+    private string EmptyInstallPath(UpdateLedger ledger) =>
+        $"There is nothing at the install path until this succeeds: run `jason update apply` again, from {Path.Combine(update.Applier, ReleaseAssets.ExecutableName)} if `jason` is no longer on your PATH, or put {ledger.PreviousPath} back by hand.";
 
     /// <summary>The swap: one rename, and the only moment the install path is not a whole executable ends here.</summary>
     private UpdateLedger Swap(UpdateLedger ledger)
@@ -429,13 +469,30 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
             SameVolume(ledger.StagedPath, ledger.InstallPath);
             const string InPlace = "putting the new executable in place";
-            var remedy = $"There is nothing at the install path until this succeeds: run `jason update apply` again, from {Path.Combine(update.Applier, ReleaseAssets.ExecutableName)} if `jason` is no longer on your PATH, or put {ledger.PreviousPath} back by hand.";
+            var remedy = EmptyInstallPath(ledger);
             OnDisk(
                 InPlace,
                 ledger.InstallPath,
                 remedy,
                 () => ExecutableMove.Run(env, HeldFiles, clock, Pause, InPlace, ledger.StagedPath, remedy, () => File.Move(ledger.StagedPath, ledger.InstallPath)));
             Say(UpdateStep.Swapped, $"{ledger.ToVersion} is at the install path");
+        }
+
+        // The new notices follow it in, each a move of its own. A notice the release did not carry was never staged, and
+        // the one installed under that name went aside with the old executable, so none of that name is left.
+        foreach (var notice in ReleaseAssets.Notices)
+        {
+            var staged = ReleaseAssets.NoticeBeside(ledger.StagedPath, notice);
+            if (File.Exists(staged))
+            {
+                const string NoticeInPlace = "putting the new notices in place";
+                const string Remedy = "The new executable is in place without them: run `jason update apply` again.";
+                OnDisk(
+                    NoticeInPlace,
+                    staged,
+                    Remedy,
+                    () => ExecutableMove.Run(env, HeldFiles, clock, Pause, NoticeInPlace, staged, Remedy, () => File.Move(staged, ReleaseAssets.NoticeBeside(ledger.InstallPath, notice), overwrite: true)));
+            }
         }
 
         return ledger;

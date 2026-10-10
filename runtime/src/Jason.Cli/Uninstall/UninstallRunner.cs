@@ -409,7 +409,7 @@ public static class UninstallRunner
             return;
         }
 
-        string? previousLeft = null;
+        string? installersLeft = null;
         if (plan.PreviousExecutable is { } previous)
         {
             try
@@ -419,10 +419,26 @@ public static class UninstallRunner
             }
             catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
             {
-                previousLeft = previous;
+                installersLeft = previous;
                 problems.Add(
                     $"{NotRemoved(env, previous, exception)} It is the executable an earlier install "
                     + "replaced while it was running, and something may be running it still.");
+            }
+        }
+
+        // The notice files the installer keeps beside the executable, by exactly their names: in a directory other tools
+        // share, nothing that merely resembles them.
+        foreach (var notice in plan.Notices ?? [])
+        {
+            try
+            {
+                env.Removes!.RemoveFile(notice);
+                done.Add($"Removed '{notice}', a notice the installer keeps beside the executable.");
+            }
+            catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)
+            {
+                installersLeft ??= notice;
+                problems.Add($"{NotRemoved(env, notice, exception)} It is a notice the installer keeps beside the executable.");
             }
         }
 
@@ -434,9 +450,9 @@ public static class UninstallRunner
                 {
                     // Not "something this installer did not write" where what is left is the installer's own file,
                     // named among the problems just above.
-                    kept.Add(previousLeft is null
+                    kept.Add(installersLeft is null
                         ? $"Kept '{directory}': something is in it that this installer did not write."
-                        : $"Kept '{directory}': '{previousLeft}' is still in it.");
+                        : $"Kept '{directory}': '{installersLeft}' is still in it.");
                 }
             }
             catch (Exception exception) when (exception is RemovalRefused or IOException or UnauthorizedAccessException)

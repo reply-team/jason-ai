@@ -30,13 +30,19 @@ curl -fsSL https://github.com/reply-team/jason-ai/releases/latest/download/insta
 irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
 ```
 
+By installing Jason you accept the Jason Runtime Licence: [LICENSE-RUNTIME.md](../LICENSE-RUNTIME.md). If you do
+not accept it, do not install Jason.
+
 Both lines install the **latest release**. A repository with no published release has no latest, so if they
 answer 404 there is nothing to install yet — and nothing in this repository to build instead (§3). That is a fact
 about the repository, not a failure of the tool or of your machine, and it is worth saying that way to whoever
 asked you to install it.
 
 Each script works out your platform, downloads the archive for it, **verifies its SHA-256 before unpacking**,
-installs the executable under your own account, and puts that directory on your PATH.
+installs the executable under your own account — with its licence and the third-party notices beside it, as
+`jason-LICENSE` and `jason-THIRD-PARTY-NOTICES` — and puts that directory on your PATH. Run again over the version
+already installed, it downloads nothing and says so, unless a licence file is missing beside the executable: then
+it downloads the archive, checks it the same way, and writes the file, leaving the executable as it is.
 
 On Windows, `install.ps1` waits up to 10 seconds for a file another program holds open — a virus scanner reading
 the executable it has just unpacked or run — before it gives up and says which file. And if the new `jason.exe`
@@ -276,17 +282,19 @@ registered for it — so a logon part-way through cannot start what is going; th
 stop — or is running and does not answer — nothing after that is removed; then, on Windows, the notification
 registration — the AppUserModelID key the toast was shown under, and the two entries Windows made for it at the
 first toast — after the runtime, so its next toast cannot write them back; then the recorded skills; then the
-PATH entry, only where the installer wrote it; then the executable, its install directory, and the native
-libraries a release unpacks the first time it runs — under the temporary directory on Windows, under
-`~/.net` on macOS and Linux.
+PATH entry, only where the installer wrote it; then the executable, its two notice files, its install directory,
+and the native libraries a release unpacks the first time it runs — under the temporary directory on Windows, under
+`~/.net` on macOS and Linux. The notice files go by name: on macOS and Linux it removes those two files by name
+from a directory other tools share, and a `LICENSE` there that is not one of them is another tool's and stays.
 
 "Only where the installer wrote it" is one rule on both platforms: the entry goes only where the installer wrote
 it **and** its directory holds nothing but what the installer puts there, because other programs are on the PATH
 through the same entry. On macOS and Linux the entry is the block the installer appends to a login profile — a
 marker line and the `export` line under it; a line nobody marked is yours and stays, and so does the block where
-the directory holds more than `jason`: `~/.local/bin`, the installer's default, is where other tools install
-too. On Windows the Path carries no marker, so the entry goes only where its directory holds nothing but the
-executable and the `jason.previous.exe` an upgrade can leave beside it. An entry that stays is named in the
+the directory holds more than `jason` and its two notice files: `~/.local/bin`, the installer's default, is where
+other tools install too. On Windows the Path carries no marker, so the entry goes only where its directory holds
+nothing but the executable, its two notice files (`jason-LICENSE`, `jason-THIRD-PARTY-NOTICES`) and the
+`jason.previous.exe` an upgrade can leave beside it. An entry that stays is named in the
 report, with the reason.
 
 On Windows the executable is the file the uninstall is running from, and Windows does not delete the image of a

@@ -1,8 +1,8 @@
 # One packaging step for every place that packages: ci.yml runs it on each pull request, release.yml on a tag.
-# It publishes one platform as a self-contained single-file executable, puts LICENSE beside it, archives the
-# two under the platform's stable asset name, and writes the checksum and the manifest fragment a release is
-# assembled from. The version is an input. The caller decides it — ci.yml asks the tree, release.yml asks the
-# tag — and this action never reads a ref, so both call it the same way.
+# It publishes one platform as a self-contained single-file executable, puts LICENSE and THIRD-PARTY-NOTICES
+# beside it, archives the three under the platform's stable asset name, and writes the checksum and the manifest
+# fragment a release is assembled from. The version is an input. The caller decides it — ci.yml asks the tree,
+# release.yml asks the tag — and this action never reads a ref, so both call it the same way.
 name: Package
 description: Publish one platform of Jason and archive it under its release name, with a checksum and a manifest fragment.
 
@@ -87,20 +87,22 @@ runs:
         EXECUTABLE: ${{ steps.publish.outputs.executable }}
       run: ./.github/scripts/Assert-ApplicationManifest.ps1 -Executable $env:EXECUTABLE
 
-    - name: Put LICENSE beside the executable
+    - name: Put LICENSE and THIRD-PARTY-NOTICES beside the executable
       shell: pwsh
       env:
         RID: ${{ inputs.rid }}
         EXECUTABLE: ${{ steps.publish.outputs.executable }}
       run: |
-        # The archive carries the runtime's own licence, runtime/LICENSE, under the name LICENSE. The
+        # The archive carries the runtime's own licence, LICENSE-RUNTIME.md, under the name LICENSE. The
         # repository's MIT licence covers the skills, contracts, plugins, documentation and install scripts, not
         # the runtime, so the repository's LICENSE is not the one that travels beside the executable.
+        # THIRD-PARTY-NOTICES travels with it: the runtimes and packages the executable carries, and their licences.
         $staging = "artifacts/package/$env:RID"
         New-Item -ItemType Directory -Force $staging | Out-Null
         New-Item -ItemType Directory -Force artifacts/release | Out-Null
         Copy-Item $env:EXECUTABLE $staging
-        Copy-Item runtime/LICENSE (Join-Path $staging LICENSE)
+        Copy-Item LICENSE-RUNTIME.md (Join-Path $staging LICENSE)
+        Copy-Item THIRD-PARTY-NOTICES (Join-Path $staging THIRD-PARTY-NOTICES)
 
     - name: Archive as zip
       if: startsWith(inputs.rid, 'win-')
@@ -124,7 +126,7 @@ runs:
         # unpacks it; the bit is set here rather than trusted from the publish. COPYFILE_DISABLE keeps macOS's
         # tar from adding the ._ resource-fork entries nobody else can use.
         chmod 755 "artifacts/package/$RID/jason"
-        COPYFILE_DISABLE=1 tar -czf "$ARCHIVE" -C "artifacts/package/$RID" jason LICENSE
+        COPYFILE_DISABLE=1 tar -czf "$ARCHIVE" -C "artifacts/package/$RID" jason LICENSE THIRD-PARTY-NOTICES
 
     - name: Write the checksum and the manifest fragment
       shell: pwsh

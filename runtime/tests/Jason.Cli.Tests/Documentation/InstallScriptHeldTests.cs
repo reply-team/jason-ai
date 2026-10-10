@@ -37,6 +37,8 @@ public sealed class InstallScriptHeldTests : IDisposable
 
     private const string Held = "is held open by another program; it was tried for 10 seconds.";
 
+    private const string NewText = "The notice the archive holds.\n";
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private readonly TempTree _tree = new();
@@ -63,8 +65,16 @@ public sealed class InstallScriptHeldTests : IDisposable
         var archive = Path.Combine(_feed, "jason-win-x64.zip");
         using (var zip = ZipFile.Open(archive, ZipArchiveMode.Create))
         {
-            using var entry = zip.CreateEntry("jason.exe").Open();
-            entry.Write(_standIn);
+            using (var entry = zip.CreateEntry("jason.exe").Open())
+            {
+                entry.Write(_standIn);
+            }
+
+            foreach (var name in (string[])["LICENSE", "THIRD-PARTY-NOTICES"])
+            {
+                using var entry = zip.CreateEntry(name).Open();
+                entry.Write(Encoding.UTF8.GetBytes(NewText));
+            }
         }
 
         File.WriteAllText(Path.Combine(_feed, "manifest.json"), "{ \"schema\": 1, \"version\": \"" + _version + "\" }");
@@ -253,13 +263,14 @@ public sealed class InstallScriptHeldTests : IDisposable
         var install = Start(WindowsPowerShell);
         int exit;
         string stderr;
+        string stdout;
         using (await HoldOnceItOpensAsync(await UnpackedAsync()))
         {
             leftover.Dispose();
-            (exit, _, stderr) = await install;
+            (exit, stdout, stderr) = await install;
         }
 
-        Assert.NotEqual(0, exit);
+        Assert.True(exit != 0, $"The install exited 0.{Environment.NewLine}stdout: {stdout}{Environment.NewLine}stderr: {stderr}");
         AssertSaid($"The downloaded jason.exe {Held} Nothing was installed: run this script again.", stderr);
         Assert.False(File.Exists(Target));
     }
@@ -297,6 +308,58 @@ public sealed class InstallScriptHeldTests : IDisposable
         Assert.DoesNotContain("held open", stderr, StringComparison.Ordinal);
         Assert.Equal(placeholder, File.ReadAllBytes(Target));
         Assert.False(File.Exists(Previous));
+    }
+
+    /// <summary>
+    /// A notice file beside the executable, held for a moment as the new one is renamed onto it, is replaced once it is
+    /// let go. It is let go once the new notice is staged beside it, which is the moment the script starts waiting.
+    /// </summary>
+    [Theory]
+    [InlineData(Pwsh)]
+    [InlineData(WindowsPowerShell)]
+    public async Task A_notice_held_for_a_moment_is_replaced_once_it_is_let_go(string shell)
+    {
+        var notice = Path.Combine(_install, "jason-LICENSE");
+        File.WriteAllText(notice, "The notice of the release before.\n");
+        var holder = Hold(notice);
+        var install = Start(shell);
+        await AppearsAsync(notice + ".installing");
+        await Task.Delay(500, Ct);
+        holder.Dispose();
+
+        var (exit, _, stderr) = await install;
+
+        Assert.True(exit == 0, stderr);
+        Assert.Equal(_standIn, File.ReadAllBytes(Target));
+        Assert.Equal(NewText, File.ReadAllText(notice));
+        Assert.False(File.Exists(notice + ".installing"));
+    }
+
+    /// <summary>
+    /// A notice file held for the whole wait: Jason is installed, the notice is not, and the run fails with 1 and says
+    /// both, with the advice to run the script again.
+    /// </summary>
+    [Fact]
+    public async Task A_notice_held_for_the_whole_wait_is_said_and_Jason_stays_installed()
+    {
+        var notice = Path.Combine(_install, "jason-THIRD-PARTY-NOTICES");
+        File.WriteAllText(notice, "The notices of the release before.\n");
+
+        int exit;
+        string stderr;
+        using (Hold(notice))
+        {
+            (exit, _, stderr) = await Start(WindowsPowerShell);
+        }
+
+        Assert.Equal(1, exit);
+        AssertSaid(
+            $"Jason {_version} is installed at {Target}, and its licence files could not be written beside it: '{FromHome(notice)}' {Held} Run this script again.",
+            stderr);
+        Assert.Equal(_standIn, File.ReadAllBytes(Target));
+        Assert.Equal(NewText, File.ReadAllText(Path.Combine(_install, "jason-LICENSE")));
+        Assert.Equal("The notices of the release before.\n", File.ReadAllText(notice));
+        Assert.False(File.Exists(notice + ".installing"));
     }
 
     /// <summary>A file that is not a program, where an earlier jason would be: its <c>--version</c> fails, so it is replaced.</summary>

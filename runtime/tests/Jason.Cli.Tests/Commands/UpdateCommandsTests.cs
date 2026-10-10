@@ -25,6 +25,23 @@ public class UpdateCommandsTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>
+    /// The two verbs that change the files beside the executable say so in their own descriptions: an update puts the new
+    /// executable in place with its licence files, and a rollback puts the old one back with its own.
+    /// </summary>
+    [Theory]
+    [InlineData("apply", "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place and start it again.")]
+    [InlineData("rollback", "Put the version this machine updated from back: the executable it replaced with its licence files, and - if that update migrated the database - the backup it wrote.")]
+    public async Task The_update_verbs_say_that_the_licence_files_move_with_the_executable(string verb, string description)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["update", verb, "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), Ct);
+
+        Assert.Contains(description, System.Text.RegularExpressions.Regex.Replace(output.ToString(), @"\s+", " "), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Check_prints_what_the_feed_says_and_never_calls_the_runtime()
     {

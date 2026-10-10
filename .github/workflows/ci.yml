@@ -200,6 +200,10 @@ jobs:
           New-Item -ItemType Directory -Force $install, $env:JASON_DATA_DIR | Out-Null
           $exe = Join-Path $install (Split-Path $env:EXECUTABLE -Leaf)
           Copy-Item $env:EXECUTABLE $exe
+          # And the two notice files an install keeps beside it, which the uninstall takes with it, by name.
+          $notices = @('jason-LICENSE', 'jason-THIRD-PARTY-NOTICES') | ForEach-Object { Join-Path $install $_ }
+          Copy-Item LICENSE-RUNTIME.md $notices[0]
+          Copy-Item THIRD-PARTY-NOTICES $notices[1]
           # Two things Jason keeps in a data directory, and one somebody else put there.
           New-Item -ItemType Directory -Force (Join-Path $env:JASON_DATA_DIR 'config'), (Join-Path $env:JASON_DATA_DIR 'logs') | Out-Null
           Set-Content (Join-Path $env:JASON_DATA_DIR 'config/settings.json') '{}'
@@ -213,6 +217,7 @@ jobs:
           $plan = (& $exe uninstall --dry-run | Out-String | ConvertFrom-Json).plan
           if ($LASTEXITCODE -ne 0) { throw "the dry run exited $LASTEXITCODE" }
           if (-not (Same $plan.executable $exe)) { throw "the plan names '$($plan.executable)', not the file it runs as ('$exe')" }
+          if (@($plan.notices).Count -ne 2) { throw "the plan names $(@($plan.notices).Count) notice files, not the two beside the executable: $($plan.notices -join ', ')" }
           # The logon registration and the agent harnesses are this account's, not this scratch data directory's,
           # so the uninstall below would take them too. On a fresh runner there are none; anywhere else - a
           # developer rehearsing this step on their own machine - it refuses before anything is removed.
@@ -227,7 +232,7 @@ jobs:
           if ($exit -ne 0) { throw "jason uninstall exited $exit" }
           $report = ($said | Where-Object { $_ -is [string] -and $_.StartsWith('{') }) | ConvertFrom-Json
           if (-not $report.completed) { throw "the report says it did not complete" }
-          foreach ($gone in $exe, $install) { if (Test-Path -LiteralPath $gone) { throw "'$gone' is still there" } }
+          foreach ($gone in @($exe) + $notices + @($install)) { if (Test-Path -LiteralPath $gone) { throw "'$gone' is still there" } }
 
           # The purge takes what Jason keeps in the data directory and keeps, byte for byte, what somebody else put
           # there - so the directory stays, holding the operator's file and nothing else, and the report names it.
@@ -392,6 +397,12 @@ jobs:
             chmod +x "install/$exe"
           }
 
+          # Laid out as the install scripts lay it out: the archive's notices beside the executable, under the names
+          # they are kept as there, so the update below has an installation's notices to keep and to replace.
+          foreach ($notice in 'LICENSE', 'THIRD-PARTY-NOTICES') {
+            Move-Item -LiteralPath "install/$notice" -Destination "install/jason-$notice"
+          }
+
           # Deliberately not asked what version it is: that would be an executable checked without opening a
           # database, and this runtime must stay stopped until the update, or it migrates the prepared database
           # itself and the new version has nothing to back up. What was installed is asserted from the update's
@@ -449,12 +460,21 @@ jobs:
           # the reason the applier's own health check does it that way: a file that prints a version proves a
           # file exists, and what matters is which build is running. That assertion is in the step below.
           $update = Join-Path $env:JASON_DATA_DIR 'update'
-          $previous = Get-ChildItem -Path (Join-Path $update 'previous') -File
-          if ((Get-FileHash $previous[0].FullName -Algorithm SHA256).Hash -ne $before) {
+          $kept = Join-Path $update "previous/$(Split-Path $env:install -Leaf)"
+          if ((Get-FileHash $kept -Algorithm SHA256).Hash -ne $before) {
             throw "what was kept is not the executable that was installed before the update"
           }
           if (Get-ChildItem -Path (Join-Path $update 'staged') -File -Recurse -ErrorAction SilentlyContinue) {
             throw "the staged executable is still staged, so what was installed is a copy of it rather than the file itself"
+          }
+
+          # The notices travel with the executable: the installed ones were kept with it, and the release's are beside
+          # the new one, from its archive, whose LICENSE is this tree's LICENSE-RUNTIME.md.
+          $directory = Split-Path $env:install -Parent
+          $notices = @{ 'jason-LICENSE' = 'LICENSE-RUNTIME.md'; 'jason-THIRD-PARTY-NOTICES' = 'THIRD-PARTY-NOTICES' }
+          foreach ($name in $notices.Keys) {
+            if (-not (Test-Path -LiteralPath (Join-Path $update "previous/$name"))) { throw "$name was not kept with the executable it belonged to" }
+            if ((Get-FileHash (Join-Path $directory $name)).Hash -ne (Get-FileHash $notices[$name]).Hash) { throw "$name beside the new executable is not its archive's" }
           }
 
       - name: The new version migrated the database it inherited
@@ -503,10 +523,13 @@ jobs:
           $status = & $env:install runtime status | ConvertFrom-Json
           if (($status.runtime_version -split '\+')[0] -ne $env:VERSION) { throw "after the rollback the runtime serving says it is $($status.runtime_version)" }
 
-          # What was kept has been consumed.
+          # What was kept has been consumed, the notices with the executable, and they are beside it again.
           $update = Join-Path $env:JASON_DATA_DIR 'update'
           if (Get-ChildItem -Path (Join-Path $update 'previous') -File -ErrorAction SilentlyContinue) {
-            throw "previous/ still holds an executable, so the rollback copied rather than moved it"
+            throw "previous/ still holds a file, so the rollback copied rather than moved what was kept"
+          }
+          foreach ($name in 'jason-LICENSE', 'jason-THIRD-PARTY-NOTICES') {
+            if (-not (Test-Path -LiteralPath (Join-Path (Split-Path $env:install -Parent) $name))) { throw "$name was not put back beside the executable" }
           }
 
           # And on Windows, the image this rollback replaced is still there: it is the process that ran the
@@ -574,9 +597,15 @@ jobs:
           export HOME="$RUNNER_TEMP/home"
           mkdir -p "$HOME"
 
-          sh install/install.sh --no-modify-path
+          sh install/install.sh --no-modify-path | tee first.txt
           installed="$("$HOME/.local/bin/jason" --version)"
           [ "${installed%%+*}" = "$VERSION" ] || { echo "installed '$installed', expected $VERSION"; exit 1; }
+
+          # The licence and the third-party notices are kept beside it, by the names it keeps them as: the archive's
+          # LICENSE is this tree's LICENSE-RUNTIME.md. And the run ends saying which licence that is.
+          cmp LICENSE-RUNTIME.md "$HOME/.local/bin/jason-LICENSE"
+          cmp THIRD-PARTY-NOTICES "$HOME/.local/bin/jason-THIRD-PARTY-NOTICES"
+          [ "$(tail -n 1 first.txt)" = "Jason $VERSION is licensed under the Jason Runtime Licence: https://github.com/reply-team/jason-ai/blob/v$VERSION/LICENSE-RUNTIME.md" ] || { tail -n 1 first.txt; exit 1; }
 
           # What was installed opens its database, which is the half of "it runs" that --version cannot see.
           export JASON_DATA_DIR="$RUNNER_TEMP/installed-data"
@@ -586,13 +615,21 @@ jobs:
           unset JASON_DATA_DIR
           if [ -f "$HOME/.profile" ] && grep -q '# added by jason install' "$HOME/.profile"; then echo "--no-modify-path edited the profile"; exit 1; fi
 
-          # The same version again: nothing is downloaded, the script says so, and this time the PATH line is written.
+          # The same version again with a notice missing, as an installation an older jason updated has it: the archive
+          # is fetched and checked for the notice alone, the executable is left as it was, and this time the PATH line
+          # is written.
+          rm "$HOME/.local/bin/jason-THIRD-PARTY-NOTICES"
+          executable="$(sha256sum < "$HOME/.local/bin/jason")"
           sh install/install.sh | tee again.txt
           grep -q "already installed" again.txt
+          grep -q "its licence files were missing and are written beside it now" again.txt
+          cmp THIRD-PARTY-NOTICES "$HOME/.local/bin/jason-THIRD-PARTY-NOTICES"
+          [ "$(sha256sum < "$HOME/.local/bin/jason")" = "$executable" ]
           [ "$(grep -c '# added by jason install' "$HOME/.profile")" = "1" ]
 
-          # A third run adds no second line.
-          sh install/install.sh
+          # A third run downloads nothing and adds no second line.
+          sh install/install.sh | tee third.txt
+          grep -q "nothing to download" third.txt
           [ "$(grep -c '# added by jason install' "$HOME/.profile")" = "1" ]
 
           # A login shell reads the line the script wrote and finds jason by name.
@@ -644,10 +681,13 @@ jobs:
           grep -q '"name":"path","required":true,"state":"ok"' status.json || { cat status.json; exit 1; }
           grep -q '.bash_profile' status.json
 
-          # And the uninstall takes back exactly what the installer appended, and not one other byte.
+          # And the uninstall takes back exactly what the installer appended, and not one other byte, with the
+          # executable and its two notice files.
           "$HOME/.local/bin/jason" uninstall
           printf '# mine\n' | cmp - "$HOME/.bash_profile"
           [ ! -e "$HOME/.local/bin/jason" ]
+          [ ! -e "$HOME/.local/bin/jason-LICENSE" ]
+          [ ! -e "$HOME/.local/bin/jason-THIRD-PARTY-NOTICES" ]
 
       - name: Install beside another tool with no SHELL set, and leave the line it is found through
         shell: bash
@@ -662,6 +702,7 @@ jobs:
           mkdir -p "$HOME/.local/bin"
           printf '#!/bin/sh\necho another tool\n' > "$HOME/.local/bin/another-tool"
           chmod 755 "$HOME/.local/bin/another-tool"
+          printf 'another tool licence\n' > "$HOME/.local/bin/LICENSE"
 
           env -u SHELL sh install/install.sh
           [ "$(grep -c '# added by jason install' "$HOME/.profile")" = "1" ]
@@ -669,7 +710,10 @@ jobs:
           export JASON_DATA_DIR="$HOME/.jason"
           "$HOME/.local/bin/jason" uninstall > uninstall.json || { cat uninstall.json; exit 1; }
           [ ! -e "$HOME/.local/bin/jason" ]
+          [ ! -e "$HOME/.local/bin/jason-LICENSE" ]
+          [ ! -e "$HOME/.local/bin/jason-THIRD-PARTY-NOTICES" ]
           [ "$("$HOME/.local/bin/another-tool")" = "another tool" ]
+          printf 'another tool licence\n' | cmp - "$HOME/.local/bin/LICENSE" || { echo "the uninstall touched another tool's LICENSE"; exit 1; }
           [ "$(grep -c '# added by jason install' "$HOME/.profile")" = "1" ] || { echo "the uninstall took away the line another tool is found through"; exit 1; }
           grep -q 'holds more than this installer writes there' uninstall.json || { cat uninstall.json; exit 1; }
 
@@ -707,6 +751,13 @@ jobs:
           $installed = & $exe --version
           if (($installed -split '\+')[0] -ne $env:VERSION) { throw "installed '$installed', expected $env:VERSION" }
 
+          # The licence and the third-party notices are kept beside it, by the names it keeps them as: the archive's
+          # LICENSE is this tree's LICENSE-RUNTIME.md.
+          $notices = @{ 'jason-LICENSE' = 'LICENSE-RUNTIME.md'; 'jason-THIRD-PARTY-NOTICES' = 'THIRD-PARTY-NOTICES' }
+          foreach ($name in $notices.Keys) {
+            if ((Get-FileHash (Join-Path $dir $name)).Hash -ne (Get-FileHash $notices[$name]).Hash) { throw "$name beside the executable is not the archive's" }
+          }
+
           # What was installed opens its database, which is the half of "it runs" that --version cannot see.
           $env:JASON_DATA_DIR = Join-Path $env:RUNNER_TEMP 'installed-data'
           & $exe runtime start | Out-Null
@@ -728,13 +779,25 @@ jobs:
           $key.SetValue('Path', $storedBefore, [Microsoft.Win32.RegistryValueKind]::ExpandString)
           $key.Dispose()
 
-          # The same version again: nothing is downloaded, the script says so, and this time the PATH gains the directory.
+          # The same version again with a notice missing, as an installation an older jason updated has it: the archive
+          # is fetched and checked for the notice alone, the executable is left as it was, and this time the PATH gains
+          # the directory.
           # 6>&1 because the script talks to the person in front of it with Write-Host, which goes to the
           # information stream: an assignment on its own captures nothing, and the check below would be reading
           # an empty string while the words it is looking for scrolled past in the log.
+          Remove-Item (Join-Path $dir 'jason-THIRD-PARTY-NOTICES')
+          $executable = (Get-FileHash $exe).Hash
           $again = ./install/install.ps1 6>&1 | Out-String
           Write-Host $again
           if ($again -notmatch 'already installed') { throw "the second run did not say the version was already installed" }
+          # Read with its white space taken out, and the sentences looked for likewise: Windows PowerShell wraps what
+          # Write-Host said at the console's width once it is captured, wherever the width falls, inside a word as well.
+          $said = $again -replace '\s+', ''
+          function Said([string] $sentence) { $said.Contains(($sentence -replace '\s+', '')) }
+          if (-not (Said 'its licence files were missing and are written beside it now')) { throw "the second run did not write the missing notice" }
+          if ((Get-FileHash (Join-Path $dir 'jason-THIRD-PARTY-NOTICES')).Hash -ne (Get-FileHash THIRD-PARTY-NOTICES).Hash) { throw "the notice written again is not the archive's" }
+          if ((Get-FileHash $exe).Hash -ne $executable) { throw "writing the missing notice changed the executable" }
+          if (-not (Said "is licensed under the Jason Runtime Licence: https://github.com/reply-team/jason-ai/blob/v$env:VERSION/LICENSE-RUNTIME.md")) { throw "the second run did not say the licence" }
           if ((UserPathEntries).Count -ne 1) { throw "the user PATH does not hold the directory exactly once" }
 
           # And it kept the value's kind and every entry as it was written, variables unexpanded.

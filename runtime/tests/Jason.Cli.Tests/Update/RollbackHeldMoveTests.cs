@@ -99,6 +99,45 @@ public sealed class RollbackHeldMoveTests
         }
     }
 
+    /// <summary>
+    /// The notices go back with the executable and wait as it does: the one beside the install path, held as it is removed,
+    /// and the kept one, held as it is moved back, are each moved once they are let go.
+    /// </summary>
+    [Theory]
+    [InlineData(Aside)]
+    [InlineData(Back)]
+    public async Task A_notice_held_for_a_moment_goes_back_once_it_is_let_go(string move)
+    {
+        using var installation = await UpdatedAsync();
+        var ledger = installation.Ledger()!;
+        var notice = move == Aside
+            ? ReleaseAssets.NoticeBeside(installation.InstallPath, "LICENSE")
+            : ReleaseAssets.NoticeBeside(ledger.PreviousPath, "LICENSE");
+        var holder = Hold(notice);
+        var pauses = new List<TimeSpan>();
+        var rollback = Rollback(installation, InstallationRemovers.HeldFiles, (delay, _) =>
+        {
+            pauses.Add(delay);
+            if (pauses.Count == 2)
+            {
+                holder.Dispose();
+            }
+        });
+
+        try
+        {
+            await rollback.RollBackAsync(Ct);
+        }
+        finally
+        {
+            holder.Dispose();
+        }
+
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+        Assert.Equal(KeptLicence, File.ReadAllText(ReleaseAssets.NoticeBeside(installation.InstallPath, "LICENSE")));
+        Assert.Equal(OperatingSystem.IsWindows() ? [TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(250)] : [], pauses);
+    }
+
     /// <summary>A deletion denied is not a hold: it is said at once, in the system's words, as before.</summary>
     [Fact]
     public async Task A_move_refused_for_another_reason_is_said_at_once()
@@ -141,10 +180,14 @@ public sealed class RollbackHeldMoveTests
             Pause = pause,
         };
 
+    private const string KeptLicence = "the licence installed";
+
+    /// <summary>An installation updated once, its licence kept with the executable it had.</summary>
     private static async Task<FakeInstallation> UpdatedAsync()
     {
         var installation = new FakeInstallation();
         installation.WithRuntime();
+        FakeInstallation.WriteNoticesBeside(installation.InstallPath, new Dictionary<string, string> { ["LICENSE"] = KeptLicence });
         await installation.Applier().ApplyAsync(new UpdateRequest(installation.Feed, null, TimeSpan.FromSeconds(5)), Ct);
         return installation;
     }

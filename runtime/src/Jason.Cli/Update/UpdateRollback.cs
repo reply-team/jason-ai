@@ -299,6 +299,33 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             () => ExecutableMove.Run(env, HeldFiles, clock, Pause, Back, ledger.PreviousPath, empty, () => File.Move(ledger.PreviousPath, ledger.InstallPath)));
 
         Say($"put {ledger.FromVersion} back");
+
+        // Its notices go back with it, by the same rule as everywhere: each one it was kept with is put back, and one it was
+        // kept without is not left beside it from the version it replaces. The one there is removed first and the kept one
+        // moved after, so that a file another program holds is waited for rather than refused as a file that exists.
+        foreach (var notice in ReleaseAssets.Notices)
+        {
+            var installed = ReleaseAssets.NoticeBeside(ledger.InstallPath, notice);
+            var kept = ReleaseAssets.NoticeBeside(ledger.PreviousPath, notice);
+            var remedy = $"{ledger.FromVersion} is back without its notices: put {kept} beside it by hand, or remove {installed} if {kept} is not there.";
+            const string NoticesBack = "putting the previous notices back";
+            OnDisk(
+                NoticesBack,
+                installed,
+                remedy,
+                () =>
+                {
+                    if (File.Exists(installed))
+                    {
+                        ExecutableMove.Run(env, HeldFiles, clock, Pause, NoticesBack, installed, remedy, () => File.Delete(installed));
+                    }
+
+                    if (File.Exists(kept))
+                    {
+                        ExecutableMove.Run(env, HeldFiles, clock, Pause, NoticesBack, kept, remedy, () => File.Move(kept, installed));
+                    }
+                });
+        }
     }
 
     /// <summary>

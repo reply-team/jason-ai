@@ -14,6 +14,8 @@ covered here.
 - `plugins/` — plugin marketplace. `skills/runtime/`, `skills/business/` — skill packs. `docs/` —
   maintained documentation only.
 - `.github/publish/` — what a release publishes: `open-set.txt` and the public repository's own files.
+- `LICENSE` — MIT, for everything outside `runtime/`. `LICENSE-RUNTIME.md` — the runtime's own licence; every archive
+  carries it as `LICENSE`, beside the executable and `THIRD-PARTY-NOTICES`.
 - `global.json` at the root pins the SDK; run every command from the repository root.
 
 ## Commands
@@ -52,7 +54,9 @@ covered here.
   tracker key, no attribution trailer, no internal pointer, no link or path that leaves the published set
   (`PublicationTests` holds the links). This repository keeps every file and the runtime's tags; its README is the
   public one.
-- Package versions live in `runtime/Directory.Packages.props` only.
+- Package versions live in `runtime/Directory.Packages.props` only. `THIRD-PARTY-NOTICES` covers every package of
+  `Jason.App`'s closure and the runtime packs the executable carries; after a package or SDK change
+  `ThirdPartyNoticesTests` is red until `pwsh .github/scripts/Write-ThirdPartyNotices.ps1` writes it again.
 - Warnings are errors. Every test runs offline and uses an isolated temporary data directory.
 
 ## Conventions

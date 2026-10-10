@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Formats.Tar;
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -81,8 +83,8 @@ public class ReleaseWorkflowTests
     }
 
     /// <summary>
-    /// The archive holds the executable and <c>LICENSE</c> and nothing else, which is only true if the
-    /// executable is one file. A self-contained single-file publish leaves native libraries beside it — SQLite's
+    /// The archive holds the executable, <c>LICENSE</c> and <c>THIRD-PARTY-NOTICES</c> and nothing else, which is
+    /// only true if the executable is one file. A self-contained single-file publish leaves native libraries beside it — SQLite's
     /// among them — unless the project says to bundle them, and nothing in CI would have noticed: the smoke
     /// test never opens a database. The project says so, and the action refuses a publish directory holding
     /// anything but the executable and its symbols, so the property cannot be lost quietly.
@@ -139,6 +141,23 @@ public class ReleaseWorkflowTests
     }
 
     /// <summary>
+    /// The runtime's licence is <c>LICENSE-RUNTIME.md</c> at the root, the place a release publishes it from, and
+    /// the repository's <c>LICENSE</c> names that file in the paragraph that scopes the MIT licence.
+    /// </summary>
+    [Fact]
+    public void The_runtime_s_licence_is_at_the_root_and_the_scope_paragraph_names_it()
+    {
+        var root = RepositoryRoot();
+        Assert.True(File.Exists(Path.Combine(root, "LICENSE-RUNTIME.md")), "LICENSE-RUNTIME.md is not at the root.");
+        Assert.False(File.Exists(Path.Combine(root, "runtime", "LICENSE")), "runtime/LICENSE is still there beside it.");
+
+        var licence = File.ReadAllText(Path.Combine(root, "LICENSE"));
+        var scope = licence[..Assert.Single(Regex.Matches(licence, "^MIT License$", RegexOptions.Multiline)).Index];
+        Assert.Contains("(see LICENSE-RUNTIME.md)", scope, StringComparison.Ordinal);
+        Assert.DoesNotContain("runtime/LICENSE", scope, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The archive carries the runtime's own licence under the name <c>LICENSE</c>, not the repository's: the
     /// repository's MIT licence covers what lies outside <c>runtime/</c>, and the executable is the runtime.
     /// </summary>
@@ -150,12 +169,12 @@ public class ReleaseWorkflowTests
     public void The_archive_carries_the_runtime_s_licence_rather_than_the_repository_s()
     {
         var staging = Assert.IsType<YamlSequenceNode>(Node(Mapping(Parse(Read(Action)), "runs"), "steps")).Children.Cast<YamlMappingNode>()
-            .Single(step => Scalar(step, "name") == "Put LICENSE beside the executable");
+            .Single(step => Scalar(step, "name") == "Put LICENSE and THIRD-PARTY-NOTICES beside the executable");
 
         using var tree = new TempTree();
         File.WriteAllText(Path.Combine(tree.Root, "LICENSE"), "the repository's licence");
-        Directory.CreateDirectory(Path.Combine(tree.Root, "runtime"));
-        File.WriteAllText(Path.Combine(tree.Root, "runtime", "LICENSE"), "the runtime's licence");
+        File.WriteAllText(Path.Combine(tree.Root, "LICENSE-RUNTIME.md"), "the runtime's licence");
+        File.WriteAllText(Path.Combine(tree.Root, "THIRD-PARTY-NOTICES"), "the notices");
         var executable = Path.Combine(tree.Root, "jason.exe");
         File.WriteAllText(executable, "not really an executable");
 
@@ -172,7 +191,133 @@ public class ReleaseWorkflowTests
 
         var package = Path.Combine(tree.Root, "artifacts", "package", "win-x64");
         Assert.Equal("the runtime's licence", File.ReadAllText(Path.Combine(package, "LICENSE")));
-        Assert.Equal(["LICENSE", "jason.exe"], Directory.GetFiles(package).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        Assert.Equal(["LICENSE", "THIRD-PARTY-NOTICES", "jason.exe"], Directory.GetFiles(package).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Every archive holds exactly the executable, <c>LICENSE</c> and <c>THIRD-PARTY-NOTICES</c>. The two halves choose
+    /// differently: the zip takes everything the staging step put in the package directory, and the tarball names its
+    /// entries, so a file staged and not named would never ship. So both are run here, after the real staging step, and
+    /// the archive each writes is listed.
+    /// </summary>
+    /// <remarks>
+    /// The tarball's step is bash, run here as GitHub runs <c>shell: bash</c>. Windows has no bash a test can count on,
+    /// so that row runs on CI's Linux and macOS legs and is skipped on Windows.
+    /// </remarks>
+    [Theory]
+    [InlineData("win-x64")]
+    [InlineData("linux-x64")]
+    public void Every_archive_holds_the_executable_its_licence_and_the_notices_and_nothing_else(string rid)
+    {
+        var tarball = !rid.StartsWith("win-", StringComparison.Ordinal);
+        Assert.SkipWhen(tarball && OperatingSystem.IsWindows(), "The tarball is written by a bash step; CI's Linux and macOS legs run this row.");
+
+        var steps = Assert.IsType<YamlSequenceNode>(Node(Mapping(Parse(Read(Action)), "runs"), "steps")).Children.Cast<YamlMappingNode>().ToList();
+        var staging = steps.Single(step => Scalar(step, "name") == "Put LICENSE and THIRD-PARTY-NOTICES beside the executable");
+        var archiving = steps.Single(step => Scalar(step, "name") == (tarball ? "Archive as tar.gz" : "Archive as zip"));
+
+        using var tree = new TempTree();
+        File.WriteAllText(Path.Combine(tree.Root, "LICENSE"), "the repository's licence");
+        File.WriteAllText(Path.Combine(tree.Root, "LICENSE-RUNTIME.md"), "the runtime's licence");
+        File.WriteAllText(Path.Combine(tree.Root, "THIRD-PARTY-NOTICES"), "the notices");
+        var executableName = tarball ? "jason" : "jason.exe";
+        var executable = Path.Combine(tree.Root, "publish", executableName);
+        Directory.CreateDirectory(Path.GetDirectoryName(executable)!);
+        File.WriteAllText(executable, "not really an executable");
+        var environment = new Dictionary<string, string>
+        {
+            ["RID"] = rid,
+            ["EXECUTABLE"] = executable,
+            ["ARCHIVE"] = $"artifacts/release/{ReleaseAssets.For(rid)}",
+        };
+
+        var stage = Path.Combine(tree.Root, "stage.ps1");
+        File.WriteAllText(stage, Scalar(staging, "run"));
+        var staged = Pwsh(environment, "-Command", $"$ErrorActionPreference = 'Stop'; Set-Location -LiteralPath '{tree.Root}'; & '{stage}'");
+        Assert.True(staged.Exit == 0, staged.Stderr);
+
+        (int Exit, string Stdout, string Stderr) written;
+        if (tarball)
+        {
+            written = Bash(environment, tree.Root, Scalar(archiving, "run")!);
+        }
+        else
+        {
+            var zip = Path.Combine(tree.Root, "archive.ps1");
+            File.WriteAllText(zip, Scalar(archiving, "run"));
+            written = Pwsh(environment, "-Command", $"$ErrorActionPreference = 'Stop'; Set-Location -LiteralPath '{tree.Root}'; & '{zip}'");
+        }
+
+        Assert.True(written.Exit == 0, written.Stderr);
+        var entries = Entries(Path.Combine(tree.Root, "artifacts", "release", ReleaseAssets.For(rid)), tarball);
+        Assert.Equal(["LICENSE", "THIRD-PARTY-NOTICES", executableName], entries.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal("the runtime's licence", entries["LICENSE"]);
+        Assert.Equal("the notices", entries["THIRD-PARTY-NOTICES"]);
+    }
+
+    /// <summary>A zip's or a tarball's entries, each name with its text.</summary>
+    private static Dictionary<string, string> Entries(string archive, bool tarball)
+    {
+        var entries = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (tarball)
+        {
+            using var gzip = new GZipStream(File.OpenRead(archive), CompressionMode.Decompress);
+            using var reader = new TarReader(gzip);
+            while (reader.GetNextEntry() is { } entry)
+            {
+                using var text = new StreamReader(entry.DataStream ?? Stream.Null);
+                entries.Add(entry.Name, text.ReadToEnd());
+            }
+        }
+        else
+        {
+            using var zip = ZipFile.OpenRead(archive);
+            foreach (var entry in zip.Entries)
+            {
+                using var text = new StreamReader(entry.Open());
+                entries.Add(entry.FullName, text.ReadToEnd());
+            }
+        }
+
+        return entries;
+    }
+
+    /// <summary>
+    /// A bash step as GitHub runs <c>shell: bash</c> — <c>bash --noprofile --norc -eo pipefail</c> — in a directory of
+    /// the test's own and with the environment the step is given.
+    /// </summary>
+    private static (int Exit, string Stdout, string Stderr) Bash(IReadOnlyDictionary<string, string> environment, string directory, string script)
+    {
+        var file = Path.Combine(directory, "step.sh");
+        File.WriteAllText(file, script);
+        var start = new ProcessStartInfo("bash")
+        {
+            WorkingDirectory = directory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var argument in (string[])["--noprofile", "--norc", "-eo", "pipefail", file])
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        foreach (var (name, value) in environment)
+        {
+            start.Environment[name] = value;
+        }
+
+        using var process = Process.Start(start)!;
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(TimeSpan.FromSeconds(120)))
+        {
+            process.Kill(entireProcessTree: true);
+            Assert.Fail("bash did not finish in two minutes.");
+        }
+
+        return (process.ExitCode, stdout.Result, stderr.Result);
     }
 
     /// <summary>

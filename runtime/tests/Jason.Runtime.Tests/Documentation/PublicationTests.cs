@@ -76,6 +76,17 @@ public sealed partial class PublicationTests
         Assert.Contains(problems, problem => problem.Contains("'docs/plugins.md' is missing", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("LICENSE")]
+    [InlineData("LICENSE-RUNTIME.md")]
+    [InlineData("THIRD-PARTY-NOTICES")]
+    public void The_open_set_names_every_licence_text(string licence)
+    {
+        var problems = OpenSet.Problems([.. Valid.Where(line => line != licence)], Kind);
+
+        Assert.Contains($"'{licence}' is missing: a release publishes every licence text it ships.", problems);
+    }
+
     /// <summary>
     /// The public repository's own files are written here and copied to its root by every release, so they are a
     /// fixed list: a file added to the directory is a file published, and that is a decision, not a side effect.
@@ -187,7 +198,7 @@ public sealed partial class PublicationTests
     }
 
     /// <summary>A list that keeps every rule, over a tree where every path exists.</summary>
-    private static readonly string[] Valid = Sorted([.. OpenSet.Documents, "README.md", "install/"]);
+    private static readonly string[] Valid = Sorted([.. OpenSet.Documents, .. OpenSet.Licences, "README.md", "install/"]);
 
     private static string[] Sorted(string[] lines) => [.. lines.Order(StringComparer.Ordinal)];
 

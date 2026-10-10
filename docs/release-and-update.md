@@ -31,9 +31,9 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 
 | Asset | What it is |
 |---|---|
-| `jason-win-x64.zip` | the Windows executable and `LICENSE` (the runtime's licence) |
-| `jason-linux-x64.tar.gz` | the Linux executable and `LICENSE` (the runtime's licence) |
-| `jason-osx-arm64.tar.gz` | the macOS (Apple silicon) executable and `LICENSE` (the runtime's licence) |
+| `jason-win-x64.zip` | the Windows executable, `LICENSE` (the runtime's licence) and `THIRD-PARTY-NOTICES` |
+| `jason-linux-x64.tar.gz` | the Linux executable, `LICENSE` (the runtime's licence) and `THIRD-PARTY-NOTICES` |
+| `jason-osx-arm64.tar.gz` | the macOS (Apple silicon) executable, `LICENSE` (the runtime's licence) and `THIRD-PARTY-NOTICES` |
 | `checksums.txt` | one `sha256sum` line per archive |
 | `manifest.json` | what the updater reads |
 | `install.sh` | the macOS and Linux install script, as this release was published with it |
@@ -52,11 +52,12 @@ https://github.com/reply-team/jason-ai/releases/latest/download/jason-linux-x64.
 resolve for every release there will ever be, so a README, an install script and a runtime's feed URL are
 written once and never edited again.
 
-**An archive holds the executable and `LICENSE`, and nothing else.** That `LICENSE` is the runtime's own; the
-repository's MIT licence covers the skills, contracts, plugins, documentation and install scripts, not the
-runtime. A plugin is installed by copying a directory into the data directory and nothing reads the install
-directory, so a bundled plugin would be a file nothing loads. Plugins are installed from the repository, exactly
-as `docs/plugins.md` §4 says.
+**An archive holds the executable, `LICENSE` and `THIRD-PARTY-NOTICES`, and nothing else.** That `LICENSE` is
+the runtime's own; the repository's MIT licence covers the skills, contracts, plugins, documentation and install
+scripts, not the runtime. `THIRD-PARTY-NOTICES` names the .NET runtime and the packages the executable carries,
+each with its licence. A plugin is installed by copying a directory into the data directory and nothing reads the
+install directory, so a bundled plugin would be a file nothing loads. Plugins are installed from the repository,
+exactly as `docs/plugins.md` §4 says.
 
 ## 3. The manifest
 
@@ -223,7 +224,8 @@ irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 
 ```
 
 Each script works out your platform, downloads the archive for it, **verifies the SHA-256 before unpacking**,
-installs the executable, and adds its directory to your PATH behind a marker line it will recognise next time.
+installs the executable with its licence and the third-party notices beside it, as `jason-LICENSE` and
+`jason-THIRD-PARTY-NOTICES`, and adds its directory to your PATH behind a marker line it will recognise next time.
 Pass `--no-modify-path` to leave your PATH alone, and `--version X.Y.Z` to install a particular release.
 
 The default install directories are `~/.local/bin/jason` on macOS and Linux, and
@@ -270,11 +272,11 @@ reads, and the update after this one overwrites.
 
 | Step | What has been begun |
 |---|---|
-| `staged` | the archive for this platform is downloaded, its SHA-256 checked against the manifest, and the one file a release holds is unpacked under `~/.jason/update/staged/<version>/` |
+| `staged` | the archive for this platform is downloaded, its SHA-256 checked against the manifest, and the executable and its two notice files are unpacked under `~/.jason/update/staged/<version>/` |
 | `drained` | the runtime has been told to claim nothing new, and what it was already running has finished or the wait has run out |
 | `stopped` | the runtime has been asked to stop, and its process is gone |
-| `kept` | the installed executable has been moved to `~/.jason/update/previous/`, and the install path is empty |
-| `swapped` | the staged executable has been moved onto the install path |
+| `kept` | the installed executable has been moved to `~/.jason/update/previous/`, its notice files after it, and the install path is empty |
+| `swapped` | the staged executable has been moved onto the install path, its notice files after it |
 | `started` | a runtime has been started from the new executable |
 | `healthy` | that runtime answers, says it is the version this update installed, and has its migrations applied |
 | `complete` | the update is over, and the ledger stays behind as the record of it |
@@ -315,7 +317,7 @@ than half-read.
 
 ### What an update does not touch
 
-An update replaces one file and writes under `~/.jason/update/`. It does not touch the rest of the data
+An update replaces the executable and its two notice files, and writes under `~/.jason/update/`. It does not touch the rest of the data
 directory: not the database, not `~/.jason/config/settings.json`, not the plugins under `~/.jason/plugins/`, not
 the skills, not the logs, not the work directories. Nor does it touch anything you registered with the machine
 to start Jason — a systemd unit, a scheduled task, a login item — because the file at the install path is
@@ -332,9 +334,9 @@ again and it finishes from the step on disk, or says what it cannot finish. Two 
 by name.
 
 **Between `kept` and `swapped` the install path is empty.** The old executable has been moved to
-`~/.jason/update/previous/` and the new one is not in place yet. The window is one rename wide, but it is the
-one window a person cannot type their way out of, because the `jason` on your PATH is the file that is not
-there. The process performing the swap is a copy of the applier under `~/.jason/update/applier/`, which is why
+`~/.jason/update/previous/`, its two notice files after it, and the new one is not in place yet. The
+window is a few renames wide, but it is the one window a person cannot type their way out of, because the
+`jason` on your PATH is the file that is not there. The process performing the swap is a copy of the applier under `~/.jason/update/applier/`, which is why
 the swap survives the file it is swapping — and it is also the first way out:
 
 ```text
@@ -413,7 +415,7 @@ a code on its own tells nobody what to do next.
 | `update_up_to_date` | the feed offers nothing newer than what is installed, and no `--version` asked for something else |
 | `update_artifact_corrupt` | what was downloaded is not the digest the manifest published. The bytes are deleted rather than kept for a retry |
 | `update_artifact_unreachable` | the download did not arrive, or the archive could not be read. Worth trying again |
-| `update_artifact_unexpected` | the archive does not hold the one file a release for this platform is supposed to hold, or the release publishes nothing for this platform |
+| `update_artifact_unexpected` | the archive does not hold the executable a release for this platform is supposed to hold, or the release publishes nothing for this platform. Its notice files are taken where the archive holds them, and an archive without one is not refused |
 | `update_in_progress` | a *different* version is already in flight. The same version is resumed rather than refused, so re-running `jason update apply` after a kill is always the right move |
 | `update_not_directly_applicable` | the release's `min_upgrade_from` is above the version installed. The message names the version to pass through first |
 | `update_not_updatable` | this Jason runs through `dotnet`, so there is no single executable to replace. Install a published release with the one-liner in §6 |
@@ -626,8 +628,8 @@ The order is the order that makes a half-finished run safe:
 | the runtime | and if it will not stop — or is running and does not answer — **nothing after this is removed** |
 | on Windows, the notification registration | after the runtime, so its next toast cannot write it back: the AppUserModelID key the toast was shown under, and the two entries Windows made for it at the first toast. All three are this account's, under `HKEY_CURRENT_USER` |
 | every recorded skill | by the paths its root's record names, digest by digest |
-| the PATH entry | only where the installer wrote it and its directory holds nothing but Jason — a PATH is a person's own document, and other programs are on it through a directory they share. On macOS and Linux the entry is the marked block in a login profile; on Windows, whose Path carries no marker, the entry in this account's Path |
-| the executable, its install directory and what it unpacked | last, because everything above runs from it. On Windows the running image cannot be deleted, so it is moved out of the install directory, to a directory on its own volume, and a cleanup removes the copy once the verb has exited; the native libraries the build unpacked on its first run go too |
+| the PATH entry | only where the installer wrote it and its directory holds nothing but Jason — the executable, its two notice files and what an upgrade left beside it. A PATH is a person's own document, and other programs are on it through a directory they share. On macOS and Linux the entry is the marked block in a login profile; on Windows, whose Path carries no marker, the entry in this account's Path |
+| the executable, its notice files, its install directory and what it unpacked | last, because everything above runs from it. The notice files go by name, so in a directory other tools share a `LICENSE` that is not one of them stays. On Windows the running image cannot be deleted, so it is moved out of the install directory, to a directory on its own volume, and a cleanup removes the copy once the verb has exited; the native libraries the build unpacked on its first run go too |
 
 A recorded file whose bytes have changed since is reported and kept, because the record says what Jason wrote
 and a mismatch says somebody else wrote it afterwards. `--force` removes it anyway, and the containing
@@ -650,11 +652,12 @@ something is still there, or it stopped part-way — and every step that did hap
 
 The **data directory** is `~/.jason`, or whatever `JASON_DATA_DIR` names: the database, the configuration, the
 plugins, the skills, the logs and the work directories. The **install directory** is wherever the executable
-happens to be, and Jason writes nothing into it. They are separate on purpose — updating the program and keeping
+happens to be, and Jason writes nothing into it but the executable and its two notice files. They are separate on purpose — updating the program and keeping
 your work are different things, and a person who installed the binary somewhere unusual should never find Jason
 writing files beside it.
 
-That is also why an update writes under the data directory and not beside the executable. `~/.jason/update/`
+That is also why an update writes under the data directory, and beside the executable only the executable and its
+two notice files. `~/.jason/update/`
 holds the ledger, the staged download, the executable that was replaced and the copy of the applier that
 replaced it; the install directory may be read-only, on another volume, or a directory somebody removes Jason
 by deleting.

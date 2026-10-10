@@ -25,6 +25,12 @@ public sealed class UpdateHeldMoveTests
 
     private const string InPlace = "in place";
 
+    private const string NoticeAside = "a notice aside";
+
+    private const string NoticeInPlace = "a notice in place";
+
+    private const string KeptLicence = "the licence installed";
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private static string Sep => Path.DirectorySeparatorChar.ToString();
@@ -77,6 +83,94 @@ public sealed class UpdateHeldMoveTests
 
         Assert.Equal(installation.To.ToString(), installation.Installed());
         Assert.Equal(OperatingSystem.IsWindows() ? [TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(250)] : [], pauses);
+    }
+
+    /// <summary>A notice moves with the executable and waits as it does: held for a moment, it is moved once it is let go.</summary>
+    [Theory]
+    [InlineData(NoticeAside)]
+    [InlineData(NoticeInPlace)]
+    public async Task A_notice_held_for_a_moment_is_moved_once_it_is_let_go(string move)
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+        FakeInstallation.WriteNoticesBeside(installation.InstallPath, new Dictionary<string, string> { ["LICENSE"] = KeptLicence });
+        FileStream? holder = null;
+        installation.OnStop = () => holder = Hold(Notice(installation, move));
+        var pauses = new List<TimeSpan>();
+        var applier = Applier(installation, InstallationRemovers.HeldFiles, (delay, _) =>
+        {
+            pauses.Add(delay);
+            if (pauses.Count == 2)
+            {
+                holder?.Dispose();
+            }
+        });
+
+        try
+        {
+            await applier.ApplyAsync(Request(installation), Ct);
+        }
+        finally
+        {
+            holder?.Dispose();
+        }
+
+        Assert.Equal(installation.To.ToString(), installation.Installed());
+        Assert.Equal("MIT", File.ReadAllText(ReleaseAssets.NoticeBeside(installation.InstallPath, "LICENSE")));
+        Assert.Equal(KeptLicence, File.ReadAllText(ReleaseAssets.NoticeBeside(installation.Update.PreviousExecutable, "LICENSE")));
+        Assert.Equal(OperatingSystem.IsWindows() ? [TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(250)] : [], pauses);
+    }
+
+    /// <summary>
+    /// Held for the whole wait, a notice's move is refused in the executable's sentence, with the way out of where its step
+    /// stands: aside, the install path holds no executable yet; in place, the new one is there without its notices.
+    /// </summary>
+    [Theory]
+    [InlineData(NoticeAside)]
+    [InlineData(NoticeInPlace)]
+    public async Task A_notice_held_for_the_whole_wait_is_refused_in_a_sentence_of_its_own(string move)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to rename a file another program holds open.");
+        using var installation = new FakeInstallation().WithRuntime();
+        FakeInstallation.WriteNoticesBeside(installation.InstallPath, new Dictionary<string, string> { ["LICENSE"] = KeptLicence });
+        string? source = null;
+        FileStream? holder = null;
+        installation.OnStop = () =>
+        {
+            source = Notice(installation, move);
+            holder = Hold(source);
+        };
+        var pauses = new List<TimeSpan>();
+        var applier = Applier(installation, Short, (delay, _) => pauses.Add(delay));
+
+        UpdateException refused;
+        try
+        {
+            refused = await Assert.ThrowsAsync<UpdateException>(() => applier.ApplyAsync(Request(installation), Ct));
+        }
+        finally
+        {
+            holder?.Dispose();
+        }
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+        Assert.True(refused.Retryable);
+        Assert.NotEmpty(pauses);
+        var ledger = installation.Ledger()!;
+        var held = $"'~{Sep}{Path.GetRelativePath(Home(installation), source!)}' is held open by another program; it was tried for 0.3 seconds.";
+        if (move == NoticeAside)
+        {
+            Assert.Equal(
+                $"moving the installed notices aside failed: {held} There is nothing at the install path until this succeeds: run `jason update apply` again, from {Path.Combine(installation.Update.Applier, ReleaseAssets.ExecutableName)} if `jason` is no longer on your PATH, or put {ledger.PreviousPath} back by hand.",
+                refused.Message);
+            Assert.Equal(UpdateStep.Kept, ledger.Step);
+        }
+        else
+        {
+            Assert.Equal(
+                $"putting the new notices in place failed: {held} The new executable is in place without them: run `jason update apply` again.",
+                refused.Message);
+            Assert.Equal(installation.To.ToString(), installation.Installed());
+        }
     }
 
     /// <summary>
@@ -252,6 +346,12 @@ public sealed class UpdateHeldMoveTests
     }
 
     /// <summary>The file a move moves: the installed executable aside, or the staged one into its place.</summary>
+    /// <summary>The notice a move moves: the installed licence aside, or the staged one into its place.</summary>
+    private static string Notice(FakeInstallation installation, string move) =>
+        move == NoticeAside
+            ? ReleaseAssets.NoticeBeside(installation.InstallPath, "LICENSE")
+            : ReleaseAssets.NoticeBeside(installation.Ledger()!.StagedPath, "LICENSE");
+
     private static string Moved(FakeInstallation installation, string move) =>
         move == Aside ? installation.InstallPath : installation.Ledger()!.StagedPath;
 

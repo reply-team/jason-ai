@@ -28,11 +28,22 @@ public sealed class FakeInstallation : HttpMessageHandler
     private readonly TempTree _tree = new();
     private readonly FakeRelease _release;
 
-    public FakeInstallation(SemanticVersion? from = null, SemanticVersion? to = null)
+    /// <param name="from">The version installed.</param>
+    /// <param name="to">The version the release offers.</param>
+    /// <param name="releaseNotices">
+    /// The notices the release's archive carries beside the executable, by their names in the archive, with their text. A
+    /// release carries its licence alone when not given, as releases before 0.6.0 do.
+    /// </param>
+    public FakeInstallation(SemanticVersion? from = null, SemanticVersion? to = null, IReadOnlyDictionary<string, string>? releaseNotices = null)
     {
         From = from ?? SemanticVersion.Current;
         To = to ?? SemanticVersion.Parse("9.9.9");
-        _release = new FakeRelease(To);
+        ReleaseNotices = releaseNotices ?? new Dictionary<string, string> { ["LICENSE"] = "MIT" };
+        _release = new FakeRelease(
+            To,
+            archive: FakeRelease.Archive(
+                ReleaseAssets.For(FakeRelease.Rid),
+                [(ReleaseAssets.ExecutableName, Encoding.UTF8.GetBytes($"jason {To}")), .. ReleaseNotices.Select(notice => (notice.Key, Encoding.UTF8.GetBytes(notice.Value)))]));
 
         Directory.CreateDirectory(InstallDirectory);
         Directory.CreateDirectory(Paths.RunDirectory);
@@ -75,6 +86,26 @@ public sealed class FakeInstallation : HttpMessageHandler
     public SemanticVersion From { get; }
 
     public SemanticVersion To { get; }
+
+    /// <summary>The notices the release's archive carries, by their names in the archive.</summary>
+    public IReadOnlyDictionary<string, string> ReleaseNotices { get; }
+
+    /// <summary>The notices beside an executable, by the names they are kept under there, with their text.</summary>
+    public static Dictionary<string, string> NoticesBeside(string executable) =>
+        ReleaseAssets.Notices
+            .Select(notice => ReleaseAssets.NoticeBeside(executable, notice))
+            .Where(File.Exists)
+            .ToDictionary(path => Path.GetFileName(path), File.ReadAllText, StringComparer.Ordinal);
+
+    /// <summary>Notices beside an executable, as an install or an earlier update would have left them.</summary>
+    public static void WriteNoticesBeside(string executable, IReadOnlyDictionary<string, string> notices)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(executable)!);
+        foreach (var (notice, text) in notices)
+        {
+            File.WriteAllText(ReleaseAssets.NoticeBeside(executable, notice), text);
+        }
+    }
 
     public JasonPaths Paths => new(Path.Combine(_tree.Root, "data"));
 
@@ -274,6 +305,7 @@ public sealed class FakeInstallation : HttpMessageHandler
         {
             Directory.CreateDirectory(Update.StagedFor(To));
             File.WriteAllText(Update.StagedExecutable(To), $"jason {To}");
+            WriteNoticesBeside(Update.StagedExecutable(To), ReleaseNotices);
         }
 
         if (step >= UpdateStep.Drained && Running)
@@ -298,12 +330,25 @@ public sealed class FakeInstallation : HttpMessageHandler
             Directory.CreateDirectory(Update.Previous);
             Directory.CreateDirectory(Update.Applier);
             File.Copy(InstallPath, Path.Combine(Update.Applier, ReleaseAssets.ExecutableName), overwrite: true);
+            foreach (var notice in ReleaseAssets.Notices)
+            {
+                File.Delete(ReleaseAssets.NoticeBeside(Update.PreviousExecutable, notice));
+            }
+
             File.Move(InstallPath, Update.PreviousExecutable, overwrite: true);
+            foreach (var notice in ReleaseAssets.Notices.Where(notice => File.Exists(ReleaseAssets.NoticeBeside(InstallPath, notice))))
+            {
+                File.Move(ReleaseAssets.NoticeBeside(InstallPath, notice), ReleaseAssets.NoticeBeside(Update.PreviousExecutable, notice));
+            }
         }
 
         if (step >= UpdateStep.Swapped)
         {
             File.Move(Update.StagedExecutable(To), InstallPath);
+            foreach (var notice in ReleaseAssets.Notices.Where(notice => File.Exists(ReleaseAssets.NoticeBeside(Update.StagedExecutable(To), notice))))
+            {
+                File.Move(ReleaseAssets.NoticeBeside(Update.StagedExecutable(To), notice), ReleaseAssets.NoticeBeside(InstallPath, notice));
+            }
         }
 
         if (step >= UpdateStep.Started)

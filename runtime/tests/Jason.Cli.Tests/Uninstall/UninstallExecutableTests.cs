@@ -5,6 +5,7 @@ using Jason.Cli.Tests.Autostart;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Update;
 
 namespace Jason.Cli.Tests.Uninstall;
 
@@ -520,6 +521,104 @@ public class UninstallExecutableTests
 
         Assert.StartsWith(Path.Combine(dir.Paths.Root, ".jason-uninstall-"), outcome.MovedTo, StringComparison.OrdinalIgnoreCase);
         Assert.True(File.Exists(outcome.MovedTo));
+    }
+
+    /// <summary>
+    /// The notice files the installer keeps beside the executable are the installer's too, and go with it, by name. Left
+    /// behind, they would make the install directory "somebody else's", and the directory would stay with them.
+    /// </summary>
+    [Fact]
+    public async Task The_notices_beside_the_executable_go_with_it()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var notices = Notices(executable);
+
+        var (exit, report) = await RunAsync(dir, executable, new RecordingRemover { ReallyRemoves = true });
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(notices, report.Plan.Notices);
+        Assert.All(notices, notice => Assert.False(File.Exists(notice), $"{notice} was left behind."));
+        Assert.False(Directory.Exists(Path.GetDirectoryName(executable)), "the install directory was kept for holding the installer's own files.");
+        Assert.All(notices, notice => Assert.Contains(report.Done, line => line.Contains($"'{notice}'", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// On macOS and Linux the install directory is one other tools share, and a <c>LICENSE</c> there is somebody else's:
+    /// exactly the two names go, and nothing that merely resembles them.
+    /// </summary>
+    [Fact]
+    public async Task Only_the_notices_names_go_and_a_licence_beside_them_that_is_not_jason_s_stays()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var notices = Notices(executable);
+        var directory = Path.GetDirectoryName(executable)!;
+        string[] theirs = [Path.Combine(directory, "LICENSE"), Path.Combine(directory, "THIRD-PARTY-NOTICES"), Path.Combine(directory, "other-LICENSE")];
+        foreach (var file in theirs)
+        {
+            File.WriteAllText(file, "another tool's");
+        }
+
+        var (exit, report) = await RunAsync(dir, executable, new RecordingRemover { ReallyRemoves = true });
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.All(notices, notice => Assert.False(File.Exists(notice)));
+        Assert.All(theirs, file => Assert.Equal("another tool's", File.ReadAllText(file)));
+        Assert.Contains(report.Kept, line => line.Contains("did not write", StringComparison.Ordinal));
+    }
+
+    /// <summary>A notice that could not be removed is a problem, named as what keeps the directory, and the verb exits 1.</summary>
+    [Fact]
+    public async Task A_notice_that_could_not_be_removed_is_named_as_what_keeps_the_directory()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var notices = Notices(executable);
+        var remover = new RecordingRemover { ReallyRemoves = true };
+        remover.Locked.Add(notices[^1]);
+
+        var (exit, report) = await RunAsync(dir, executable, remover);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains(report.Problems, line => line.Contains(notices[^1], StringComparison.Ordinal));
+        Assert.DoesNotContain(report.Kept, line => line.Contains("did not write", StringComparison.Ordinal));
+        Assert.Contains(report.Kept, line => line.Contains(Path.GetDirectoryName(executable)!, StringComparison.Ordinal)
+            && line.Contains(Path.GetFileName(notices[^1]), StringComparison.Ordinal));
+    }
+
+    /// <summary>The dry run lists each notice it would remove, after the executable, as the run does.</summary>
+    [Fact]
+    public async Task The_plan_names_each_notice_it_would_remove()
+    {
+        using var dir = new TempPaths();
+        var executable = Install(dir);
+        var notices = Notices(executable);
+        var output = new StringWriter();
+
+        await UninstallCommand.RunAsync(
+            Environment(dir, executable, new RecordingRemover(), output),
+            new UninstallOptions(Human: true, DryRun: true, PurgeData: false, Yes: false, Force: false),
+            Ct);
+
+        var said = output.ToString();
+        var at = said.IndexOf($"the executable at {executable}", StringComparison.Ordinal);
+        var licence = said.IndexOf($"  the licence notice at {notices[0]}", StringComparison.Ordinal);
+        var thirdParty = said.IndexOf($"  the third-party notices at {notices[1]}", StringComparison.Ordinal);
+        Assert.True(at >= 0 && licence > at && thirdParty > licence, said);
+        Assert.True(File.Exists(notices[0]), "a dry run removed a notice.");
+    }
+
+    /// <summary>The notices an install writes beside the executable, written, in the order the code names them.</summary>
+    private static List<string> Notices(string executable)
+    {
+        List<string> notices = [.. ReleaseAssets.Notices.Select(notice => ReleaseAssets.NoticeBeside(executable, notice))];
+        foreach (var notice in notices)
+        {
+            File.WriteAllText(notice, "a notice");
+        }
+
+        return notices;
     }
 
     /// <summary>

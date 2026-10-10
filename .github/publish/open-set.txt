@@ -2,7 +2,9 @@
 .gitattributes
 CODEOWNERS
 LICENSE
+LICENSE-RUNTIME.md
 README.md
+THIRD-PARTY-NOTICES
 docs/INSTALL.md
 docs/contracts/
 docs/golden-path.md

@@ -279,7 +279,9 @@ public class ReleaseAndUpdateDocTests
             Paragraphs(),
             paragraph => paragraph.Contains("Between `kept` and `swapped` the install path is empty", StringComparison.Ordinal));
 
-        Assert.Contains("one rename wide", window, StringComparison.Ordinal);
+        // The executable's rename aside, its notices' after it, and the rename in: no longer one rename wide.
+        Assert.Contains("a few renames wide", window, StringComparison.Ordinal);
+        Assert.DoesNotContain("one rename wide", window, StringComparison.Ordinal);
 
         // The two directories, named from the paths the code composes rather than from memory.
         var page = Read();

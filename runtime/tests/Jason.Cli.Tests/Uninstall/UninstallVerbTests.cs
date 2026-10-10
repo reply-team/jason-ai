@@ -86,6 +86,23 @@ public class UninstallVerbTests
         Assert.Contains(published, output.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The steps name the notice files the installer keeps beside the executable: step 5's rule counts them as Jason's,
+    /// and step 6 removes them. Read with the help page's line breaks made spaces, since a step wraps.
+    /// </summary>
+    [Theory]
+    [InlineData("5. the PATH entry, only where the installer wrote it and its directory holds nothing but Jason — the executable, its two notice files and what an upgrade left beside it:")]
+    [InlineData("6. the executable, its notice files (jason-LICENSE, jason-THIRD-PARTY-NOTICES), its install directory, and the native libraries it unpacked on first run")]
+    public async Task The_help_page_names_the_notice_files_in_the_steps_that_remove_them(string published)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["uninstall", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
+
+        Assert.Contains(published, System.Text.RegularExpressions.Regex.Replace(output.ToString(), @"\s+", " "), StringComparison.Ordinal);
+    }
+
     /// <summary>The wait the help page publishes is the remover's own, not a number written down beside it.</summary>
     [Fact]
     public async Task The_wait_the_help_page_publishes_is_the_removers_rule()

@@ -4,9 +4,10 @@ Installs Jason on Windows.
 
 .DESCRIPTION
 Downloads jason-win-x64.zip from the latest release, or from the release -Version names, checks it against
-checksums.txt before unpacking, puts jason.exe in %LOCALAPPDATA%\Programs\jason, and adds that directory to
-the user's PATH unless -NoModifyPath says otherwise. Running it again over the same version downloads nothing
-and says so.
+checksums.txt before unpacking, puts jason.exe in %LOCALAPPDATA%\Programs\jason with the licence and the
+third-party notices beside it as jason-LICENSE and jason-THIRD-PARTY-NOTICES, and adds that directory to the
+user's PATH unless -NoModifyPath says otherwise. Running it again over the same version downloads nothing and
+says so, unless a licence file is missing beside it, which it then writes.
 
     irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
     & ([scriptblock]::Create((irm https://github.com/reply-team/jason-ai/releases/download/v0.2.0/install.ps1))) -Version 0.2.0 -NoModifyPath
@@ -26,7 +27,7 @@ The release to install, without a leading v. The latest, when not given.
 A directory or a base URL to read the release's files from, instead of GitHub. Also JASON_INSTALL_FEED.
 
 .PARAMETER InstallDir
-Where jason.exe goes. %LOCALAPPDATA%\Programs\jason, when not given.
+Where jason.exe and its licence files go. %LOCALAPPDATA%\Programs\jason, when not given.
 
 .PARAMETER NoModifyPath
 Leave the user's PATH alone.
@@ -57,6 +58,9 @@ function Install-Jason {
     Set-StrictMode -Version Latest
 
     $repositoryUrl = 'https://github.com/reply-team/jason-ai'
+    # The licence is a page of the repository, at the release's tag; the downloads are a release's assets. Each has a
+    # base of its own, so that the downloads can move without the licence page moving with them.
+    $licenceBase = 'https://github.com/reply-team/jason-ai/blob'
     $rid = 'win-x64'
     $asset = 'jason-win-x64.zip'
 
@@ -125,6 +129,84 @@ function Install-Jason {
         return $path
     }
 
+    $held = 'is held open by another program; it was tried for 10 seconds.'
+
+    # True for 0.6.0 and later, the pre-release part ignored: LICENSE-RUNTIME.md first exists at v0.6.0, and an earlier
+    # release carried a notice of its own, which is not the Jason Runtime Licence.
+    function Test-Licensed([string] $version) {
+        $core = $null
+        [version]::TryParse(($version -split '[-+]')[0], [ref] $core) -and $core -ge [version] '0.6.0'
+    }
+
+    # The archive, downloaded with checksums.txt and checked against it before Expand-Archive opens anything. An
+    # archive that does not match goes with the temporary directory, and nothing is installed or written.
+    function Get-CheckedArchive {
+        Write-Host "Downloading Jason $latest for $rid from $base ..."
+        Fetch 'checksums.txt' (Join-Path $tmp 'checksums.txt')
+        $archive = Join-Path $tmp $asset
+        Fetch $asset $archive
+
+        $line = Get-Content -LiteralPath (Join-Path $tmp 'checksums.txt') | Where-Object { $_ -match "^[0-9a-f]{64}  $([regex]::Escape($asset))$" } | Select-Object -First 1
+        if (-not $line) { throw "checksums.txt has no line for $asset." }
+        $expected = ($line -split ' ')[0]
+        $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actual -ne $expected) { throw "$asset does not match checksums.txt (sha256 $actual, expected $expected); nothing was installed." }
+        return $archive
+    }
+
+    # The archive unpacked into the temporary directory. Expand-Archive refuses an archive that names a file twice or a
+    # file outside the directory, but as an error the caller's preference does not reach: told to stop, it stops the
+    # install before anything is installed.
+    function Expand-Checked([string] $archive) {
+        $unpacked = Join-Path $tmp 'unpacked'
+        Expand-Archive -LiteralPath $archive -DestinationPath $unpacked -ErrorAction Stop
+        return $unpacked
+    }
+
+    # The two notices an archive carries beside the executable. Beside the installed executable each is jason-<name>.
+    $notices = @('LICENSE', 'THIRD-PARTY-NOTICES')
+
+    # Each notice the unpacked archive holds as a regular file of exactly its name at its top level; anything else under
+    # that name - a path, a directory, another case of it - is not the release's notice. The names are read from the
+    # directory, because a path asked for is answered in the case it was asked in.
+    function Read-Notices([string] $unpacked) {
+        $taken = @{}
+        $entries = @(Get-ChildItem -LiteralPath $unpacked -Force)
+        foreach ($name in $notices) {
+            $item = $entries | Where-Object { $_.Name -ceq $name } | Select-Object -First 1
+            if ($item -and -not $item.PSIsContainer -and -not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                $taken[$name] = $item.FullName
+            }
+        }
+        return $taken
+    }
+
+    # Each notice beside the executable, by one rule per name: jason-<name> is written from the archive's file of that
+    # name when the archive has it, and removed when it does not. Each is copied beside its final name, the old one is
+    # removed, and the copy is renamed onto the name, after the executable is in place. A file another program holds is
+    # waited for as the executable is: removing it is what waits, since a rename onto a held file is refused as a file
+    # that exists. The reason one could not be written is returned, or nothing.
+    function Write-Notices([hashtable] $taken) {
+        foreach ($name in $notices) {
+            $destination = Join-Path $InstallDir "jason-$name"
+            $staging = $null
+            if (Test-Path -LiteralPath $destination -PathType Container) { return "'$(FromHome $destination)' is a directory." }
+            try {
+                $written = $true
+                if ($taken.ContainsKey($name)) {
+                    $staging = "$destination.installing"
+                    Copy-Item -LiteralPath $taken[$name] -Destination $staging -Force -ErrorAction Stop
+                }
+                if (Test-Path -LiteralPath $destination) { $written = Held { Remove-Item -LiteralPath $destination -Force -ErrorAction Stop } }
+                if ($written -and $staging) { $written = Held { Move-Item -LiteralPath $staging -Destination $destination -ErrorAction Stop } }
+                if (-not $written) { throw "'$(FromHome $destination)' $held" }
+            } catch {
+                if ($staging) { Remove-Item -LiteralPath $staging -Force -ErrorAction SilentlyContinue }
+                return $_.Exception.Message.Trim().TrimEnd('.') + '.'
+            }
+        }
+    }
+
     $tmp = Join-Path ([IO.Path]::GetTempPath()) "jason-install-$([Guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Path $tmp | Out-Null
     try {
@@ -149,25 +231,21 @@ function Install-Jason {
         }
 
         if ($installed -eq $latest) {
-            Write-Host "Jason $latest is already installed at $target; nothing to download."
+            # The right version, without its notices: an installation an older jason updated, or one whose notices
+            # were removed. A release before 0.6.0 never had THIRD-PARTY-NOTICES, so it has nothing to repair. The
+            # archive is checked as an install's is; the notices are taken out of it, and the executable is not touched.
+            $missing = @($notices | Where-Object { -not (Test-Path -LiteralPath (Join-Path $InstallDir "jason-$_") -PathType Leaf) })
+            if ((Test-Licensed $latest) -and $missing.Count -gt 0) {
+                $reason = Write-Notices (Read-Notices (Expand-Checked (Get-CheckedArchive)))
+                if ($reason) { throw "Jason $latest is installed at $target, and its licence files could not be written beside it: $reason Run this script again." }
+                Write-Host "Jason $latest is already installed at $target; its licence files were missing and are written beside it now."
+            } else {
+                Write-Host "Jason $latest is already installed at $target; nothing to download."
+            }
         } else {
             # --- download, and check before unpacking -------------------------------------------------------
 
-            Write-Host "Downloading Jason $latest for $rid from $base ..."
-            Fetch 'checksums.txt' (Join-Path $tmp 'checksums.txt')
-            $archive = Join-Path $tmp $asset
-            Fetch $asset $archive
-
-            # The digest from checksums.txt, compared before Expand-Archive opens anything. An archive that does
-            # not match goes with the temporary directory, and nothing is installed.
-            $line = Get-Content -LiteralPath (Join-Path $tmp 'checksums.txt') | Where-Object { $_ -match "^[0-9a-f]{64}  $([regex]::Escape($asset))$" } | Select-Object -First 1
-            if (-not $line) { throw "checksums.txt has no line for $asset." }
-            $expected = ($line -split ' ')[0]
-            $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($actual -ne $expected) { throw "$asset does not match checksums.txt (sha256 $actual, expected $expected); nothing was installed." }
-
-            $unpacked = Join-Path $tmp 'unpacked'
-            Expand-Archive -LiteralPath $archive -DestinationPath $unpacked
+            $unpacked = Expand-Checked (Get-CheckedArchive)
             # Expand-Archive hands the download's mark of the web on to what it unpacks, and an executable carrying
             # it is stopped by SmartScreen the first time it runs.
             Unblock-File -LiteralPath (Join-Path $unpacked 'jason.exe')
@@ -182,12 +260,10 @@ function Install-Jason {
             $started = ($started -split '\+')[0]
             if ($started -ne $latest) { throw "The downloaded jason.exe says it is $started and the manifest says $latest; nothing was installed." }
 
-            # Only the executable is installed; LICENSE stays in the archive, and the install directory holds
-            # nothing but the program. A running jason.exe cannot be overwritten but can be renamed: the old one
-            # steps aside, the new one moves in, and the old one is removed once nothing runs it.
+            # The executable goes in first, and its notices after it. A running jason.exe cannot be overwritten but can
+            # be renamed: the old one steps aside, the new one moves in, and the old one is removed once nothing runs it.
             New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
             $previous = Join-Path $InstallDir 'jason.previous.exe'
-            $held = 'is held open by another program; it was tried for 10 seconds.'
 
             # What an earlier install left is cleared first, and waited for while something holds it: moving onto it
             # would refuse a held file and a file a jason still runs from in the same words. Any other refusal - that
@@ -224,6 +300,11 @@ function Install-Jason {
             }
             if (Test-Path -LiteralPath $previous) { Remove-Item -LiteralPath $previous -Force -ErrorAction SilentlyContinue }
 
+            # The notices go beside it once it is in place. One that cannot be written leaves Jason installed without it,
+            # and the run says so; run again, it takes the path above and writes them.
+            $reason = Write-Notices (Read-Notices $unpacked)
+            if ($reason) { throw "Jason $started is installed at $target, and its licence files could not be written beside it: $reason Run this script again." }
+
             Write-Host "Installed Jason $started to $target"
         }
     } finally {
@@ -232,32 +313,39 @@ function Install-Jason {
 
     # --- the PATH ---------------------------------------------------------------------------------------------
 
-    if ($NoModifyPath) { return }
-
-    # The user's PATH lives in the registry, where a directory is its own mark: it is added when it is not there
-    # and left alone when it is, so a second run changes nothing.
-    #
-    # Read as the registry stores it and written back with the kind it had. An ordinary account's Path is
-    # REG_EXPAND_SZ and full of %USERPROFILE%, and the [Environment] pair this used to go through expanded every
-    # entry on the way in and wrote the whole value back as REG_SZ. Running programs are told, which that setter
-    # did for free, and so is this session.
-    #
-    # `jason status` prints these same statements, on one line, as its repair for a PATH that does not carry
-    # Jason, and a test holds the two to each other line by line.
-    $directory = $InstallDir.TrimEnd('\')
-    & {
-        $entry = $directory
-        $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
-        $stored = [string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-        $kind = if ($key.GetValueNames() -contains 'Path') { $key.GetValueKind('Path') } else { 'ExpandString' }
-        if (-not @($stored -split ';' | Where-Object { $(if ($kind -eq 'ExpandString') { [Environment]::ExpandEnvironmentVariables($_) } else { $_ }).TrimEnd('\') -ieq $entry })) { $key.SetValue('Path', ((@($stored -split ';' | Where-Object { $_ }) + $entry) -join ';'), $kind) }
-        $key.Dispose()
-        if (-not ('Jason.UserEnvironment' -as [type])) { Add-Type -Namespace Jason -Name UserEnvironment -MemberDefinition '[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessageTimeout(IntPtr window, uint message, UIntPtr wParam, string lParam, uint flags, uint timeout, out UIntPtr result);' }
-        $answer = [UIntPtr]::Zero
-        [void][Jason.UserEnvironment]::SendMessageTimeout([IntPtr]0xffff, 0x1a, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$answer)
-        if (-not @($env:Path -split ';' | Where-Object { $_.TrimEnd('\') -ieq $entry })) { $env:Path += ';' + $entry }
+    if (-not $NoModifyPath) {
+        # The user's PATH lives in the registry, where a directory is its own mark: it is added when it is not there
+        # and left alone when it is, so a second run changes nothing.
+        #
+        # Read as the registry stores it and written back with the kind it had. An ordinary account's Path is
+        # REG_EXPAND_SZ and full of %USERPROFILE%, and the [Environment] pair this used to go through expanded every
+        # entry on the way in and wrote the whole value back as REG_SZ. Running programs are told, which that setter
+        # did for free, and so is this session.
+        #
+        # `jason status` prints these same statements, on one line, as its repair for a PATH that does not carry
+        # Jason, and a test holds the two to each other line by line.
+        $directory = $InstallDir.TrimEnd('\')
+        & {
+            $entry = $directory
+            $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+            $stored = [string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+            $kind = if ($key.GetValueNames() -contains 'Path') { $key.GetValueKind('Path') } else { 'ExpandString' }
+            if (-not @($stored -split ';' | Where-Object { $(if ($kind -eq 'ExpandString') { [Environment]::ExpandEnvironmentVariables($_) } else { $_ }).TrimEnd('\') -ieq $entry })) { $key.SetValue('Path', ((@($stored -split ';' | Where-Object { $_ }) + $entry) -join ';'), $kind) }
+            $key.Dispose()
+            if (-not ('Jason.UserEnvironment' -as [type])) { Add-Type -Namespace Jason -Name UserEnvironment -MemberDefinition '[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessageTimeout(IntPtr window, uint message, UIntPtr wParam, string lParam, uint flags, uint timeout, out UIntPtr result);' }
+            $answer = [UIntPtr]::Zero
+            [void][Jason.UserEnvironment]::SendMessageTimeout([IntPtr]0xffff, 0x1a, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$answer)
+            if (-not @($env:Path -split ';' | Where-Object { $_.TrimEnd('\') -ieq $entry })) { $env:Path += ';' + $entry }
+        }
+        Write-Host "$directory is on your PATH; open a new terminal to run jason from anywhere."
     }
-    Write-Host "$directory is on your PATH; open a new terminal to run jason from anywhere."
+
+    # --- the licence ------------------------------------------------------------------------------------------
+
+    # The last line of a successful run, and never a question: what is installed, and the terms it is installed under.
+    if (Test-Licensed $latest) {
+        Write-Host "Jason $latest is licensed under the Jason Runtime Licence: $licenceBase/v$latest/LICENSE-RUNTIME.md"
+    }
 }
 
 # Removed again whatever happens: the one-liner is `irm ... | iex`, which runs this text in the session that

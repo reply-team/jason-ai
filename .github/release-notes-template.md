@@ -22,11 +22,11 @@ from the runtime's source at `v{{version}}` — which is not published — by th
 | `install.sh` | macOS and Linux: the install script this release was published with |
 | `install.ps1` | Windows: the install script this release was published with |
 
-Each archive holds the executable and `LICENSE` (the runtime's licence; the repository's MIT does not cover the
-runtime), nothing else. Plugins are installed from the repository as before: a package is copied into
-`~/.jason/plugins/`. On Linux the executable needs the ICU library (`libicu`), which desktop distributions carry
-and minimal images may not; the install script stops, with the runtime's own message, rather than install a
-program that does not start.
+Each archive holds the executable, `LICENSE` (the runtime's licence; the repository's MIT does not cover the
+runtime) and `THIRD-PARTY-NOTICES`, nothing else. Plugins are installed from the repository as before: a package
+is copied into `~/.jason/plugins/`. On Linux the executable needs the ICU library (`libicu`), which desktop
+distributions carry and minimal images may not; the install script stops, with the runtime's own message, rather
+than install a program that does not start.
 
 ## Installing
 
@@ -42,9 +42,15 @@ and on Windows, in PowerShell:
 irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
 ```
 
+By installing Jason you accept the Jason Runtime Licence:
+<https://github.com/reply-team/jason-ai/blob/v{{version}}/LICENSE-RUNTIME.md>. If you do not accept it, do not
+install Jason.
+
 Both find this machine's archive, check it against `checksums.txt` before unpacking, and put `jason` on the
-PATH — in `~/.local/bin`, or `%LOCALAPPDATA%\Programs\jason`. Running the line again over an installed Jason of
-the same version changes nothing and says so. Two options, for a script that must be told:
+PATH — in `~/.local/bin`, or `%LOCALAPPDATA%\Programs\jason` — with its licence and the third-party notices
+beside it, as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`. Running the line again over an installed Jason of
+the same version changes nothing and says so, unless a licence file is missing beside the executable, which it
+then writes. Two options, for a script that must be told:
 
 ```sh
 curl -fsSL https://github.com/reply-team/jason-ai/releases/download/v{{version}}/install.sh | sh -s -- --version {{version}} --no-modify-path
@@ -69,6 +75,9 @@ sha256sum --check --ignore-missing checksums.txt
 ```
 
 On Windows, compare `Get-FileHash` of the archive with its line in `checksums.txt`.
+
+If you then put the executable in place by hand, keep `LICENSE` and `THIRD-PARTY-NOTICES` beside it, named
+`jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`.
 
 ## What is not here
 

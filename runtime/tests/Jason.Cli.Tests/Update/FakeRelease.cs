@@ -138,6 +138,68 @@ public sealed class FakeRelease : HttpMessageHandler
             : new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new ByteArrayContent([]) };
     }
 
+    /// <summary>What an entry of a test's archive is.</summary>
+    public enum EntryKind
+    {
+        File,
+        Directory,
+
+        /// <summary>A link whose target is the entry's content, as text.</summary>
+        SymbolicLink,
+    }
+
+    /// <summary>One entry of a test's archive, of any kind a hostile archive could hold.</summary>
+    public sealed record Entry(string Name, byte[] Content, EntryKind Kind = EntryKind.File)
+    {
+        public Entry(string name, string text, EntryKind kind = EntryKind.File)
+            : this(name, Encoding.UTF8.GetBytes(text), kind)
+        {
+        }
+    }
+
+    /// <summary>
+    /// An archive holding exactly <paramref name="entries"/>, in order, each of the kind it says. A link in a zip is what
+    /// Unix zip tools write: the entry's mode says it is one, and its content is the target.
+    /// </summary>
+    public static byte[] ArchiveOf(string asset, IEnumerable<Entry> entries)
+    {
+        using var memory = new MemoryStream();
+        if (asset.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            using var zip = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true);
+            foreach (var entry in entries)
+            {
+                var written = zip.CreateEntry(entry.Kind is EntryKind.Directory ? entry.Name + "/" : entry.Name);
+                if (entry.Kind is EntryKind.SymbolicLink)
+                {
+                    written.ExternalAttributes = unchecked((int)(0xA1FFu << 16));
+                }
+
+                if (entry.Kind is not EntryKind.Directory)
+                {
+                    using var stream = written.Open();
+                    stream.Write(entry.Content);
+                }
+            }
+        }
+        else
+        {
+            using var gzip = new GZipStream(memory, CompressionMode.Compress, leaveOpen: true);
+            using var tar = new TarWriter(gzip, TarEntryFormat.Pax, leaveOpen: true);
+            foreach (var entry in entries)
+            {
+                tar.WriteEntry(entry.Kind switch
+                {
+                    EntryKind.Directory => new PaxTarEntry(TarEntryType.Directory, entry.Name + "/"),
+                    EntryKind.SymbolicLink => new PaxTarEntry(TarEntryType.SymbolicLink, entry.Name) { LinkName = Encoding.UTF8.GetString(entry.Content) },
+                    _ => new PaxTarEntry(TarEntryType.RegularFile, entry.Name) { DataStream = new MemoryStream(entry.Content) },
+                });
+            }
+        }
+
+        return memory.ToArray();
+    }
+
     private static byte[] Zip(IReadOnlyList<(string Name, byte[] Content)> entries)
     {
         using var memory = new MemoryStream();

@@ -55,7 +55,7 @@ public static class UpdateCommands
     {
         var command = new Command(
             "apply",
-            "Install the newest release: download it, stop this machine's runtime, put the new executable in place and start it again.");
+            "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place and start it again.");
         var feed = new Option<string?>("--feed")
         {
             Description = "Read a different feed: the https address of a manifest.json, or http on this machine. Default: the public release feed.",
@@ -141,7 +141,7 @@ public static class UpdateCommands
     {
         var command = new Command(
             "rollback",
-            "Put the version this machine updated from back: the executable it replaced, and - if that update migrated the database - the backup it wrote.");
+            "Put the version this machine updated from back: the executable it replaced with its licence files, and - if that update migrated the database - the backup it wrote.");
         var human = VerbOptions.Human();
         command.Options.Add(human);
 

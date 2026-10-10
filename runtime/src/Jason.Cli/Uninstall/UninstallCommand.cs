@@ -4,6 +4,7 @@ using System.Text.Json;
 using Jason.Cli.Commands;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
+using Jason.Contracts.Update;
 
 namespace Jason.Cli.Uninstall;
 
@@ -44,9 +45,11 @@ public static class UninstallCommand
           3. on Windows, the notification registration: the AppUserModelID key the toast was shown under, and
              the two entries Windows made for it
           4. every skill a deployment recorded, by the paths its record names
-          5. the PATH entry, only where the installer wrote it and its directory holds nothing but Jason:
-             the marked block in a login profile; on Windows, the entry in this account's Path
-          6. the executable, its install directory, and the native libraries it unpacked on first run
+          5. the PATH entry, only where the installer wrote it and its directory holds nothing but Jason — the
+             executable, its two notice files and what an upgrade left beside it: the marked block in a login
+             profile; on Windows, the entry in this account's Path
+          6. the executable, its notice files (jason-LICENSE, jason-THIRD-PARTY-NOTICES), its install
+             directory, and the native libraries it unpacked on first run
 
         A file another program holds open is tried again for up to {InstallationRemovers.HeldFiles.WaitInWords} before it is reported;
         elsewhere than Windows an open file does not stop the removal.
@@ -320,6 +323,13 @@ public static class UninstallCommand
                 "  no executable: this Jason is not a published single file - it is running through `dotnet`, or "
                 + "from a build's own output - so there is no one file to remove. The build it runs from is where "
                 + "it lives.");
+        }
+
+        foreach (var notice in plan.Notices ?? [])
+        {
+            env.Out.WriteLine(Path.GetFileName(notice) == ReleaseAssets.NoticeFileName("LICENSE")
+                ? $"  the licence notice at {notice}"
+                : $"  the third-party notices at {notice}");
         }
 
         if (plan.PreviousExecutable is { } previous)

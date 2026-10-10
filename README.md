@@ -108,10 +108,14 @@ curl -fsSL https://github.com/reply-team/jason-ai/releases/latest/download/insta
 irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
 ```
 
+By installing Jason you accept the Jason Runtime Licence: [LICENSE-RUNTIME.md](LICENSE-RUNTIME.md). If you do not
+accept it, do not install Jason.
+
 Each script works out your platform, verifies the download's SHA-256 before unpacking it, installs the
 executable under your own account — `~/.local/bin` on macOS and Linux, `%LOCALAPPDATA%\Programs\jason` on
-Windows — and puts that directory on your PATH unless you pass `--no-modify-path`. Nothing needs administrator
-rights. Both lines install the **latest release**. If they answer 404 there is no published release to install
+Windows — with its licence and the third-party notices beside it, as `jason-LICENSE` and
+`jason-THIRD-PARTY-NOTICES`, and puts that directory on your PATH unless you pass `--no-modify-path`. Nothing
+needs administrator rights. Both lines install the **latest release**. If they answer 404 there is no published release to install
 yet: that is a fact about this repository, not a failure of your machine, and there is nothing here to build
 instead ([docs/INSTALL.md](docs/INSTALL.md) §3).
 
@@ -142,6 +146,10 @@ preamble, no repository tour:
 
 ```text
 Install Jason on this machine and tell me whether it can start work.
+
+By installing Jason you accept the Jason Runtime Licence:
+<https://github.com/reply-team/jason-ai/blob/main/LICENSE-RUNTIME.md>. If you do not accept it, do
+not install Jason.
 
 Follow docs/INSTALL.md in this repository, in order, from section 2.
 
@@ -285,8 +293,9 @@ there, and this verb removes those skills and nothing else — a skill you copie
 receipt, so it is removed by nobody, including this. The rest goes by rule, in a fixed order: the logon
 registration first, so a logon part-way through cannot start what is going; then the runtime, and if it will
 not stop, nothing after that is removed; then the recorded skills; then the PATH entry, only where the
-installer wrote it and its directory holds nothing but Jason; then the executable, its install directory and
-the native libraries it unpacked. A recorded file whose bytes have changed since is
+installer wrote it and its directory holds nothing but Jason — the executable, its two notice files and what an
+upgrade left beside it; then the executable, its notice files, its install directory and the native libraries it
+unpacked. A recorded file whose bytes have changed since is
 reported and kept unless `--force` says otherwise.
 
 **The data directory is kept** — the database, the settings, the plugins, the logs and the work directories
@@ -465,4 +474,6 @@ that file before you send it; [When something is wrong](#when-something-is-wrong
 ## License
 
 Everything in this repository is MIT ([LICENSE](LICENSE)). The runtime binaries attached to each release are
-licensed separately: the licence ships inside every archive, beside the executable.
+licensed separately, under the Jason Runtime Licence ([LICENSE-RUNTIME.md](LICENSE-RUNTIME.md)): every archive
+carries the licence and the third-party notices, and an install keeps both beside the executable as
+`jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`.

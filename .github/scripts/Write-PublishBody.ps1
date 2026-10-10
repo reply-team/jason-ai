@@ -43,9 +43,15 @@ $areas = @(
     [pscustomobject]@{ Name = 'Contracts (`docs/contracts/`)'; Paths = @('docs/contracts/') }
     [pscustomobject]@{ Name = 'Documentation (`README.md`, `docs/`)'; Paths = @('README.md', 'docs/') }
     [pscustomobject]@{ Name = 'Install path (`install/`)'; Paths = @('install/') }
+    # A row of its own, so that a change to the terms or to the notices reads as something other than 0 0 0. The
+    # own-files row changes in every release, with VERSION, and would hide it.
     [pscustomobject]@{
-        Name  = 'This repository''s own files (`VERSION`, `LICENSE`, `CODEOWNERS`, `.gitattributes`, `.gitignore`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/`)'
-        Paths = @('VERSION', 'LICENSE', 'CODEOWNERS', '.gitattributes', '.gitignore', 'CONTRIBUTING.md', 'SECURITY.md', '.github/')
+        Name  = 'Licences (`LICENSE`, `LICENSE-RUNTIME.md`, `THIRD-PARTY-NOTICES`)'
+        Paths = @('LICENSE', 'LICENSE-RUNTIME.md', 'THIRD-PARTY-NOTICES')
+    }
+    [pscustomobject]@{
+        Name  = 'This repository''s own files (`VERSION`, `CODEOWNERS`, `.gitattributes`, `.gitignore`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/`)'
+        Paths = @('VERSION', 'CODEOWNERS', '.gitattributes', '.gitignore', 'CONTRIBUTING.md', 'SECURITY.md', '.github/')
     }
 )
 

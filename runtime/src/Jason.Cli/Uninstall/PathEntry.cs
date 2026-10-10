@@ -1,3 +1,5 @@
+using Jason.Contracts.Update;
+
 namespace Jason.Cli.Uninstall;
 
 /// <summary>
@@ -463,13 +465,15 @@ public static class PathEntry
     }
 
     /// <summary>
-    /// What <c>install.ps1</c> ever writes into an install directory: the executable, and the one an upgrade
-    /// replaced while it was running.
+    /// What <c>install.ps1</c> ever writes into an install directory: the executable, its two notice files, and the
+    /// executable an upgrade replaced while it was running.
     /// </summary>
-    public static IReadOnlyList<string> InstallerFiles { get; } = ["jason.exe", "jason.previous.exe"];
+    public static IReadOnlyList<string> InstallerFiles { get; } =
+        ["jason.exe", .. ReleaseAssets.Notices.Select(ReleaseAssets.NoticeFileName), "jason.previous.exe"];
 
-    /// <summary>What <c>install.sh</c> ever leaves in an install directory: the executable, and nothing else.</summary>
-    public static IReadOnlyList<string> UnixInstallerFiles { get; } = ["jason"];
+    /// <summary>What <c>install.sh</c> ever leaves in an install directory: the executable and its two notice files.</summary>
+    public static IReadOnlyList<string> UnixInstallerFiles { get; } =
+        ["jason", .. ReleaseAssets.Notices.Select(ReleaseAssets.NoticeFileName)];
 
     /// <summary>
     /// Whether a directory holding those entries is Jason's own: nothing in it but what the installer writes.

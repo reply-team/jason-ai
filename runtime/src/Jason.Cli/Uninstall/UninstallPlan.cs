@@ -50,6 +50,10 @@ public sealed record UnknownRoot(string Root, string Reason);
 /// for certain which directory was its own.
 /// </param>
 /// <param name="PurgesData">Whether the explicit word was said. Nothing else stands for it.</param>
+/// <param name="Notices">
+/// The notice files the installer keeps beside the executable, by their names there, where they are present. The
+/// installer wrote them, so they go with the executable, and nothing else of that directory is taken for them.
+/// </param>
 /// <param name="DataDirectory">Where it is, so the kept-it line can name it.</param>
 public sealed record UninstallPlan(
     bool AutostartRegistered,
@@ -66,7 +70,8 @@ public sealed record UninstallPlan(
     bool PurgesData,
     string DataDirectory,
     IReadOnlyList<string>? NotificationKeys = null,
-    string? NotificationKeysUnreadable = null)
+    string? NotificationKeysUnreadable = null,
+    IReadOnlyList<string>? Notices = null)
 {
     /// <summary>How many files the receipts name that are still there and still ours.</summary>
     public int Removable => Roots.Sum(root => root.Files.Count(file => file.Present && !file.Edited));

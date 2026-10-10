@@ -6,6 +6,7 @@ using Jason.Cli.Autostart;
 using Jason.Cli.Skills;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Json;
+using Jason.Contracts.Update;
 
 namespace Jason.App.Tests.Uninstall;
 
@@ -16,8 +17,9 @@ namespace Jason.App.Tests.Uninstall;
 /// <remarks>
 /// <para>
 /// Scratch data directory, scratch install directory, scratch harness root, and this repository read where it
-/// stands. Three canaries — a neighbouring skill in the harness root, a file in the data directory, and a file
-/// in the install directory the installer did not write — because the only convincing evidence that a
+/// stands. Four canaries — a neighbouring skill in the harness root, a file in the data directory, and two files
+/// in the install directory the installer did not write, one of them another tool's <c>LICENSE</c> beside Jason's
+/// notice files — because the only convincing evidence that a
 /// destructive verb removed the right things is that named other things are still byte-identical afterwards.
 /// A scan for a deletion that did not happen proves nothing.
 /// </para>
@@ -62,7 +64,7 @@ public class RoundTripTests
         // file that was the installation: every deployed file is gone, and every file that was already there
         // is still there with the same bytes. Stated as an equality rather than as a handful of Exists calls,
         // because a verb that removed one thing too many would pass every one of those and fail this.
-        Assert.Equal(Without(Outside(before, tree), tree.Executable), Outside(after, tree));
+        Assert.Equal(Without(Outside(before, tree), [tree.Executable, .. tree.Notices]), Outside(after, tree));
 
         // The install directory itself stays, because somebody else's file is in it.
         Assert.True(Directory.Exists(tree.InstallDirectory), "The install directory went although a file this installer did not write is in it.");
@@ -98,7 +100,7 @@ public class RoundTripTests
         Assert.Equal([tree.DataCanary], left);
         Assert.Equal(before[tree.DataCanary], tree.Snapshot()[tree.DataCanary]);
         Assert.Contains(report.Kept, line => line.Contains(Path.GetFileName(tree.DataCanary), StringComparison.Ordinal));
-        Assert.Equal(Without(Outside(before, tree), tree.Executable), Outside(tree.Snapshot(), tree));
+        Assert.Equal(Without(Outside(before, tree), [tree.Executable, .. tree.Notices]), Outside(tree.Snapshot(), tree));
     }
 
     /// <summary>
@@ -128,17 +130,21 @@ public class RoundTripTests
     }
 
     /// <summary>
-    /// The same set with one path taken out of it — the executable, which is the one file outside the data
-    /// directory that an uninstall is supposed to remove.
+    /// The same set with the installation's own files taken out of it — the executable and the two notice files the
+    /// installer keeps beside it, which are the files outside the data directory that an uninstall is supposed to remove.
     /// </summary>
     /// <remarks>
     /// It asserts the path was in there. Silently removing nothing would turn this comparison into "the tree
     /// is unchanged", which is the opposite of what is being claimed and would pass on a verb that did
     /// nothing at all.
     /// </remarks>
-    private static Dictionary<string, string> Without(Dictionary<string, string> snapshot, string path)
+    private static Dictionary<string, string> Without(Dictionary<string, string> snapshot, IEnumerable<string> paths)
     {
-        Assert.True(snapshot.Remove(path), $"'{path}' was not in the snapshot this comparison takes it out of.");
+        foreach (var path in paths)
+        {
+            Assert.True(snapshot.Remove(path), $"'{path}' was not in the snapshot this comparison takes it out of.");
+        }
+
         return snapshot;
     }
 
@@ -167,11 +173,17 @@ public class RoundTripTests
             // The file this installation is installed as, named rather than worked out. Working it out is how
             // this verb came to plan the removal of the muxer that was running it.
             File.WriteAllText(Executable, "not really a program");
+            foreach (var notice in Notices)
+            {
+                File.WriteAllText(notice, "a notice the installer keeps beside the executable");
+            }
 
-            // Three canaries. The neighbour is what a real harness root looks like: somebody else's skill
-            // beside the ones a deployment wrote, with no receipt naming it.
+            // Four canaries. The neighbour is what a real harness root looks like: somebody else's skill
+            // beside the ones a deployment wrote, with no receipt naming it. The LICENSE is what a directory other
+            // tools share can hold beside Jason's own notice files.
             Canary(Path.Combine(Harness, "somebody-elses-skill", "SKILL.md"), "---\nname: somebody-elses-skill\n---\n");
             Canary(Path.Combine(InstallDirectory, "notes.txt"), "a file the installer did not write");
+            Canary(Path.Combine(InstallDirectory, "LICENSE"), "another tool's licence, beside Jason's notices");
             Canary(DataCanary, "a file somebody put in the data directory");
         }
 
@@ -184,6 +196,9 @@ public class RoundTripTests
         public string Executable => Path.Combine(InstallDirectory, OperatingSystem.IsWindows() ? "jason.exe" : "jason");
 
         public string DataCanary => Path.Combine(Installation.Root, "notes-of-my-own.txt");
+
+        /// <summary>The notice files an install keeps beside the executable.</summary>
+        public IReadOnlyList<string> Notices => [.. ReleaseAssets.Notices.Select(notice => ReleaseAssets.NoticeBeside(Executable, notice))];
 
         public void Canary(string path, string content)
         {
