@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using System.Text.Json;
 using Jason.Contracts.Update;
 using YamlDotNet.RepresentationModel;
+using static Jason.Runtime.Tests.Documentation.Workflows;
 
 namespace Jason.Runtime.Tests.Documentation;
 
@@ -378,78 +379,179 @@ public class ReleaseWorkflowTests
         Assert.DoesNotContain("-p:VersionPrefix", ci, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The checks ci.yml reports, its matrix legs expanded, are exactly the ten this repository's ruleset requires
+    /// before a pull request merges. A renamed job is a required check that never reports, and every pull request
+    /// would wait for it: a job is renamed here only together with the ruleset.
+    /// </summary>
+    [Fact]
+    public void Ci_reports_exactly_the_checks_the_ruleset_requires()
+    {
+        string[] required =
+        [
+            "The version this tree carries",
+            "The suite under a release's version",
+            "win-x64",
+            "linux-x64",
+            "osx-arm64",
+            "jason.exe on a Windows older than 24H2",
+            "an update on win-x64",
+            "an update on linux-x64",
+            "install.sh on ubuntu",
+            "install.ps1 on windows",
+        ];
+
+        var reported = new List<string>();
+        foreach (var (key, value) in Mapping(Parse(Read(Ci)), "jobs").Children)
+        {
+            var job = (YamlMappingNode)value;
+            var name = Scalar(job, "name") ?? key.ToString();
+            var legs = Node(job, "strategy") is YamlMappingNode strategy
+                && Node(strategy, "matrix") is YamlMappingNode matrix
+                && Node(matrix, "include") is YamlSequenceNode include
+                    ? include.Children.Cast<YamlMappingNode>().ToList()
+                    : null;
+            if (legs is null)
+            {
+                reported.Add(name);
+                continue;
+            }
+
+            reported.AddRange(legs.Select(leg => Regex.Replace(name, @"\$\{\{\s*matrix\.(\w+)\s*\}\}", match => Scalar(leg, match.Groups[1].Value) ?? match.Value)));
+        }
+
+        Assert.True(
+            required.Order(StringComparer.Ordinal).SequenceEqual(reported.Order(StringComparer.Ordinal)),
+            $"ci.yml reports {string.Join(", ", reported.Select(name => $"'{name}'"))}, and the ruleset requires "
+            + $"{string.Join(", ", required.Select(name => $"'{name}'"))}. A check renamed here is renamed in the ruleset in the same change.");
+    }
+
     // --- release.yml -------------------------------------------------------------------------------------
 
     [Fact]
     public void A_release_is_built_from_a_tag_and_a_draft_from_a_button()
     {
-        var release = Read(Release);
-        var triggers = Mapping(Parse(release), "on");
+        var triggers = Mapping(Parse(Read(Release)), "on");
 
         var tags = Assert.IsType<YamlSequenceNode>(Node(Mapping(triggers, "push"), "tags"));
         Assert.Contains("v*", tags.Children.Select(tag => tag.ToString()));
         Assert.Contains("version", Mapping(Mapping(triggers, "workflow_dispatch"), "inputs").Children.Keys.Select(key => key.ToString()));
 
-        // The button's release is a draft, so a dry run can be inspected and deleted — and the two things are
-        // decided on one line, so nobody can read the condition without the consequence.
-        Assert.Contains(release.Split('\n'), line => line.Contains("workflow_dispatch", StringComparison.Ordinal) && line.Contains("--draft", StringComparison.Ordinal));
+        // Both build the draft in the public repository; only a tag goes on to open the pull request whose merge
+        // publishes it, so the button is a dry run that leaves no branch and no pull request behind.
+        Assert.Equal("github.event_name == 'push'", Scalar(PublishingStep("Open the pull request"), "if"));
+        Assert.Null(Scalar(PublishingStep("Create the draft release"), "if"));
     }
 
     /// <summary>
-    /// The token that can write to the repository is granted to the one job that publishes, and to nothing that
-    /// builds or tests: a compromised test on a matrix runner must not be able to create a release.
+    /// The token that can publish is handed to the one job that publishes, and to nothing that builds or tests: a
+    /// compromised test on a matrix runner must not be able to create a release or push to the public repository.
+    /// That job writes nothing here either — the draft, the branch and the pull request are all in the public
+    /// repository, reached with that token alone — so no permission anywhere grants a write.
     /// </summary>
     [Fact]
-    public void Only_the_assembling_job_may_write()
+    public void Only_the_publishing_job_holds_the_publication_token()
     {
-        var release = Parse(Read(Release));
+        var text = Read(Release);
+        var release = Parse(text);
         Assert.Equal("read", Scalar(Mapping(release, "permissions"), "contents"));
+        Assert.DoesNotContain("github.token", text, StringComparison.Ordinal);
 
         var jobs = Mapping(release, "jobs");
-        var writers = jobs.Children
-            .Where(job => Node((YamlMappingNode)job.Value, "permissions") is YamlMappingNode permissions && Scalar(permissions, "contents") == "write")
-            .Select(job => job.Key.ToString())
-            .ToList();
+        foreach (var (name, job) in jobs.Children.Select(job => (job.Key.ToString(), (YamlMappingNode)job.Value)))
+        {
+            if (Node(job, "permissions") is YamlMappingNode permissions)
+            {
+                Assert.True(Scalar(permissions, "contents") != "write", $"The '{name}' job may write to this repository.");
+            }
+        }
 
-        var writer = Assert.Single(writers);
-        var assembling = (YamlMappingNode)jobs.Children[new YamlScalarNode(writer)];
+        // Every mention of a secret is the publication token's, and every one of them lies inside the publishing job.
+        var everywhere = Scalars(release).Where(scalar => scalar.Contains("secrets.", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(everywhere);
+        Assert.All(everywhere, scalar => Assert.Contains("secrets.PUBLISH_TOKEN", scalar, StringComparison.Ordinal));
+        var holders = jobs.Children.Where(job => Scalars(job.Value).Any(scalar => scalar.Contains("secrets.", StringComparison.Ordinal))).ToList();
+        var holder = Assert.Single(holders);
+        Assert.Equal(everywhere.Count, Scalars(holder.Value).Count(scalar => scalar.Contains("secrets.", StringComparison.Ordinal)));
+
+        // It runs after every matrix leg, and nothing is published when one of them failed: `needs` is exactly that.
         var building = jobs.Children.Single(job => Node((YamlMappingNode)job.Value, "strategy") is not null).Key.ToString();
+        Assert.Contains(building, Assert.IsType<YamlSequenceNode>(Node((YamlMappingNode)holder.Value, "needs")).Children.Select(need => need.ToString()));
+        Assert.Contains("gh release create", text, StringComparison.Ordinal);
+    }
 
-        // It runs after every matrix leg, and nothing is created when one of them failed: `needs` is exactly that.
-        Assert.Contains(building, Assert.IsType<YamlSequenceNode>(Node(assembling, "needs")).Children.Select(need => need.ToString()));
-        Assert.Contains("gh release create", Read(Release), StringComparison.Ordinal);
+    /// <summary>Every scalar under a node, keys and values alike.</summary>
+    private static IEnumerable<string> Scalars(YamlNode node) => node switch
+    {
+        YamlScalarNode scalar => [scalar.Value ?? string.Empty],
+        YamlSequenceNode sequence => sequence.Children.SelectMany(Scalars),
+        YamlMappingNode mapping => mapping.Children.SelectMany(pair => Scalars(pair.Key).Concat(Scalars(pair.Value))),
+        _ => [],
+    };
+
+    /// <summary>
+    /// The notes address a running Jason shows is the public repository's release page, written as a constant: the
+    /// release is published there whichever repository built it, so the repository running the workflow is not it.
+    /// </summary>
+    [Fact]
+    public void The_notes_address_is_the_public_repository_s_release_page()
+    {
+        var release = Read(Release);
+
+        Assert.DoesNotContain("github.repository", release, StringComparison.Ordinal);
+        Assert.Contains(
+            "-ReleaseNotesUrl \"https://github.com/reply-team/jason-ai/releases/tag/v$env:VERSION\"",
+            release,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// A draft's tag does not exist, but a draft holds the name: <c>gh release create v0.2.0</c> fails while a
-    /// draft of v0.2.0 is sitting there, and it fails complaining about a tag that does not exist. So the
-    /// second dry run of a version — the ordinary case, because a dry run is inspected and then pressed again —
-    /// died at the last step, with every runner's work already done.
+    /// The release is created in the public repository as a draft, by a tag and by the button alike, before anything
+    /// announces it. A draft an earlier run left behind holds the name, so it is deleted first — and only a draft: a
+    /// published release of that version is somebody's installed software, and the step stops before it creates
+    /// anything.
     /// </summary>
     /// <remarks>
-    /// The step is run, not read: its own PowerShell, with <c>gh</c> replaced by a function that records what
-    /// it was asked to do (a function wins over an external command, so what runs is the workflow's own line).
-    /// What the rows assert is the safety of the repair as much as the repair: a <em>published</em> release of
-    /// that version is somebody's installed software, and nothing here may delete it — the workflow stops
-    /// instead, which is what <c>gh release create</c> failing on an existing release does.
+    /// The step is run, not read: its own PowerShell, with <c>gh</c> replaced by a function that records what it was
+    /// asked to do (a function wins over an external command, so what runs is the workflow's own line).
     /// </remarks>
     [Theory]
-    [InlineData("workflow_dispatch", "draft", true)]
-    [InlineData("push", "draft", true)]
-    [InlineData("workflow_dispatch", "published", false)]
-    [InlineData("workflow_dispatch", "none", false)]
-    public void A_second_dry_run_of_the_same_version_replaces_its_draft_rather_than_failing(string eventName, string existing, bool deleted)
+    [InlineData("workflow_dispatch", "none")]
+    [InlineData("workflow_dispatch", "draft")]
+    [InlineData("workflow_dispatch", "published")]
+    [InlineData("push", "none")]
+    [InlineData("push", "draft")]
+    [InlineData("push", "published")]
+    public void The_draft_is_made_in_the_public_repository_and_replaces_only_a_draft(string eventName, string existing)
     {
-        var calls = RunTheReleaseStep(eventName, existing);
+        var (exit, stderr, calls) = RunTheReleaseStep(eventName, existing, "0.2.0");
 
+        // Every call is about the public repository, and none is about this one.
+        Assert.NotEmpty(calls);
+        Assert.All(calls, call => Assert.Contains("-R reply-team/jason-ai", call, StringComparison.Ordinal));
         Assert.Contains(calls, call => call.StartsWith("release view v0.2.0", StringComparison.Ordinal));
-        var created = calls.Index().Single(call => call.Item.StartsWith("release create", StringComparison.Ordinal));
+        var deletions = calls.Index().Where(call => call.Item.StartsWith("release delete", StringComparison.Ordinal)).ToList();
+        var creations = calls.Index().Where(call => call.Item.StartsWith("release create", StringComparison.Ordinal)).ToList();
 
-        // And every flag reaches gh whole. PowerShell unrolls a one-element array assigned from an `if` into a
-        // scalar string, `+=` on a string concatenates, and splatting a string spells it out one character per
-        // argument — which is what the tag path did: `gh release create v0.2.0 - - v e r i f y - t a g …`.
-        Assert.Contains(eventName == "push" ? "--verify-tag" : "--draft", created.Item, StringComparison.Ordinal);
-        Assert.Contains("--latest", created.Item, StringComparison.Ordinal);
+        if (existing == "published")
+        {
+            Assert.NotEqual(0, exit);
+            Assert.Contains("v0.2.0 is already published", stderr, StringComparison.Ordinal);
+            Assert.Empty(deletions);
+            Assert.Empty(creations);
+            return;
+        }
+
+        Assert.True(exit == 0, $"The step exited {exit}: {stderr}");
+        var created = Assert.Single(creations);
+
+        // A draft aimed at the public repository's main, whatever started the run; never --latest, which is decided
+        // when it is published. And every flag reaches gh whole: PowerShell unrolls a one-element array assigned from
+        // an `if` into a scalar string, and splatting a string spells it out one character per argument.
+        Assert.Contains("--draft --target main", created.Item, StringComparison.Ordinal);
+        Assert.DoesNotContain("--latest", created.Item, StringComparison.Ordinal);
+        Assert.DoesNotContain("--prerelease", created.Item, StringComparison.Ordinal);
+        Assert.DoesNotContain("--verify-tag", created.Item, StringComparison.Ordinal);
         Assert.DoesNotContain("- -", created.Item, StringComparison.Ordinal);
 
         // And every file a release publishes reaches gh as an asset, each a path of its own.
@@ -458,38 +560,56 @@ public class ReleaseWorkflowTests
             Assert.Matches($@"(^| )\S*/{Regex.Escape(name)}( |$)", created.Item);
         }
 
-        var deletions = calls.Index().Where(call => call.Item.StartsWith("release delete", StringComparison.Ordinal)).ToList();
-
-        if (!deleted)
+        if (existing == "none")
         {
             Assert.Empty(deletions);
             return;
         }
 
         var deletion = Assert.Single(deletions);
-        Assert.Contains("v0.2.0", deletion.Item, StringComparison.Ordinal);
+        Assert.StartsWith("release delete v0.2.0", deletion.Item, StringComparison.Ordinal);
         Assert.True(deletion.Index < created.Index, $"The draft is deleted after the release is created:\n{string.Join('\n', calls)}");
 
         // A draft has no tag to clean up, and asking for one is how a published tag gets deleted by accident.
         Assert.DoesNotContain("--cleanup-tag", deletion.Item, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// The assembling job's "Create the release" step, run with <c>gh</c> standing in, and what it asked
-    /// <c>gh</c> to do — one call per line, in the order they were made.
-    /// </summary>
-    private static IReadOnlyList<string> RunTheReleaseStep(string eventName, string existing)
+    /// <summary>A candidate's draft is a pre-release from the start, whichever event made it.</summary>
+    [Theory]
+    [InlineData("workflow_dispatch")]
+    [InlineData("push")]
+    public void A_candidate_s_draft_is_a_pre_release(string eventName)
+    {
+        var (exit, stderr, calls) = RunTheReleaseStep(eventName, "none", "1.0.0-rc.1");
+
+        Assert.True(exit == 0, stderr);
+        var created = Assert.Single(calls, call => call.StartsWith("release create", StringComparison.Ordinal));
+        Assert.Contains("--draft --target main --prerelease", created, StringComparison.Ordinal);
+        Assert.DoesNotContain("--latest", created, StringComparison.Ordinal);
+    }
+
+    /// <summary>One step of the publishing job, by its name.</summary>
+    private static YamlMappingNode PublishingStep(string name) => Assert.Single(PublishingSteps(), step => Scalar(step, "name") == name);
+
+    /// <summary>The steps of the job that holds the publication token, in order.</summary>
+    private static IReadOnlyList<YamlMappingNode> PublishingSteps()
     {
         var jobs = Mapping(Parse(Read(Release)), "jobs");
-        var assembling = (YamlMappingNode)jobs.Children
-            .Single(job => Node((YamlMappingNode)job.Value, "permissions") is YamlMappingNode permissions && Scalar(permissions, "contents") == "write")
+        var publishing = (YamlMappingNode)jobs.Children
+            .Single(job => Node((YamlMappingNode)job.Value, "env") is YamlMappingNode env && Scalar(env, "GH_TOKEN")?.Contains("secrets.PUBLISH_TOKEN", StringComparison.Ordinal) == true)
             .Value;
-        var creating = Assert.IsType<YamlSequenceNode>(Node(assembling, "steps")).Children.Cast<YamlMappingNode>()
-            .Single(step => Scalar(step, "name") == "Create the release");
+        return [.. Assert.IsType<YamlSequenceNode>(Node(publishing, "steps")).Children.Cast<YamlMappingNode>()];
+    }
 
+    /// <summary>
+    /// The publishing job's "Create the draft release" step, run with <c>gh</c> standing in: its exit code, what it
+    /// wrote to stderr, and what it asked <c>gh</c> to do — one call per line, in the order they were made.
+    /// </summary>
+    private static (int Exit, string Stderr, IReadOnlyList<string> Calls) RunTheReleaseStep(string eventName, string existing, string version)
+    {
         using var tree = new TempTree();
-        var step = Path.Combine(tree.Root, "create-the-release.ps1");
-        File.WriteAllText(step, Scalar(creating, "run"));
+        var step = Path.Combine(tree.Root, "create-the-draft.ps1");
+        File.WriteAllText(step, Scalar(PublishingStep("Create the draft release"), "run"));
         var calls = Path.Combine(tree.Root, "gh-calls.txt");
         File.WriteAllText(calls, string.Empty);
         var harness = Path.Combine(tree.Root, "harness.ps1");
@@ -499,17 +619,137 @@ public class ReleaseWorkflowTests
             new Dictionary<string, string>
             {
                 ["EVENT"] = eventName,
-                ["SHA"] = "1111111111111111111111111111111111111111",
-                ["VERSION"] = "0.2.0",
+                ["VERSION"] = version,
                 ["GH_TOKEN"] = "not-a-token",
                 ["EXISTING"] = existing,
                 ["CALLS"] = calls,
             },
             "-File", harness);
 
-        Assert.True(exit == 0, $"The step exited {exit}: {stderr}");
-        return File.ReadAllLines(calls);
+        return (exit, stderr, File.ReadAllLines(calls));
     }
+
+    /// <summary>
+    /// The draft exists before the pull request that announces it, so a person never reads a pull request whose merge
+    /// would have nothing to publish.
+    /// </summary>
+    [Fact]
+    public void The_draft_is_made_before_the_pull_request()
+    {
+        var names = PublishingSteps().Select(step => Scalar(step, "name")).ToList();
+        var draft = names.IndexOf("Create the draft release");
+        var opening = names.IndexOf("Open the pull request");
+
+        Assert.True(draft >= 0 && draft < opening, $"The steps run in this order: {string.Join(", ", names)}");
+    }
+
+    /// <summary>
+    /// What a tag does in the public repository once the draft exists: it commits the projection as the person the
+    /// release process acts for, pushes it over this version's branch, and opens that branch's pull request — or, when
+    /// one is open already, gives it the new body. Labelled for the people who read contract changes when the body
+    /// says a contract changed. Run with <c>git</c> and <c>gh</c> standing in.
+    /// </summary>
+    [Theory]
+    [InlineData("contracts", "[]", "create --label contracts")]
+    [InlineData("", "[]", "create")]
+    [InlineData("", "[{\"number\":3,\"headRefName\":\"fix-a-typo\"}]", "create")]
+    [InlineData("contracts", "[{\"number\":7,\"headRefName\":\"release/v0.6.0\"}]", "edit 7")]
+    public void A_tag_commits_the_projection_pushes_its_branch_and_opens_or_updates_its_pull_request(string label, string open, string expected)
+    {
+        var (exit, _, stderr, calls) = RunThePullRequestStep(staged: true, label, open);
+
+        Assert.True(exit == 0, $"The step exited {exit}: {stderr}");
+        var commit = Assert.Single(calls, call => call.StartsWith("git ", StringComparison.Ordinal) && call.Contains(" commit ", StringComparison.Ordinal));
+        Assert.Equal("git -C public -c user.name=Artem Kosolap -c user.email=art@reply.io commit --quiet -m Jason 0.6.0", commit);
+        Assert.Contains("git -C public push --force origin HEAD:refs/heads/release/v0.6.0", calls);
+        Assert.All(calls.Where(call => call.StartsWith("gh ", StringComparison.Ordinal)), call => Assert.Contains("-R reply-team/jason-ai", call, StringComparison.Ordinal));
+
+        var pulls = calls.Where(call => call.StartsWith("gh pr create", StringComparison.Ordinal) || call.StartsWith("gh pr edit", StringComparison.Ordinal)).ToList();
+        var pull = Assert.Single(pulls);
+        if (expected.StartsWith("edit", StringComparison.Ordinal))
+        {
+            Assert.Equal("gh pr edit 7 -R reply-team/jason-ai --body-file artifacts/publish/body.md", pull);
+            return;
+        }
+
+        var labelled = expected.EndsWith("--label contracts", StringComparison.Ordinal) ? " --label contracts" : string.Empty;
+        Assert.Equal($"gh pr create -R reply-team/jason-ai --base main --head release/v0.6.0 --title Jason 0.6.0 --body-file artifacts/publish/body.md{labelled}", pull);
+    }
+
+    /// <summary>
+    /// One release's pull request at a time: merging one tags its version, so two open at once would be tagged in
+    /// whatever order a person merged them. The other one is named, and the step stops after the draft and the push,
+    /// so running the job again once it is merged or closed has only the pull request left to open.
+    /// </summary>
+    [Fact]
+    public void Another_release_s_open_pull_request_stops_the_step_before_this_one_is_opened()
+    {
+        var (exit, _, stderr, calls) = RunThePullRequestStep(staged: true, "", "[{\"number\":5,\"headRefName\":\"release/v0.5.1\"}]");
+
+        Assert.NotEqual(0, exit);
+        Assert.Contains("release/v0.5.1's pull request is open; merge or close it, then re-run this job.", stderr, StringComparison.Ordinal);
+        Assert.Contains("git -C public push --force origin HEAD:refs/heads/release/v0.6.0", calls);
+        Assert.DoesNotContain(calls, call => call.StartsWith("gh pr create", StringComparison.Ordinal) || call.StartsWith("gh pr edit", StringComparison.Ordinal));
+    }
+
+    /// <summary>A projection that changes nothing — a run after the release was merged — commits nothing and opens nothing, and says so.</summary>
+    [Fact]
+    public void A_projection_that_changes_nothing_commits_nothing_and_opens_nothing()
+    {
+        var (exit, stdout, stderr, calls) = RunThePullRequestStep(staged: false, "", "[]");
+
+        Assert.True(exit == 0, stderr);
+        Assert.Contains("nothing to commit", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain(calls, call => call.Contains(" commit ", StringComparison.Ordinal) || call.Contains(" push ", StringComparison.Ordinal) || call.StartsWith("gh ", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The publishing job's "Open the pull request" step, run with <c>git</c> and <c>gh</c> standing in: <c>git diff
+    /// --cached --quiet</c> answers whether anything is staged, <c>gh pr list</c> answers <paramref name="open"/>, and
+    /// every call of either is recorded as one line.
+    /// </summary>
+    private static (int Exit, string Stdout, string Stderr, IReadOnlyList<string> Calls) RunThePullRequestStep(bool staged, string label, string open)
+    {
+        using var tree = new TempTree();
+        var step = Path.Combine(tree.Root, "open-the-pull-request.ps1");
+        File.WriteAllText(step, Scalar(PublishingStep("Open the pull request"), "run"));
+        var calls = Path.Combine(tree.Root, "calls.txt");
+        File.WriteAllText(calls, string.Empty);
+        var harness = Path.Combine(tree.Root, "harness.ps1");
+        File.WriteAllText(harness, StandInsForThePullRequest.Replace("@STEP@", step, StringComparison.Ordinal));
+
+        var (exit, stdout, stderr) = Pwsh(
+            new Dictionary<string, string>
+            {
+                ["VERSION"] = "0.6.0",
+                ["LABEL"] = label,
+                ["GH_TOKEN"] = "not-a-token",
+                ["STAGED"] = staged ? "yes" : "no",
+                ["OPEN"] = open,
+                ["CALLS"] = calls,
+            },
+            "-File", harness);
+
+        return (exit, stdout, stderr, File.ReadAllLines(calls));
+    }
+
+    private const string StandInsForThePullRequest = """
+        $ErrorActionPreference = 'Stop'
+
+        function git {
+            Add-Content -LiteralPath $env:CALLS -Value ('git ' + ($args -join ' '))
+            $global:LASTEXITCODE = 0
+            if ($args -contains 'diff' -and $args -contains '--quiet' -and $env:STAGED -eq 'yes') { $global:LASTEXITCODE = 1 }
+        }
+
+        function gh {
+            Add-Content -LiteralPath $env:CALLS -Value ('gh ' + ($args -join ' '))
+            $global:LASTEXITCODE = 0
+            if ($args[0] -eq 'pr' -and $args[1] -eq 'list') { $env:OPEN }
+        }
+
+        try { & '@STEP@'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE } } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }
+        """;
 
     /// <summary>
     /// <c>gh</c> for the length of one step: every call recorded, and <c>release view</c> answering the way
@@ -532,7 +772,7 @@ public class ReleaseWorkflowTests
             $global:LASTEXITCODE = 0
         }
 
-        & '@STEP@'
+        try { & '@STEP@'; if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE } } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }
         """;
 
     /// <summary>
@@ -721,17 +961,12 @@ public class ReleaseWorkflowTests
     }
 
     /// <summary>
-    /// The release's "Write the notes" step, run the way the assembling job runs it: this template, this
+    /// The release's "Write the notes" step, run the way the publishing job runs it: this template, this
     /// version, in a tree of the test's own — and what it wrote.
     /// </summary>
     private static string WriteTheNotes(string template)
     {
-        var jobs = Mapping(Parse(Read(Release)), "jobs");
-        var assembling = (YamlMappingNode)jobs.Children
-            .Single(job => Node((YamlMappingNode)job.Value, "permissions") is YamlMappingNode permissions && Scalar(permissions, "contents") == "write")
-            .Value;
-        var writing = Assert.IsType<YamlSequenceNode>(Node(assembling, "steps")).Children.Cast<YamlMappingNode>()
-            .Single(step => Scalar(step, "name") == "Write the notes");
+        var writing = PublishingStep("Write the notes");
 
         using var tree = new TempTree();
         Directory.CreateDirectory(Path.Combine(tree.Root, ".github"));
@@ -1038,6 +1273,12 @@ public class ReleaseWorkflowTests
         {
             Assert.True(manifest.Artifacts.ContainsKey(rid), $"the manifest {invocation} wrote carries nothing for {rid}");
         }
+
+        // The release's notes are read where it is published, which is the public repository.
+        if (workflow == Release[^1])
+        {
+            Assert.Equal("https://github.com/reply-team/jason-ai/releases/tag/v0.2.0", manifest.ReleaseNotesUrl);
+        }
     }
 
     public static TheoryData<string, string> ManifestInvocations()
@@ -1061,7 +1302,7 @@ public class ReleaseWorkflowTests
 
     /// <summary>
     /// The runner's own substitutions, and nothing else: the workflow expression that carries the version, the
-    /// environment variables the release job exports, and the directory the artifacts arrive in.
+    /// environment variables the jobs export, and the directory the artifacts arrive in.
     /// </summary>
     private static string ExpandForThisMachine(string invocation, string directory)
     {
@@ -1071,8 +1312,7 @@ public class ReleaseWorkflowTests
             .Replace("${{ needs.version.outputs.version }}", "0.2.0", StringComparison.Ordinal)
             .Replace("$env:VERSION", "0.2.0", StringComparison.Ordinal)
             .Replace("$env:NEXT", "0.2.1", StringComparison.Ordinal)
-            .Replace("$env:RID", ReleaseAssets.Rids[0], StringComparison.Ordinal)
-            .Replace("$env:REPOSITORY", "reply-team/jason-ai", StringComparison.Ordinal);
+            .Replace("$env:RID", ReleaseAssets.Rids[0], StringComparison.Ordinal);
 
         // -Directory names where a runner downloaded the artifacts to; here it is the staged tree this test made.
         return System.Text.RegularExpressions.Regex.Replace(
@@ -1081,101 +1321,6 @@ public class ReleaseWorkflowTests
             $"-Directory '{directory}'");
     }
 
-    private static (int Exit, string Stdout, string Stderr) Pwsh(IReadOnlyDictionary<string, string> environment, params string[] args)
-    {
-        var pwsh = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .SelectMany(directory => new[] { Path.Combine(directory, "pwsh.exe"), Path.Combine(directory, "pwsh") })
-            .FirstOrDefault(File.Exists);
-        Assert.SkipWhen(pwsh is null, "pwsh is not on this machine's PATH; every CI runner has it, and the release is only ever built there.");
-
-        var start = new ProcessStartInfo(pwsh)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
-        // PowerShell reports telemetry over the network unless told not to, and no test in this repository
-        // reaches the network.
-        start.Environment["POWERSHELL_TELEMETRY_OPTOUT"] = "1";
-        start.ArgumentList.Add("-NoProfile");
-        start.ArgumentList.Add("-NonInteractive");
-        foreach (var argument in args)
-        {
-            start.ArgumentList.Add(argument);
-        }
-
-        foreach (var (name, value) in environment)
-        {
-            start.Environment[name] = value;
-        }
-
-        using var process = Process.Start(start)!;
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(TimeSpan.FromSeconds(120)))
-        {
-            process.Kill(entireProcessTree: true);
-            Assert.Fail("pwsh did not finish in two minutes.");
-        }
-
-        return (process.ExitCode, stdout.Result, stderr.Result);
-    }
-
-    private static string Read(string[] relative) => File.ReadAllText(Path.Combine([RepositoryRoot(), .. relative]));
-
-    /// <summary>
-    /// One job of a workflow, as the text between its name and the next job at the same indentation. Read as
-    /// text rather than through the parser because what these guards are about is what the job's script says.
-    /// </summary>
-    private static string Job(string workflow, string name)
-    {
-        var start = workflow.IndexOf($"\n  {name}:", StringComparison.Ordinal);
-        Assert.True(start >= 0, $"There is no '{name}' job in this workflow.");
-
-        var next = workflow.IndexOf("\n  ", start + 3, StringComparison.Ordinal);
-        while (next >= 0 && workflow.Length > next + 3 && char.IsWhiteSpace(workflow[next + 3]))
-        {
-            next = workflow.IndexOf("\n  ", next + 3, StringComparison.Ordinal);
-        }
-
-        return next < 0 ? workflow[start..] : workflow[start..next];
-    }
-
-    private static YamlMappingNode Parse(string yaml)
-    {
-        var stream = new YamlStream();
-        stream.Load(new StringReader(yaml));
-        return (YamlMappingNode)stream.Documents[0].RootNode;
-    }
-
-    private static YamlNode? Node(YamlMappingNode node, string key) =>
-        node.Children.TryGetValue(new YamlScalarNode(key), out var child) ? child : null;
-
-    private static string? Scalar(YamlMappingNode node, string key) => (Node(node, key) as YamlScalarNode)?.Value;
-
-    private static YamlMappingNode Mapping(YamlMappingNode node, string key)
-    {
-        var child = Node(node, key);
-        Assert.True(child is not null, $"There is no '{key}' mapping.");
-        return Assert.IsType<YamlMappingNode>(child);
-    }
-
-    /// <summary>The repository root, found by walking up from the test binaries to the directory holding <c>global.json</c>.</summary>
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "global.json")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-        return directory.FullName;
-    }
     /// <summary>
     /// The end-to-end job updates a real installation between two real versions, and asserts the one that came
     /// up. Everything about it that could quietly stop proving anything is read here.

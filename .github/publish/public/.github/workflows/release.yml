@@ -1,0 +1,95 @@
+# Publishes the release this tree describes. A merge into main that changes VERSION — which only the release
+# process's pull request does — tags that merge and publishes the draft release the release process left for that
+# version. From the button it finishes a publication that stopped part-way; it takes no input and acts only on the
+# version VERSION names.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [VERSION]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Tag and publish
+    runs-on: ubuntu-latest
+    steps:
+      # The whole history, to find the commit that last changed VERSION: the merge of the release's pull request,
+      # whichever way this run was started.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Tag the merge and publish its draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $given = (Get-Content VERSION -Raw).Trim()
+          $identifier = '(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)'
+          if ($given -cnotmatch "^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-$identifier(?:\.$identifier)*)?$") {
+            throw "VERSION says '$given', which is not a version a release carries: 0.2.0 or 1.0.0-rc.1."
+          }
+          $version = $given
+          $tag = "v$version"
+
+          $commit = git log -1 --format=%H -- VERSION
+          if ($LASTEXITCODE -ne 0 -or -not $commit) { throw "No commit on main changed VERSION." }
+
+          # What there is: the release's state (a draft, published, or none), and whether the tag exists.
+          $state = 'none'
+          try {
+            $draft = gh release view $tag --json isDraft --jq '.isDraft' 2>$null
+            if ($LASTEXITCODE -eq 0) { $state = if ($draft -eq 'true') { 'draft' } else { 'published' } }
+          } catch {
+            $state = 'none'
+          }
+          git ls-remote --exit-code --tags origin "refs/tags/$tag" | Out-Null
+          $tagged = $LASTEXITCODE -eq 0
+
+          if ($state -eq 'none') {
+            throw "There is no draft of ${tag}: the release process creates it before it opens the pull request. Run that release again."
+          }
+          if ($state -eq 'published' -and $tagged) {
+            Write-Host "$tag is already published."
+            exit 0
+          }
+          if ($state -eq 'published') {
+            throw "$tag is published but not tagged here, which is not something this workflow does. Look at it before anything is changed."
+          }
+
+          if (-not $tagged) {
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' tag --annotate $tag $commit -m "Jason $version"
+            if ($LASTEXITCODE -ne 0) { throw "git tag exited with $LASTEXITCODE" }
+            git push origin "refs/tags/$tag"
+            if ($LASTEXITCODE -ne 0) { throw "git push exited with $LASTEXITCODE" }
+          }
+
+          # A candidate is published as a pre-release and never as latest. A release becomes latest unless a newer one
+          # already is - a fix to an older line published after a newer release must not take latest from it.
+          [string[]] $how = '--draft=false'
+          if ($version -clike '*-*') {
+            $how += '--prerelease'
+          } else {
+            $latest = $null
+            try {
+              $latest = gh release view --json tagName --jq '.tagName' 2>$null
+              if ($LASTEXITCODE -ne 0) { $latest = $null }
+            } catch {
+              $latest = $null
+            }
+            if ($latest -and [semver]$latest.Substring(1) -gt [semver]$version) {
+              Write-Host "$latest is newer and stays the latest release; $tag is published beside it."
+              $how += '--latest=false'
+            } else {
+              $how += '--latest'
+            }
+          }
+
+          gh release edit $tag @how
+          if ($LASTEXITCODE -ne 0) { throw "gh release edit exited with $LASTEXITCODE" }
+          Write-Host "$tag is published."

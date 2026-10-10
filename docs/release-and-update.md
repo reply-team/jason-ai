@@ -17,6 +17,12 @@ the files and inside the manifest. Signing and notarization are their own story,
 A release is the git tag `vX.Y.Z` and the files that tag's build publishes. A merge to `main` is not a release:
 `main` is where the code is, and a tag is the statement that one commit of it is worth installing.
 
+Two repositories carry a release. The runtime's source and its tags live in `reply-team/jason-internal`, and a tag
+there builds the release. The release itself — the assets below, the notes, `latest` — is published in
+`reply-team/jason-ai`, together with the open set at that version, through a pull request a person reviews and merges;
+that merge is what tags `v<version>` in the public repository, so the public tag names the published tree and the
+runtime's tag of the same name names the source it was built from.
+
 Versions are [SemVer](https://semver.org). `0.x` releases are ordinary releases and are never flagged as
 pre-releases — the pre-release flag is reserved for release candidates (`v1.0.0-rc.1`), because a repository
 whose only releases are flagged has no "latest" for anything to resolve to.
@@ -229,10 +235,10 @@ install from — build from source until one has. [`docs/INSTALL.md`](INSTALL.md
 in the order a stranger reads it.
 
 The workflow that builds a release has a button — a `workflow_dispatch` that produces a draft, for a dry run
-before any tag exists. GitHub offers that button only for a workflow that is already on the **default branch**,
-so the pipeline cannot be rehearsed from the branch that writes it: everything up to and including the three
-archives and the manifest is exercised on every pull request, and the last step, which creates the release, is
-proved by that dry run once the workflow has merged.
+before any tag exists. GitHub offers that button only for a workflow that is already on the **default branch**;
+once it is, a branch's own version can be run from it (`gh workflow run release.yml --ref <branch>`), which is how a
+change to the pipeline is rehearsed before it merges. The dry run builds the draft in `reply-team/jason-ai` and opens
+no pull request.
 
 ## 7. Updating
 

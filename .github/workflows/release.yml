@@ -1,9 +1,11 @@
 # A tag named v<version> builds the release: three native runners, each running the tests at the tag and
-# packaging one platform through the same action ci.yml runs on every pull request, then one job — the only
-# one that may write to the repository — assembles the manifest and the checksums and creates the release.
+# packaging one platform through the same action ci.yml runs on every pull request, then one job — the only one
+# that holds the publication token — assembles the manifest and the checksums, creates the release as a draft in
+# reply-team/jason-ai, and opens the pull request that brings that repository to this version. Merging that pull
+# request is what tags the release there and publishes it.
 #
-# The button (workflow_dispatch) builds the same thing as a draft, for a dry run. A draft's tag does not exist
-# until the draft is published, so a dry run leaves nothing behind once its draft is deleted.
+# The button (workflow_dispatch) builds the same draft, for a dry run, and stops there: nothing is tagged and no
+# pull request is opened, so a dry run leaves nothing behind once its draft is deleted.
 name: Release
 
 on:
@@ -12,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'The version to build, without the v (0.2.0, 1.0.0-rc.1). The result is a draft; publishing it is what creates the tag.'
+        description: 'The version to build, without the v (0.2.0, 1.0.0-rc.1). The result is a draft in reply-team/jason-ai: nothing is tagged and no pull request is opened.'
         required: true
         type: string
 
@@ -133,10 +135,14 @@ jobs:
     name: Assemble and publish
     needs: [version, build]
     runs-on: ubuntu-latest
-    # The only job holding a token that can write. It creates the release and runs nothing that was built, so a
-    # test on a matrix runner cannot publish anything, and nothing is created here when a matrix leg failed.
+    # The only job that holds the publication token, which reaches the public repository and nothing else. It builds
+    # and runs nothing that was built, so a test on a matrix runner cannot publish anything, and nothing is published
+    # when a matrix leg failed. It writes nothing here: the draft release, the branch and the pull request are all in
+    # reply-team/jason-ai.
     permissions:
-      contents: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
@@ -150,12 +156,12 @@ jobs:
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
-          REPOSITORY: ${{ github.repository }}
         run: |
           # The three fragments become manifest.json — what a running Jason reads to learn this release exists —
           # and checksums.txt. A platform missing from the download, or an archive that no longer hashes to what
-          # its fragment says, stops the release here.
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -ReleaseNotesUrl "https://github.com/$env:REPOSITORY/releases/tag/v$env:VERSION"
+          # its fragment says, stops the release here. The notes are read where the release is published, which is
+          # the public repository whichever repository built it.
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -ReleaseNotesUrl "https://github.com/reply-team/jason-ai/releases/tag/v$env:VERSION"
           Get-Content artifacts/release/manifest.json
           Get-Content artifacts/release/checksums.txt
 
@@ -171,48 +177,121 @@ jobs:
           $notes = [regex]::Replace($notes, '(?s)<!--.*?-->', '').TrimStart()
           Set-Content artifacts/release/notes.md -Value $notes -NoNewline
 
-      - name: Create the release
+      - name: Check out the public repository
+        uses: actions/checkout@v7
+        with:
+          repository: reply-team/jason-ai
+          path: public
+          token: ${{ secrets.PUBLISH_TOKEN }}
+
+      - name: Make it what this release publishes
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
-          EVENT: ${{ github.event_name }}
-          SHA: ${{ github.sha }}
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          # A tag push is the release, and the tag must already exist. The button makes a draft pointed at the
-          # commit it built, so a dry run can be inspected and deleted; publishing the draft is what creates its tag.
+          # The public tree becomes the open set at this tag, LICENSE's MIT block, VERSION and the public repository's
+          # own files - a function of the tag, whatever its main held before. Staged and not committed: the button
+          # stops at the draft, and only a tag commits it, in the pull request's step.
+          ./.github/scripts/Publish-OpenSet.ps1 -Source . -Target public -Version $env:VERSION
+          git -C public add -A
+          if ($LASTEXITCODE -ne 0) { throw "git add exited with $LASTEXITCODE" }
+
+      - name: Write the pull request's body
+        id: body
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # Printed on every run, the button's included, so that a dry run shows the pull request a tag would open.
+          ./.github/scripts/Write-PublishBody.ps1 -Target public -Version $env:VERSION -Body artifacts/publish/body.md
+          Get-Content artifacts/publish/body.md
+
+      - name: Create the draft release
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # The release is created in the public repository, as a draft, before the pull request that announces it:
+          # merging that pull request is what tags the release there and publishes it. A tag and the button make the
+          # same draft. Never --latest here: which release is latest is decided when one is published, by the public
+          # repository's own workflow.
           #
           # [string[]] and not a bare assignment: PowerShell unrolls a one-element array assigned from an `if`
-          # into a scalar string, and `+=` on a string concatenates rather than appends. The tag path would
-          # otherwise have handed gh the characters of "--verify-tag--latest", one argument each.
-          [string[]] $how = if ($env:EVENT -eq 'workflow_dispatch') { '--draft', '--target', $env:SHA } else { '--verify-tag' }
+          # into a scalar string, and `+=` on a string concatenates rather than appends.
+          $repository = 'reply-team/jason-ai'
+          [string[]] $how = '--draft', '--target', 'main'
 
-          # A version carrying a pre-release part is published as one. `latest` is what the default update feed
-          # advertises and what both install one-liners download, so a candidate released without this would be
-          # offered to every runtime that checks and installed by anybody who typed the one-liner that day. The
-          # rule is the version's, not the event's: a candidate is a candidate however it arrived.
-          if ($env:VERSION -clike '*-*') { $how += '--prerelease' } else { $how += '--latest' }
+          # A version carrying a pre-release part is published as one, so that it never becomes the latest release:
+          # `latest` is what the default update feed advertises and what both install one-liners download. The rule
+          # is the version's, not the event's: a candidate is a candidate however it arrived.
+          if ($env:VERSION -clike '*-*') { $how += '--prerelease' }
 
           # A draft this version left behind - an earlier dry run of the same number, inspected and pressed
-          # again - already holds the name that is about to be created, and `gh release create` fails on it,
-          # complaining about a tag that does not exist (a draft's does not). So it is deleted first, and only
-          # if it really is a draft: a published release of this version is somebody's installed software, and
-          # the workflow stops rather than replace it. No --cleanup-tag; a draft has no tag to clean up.
-          $draft = $false
+          # again - holds the name that is about to be created, so it is deleted first, and only if it really is
+          # a draft. A published release of this version is somebody's installed software: the job stops before it
+          # creates anything. No --cleanup-tag; a draft has no tag to clean up.
+          $existing = $null
           try {
-            $existing = gh release view "v$env:VERSION" --json isDraft --jq '.isDraft' 2>$null
-            $draft = ($LASTEXITCODE -eq 0 -and $existing -eq 'true')
+            $existing = gh release view "v$env:VERSION" -R $repository --json isDraft --jq '.isDraft' 2>$null
+            if ($LASTEXITCODE -ne 0) { $existing = $null }
           } catch {
-            $draft = $false
+            $existing = $null
           }
-          if ($draft) {
+          if ($null -ne $existing -and $existing -ne 'true') {
+            throw "v$env:VERSION is already published in $repository. A published release is somebody's installed software, and this job replaces only a draft."
+          }
+          if ($existing -eq 'true') {
             Write-Host "Deleting the draft of v$env:VERSION that an earlier run left behind."
-            gh release delete "v$env:VERSION" --yes
+            gh release delete "v$env:VERSION" -R $repository --yes
             if ($LASTEXITCODE -ne 0) { throw "gh release delete exited with $LASTEXITCODE" }
           }
 
           # gh names an asset by its file name. The archives and the feed were assembled under artifacts/release; the
           # install scripts are the tag's own, so a one-liner pinned to this release runs the script it was published with.
           $assets = @('artifacts/release/jason-win-x64.zip', 'artifacts/release/jason-linux-x64.tar.gz', 'artifacts/release/jason-osx-arm64.tar.gz', 'artifacts/release/manifest.json', 'artifacts/release/checksums.txt') + @('install/install.sh', 'install/install.ps1')
-          gh release create "v$env:VERSION" @how --title "Jason $env:VERSION" --notes-file artifacts/release/notes.md @assets
+          gh release create "v$env:VERSION" -R $repository @how --title "Jason $env:VERSION" --notes-file artifacts/release/notes.md @assets
           if ($LASTEXITCODE -ne 0) { throw "gh release create exited with $LASTEXITCODE" }
+
+      - name: Open the pull request
+        if: github.event_name == 'push'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          LABEL: ${{ steps.body.outputs.label }}
+        run: |
+          # Only a tag opens the pull request; the button's draft is a dry run and leaves the public repository's
+          # branches alone. The commit holds what the projection staged, and the branch is this version's alone,
+          # replaced whole when the job runs again.
+          $repository = 'reply-team/jason-ai'
+          $branch = "release/v$env:VERSION"
+
+          git -C public diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "The public repository already holds v$env:VERSION's tree: there is nothing to commit, and no pull request is opened."
+            exit 0
+          }
+
+          git -C public -c user.name='Artem Kosolap' -c user.email='art@reply.io' commit --quiet -m "Jason $env:VERSION"
+          if ($LASTEXITCODE -ne 0) { throw "git commit exited with $LASTEXITCODE" }
+          git -C public push --force origin "HEAD:refs/heads/$branch"
+          if ($LASTEXITCODE -ne 0) { throw "git push exited with $LASTEXITCODE" }
+
+          # One release's pull request at a time. Merging one tags its version, so two open at once would be tagged
+          # in whatever order a person merged them. Asked after the draft and the push, so running the job again once
+          # the other is merged or closed has only this step left to do.
+          $open = @(gh pr list -R $repository --state open --json number,headRefName | ConvertFrom-Json)
+          if ($LASTEXITCODE -ne 0) { throw "gh pr list exited with $LASTEXITCODE" }
+          $other = @($open | Where-Object { $_.headRefName -clike 'release/v*' -and $_.headRefName -cne $branch })
+          if ($other.Count -gt 0) { throw "$($other[0].headRefName)'s pull request is open; merge or close it, then re-run this job." }
+
+          $mine = @($open | Where-Object { $_.headRefName -ceq $branch })
+          if ($mine.Count -gt 0) {
+            gh pr edit $mine[0].number -R $repository --body-file artifacts/publish/body.md
+            if ($LASTEXITCODE -ne 0) { throw "gh pr edit exited with $LASTEXITCODE" }
+            exit 0
+          }
+
+          [string[]] $label = @()
+          if ($env:LABEL -eq 'contracts') { $label = '--label', 'contracts' }
+          gh pr create -R $repository --base main --head $branch --title "Jason $env:VERSION" --body-file artifacts/publish/body.md @label
+          if ($LASTEXITCODE -ne 0) { throw "gh pr create exited with $LASTEXITCODE" }

@@ -1,0 +1,160 @@
+# Every pull request into this repository is read for three things before it merges: nothing in it points into the
+# work that produced it, every plugin's JavaScript parses, and every link in the tree stays in the tree. The release
+# process's own pull requests are held to the same, since what they bring is read here by everyone.
+name: Check
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: The published tree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Nothing internal in the change
+        shell: pwsh
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          # Read over the lines the change adds, its title and its body. Each pattern is written so that it does not
+          # match itself, so a change to this file is read like any other.
+          $patterns = [ordered]@{
+            'a tracker key'             = '\bREPLY-[0-9]+'
+            'an Atlassian address'      = 'atlassian\.net'
+            'an attribution trailer'    = 'Co-Authored-B[y]:|Claude-Sessio[n]:|Generated wit[h] \[Claude'
+            'a session link'            = 'claude\.ai/code'
+            'another repository of ours' = 'reply-team/jaso[n]-(?!ai(?![\w-]))[\w-]+'
+          }
+          $found = [Collections.Generic.List[string]]::new()
+          function Read-Text([string] $where, [string] $text) {
+            foreach ($name in $patterns.Keys) {
+              if ($text -cmatch $patterns[$name]) { $found.Add("${where}: $name") }
+            }
+          }
+
+          Read-Text 'the title' $env:TITLE
+          Read-Text 'the body' $env:BODY
+
+          # The added lines, each with its file and its line in the new text. --unified=0 leaves no context lines, so
+          # every line of a hunk is an addition or a removal, and a file's header ends at its first hunk.
+          $file = $null
+          $line = 0
+          $header = $false
+          foreach ($row in (git diff --unified=0 --no-color --no-ext-diff "$env:BASE...HEAD")) {
+            if ($row.StartsWith('diff --git ')) { $header = $true; $file = $null; continue }
+            if ($header -and $row.StartsWith('+++ ')) { $file = if ($row -eq '+++ /dev/null') { $null } else { $row.Substring(6) }; continue }
+            if ($row -cmatch '^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@') { $header = $false; $line = [int]$Matches[1]; continue }
+            if ($header) { continue }
+            if ($row.StartsWith('+')) {
+              Read-Text "${file}:$line" $row.Substring(1)
+              $line++
+            }
+          }
+          if ($LASTEXITCODE -ne 0) { throw "git diff exited with $LASTEXITCODE" }
+
+          if ($found.Count -gt 0) {
+            $found | ForEach-Object { Write-Host "::error::$_" }
+            throw "The change carries $($found.Count) thing(s) that point into the work that produced it."
+          }
+          Write-Host 'Nothing internal in the change.'
+
+      - name: Every plugin's JavaScript parses
+        shell: bash
+        run: find plugins -name '*.js' -print0 | xargs -0 -r -n1 node --check
+
+      - name: Every link stays in the tree
+        shell: pwsh
+        run: |
+          # Every Markdown file's links, read the way the release process reads them before it publishes: a relative
+          # link lands on a file or directory in this tree, no address names another repository of ours, and an
+          # address into this repository's files names a path that is here. A link in code is not a link; an address
+          # is read everywhere.
+          $inline = '!?\[[^\]]*\]\(\s*<?(?<target>[^)\s>]+)>?(?:\s+(?:"[^"]*"|''[^'']*''))?\s*\)'
+          $definition = '(?m)^ {0,3}\[[^\]]+\]:[ \t]*<?(?<target>[^\s>]+)>?'
+          $address = '(?m)https?://(?<host>github\.com|raw\.githubusercontent\.com)/reply-team/(?<repository>[A-Za-z0-9._-]+?)(?:\.git)?(?=$|[/\s)\]>"''`,#?])(?<rest>[^\s)\]>"''`,]*)'
+          $other = 'reply-team/jaso[n]-(?!ai(?![\w-]))[\w-]+|(?<![\w/-])jason-interna[l](?![\w-])'
+          $root = (Get-Location).Path
+
+          function Get-Prose([string] $text) {
+            $characters = $text.ToCharArray()
+            $fenced = $false
+            $position = 0
+            foreach ($row in $text.Split("`n")) {
+              $fence = $row -match '^ {0,3}(?:```|~~~)'
+              if ($fenced -or $fence) {
+                for ($i = 0; $i -lt $row.Length; $i++) { $characters[$position + $i] = ' ' }
+              } else {
+                foreach ($code in [regex]::Matches($row, '`+[^`]*`+')) {
+                  for ($i = 0; $i -lt $code.Length; $i++) { $characters[$position + $code.Index + $i] = ' ' }
+                }
+              }
+              if ($fence) { $fenced = -not $fenced }
+              $position += $row.Length + 1
+            }
+            -join $characters
+          }
+
+          function Resolve-Link([string] $target, [string] $at) {
+            if ($target -match '^[A-Za-z][A-Za-z0-9+.-]*:' -or $target.StartsWith('#') -or $target.StartsWith('//')) { return $null }
+            $path = [Uri]::UnescapeDataString($target.Split('#', 2)[0].Split('?', 2)[0])
+            if ($path.Length -eq 0) { return $null }
+            $segments = [Collections.Generic.List[string]]::new()
+            $start = if ($path.StartsWith('/')) { @() } else { @($at.Split('/') | Select-Object -SkipLast 1) }
+            foreach ($segment in @($start) + @($path.Split('/'))) {
+              if ($segment -eq '' -or $segment -eq '.') { continue }
+              if ($segment -eq '..') {
+                if ($segments.Count -eq 0) { return "(outside the repository) $path" }
+                $segments.RemoveAt($segments.Count - 1)
+                continue
+              }
+              $segments.Add($segment)
+            }
+            $segments -join '/'
+          }
+
+          function Test-Here([string] $path) {
+            $full = Join-Path $root $path
+            (Test-Path -LiteralPath $full) -and -not $path.StartsWith('(')
+          }
+
+          function Get-Line([string] $text, [int] $index) { ($text.Substring(0, $index).Split("`n")).Count }
+
+          $found = [Collections.Generic.List[string]]::new()
+          $files = git ls-files -- '*.md' | Sort-Object { $_ } -CaseSensitive
+          foreach ($file in $files) {
+            $text = [IO.File]::ReadAllText((Join-Path $root $file)).ReplaceLineEndings("`n")
+            $prose = Get-Prose $text
+
+            foreach ($match in @([regex]::Matches($prose, $inline)) + @([regex]::Matches($prose, $definition))) {
+              $resolved = Resolve-Link $match.Groups['target'].Value $file
+              if ($null -ne $resolved -and -not (Test-Here $resolved)) { $found.Add("${file}:$(Get-Line $text $match.Index) [a] $resolved") }
+            }
+
+            foreach ($match in [regex]::Matches($text, $other)) {
+              $found.Add("${file}:$(Get-Line $text $match.Index) [b] $($match.Value)")
+            }
+
+            foreach ($match in [regex]::Matches($text, $address)) {
+              if ($match.Groups['repository'].Value -cne 'jason-ai') { continue }
+              $pattern = if ($match.Groups['host'].Value -eq 'raw.githubusercontent.com') { '^/[^/]+/(?<path>.+)$' } else { '^/(?:blob|tree|raw|edit)/[^/]+/(?<path>.+)$' }
+              $named = [regex]::Match($match.Groups['rest'].Value, $pattern)
+              if (-not $named.Success) { continue }
+              $path = [Uri]::UnescapeDataString($named.Groups['path'].Value.Split('#', 2)[0].Split('?', 2)[0]).TrimEnd('/')
+              if (-not (Test-Here $path)) { $found.Add("${file}:$(Get-Line $text $match.Index) [c] $path") }
+            }
+          }
+
+          if ($found.Count -gt 0) {
+            $found | ForEach-Object { Write-Host "::error::$_" }
+            throw "$($found.Count) link(s) leave this tree."
+          }
+          Write-Host "Every link in $(@($files).Count) Markdown files stays in the tree."

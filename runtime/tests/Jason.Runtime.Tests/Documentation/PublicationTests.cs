@@ -90,7 +90,7 @@ public sealed partial class PublicationTests
             .Select(file => Path.GetRelativePath(directory, file).Replace(Path.DirectorySeparatorChar, '/'))
             .Order(StringComparer.Ordinal);
 
-        Assert.Equal([".gitignore", "CONTRIBUTING.md", "SECURITY.md"], files);
+        Assert.Equal([".github/workflows/check.yml", ".github/workflows/release.yml", ".gitignore", "CONTRIBUTING.md", "SECURITY.md"], files);
     }
 
     /// <summary>

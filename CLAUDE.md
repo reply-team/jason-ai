@@ -13,6 +13,7 @@ covered here.
   `tests/` (one xUnit project per source project).
 - `plugins/` — plugin marketplace. `skills/runtime/`, `skills/business/` — skill packs. `docs/` —
   maintained documentation only.
+- `.github/publish/` — what a release publishes: `open-set.txt` and the public repository's own files.
 - `global.json` at the root pins the SDK; run every command from the repository root.
 
 ## Commands
@@ -42,6 +43,15 @@ covered here.
   guard reads the compiled IL of every production assembly and refuses a `ProcessStartInfo` made anywhere else,
   a write to `CreateNoWindow` or `UseShellExecute`, `Process.Start` from a file name, and a read of a
   process's `StartInfo`. Reflection, expression trees and `new T()` are beyond what it reads.
+- Publication: the open set — exactly the paths `.github/publish/open-set.txt` lists — and the public repository's own
+  files under `.github/publish/public/` are published to `reply-team/jason-ai` at each release, through a pull request
+  a person reviews. The release workflow's publish job makes the public tree a pure function of the tag: the open set,
+  `LICENSE` as its MIT block alone, `VERSION`, and the public-own files; it creates the draft release there first and
+  then opens the pull request, and merging it tags and publishes there. Paths are identical on both sides. Everything
+  in the open set, and every diff of it, is read publicly, so the public-repository hygiene holds here as well: no
+  tracker key, no attribution trailer, no internal pointer, no link or path that leaves the published set
+  (`PublicationTests` holds the links). This repository keeps every file and the runtime's tags; its README is the
+  public one.
 - Package versions live in `runtime/Directory.Packages.props` only.
 - Warnings are errors. Every test runs offline and uses an isolated temporary data directory.
 
