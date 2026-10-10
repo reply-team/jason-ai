@@ -3,7 +3,7 @@
 Skills that teach an AI agent how to operate Jason itself: turning an objective into durable campaign work,
 presenting what is waiting on a person, running the installation, reading why something stopped, and telling
 Jason about effects produced outside it. They move in lockstep with the runtime's API and **ship with it**:
-this pack ships with Jason **0.6.0**.
+this pack ships with Jason **0.7.0**.
 
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
