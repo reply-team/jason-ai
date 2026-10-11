@@ -307,6 +307,36 @@ public class PageClaimsTests
     public void The_pages_say_where_a_release_request_goes_and_who_operates_the_address(string page, string said) =>
         Assert.Contains(said, Flat(Unquoted(Page(page.Split('/')))), StringComparison.Ordinal);
 
+    /// <summary>
+    /// What the address keeps of those requests, and for how long, is the runtime's licence's to say, in its section
+    /// 7.2. The pages that say where the requests go point there, right after saying it, rather than repeat it.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md", "the skills come from this repository directly. What that address keeps, and for how long, is section 7.2 of the [runtime's licence](LICENSE-RUNTIME.md).")]
+    [InlineData("docs/INSTALL.md", "which redirects them to this repository's releases on GitHub. What that address keeps, and for how long, is section 7.2 of the [licence](../LICENSE-RUNTIME.md).")]
+    public void The_pages_point_at_what_the_address_keeps_where_they_say_where_requests_go(string page, string said) =>
+        Assert.Contains(said, Flat(Unquoted(Page(page.Split('/')))), StringComparison.Ordinal);
+
+    /// <summary>
+    /// The names are trademarks, and neither licence grants a right to use them, so README says so where it names the
+    /// licences, and points at the note that says what anyone may do with them. It no longer has a section saying
+    /// "Jason AI" is used descriptively, which beside that note is not so.
+    /// </summary>
+    [Fact]
+    public void The_readme_names_the_marks_beside_the_licences()
+    {
+        var text = Flat(Page("README.md"));
+        var licences = text.IndexOf("## License", StringComparison.Ordinal);
+        Assert.True(licences >= 0, "README has no License section.");
+
+        Assert.Contains(
+            "The names \"Jason\", \"Jason AI\", \"Reply\" and \"Reply.io\", and their logos, are trademarks of ReplyApp Inc. Neither licence grants a right to use them; [TRADEMARKS.md](TRADEMARKS.md) says what you may do with them without asking.",
+            text[licences..],
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("## Naming", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("used descriptively", text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_install_prompt_says_installing_is_accepting_the_licence_at_main()
     {

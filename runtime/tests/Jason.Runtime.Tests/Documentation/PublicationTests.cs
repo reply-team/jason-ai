@@ -80,6 +80,7 @@ public sealed partial class PublicationTests
     [InlineData("LICENSE")]
     [InlineData("LICENSE-RUNTIME.md")]
     [InlineData("THIRD-PARTY-NOTICES")]
+    [InlineData("TRADEMARKS.md")]
     public void The_open_set_names_every_licence_text(string licence)
     {
         var problems = OpenSet.Problems([.. Valid.Where(line => line != licence)], Kind);

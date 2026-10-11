@@ -1422,7 +1422,7 @@ jason-internal/
 ├── docs/                  maintained documentation
 ├── install/               the install scripts and the update feed's schema
 ├── global.json            pins the .NET SDK; commands run from the repository root
-└── README.md  CLAUDE.md  LICENSE  LICENSE-RUNTIME.md  THIRD-PARTY-NOTICES
+└── README.md  CLAUDE.md  LICENSE  LICENSE-RUNTIME.md  THIRD-PARTY-NOTICES  TRADEMARKS.md
 ```
 
 The public repository, `reply-team/jason-ai`, holds `plugins/`, `skills/`, `.claude-plugin/`,
@@ -1664,7 +1664,7 @@ original chat session.
 |---|---|
 | DEC-PROD-001 | The product is Jason AI, an AI SDR harness: a local-first, vendor-neutral SDR domain runtime distributed as closed-source binaries, together with open skills, contracts, plugins, documentation and install path, presented as one coherent product. |
 | DEC-PROD-002 | The product combines deterministic Runtime, skill-guided AI reasoning, and provider execution plugins. |
-| DEC-OSS-002 | Contracts, skills, the public plugin mechanism, documentation and the install path are open (MIT) and published in `reply-team/jason-ai`; the runtime's source is not published and its binaries are released there under the runtime's own licence; hosted provider capabilities remain external services. |
+| DEC-OSS-002 | Contracts, skills, the public plugin mechanism, documentation and the install path are open (MIT) and published in `reply-team/jason-ai`; the runtime's source is not published and its binaries are released there under the Jason Runtime Licence (`LICENSE-RUNTIME.md`), with the trademark note `TRADEMARKS.md` beside it; hosted provider capabilities remain external services. |
 | DEC-ENTRY-001 | `reply-team/jason-ai` is the intended primary public product entry point. |
 | DEC-REPO-001 | Two repositories, resolving DEF-REPO-001. `reply-team/jason-internal` (private) is the source of truth for the whole product including the open set; `reply-team/jason-ai` (public) is the product entry point, a release-aligned published copy of the open set, and the binary store. Publication is release-triggered, deterministic, and lands through a reviewed pull request; the public repository never describes a runtime that has not been released. |
 | DEC-REPLY-001 | Reply is the configured ready-to-use default provider and commercial execution path, not a hard-coded dependency. |

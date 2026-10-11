@@ -20,6 +20,7 @@ public sealed class PublishBodyTests
         ["LICENSE-RUNTIME.md"] = "The runtime's licence.\n",
         ["README.md"] = "# Jason\n",
         ["THIRD-PARTY-NOTICES"] = "Third-party notices.\n",
+        ["TRADEMARKS.md"] = "The marks.\n",
         ["VERSION"] = "0.5.0\n",
         ["docs/INSTALL.md"] = "# Installing Jason\n",
         ["docs/contracts/README.md"] = "The contracts.\n",
@@ -70,7 +71,7 @@ public sealed class PublishBodyTests
             | Contracts (`docs/contracts/`) | 2 | 1 | 1 |
             | Documentation (`README.md`, `docs/`) | 0 | 1 | 0 |
             | Install path (`install/`) | 0 | 1 | 0 |
-            | Licences (`LICENSE`, `LICENSE-RUNTIME.md`, `THIRD-PARTY-NOTICES`) | 0 | 0 | 0 |
+            | Licences (`LICENSE`, `LICENSE-RUNTIME.md`, `THIRD-PARTY-NOTICES`, `TRADEMARKS.md`) | 0 | 0 | 0 |
             | This repository's own files (`VERSION`, `CODEOWNERS`, `.gitattributes`, `.gitignore`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/`) | 0 | 1 | 0 |
 
             <details><summary>Every file</summary>
@@ -173,15 +174,16 @@ public sealed class PublishBodyTests
     }
 
     /// <summary>
-    /// A change to the terms the runtime is published under, or to the notices of what it carries, is the change in a
-    /// release's pull request its reviewer must not miss. The licence texts have a row of their own, which reads 0 0 0 in
-    /// an ordinary release, so it stands out when it does not; the own-files row changes in every release, with
-    /// <c>VERSION</c>, and would hide it.
+    /// A change to the terms the runtime is published under, to the notices of what it carries, or to the note on its
+    /// marks is the change in a release's pull request its reviewer must not miss. The licence texts have a row of their
+    /// own, which reads 0 0 0 in an ordinary release, so it stands out when it does not; the own-files row changes in
+    /// every release, with <c>VERSION</c>, and would hide it.
     /// </summary>
     [Theory]
     [InlineData("LICENSE")]
     [InlineData("LICENSE-RUNTIME.md")]
     [InlineData("THIRD-PARTY-NOTICES")]
+    [InlineData("TRADEMARKS.md")]
     public void A_change_to_a_licence_text_is_counted_under_the_licences(string licence)
     {
         using var tree = new Checkout();
@@ -190,7 +192,7 @@ public sealed class PublishBodyTests
 
         var (body, label) = Write(tree);
 
-        Assert.Contains("| Licences (`LICENSE`, `LICENSE-RUNTIME.md`, `THIRD-PARTY-NOTICES`) | 0 | 1 | 0 |\n", body, StringComparison.Ordinal);
+        Assert.Contains("| Licences (`LICENSE`, `LICENSE-RUNTIME.md`, `THIRD-PARTY-NOTICES`, `TRADEMARKS.md`) | 0 | 1 | 0 |\n", body, StringComparison.Ordinal);
         Assert.Contains("| This repository's own files (`VERSION`, `CODEOWNERS`, `.gitattributes`, `.gitignore`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/`) | 0 | 1 | 0 |\n", body, StringComparison.Ordinal);
         Assert.Equal(string.Empty, label);
     }
@@ -200,12 +202,12 @@ public sealed class PublishBodyTests
     {
         using var tree = new Checkout();
         Change(tree.Root, "VERSION", "0.6.0\n");
-        Change(tree.Root, "TRADEMARKS.md", "Names.\n");
+        Change(tree.Root, "NOTES.md", "Notes.\n");
 
         var run = Run(tree, Path.Combine(tree.Root, "..", "body.md"), Path.Combine(tree.Root, "..", "output"));
 
         Assert.NotEqual(0, run.Exit);
-        Assert.Contains("'TRADEMARKS.md'", run.Stderr, StringComparison.Ordinal);
+        Assert.Contains("'NOTES.md'", run.Stderr, StringComparison.Ordinal);
     }
 
     /// <summary>

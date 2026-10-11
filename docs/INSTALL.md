@@ -108,7 +108,8 @@ day after that, at the default settings: one `GET`, carrying nothing about you o
 the runtime's version, including its build. `Update:CheckEnabled` set to `false` in
 `~/.jason/config/settings.json` turns that off. That request, and the downloads the install scripts and
 `jason update apply` make, go to `jasonharness.ai`, an address Reply.io operates, which redirects them to this
-repository's releases on GitHub.
+repository's releases on GitHub. What that address keeps, and for how long, is section 7.2 of the
+[licence](../LICENSE-RUNTIME.md).
 
 ---
 

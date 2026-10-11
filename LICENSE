@@ -1,11 +1,11 @@
 Scope. This licence covers this repository except the runtime/ directory,
-whose contents are licensed separately (see LICENSE-RUNTIME.md). The runtime
-binaries attached to each release are licensed under the terms shipped inside
-the archive.
+whose source is proprietary to ReplyApp Inc. and is licensed to no one by this
+file. The runtime binaries attached to each release are licensed under the
+Jason Runtime Licence (see LICENSE-RUNTIME.md), which every archive carries.
 
 MIT License
 
-Copyright (c) 2026 Reply.io
+Copyright (c) 2026 ReplyApp Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

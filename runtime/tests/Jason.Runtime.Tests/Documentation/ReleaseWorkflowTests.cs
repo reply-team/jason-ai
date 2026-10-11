@@ -142,7 +142,8 @@ public class ReleaseWorkflowTests
 
     /// <summary>
     /// The runtime's licence is <c>LICENSE-RUNTIME.md</c> at the root, the place a release publishes it from, and
-    /// the repository's <c>LICENSE</c> names that file in the paragraph that scopes the MIT licence.
+    /// the repository's <c>LICENSE</c> names that file in the paragraph that scopes the MIT licence. That licence
+    /// covers the binaries and grants no right to the source, so the paragraph says the source is licensed to no one.
     /// </summary>
     [Fact]
     public void The_runtime_s_licence_is_at_the_root_and_the_scope_paragraph_names_it()
@@ -154,6 +155,7 @@ public class ReleaseWorkflowTests
         var licence = File.ReadAllText(Path.Combine(root, "LICENSE"));
         var scope = licence[..Assert.Single(Regex.Matches(licence, "^MIT License$", RegexOptions.Multiline)).Index];
         Assert.Contains("(see LICENSE-RUNTIME.md)", scope, StringComparison.Ordinal);
+        Assert.Contains("whose source is proprietary to ReplyApp Inc.", scope.ReplaceLineEndings(" "), StringComparison.Ordinal);
         Assert.DoesNotContain("runtime/LICENSE", scope, StringComparison.Ordinal);
     }
 

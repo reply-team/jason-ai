@@ -5,6 +5,7 @@ LICENSE
 LICENSE-RUNTIME.md
 README.md
 THIRD-PARTY-NOTICES
+TRADEMARKS.md
 docs/INSTALL.md
 docs/contracts/
 docs/golden-path.md

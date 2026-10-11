@@ -180,9 +180,13 @@ internal static partial class Links
         return string.Join('/', segments);
     }
 
-    /// <summary>The published path an address into the public repository's files names.</summary>
+    /// <summary>
+    /// The published path an address into the public repository's files names. The punctuation that ends a sentence or
+    /// closes emphasis after an address in text is not part of it: GitHub's links leave it out, and so does this.
+    /// </summary>
     private static string? FilePath(string host, string rest)
     {
+        rest = rest.TrimEnd('.', '?', '!', ':', '*', '_', '~');
         var match = host == "raw.githubusercontent.com" ? RawPath().Match(rest) : BlobPath().Match(rest);
         return match.Success ? Uri.UnescapeDataString(match.Groups["path"].Value.Split('#', 2)[0].Split('?', 2)[0]).TrimEnd('/') : null;
     }

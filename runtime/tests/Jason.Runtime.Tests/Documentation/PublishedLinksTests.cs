@@ -45,6 +45,7 @@ public sealed class PublishedLinksTests : IDisposable
     [InlineData("```\nhttps://github.com/reply-team/jason-ai/blob/v0.6.0/docs/private.md\n```", "README.md [c] docs/private.md")]
     [InlineData("[p](https://github.com/reply-team/jason-ai/tree/main/runtime/src)", "README.md [c] runtime/src")]
     [InlineData("https://raw.githubusercontent.com/reply-team/jason-ai/main/CLAUDE.md", "README.md [c] CLAUDE.md")]
+    [InlineData("The design is at https://github.com/reply-team/jason-ai/blob/main/docs/private.md.", "README.md [c] docs/private.md")]
     [InlineData("```\n[p](docs/private.md)\n```", "README.md [d] docs/private.md")]
     [InlineData("See `docs/private.md`.", "README.md [d] docs/private.md")]
     [InlineData("See private.md.", "README.md [d] private.md")]
@@ -64,6 +65,7 @@ public sealed class PublishedLinksTests : IDisposable
     [InlineData("[install.sh](https://jasonharness.ai/releases/latest/download/install.sh), `jasonharness.ai` and <https://jasonharness.ai/releases/tag/v0.7.0>")]
     [InlineData("reply-team/jason-ai, jason-linux-x64.tar.gz and jason-internals-of-a-plugin name nothing private.")]
     [InlineData("https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/public.md and https://github.com/reply-team/reply-cli")]
+    [InlineData("The note is published at https://github.com/reply-team/jason-ai/blob/main/docs/public.md. So is https://github.com/reply-team/jason-ai/blob/main/VERSION: read it.")]
     [InlineData("`[not a link](../outside.md)` is code, and code links nowhere")]
     [InlineData("skills/runtime/private.md is another directory's page, and notes.md names no page of docs/.")]
     public void A_published_text_that_stays_in_what_is_published_is_not(string text)

@@ -16,8 +16,9 @@ installed SDR skills, and external execution providers into a durable outbound-s
 > its build (`Update:CheckEnabled` set to `false` turns it off); and the requests you start yourself — the install
 > scripts and `jason update`, and `jason skills install` and `update`. The check, the install scripts and
 > `jason update` go to `jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's
-> releases; the skills come from this repository directly. Nothing else, and no telemetry: the file `jason doctor`
-> writes stays on your machine unless you send it.
+> releases; the skills come from this repository directly. What that address keeps, and for how long, is
+> section 7.2 of the [runtime's licence](LICENSE-RUNTIME.md). Nothing else, and no telemetry: the file
+> `jason doctor` writes stays on your machine unless you send it.
 
 What runs today is one executable that hosts the local Runtime API, a CLI that talks to it, and a database layer
 that migrates itself on start. The runtime manages campaigns, their context and their append-only journal, a contact
@@ -461,11 +462,6 @@ checkout of this repository with `--source` ([docs/INSTALL.md](docs/INSTALL.md) 
 | [`reply-team/reply-mcp`](https://github.com/reply-team/reply-mcp) | Remote MCP server exposing curated Reply tools to MCP-capable agents |
 | [`reply-team/reply-skills`](https://github.com/reply-team/reply-skills) | **Formerly** the home of the skills packs. Both halves now live here: the runtime skills in [`skills/runtime`](skills/runtime), re-authored around the Runtime API, and the business skills in [`skills/business`](skills/business), moved across unchanged and then held to this repository's own guards. The Reply-specific half belongs with `reply-cli` |
 
-## Naming
-
-“Jason AI” is used descriptively here; the repository identity is `jason-ai`. Final public
-product naming may change — the architecture does not depend on it.
-
 ## Getting help
 
 Jason is in alpha, and this repository takes no issues yet. If something does not work, write to
@@ -479,3 +475,6 @@ Everything in this repository is MIT ([LICENSE](LICENSE)). The runtime binaries 
 licensed separately, under the Jason Runtime Licence ([LICENSE-RUNTIME.md](LICENSE-RUNTIME.md)): every archive
 carries the licence and the third-party notices, and an install keeps both beside the executable as
 `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`.
+
+The names "Jason", "Jason AI", "Reply" and "Reply.io", and their logos, are trademarks of ReplyApp Inc. Neither
+licence grants a right to use them; [TRADEMARKS.md](TRADEMARKS.md) says what you may do with them without asking.

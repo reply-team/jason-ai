@@ -47,11 +47,12 @@ internal static class OpenSet
     public static readonly string[] Documents = ["docs/INSTALL.md", "docs/contracts/", "docs/golden-path.md", "docs/plugins.md"];
 
     /// <summary>
-    /// The licence texts at the root: the MIT licence of the published tree, the runtime's own licence and the
-    /// third-party notices. Every archive carries the last two beside the executable, and the pages link the runtime's
-    /// licence in the public tree, so the public tree holds all three.
+    /// The licence texts at the root: the MIT licence of the published tree, the runtime's own licence, the third-party
+    /// notices and the note on the marks. Every archive carries the runtime's licence and the notices beside the
+    /// executable, the pages link the runtime's licence in the public tree, and that licence links the note there, so the
+    /// public tree holds all four.
     /// </summary>
-    public static readonly string[] Licences = ["LICENSE", "LICENSE-RUNTIME.md", "THIRD-PARTY-NOTICES"];
+    public static readonly string[] Licences = ["LICENSE", "LICENSE-RUNTIME.md", "THIRD-PARTY-NOTICES", "TRADEMARKS.md"];
 
     private static readonly string[] NeverPublished = ["CLAUDE.md", "global.json", "dotnet-tools.json", "TestResults"];
 
