@@ -23,11 +23,11 @@ harness installed, so §4 has somewhere to deploy.
 ## 2. Install from a release
 
 ```sh
-curl -fsSL https://github.com/reply-team/jason-ai/releases/latest/download/install.sh | sh
+curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
-irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
+irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
 By installing Jason you accept the Jason Runtime Licence: [LICENSE-RUNTIME.md](../LICENSE-RUNTIME.md). If you do
@@ -67,14 +67,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://github.com/reply-team/jason-ai/releases/download/v0.1.0/install.sh | sh -s -- --version 0.1.0
+curl -fsSL https://jasonharness.ai/releases/download/v0.7.0/install.sh | sh -s -- --version 0.7.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/reply-team/jason-ai/releases/download/v0.1.0/install.ps1))) -Version 0.1.0
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.7.0/install.ps1))) -Version 0.7.0
 ```
 
-These install 0.1.0 with 0.1.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.7.0 with 0.7.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
@@ -106,7 +106,10 @@ path — `~/.local/bin/jason --version`.
 A started runtime asks the release feed whether a newer version exists five minutes after it starts, and once a
 day after that, at the default settings: one `GET`, carrying nothing about you or your work — it identifies only
 the runtime's version, including its build. `Update:CheckEnabled` set to `false` in
-`~/.jason/config/settings.json` turns that off.
+`~/.jason/config/settings.json` turns that off. That request, and the downloads the install scripts and
+`jason update apply` make, go to `jasonharness.ai`, an address Reply.io operates, which redirects them to this
+repository's releases on GitHub. What that address keeps, and for how long, is section 7.2 of the
+[licence](../LICENSE-RUNTIME.md).
 
 ---
 

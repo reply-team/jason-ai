@@ -5,8 +5,8 @@
 # directory added to the PATH behind a marker line unless --no-modify-path says otherwise. Running it again over
 # the same version downloads nothing and says so, unless a licence file is missing beside it, which it then writes.
 #
-#   curl -fsSL https://github.com/reply-team/jason-ai/releases/latest/download/install.sh | sh
-#   curl -fsSL https://github.com/reply-team/jason-ai/releases/download/v0.2.0/install.sh | sh -s -- --version 0.2.0 --no-modify-path
+#   curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
+#   curl -fsSL https://jasonharness.ai/releases/download/v0.7.0/install.sh | sh -s -- --version 0.7.0 --no-modify-path
 #
 # JASON_INSTALL_FEED (or --feed) points it at a directory or a base URL holding the same files a release holds
 # — the archives, manifest.json and checksums.txt — which is how CI runs it against the archives it has just
@@ -14,7 +14,9 @@
 # dash.
 set -eu
 
-REPOSITORY_URL="https://github.com/reply-team/jason-ai"
+# The product's own address, in front of the releases: it redirects every path under /releases/ to the same path in
+# the public repository's releases on GitHub.
+RELEASES_URL="https://jasonharness.ai/releases"
 # The licence is a page of the repository, at the release's tag; the downloads are a release's assets. Each has a base
 # of its own, so that the downloads can move without the licence page moving with them.
 LICENCE_BASE="https://github.com/reply-team/jason-ai/blob"
@@ -29,7 +31,7 @@ usage() {
 Usage: install.sh [--version X.Y.Z] [--feed DIRECTORY-OR-URL] [--install-dir DIRECTORY] [--no-modify-path]
 
   --version X.Y.Z        install that release rather than the latest
-  --feed DIRECTORY|URL   read the release's files from there instead of GitHub (also JASON_INSTALL_FEED)
+  --feed DIRECTORY|URL   read the release's files from there instead of the published releases (also JASON_INSTALL_FEED)
   --install-dir DIR      put the executable there instead of ~/.local/bin
   --no-modify-path       do not add the install directory to the PATH in your profile
 EOF
@@ -74,9 +76,9 @@ esac
 if [ -n "$FEED" ]; then
     BASE="$FEED"
 elif [ -n "$VERSION" ]; then
-    BASE="$REPOSITORY_URL/releases/download/v$VERSION"
+    BASE="$RELEASES_URL/download/v$VERSION"
 else
-    BASE="$REPOSITORY_URL/releases/latest/download"
+    BASE="$RELEASES_URL/latest/download"
 fi
 
 # One file from the feed into the temporary directory: over the web with curl or wget, or a copy from a directory.
