@@ -1,7 +1,12 @@
 using System.Diagnostics;
+using System.IO.Compression;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Update;
+using Microsoft.Win32;
 
 namespace Jason.Cli.Tests.Documentation;
 
@@ -578,6 +583,175 @@ public partial class InstallScriptTests
         if (Test-Path Function:Install-Jason) { "left behind: Install-Jason" }
         try { $null = $aNameThisSessionNeverDefined; "strict mode=off" } catch { "strict mode=on" }
         """;
+
+    private const string PowerShell7 = "pwsh";
+
+    private const string WindowsPowerShell = "Windows PowerShell 5.1";
+
+    /// <summary>
+    /// A .NET call that fails inside <c>install.ps1</c> stops the install with exit code 1, in every form the pages show it
+    /// run in and under both shells, with what failed on stderr. Such a failure used to end the run with 0: the exception
+    /// left the installer's function and reached the call at the bottom of the script, whose <c>try</c> had a
+    /// <c>finally</c> and no <c>catch</c>, and the shell printed it and went on to the end. A <c>throw</c> or a failed
+    /// command exited 1; only an exception from a method call got through, and a CI step or an agent that reads the exit
+    /// code took a failed install for an installed one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The failure is a real one, reached as a damaged archive would reach it: the archive's first entry is a directory
+    /// named <c>jason.exe</c>, ahead of the file of that name. Expand-Archive makes the directory, and the .NET call that
+    /// writes the file over it is refused. The checksums match, so nothing before the unpack stops the run.
+    /// </para>
+    /// <para>
+    /// <c>irm … | iex</c> passes no parameters, so that form cannot be told to leave the PATH alone, and the PATH is the
+    /// account's registry. Three things keep the row away from it: the failure is at the unpack, long before the PATH
+    /// step; the file named <c>jason.exe</c> holds text that does not run, so an archive that did unpack would stop at the
+    /// check that the executable starts; and the account's Path is read before and after each row, its text and its kind,
+    /// so a run that wrote it fails here rather than passing.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData(PowerShell7, "-File")]
+    [InlineData(PowerShell7, "[scriptblock]::Create")]
+    [InlineData(PowerShell7, "| iex")]
+    [InlineData(WindowsPowerShell, "-File")]
+    [InlineData(WindowsPowerShell, "[scriptblock]::Create")]
+    [InlineData(WindowsPowerShell, "| iex")]
+    [SupportedOSPlatform("windows")]
+    public void A_failed_net_call_stops_the_install_with_exit_1_in_every_form_the_pages_show(string shell, string form)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "install.ps1 refuses a PowerShell that is not on Windows, so its rules can only be run on Windows.");
+
+        using var tree = new TempTree();
+        var feed = tree.NewDirectory("feed");
+        var asset = ReleaseAssets.For("win-x64");
+        var archive = Path.Combine(feed, asset);
+        using (var zip = ZipFile.Open(archive, ZipArchiveMode.Create))
+        {
+            zip.CreateEntry("jason.exe/");
+            using var file = zip.CreateEntry("jason.exe").Open();
+            file.Write("This is not a program.\n"u8);
+        }
+
+        File.WriteAllText(Path.Combine(feed, ReleaseAssets.Manifest), """{ "schema": 1, "version": "0.7.0" }""");
+        File.WriteAllText(Path.Combine(feed, ReleaseAssets.Checksums), Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(archive))) + "  " + asset + "\n");
+
+        // Where the one-liner installs, under a LOCALAPPDATA of the test's own; the other two forms are told the same place.
+        var programs = Path.Combine(tree.Root, "Programs", "jason");
+        var script = Path.Combine(RepositoryRoot(), "install", "install.ps1");
+        string[] arguments = form switch
+        {
+            "-File" => ["-File", script, "-InstallDir", programs, "-NoModifyPath", "-Feed", feed],
+            "[scriptblock]::Create" => ["-Command", $"& ([scriptblock]::Create((Get-Content -LiteralPath {Quoted(script)} -Raw))) -InstallDir {Quoted(programs)} -NoModifyPath -Feed {Quoted(feed)}"],
+            _ => ["-Command", $"Get-Content -LiteralPath {Quoted(script)} -Raw | iex"],
+        };
+        var temp = tree.NewDirectory("temp");
+        var environment = new Dictionary<string, string>
+        {
+            ["LOCALAPPDATA"] = tree.Root,
+            ["JASON_INSTALL_FEED"] = feed,
+            ["TEMP"] = temp,
+            ["TMP"] = temp,
+        };
+
+        var path = AccountPath();
+        var (exit, _, stderr) = PowerShell(shell, environment, arguments);
+
+        Assert.Equal(path, AccountPath());
+        Assert.True(exit == 1, $"{shell} {form} exited {exit}. It said: {stderr}");
+        Assert.False(Directory.Exists(programs) && Directory.EnumerateFileSystemEntries(programs).Any(), $"{shell} {form} installed something.");
+        Assert.True(
+            Regex.Replace(stderr, @"\s+", string.Empty).Contains("Accesstothepath", StringComparison.Ordinal),
+            $"{shell} {form} did not say the unpack was refused. It said: {stderr}");
+    }
+
+    /// <summary>
+    /// And <c>install.sh</c> stops on a command that fails without a check of the script's own around it: a feed whose
+    /// <c>checksums.txt</c> cannot be read makes <c>cp</c> fail, and <c>set -e</c> is what ends the run there, non-zero,
+    /// in <c>cp</c>'s own words and with nothing installed. Without it the run went on, and stopped later on a check of
+    /// its own, which is not where it failed.
+    /// </summary>
+    [Fact]
+    [UnsupportedOSPlatform("windows")]
+    public void Install_sh_stops_where_a_command_fails_with_nothing_installed()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "install.sh refuses a Windows shell by name; CI's Linux and macOS legs run this row.");
+        Assert.SkipUnless(
+            (OperatingSystem.IsLinux() && RuntimeInformation.OSArchitecture == Architecture.X64)
+            || (OperatingSystem.IsMacOS() && RuntimeInformation.OSArchitecture == Architecture.Arm64),
+            "No release is built for this machine, and install.sh refuses it by name.");
+
+        using var tree = new TempTree();
+        var feed = tree.NewDirectory("feed");
+        var asset = ReleaseAssets.For(OperatingSystem.IsMacOS() ? "osx-arm64" : "linux-x64");
+        File.WriteAllText(Path.Combine(feed, ReleaseAssets.Manifest), "{\n  \"schema\": 1,\n  \"version\": \"0.7.0\"\n}\n");
+        File.WriteAllText(Path.Combine(feed, asset), "Not an archive.\n");
+        var checksums = Path.Combine(feed, ReleaseAssets.Checksums);
+        File.WriteAllText(checksums, new string('0', 64) + "  " + asset + "\n");
+        File.SetUnixFileMode(checksums, UnixFileMode.None);
+        Assert.SkipWhen(Readable(checksums), "This account reads a file whatever its mode says, as root does, so there is no refusal to make.");
+
+        var install = tree.NewDirectory("bin");
+        var (exit, _, stderr) = Run(
+            "/bin/sh",
+            new Dictionary<string, string> { ["HOME"] = tree.NewDirectory("home") },
+            Path.Combine(RepositoryRoot(), "install", "install.sh"), "--feed", feed, "--install-dir", install, "--no-modify-path");
+
+        Assert.True(exit != 0, $"install.sh exited 0. It said: {stderr}");
+        Assert.Empty(Directory.EnumerateFileSystemEntries(install));
+        Assert.Contains(ReleaseAssets.Checksums, stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("install.sh:", stderr, StringComparison.Ordinal);
+    }
+
+    /// <summary>True when this account can open the file for reading.</summary>
+    private static bool Readable(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The account's own Path as the registry holds it, its text unexpanded and its kind, or null where it has none. Read,
+    /// never written: a row that compares it before and after is how a run that wrote it would fail rather than pass.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    private static (string Value, RegistryValueKind Kind)? AccountPath()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(Jason.Cli.Uninstall.UserPathValue.EnvironmentKey);
+        return key?.GetValue("Path", null, RegistryValueOptions.DoNotExpandEnvironmentNames) is string value
+            ? (value, key.GetValueKind("Path"))
+            : null;
+    }
+
+    /// <summary>
+    /// The shell named, run to completion: PowerShell 7 from this machine's PATH, or the Windows PowerShell 5.1 every
+    /// Windows carries, which is what a fresh Windows has and what the one-liner is typed into.
+    /// </summary>
+    private static (int Exit, string Stdout, string Stderr) PowerShell(string shell, Dictionary<string, string> environment, params string[] arguments)
+    {
+        if (shell == PowerShell7)
+        {
+            return Pwsh(environment, ["-ExecutionPolicy", "Bypass", .. arguments]);
+        }
+
+        // A test run from PowerShell 7, as CI's is, hands its children PowerShell 7's module path, and Windows PowerShell
+        // started under it finds no Expand-Archive of its own. One started from Windows has the machine's.
+        environment["PSModulePath"] = Environment.GetEnvironmentVariable("PSModulePath", EnvironmentVariableTarget.Machine) ?? string.Empty;
+        return Run(
+            Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
+            environment,
+            ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", .. arguments]);
+    }
+
+    /// <summary>A path as a PowerShell literal.</summary>
+    private static string Quoted(string path) => "'" + path.Replace("'", "''", StringComparison.Ordinal) + "'";
 
     /// <summary>
     /// <c>install.ps1</c>, run to completion by <c>pwsh</c> with a feed of the test's own and an install

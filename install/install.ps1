@@ -353,8 +353,15 @@ function Install-Jason {
 
 # Removed again whatever happens: the one-liner is `irm ... | iex`, which runs this text in the session that
 # typed it, and a function left behind there is this script still sitting in somebody's shell after it is done.
+#
+# And a failure is thrown on from here, whatever it was. An exception from a .NET call inside the function - a file
+# Expand-Archive could not write, say - reached this level as an error the shell printed and went on from, and the run
+# exited 0 as if it had installed. Thrown again, it ends the run with 1, as a throw or a failed command always did.
 try {
     Install-Jason -Version $Version -Feed $Feed -InstallDir $InstallDir -NoModifyPath:$NoModifyPath
+}
+catch {
+    throw
 }
 finally {
     Remove-Item function:Install-Jason -ErrorAction SilentlyContinue
