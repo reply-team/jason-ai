@@ -1,4 +1,5 @@
 using Jason.Cli.Autostart;
+using Jason.Contracts.Update;
 
 namespace Jason.Cli.Tests.Autostart;
 
@@ -258,6 +259,19 @@ public class AutostartArtifactsTests
             [["systemctl", "--user", "disable", "jason.service"], ["systemctl", "--user", "daemon-reload"]],
             unit.Remove);
         Assert.Equal(["systemctl", "--user", "is-enabled", "jason.service"], unit.Query);
+    }
+
+    /// <summary>
+    /// The unit's documentation is the product's front door, its own address, which a person reading
+    /// <c>systemctl --user status jason</c> can open. Only <c>ExecStart</c> is read back, so a unit written before
+    /// this still reads as Jason's, and the next enable rewrites it.
+    /// </summary>
+    [Fact]
+    public void The_user_unit_documents_itself_at_the_products_address()
+    {
+        var unit = AutostartArtifacts.Compose(AutostartPlatform.Linux, ["/home/ada/.local/bin/jason"], Unix, Home, "ada");
+
+        Assert.Contains($"\nDocumentation={ProductAddress.Root}\n", unit.Artifact, StringComparison.Ordinal);
     }
 
     /// <summary>

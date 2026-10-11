@@ -295,6 +295,18 @@ public class PageClaimsTests
         Assert.True(said > Flat(text[..oneLiner]).Length, $"{page} does not say, after its one-liners: {sentence}");
     }
 
+    /// <summary>
+    /// The update check, the install scripts and <c>jason update</c> go to the product's own address, which redirects
+    /// them to the public repository's releases. The pages that say what leaves a machine say where those requests go
+    /// and who operates the address, and that the skills still come from the repository directly.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md", "The check, the install scripts and `jason update` go to `jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases; the skills come from this repository directly.")]
+    [InlineData("docs/INSTALL.md", "That request, and the downloads the install scripts and `jason update apply` make, go to `jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's releases on GitHub.")]
+    [InlineData("docs/release-and-update.md", "**Where it goes.** The default feed is on `jasonharness.ai`, an address Reply.io operates, which redirects every request under `/releases/` to the same path in the public repository's releases on GitHub.")]
+    public void The_pages_say_where_a_release_request_goes_and_who_operates_the_address(string page, string said) =>
+        Assert.Contains(said, Flat(Unquoted(Page(page.Split('/')))), StringComparison.Ordinal);
+
     [Fact]
     public void The_install_prompt_says_installing_is_accepting_the_licence_at_main()
     {
@@ -462,6 +474,9 @@ public class PageClaimsTests
 
     /// <summary>A page with every run of white space made one space, so a sentence is found however it is wrapped.</summary>
     private static string Flat(string text) => System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
+
+    /// <summary>A page with the marks of a quoted block taken off, so a sentence quoted across lines reads as one.</summary>
+    private static string Unquoted(string text) => System.Text.RegularExpressions.Regex.Replace(text, "(?m)^> ?", "");
 
     /// <summary>The README's paste-in prompt: the fenced block under its own heading.</summary>
     private static string Prompt()

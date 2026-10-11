@@ -24,10 +24,11 @@ namespace Jason.Contracts.Update;
 public sealed class UpdateFeed(HttpClient client)
 {
     /// <summary>
-    /// The feed of the public repository's latest release. The asset names carry no version, so this one URL
-    /// resolves for every release there will ever be and nothing that names it needs editing.
+    /// The feed of the latest release, at the product's own address, which redirects it to the public
+    /// repository's latest release on GitHub. The asset names carry no version, so this one URL resolves for
+    /// every release there will ever be and nothing that names it needs editing.
     /// </summary>
-    public static Uri Default { get; } = new("https://github.com/reply-team/jason-ai/releases/latest/download/manifest.json");
+    public static Uri Default { get; } = new($"{ProductAddress.Releases}/latest/download/{ReleaseAssets.Manifest}");
 
     /// <summary>
     /// How long either caller waits for a feed. A manifest is a few hundred bytes: a page that has not answered

@@ -213,7 +213,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
     private async Task<UpdateManifest> ReadFeedAsync(UpdateRequest request, CancellationToken cancellationToken)
     {
-        using var client = env.HttpHandler is null ? new HttpClient() : new HttpClient(env.HttpHandler, disposeHandler: false);
+        using var client = UpdateHttp.Client(env);
         client.Timeout = UpdateFeed.DefaultTimeout;
         return await new UpdateFeed(client).ReadAsync(Address(request), cancellationToken).ConfigureAwait(false);
     }
@@ -257,7 +257,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
                 $"The feed now offers {manifest.Version}, and this update is for {ledger.ToVersion}.");
         }
 
-        using var client = env.HttpHandler is null ? new HttpClient() : new HttpClient(env.HttpHandler, disposeHandler: false);
+        using var client = UpdateHttp.Client(env);
         var staged = await new UpdateStager(client)
             .StageAsync(manifest, ReleaseAssets.CurrentRid!, Address(release), update, cancellationToken)
             .ConfigureAwait(false);

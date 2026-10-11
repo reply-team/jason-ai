@@ -116,6 +116,31 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// A release is fetched from the product's own address, the base <see cref="ProductAddress.Releases"/> names,
+    /// which redirects every path under it to the same path in the public repository's releases. Each script holds
+    /// that base as one literal and composes both shapes from it, the latest release and a pinned one, so a one-liner
+    /// and the runtime's own feed ask the same address.
+    /// </summary>
+    [Fact]
+    public void Both_scripts_fetch_a_release_from_the_product_address()
+    {
+        var sh = Code("install.sh");
+        var ps1 = Code("install.ps1");
+
+        var shBase = Regex.Match(sh, "^RELEASES_URL=\"([^\"]*)\"$", RegexOptions.Multiline);
+        var ps1Base = Regex.Match(ps1, @"^\s*\$releasesUrl = '([^']*)'$", RegexOptions.Multiline);
+        Assert.True(shBase.Success, "install.sh has no RELEASES_URL of its own.");
+        Assert.True(ps1Base.Success, "install.ps1 has no $releasesUrl of its own.");
+        Assert.Equal(ProductAddress.Releases, shBase.Groups[1].Value);
+        Assert.Equal(ProductAddress.Releases, ps1Base.Groups[1].Value);
+
+        Assert.Contains("BASE=\"$RELEASES_URL/download/v$VERSION\"", sh, StringComparison.Ordinal);
+        Assert.Contains("BASE=\"$RELEASES_URL/latest/download\"", sh, StringComparison.Ordinal);
+        Assert.Contains("\"$releasesUrl/download/v$Version\"", ps1, StringComparison.Ordinal);
+        Assert.Contains("\"$releasesUrl/latest/download\"", ps1, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// PA9: the line in the profile is marked, and the profile is searched before it is appended to, so that a
     /// second run adds nothing. What is searched for is the whole line the script wrote — the one naming the
     /// install directory — and not the comment above it: that comment is an English sentence a person's own
@@ -547,7 +572,7 @@ public partial class InstallScriptTests
         try { Invoke-Expression (Get-Content -LiteralPath '@SCRIPT@' -Raw) } catch { }
 
         "ErrorActionPreference=$ErrorActionPreference"
-        foreach ($name in 'rid', 'asset', 'base', 'repositoryUrl', 'licenceBase', 'core', 'fromWeb', 'tmp', 'latest', 'target', 'installed', 'archive', 'expected', 'actual', 'unpacked', 'started', 'previous', 'directory', 'userPath', 'entries') {
+        foreach ($name in 'rid', 'asset', 'base', 'releasesUrl', 'licenceBase', 'core', 'fromWeb', 'tmp', 'latest', 'target', 'installed', 'archive', 'expected', 'actual', 'unpacked', 'started', 'previous', 'directory', 'userPath', 'entries') {
             if (Test-Path "Variable:$name") { "left behind: $name" }
         }
         if (Test-Path Function:Install-Jason) { "left behind: Install-Jason" }

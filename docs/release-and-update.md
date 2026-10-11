@@ -46,11 +46,12 @@ release it installs was published with.
 **The names carry no version, on purpose.** That is what makes
 
 ```text
-https://github.com/reply-team/jason-ai/releases/latest/download/jason-linux-x64.tar.gz
+https://jasonharness.ai/releases/latest/download/jason-linux-x64.tar.gz
 ```
 
 resolve for every release there will ever be, so a README, an install script and a runtime's feed URL are
-written once and never edited again.
+written once and never edited again. The address is Reply.io's own and keeps GitHub's paths (§4), so the store
+behind it can change without any of them changing.
 
 **An archive holds the executable, `LICENSE` and `THIRD-PARTY-NOTICES`, and nothing else.** That `LICENSE` is
 the runtime's own; the repository's MIT licence covers the skills, contracts, plugins, documentation and install
@@ -69,7 +70,7 @@ nothing to break when an API version retires.
   "schema": 1,
   "version": "0.2.0",
   "published_at": "2026-09-19T08:00:00Z",
-  "release_notes_url": "https://github.com/reply-team/jason-ai/releases/tag/v0.2.0",
+  "release_notes_url": "https://jasonharness.ai/releases/tag/v0.2.0",
   "min_upgrade_from": null,
   "artifacts": {
     "win-x64":   { "asset": "jason-win-x64.zip",      "sha256": "e3b0…b855", "size": 114254557 },
@@ -111,6 +112,11 @@ the one who never thinks to ask.
 nothing else.** No body, no query, no identifier, no machine facts, nothing about your campaigns, your plugins
 or your data directory. The answer is kept in memory and shown by `system.info`; it is never written to disk.
 
+**Where it goes.** The default feed is on `jasonharness.ai`, an address Reply.io operates, which redirects every
+request under `/releases/` to the same path in the public repository's releases on GitHub. A download is composed
+from the feed's own directory (§3), so it goes the same way. An installation built before that address existed
+asks GitHub directly; both answer with the same file.
+
 A check that fails — offline, a page that answers 500, something that is not a manifest — is a log line at
 warning and never an error to any caller. An offline machine is a normal machine. A feed that has not answered
 within **10 seconds** is one of those failures: a manifest is a few hundred bytes, so waiting longer only makes
@@ -121,7 +127,7 @@ an offline machine slower to admit it. `jason update check` waits exactly as lon
 | Setting | Default | Range | What it does |
 |---|---|---|---|
 | `Update:CheckEnabled` | `true` | — | whether this runtime asks at all |
-| `Update:FeedUrl` | `https://github.com/reply-team/jason-ai/releases/latest/download/manifest.json` | an `https` address, or `http` on loopback | where it asks |
+| `Update:FeedUrl` | `https://jasonharness.ai/releases/latest/download/manifest.json` | an `https` address, or `http` on loopback | where it asks |
 | `Update:InitialDelayMinutes` | `5` | 1..1440 | how long after starting it first asks |
 | `Update:IntervalHours` | `24` | 1..168 | how often it asks after that |
 
@@ -216,11 +222,11 @@ what answered was not a manifest, `update_feed_insecure` when the feed is not an
 ## 6. Installing
 
 ```sh
-curl -fsSL https://github.com/reply-team/jason-ai/releases/latest/download/install.sh | sh
+curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
-irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
+irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
 Each script works out your platform, downloads the archive for it, **verifies the SHA-256 before unpacking**,

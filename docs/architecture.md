@@ -1371,10 +1371,13 @@ A tagged version, not every merge to `main`, is the conceptual release trigger f
 distributable binaries. CI builds and tests supported self-contained assets and publishes
 versioned GitHub Release artifacts with integrity metadata, release notes, and the platform
 signing or notarization required for Windows and macOS. GitHub Releases can serve as the
-binary store. This mechanism describes artifact integrity and update compatibility; it does
-not impose a roadmap, and source increments are not atomic product releases. The private
-repository's pipeline publishes each release in the public repository, together with the open set
-at that version, through a pull request a person reviews.
+binary store. The product's own address, `jasonharness.ai`, stands in front of it: the feed,
+the install lines and the release page name the address, which redirects every request under
+`/releases/` to the same path in the public repository, so the store behind it can change
+while those paths stay the same. This mechanism describes artifact integrity and update
+compatibility; it does not impose a roadmap, and source increments are not atomic product
+releases. The private repository's pipeline publishes each release in the public repository,
+together with the open set at that version, through a pull request a person reviews.
 
 ### 15.8 Update responsibility
 
@@ -1712,6 +1715,7 @@ original chat session.
 | DEC-DATA-001 | EF Core is selected; Dapper is excluded; Native AOT is deferred until compatible and low-risk. |
 | DEC-INSTALL-001 | Standalone and Reply-assisted installation are both legitimate paths to the same user Runtime. |
 | DEC-UPDATE-001 | Runtime may advertise updates; a short-lived CLI/installer performs controlled replacement. |
+| DEC-UPDATE-002 | The feed, the install lines and the release page name the product's own address, `jasonharness.ai`, which redirects `/releases/*` to the same path in the public repository's releases with a temporary redirect; the licence page, links into the tree and the skills source stay on GitHub, and the runtime's licence never names the address. |
 | DEC-INFRA-001 | Docker, server database, message broker, and vendor-specific background services are not required by the local architecture. |
 | DEC-DOC-001 | This document describes the complete target vision without releases, milestones, implementation order, or backlog decomposition. |
 

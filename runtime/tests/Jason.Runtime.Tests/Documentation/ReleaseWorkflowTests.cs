@@ -635,17 +635,18 @@ public class ReleaseWorkflowTests
     };
 
     /// <summary>
-    /// The notes address a running Jason shows is the public repository's release page, written as a constant: the
-    /// release is published there whichever repository built it, so the repository running the workflow is not it.
+    /// The notes address a running Jason shows is the release's page at the product's own address, written as a
+    /// constant: the address redirects it to the public repository's release page, where the release is published
+    /// whichever repository built it, so the repository running the workflow is not it.
     /// </summary>
     [Fact]
-    public void The_notes_address_is_the_public_repository_s_release_page()
+    public void The_notes_address_is_the_release_page_at_the_products_address()
     {
         var release = Read(Release);
 
         Assert.DoesNotContain("github.repository", release, StringComparison.Ordinal);
         Assert.Contains(
-            "-ReleaseNotesUrl \"https://github.com/reply-team/jason-ai/releases/tag/v$env:VERSION\"",
+            "-ReleaseNotesUrl \"https://jasonharness.ai/releases/tag/v$env:VERSION\"",
             release,
             StringComparison.Ordinal);
     }
@@ -1419,10 +1420,11 @@ public class ReleaseWorkflowTests
             Assert.True(manifest.Artifacts.ContainsKey(rid), $"the manifest {invocation} wrote carries nothing for {rid}");
         }
 
-        // The release's notes are read where it is published, which is the public repository.
+        // The release's notes are read at the product's own address, which redirects to where the release is
+        // published, the public repository.
         if (workflow == Release[^1])
         {
-            Assert.Equal("https://github.com/reply-team/jason-ai/releases/tag/v0.2.0", manifest.ReleaseNotesUrl);
+            Assert.Equal("https://jasonharness.ai/releases/tag/v0.2.0", manifest.ReleaseNotesUrl);
         }
     }
 

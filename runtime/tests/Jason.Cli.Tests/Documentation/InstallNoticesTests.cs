@@ -150,9 +150,9 @@ public sealed partial class InstallNoticesTests : IDisposable
     }
 
     /// <summary>
-    /// The licence page is a page of the repository on GitHub, and the downloads are a release's assets: when the
-    /// downloads move to an address of their own, the licence page stays where it is. So each script has a base for each,
-    /// the two scripts' licence bases are the same address, and neither is built from the download base.
+    /// The licence page is a page of the repository on GitHub, and the downloads are a release's assets, fetched through
+    /// the product's own address: the downloads moved there and the licence page stayed where it is. So each script has a
+    /// base for each, the two scripts' licence bases are the same address, and neither is built from the download base.
     /// </summary>
     [Fact]
     public void The_licence_page_and_the_downloads_have_bases_of_their_own()
@@ -169,8 +169,35 @@ public sealed partial class InstallNoticesTests : IDisposable
 
         Assert.Contains("$LICENCE_BASE/v$LATEST/LICENSE-RUNTIME.md", sh, StringComparison.Ordinal);
         Assert.Contains("$licenceBase/v$latest/LICENSE-RUNTIME.md", ps1, StringComparison.Ordinal);
-        Assert.DoesNotContain("REPOSITORY_URL", shBase.Value, StringComparison.Ordinal);
-        Assert.DoesNotContain("repositoryUrl", ps1Base.Value, StringComparison.Ordinal);
+        Assert.DoesNotContain("RELEASES_URL", shBase.Value, StringComparison.Ordinal);
+        Assert.DoesNotContain("releasesUrl", ps1Base.Value, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The one-liners and the scripts' own downloads name the product's address, which answers each request with a
+    /// redirect to where the release is stored. Each script follows it for every file it fetches: the manifest, the
+    /// checksums and the archive are each asked of the address first and then of the place it named, and the install
+    /// completes.
+    /// </summary>
+    [Theory]
+    [InlineData(Sh)]
+    [InlineData(Ps1)]
+    public void An_install_from_the_address_follows_it_for_every_file(string script)
+    {
+        var installer = Installer.For(script, _tree);
+        using var address = new Jason.Runtime.Tests.LoopbackReleases(installer.Feed("0.6.0"));
+
+        var run = installer.Run($"{address.Releases}/latest/download");
+
+        Assert.True(run.Exit == 0, run.Stderr);
+        Assert.Equal(LicenceLine("0.6.0"), Lines(run.Stdout)[^1]);
+        var asked = address.Asked.ToList();
+        foreach (var file in (string[])[ReleaseAssets.Manifest, ReleaseAssets.Checksums, installer.Asset])
+        {
+            var first = asked.IndexOf($"GET /releases/latest/download/{file}");
+            var then = asked.IndexOf($"GET /store/releases/latest/download/{file}");
+            Assert.True(first >= 0 && then > first, $"{script} did not fetch {file} through the address: {string.Join(", ", asked)}");
+        }
     }
 
     /// <summary>One entry of an archive beside the executable: a file with its text, a directory, or a link to its text.</summary>

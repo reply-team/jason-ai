@@ -61,6 +61,7 @@ public sealed class PublishedLinksTests : IDisposable
     [InlineData("[p](docs/public.md) [p](plugins/p/README.md) [p](plugins/p) [p](#here) [p](https://example.com/x.md)")]
     [InlineData("[p](./docs/public.md#a-heading) [p](docs/../docs/public.md) [v](VERSION)")]
     [InlineData("https://github.com/reply-team/jason-ai/releases/latest/download/install.sh and https://github.com/reply-team/jason-ai.git")]
+    [InlineData("[install.sh](https://jasonharness.ai/releases/latest/download/install.sh), `jasonharness.ai` and <https://jasonharness.ai/releases/tag/v0.7.0>")]
     [InlineData("reply-team/jason-ai, jason-linux-x64.tar.gz and jason-internals-of-a-plugin name nothing private.")]
     [InlineData("https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/public.md and https://github.com/reply-team/reply-cli")]
     [InlineData("`[not a link](../outside.md)` is code, and code links nowhere")]

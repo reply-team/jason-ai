@@ -161,7 +161,7 @@ jobs:
           # and checksums.txt. A platform missing from the download, or an archive that no longer hashes to what
           # its fragment says, stops the release here. The notes are read where the release is published, which is
           # the public repository whichever repository built it.
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -ReleaseNotesUrl "https://github.com/reply-team/jason-ai/releases/tag/v$env:VERSION"
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory artifacts/release -Require win-x64,linux-x64,osx-arm64 -ReleaseNotesUrl "https://jasonharness.ai/releases/tag/v$env:VERSION"
           Get-Content artifacts/release/manifest.json
           Get-Content artifacts/release/checksums.txt
 

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Xml.Linq;
+using Jason.Contracts.Update;
 
 namespace Jason.Cli.Autostart;
 
@@ -310,7 +311,7 @@ public static class AutostartArtifacts
         var unit = $"""
             [Unit]
             Description=The Jason runtime
-            Documentation=https://github.com/reply-team/jason-ai
+            Documentation={ProductAddress.Root}
             After=default.target
 
             [Service]

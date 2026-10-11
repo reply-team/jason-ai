@@ -33,13 +33,13 @@ than install a program that does not start.
 One line, on macOS and Linux:
 
 ```sh
-curl -fsSL https://github.com/reply-team/jason-ai/releases/latest/download/install.sh | sh
+curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
 ```
 
 and on Windows, in PowerShell:
 
 ```powershell
-irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
+irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
 By installing Jason you accept the Jason Runtime Licence:
@@ -53,11 +53,11 @@ the same version changes nothing and says so, unless a licence file is missing b
 then writes. Two options, for a script that must be told:
 
 ```sh
-curl -fsSL https://github.com/reply-team/jason-ai/releases/download/v{{version}}/install.sh | sh -s -- --version {{version}} --no-modify-path
+curl -fsSL https://jasonharness.ai/releases/download/v{{version}}/install.sh | sh -s -- --version {{version}} --no-modify-path
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/reply-team/jason-ai/releases/download/v{{version}}/install.ps1))) -Version {{version}} -NoModifyPath
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v{{version}}/install.ps1))) -Version {{version}} -NoModifyPath
 ```
 
 ## Upgrading from 0.1.0

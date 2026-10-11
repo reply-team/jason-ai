@@ -45,12 +45,13 @@ public class UpdateFeedTests
 
     /// <summary>
     /// The default feed is the one URL that resolves for every release there will ever be, which is why the
-    /// asset names carry no version.
+    /// asset names carry no version. It names the product's own address, which redirects to the public
+    /// repository's releases, so the store behind it can change without an installed runtime changing.
     /// </summary>
     [Fact]
-    public void The_default_feed_is_the_latest_release_of_the_public_repository() =>
+    public void The_default_feed_is_the_latest_release_at_the_products_address() =>
         Assert.Equal(
-            "https://github.com/reply-team/jason-ai/releases/latest/download/manifest.json",
+            "https://jasonharness.ai/releases/latest/download/manifest.json",
             UpdateFeed.Default.ToString());
 
     /// <summary>
@@ -60,8 +61,18 @@ public class UpdateFeedTests
     [Fact]
     public void A_download_is_built_from_the_feeds_own_base_and_a_validated_name() =>
         Assert.Equal(
-            "https://github.com/reply-team/jason-ai/releases/latest/download/jason-win-x64.zip",
+            "https://jasonharness.ai/releases/latest/download/jason-win-x64.zip",
             UpdateFeed.DownloadUrlFor(UpdateFeed.Default, ReleaseAssets.For("win-x64")).ToString());
+
+    /// <summary>
+    /// A pinned version asks the same address for that release's own feed: the path the address keeps from
+    /// GitHub's releases is what lets the one rule in <see cref="UpdateFeed.PinnedFor"/> work in front of it.
+    /// </summary>
+    [Fact]
+    public void A_pinned_version_of_the_default_feed_is_that_release_at_the_products_address() =>
+        Assert.Equal(
+            "https://jasonharness.ai/releases/download/v1.2.3/manifest.json",
+            UpdateFeed.PinnedFor(UpdateFeed.Default, SemanticVersion.Parse("1.2.3")).ToString());
 
     [Theory]
     [InlineData("../../../evil.zip")]

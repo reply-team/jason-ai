@@ -176,4 +176,18 @@ public class MarketplaceTests
             !text.Contains("atlassian", StringComparison.OrdinalIgnoreCase),
             "The marketplace carries a link into a system an outside reader cannot open.");
     }
+
+    /// <summary>
+    /// The owner a person sees before they trust the marketplace links to the product's front door, its own
+    /// address, rather than to wherever its files happen to be stored.
+    /// </summary>
+    [Fact]
+    public void The_owner_links_to_the_products_address()
+    {
+        using var manifest = JsonDocument.Parse(File.ReadAllText(Manifest()));
+
+        Assert.Equal(
+            Jason.Contracts.Update.ProductAddress.Root,
+            manifest.RootElement.GetProperty("owner").GetProperty("url").GetString());
+    }
 }

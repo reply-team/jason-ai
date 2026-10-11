@@ -298,7 +298,7 @@ public static class UpdateCommands
 
         // The handler the rest of the CLI sends through, so a test that substitutes it sees this request too —
         // and sees that no other is made.
-        using var client = env.HttpHandler is null ? new HttpClient() : new HttpClient(env.HttpHandler, disposeHandler: false);
+        using var client = UpdateHttp.Client(env);
         client.Timeout = UpdateFeed.DefaultTimeout;
 
         UpdateManifest manifest;

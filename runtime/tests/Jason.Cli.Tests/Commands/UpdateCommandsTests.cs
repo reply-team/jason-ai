@@ -5,6 +5,7 @@ using Jason.Cli.Tests.Process;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
 using Jason.Contracts.Update;
+using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests.Commands;
 
@@ -67,6 +68,34 @@ public class UpdateCommandsTests
         Assert.DoesNotContain('\n', stdout.ToString().TrimEnd());
         Assert.Contains("\"checked_at\":", stdout.ToString(), StringComparison.Ordinal);
         Assert.Contains("\"release_notes_url\":", stdout.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The default feed is on the product's own address, which answers every request with a redirect to where the
+    /// release is stored. So the client a real CLI sends through, with no handler of a test's own, follows it: the
+    /// address is asked first, then the place it named, and the answer is the release found there.
+    /// </summary>
+    [Fact]
+    public async Task The_check_follows_the_address_to_the_release_it_redirects_to()
+    {
+        using var dir = new TempPaths();
+        using var tree = new TempTree();
+        var store = tree.NewDirectory("store");
+        File.WriteAllText(Path.Combine(store, ReleaseAssets.Manifest), Manifest(Newer));
+        using var address = new LoopbackReleases(store);
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        var exit = await CliApp.RunAsync(
+            ["update", "check", "--feed", $"{address.Releases}/latest/download/{ReleaseAssets.Manifest}"],
+            new CliEnvironment(output, error, dir.Paths),
+            Ct);
+
+        Assert.True(exit == ExitCodes.Success, output.ToString() + error.ToString());
+        Assert.Equal(Newer, JsonSerializer.Deserialize<UpdateCheckResponse>(output.ToString(), JasonJson.Options)!.Latest);
+        Assert.Equal(
+            ["GET /releases/latest/download/manifest.json", "GET /store/releases/latest/download/manifest.json"],
+            address.Asked);
     }
 
     [Fact]

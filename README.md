@@ -14,8 +14,10 @@ installed SDR skills, and external execution providers into a durable outbound-s
 > configure Jason to start send to theirs; the runtime's check for a newer release — five minutes after it starts
 > and then once a day, at the default settings, a single `GET` that identifies only the runtime's version, including
 > its build (`Update:CheckEnabled` set to `false` turns it off); and the requests you start yourself — the install
-> scripts, `jason update`, and `jason skills install` and `update`, which fetch from this repository. Nothing else,
-> and no telemetry: the file `jason doctor` writes stays on your machine unless you send it.
+> scripts and `jason update`, and `jason skills install` and `update`. The check, the install scripts and
+> `jason update` go to `jasonharness.ai`, an address Reply.io operates, which redirects them to this repository's
+> releases; the skills come from this repository directly. Nothing else, and no telemetry: the file `jason doctor`
+> writes stays on your machine unless you send it.
 
 What runs today is one executable that hosts the local Runtime API, a CLI that talks to it, and a database layer
 that migrates itself on start. The runtime manages campaigns, their context and their append-only journal, a contact
@@ -101,11 +103,11 @@ release's version, and this tree is published from the same release.
 ## Installing
 
 ```sh
-curl -fsSL https://github.com/reply-team/jason-ai/releases/latest/download/install.sh | sh
+curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
-irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
+irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
 By installing Jason you accept the Jason Runtime Licence: [LICENSE-RUNTIME.md](LICENSE-RUNTIME.md). If you do not

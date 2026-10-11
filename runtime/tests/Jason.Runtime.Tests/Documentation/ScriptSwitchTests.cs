@@ -54,8 +54,10 @@ public sealed partial class ScriptSwitchTests
     [InlineData("irm https://github.com/reply-team/jason-ai/releases/download/v0.1.0/install.ps1 | iex", "install.ps1")]
     [InlineData("curl -fsSL https://github.com/reply-team/jason-ai/releases/download/v{{version}}/install.sh | sh", "install.sh")]
     [InlineData("https://github.com/reply-team/jason-ai/releases/download/v1.0.0-rc.1/manifest.json", "manifest.json")]
-    [InlineData("BASE=\"$REPOSITORY_URL/releases/download/v$VERSION\"", null)]
-    [InlineData("$base = \"$repositoryUrl/releases/latest/download\"", null)]
+    [InlineData("curl -fsSL https://jasonharness.ai/releases/download/v{{version}}/install.sh | sh", "install.sh")]
+    [InlineData("irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex", "install.ps1")]
+    [InlineData("BASE=\"$RELEASES_URL/download/v$VERSION\"", null)]
+    [InlineData("$base = \"$releasesUrl/latest/download\"", null)]
     public void The_download_detector_reads_the_asset_a_line_names(string line, string? name)
     {
         var found = Download().Matches(line).Select(match => match.Groups["name"].Value).ToList();
