@@ -150,6 +150,11 @@ public sealed class PublicCheckTests
     /// relative link, another repository of ours, and an address into this one. The fourth rule — a private path
     /// named in words — has nothing to find in a tree that holds no private path, so it is not the check's.
     /// </summary>
+    /// <remarks>
+    /// The punctuation that ends a sentence or closes emphasis after an address is not part of it. Windows drops a
+    /// trailing dot from a path before it looks the path up, so there an address that ends a sentence is found with or
+    /// without its dot; the other marks are not dropped, and the check itself runs on Linux.
+    /// </remarks>
     [Theory]
     [InlineData("[p](docs/private.md)")]
     [InlineData("[p][r]\n\n[r]: docs/private.md")]
@@ -170,6 +175,9 @@ public sealed class PublicCheckTests
     [InlineData("https://github.com/reply-team/jason-ai/blob/main/docs/public.md and https://github.com/reply-team/reply-cli")]
     [InlineData("`[not a link](../outside.md)` is code, and code links nowhere")]
     [InlineData("```\n[p](docs/private.md)\n```")]
+    [InlineData("The page is published at https://github.com/reply-team/jason-ai/blob/main/docs/public.md.")]
+    [InlineData("Read **https://github.com/reply-team/jason-ai/blob/main/docs/public.md**, _https://github.com/reply-team/jason-ai/blob/main/plugins/p/README.md_ and ~~https://github.com/reply-team/jason-ai/blob/main/README.md~~. Is it *https://github.com/reply-team/jason-ai/blob/main/docs/public.md*? It is https://raw.githubusercontent.com/reply-team/jason-ai/main/README.md! And here: https://github.com/reply-team/jason-ai/blob/main/docs/public.md:")]
+    [InlineData("https://github.com/reply-team/jason-ai/blob/main/docs/public.md!#here")]
     public void The_link_step_gives_the_verdicts_this_repository_s_guard_gives(string text)
     {
         // The guard's view: this repository, with a page it does not publish.
@@ -200,6 +208,30 @@ public sealed class PublicCheckTests
 
         Assert.Equal(guard, check);
         Assert.Equal(guard.Count == 0, run.Exit == 0);
+    }
+
+    /// <summary>
+    /// The link step passes what a release publishes from this tree as it is: the open set, the public repository's own
+    /// files and VERSION, projected by the release's own script and read as the check there reads them. The rows above
+    /// hold the step to the guard one way of writing a link at a time; this holds it to every text a release will
+    /// actually publish, so a way of writing one that no row has thought of fails here and not on a release's own pull
+    /// request.
+    /// </summary>
+    [Fact]
+    public void The_link_step_passes_what_a_release_publishes_from_this_tree()
+    {
+        using var repository = new Repository();
+        var projected = Script(
+            new Dictionary<string, string>(),
+            Path.Combine(RepositoryRoot(), ".github", "scripts", "Publish-OpenSet.ps1"),
+            "-Source", RepositoryRoot(), "-Target", repository.Root, "-Version", "0.6.0");
+        Assert.True(projected.Exit == 0, projected.Stderr);
+        Git(repository.Root, "add", "-A");
+        Git(repository.Root, "commit", "--quiet", "-m", "Jason 0.6.0");
+
+        var run = LinkStep(repository);
+
+        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
     }
 
     /// <summary>The public repository's workflows are read there by everyone, so they name no other repository of ours.</summary>
