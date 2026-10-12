@@ -9,8 +9,8 @@ third-party notices beside it as jason-LICENSE and jason-THIRD-PARTY-NOTICES, an
 user's PATH unless -NoModifyPath says otherwise. Running it again over the same version downloads nothing and
 says so, unless a licence file is missing beside it, which it then writes.
 
-    irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
-    & ([scriptblock]::Create((irm https://github.com/reply-team/jason-ai/releases/download/v0.2.0/install.ps1))) -Version 0.2.0 -NoModifyPath
+    irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
+    & ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.7.0/install.ps1))) -Version 0.7.0 -NoModifyPath
 
 -Feed (or JASON_INSTALL_FEED) points it at a directory or a base URL holding the same files a release holds
 - the archives, manifest.json and checksums.txt - which is how CI runs it against the archives it has just
@@ -24,7 +24,7 @@ fresh Windows has and what the one-liner is typed into.
 The release to install, without a leading v. The latest, when not given.
 
 .PARAMETER Feed
-A directory or a base URL to read the release's files from, instead of GitHub. Also JASON_INSTALL_FEED.
+A directory or a base URL to read the release's files from, instead of the published releases. Also JASON_INSTALL_FEED.
 
 .PARAMETER InstallDir
 Where jason.exe and its licence files go. %LOCALAPPDATA%\Programs\jason, when not given.
@@ -57,7 +57,9 @@ function Install-Jason {
     $ErrorActionPreference = 'Stop'
     Set-StrictMode -Version Latest
 
-    $repositoryUrl = 'https://github.com/reply-team/jason-ai'
+    # The product's own address, in front of the releases: it redirects every path under /releases/ to the same path
+    # in the public repository's releases on GitHub.
+    $releasesUrl = 'https://jasonharness.ai/releases'
     # The licence is a page of the repository, at the release's tag; the downloads are a release's assets. Each has a
     # base of its own, so that the downloads can move without the licence page moving with them.
     $licenceBase = 'https://github.com/reply-team/jason-ai/blob'
@@ -84,11 +86,12 @@ function Install-Jason {
 
     # --- the feed ---------------------------------------------------------------------------------------------
 
-    $base = if ($Feed) { $Feed } elseif ($Version) { "$repositoryUrl/releases/download/v$Version" } else { "$repositoryUrl/releases/latest/download" }
+    $base = if ($Feed) { $Feed } elseif ($Version) { "$releasesUrl/download/v$Version" } else { "$releasesUrl/latest/download" }
     $fromWeb = $base -match '^https?://'
 
     if ($fromWeb -and $PSVersionTable.PSVersion.Major -lt 6) {
-        # Windows PowerShell's defaults are older than GitHub accepts, and its progress bar makes a download slow.
+        # Windows PowerShell's defaults are older than the release's address and GitHub accept, and its progress bar
+        # makes a download slow.
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
         $ProgressPreference = 'SilentlyContinue'
     }
@@ -350,8 +353,15 @@ function Install-Jason {
 
 # Removed again whatever happens: the one-liner is `irm ... | iex`, which runs this text in the session that
 # typed it, and a function left behind there is this script still sitting in somebody's shell after it is done.
+#
+# And a failure is thrown on from here, whatever it was. An exception from a .NET call inside the function - a file
+# Expand-Archive could not write, say - reached this level as an error the shell printed and went on from, and the run
+# exited 0 as if it had installed. Thrown again, it ends the run with 1, as a throw or a failed command always did.
 try {
     Install-Jason -Version $Version -Feed $Feed -InstallDir $InstallDir -NoModifyPath:$NoModifyPath
+}
+catch {
+    throw
 }
 finally {
     Remove-Item function:Install-Jason -ErrorAction SilentlyContinue
