@@ -14,9 +14,6 @@ public class ReplyCampaignActivateTests
 {
     private const string Operation = "campaign.activate";
     private const int Sequence = ReplyOperations.Sequence;
-    private const string SequencePath = "/v3/sequences/7";
-    private const string CountPath = "/v3/sequences/7/contacts/count";
-    private const string StartPath = "/v3/sequences/7/start";
     private const string WorkItemId = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRK";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -39,9 +36,8 @@ public class ReplyCampaignActivateTests
         var outcome = Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
         Assert.Equal("""{"campaign":"7"}""", outcome.ExternalIds!.ToJsonString());
         Assert.Equal("active", (string?)account.Sequences.Single()!["status"]);
-        Assert.Equal(
-            [$"GET {SequencePath}", $"GET {CountPath}", $"POST {StartPath}"],
-            account.Calls.Select(call => call.Method + " " + call.Path));
+        Assert.Equal(["sequence start 7"], account.Calls.Select(call => call.Line));
+        Assert.Equal("2", account.Calls[0].Option("--expect-contacts"));
         Assert.All(account.Calls, call => Assert.Null(call.Body));
     }
 
@@ -57,7 +53,7 @@ public class ReplyCampaignActivateTests
         Assert.Equal(
             """{"items":[{"campaign_external_id":"7","status":"already_live","was":null,"enrolled":2}]}""",
             answer.ToJsonString());
-        Assert.DoesNotContain(account.Calls, call => call.Path == StartPath);
+        Assert.Equal(["sequence start 7"], account.Calls.Select(call => call.Line));
     }
 
     /// <summary>
@@ -81,11 +77,11 @@ public class ReplyCampaignActivateTests
         Assert.Contains("The attempt's trace carries both numbers", error.Message, StringComparison.Ordinal);
         Assert.Equal("7", (string?)error.ExternalIds!["campaign"]);
         Assert.Equal("new", (string?)account.Sequences.Single()!["status"]);
-        Assert.DoesNotContain(account.Calls, call => call.Path == StartPath);
+        Assert.Equal("2", Assert.Single(account.Calls).Option("--expect-contacts"));
     }
 
     [Fact]
-    public async Task An_archived_campaign_cannot_be_started_and_is_not_asked()
+    public async Task An_archived_campaign_is_not_activatable()
     {
         using var account = Planted("paused", people: 1, archived: true);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
@@ -94,9 +90,9 @@ public class ReplyCampaignActivateTests
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(expected: 1, pinned: "7")));
 
         Assert.Equal("campaign_not_activatable", error.Code);
-        Assert.Contains("Either its state says it is archived, or Reply refused the start", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Either it is archived, or Reply refused the start", error.Message, StringComparison.Ordinal);
         Assert.Contains("The attempt's trace says which", error.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain(account.Calls, call => call.Path == StartPath);
+        Assert.Equal(["sequence start 7"], account.Calls.Select(call => call.Line));
     }
 
     /// <summary>
@@ -107,7 +103,7 @@ public class ReplyCampaignActivateTests
     public async Task A_start_reply_refuses_is_not_activatable_and_carries_reply_s_own_code()
     {
         using var account = Planted("new", people: 1);
-        account.WithoutSendingAccount(Sequence);
+        account.Refuses("sequence start", "sequence.not_startable", status: 400, replyCode: "sequenceAction.noEmailAccounts");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -132,15 +128,12 @@ public class ReplyCampaignActivateTests
         Assert.Equal("new", (string?)account.Sequences.Single()!["status"]);
     }
 
-    /// <summary>
-    /// The sequence was not archived when it was read and is by the time the start arrives: Reply's 409 is the same
-    /// refusal the state read would have made, with Reply's own code carried.
-    /// </summary>
+    /// <summary>Reply's 409 for an archived sequence is not activatable, with Reply's own code carried.</summary>
     [Fact]
     public async Task A_start_refused_as_archived_after_the_read_is_not_activatable()
     {
         using var account = Planted("new", people: 1);
-        account.Answers("POST", StartPath, 409, """{"type":"about:blank","title":"Conflict","status":409,"code":"sequenceAction.archived"}""");
+        account.Refuses("sequence start", "sequence.archived", status: 409, replyCode: "sequenceAction.archived");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -164,14 +157,14 @@ public class ReplyCampaignActivateTests
     }
 
     /// <summary>
-    /// A start whose answer was lost may already be sending. The next attempt reads the state and the count first,
-    /// and a start that already happened answers `already_live` rather than starting twice.
+    /// A start whose answer was lost may already be sending. The next attempt runs the start again, and the CLI, which
+    /// reads the state first, answers that it is already live rather than starting twice.
     /// </summary>
     [Fact]
-    public async Task A_start_whose_answer_was_lost_is_read_first_and_answers_already_live()
+    public async Task A_start_whose_answer_was_lost_is_run_again_and_answers_already_live()
     {
         using var account = Planted("new", people: 1);
-        account.LosesTheAnswerAfterWriting("POST", StartPath);
+        account.LosesTheOutcome("sequence start");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -183,7 +176,63 @@ public class ReplyCampaignActivateTests
         var mark = account.Mark();
         var repeated = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(expected: 1, pinned: "7"), attempt: 2));
         Assert.Equal("already_live", (string?)repeated["items"]![0]!["status"]);
-        Assert.DoesNotContain(account.CallsSince(mark), call => call.Path == StartPath);
+        Assert.Equal(["sequence start 7"], account.CallsSince(mark).Select(call => call.Line));
+    }
+
+    [Fact]
+    public async Task A_sequence_reply_is_still_activating_is_asked_again_later()
+    {
+        using var account = Planted("paused", people: 2);
+        account.Refuses("sequence start", "sequence.busy", status: 409, replyCode: "sequenceAction.activationInProgress");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(expected: 2, pinned: "7")));
+
+        Assert.Equal("provider_unavailable", error.Code);
+        Assert.Equal(FailureClass.Transient, error.Class);
+    }
+
+    /// <summary>The contract needs Reply's count; a live sequence answered without one is a read that did not answer.</summary>
+    [Fact]
+    public async Task A_live_campaign_whose_count_reply_would_not_give_is_asked_again()
+    {
+        using var account = Planted("active", people: 2);
+        account.Returns("sequence start", new JsonObject
+        {
+            ["status"] = "already_active", ["sequence_id"] = 7, ["previous_status"] = "active", ["contacts"] = null,
+        });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(expected: 2, pinned: "7")));
+
+        Assert.Equal("provider_unavailable", error.Code);
+        Assert.Equal(FailureClass.Transient, error.Class);
+    }
+
+    /// <summary>
+    /// Reply has a rare state beside new and paused. The start has happened, and `was` has no word for where it came
+    /// from, so the attempt fails and says plainly that the sequence is live now and which state it left.
+    /// </summary>
+    [Fact]
+    public async Task A_start_from_a_state_this_version_has_no_word_for_says_it_started_and_names_the_state()
+    {
+        using var account = Planted("new", people: 2);
+        account.Returns("sequence start", new JsonObject
+        {
+            ["status"] = "started", ["sequence_id"] = 7, ["previous_status"] = "skipped", ["contacts"] = 2,
+        });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(expected: 2, pinned: "7")));
+
+        Assert.Equal("provider_call_failed", error.Code);
+        Assert.Equal(FailureClass.Permanent, error.Class);
+        Assert.Contains("skipped", (string?)error.Details!["reason"], StringComparison.Ordinal);
+        Assert.Contains("The sequence is live now", error.Message, StringComparison.Ordinal);
+        Assert.Equal("7", (string?)error.ExternalIds!["campaign"]);
     }
 
     private static ReplyAccount Planted(string status, int people, bool archived = false)

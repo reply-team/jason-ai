@@ -13,7 +13,6 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 public class ReplyEngagementSummarizeTests
 {
     private const string Operation = "engagement.summarize";
-    private const string StatsPath = "/v3/sequences/7/stats";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -59,21 +58,22 @@ public class ReplyEngagementSummarizeTests
     }
 
     [Fact]
-    public async Task The_window_travels_on_stdin_as_the_provider_s_own_filter()
+    public async Task The_window_travels_as_the_cli_s_own_flags_and_nothing_goes_on_stdin()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount());
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var span = new JsonObject { ["from"] = "2026-09-01T00:00:00Z", ["to"] = "2026-10-01T00:00:00Z" };
-        var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(span, supplied: "7")));
-        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(new JsonObject { ["preset"] = "all_time" }, pinned: "7")));
+        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(new JsonObject { ["preset"] = "last_month" }, supplied: "7")));
+        ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(
+            new JsonObject { ["from"] = "2026-09-01T00:00:00Z", ["to"] = "2026-10-01T00:00:00Z" }, supplied: "7")));
 
-        Assert.Equal(span.ToJsonString(), answer["rows"]![0]!["envelope"]!["window"]!.ToJsonString());
-        Assert.Equal(
-            ["""{"filters":{"from":"2026-09-01T00:00:00Z","to":"2026-10-01T00:00:00Z"}}""", """{"filters":{"dateRangePreset":"allTime"}}"""],
-            account.Calls.Select(call => call.Body));
-        Assert.All(account.Calls, call => Assert.Equal(["--json", "-q", "api", StatsPath, "--method", "POST", "--body", "-"], call.Args));
+        var (preset, span) = (account.Calls[0], account.Calls[1]);
+        Assert.Equal("last-month", preset.Option("--preset"));
+        Assert.Null(preset.Option("--from"));
+        Assert.Equal("2026-09-01T00:00:00Z", span.Option("--from"));
+        Assert.Equal("2026-10-01T00:00:00Z", span.Option("--to"));
+        Assert.All(account.Calls, call => Assert.Null(call.Body));
     }
 
     [Fact]
@@ -103,37 +103,37 @@ public class ReplyEngagementSummarizeTests
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(new JsonObject { ["preset"] = "last_week" }, supplied: "7")));
 
         Assert.Equal("campaign_not_found", error.Code);
-        Assert.Equal("sequenceStats.notFound", (string?)error.Details!["provider_code"]);
+        Assert.Equal("sequence.not_found", (string?)error.Details!["cli_code"]);
         Assert.Null(error.ExternalIds);
     }
 
-    [Fact]
-    public async Task A_window_the_provider_refuses_is_a_validation_failure()
+    /// <summary>
+    /// A window is the whole of what this read asks, so a refused window is the work item's own input: the CLI refuses
+    /// a span that does not end after it starts before sending, and Reply may refuse what it does not accept.
+    /// </summary>
+    [Theory]
+    [InlineData("usage.stats", 2)]
+    [InlineData("reply.invalid_request", 1)]
+    public async Task A_window_that_is_refused_is_a_validation_failure(string code, int exitCode)
     {
         using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.Refuses("sequence stats", code, exitCode, details: new JsonObject { ["fields"] = new JsonArray("filters") });
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var backwards = new JsonObject { ["from"] = "2026-10-01T00:00:00Z", ["to"] = "2026-09-01T00:00:00Z" };
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(backwards, pinned: "7")));
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(new JsonObject { ["preset"] = "last_week" }, supplied: "7")));
 
         Assert.Equal("window_invalid", error.Code);
         Assert.Equal(FailureClass.Validation, error.Class);
     }
 
     [Theory]
-    [InlineData("sequenceStats.forbidden", "feature_unavailable")]
-    [InlineData("auth.scopeMissing", "unauthorized")]
-    public async Task A_403_is_a_feature_the_account_lacks_only_where_reply_says_so(string providerCode, string expected)
+    [InlineData("access.feature_unavailable", "sequenceStats.forbidden", "feature_unavailable")]
+    [InlineData("access.denied", null, "unauthorized")]
+    public async Task A_403_is_a_feature_the_account_lacks_only_where_reply_says_so(string cliCode, string? providerCode, string expected)
     {
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.Answers("POST", StatsPath, 403, new JsonObject
-        {
-            ["type"] = "about:blank",
-            ["title"] = "Forbidden",
-            ["status"] = 403,
-            ["code"] = providerCode,
-        }.ToJsonString());
+        account.Refuses("sequence stats", cliCode, status: 403, replyCode: providerCode);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 

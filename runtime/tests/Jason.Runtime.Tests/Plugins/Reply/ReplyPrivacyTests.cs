@@ -108,8 +108,9 @@ public class ReplyPrivacyTests
         }
 
         // And the second half, which is what makes the first half mean something: the data really did reach
-        // Reply, and it reached it the only way it may. Both ensures carry all four fields in a body.
-        var ensures = account.Calls.Where(call => call.Path == "/v3/contacts/import").ToList();
+        // Reply, and it reached it the only way it may. The list add and the enrolment both carry the person, all four
+        // fields, on stdin.
+        var ensures = account.Calls.Where(call => call.Body is not null).ToList();
         Assert.Equal(2, ensures.Count);
         foreach (var ensure in ensures)
         {
@@ -254,12 +255,12 @@ public class ReplyPrivacyTests
         Assert.Contains(Body, answered[3], StringComparison.Ordinal);
         Assert.Contains(Address, answered[3], StringComparison.Ordinal);
 
-        // And nowhere else. A read sends identifiers, a window and a page, so the requests themselves hold none of it.
+        // And nowhere else. A read sends identifiers, a window and a page, so the commands themselves hold none of it.
         // Every thread is two of Reply's buckets, so the list of threads is two of these calls.
-        Assert.Equal(7, account.Calls.Count);
+        Assert.Equal(5, account.Calls.Count);
         foreach (var call in account.Calls)
         {
-            var sent = string.Join(' ', call.Args) + call.Path + (call.Body ?? string.Empty);
+            var sent = string.Join(' ', call.Args) + (call.Body ?? string.Empty);
             foreach (var field in personal)
             {
                 Assert.DoesNotContain(field, sent, StringComparison.OrdinalIgnoreCase);
@@ -280,8 +281,9 @@ public class ReplyPrivacyTests
 
     /// <summary>
     /// The two writes that take a person out carry what the person said and why they were taken out — Jason's record,
-    /// which never reaches Reply — and they find the person by an address. The record reaches no argument, no request,
-    /// no diagnostic and no log; the address travels once per lookup, in the search's body on stdin, and nowhere else.
+    /// which never reaches Reply — and the CLI finds the person by an address. The record reaches no argument, no
+    /// request, no diagnostic and no log; the address travels once per command, in the person on stdin, and nowhere
+    /// else.
     /// Each corpus is shown to hold what did travel, so a value that had gone there would be found.
     /// </summary>
     [Fact]
@@ -348,28 +350,22 @@ public class ReplyPrivacyTests
             ReplyOperations.Succeeded(operation, await ReplyOperations.InvokeAsync(api, operation, input, Ct));
         }
 
-        // Both writes did their work, each finding the person by the address first.
-        Assert.Equal(
-            [
-                "POST /v3/contacts/filter?top=100&skip=0", "GET /v3/contacts/1001/statuses", "POST /v3/contacts/set-opted-out",
-                "POST /v3/contacts/filter?top=100&skip=0", "GET /v3/sequences/7/contacts/1001", "DELETE /v3/sequences/7/contact-links/1001",
-            ],
-            Paths(account));
+        // Both writes did their work, the CLI finding the person by the address each time.
+        Assert.Equal(["contact opt-out", "sequence remove-contact 7"], Paths(account));
         Assert.Equal([1001], account.OptOuts.Select(entry => entry!.GetValue<int>()));
         Assert.Empty(account.EnrolledIn(ReplyOperations.Sequence));
 
         foreach (var call in account.Calls)
         {
-            var sent = string.Join(' ', call.Args) + call.Path + (call.Body ?? string.Empty);
+            var sent = string.Join(' ', call.Args) + (call.Body ?? string.Empty);
             foreach (var field in record)
             {
                 Assert.DoesNotContain(field, sent, StringComparison.OrdinalIgnoreCase);
             }
 
-            // The address goes to the lookup, in its body, and to nothing else.
-            var lookup = call.Path.StartsWith("/v3/contacts/filter", StringComparison.Ordinal);
-            Assert.DoesNotContain(Address, string.Join(' ', call.Args) + call.Path, StringComparison.OrdinalIgnoreCase);
-            Assert.Equal(lookup, (call.Body ?? string.Empty).Contains(Address, StringComparison.OrdinalIgnoreCase));
+            // The address goes to the CLI in the person on stdin, and to nothing else.
+            Assert.DoesNotContain(Address, string.Join(' ', call.Args), StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(Address, call.Body!, StringComparison.OrdinalIgnoreCase);
         }
 
         var diagnostics = ReadAll(api.Paths.PluginWorkDirectory);
@@ -398,7 +394,7 @@ public class ReplyPrivacyTests
 
     /// <summary>Every call the account was asked to make, as "METHOD /path", in the order it was asked.</summary>
     private static IReadOnlyList<string> Paths(ReplyAccount account) =>
-        [.. account.Calls.Select(call => call.Method + " " + call.Path)];
+        [.. account.Calls.Select(call => call.Line)];
 
     private static string ReadAll(string directory)
     {

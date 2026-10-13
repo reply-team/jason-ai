@@ -23,7 +23,7 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 /// <para>
 /// What it asserts is exactly what the offline tests assert, with nothing planted: the answers satisfy the
 /// published output schemas through <see cref="OutcomeContract"/>, the words come from the documents' own
-/// vocabularies, the pins come back, a repeated list add answers from the recovery read, and no address ever
+/// vocabularies, the pins come back, a repeated list add leaves one membership, and no address ever
 /// reaches a command-line argument. What it cannot assert is the ordered call log, because a real account
 /// keeps none for us — so where an offline test reads the stand-in's calls, this one reads the <c>exec</c>
 /// diagnostics the host itself wrote.
@@ -94,10 +94,10 @@ public class ReplyLiveConformanceTests
 
     /// <summary>
     /// The flags A1 forbids, held to here as well as offline: a key on a command line, a verbose mode that
-    /// would print the whole request and response, an impersonation the binding has no field for, and a
-    /// pretty-printer nothing parses.
+    /// would print the whole request and response, an impersonation the binding has no field for, a
+    /// pretty-printer nothing parses, and a key the API does not honour.
     /// </summary>
-    private static readonly string[] Forbidden = ["-k", "--api-key", "--verbose", "--user-id", "--user-email", "--pretty"];
+    private static readonly string[] Forbidden = ["-k", "--api-key", "--verbose", "--user-id", "--user-email", "--pretty", "--idempotency-key"];
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -129,7 +129,7 @@ public class ReplyLiveConformanceTests
     }
 
     [Fact]
-    public async Task A_live_list_add_puts_the_named_recipient_on_the_named_list_and_a_repeat_reads_before_it_writes()
+    public async Task A_live_list_add_puts_the_named_recipient_on_the_named_list_and_a_repeat_leaves_one_membership()
     {
         var profile = Require(ProfileKey, TheProfile);
         var recipient = Require(RecipientKey, TheRecipient);
@@ -143,20 +143,16 @@ public class ReplyLiveConformanceTests
         // back in both places the contract names — the item, which records whose identifier it is, and the
         // envelope, which is what the runtime pins.
         var added = Succeeded(MembershipAdd, first);
-        Assert.Contains(added["items"]![0]!["status"]!.GetValue<string>(), ItemStatusWords(MembershipAdd));
+        Assert.Equal("added", added["items"]![0]!["status"]!.GetValue<string>());
         var pin = added["items"]![0]!["external_ids"]!["contact"]!.GetValue<string>();
         Assert.Equal(pin, Assert.IsType<InvocationOutcome.Succeeded>(first.Outcome).ExternalIds!["contact"]!.GetValue<string>());
 
+        // The repeat after a lost answer, against the provider: Reply keeps one membership however often a person is
+        // added and does not say whether they were there already, so the repeat runs the add again and answers
+        // `added` for the same contact.
         var again = await InvokeAsync(api, MembershipAdd, MembershipInput(list, recipient, pinned: pin), profile, Ct, attempt: 2);
-
-        // The ambiguous-recovery path, proven against the provider rather than against a stand-in.
-        // `already_member` is a word the add path cannot produce: it exists only on the branch that searched
-        // the list first and found this person already on it. Answering it is therefore the evidence that the
-        // second attempt read before it wrote, which is what makes one interrupted attempt cost one effect
-        // rather than two — and it is the assertion that failed against a live account while the read was made
-        // from the contact's own side, which is how that endpoint's silence for a private list was found.
         var repeat = Succeeded(MembershipAdd, again);
-        Assert.Equal("already_member", repeat["items"]![0]!["status"]!.GetValue<string>());
+        Assert.Equal("added", repeat["items"]![0]!["status"]!.GetValue<string>());
         Assert.Equal(pin, repeat["items"]![0]!["external_ids"]!["contact"]!.GetValue<string>());
 
         await AssertNothingLeakedAsync(api, recipient, first, again);
@@ -196,10 +192,9 @@ public class ReplyLiveConformanceTests
         // times this test reached the provider at all: the state read, and the enrollment.
         Assert.Equal(2, Directory.GetDirectories(api.Paths.PluginWorkDirectory).Length);
 
-        // And the repeat, which is the path that keeps one interrupted attempt from sending to a person twice.
-        // The participation this run just made is what it reads, and reading it is the whole of what it does:
-        // `already_enrolled` under `collision: skip` is a word the enrol path can also produce, so the evidence
-        // that nothing was written is the call log — the recovery read and the live state, and no bulk enrol.
+        // And the repeat, which is the path that keeps one interrupted attempt from sending to a person twice. The CLI
+        // reads the participation this run just made before it writes anything, and finds it: a repeated attempt
+        // answers `already_enrolled` from that, whatever the policy.
         var pin = item["external_ids"]!["contact"]!.GetValue<string>();
         var again = await InvokeAsync(api, Enroll, EnrollInput(sequence, recipient, pinned: pin), profile, Ct, attempt: 2);
         var repeat = Succeeded(Enroll, again);
@@ -210,12 +205,10 @@ public class ReplyLiveConformanceTests
     }
 
     /// <summary>
-    /// Reply's bulk add never says that a person already takes part: it moves them to a later start step, or refuses
-    /// the same step with a generic word after assigning the sequence's sending account. So before enrolling anybody
-    /// who existed, the package reads the participation, and one found decides the answer by the policy, with nothing
-    /// written. This is that, live, for a contact already in a sequence nobody has started: `skip` answers
-    /// `already_enrolled`, `refuse` fails `collision_refused`, no bulk add is started, and the participation reads
-    /// the same afterwards as before.
+    /// reply-cli reads whether a person already takes part before it adds them, and answers that with nothing written;
+    /// the package decides the answer by the policy. This is that, live, for a contact already in a sequence nobody has
+    /// started: `skip` answers `already_enrolled`, `refuse` fails `collision_refused`, nothing is written, and the
+    /// participation reads the same afterwards as before.
     /// </summary>
     [Fact]
     public async Task A_live_enrollment_of_a_person_already_taking_part_writes_nothing_under_either_policy()
@@ -228,8 +221,9 @@ public class ReplyLiveConformanceTests
 
         await LeavesAParticipantAloneAsync((operation, input) => InvokeAsync(api, operation, input, profile, Ct), sequence, participant);
 
-        // No bulk add was started at all: the host's own record of every program it ran is the evidence.
-        Assert.DoesNotContain(ExecArguments(api.Paths), command => command.Any(argument => argument.Contains("/contact-links/bulk", StringComparison.Ordinal)));
+        // Both policies reached the CLI's add for the participant, and the participation read the same before and
+        // after: the host's own record of every program it ran shows the two adds.
+        Assert.Equal(2, ExecArguments(api.Paths).Count(command => command.Contains("add-contact") && command.Contains(participant)));
     }
 
     /// <summary>

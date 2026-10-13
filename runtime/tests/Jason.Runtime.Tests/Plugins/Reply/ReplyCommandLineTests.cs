@@ -31,6 +31,7 @@ public class ReplyCommandLineTests
     [InlineData("--user-id")]
     [InlineData("--user-email")]
     [InlineData("--pretty")]
+    [InlineData("--idempotency-key")]
     public async Task A_flag_this_plugin_must_never_pass_appears_in_no_call(string flag)
     {
         // `--verbose` prints the whole request and response to stderr, which is where a contact's address would
@@ -65,8 +66,8 @@ public class ReplyCommandLineTests
 
         await ReplyOperations.RunEachAsync(api, binding: null, Ct);
 
-        // `--json -q [--profile P] [--team-id T] api <path> [--method M] [--body -]`, and nothing else ever, in
-        // that order. Every call of every operation is compared with the whole vector rebuilt from what that
+        // `--json -q [--profile P] [--team-id T] <noun> <verb> [<id>] [flags]`, and nothing else ever, in that
+        // order. Every call of every operation is compared with the whole vector rebuilt from what that
         // call was, which is stricter than looking for what must not be there: it also fails on something new
         // that nobody thought to forbid.
         AssertEveryArgumentVector(account, profile: null, team: null);
@@ -108,12 +109,12 @@ public class ReplyCommandLineTests
         {
             Assert.DoesNotContain("--profile", call.Args);
             Assert.DoesNotContain("--team-id", call.Args);
-            Assert.Equal(["--json", "-q", "api"], call.Args.Take(3));
+            Assert.Equal(["--json", "-q"], call.Args.Take(2));
         }
     }
 
     [Fact]
-    public async Task Every_request_body_travels_on_stdin_and_never_in_an_argument()
+    public async Task Every_person_travels_on_stdin_and_never_in_an_argument()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount());
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
@@ -121,27 +122,26 @@ public class ReplyCommandLineTests
 
         await ReplyOperations.RunEachAsync(api, binding: null, Ct);
 
-        // The `exec` diagnostic records every argument and the runtime's logs may never hold contact data, so a
-        // body is on stdin or it is nowhere. A call that has one says so with `--body -`; a call that has none
-        // never mentions the flag.
-        var withBody = 0;
+        // The `exec` diagnostic records every argument and the runtime's logs may never hold contact data, so a person
+        // is on stdin or nowhere. A call that carries one says so with `--contact -`; a call that has none never
+        // mentions the flag.
+        var withPerson = 0;
         foreach (var call in account.Calls)
         {
-            Assert.DoesNotContain(call.Args, argument => argument.Contains('{', StringComparison.Ordinal));
+            Assert.DoesNotContain(call.Args, argument => argument.Contains('{', StringComparison.Ordinal) || argument.Contains('@', StringComparison.Ordinal));
             if (call.Body is null)
             {
-                Assert.DoesNotContain("--body", call.Args);
+                Assert.DoesNotContain("--contact", call.Args);
                 continue;
             }
 
-            withBody++;
-            Assert.Equal(["--body", "-"], call.Args.TakeLast(2));
-            Assert.Single(call.Args, argument => argument == "--body");
+            withPerson++;
+            Assert.Equal("-", call.Option("--contact"));
+            Assert.Contains(ReplyOperations.Address, call.Body, StringComparison.Ordinal);
         }
 
-        // Four of the eight calls carry one, or the rule above would be a rule about nothing: the two ensures,
-        // which carry a person's own data, and the two writes that name them by identifier.
-        Assert.Equal(4, withBody);
+        // The two writes about a person carry one; the campaign read does not.
+        Assert.Equal(2, withPerson);
     }
 
     /// <summary>
@@ -175,27 +175,20 @@ public class ReplyCommandLineTests
             expected.Add(team);
         }
 
-        expected.Add("api");
-        expected.Add(call.Path);
-
-        if (call.Method != "GET")
+        expected.AddRange(call.Line switch
         {
-            expected.Add("--method");
-            expected.Add(call.Method);
-        }
-
-        if (call.Body is not null)
-        {
-            expected.Add("--body");
-            expected.Add("-");
-        }
+            "sequence get 7" => new[] { "sequence", "get", "7" },
+            "contact-list add-contact 9" => new[] { "contact-list", "add-contact", "9", "--contact", "-", "--refuse-opted-out" },
+            "sequence add-contact 7" => new[] { "sequence", "add-contact", "7", "--contact", "-" },
+            _ => throw new InvalidOperationException($"No expected argument vector for '{call.Line}'."),
+        });
 
         return expected;
     }
 
-    /// <summary>Every call the account was asked to make, as "METHOD /path", in the order it was asked.</summary>
+    /// <summary>Every call the account was asked to make, one line each, in the order it was asked.</summary>
     private static IReadOnlyList<string> Paths(ReplyAccount account) =>
-        [.. account.Calls.Select(call => call.Method + " " + call.Path)];
+        [.. account.Calls.Select(call => call.Line)];
 }
 
 /// <summary>
@@ -233,23 +226,15 @@ internal static class ReplyOperations
     public static IReadOnlyList<string> All => [CampaignGet, MembershipAdd, Enroll];
 
     /// <summary>
-    /// Every call those operations make against a planted account, in order: one read for the campaign;
-    /// then the ensure, the suppression read and the add; then the ensure — which finds the person the add
-    /// created — the participation read for a person who existed, the live-state read, the suppression read
-    /// and the enrollment. A test that asserts a rule over "every call" asserts this list first, so a rule
-    /// that held because nothing ran fails instead.
+    /// Every call those operations make against a planted account, in order: the campaign read; the list add, which
+    /// imports the person from stdin; the enrolment, which imports them again — matched now — and adds them. A test that
+    /// asserts a rule over "every call" asserts this list first, so a rule that held because nothing ran fails instead.
     /// </summary>
     public static IReadOnlyList<string> EveryCall =>
     [
-        $"GET /v3/sequences/{Sequence}",
-        "POST /v3/contacts/import",
-        $"GET /v3/contacts/{Ensured}/statuses",
-        $"POST /v3/contact-lists/{List}/add-contacts",
-        "POST /v3/contacts/import",
-        $"GET /v3/sequences/{Sequence}/contacts/{Ensured}",
-        $"GET /v3/sequences/{Sequence}",
-        $"GET /v3/contacts/{Ensured}/statuses",
-        $"POST /v3/sequences/{Sequence}/contact-links/bulk",
+        $"sequence get {Sequence}",
+        $"contact-list add-contact {List}",
+        $"sequence add-contact {Sequence}",
     ];
 
     /// <summary>The provider's world these operations need: one live sequence with steps, and one list.</summary>

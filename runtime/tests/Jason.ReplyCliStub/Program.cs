@@ -1,51 +1,46 @@
 // A stand-in for the Reply CLI, as the official plugin is allowed to use it and nothing more:
 //
+//     reply [--json] [-q] [--profile <name>] [--team-id <id>] <noun> <verb> [<id>] [options]
 //     reply [--json] [-q] [--profile <name>] [--team-id <id>] api <path> [--method <verb>] [--body -]
 //
-// A flag this program does not know is a usage error, so a plugin that reached for `--api-key`, `--verbose`,
-// `--user-id`, `--user-email` or `--pretty` fails here, before any assertion about the argument vector runs.
-// Everything else was measured from the real CLI rather than guessed: it prints {"code": <status>, "data":
-// <body>} for any status, exits 1 from 400 up, exits 2 on a usage error before it has called anything, and —
-// holding no credential — exits 1 having printed nothing a caller could parse. Which account it works in is
-// never on the command line: it finds its store the way the real CLI does, from the platform's own
-// configuration directory and the profile name, so a test chooses one by setting a variable on the process
-// that starts it.
+// It stands in for the program from the outside: each work command prints what reply-cli 0.11.0 documents — its
+// result as JSON on stdout, or one `{"error":…}` line on stderr with exit 1, 2 or 3 — from a small record of what the
+// account holds, so a test can plant a world and read back what happened. It never imitates Reply's API; the one raw
+// call it still answers is the contact search, the one the plugin still makes. A flag this program does not know is a
+// usage error, so a plugin that reached for `--api-key`, `--verbose`, `--user-id`, `--user-email`, `--pretty` or
+// `--idempotency-key` fails here, before any assertion about the argument vector runs. Which account it works in is
+// never on the command line: it finds its store the way the real CLI does, from the platform's own configuration
+// directory and the profile name.
 
-// The one thing answered before anything else: a manifest that declares a minimum version makes a reload run
-// this on whatever it resolved, long before any account is involved, and a program that refused it would be
-// refused in turn and never reach an operation at all.
-if (args.Length == 1 && string.Equals(args[0], "--version", StringComparison.Ordinal))
+// Answered before anything else: a manifest that declares a minimum version makes a reload run this on whatever it
+// resolved, long before any account is involved. reply-cli prints the bare version.
+if (args.Length == 1 && (args[0] == "--version" || args[0] == "-v"))
 {
-    // Newer than the oldest release the official package will work with, and printed the way the real one prints
-    // it: a line with the program's own name in front of the number.
-    await Console.Out.WriteLineAsync("reply 0.5.1");
+    await Console.Out.WriteLineAsync("0.11.0");
     return 0;
 }
 
 string profile = "default";
-string path;
-var method = "GET";
-var bodyOnStdin = false;
 var index = 0;
 
-// The global prefix, which comes before the subcommand.
-while (index < args.Length && !string.Equals(args[index], "api", StringComparison.Ordinal))
+// The global options, which come before the command.
+while (index < args.Length && args[index].StartsWith('-'))
 {
     var argument = args[index];
-    if (string.Equals(argument, "--json", StringComparison.Ordinal) || string.Equals(argument, "-q", StringComparison.Ordinal))
+    if (argument is "--json" or "-q")
     {
         index++;
         continue;
     }
 
-    if (string.Equals(argument, "--profile", StringComparison.Ordinal) || string.Equals(argument, "--team-id", StringComparison.Ordinal))
+    if (argument is "--profile" or "--team-id")
     {
         if (index + 1 >= args.Length)
         {
             return await UsageAsync($"option '{argument}' argument missing");
         }
 
-        if (string.Equals(argument, "--profile", StringComparison.Ordinal))
+        if (argument == "--profile")
         {
             profile = args[index + 1];
         }
@@ -56,78 +51,102 @@ while (index < args.Length && !string.Equals(args[index], "api", StringCompariso
         continue;
     }
 
-    return await UsageAsync(argument.StartsWith('-')
-        ? $"unknown option '{argument}'"
-        : $"unknown command '{argument}'");
+    return await UsageAsync($"unknown option '{argument}'");
 }
 
 if (index >= args.Length)
 {
-    return await UsageAsync("missing command 'api'");
+    return await UsageAsync("missing command");
 }
 
-index++;
+var noun = args[index++];
+if (noun == "api")
+{
+    return await ApiAsync(profile, args, index);
+}
+
 if (index >= args.Length)
 {
-    return await UsageAsync("missing required argument 'path'");
+    return await UsageAsync($"missing command after '{noun}'");
 }
 
-path = args[index++];
-if (path.StartsWith('-'))
+var command = noun + " " + args[index++];
+if (!Commands.IsKnown(command))
 {
-    return await UsageAsync($"unknown option '{path}'");
+    return await UsageAsync($"unknown command '{command}'");
 }
 
-while (index < args.Length)
+var rest = args[index..];
+var stdin = Commands.ReadsStdin(rest) ? await Console.In.ReadToEndAsync() : null;
+return await Account.RunCommandAsync(profile, command, rest, stdin, args);
+
+// `api <path> [--method <verb>] [--body -]`: the raw call, kept for the one request the plugin still makes that way.
+static async Task<int> ApiAsync(string profile, string[] args, int index)
 {
-    var argument = args[index];
-    if (string.Equals(argument, "--method", StringComparison.Ordinal))
+    if (index >= args.Length)
     {
-        if (index + 1 >= args.Length)
-        {
-            return await UsageAsync("option '--method' argument missing");
-        }
-
-        method = args[index + 1].ToUpperInvariant();
-        index += 2;
-        continue;
+        return await UsageAsync("missing required argument 'path'");
     }
 
-    if (string.Equals(argument, "--body", StringComparison.Ordinal))
+    var path = args[index++];
+    if (path.StartsWith('-'))
     {
-        if (index + 1 >= args.Length)
-        {
-            return await UsageAsync("option '--body' argument missing");
-        }
-
-        if (!string.Equals(args[index + 1], "-", StringComparison.Ordinal))
-        {
-            // A body on the command line would put a person's address into the caller's log. This CLI takes a
-            // body from stdin and from nowhere else, so the rule holds against a plugin that tried anyway.
-            return await UsageAsync("option '--body' takes only '-': a request body is read from stdin");
-        }
-
-        bodyOnStdin = true;
-        index += 2;
-        continue;
+        return await UsageAsync($"unknown option '{path}'");
     }
 
-    return await UsageAsync(argument.StartsWith('-')
-        ? $"unknown option '{argument}'"
-        : $"unexpected argument '{argument}'");
-}
+    var method = "GET";
+    var bodyOnStdin = false;
+    while (index < args.Length)
+    {
+        var argument = args[index];
+        if (string.Equals(argument, "--method", StringComparison.Ordinal))
+        {
+            if (index + 1 >= args.Length)
+            {
+                return await UsageAsync("option '--method' argument missing");
+            }
 
-if (!path.StartsWith('/'))
-{
-    return await UsageAsync($"argument 'path' must start with '/': '{path}'");
-}
+            method = args[index + 1].ToUpperInvariant();
+            index += 2;
+            continue;
+        }
 
-var body = bodyOnStdin ? await Console.In.ReadToEndAsync() : null;
-return await Account.RunAsync(profile, method, path, body, args);
+        if (string.Equals(argument, "--body", StringComparison.Ordinal))
+        {
+            if (index + 1 >= args.Length)
+            {
+                return await UsageAsync("option '--body' argument missing");
+            }
+
+            if (!string.Equals(args[index + 1], "-", StringComparison.Ordinal))
+            {
+                // A body on the command line would put a person's address into the caller's log. This CLI takes a
+                // body from stdin and from nowhere else, so the rule holds against a plugin that tried anyway.
+                return await UsageAsync("option '--body' takes only '-': a request body is read from stdin");
+            }
+
+            bodyOnStdin = true;
+            index += 2;
+            continue;
+        }
+
+        return await UsageAsync(argument.StartsWith('-')
+            ? $"unknown option '{argument}'"
+            : $"unexpected argument '{argument}'");
+    }
+
+    if (!path.StartsWith('/'))
+    {
+        return await UsageAsync($"argument 'path' must start with '/': '{path}'");
+    }
+
+    var body = bodyOnStdin ? await Console.In.ReadToEndAsync() : null;
+    return await Account.RunAsync(profile, method, path, body, args);
+}
 
 static async Task<int> UsageAsync(string message)
 {
-    // Exit 2 is a usage error, and it is decided before anything at all has been called.
+    // commander's own refusal: plain text and exit 2, decided before anything at all has been called.
     await Console.Error.WriteLineAsync("error: " + message);
     return 2;
 }

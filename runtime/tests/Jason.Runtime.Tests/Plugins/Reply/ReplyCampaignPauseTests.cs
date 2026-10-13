@@ -14,8 +14,6 @@ public class ReplyCampaignPauseTests
 {
     private const string Operation = "campaign.pause";
     private const int Sequence = ReplyOperations.Sequence;
-    private const string SequencePath = "/v3/sequences/7";
-    private const string PausePath = "/v3/sequences/7/pause";
     private const string WorkItemId = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRJ";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -35,13 +33,14 @@ public class ReplyCampaignPauseTests
         Assert.Equal("""{"campaign":"7"}""", outcome.ExternalIds!.ToJsonString());
         Assert.Equal("paused", (string?)account.Sequences.Single()!["status"]);
 
-        // The state first, then the one write; nothing on stdin, because the pause takes no body.
-        Assert.Equal([$"GET {SequencePath}", $"POST {PausePath}"], account.Calls.Select(call => call.Method + " " + call.Path));
+        // One command; nothing on stdin, because the pause takes no person.
+        Assert.Equal(["sequence pause 7"], account.Calls.Select(call => call.Line));
         Assert.All(account.Calls, call => Assert.Null(call.Body));
     }
 
+    /// <summary>Reply answers a pause of a paused sequence with the same success, so the answer is `paused` again.</summary>
     [Fact]
-    public async Task A_campaign_already_paused_answers_already_paused_and_writes_nothing()
+    public async Task A_campaign_already_paused_answers_paused()
     {
         using var account = Planted("paused");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
@@ -49,18 +48,15 @@ public class ReplyCampaignPauseTests
 
         var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(pinned: "7")));
 
-        Assert.Equal("already_paused", (string?)answer["items"]![0]!["status"]);
-        Assert.Equal([$"GET {SequencePath}"], account.Calls.Select(call => call.Method + " " + call.Path));
+        Assert.Equal("paused", (string?)answer["items"]![0]!["status"]);
+        Assert.Equal(["sequence pause 7"], account.Calls.Select(call => call.Line));
     }
 
-    /// <summary>
-    /// An archived sequence, or one that never started, is not pausable, and the state read already says so: the
-    /// package asks for no pause it knows will be refused.
-    /// </summary>
+    /// <summary>An archived sequence, or one that never started, is not pausable: the CLI refuses both.</summary>
     [Theory]
     [InlineData("active", true)]
     [InlineData("new", false)]
-    public async Task A_campaign_that_cannot_be_paused_is_refused_from_its_state_without_asking(string status, bool archived)
+    public async Task A_campaign_that_cannot_be_paused_is_not_pausable(string status, bool archived)
     {
         using var account = Planted(status, archived);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
@@ -70,20 +66,17 @@ public class ReplyCampaignPauseTests
 
         Assert.Equal("campaign_not_pausable", error.Code);
         Assert.Equal("7", (string?)error.ExternalIds!["campaign"]);
-        Assert.Equal([$"GET {SequencePath}"], account.Calls.Select(call => call.Method + " " + call.Path));
+        Assert.Equal(["sequence pause 7"], account.Calls.Select(call => call.Line));
     }
 
-    /// <summary>
-    /// A sequence archived between the read and the pause: Reply's own refusal is carried, with its code, rather than
-    /// guessed at from a state that is no longer true.
-    /// </summary>
+    /// <summary>Reply's own refusal of the pause is carried with its code rather than guessed at.</summary>
     [Theory]
-    [InlineData(409, "sequenceAction.archived")]
-    [InlineData(400, "sequenceAction.teamMemberNotFound")]
-    public async Task A_pause_reply_refuses_is_not_pausable_and_carries_reply_s_own_code(int status, string providerCode)
+    [InlineData("sequence.archived", 409, "sequenceAction.archived")]
+    [InlineData("sequence.not_pausable", 400, "sequenceAction.teamMemberNotFound")]
+    public async Task A_pause_reply_refuses_is_not_pausable_and_carries_reply_s_own_code(string code, int status, string providerCode)
     {
         using var account = Planted("active");
-        account.Answers("POST", PausePath, status, Problem(status, providerCode));
+        account.Refuses("sequence pause", code, status: status, replyCode: providerCode);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -131,13 +124,13 @@ public class ReplyCampaignPauseTests
 
     /// <summary>
     /// The pause is documented idempotent, which is what makes a repeat after a lost answer safe: the next attempt
-    /// reads the state and answers `already_paused`.
+    /// pauses again and answers `paused`.
     /// </summary>
     [Fact]
-    public async Task A_pause_whose_answer_was_lost_is_repeated_and_answers_already_paused()
+    public async Task A_pause_whose_answer_was_lost_is_repeated_and_answers_paused()
     {
         using var account = Planted("active");
-        account.LosesTheAnswerAfterWriting("POST", PausePath);
+        account.LosesTheOutcome("sequence pause");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -147,7 +140,37 @@ public class ReplyCampaignPauseTests
         Assert.Equal("7", (string?)lost.ExternalIds!["campaign"]);
 
         var repeated = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(pinned: "7"), attempt: 2));
-        Assert.Equal("already_paused", (string?)repeated["items"]![0]!["status"]);
+        Assert.Equal("paused", (string?)repeated["items"]![0]!["status"]);
+    }
+
+    [Fact]
+    public async Task A_sequence_reply_is_still_activating_is_asked_again_later()
+    {
+        using var account = Planted("active");
+        account.Refuses("sequence pause", "sequence.busy", status: 409, replyCode: "sequenceAction.activationInProgress");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "7")));
+
+        Assert.Equal("provider_unavailable", error.Code);
+        Assert.Equal(FailureClass.Transient, error.Class);
+    }
+
+    /// <summary>An exit the CLI did not explain, on a write that may have gone out, is never a definite refusal.</summary>
+    [Fact]
+    public async Task An_exit_the_cli_did_not_explain_is_ambiguous_on_a_write()
+    {
+        using var account = Planted("active");
+        account.Prints("sequence pause", 1, string.Empty, "TypeError: fetch failed\n    at pause (sequence-state.js:1:1)");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "7")));
+
+        Assert.Equal("provider_answer_lost", error.Code);
+        Assert.Equal(FailureClass.Ambiguous, error.Class);
+        Assert.Equal("7", (string?)error.ExternalIds!["campaign"]);
     }
 
     private static ReplyAccount Planted(string status, bool archived = false)
@@ -185,13 +208,4 @@ public class ReplyCampaignPauseTests
 
     private static Task<PluginInvocationResult> InvokeAsync(RuntimeApiFixture api, JsonObject input, int attempt = 1) =>
         ReplyOperations.InvokeAsync(api, Operation, input, Ct, attempt: attempt);
-
-    private static string Problem(int status, string code) => new JsonObject
-    {
-        ["type"] = "about:blank",
-        ["title"] = status == 409 ? "Conflict" : "Bad Request",
-        ["status"] = status,
-        ["detail"] = "The stand-in was told to answer this.",
-        ["code"] = code,
-    }.ToJsonString();
 }

@@ -14,7 +14,6 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 public class ReplyConversationListTests
 {
     private const string Operation = "conversation.list";
-    private const string FilterPath = "/v3/inbox/threads/filter";
     private const string Phone = "+5715550100";
     private const string Profile = "https://www.linkedin.com/in/marta-alvarez";
 
@@ -46,9 +45,11 @@ public class ReplyConversationListTests
         Assert.Null(outcome.ExternalIds);
 
         // Every thread is two of Reply's buckets, the inbox and the sent threads, each read from its first thread.
-        Assert.Equal([$"{FilterPath}?top=20&skip=0", $"{FilterPath}?top=20&skip=0"], account.Calls.Select(call => call.Path));
-        Assert.Equal(["""{"contactIds":[1001],"source":"inbox"}""", """{"contactIds":[1001],"source":"sent"}"""], account.Calls.Select(call => call.Body));
-        Assert.Equal(["--json", "-q", "api", $"{FilterPath}?top=20&skip=0", "--method", "POST", "--body", "-"], account.Calls[0].Args);
+        Assert.Equal(["inbox", "sent"], account.Calls.Select(call => call.Option("--source")));
+        Assert.All(account.Calls, call => Assert.Null(call.Body));
+        Assert.Equal(
+            ["--json", "-q", "inbox", "list", "--contact-id", "1001", "--source", "inbox", "--limit", "20", "--offset", "0"],
+            account.Calls[0].Args);
     }
 
     [Fact]
@@ -94,36 +95,39 @@ public class ReplyConversationListTests
         Assert.Equal(["501"], ReplyOperations.Succeeded(Operation, linking)["items"]!.AsArray().Select(thread => (string)thread!["external_id"]!));
         Assert.Equal("""{"campaign":"7"}""", Assert.IsType<InvocationOutcome.Succeeded>(linking.Outcome).ExternalIds!.ToJsonString());
         Assert.Null(Assert.IsType<InvocationOutcome.Succeeded>(linked.Outcome).ExternalIds);
-        Assert.All(account.Calls, call => Assert.Contains(call.Body, new[] { """{"sequenceIds":[7],"source":"inbox"}""", """{"sequenceIds":[7],"source":"sent"}""" }));
+        Assert.All(account.Calls, call => Assert.Equal("7", call.Option("--sequence-id")));
+        Assert.All(account.Calls, call => Assert.Null(call.Option("--contact-id")));
     }
 
+    /// <summary>`inbound` is Reply's inbox bucket, and `since` is passed as given: the CLI keeps a thread that moved at or after it.</summary>
     [Fact]
-    public async Task Replies_only_and_since_travel_as_the_provider_s_own_filter()
+    public async Task Inbound_and_since_travel_as_the_cli_s_own_flags()
     {
         using var account = Planted();
-        account.WithThread(Thread(501, "2026-10-03T07:41:09Z"));
-        account.WithThread(Thread(502, "2026-10-02T18:02:44Z", inbound: false));
-        account.WithThread(Thread(503, "2026-09-20T10:00:00Z"));
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var answer = ReplyOperations.Succeeded(
-            Operation,
-            await InvokeAsync(api, Input(limit: 20, offset: 0, pinned: "7", source: "inbound", since: "2026-10-01T00:00:00Z")));
+        ReplyOperations.Succeeded(Operation, await InvokeAsync(
+            api, Input(limit: 20, offset: 0, pin: "1001", source: "inbound", since: "2026-10-01T09:00:00Z")));
 
-        Assert.Equal(["501"], answer["items"]!.AsArray().Select(thread => (string)thread!["external_id"]!));
-        Assert.Equal("""{"sequenceIds":[7],"source":"inbox","from":"2026-09-30T23:59:59.999Z"}""", Assert.Single(account.Calls).Body);
+        var call = Assert.Single(account.Calls);
+        Assert.Equal("inbox list", call.Line);
+        Assert.Equal("1001", call.Option("--contact-id"));
+        Assert.Equal("inbox", call.Option("--source"));
+        Assert.Equal("2026-10-01T09:00:00Z", call.Option("--since"));
+        Assert.Equal("20", call.Option("--limit"));
+        Assert.Equal("0", call.Option("--offset"));
+        Assert.Null(call.Body);
     }
 
     /// <summary>
-    /// The contract keeps the threads that moved at or after <c>since</c>, and Reply's <c>from</c> keeps only those
-    /// that moved after it, to the millisecond. So the package asks from one millisecond earlier, and a thread whose
-    /// last activity is stamped exactly at <c>since</c> is listed.
+    /// The contract keeps the threads that moved at or after <c>since</c>, and so does the CLI's <c>--since</c>: the
+    /// package passes the moment as given, and a thread whose last activity is stamped exactly at it is listed.
     /// </summary>
     [Theory]
-    [InlineData("2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z", "2026-09-30T23:59:59.999Z")]
-    [InlineData("2026-10-01T07:41:09.250Z", "2026-10-01T07:41:09.250Z", "2026-10-01T07:41:09.249Z")]
-    public async Task A_thread_that_moved_exactly_at_since_is_listed(string moved, string since, string from)
+    [InlineData("2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z")]
+    [InlineData("2026-10-01T07:41:09.250Z", "2026-10-01T07:41:09.250Z")]
+    public async Task A_thread_that_moved_exactly_at_since_is_listed(string moved, string since)
     {
         using var account = Planted();
         account.WithThread(Thread(501, moved));
@@ -135,7 +139,7 @@ public class ReplyConversationListTests
             await InvokeAsync(api, Input(limit: 20, offset: 0, pinned: "7", source: "inbound", since: since)));
 
         Assert.Equal(["501"], answer["items"]!.AsArray().Select(thread => (string)thread!["external_id"]!));
-        Assert.Equal($$"""{"sequenceIds":[7],"source":"inbox","from":"{{from}}"}""", Assert.Single(account.Calls).Body);
+        Assert.Equal(since, Assert.Single(account.Calls).Option("--since"));
     }
 
     // -------------------------------------------------------------------------------------------------------
@@ -300,7 +304,7 @@ public class ReplyConversationListTests
         var middle = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(limit: 2, offset: 1, pinned: "7")));
         Assert.Equal(["502", "503"], middle["items"]!.AsArray().Select(thread => (string)thread!["external_id"]!));
         Assert.True((bool)middle["has_more"]!);
-        Assert.All(account.Calls, call => Assert.Equal($"{FilterPath}?top=3&skip=0", call.Path));
+        Assert.All(account.Calls, call => Assert.Equal(("3", "0"), (call.Option("--limit"), call.Option("--offset"))));
 
         var last = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(limit: 2, offset: 3, pinned: "7")));
         Assert.Equal(["504"], last["items"]!.AsArray().Select(thread => (string)thread!["external_id"]!));
@@ -308,8 +312,9 @@ public class ReplyConversationListTests
     }
 
     /// <summary>
-    /// One read reaches a thousand threads, Reply's largest page, so a page of every thread that ends past the first
-    /// thousand cannot be merged from two reads and is refused before anything is asked. One that ends at it is read.
+    /// Every thread is merged from both buckets, each read a hundred threads at a time from its first, as far as a
+    /// thousand; a page of every thread that ends past the first thousand is refused before anything is asked. One that
+    /// ends at it is read.
     /// </summary>
     [Theory]
     [InlineData(990, 20, true)]
@@ -325,7 +330,7 @@ public class ReplyConversationListTests
         if (!refused)
         {
             ReplyOperations.Succeeded(Operation, result);
-            Assert.All(account.Calls, call => Assert.Equal($"{FilterPath}?top=1000&skip=0", call.Path));
+            Assert.All(account.Calls, call => Assert.Equal(("100", "0"), (call.Option("--limit"), call.Option("--offset"))));
             return;
         }
 
@@ -358,6 +363,41 @@ public class ReplyConversationListTests
         Assert.True((bool)answer["has_more"]!);
     }
 
+    /// <summary>
+    /// A page further in than one CLI page reaches: each bucket is read in steps of a hundred from its first thread, as
+    /// far as the page reaches or the bucket ends, and the page is a slice of the merged order.
+    /// </summary>
+    [Fact]
+    public async Task A_deep_page_of_every_thread_reads_each_bucket_in_steps_of_a_hundred()
+    {
+        using var account = Planted();
+        for (var at = 0; at < 260; at++)
+        {
+            account.WithThread(Thread(10_000 + at, Moment(at)));
+        }
+
+        for (var at = 0; at < 120; at++)
+        {
+            account.WithThread(Thread(20_000 + at, Moment(at), inbound: false));
+        }
+
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(limit: 100, offset: 250, pinned: "7")));
+
+        // The page reaches 350: the inbox ends at 260, so it is read at 0, 100 and 200; the sent bucket ends at 120.
+        Assert.Equal(
+            ["inbox 0 100", "inbox 100 100", "inbox 200 100", "sent 0 100", "sent 100 100"],
+            account.Calls.Select(call => $"{call.Option("--source")} {call.Option("--offset")} {call.Option("--limit")}"));
+        Assert.Equal(100, answer["items"]!.AsArray().Count);
+        Assert.True((bool)answer["has_more"]!);
+    }
+
+    private static string Moment(int minutes) =>
+        new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero).AddMinutes(minutes)
+            .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+
     /// <summary>A planted thread with an outbound reply after its inbound message, so its latest message is outbound.</summary>
     private static JsonObject Answered(JsonObject thread, string at)
     {
@@ -380,18 +420,12 @@ public class ReplyConversationListTests
     // -------------------------------------------------------------------------------------------------------
 
     [Theory]
-    [InlineData("inboxThread.forbidden", "feature_unavailable")]
-    [InlineData("auth.scopeMissing", "unauthorized")]
-    public async Task A_403_is_a_feature_the_account_lacks_only_where_reply_says_so(string providerCode, string expected)
+    [InlineData("access.feature_unavailable", "inboxThread.forbidden", "feature_unavailable")]
+    [InlineData("access.denied", null, "unauthorized")]
+    public async Task A_403_is_a_feature_the_account_lacks_only_where_reply_says_so(string cliCode, string? providerCode, string expected)
     {
         using var account = Planted();
-        account.Answers("POST", $"{FilterPath}?top=20&skip=0", 403, new JsonObject
-        {
-            ["title"] = "Forbidden",
-            ["status"] = 403,
-            ["detail"] = "Inbox feature is not available for this user.",
-            ["code"] = providerCode,
-        }.ToJsonString());
+        account.Refuses("inbox list", cliCode, status: 403, replyCode: providerCode);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 

@@ -1,26 +1,25 @@
 // `engagement.summarize`: Reply's own counts for one sequence over one window, a row per channel it reports.
 //
-// One read: `POST /v3/sequences/{id}/stats`, a POST that changes nothing, with the window on stdin. Reply answers an
-// overview per channel; each becomes a row with the envelope that says what its numbers count. Only counts are
-// mapped, and only the ones the document names — a rate is two counts and a denominator, and the denominator is
-// exactly what Reply does not say, so its percentages are never copied.
-import { call } from "./cli.js";
-import { callOf, fail, lostAnswerRow, observe, statusRow } from "./errors.js";
+// One command, `reply sequence stats`, with the window as its flags. Reply answers an overview per channel; each
+// becomes a row with the envelope that says what its numbers count. Only counts are mapped, and only the ones the
+// document names — a rate is two counts and a denominator, and the denominator is exactly what Reply does not say,
+// so its percentages are never copied.
+import { run } from "./cli.js";
 import { sequenceOf } from "./reading.js";
 
 const OPERATION = "engagement.summarize";
+const COMMAND = "sequence stats";
 
-// The presets Jason names, and Reply's word for each.
+// The presets Jason names, and the CLI's word for each.
 const PRESET = {
-  "last_week": "lastWeek",
-  "last_month": "lastMonth",
-  "last_year": "lastYear",
-  "all_time": "allTime",
+  "last_week": "last-week",
+  "last_month": "last-month",
+  "last_year": "last-year",
+  "all_time": "all-time",
 };
 
 // Each overview Reply answers, the channel its row is about, and which of its counts the document names. A count
-// Reply reports beyond these — not reached, connection notes, regular messages, likes, follows, endorsements,
-// comments — is not returned in this version.
+// Reply reports beyond these is not returned in this version.
 const OVERVIEWS = [
   {
     overview: "emailOverview",
@@ -53,44 +52,14 @@ const OVERVIEWS = [
   },
 ];
 
-// The refusal Reply gives an account whose role may not read a sequence's statistics.
-const FORBIDDEN = "sequenceStats.forbidden";
-
 export function engagementSummarize(input, context) {
   const sequence = sequenceOf(input, OPERATION);
   const learned = { campaign: sequence };
-  const path = "/v3/sequences/" + sequence + "/stats";
-  const known = callOf("POST", path);
   const window = input.args.window;
 
   // The plugin's clock when it asked: Reply does not say when it counted, so this is the closest honest moment.
   const asOf = new Date().toISOString();
-  const answer = call(context, "POST", path, { filters: filters(window) }, learned, OPERATION);
-
-  if (answer.code === 404) {
-    fail(OPERATION, observe(known, answer, "campaign_not_found"), undefined);
-  }
-
-  if (answer.code !== 200) {
-    const seen = observe(known, answer, statusRow(answer.code, known));
-    if (answer.code === 403 && seen.provider_code === FORBIDDEN) {
-      seen.row = "feature_not_included";
-    }
-
-    // Reply's validation problem carries `errors[]` and no code, and the window is the whole of what this call
-    // asked: it is the window Reply refused, which no later attempt with the same window can change.
-    const data = answer.data !== null && typeof answer.data === "object" ? answer.data : {};
-    if (answer.code === 400 && Array.isArray(data.errors)) {
-      seen.row = "window_refused";
-    }
-
-    fail(OPERATION, seen, learned);
-  }
-
-  const overviews = answer.data;
-  if (overviews === null || typeof overviews !== "object" || Array.isArray(overviews)) {
-    fail(OPERATION, observe(known, answer, lostAnswerRow(known)), learned);
-  }
+  const overviews = run(context, { operation: OPERATION, command: COMMAND, operands: [sequence], flags: windowFlags(window), learned: learned });
 
   const rows = [];
   for (const shape of OVERVIEWS) {
@@ -117,14 +86,15 @@ export function engagementSummarize(input, context) {
   return { result: { rows: rows, vendor: {} }, external_ids: learned };
 }
 
-// The window as Reply's filter: a preset, or a span. The input schema has already refused both and neither.
-function filters(window) {
-  return typeof window.preset === "string" ? { dateRangePreset: PRESET[window.preset] } : { from: window.from, to: window.to };
+// The window as the CLI's flags: a preset, or a span. The input schema has already refused both and neither.
+function windowFlags(window) {
+  return typeof window.preset === "string"
+    ? ["--preset", PRESET[window.preset]]
+    : ["--from", window.from, "--to", window.to];
 }
 
-// The counts the document names, each only where Reply sent a whole number the schema can hold. Anything else —
-// a missing count, a fraction, a negative — is left out rather than coerced: absent says "the provider does not
-// say", and a 0 or a rounding would say something it did not.
+// The counts the document names, each only where Reply sent a whole number the schema can hold. Anything else is
+// left out rather than coerced: absent says "the provider does not say", and a 0 would say something it did not.
 function measures(overview, named) {
   const mapped = {};
   for (const reply of Object.keys(named)) {

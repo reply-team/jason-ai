@@ -54,7 +54,8 @@ public class PopulationTests
         Assert.Equal(2, (int)details["expected"]!);
         Assert.Equal(3, (int)details["actual"]!);
         Assert.Equal("new", (string?)it.Account.Sequences.Single()!["status"]);
-        Assert.DoesNotContain(it.Account.Calls, call => call.Path.EndsWith("/start", StringComparison.Ordinal));
+        // The start was asked for with the approved number, and the CLI's guard started nothing for another one.
+        Assert.Single(it.Account.Calls, call => call.Command == "sequence start" && call.Option("--expect-contacts") == "2");
 
         // 4. The new population is a new decision: a new work item, parked again, with a summary that names it.
         var second = await ActivateAsync(it, campaign, enrolled: 3);

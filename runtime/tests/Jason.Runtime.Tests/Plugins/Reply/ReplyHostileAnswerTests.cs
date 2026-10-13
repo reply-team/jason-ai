@@ -20,11 +20,8 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 [Collection(ProcessEnvironmentCollection.Name)]
 public class ReplyHostileAnswerTests
 {
-    private const string SequencePath = "/v3/sequences/7";
-    private const string ImportPath = "/v3/contacts/import";
-    private const string FilterPath = "/v3/contacts/filter?top=1000";
-    private const string AddPath = "/v3/contact-lists/9/add-contacts";
-    private const string BulkPath = "/v3/sequences/7/contact-links/bulk";
+    /// <summary>The first page of the contact search, the one raw call the package still makes.</summary>
+    private const string LookupPage = "/v3/contacts/filter?top=100&skip=0";
 
     /// <summary>A profile nobody has signed into, which is how an account with no credential is asked for.</summary>
     private const string SignedOut = "signed-out";
@@ -53,7 +50,7 @@ public class ReplyHostileAnswerTests
         // and this call changes nothing, so asking again costs nothing.
         var noise = string.Join('\n', Enumerable.Range(0, 20).Select(line => "reply: unhandled exception at frame " + line));
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.Prints("GET", SequencePath, 1, noise);
+        account.Prints("sequence get", 0, noise);
 
         var error = await FailedAsync(account, ReplyOperations.CampaignGet, ReplyOperations.CampaignGetInput());
 
@@ -62,13 +59,12 @@ public class ReplyHostileAnswerTests
     }
 
     [Fact]
-    public async Task An_envelope_whose_data_is_null_where_an_object_was_expected_is_no_answer_either()
+    public async Task A_result_that_is_null_is_no_answer()
     {
-        // The envelope parses and the status says success; the body it carries says nothing. Reading a campaign
-        // out of null would mean inventing one, so the read is reported as one that did not arrive.
-        var envelope = new JsonObject { ["code"] = 200, ["data"] = null };
+        // The command exited 0 and its result says nothing. Reading a campaign out of null would mean inventing one,
+        // so the read is reported as one that did not arrive.
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.Prints("GET", SequencePath, 0, envelope.ToJsonString());
+        account.Prints("sequence get", 0, "null");
 
         var error = await FailedAsync(account, ReplyOperations.CampaignGet, ReplyOperations.CampaignGetInput());
 
@@ -77,38 +73,40 @@ public class ReplyHostileAnswerTests
     }
 
     [Fact]
-    public async Task A_two_hundred_that_leaves_out_the_field_the_mapping_needs_is_reported_rather_than_guessed()
+    public async Task A_result_that_leaves_out_the_field_the_mapping_needs_is_a_lost_write()
     {
-        // The import answers per item, and an item with no identifier is a person this call cannot work with.
-        // Guessing one — the first contact in the account, say — would enrol or list somebody else.
-        var answered = new JsonObject
-        {
-            ["items"] = new JsonArray(new JsonObject { ["status"] = "created", ["error"] = $"{ReplyOperations.Address} could not be read" }),
-        };
-
+        // The add went out, and its result does not say whom it took. Guessing a contact would list somebody else, so
+        // it is the lost write it may be, and what came back travels as evidence.
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.Answers("POST", ImportPath, 200, answered.ToJsonString());
+        account.Returns("contact-list add-contact", new JsonObject { ["status"] = "added", ["list_id"] = 9 });
 
         var error = await FailedAsync(account, ReplyOperations.MembershipAdd, ReplyOperations.MembershipAddInput());
 
-        Assert.Equal("provider_call_failed", error.Code);
-        Assert.Equal(FailureClass.Permanent, error.Class);
-
-        // What came back is reported by the identifier it carries, never mapped, and nothing else of the item travels:
-        // the rest of an import item can say what a person's record holds.
+        Assert.Equal("provider_answer_lost", error.Code);
+        Assert.Equal(FailureClass.Ambiguous, error.Class);
         var item = error.Details!["provider_item"]!.GetValue<string>();
         Assert.DoesNotContain(ReplyOperations.Address, item, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("created", item, StringComparison.Ordinal);
+    }
+
+    /// <summary>A list add whose result names the contact by an identifier nobody can work by took somebody: a lost write.</summary>
+    [Fact]
+    public async Task A_list_add_whose_result_names_a_contact_nobody_can_work_by_is_a_lost_write()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.Returns("contact-list add-contact", new JsonObject { ["status"] = "added", ["list_id"] = 9, ["contact_id"] = "abc" });
+
+        var error = await FailedAsync(account, ReplyOperations.MembershipAdd, ReplyOperations.MembershipAddInput());
+
+        Assert.Equal("provider_answer_lost", error.Code);
+        Assert.Contains("abc", error.Details!["provider_item"]!.GetValue<string>(), StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// An import item, or a contact the create path made, under an identifier this package cannot work by is reported
-    /// by that identifier alone: the rest of either answer is a person's record, and none of it belongs in a failure.
+    /// The contact search finds the person under an identifier this package cannot work by: that is reported by the
+    /// identifier alone, because the rest of a search answer is a person's record and none of it belongs in a failure.
     /// </summary>
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task A_contact_made_under_an_identifier_nobody_can_work_by_is_reported_by_that_identifier_alone(bool imported)
+    [Fact]
+    public async Task A_contact_made_under_an_identifier_nobody_can_work_by_is_reported_by_that_identifier_alone()
     {
         var record = new JsonObject
         {
@@ -120,19 +118,12 @@ public class ReplyHostileAnswerTests
 
         using var account = ReplyOperations.Plant(new ReplyAccount());
         var input = ReplyOperations.MembershipAddInput();
-        if (imported)
-        {
-            account.Answers("POST", ImportPath, 200, new JsonObject { ["items"] = new JsonArray(record) }.ToJsonString());
-        }
-        else
-        {
-            // Without a first name the import is never asked, and the contact is created instead.
-            input["contacts"]![0]!["first_name"] = null;
-            account.Answers("POST", "/v3/contacts", 200, record.ToJsonString());
-        }
+        input["contacts"]![0]!["first_name"] = null;
+        account.Answers("POST", LookupPage, 200, new JsonObject { ["items"] = new JsonArray(record), ["hasMore"] = false }.ToJsonString());
 
         var error = await FailedAsync(account, ReplyOperations.MembershipAdd, input);
 
+        Assert.Equal("provider_call_failed", error.Code);
         var item = error.Details!["provider_item"]!.GetValue<string>();
         Assert.Contains("c-88", item, StringComparison.Ordinal);
         foreach (var field in new[] { ReplyOperations.Address, "Recorded-marker", "+15550100" })
@@ -150,7 +141,7 @@ public class ReplyHostileAnswerTests
     public async Task A_read_whose_answer_outgrows_the_capture_fails_permanently_as_too_large()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.Answers("GET", SequencePath, 200, Enormous().ToJsonString());
+        account.Prints("sequence get", 0, Enormous().ToJsonString());
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct, paths => Capping(paths, Capture));
 
@@ -179,7 +170,7 @@ public class ReplyHostileAnswerTests
     public async Task A_write_whose_answer_outgrows_the_capture_is_still_a_lost_write()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.Answers("POST", ImportPath, 200, Enormous().ToJsonString());
+        account.Prints("contact-list add-contact", 0, Enormous().ToJsonString());
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct, paths => Capping(paths, Capture));
 
@@ -192,25 +183,27 @@ public class ReplyHostileAnswerTests
     }
 
     /// <summary>
-    /// A read made inside a write keeps the ending it always had. The write declares no too-large code — its
-    /// answers are small, and the code is a read's — so a cut there is reported as the read going unanswered,
-    /// which the next attempt simply asks again.
+    /// A read made inside a write keeps the ending it always had. The contact search a list add makes for a person
+    /// with no first name is a read, and the write declares no too-large code, so a cut there is reported as the read
+    /// going unanswered, which the next attempt simply asks again.
     /// </summary>
     [Fact]
     public async Task A_read_inside_a_write_whose_answer_outgrows_the_capture_keeps_the_ending_it_had()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
-        account.Answers("GET", SequencePath, 200, Enormous().ToJsonString());
+        account.Answers("POST", LookupPage, 200, Enormous().ToJsonString());
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct, paths => Capping(paths, Capture));
+        var input = ReplyOperations.MembershipAddInput();
+        input["contacts"]![0]!["first_name"] = null;
 
         var error = ReplyOperations.Failed(
-            ReplyOperations.Enroll,
-            await ReplyOperations.InvokeAsync(api, ReplyOperations.Enroll, ReplyOperations.EnrollInput(), Ct));
+            ReplyOperations.MembershipAdd,
+            await ReplyOperations.InvokeAsync(api, ReplyOperations.MembershipAdd, input, Ct));
 
         Assert.Equal("provider_unavailable", error.Code);
         Assert.Equal(FailureClass.Transient, error.Class);
+        Assert.Empty(account.MembersOf(ReplyOperations.List));
     }
 
     [Fact]
@@ -219,7 +212,7 @@ public class ReplyHostileAnswerTests
         // The call was cut off, and this one changes nothing at the provider: there is nothing to recover and
         // nothing a repeat could do twice.
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.Hangs("GET", SequencePath, 20_000);
+        account.Hangs("sequence get", 20_000);
 
         // Wide enough for the package's reserve to apply nearly in full — it keeps back five seconds, never more than half of
         // what is left — so the call that is cut off has seconds to spare on a busy machine before the host's own
@@ -245,7 +238,7 @@ public class ReplyHostileAnswerTests
         // item stops for a person instead of being retried.
         using var account = ReplyOperations.Plant(new ReplyAccount());
         account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
-        account.Hangs("POST", BulkPath, 20_000);
+        account.Hangs("sequence add-contact", 20_000);
 
         // Wide enough for the package's reserve to apply in full, as in the read above.
         var timeout = TimeSpan.FromSeconds(16);
@@ -262,20 +255,18 @@ public class ReplyHostileAnswerTests
     }
 
     [Fact]
-    public async Task An_empty_bodied_refusal_of_the_credential_is_never_parsed()
+    public async Task A_refused_credential_is_unauthorized()
     {
-        // Reply's 401 carries no body at all, which is the answer a plugin is likeliest to meet: a package that
-        // parsed one would fail on its most ordinary bad day, and it would fail with the wrong word.
+        // The CLI says a refused credential in its own word, `access.denied`, with Reply's status beside it: the
+        // profile has to be signed in again, and no repeat can help.
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.Answers("POST", ImportPath, 401, string.Empty);
+        account.Refuses("sequence get", "access.denied", status: 401);
 
-        var error = await FailedAsync(account, ReplyOperations.MembershipAdd, ReplyOperations.MembershipAddInput());
+        var error = await FailedAsync(account, ReplyOperations.CampaignGet, ReplyOperations.CampaignGetInput());
 
         Assert.Equal("unauthorized", error.Code);
         Assert.Equal(FailureClass.Permanent, error.Class);
         Assert.Equal(401, error.Details!["status"]!.GetValue<int>());
-
-        // Nothing was read out of the body, because there was none: no provider code is claimed.
         Assert.Null(error.Details!["provider_code"]);
     }
 
@@ -284,7 +275,7 @@ public class ReplyHostileAnswerTests
     {
         var listed = new JsonArray(new JsonObject { ["id"] = ReplyOperations.Sequence });
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.Answers("GET", SequencePath, 200, listed.ToJsonString());
+        account.Prints("sequence get", 0, listed.ToJsonString());
 
         var error = await FailedAsync(account, ReplyOperations.CampaignGet, ReplyOperations.CampaignGetInput());
 
@@ -297,72 +288,18 @@ public class ReplyHostileAnswerTests
     [Fact]
     public async Task A_two_hundred_carrying_an_array_where_a_page_was_expected_is_no_answer_either()
     {
-        // The recovery read answers a page: the people this list holds, and whether it holds more. A bare array
-        // is not that page, and reading one as an empty page would turn a reading into a second write.
-        var notAPage = new JsonArray(new JsonObject { ["id"] = 1001 });
+        // A page's items that are not a list say nothing about who the sequence holds, and reading them as an empty
+        // page would answer a page nobody gave. This read changes nothing, so it is asked again.
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
-        account.Answers("POST", FilterPath, 200, notAPage.ToJsonString());
+        account.Prints("sequence contacts", 0, """{"items":{},"has_more":false,"total":0}""");
 
-        var error = await FailedAsync(
-            account,
-            ReplyOperations.MembershipAdd,
-            ReplyOperations.MembershipAddInput(pinned: ReplyOperations.Ensured),
-            attempt: 2);
+        // A read carries no idempotency key, so the campaign-scope input is built without one.
+        var input = CampaignOnly(new JsonObject { ["limit"] = 10, ["offset"] = 0 });
+        input.Remove("idempotency_key");
+        var error = await FailedAsync(account, "enrollment.list", input);
 
         Assert.Equal("provider_unavailable", error.Code);
         Assert.Equal(FailureClass.Transient, error.Class);
-        Assert.Empty(account.MembersOf(ReplyOperations.List));
-    }
-
-    [Fact]
-    public async Task A_per_item_failure_of_the_list_add_whose_value_is_neither_documented_shape_is_reported()
-    {
-        // The add answers a failures-only dictionary, and what the value against a present key is, Reply's own
-        // description gives two incompatible answers to. So the key's presence is the failure and the value is
-        // only ever evidence — which has to hold for a value that is neither of the two spellings.
-        var refused = new JsonObject
-        {
-            [ReplyOperations.Ensured] = new JsonObject { ["unexpected"] = new JsonArray(1, 2, 3) },
-        };
-
-        using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
-        account.Answers("POST", AddPath, 200, refused.ToJsonString());
-
-        var error = await FailedAsync(
-            account,
-            ReplyOperations.MembershipAdd,
-            ReplyOperations.MembershipAddInput(pinned: ReplyOperations.Ensured));
-
-        Assert.Equal("provider_call_failed", error.Code);
-        Assert.Equal(FailureClass.Permanent, error.Class);
-        Assert.Contains("unexpected", error.Details!["provider_item"]!.GetValue<string>(), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task A_per_item_failure_of_the_enrollment_whose_value_is_neither_documented_shape_is_reported()
-    {
-        // The same rule on the other write, whose per-item set is published as open: a value with no word in it
-        // at all falls to the default branch rather than being read as the nearest word that fits.
-        var refused = new JsonObject
-        {
-            ["added"] = new JsonArray(),
-            ["notProcessed"] = new JsonObject { [ReplyOperations.Ensured] = 8 },
-        };
-
-        using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
-        account.Answers("POST", BulkPath, 200, refused.ToJsonString());
-
-        var error = await FailedAsync(
-            account,
-            ReplyOperations.Enroll,
-            ReplyOperations.EnrollInput(pinned: ReplyOperations.Ensured));
-
-        Assert.Equal("provider_call_failed", error.Code);
-        Assert.Equal(FailureClass.Permanent, error.Class);
-        Assert.Contains("8", error.Details!["provider_item"]!.GetValue<string>(), StringComparison.Ordinal);
     }
 
     [Theory]
@@ -388,7 +325,7 @@ public class ReplyHostileAnswerTests
 
         // Read from the CLI's own refusal rather than from its exit code, which says only that the call was
         // refused and not what an operator has to do about it.
-        Assert.Equal("auth.required", error.Details!["provider_code"]!.GetValue<string>());
+        Assert.Equal("auth.required", error.Details!["cli_code"]!.GetValue<string>());
         Assert.Equal(2, error.Details!["exit_code"]!.GetValue<int>());
 
         // The account this test planted was never touched: the calls this run made went to the profile nobody
@@ -405,7 +342,7 @@ public class ReplyHostileAnswerTests
         // and it is a call this package built wrong rather than an account nobody signed into.
         using var account = ReplyOperations.Plant(new ReplyAccount());
         account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
-        account.Prints("POST", ImportPath, 2, string.Empty, stderr: UsageRefusal);
+        account.Prints("contact-list add-contact", 2, string.Empty, stderr: UsageRefusal);
 
         var error = await FailedAsync(
             account,
@@ -414,7 +351,7 @@ public class ReplyHostileAnswerTests
 
         Assert.Equal("provider_call_failed", error.Code);
         Assert.Equal(FailureClass.Permanent, error.Class);
-        Assert.Equal("usage.profile", error.Details!["provider_code"]!.GetValue<string>());
+        Assert.Equal("usage.profile", error.Details!["cli_code"]!.GetValue<string>());
     }
 
     [Fact]
@@ -425,7 +362,7 @@ public class ReplyHostileAnswerTests
         // it was.
         using var account = ReplyOperations.Plant(new ReplyAccount());
         account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
-        account.Prints("POST", ImportPath, 1, string.Empty, stderr: "reply: connection reset while reading the response");
+        account.Prints("contact-list add-contact", 1, string.Empty, stderr: "reply: connection reset while reading the response");
 
         var error = await FailedAsync(
             account,
@@ -435,54 +372,54 @@ public class ReplyHostileAnswerTests
         Assert.Equal("provider_answer_lost", error.Code);
         Assert.Equal(FailureClass.Ambiguous, error.Class);
         Assert.Null(error.Details!["provider_code"]);
+        Assert.Null(error.Details!["cli_code"]);
     }
 
     // -------------------------------------------------------------------------------------------------------
     // The four writes: a shape no provider documents, on the read each one decides by, ends in a declared code
     // -------------------------------------------------------------------------------------------------------
 
-    /// <summary>
-    /// A pause decides by the sequence's state. A 200 carrying a page where one sequence was asked for says no state,
-    /// and the pause is not asked for: the read is reported as one that did not arrive.
-    /// </summary>
+    /// <summary>A pause whose result does not say `paused` went out and says nothing of what it did: a lost write.</summary>
     [Fact]
-    public async Task A_pause_whose_state_read_answers_a_page_pauses_nothing()
+    public async Task A_pause_whose_result_is_not_paused_is_a_lost_write()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.Answers("GET", SequencePath, 200, new JsonArray(new JsonObject { ["id"] = ReplyOperations.Sequence }).ToJsonString());
+        account.Returns("sequence pause", new JsonObject { ["status"] = "weird", ["sequence_id"] = 7 });
 
         var error = await FailedAsync(account, "campaign.pause", CampaignOnly(new JsonObject()));
 
-        Assert.Equal("provider_unavailable", error.Code);
-        Assert.Equal(FailureClass.Transient, error.Class);
-        Assert.DoesNotContain(account.Calls, call => call.Path.EndsWith("/pause", StringComparison.Ordinal));
+        Assert.Equal("provider_answer_lost", error.Code);
+        Assert.Equal(FailureClass.Ambiguous, error.Class);
     }
 
-    /// <summary>
-    /// An activation holds the population to the count. A count written as words is no count, and nothing starts.
-    /// </summary>
+    /// <summary>A live sequence counted in words is no count: the answer would have no `enrolled`, so it is asked again.</summary>
     [Fact]
-    public async Task An_activation_whose_count_is_not_a_number_starts_nothing()
+    public async Task An_activation_whose_count_is_not_a_number_is_asked_again()
     {
-        using var account = new ReplyAccount().WithSequence(ReplyOperations.Sequence, "Q3 LatAm founders", "new", false, 11, 12);
-        account.Answers("GET", SequencePath + "/contacts/count", 200, new JsonObject { ["count"] = "two" }.ToJsonString());
+        using var account = new ReplyAccount().WithSequence(ReplyOperations.Sequence, "Q3 LatAm founders", "active", false, 11, 12);
+        account.Returns("sequence start", new JsonObject
+        {
+            ["status"] = "already_active",
+            ["sequence_id"] = 7,
+            ["previous_status"] = "active",
+            ["contacts"] = "two",
+        });
 
         var error = await FailedAsync(account, "campaign.activate", CampaignOnly(new JsonObject { ["expected"] = new JsonObject { ["enrolled"] = 2 } }));
 
         Assert.Equal("provider_unavailable", error.Code);
         Assert.Equal(FailureClass.Transient, error.Class);
-        Assert.DoesNotContain(account.Calls, call => call.Path.EndsWith("/start", StringComparison.Ordinal));
     }
 
     /// <summary>
-    /// The opt-out's write answers a failures-only dictionary. An array there says nothing about whom it took, and the
-    /// write went out, so it is the lost write it may be: the next attempt reads the flag before writing again.
+    /// An opt-out whose result is an array says nothing about whom it took, and the write went out, so it is the lost
+    /// write it may be.
     /// </summary>
     [Fact]
     public async Task An_opt_out_whose_write_answers_an_array_is_a_lost_write()
     {
         using var account = new ReplyAccount().WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName);
-        account.Answers("POST", "/v3/contacts/set-opted-out", 200, new JsonArray(1001).ToJsonString());
+        account.Prints("contact opt-out", 0, "[]");
 
         var error = await FailedAsync(account, "optout.record", Person(
             new JsonObject
@@ -500,44 +437,21 @@ public class ReplyHostileAnswerTests
         Assert.Equal("1001", (string?)error.ExternalIds!["contact"]);
     }
 
-    /// <summary>
-    /// The lookup reads a page and its word for the end. A page whose items are not a list says neither, and taking it
-    /// for nobody would answer a stop that never happened: it is a read that did not arrive.
-    /// </summary>
+    /// <summary>A stop whose result is neither `removed` nor `not_in_sequence` says nothing of what it did: a lost write.</summary>
     [Fact]
-    public async Task A_stop_whose_lookup_answers_no_list_takes_nobody_for_absent()
+    public async Task A_stop_whose_result_is_not_one_it_knows_is_a_lost_write()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount());
         account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName).WithEnrollment(ReplyOperations.Sequence, 1001);
-        account.Answers("POST", "/v3/contacts/filter?top=100&skip=0", 200, new JsonObject { ["items"] = "nobody", ["hasMore"] = false }.ToJsonString());
+        account.Returns("sequence remove-contact", new JsonObject { ["status"] = "gone", ["sequence_id"] = 7, ["contact_id"] = 1001 });
 
         var error = await FailedAsync(account, "enrollment.stop", Person(
             new JsonObject { ["channel"] = "email", ["reason"] = new JsonObject { ["code"] = "other" } },
             pinned: null,
             campaign: "7"));
 
-        Assert.Equal("provider_unavailable", error.Code);
-        Assert.Equal(FailureClass.Transient, error.Class);
-        Assert.Equal([1001], account.EnrolledIn(ReplyOperations.Sequence));
-    }
-
-    /// <summary>
-    /// The stop decides by the participation. A 200 carrying a bare string is no participation, and nothing is removed.
-    /// </summary>
-    [Fact]
-    public async Task A_stop_whose_participation_read_answers_a_string_removes_nothing()
-    {
-        using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName).WithEnrollment(ReplyOperations.Sequence, 1001);
-        account.Answers("GET", SequencePath + "/contacts/1001", 200, "\"active\"");
-
-        var error = await FailedAsync(account, "enrollment.stop", Person(
-            new JsonObject { ["channel"] = "email", ["reason"] = new JsonObject { ["code"] = "other" } },
-            pinned: "1001",
-            campaign: "7"));
-
-        Assert.Equal("provider_unavailable", error.Code);
-        Assert.Equal(FailureClass.Transient, error.Class);
+        Assert.Equal("provider_answer_lost", error.Code);
+        Assert.Equal(FailureClass.Ambiguous, error.Class);
         Assert.Equal([1001], account.EnrolledIn(ReplyOperations.Sequence));
     }
 

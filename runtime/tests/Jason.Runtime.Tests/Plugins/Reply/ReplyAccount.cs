@@ -6,6 +6,11 @@ using System.Text.Json.Nodes;
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>One call the stand-in was asked to make, as it recorded it before answering.</summary>
+/// <param name="Command">The command's two words, such as <c>sequence add-contact</c>; <c>api</c> for the raw call.</param>
+/// <param name="Operands">The positional arguments after the command: the ids, or the raw call's path.</param>
+/// <param name="Method">The raw call's HTTP method; empty for a command.</param>
+/// <param name="Path">The raw call's path and query; empty for a command.</param>
+/// <param name="Body">What the call read from stdin: the person, or the raw call's body.</param>
 /// <param name="Args">The whole argument vector, which is what makes "this flag never appears" assertable.</param>
 /// <param name="Environment">
 /// Every vendor-named variable the stand-in was started with. No <c>REPLY_*</c> name enters the runtime, so what
@@ -13,11 +18,33 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 /// package sets on the call itself, and this is where that is read rather than assumed.
 /// </param>
 public sealed record ReplyCall(
+    string Command,
+    IReadOnlyList<string> Operands,
     string Method,
     string Path,
     string? Body,
     IReadOnlyList<string> Args,
-    IReadOnlyDictionary<string, string> Environment);
+    IReadOnlyDictionary<string, string> Environment)
+{
+    /// <summary>The call as one line: <c>sequence get 7</c>, or <c>POST /v3/contacts/filter?top=100&amp;skip=0</c> for the raw call.</summary>
+    public string Line => Command == "api"
+        ? Method + " " + Path
+        : Operands.Count == 0 ? Command : Command + " " + string.Join(' ', Operands);
+
+    /// <summary>The value the call gave an option, or null when it gave none.</summary>
+    public string? Option(string flag)
+    {
+        for (var at = 0; at < Args.Count - 1; at++)
+        {
+            if (string.Equals(Args[at], flag, StringComparison.Ordinal))
+            {
+                return Args[at + 1];
+            }
+        }
+
+        return null;
+    }
+}
 
 /// <summary>
 /// One Reply account, as a directory of JSON files: the state the stand-in vendor CLI reads and writes, and the
@@ -162,11 +189,7 @@ public sealed class ReplyAccount : IDisposable
         return WithContact(id, (string)original["email"]!, (string?)original["firstName"]);
     }
 
-    /// <summary>
-    /// A contact list. It is not shared unless a test says so, which is how the lists a person makes for
-    /// themselves arrive — and a list that is not shared is one Reply's own <c>GET /v3/contacts/{id}/lists</c>
-    /// does not report, as a live account showed.
-    /// </summary>
+    /// <summary>A contact list and the contacts it holds; not shared unless a test says so.</summary>
     public ReplyAccount WithList(int id, string name, params int[] members) => WithList(id, name, shared: false, members);
 
     public ReplyAccount WithList(int id, string name, bool shared, params int[] members)
@@ -352,8 +375,9 @@ public sealed class ReplyAccount : IDisposable
     // -------------------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// The next call to this method and path answers with this status and body, whatever the account holds. The
-    /// body is written out as it is given, so a test can build an answer no provider would send.
+    /// The next raw call to this method and path — the contact search is the one the plugin makes — answers with this
+    /// status and body, whatever the account holds. The body is written out as it is given, so a test can build an
+    /// answer no provider would send.
     /// </summary>
     public ReplyAccount Answers(string method, string path, int code, string bodyJson) =>
         Script(new JsonObject
@@ -366,14 +390,7 @@ public sealed class ReplyAccount : IDisposable
         });
 
     /// <summary>
-    /// The next call to this method and path does everything it would have done and then says nothing useful
-    /// about it: the write lands, the answer is a gateway failure. That is the ending a recovery read exists for.
-    /// </summary>
-    public ReplyAccount LosesTheAnswerAfterWriting(string method, string path) =>
-        Script(new JsonObject { ["kind"] = "lost", ["method"] = method, ["path"] = path });
-
-    /// <summary>
-    /// The next call to this method and path writes exactly this on stdout and on stderr and ends with exactly
+    /// The next raw call to this method and path writes exactly this on stdout and on stderr and ends with exactly
     /// this code, whatever it would otherwise have answered. It is the one ending <see cref="Answers"/> cannot
     /// express — that one always prints the CLI's own <c>{code, data}</c> around whatever it is given — and a
     /// caller has to survive stdout that is not an envelope at all: a stack trace, half a line, or nothing.
@@ -390,7 +407,7 @@ public sealed class ReplyAccount : IDisposable
         });
 
     /// <summary>
-    /// The next call to this method and path says it has started — by creating <paramref name="marker"/> — and
+    /// The next raw call to this method and path says it has started — by creating <paramref name="marker"/> — and
     /// then waits for <paramref name="until"/> to appear before answering as it otherwise would. It is what
     /// <see cref="Hangs"/> cannot do: a delay says how long to wait, never that the waiting has begun, and a
     /// test that has to interrupt a call in flight can only be deterministic if it observes the call rather
@@ -407,7 +424,7 @@ public sealed class ReplyAccount : IDisposable
             ["timeout_ms"] = capMs,
         });
 
-    /// <summary>The next call to this method and path takes this long before it answers.</summary>
+    /// <summary>The next raw call to this method and path takes this long before it answers.</summary>
     public ReplyAccount Hangs(string method, string path, int milliseconds) =>
         Script(new JsonObject
         {
@@ -415,6 +432,98 @@ public sealed class ReplyAccount : IDisposable
             ["method"] = method,
             ["path"] = path,
             ["milliseconds"] = milliseconds,
+        });
+
+    /// <summary>The next run of this command prints this result and exits 0, whatever the account holds.</summary>
+    public ReplyAccount Returns(string command, JsonObject result, string? match = null)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        return Prints(command, 0, result.ToJsonString(), null, match);
+    }
+
+    /// <summary>
+    /// The next run of this command fails the way reply-cli fails: nothing on stdout, one <c>{"error":…}</c> line on
+    /// stderr, and this exit code. The members left null are left out, as reply-cli leaves them out.
+    /// </summary>
+    public ReplyAccount Refuses(
+        string command,
+        string code,
+        int exitCode = 1,
+        int? status = null,
+        string? replyCode = null,
+        string? detail = null,
+        JsonObject? ids = null,
+        JsonObject? details = null,
+        int? retryAfter = null,
+        string? match = null)
+    {
+        var error = new JsonObject { ["code"] = code, ["title"] = "The stand-in was told to refuse this." };
+        if (status is { } answered)
+        {
+            error["status"] = answered;
+        }
+
+        if (replyCode is not null)
+        {
+            error["reply_code"] = replyCode;
+        }
+
+        if (detail is not null)
+        {
+            error["detail"] = detail;
+        }
+
+        if (ids is not null)
+        {
+            error["ids"] = ids.DeepClone();
+        }
+
+        if (retryAfter is { } wait)
+        {
+            error["retry_after"] = wait;
+        }
+
+        if (details is not null)
+        {
+            error["details"] = details.DeepClone();
+        }
+
+        return Prints(command, exitCode, string.Empty, new JsonObject { ["error"] = error }.ToJsonString(), match);
+    }
+
+    /// <summary>The next run of this command writes exactly this and exits with exactly this code.</summary>
+    public ReplyAccount Prints(string command, int exitCode, string stdout, string? stderr = null, string? match = null) =>
+        Script(new JsonObject
+        {
+            ["kind"] = "prints",
+            ["command"] = command,
+            ["match"] = match,
+            ["exit_code"] = exitCode,
+            ["stdout"] = stdout,
+            ["stderr"] = stderr ?? string.Empty,
+        });
+
+    /// <summary>
+    /// The next run of this command does everything it would have done, and then answers as reply-cli answers a write
+    /// whose answer never came back: <c>outcome.unknown</c>, exit 3, with the ids it had learned.
+    /// </summary>
+    public ReplyAccount LosesTheOutcome(string command, string? match = null) =>
+        Script(new JsonObject { ["kind"] = "lost", ["command"] = command, ["match"] = match });
+
+    /// <summary>The next run of this command takes this long before it answers.</summary>
+    public ReplyAccount Hangs(string command, int milliseconds, string? match = null) =>
+        Script(new JsonObject { ["kind"] = "hang", ["command"] = command, ["match"] = match, ["milliseconds"] = milliseconds });
+
+    /// <summary>The next run of this command says it started, waits to be let go, then answers as it otherwise would.</summary>
+    public ReplyAccount HoldsOn(string command, string marker, string until, int capMs = 120_000, string? match = null) =>
+        Script(new JsonObject
+        {
+            ["kind"] = "hold",
+            ["command"] = command,
+            ["match"] = match,
+            ["marker"] = marker,
+            ["until"] = until,
+            ["timeout_ms"] = capMs,
         });
 
     /// <summary>
@@ -456,8 +565,12 @@ public sealed class ReplyAccount : IDisposable
                 }
 
                 calls.Add(new ReplyCall(
-                    call["method"]!.GetValue<string>(),
-                    call["path"]!.GetValue<string>(),
+                    call["command"]?.GetValue<string>() ?? "api",
+                    call["operands"] is JsonArray operands
+                        ? [.. operands.Select(operand => operand!.GetValue<string>())]
+                        : [call["path"]?.GetValue<string>() ?? string.Empty],
+                    call["method"]?.GetValue<string>() ?? string.Empty,
+                    call["path"]?.GetValue<string>() ?? string.Empty,
                     call["body"] is JsonValue body ? body.GetValue<string>() : null,
                     [.. call["args"]!.AsArray().Select(argument => argument!.GetValue<string>())],
                     (call["env"] as JsonObject ?? []).ToDictionary(

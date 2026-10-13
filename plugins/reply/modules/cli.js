@@ -1,31 +1,32 @@
 // The only place in this package where a command line is built.
 //
-// One place, so that "a person's address never travels as an argument" and "these flags never appear" are
-// properties of the package rather than of whoever wrote the newest module. The `exec` diagnostic records every
-// argument, and the runtime's logs may never hold contact data, so a request body goes on stdin and nowhere else.
-// A test on the runtime side reads the argument vector out of the stand-in's call log and holds it to exactly the
-// shape `args` builds here.
+// One place, so that "a person's data never travels as an argument" and "these flags never appear" are properties of
+// the package rather than of whoever wrote the newest module. The `exec` diagnostic records every argument, and the
+// runtime's logs may never hold contact data, so a person goes on stdin and nowhere else. A test on the runtime side
+// reads the argument vector out of the stand-in's call log and holds it to exactly the shapes built here.
 //
-// This module knows command lines and nothing about operations; the operation modules know Reply and nothing
-// about command lines. That split is what makes the rule above assertable instead of aspirational.
-import { callOf, cutAnswerRow, fail, lostAnswerRow } from "./errors.js";
+// This module knows command lines and how the Reply CLI ends, and nothing about operations; the operation modules know
+// which command serves them and nothing about command lines. That split is what makes the rules above assertable
+// instead of aspirational.
+import { codeOf, cutAnswerRow, fail, lostAnswerRow, rowOf } from "./errors.js";
 
 // The vendor program, by the name the manifest declares and the operator grants. The runtime decided at reload
 // what that name means on this machine; nothing here looks a program up for itself.
 const PROGRAM = "reply";
 
-// The host answers -1 when it could not start the program at all, and the CLI answers 2 when it refuses the call
-// it was handed. Neither can have reached the account.
+// The host answers -1 when it could not start the program at all.
 const NEVER_STARTED = -1;
+
+// What reply-cli's exit codes mean: 0 done, 1 failed with the main effect not done, 2 refused before anything was
+// sent, 3 a write whose outcome is unknown.
+const DONE = 0;
+const FAILED = 1;
 const REFUSED_THE_CALL = 2;
+const OUTCOME_UNKNOWN = 3;
 
-// The namespace reply-cli 0.5.1 gives the refusals that are about who is calling: `auth.required` when no
-// credential is stored, `auth.expired` and `auth.refresh_failed` when one is there and no longer works. All
-// three are decided before a request is built, and the set is open — a fourth would mean the same thing — so the
-// namespace is matched rather than the three names.
-const AUTHENTICATION = "auth.";
+const LARGEST_REPLY_NUMBER = 2147483647;
 
-// How much of a program's stderr is read to find its last line. A refusal is one short line; the rest is a
+// How much of a program's stderr is read to find the CLI's verdict. A refusal is one short line; the rest is a
 // bound, not a budget.
 const STDERR_TAIL = 8192;
 
@@ -50,16 +51,11 @@ function compact(request) {
   return cleaned;
 }
 
-/**
- * The whole argument vector for one call, exported so a test can read it rather than infer it from a log.
- * `--json -q [--profile P] [--team-id T] api <path> [--method M] [--body -]`, and nothing else ever.
- */
-export function args(context, method, path, hasBody) {
+// Which account a call acts in, from the route's binding. Never a key, never a user to act as: the CLI owns the
+// credential, and the binding is written by the people who operate the installation.
+function prefix(context) {
   const binding = (context && context.binding) || {};
   const line = ["--json", "-q"];
-
-  // Which account this call acts in, from the route's binding. Never a key, never a user to act as: the CLI owns
-  // the credential, and the binding is written by the people who operate the installation.
   if (binding.profile) {
     line.push("--profile", binding.profile);
   }
@@ -68,13 +64,27 @@ export function args(context, method, path, hasBody) {
     line.push("--team-id", binding.team_id);
   }
 
-  line.push("api", path);
+  return line;
+}
 
+/**
+ * The whole argument vector of one work command, exported so a test can read it rather than infer it from a log:
+ * `--json -q [--profile P] [--team-id T] <noun> <verb> [operands…] [flags…]`, and nothing else ever.
+ */
+export function commandArgs(context, command, operands, flags) {
+  return prefix(context).concat(command.split(" "), operands, flags);
+}
+
+/**
+ * The whole argument vector of the one raw call: `--json -q [--profile P] [--team-id T] api <path> [--method M]
+ * [--body -]`. The body itself goes on stdin: it carries a person's address, and arguments are written to the log.
+ */
+export function apiArgs(context, method, path, hasBody) {
+  const line = prefix(context).concat(["api", path]);
   if (method !== "GET") {
     line.push("--method", method);
   }
 
-  // The body itself goes on stdin. It carries a person's address, and arguments are written to the runtime's log.
   if (hasBody) {
     line.push("--body", "-");
   }
@@ -103,110 +113,177 @@ function timeoutOf(context) {
   return Math.min(total, Math.max(1, Math.floor(left - kept)));
 }
 
+function exec(context, args, stdin) {
+  return host.exec(compact({
+    executable: PROGRAM,
+    args: args,
+    stdin: stdin,
+    timeout_ms: timeoutOf(context),
+    // reply-cli 0.11.0 looks for a newer release only under `--version`, which this package never runs; the variable
+    // keeps a later release from doing it on a work command, where it would cost time inside the operation's budget,
+    // a write to the configuration directory and a notice on stderr. An ordinary name, so it needs no capability —
+    // and it is the only variable this package sets on anything.
+    env: { REPLY_NO_UPDATE_CHECK: "1" },
+  }));
+}
+
 /**
- * One call to Reply through the CLI: the answer is `{ code, data }` — Reply's own status and its body, whatever
- * that status was — and every other ending throws `host.fail` with the class the table decided. `learned` is what
- * this package already knows Reply calls our entities at the moment of the call; it travels out with a failure,
- * because after a lost answer a pin is the only trace of what was done. `operation` is the canonical operation the
- * call serves, because one ending — an answer too large to read whole — means something only a read's own row can
- * say.
+ * One reply-cli work command: its result object when it exits 0, and `host.fail` with the row the table decides for
+ * every other ending. `request` is `{ operation, command, operands, flags, stdin, learned }`: the canonical operation
+ * the command serves, the command's two words, its ids, its flags, the person for stdin, and what this package
+ * already knows Reply calls our entities — which travels out with a failure, joined by whatever the CLI says it had
+ * learned before it failed.
+ */
+export function run(context, request) {
+  const stdin = request.stdin === undefined || request.stdin === null ? undefined : JSON.stringify(request.stdin);
+  const answer = exec(context, commandArgs(context, request.command, request.operands || [], request.flags || []), stdin);
+  return ended(answer, request);
+}
+
+/**
+ * The one raw call this package still makes, `reply api`: the contact search a list add or an enrolment makes for a
+ * person with no pin and no first name. The answer is `{ code, data }` — Reply's own status and its body, whatever
+ * that status was — and every ending without one throws `host.fail`. The table knows the call as
+ * `api <METHOD> <path without its query>`, which is how its read/write mark is found.
  */
 export function call(context, method, path, body, learned, operation) {
   const hasBody = body !== undefined && body !== null;
-  const known = callOf(method, path);
-
-  const answer = host.exec(compact({
-    executable: PROGRAM,
-    args: args(context, method, path, hasBody),
-    stdin: hasBody ? JSON.stringify(body) : undefined,
-    timeout_ms: timeoutOf(context),
-    // The CLI otherwise asks whether a newer release exists: latency inside the operation's budget, a write to
-    // the configuration directory, and a notice on stderr, all for nothing. An ordinary name, so it needs no
-    // capability — and it is the only variable this package sets on anything.
-    env: { REPLY_NO_UPDATE_CHECK: "1" },
-  }));
-
-  return read(answer, known, learned, operation);
+  const named = "api " + method + " " + String(path).split("?")[0];
+  const answer = exec(context, apiArgs(context, method, path, hasBody), hasBody ? JSON.stringify(body) : undefined);
+  return answered(answer, named, learned, operation);
 }
 
-// The endings that are not an answer, each turned into the row that says what it means. Nothing else is ever
-// thrown from here: a plugin that threw something of its own would have the runtime call it `plugin_exception`,
-// which says nothing about whether the provider acted.
-function read(answer, known, learned, operation) {
-  const observed = {
-    call: known,
-    exit_code: answer.exit_code,
-    timed_out: answer.timed_out === true,
-  };
+// The endings that come before anything the program printed can be read. A timeout is read first, because a process
+// that was killed can report -1 exactly as a program that never started does, and reading the exit code first would
+// let a write that may have landed be called "never sent". An answer cut off at the exec capture is not parsed at
+// all: what survived the cut can even parse, and acting on half an answer is worse than having none. On a read it
+// fails with the operation's own row — the same read would be cut at the same byte — and anywhere else it keeps the
+// lost-answer ending.
+function failIfUnread(answer, command, operation, learned) {
+  const observed = { call: command, exit_code: answer.exit_code, timed_out: answer.timed_out === true };
 
-  // A timeout is read first, because a process that was killed can report -1 exactly as a program that never
-  // started does. Reading the exit code first would let a write that may have landed be called "never sent".
   if (answer.timed_out === true) {
-    observed.row = lostAnswerRow(known);
-    fail(null, observed, learned);
+    observed.row = lostAnswerRow(command);
+    fail(operation, observed, learned);
   }
 
   if (answer.exit_code === NEVER_STARTED) {
     observed.row = "program_never_started";
-    fail(null, observed, learned);
+    fail(operation, observed, learned);
   }
 
-  // An answer cut off at the exec capture is read before anything is parsed: what survived the cut can even parse,
-  // and acting on half an answer is worse than having none. On a read it fails with the operation's own row — the
-  // same read would be cut at the same byte — and anywhere else it keeps the lost-answer ending it always had.
   if (answer.truncated !== null && typeof answer.truncated === "object" && answer.truncated.stdout === true) {
-    observed.row = cutAnswerRow(operation, known);
+    observed.row = cutAnswerRow(operation, command);
     observed.reason = "The answer passed Plugins:Exec:OutputBytes and was cut off.";
-    fail(operation === undefined ? null : operation, observed, learned);
+    fail(operation, observed, learned);
   }
 
-  const parsed = parse(answer.stdout);
+  return observed;
+}
 
-  // Where the CLI left no answer at all, its own refusal decides — and it says why in a structured envelope,
-  // because this package always passes `--json`. That vocabulary is finer than the exit code's: "not signed in"
-  // and "unknown flag" are both exit 2, and only one of them is something an operator fixes by signing in. A
-  // refusal that was printed beside a readable answer is not read: an answer on stdout is the answer.
-  const said = parsed === null ? refusal(answer.stderr) : null;
-  if (said !== null && said.slice(0, AUTHENTICATION.length) === AUTHENTICATION) {
-    // Nothing was sent: the CLI never had a credential to send it with. Saying a write may have happened here
-    // would stop a work item for a person over an account that was never touched.
-    observed.row = "unauthorized";
-    // The CLI's own word for its refusal, in the field that carries the vendor side's own code. It is the whole
-    // of what an operator has to go on here, because there is no HTTP status to report.
-    observed.provider_code = said;
-    fail(null, observed, learned);
+// Every ending of a work command. Nothing else is ever thrown from here: a plugin that threw something of its own
+// would have the runtime call it `plugin_exception`, which says nothing about whether the provider acted.
+function ended(answer, request) {
+  const command = request.command;
+  const operation = request.operation;
+  const observed = failIfUnread(answer, command, operation, request.learned);
+
+  if (answer.exit_code === DONE) {
+    const result = resultOf(answer.stdout);
+    if (result === null) {
+      observed.row = lostAnswerRow(command);
+      fail(operation, observed, request.learned);
+    }
+
+    return result;
+  }
+
+  const said = verdict(answer.stderr);
+  if (said !== null) {
+    observed.cli_code = said.code;
+    observed.status = said.status;
+    observed.provider_code = said.reply_code;
+    observed.provider_detail = said.detail;
+    observed.retry_after = said.retry_after;
+    if (said.details !== null && typeof said.details === "object") {
+      observed.expected = said.details.expected;
+      observed.actual = said.details.actual;
+    }
+  }
+
+  if (answer.exit_code === OUTCOME_UNKNOWN) {
+    observed.row = lostAnswerRow(command);
+  } else if (answer.exit_code === REFUSED_THE_CALL) {
+    // Nothing was sent. The CLI's own word says whether it was about who is calling or about what was asked.
+    observed.row = said === null ? "call_refused_before_it_was_sent" : rowOf(operation, said);
+  } else if (answer.exit_code === FAILED && said !== null) {
+    observed.row = rowOf(operation, said);
+  } else {
+    // An exit the CLI did not explain: a crash, a stack trace. On a write it may have happened.
+    observed.row = lostAnswerRow(command);
+  }
+
+  fail(operation, observed, learnedWith(request.learned, said, operation, observed.row));
+}
+
+// Every ending of the raw call. `reply api` prints `{code, data}` for any status Reply answered, with exit 0 or 1, and
+// that is the answer whatever the status. An ending without it is the CLI's own: a refusal before sending (exit 2),
+// Reply not reached (exit 1), or a write whose outcome is unknown (exit 3) — which the CLI says of any POST, this
+// search included, and which the table's mark for this call reads as the read it is.
+function answered(answer, named, learned, operation) {
+  const observed = failIfUnread(answer, named, operation, learned);
+
+  const envelope = envelopeOf(answer.stdout);
+  if (envelope !== null) {
+    return envelope;
+  }
+
+  const said = verdict(answer.stderr);
+  if (said !== null) {
+    observed.cli_code = said.code;
   }
 
   if (answer.exit_code === REFUSED_THE_CALL) {
-    observed.row = "call_refused_before_it_was_sent";
-    observed.provider_code = said === null ? undefined : said;
-    fail(null, observed, learned);
+    observed.row = said === null ? "call_refused_before_it_was_sent" : rowOf(operation, said);
+  } else {
+    observed.row = lostAnswerRow(named);
   }
 
-  if (parsed === null) {
-    // Exit 1 with nothing to parse and no refusal of the CLI's own: it was cut off, or the machine it runs on
-    // could not reach Reply — endings that can be met after the request went out. The read/write mark decides,
-    // and a write is the expensive ending on purpose.
-    observed.row = lostAnswerRow(known);
-    fail(null, observed, learned);
-  }
-
-  return parsed;
+  fail(operation, observed, learned);
 }
 
-// The CLI's own refusal as it prints it under `--json`: one line of `{"error":{"code":…}}` on stderr, and the
-// exit code beside it. Only the code is read — the title and the hint are prose for a person — and only from the
-// last line, because anything the program said before it is not its verdict. Nothing here throws: stderr is
-// whatever the machine produced, and an unreadable one simply says nothing.
-function refusal(stderr) {
+// What a failure carries out: what this package knew, joined by the ids the CLI had learned — the contact it created
+// before Reply refused the add, say. A campaign the provider has just denied is never pinned.
+function learnedWith(learned, said, operation, row) {
+  const merged = Object.assign({}, learned || {});
+  const ids = said !== null && said.ids !== null && typeof said.ids === "object" ? said.ids : {};
+
+  if (isReplyNumber(ids.sequence_id)) {
+    merged.campaign = String(ids.sequence_id);
+  }
+
+  if (isReplyNumber(ids.contact_id)) {
+    merged.contact = String(ids.contact_id);
+  }
+
+  if (codeOf(operation, row) === "campaign_not_found") {
+    delete merged.campaign;
+  }
+
+  return Object.keys(merged).length === 0 ? undefined : merged;
+}
+
+// The CLI's verdict under `--json`: its one `{"error":{"code":…}}` line, the last such line on stderr. Node may print a
+// warning before it or after it — a deprecation, an unhandled rejection at exit — so other lines are passed over rather
+// than read as no verdict, which would turn a refusal into a lost answer. Bounded on purpose: a program that floods
+// stderr may not make reading its tail expensive.
+function verdict(stderr) {
   if (typeof stderr !== "string" || stderr.length === 0) {
     return null;
   }
 
-  // Bounded on purpose: a program that floods stderr may not make reading its last line expensive.
   const tail = stderr.length > STDERR_TAIL ? stderr.slice(stderr.length - STDERR_TAIL) : stderr;
   const lines = tail.split("\n");
-
   for (let at = lines.length - 1; at >= 0; at--) {
     const line = lines[at].trim();
     if (line.length === 0) {
@@ -217,33 +294,46 @@ function refusal(stderr) {
     try {
       parsed = JSON.parse(line);
     } catch (error) {
-      return null;
+      continue;
     }
 
     const error = parsed !== null && typeof parsed === "object" ? parsed.error : null;
-    return error !== null && typeof error === "object" && typeof error.code === "string" ? error.code : null;
+    if (error !== null && typeof error === "object" && typeof error.code === "string") {
+      return error;
+    }
   }
 
   return null;
 }
 
-// The CLI's own envelope: a status and the body Reply answered with, for any status. Anything else — an empty
-// stdout, half a line, a JSON value that is not that envelope — is not an answer and is treated as none.
-function parse(stdout) {
-  if (typeof stdout !== "string" || stdout.trim().length === 0) {
-    return null;
-  }
+// A command's result: one JSON object on stdout. Anything else — nothing, half a line, an array — is not an answer.
+function resultOf(stdout) {
+  const parsed = jsonOf(stdout);
+  return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+}
 
-  let parsed;
-  try {
-    parsed = JSON.parse(stdout);
-  } catch (error) {
-    return null;
-  }
-
+// The raw call's envelope: a status and the body Reply answered with, for any status. Anything else is not an answer.
+function envelopeOf(stdout) {
+  const parsed = jsonOf(stdout);
   if (parsed === null || typeof parsed !== "object" || typeof parsed.code !== "number") {
     return null;
   }
 
   return { code: parsed.code, data: parsed.data === undefined ? null : parsed.data };
+}
+
+function jsonOf(stdout) {
+  if (typeof stdout !== "string" || stdout.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(stdout);
+  } catch (error) {
+    return null;
+  }
+}
+
+function isReplyNumber(value) {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 && value <= LARGEST_REPLY_NUMBER;
 }

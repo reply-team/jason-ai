@@ -15,8 +15,6 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 public class ReplyConversationGetTests
 {
     private const string Operation = "conversation.get";
-    private const string HeaderPath = "/v3/inbox/threads/501";
-    private const string MessagesPath = "/v3/inbox/threads/501/messages";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -47,7 +45,9 @@ public class ReplyConversationGetTests
 
         // The thread named itself, so nothing is pinned; two reads, the header and then the page, with no body.
         Assert.Null(Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds);
-        Assert.Equal([$"GET {HeaderPath}", $"GET {MessagesPath}?top=20&skip=0"], account.Calls.Select(call => call.Method + " " + call.Path));
+        var call = Assert.Single(account.Calls);
+        Assert.Equal("inbox get 501", call.Line);
+        Assert.Equal(("20", "0"), (call.Option("--limit"), call.Option("--offset")));
         Assert.All(account.Calls, call => Assert.Null(call.Body));
     }
 
@@ -267,12 +267,12 @@ public class ReplyConversationGetTests
     }
 
     [Theory]
-    [InlineData("inboxThread.forbidden", "feature_unavailable")]
-    [InlineData("auth.scopeMissing", "unauthorized")]
-    public async Task A_403_is_a_feature_the_account_lacks_only_where_reply_says_so(string providerCode, string expected)
+    [InlineData("access.feature_unavailable", "inboxThread.forbidden", "feature_unavailable")]
+    [InlineData("access.denied", null, "unauthorized")]
+    public async Task A_403_is_a_feature_the_account_lacks_only_where_reply_says_so(string cliCode, string? providerCode, string expected)
     {
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.Answers("GET", HeaderPath, 403, new JsonObject { ["title"] = "Forbidden", ["status"] = 403, ["code"] = providerCode }.ToJsonString());
+        account.Refuses("inbox get", cliCode, status: 403, replyCode: providerCode);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -282,11 +282,11 @@ public class ReplyConversationGetTests
     }
 
     /// <summary>
-    /// Reply sends a thread's whole history with the thread, so a history long enough passes the exec capture
-    /// whatever page was asked for. That is permanent: asking again, for any page, would be cut the same way.
+    /// The CLI reads a thread without its inline history, so a history far longer than the exec capture is read a page
+    /// at a time, however long it grows.
     /// </summary>
     [Fact]
-    public async Task A_history_too_long_to_read_whole_is_too_large_however_small_the_page()
+    public async Task A_thread_with_a_long_history_is_read_a_page_at_a_time()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount());
         account.WithThread(Thread(501, [.. Enumerable.Range(0, 30).Select(at =>
@@ -294,11 +294,10 @@ public class ReplyConversationGetTests
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct, paths => Capping(paths, 65_536));
 
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input("501", limit: 1, offset: 0)));
+        var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input("501", limit: 1, offset: 0)));
 
-        Assert.Equal("provider_answer_too_large", error.Code);
-        Assert.Equal(FailureClass.Permanent, error.Class);
-        Assert.Equal("GET /v3/inbox/threads/{id}", (string?)error.Details!["call"]);
+        Assert.Single(answer["messages"]!.AsArray());
+        Assert.True((bool)answer["has_more"]!);
     }
 
     // -------------------------------------------------------------------------------------------------------

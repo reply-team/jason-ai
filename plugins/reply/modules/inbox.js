@@ -4,20 +4,23 @@
 // campaign by its sequence, a thread by the identifier the list returned. What Reply says about the person on a
 // thread is mapped to two things — their identifier and the name it shows — and never to the address, the phone,
 // the profile URL, the company or the title that come with them.
-import { call } from "./cli.js";
-import { callOf, fail, lostAnswerRow, observe, statusRow } from "./errors.js";
+import { run } from "./cli.js";
+import { fail, lostAnswerRow } from "./errors.js";
 import { fill } from "./page.js";
 import { cut, flag, identifier, isReplyNumber, lookup, text, utc, word } from "./reading.js";
 
 const LIST = "conversation.list";
 const GET = "conversation.get";
+const LIST_COMMAND = "inbox list";
+const GET_COMMAND = "inbox get";
 
 // What a message's body may be, and how many addresses each recipient list carries.
 const BODY = 12000;
 const RECIPIENTS = 10;
 
-// The refusal Reply gives an account whose plan or role does not include the inbox.
-const FORBIDDEN = "inboxThread.forbidden";
+// How far every thread is read, and how many threads one `inbox list` returns at most.
+const MERGE_REACH = 1000;
+const STEP = 100;
 
 const CHANNEL = { "email": "email", "linkedIn": "linkedin" };
 const STATE = { "ok": "ok", "needsAttention": "needs_attention" };
@@ -25,7 +28,7 @@ const AI_SENT = { "aiGenerated": "ai_generated", "aiGeneratedEdited": "ai_genera
 
 export function conversationList(input, context) {
   const person = Array.isArray(input.contacts) && input.contacts.length > 0 ? input.contacts[0] : null;
-  const filter = {};
+  let target;
   let learned;
 
   if (person !== null) {
@@ -41,7 +44,7 @@ export function conversationList(input, context) {
       fail(LIST, { call: null, row: "identifier_names_nothing", reason: "The pinned contact identifier is not a Reply contact number." }, undefined);
     }
 
-    filter.contactIds = [Number(pin)];
+    target = ["--contact-id", pin];
   } else {
     const pinned = input.campaign && input.campaign.external_ids && input.campaign.external_ids.campaign;
     const supplied = input.args.campaign && input.args.campaign.external_id;
@@ -50,16 +53,14 @@ export function conversationList(input, context) {
       fail(LIST, { call: null, row: "identifier_names_nothing", reason: "The campaign's identifier is not a Reply sequence number." }, undefined);
     }
 
-    filter.sequenceIds = [Number(sequence)];
+    target = ["--sequence-id", sequence];
 
     // Only a read that made the first link returns the campaign's identifier: a pin is never written twice.
     learned = pinned ? undefined : { campaign: sequence };
   }
 
-  // The contract keeps the threads that moved at or after `since`; Reply's `from` keeps only those that moved after
-  // it, to the millisecond. So it is asked from one millisecond earlier, and a thread whose last activity is stamped
-  // exactly at `since` is listed.
-  const from = typeof input.args.since === "string" ? new Date(Date.parse(input.args.since) - 1).toISOString() : undefined;
+  // The contract keeps the threads that moved at or after `since`, and so does the CLI's `--since`.
+  const since = typeof input.args.since === "string" ? ["--since", input.args.since] : [];
 
   const result = { items: [], has_more: false, vendor: { ordering: "last_activity_desc" } };
   let threads;
@@ -67,26 +68,26 @@ export function conversationList(input, context) {
 
   if (input.args.source === "inbound") {
     // One of Reply's own buckets, paged at Reply.
-    const page = readPage(context, bucket(filter, "inbox", from), input.args.limit, input.args.offset, learned);
+    const page = readPage(context, target, since, "inbox", input.args.limit, input.args.offset, learned);
     threads = page.threads;
     more = page.more;
   } else {
     // Every thread. Reply's filter has no bucket for that — with no source it answers the inbox, the threads with an
     // inbound message — so the inbox and the threads whose latest message is outbound are read, each from its first
-    // thread, and merged: by last activity, newest first, then by identifier, a thread found in both listed once.
-    // A page further in than one read of each can reach is refused rather than guessed at.
+    // thread, and merged: by last activity, newest first, then by identifier, a thread found in both listed once. A
+    // page further in than this package reads every thread is refused rather than guessed at.
     const reach = input.args.offset + input.args.limit;
     if (reach > MERGE_REACH) {
       fail(LIST, {
         call: null,
         row: "call_could_not_be_built",
-        reason: "source all reads Reply's inbox and its sent threads from the first thread each and merges them, and one read reaches at most "
+        reason: "source all reads Reply's inbox and its sent threads from the first thread each and merges them, as far as "
           + MERGE_REACH + " threads, so offset plus limit may not pass " + MERGE_REACH + ".",
       }, learned);
     }
 
-    const inbox = readPage(context, bucket(filter, "inbox", from), reach, 0, learned);
-    const sent = readPage(context, bucket(filter, "sent", from), reach, 0, learned);
+    const inbox = readBucket(context, target, since, "inbox", reach, learned);
+    const sent = readBucket(context, target, since, "sent", reach, learned);
     const merged = merge(inbox.threads, sent.threads);
     threads = merged.slice(input.args.offset, reach);
     more = inbox.more || sent.more || merged.length > reach;
@@ -99,44 +100,37 @@ export function conversationList(input, context) {
   return learned === undefined ? { result: result } : { result: result, external_ids: learned };
 }
 
-// How far one read of a bucket reaches: v3's largest page.
-const MERGE_REACH = 1000;
-
-// The filter with one of Reply's buckets and the lower bound, in the order the provider is asked them.
-function bucket(filter, source, from) {
-  const asked = Object.assign({}, filter, { source: source });
-  if (from !== undefined) {
-    asked.from = from;
+// One bucket, read from its first thread as far as `reach`: a hundred at a time, the CLI's largest page, stopping
+// where the bucket ends.
+function readBucket(context, target, since, source, reach, learned) {
+  let threads = [];
+  for (let skip = 0; skip < reach; skip += STEP) {
+    const page = readPage(context, target, since, source, Math.min(STEP, reach - skip), skip, learned);
+    threads = threads.concat(page.threads);
+    if (!page.more) {
+      return { threads: threads, more: false };
+    }
   }
 
-  return asked;
+  return { threads: threads, more: true };
 }
 
 // One page of a bucket, read and mapped; any refusal ends the operation in its own words.
-function readPage(context, filter, top, skip, learned) {
-  const path = "/v3/inbox/threads/filter?top=" + top + "&skip=" + skip;
-  const known = callOf("POST", path);
-  const answer = call(context, "POST", path, filter, learned, LIST);
+function readPage(context, target, since, source, limit, offset, learned) {
+  const page = run(context, {
+    operation: LIST,
+    command: LIST_COMMAND,
+    operands: [],
+    flags: target.concat(["--source", source], since, ["--limit", String(limit), "--offset", String(offset)]),
+    learned: learned,
+  });
 
-  if (answer.code !== 200) {
-    // A campaign Reply does not hold answers an empty page, not a refusal, so there is no `*_not_found` here. A
-    // contact identifier Reply does not hold is refused, as a 400 with no code of its own, which is the refusal
-    // this version has no word for.
-    const seen = observe(known, answer, statusRow(answer.code, known));
-    if (answer.code === 403 && seen.provider_code === FORBIDDEN) {
-      seen.row = "feature_not_included";
-    }
-
-    fail(LIST, seen, learned);
+  const threads = Array.isArray(page.items) ? page.items.map(listed) : null;
+  if (threads === null || threads.indexOf(null) >= 0 || typeof page.has_more !== "boolean") {
+    fail(LIST, { call: LIST_COMMAND, row: lostAnswerRow(LIST_COMMAND) }, learned);
   }
 
-  const page = answer.data;
-  const threads = page !== null && typeof page === "object" && Array.isArray(page.items) ? page.items.map(listed) : null;
-  if (threads === null || threads.indexOf(null) >= 0) {
-    fail(LIST, observe(known, answer, lostAnswerRow(known)), learned);
-  }
-
-  return { threads: threads, more: page.hasMore === true };
+  return { threads: threads, more: page.has_more };
 }
 
 // Two buckets as one list: newest activity first, then the larger identifier, and a thread in both once.
@@ -163,72 +157,41 @@ export function conversationGet(input, context) {
     fail(GET, { call: null, row: "conversation_not_found" }, undefined);
   }
 
-  // The header first: the thread itself, with its whole history inline — which is why a history too long to read
-  // whole fails here, as too large, and never as a page.
-  const header = read(context, "/v3/inbox/threads/" + thread);
-  const messages = read(context, "/v3/inbox/threads/" + thread + "/messages?top=" + input.args.limit + "&skip=" + input.args.offset);
+  const read = run(context, {
+    operation: GET,
+    command: GET_COMMAND,
+    operands: [thread],
+    flags: ["--limit", String(input.args.limit), "--offset", String(input.args.offset)],
+  });
 
-  if (header.thread === null) {
-    // A 200 whose body is not a thread is not an answer; on a read, it is asked again.
-    fail(GET, observe(header.known, header.answer, lostAnswerRow(header.known)), undefined);
+  const head = header(read.thread);
+  const page = read.messages !== null && typeof read.messages === "object" ? read.messages : null;
+  const entries = page !== null && Array.isArray(page.items) ? page.items.map(message) : null;
+  if (head === null || entries === null || entries.indexOf(null) >= 0) {
+    // A result that is not a thread and a page of its messages is not an answer; on a read, it is asked again.
+    fail(GET, { call: GET_COMMAND, row: lostAnswerRow(GET_COMMAND) }, undefined);
   }
 
-  const page = messages.data;
-  const entries = page !== null && typeof page === "object" && Array.isArray(page.items) ? page.items.map(message) : null;
-  if (entries === null || entries.indexOf(null) >= 0) {
-    fail(GET, observe(messages.known, messages.answer, lostAnswerRow(messages.known)), undefined);
-  }
-
-  const result = { thread: header.thread, messages: [], has_more: false, vendor: { ordering: "oldest_first" } };
+  const result = { thread: head, messages: [], has_more: false, vendor: { ordering: "oldest_first" } };
   const filled = fill(entries, result);
   result.messages = filled.items;
-  result.has_more = page.hasMore === true || filled.cut;
+  result.has_more = page.has_more === true || filled.cut;
 
   // Nothing is pinned: the thread named itself, and its person is reported, never linked.
   return { result: result };
 }
 
-// One read of the thread, refused in the operation's own words where Reply has them.
-function read(context, path) {
-  const known = callOf("GET", path);
-  const answer = call(context, "GET", path, undefined, undefined, GET);
-
-  if (answer.code === 404) {
-    fail(GET, observe(known, answer, "conversation_not_found"), undefined);
-  }
-
-  if (answer.code !== 200) {
-    const seen = observe(known, answer, statusRow(answer.code, known));
-    if (answer.code === 403 && seen.provider_code === FORBIDDEN) {
-      seen.row = "feature_not_included";
-    }
-
-    fail(GET, seen, undefined);
-  }
-
-  return { known: known, answer: answer, data: answer.data, thread: header(answer.data) };
-}
-
-// The thread as the document publishes it, from Reply's header. Reply's thread carries no subject of its own, so
-// the subject is the one the last email message of its history carries; a channel without subjects has none.
+// The thread as the document publishes it. Reply's thread has no subject of its own; the CLI gives the subject of its
+// latest email message, and none for a channel without subjects.
 function header(data) {
   if (data === null || typeof data !== "object" || Array.isArray(data) || identifier(data.id) === null) {
     return null;
   }
 
-  const history = Array.isArray(data.messages) ? data.messages : [];
-  let subject = null;
-  for (let at = history.length - 1; at >= 0 && subject === null; at--) {
-    const entry = history[at];
-    if (entry !== null && typeof entry === "object" && entry.channel === "email") {
-      subject = text(entry.subject, 1000);
-    }
-  }
-
   return {
     external_id: identifier(data.id),
     channel: lookup(CHANNEL, data.channel) || "other",
-    subject: subject,
+    subject: text(data.subject, 1000),
     contact: party(data.contact),
     campaign_external_id: data.sequence !== null && typeof data.sequence === "object" ? identifier(data.sequence.id) : null,
     unread: data.isRead === false,

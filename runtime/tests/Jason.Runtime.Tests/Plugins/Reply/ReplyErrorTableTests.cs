@@ -137,24 +137,6 @@ public class ReplyErrorTableTests
     }
 
     [Fact]
-    public void Every_call_the_package_makes_is_marked_a_read_or_a_write()
-    {
-        var calls = ReplyErrorTable.Calls;
-        Assert.NotEmpty(calls);
-
-        foreach (var (call, marked) in calls)
-        {
-            var kind = Text(marked!.AsObject(), "kind");
-            Assert.True(kind is "read" or "write", $"'{call}' is marked '{kind}', which decides nothing.");
-        }
-
-        // The mark is per call and not per verb, which is the whole reason it is written down: an import is a
-        // POST that creates people, and a search would be a POST that changes nothing.
-        Assert.Equal("write", Text(calls["POST /v3/contacts/import"]!.AsObject(), "kind"));
-        Assert.Equal("read", Text(calls["GET /v3/sequences/{id}"]!.AsObject(), "kind"));
-    }
-
-    [Fact]
     public void A_lost_answer_is_ambiguous_on_a_write_and_only_transient_on_a_read()
     {
         var shared = ReplyErrorTable.Shared;
@@ -243,17 +225,63 @@ public class ReplyErrorTableTests
         Assert.DoesNotContain(ReplyErrorTable.Rows("campaign.get"), entry => Text(entry.Row, "code") == "limit_reached");
     }
 
+    [Fact]
+    public void Every_command_the_package_runs_is_marked_a_read_or_a_write()
+    {
+        var commands = ReplyErrorTable.Commands;
+        Assert.NotEmpty(commands);
+
+        foreach (var (command, marked) in commands)
+        {
+            var kind = Text(marked!.AsObject(), "kind");
+            Assert.True(kind is "read" or "write", $"'{command}' is marked '{kind}', which decides nothing.");
+        }
+
+        // The mark is per command, and the one raw call is a POST that only reads.
+        Assert.Equal("write", Text(commands["sequence add-contact"]!.AsObject(), "kind"));
+        Assert.Equal("read", Text(commands["api POST /v3/contacts/filter"]!.AsObject(), "kind"));
+    }
+
+    /// <summary>
+    /// A CLI code mapped to a row the operation does not have would end in the package's own defect message rather
+    /// than in the canonical code the operation declares, so every mapping is held to the rows it names.
+    /// </summary>
+    [Fact]
+    public void Every_code_the_table_maps_lands_on_a_row_that_exists()
+    {
+        foreach (var (code, row) in ReplyErrorTable.Codes["shared"]!.AsObject())
+        {
+            Assert.True(
+                ReplyErrorTable.Shared.ContainsKey(row!.GetValue<string>()),
+                $"shared code '{code}' maps to '{row}', which is no shared row.");
+        }
+
+        foreach (var (operation, mapping) in ReplyErrorTable.Codes["per_operation"]!.AsObject())
+        {
+            Assert.Contains(operation, ReplyErrorTable.Performed());
+            var rows = ReplyErrorTable.Rows(operation).Select(entry => entry.Key).ToHashSet(StringComparer.Ordinal);
+            foreach (var (code, row) in mapping!.AsObject())
+            {
+                Assert.True(rows.Contains(row!.GetValue<string>()), $"{operation} maps '{code}' to '{row}', which it has no row for.");
+            }
+        }
+    }
+
     private static string Text(JsonObject row, string member) => row[member]?.GetValue<string>() ?? string.Empty;
 }
 
 /// <summary>
-/// The package's own table, read out of the package's own file. <c>CALLS</c> and <c>ROWS</c> are written as
+/// The package's own table, read out of the package's own file. <c>COMMANDS</c>, <c>CODES</c> and <c>ROWS</c> are written as
 /// strict JSON object literals precisely so this reader can exist: one source for the table, no JSON twin beside
 /// it to fall out of step, and a test that fails the moment the package names something the contracts do not.
 /// </summary>
 internal static class ReplyErrorTable
 {
-    public static JsonObject Calls => Table("CALLS");
+    /// <summary>Every command the package runs, and whether it is a read or a write.</summary>
+    public static JsonObject Commands => Table("COMMANDS");
+
+    /// <summary>Which row each of reply-cli's error codes is: shared, and per operation.</summary>
+    public static JsonObject Codes => Table("CODES");
 
     /// <summary>The operations the package's manifest says it performs, read from its one <c>operations:</c> line.</summary>
     public static IReadOnlyList<string> Performed()

@@ -134,16 +134,18 @@ public class InboundSyncE2ETests
             it, "journal", "list", "--campaign", campaign, "--kind", "inbound_reply_observed")))["items"]!.AsArray();
         Assert.Single(lines);
 
-        // 4. The provider was only read: every call since the reply is the inbox filter, for this sequence, from a moment.
+        // 4. The provider was only read: every call since the reply is the inbox list for this sequence, from a moment.
         var calls = it.Account.CallsSince(beforeTheRead);
         Assert.NotEmpty(calls);
         Assert.All(calls, call =>
         {
-            Assert.Equal("POST", call.Method);
-            Assert.Equal("/v3/inbox/threads/filter?top=100&skip=0", call.Path);
-            Assert.Contains("\"sequenceIds\":[7]", call.Body, StringComparison.Ordinal);
-            Assert.Contains("\"source\":\"inbox\"", call.Body, StringComparison.Ordinal);
-            Assert.Contains("\"from\":", call.Body, StringComparison.Ordinal);
+            Assert.Equal("inbox list", call.Command);
+            Assert.Equal("7", call.Option("--sequence-id"));
+            Assert.Equal("inbox", call.Option("--source"));
+            Assert.NotNull(call.Option("--since"));
+            Assert.Equal("100", call.Option("--limit"));
+            Assert.Equal("0", call.Option("--offset"));
+            Assert.Null(call.Body);
         });
 
         // 5. The person's words stayed at the provider: not in the chronicle, and not in the runtime's own log, read

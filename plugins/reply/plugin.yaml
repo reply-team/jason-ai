@@ -1,6 +1,6 @@
 manifest_version: 1
 id: reply
-version: 0.2.6
+version: 0.3.0
 kind: provider
 name: Reply
 description: >-
@@ -21,10 +21,10 @@ capabilities:
     # account. A language runtime is never declared here — granting one would reach every program it can start.
     executables:
       - name: reply
-        # The oldest release whose `api` subcommand answers the way every operation below depends on: the
-        # {code, data} envelope on stdout, a body read from stdin, and an exit code that separates a usage
-        # refusal from an answer. A reload runs the version command and refuses an older one.
-        min_version: 0.5.0
+        # The oldest release that has the work commands every operation below runs — `reply sequence add-contact`,
+        # `reply inbox list` and the rest — with the results and the error codes this package reads, and a start
+        # that says the state it left. A reload runs the version command and refuses an older one.
+        min_version: 0.11.0
         version_command: ["--version"]
   # No `http`: every provider call goes through the CLI, which is what holds the credential. A package that could
   # reach the API directly would need a credential of its own, and then there would be two places one can leak
@@ -34,11 +34,11 @@ capabilities:
   # or REPLY_CONFIG_DIR deliberately does not reach the child, so an account is chosen by the binding below and by
   # the profile store the CLI already keeps, never by whatever happened to be exported in a shell.
 #
-# Memory, and nothing else. The budget counts what an invocation allocates, every answer it reads included, and a
-# read of a thread reads two answers that can each be as large as the exec capture (`Plugins:Exec:OutputBytes`,
-# 4 MiB by default): the thread with its whole history, then the page. Measured, two answers of 1.4 MB allocate
-# 68 MB with the parsing and the mapping around them, so 256 MiB holds two at the cap, under the installation's
-# default ceiling of 512.
+# Memory, and nothing else. The budget counts what an invocation allocates, every answer it reads included, and an
+# answer can be as large as the exec capture (`Plugins:Exec:OutputBytes`, 4 MiB by default). It was set for a thread
+# read that held two answers at the cap — the thread with its whole history, then the page. The CLI's thread no
+# longer carries its history, so that read now holds one; 256 MiB is kept, under the installation's default ceiling
+# of 512.
 #
 # No `timeout_ms`: the installation's default timeout is the budget of the slowest operation this runtime
 # publishes, and a package's own limit can only lower what an operation asks for. `campaign.enroll` is allowed

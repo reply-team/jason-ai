@@ -302,14 +302,11 @@ public class ReplyCampaignGetTests
     }
 
     [Fact]
-    public async Task A_credential_that_may_not_read_campaigns_fails_permanently_and_nothing_parses_its_body()
+    public async Task A_credential_that_may_not_read_campaigns_fails_permanently()
     {
         using var account = new ReplyAccount();
         account.WithSequence(Sequence, "Q3 outbound", "active");
-
-        // Reply's 401 has an empty body. A plugin that parsed one would fail on the answer it is most likely to
-        // meet, so the account is told to answer exactly that.
-        account.Answers("GET", "/v3/sequences/7", 401, string.Empty);
+        account.Refuses("sequence get", "access.denied", status: 401);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -326,7 +323,7 @@ public class ReplyCampaignGetTests
     {
         using var account = new ReplyAccount();
         account.WithSequence(Sequence, "Q3 outbound", "active");
-        account.Answers("GET", "/v3/sequences/7", 429, Problem(429, "Too Many Requests", "rateLimit.exceeded").ToJsonString());
+        account.Refuses("sequence get", "rate_limited", status: 429, retryAfter: 30);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -335,6 +332,7 @@ public class ReplyCampaignGetTests
         var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
         Assert.Equal("rate_limited", failed.Error.Code);
         Assert.Equal(FailureClass.Transient, failed.Error.Class);
+        Assert.Equal(30, (int)failed.Error.Details!["retry_after"]!);
     }
 
     [Fact]
@@ -342,7 +340,7 @@ public class ReplyCampaignGetTests
     {
         using var account = new ReplyAccount();
         account.WithSequence(Sequence, "Q3 outbound", "active");
-        account.Answers("GET", "/v3/sequences/7", 503, Problem(503, "Service Unavailable", "server.unavailable").ToJsonString());
+        account.Refuses("sequence get", "reply.unavailable", status: 503);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -361,7 +359,7 @@ public class ReplyCampaignGetTests
     {
         using var account = new ReplyAccount();
         account.WithSequence(Sequence, "Q3 outbound", "active");
-        account.Answers("GET", "/v3/sequences/7", 429, Problem(429, "Too Many Requests", "rateLimit.exceeded").ToJsonString());
+        account.Refuses("sequence get", "rate_limited", status: 429, retryAfter: 30);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -380,6 +378,41 @@ public class ReplyCampaignGetTests
         Assert.Equal("7", outcome.ExternalIds!["campaign"]!.GetValue<string>());
     }
 
+    /// <summary>reply-cli's verdict is its one error line on stderr; Node may print a warning before it or after it.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task The_cli_s_verdict_is_found_among_other_lines_on_stderr(bool warningAfter)
+    {
+        const string Warning = "(node:4242) ExperimentalWarning: something unrelated";
+        const string Verdict = """{"error":{"code":"sequence.not_found","title":"This account has no sequence 7.","status":404}}""";
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.Prints("sequence get", 1, string.Empty, warningAfter ? Verdict + "\n" + Warning : Warning + "\n" + Verdict);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(supplied: "7"), Ct));
+
+        Assert.Equal("campaign_not_found", error.Code);
+        Assert.Null(error.ExternalIds);
+    }
+
+    /// <summary>An exit the CLI did not explain — a crash and its stack trace — is a read that did not answer: asked again.</summary>
+    [Fact]
+    public async Task An_exit_the_cli_did_not_explain_is_transient_on_a_read()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.Prints("sequence get", 1, string.Empty, "TypeError: Cannot read properties of undefined\n    at main (index.js:1:1)");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(supplied: "7"), Ct));
+
+        Assert.Equal("provider_unavailable", error.Code);
+        Assert.Equal(FailureClass.Transient, error.Class);
+        Assert.Equal(1, (int)error.Details!["exit_code"]!);
+    }
+
     // -------------------------------------------------------------------------------------------------------
     // What the call log has to show
     // -------------------------------------------------------------------------------------------------------
@@ -394,11 +427,11 @@ public class ReplyCampaignGetTests
 
         Succeeded(await InvokeAsync(api, Input(supplied: "7"), Ct));
 
-        // The whole command line, read out of the stand-in's own log rather than inferred: the global prefix
-        // the package promises, the `api` subcommand, the path — no method, because it is a read, and no body,
-        // because a read has none. A route with no binding names neither a profile nor a team.
+        // The whole command line, read out of the stand-in's own log rather than inferred: the global prefix the
+        // package promises, the command and the sequence — and nothing on stdin, because a read carries no person. A
+        // route with no binding names neither a profile nor a team.
         var call = Assert.Single(account.Calls);
-        Assert.Equal(["--json", "-q", "api", "/v3/sequences/7"], call.Args);
+        Assert.Equal(["--json", "-q", "sequence", "get", "7"], call.Args);
         Assert.Null(call.Body);
     }
 
@@ -424,16 +457,6 @@ public class ReplyCampaignGetTests
         },
     };
 
-    /// <summary>A problem document of the shape Reply answers a refusal in, built rather than written out.</summary>
-    private static JsonObject Problem(int status, string title, string code) => new()
-    {
-        ["type"] = "about:blank",
-        ["title"] = title,
-        ["status"] = status,
-        ["detail"] = "The stand-in was told to answer this.",
-        ["code"] = code,
-    };
-
     /// <summary>The result the plugin answered with, having first been held to the operation's own document.</summary>
     private static JsonObject Succeeded(PluginInvocationResult result)
     {
@@ -449,8 +472,7 @@ public class ReplyCampaignGetTests
     private static void AssertTheSequenceWasRead(ReplyAccount account)
     {
         var call = Assert.Single(account.Calls);
-        Assert.Equal("GET", call.Method);
-        Assert.Equal($"/v3/sequences/{Sequence}", call.Path);
+        Assert.Equal($"sequence get {Sequence}", call.Line);
         Assert.Null(call.Body);
     }
 

@@ -35,17 +35,6 @@ public class ReplyMembershipTests
     /// <summary>The identifier Reply gives the first contact an account creates.</summary>
     private const string Ensured = "1001";
 
-    /// <summary>
-    /// The recovery read, as it appears in the call log: the contacts search scoped to this list, asked for a
-    /// page at a time. Reply's own read from the person's side — <c>GET /v3/contacts/{id}/lists</c> — answers
-    /// nothing for a list that is not shared, which a live account settled, so this is the read the obligation
-    /// is performed with.
-    /// </summary>
-    private const string RecoveryRead = "POST " + FilterPath;
-
-    /// <summary>The path of that read, for a test that scripts what the search answers.</summary>
-    private const string FilterPath = "/v3/contacts/filter?top=1000";
-
     private const string Address = "marta@example.com";
     private const string FirstName = "Marta";
     private const string LastName = "Alvarez";
@@ -73,7 +62,10 @@ public class ReplyMembershipTests
         // carries reaches Reply nowhere at all — which is what stops two spellings of one address ever becoming
         // two people.
         Assert.Equal("added", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal([$"GET /v3/contacts/{Ensured}/statuses", $"POST /v3/contact-lists/{List}/add-contacts"], Paths(account));
+        Assert.Equal(["contact-list add-contact 9"], Paths(account));
+        Assert.Equal(Ensured, account.Calls[0].Option("--contact-id"));
+        Assert.Contains("--refuse-opted-out", account.Calls[0].Args);
+        Assert.Null(account.Calls[0].Body);
         Assert.DoesNotContain(Address, Everything(account), StringComparison.OrdinalIgnoreCase);
         Assert.Equal([1001], account.MembersOf(List));
     }
@@ -96,103 +88,247 @@ public class ReplyMembershipTests
         var outcome = Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
         Assert.Equal(Ensured, outcome.ExternalIds!["contact"]!.GetValue<string>());
         Assert.Equal([1001], account.MembersOf(List));
+
+        // One command, and the person on stdin for the CLI to import.
+        var call = Assert.Single(account.Calls);
+        Assert.Equal("-", call.Option("--contact"));
+        Assert.Contains(Address, call.Body!, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Reply keeps one membership however often a person is added, and does not say whether they were there already,
+    /// so a second call answers `added` again: the effect at Reply is the same.
+    /// </summary>
     [Fact]
-    public async Task A_second_call_under_the_same_key_answers_already_member_and_writes_nothing()
+    public async Task A_second_call_answers_added_and_leaves_one_membership()
     {
-        using var account = new ReplyAccount();
-        account.WithContact(1001, Address, FirstName).WithList(List, "Q3 LatAm founders");
+        using var account = ReplyOperations.Plant(new ReplyAccount());
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct));
-        var mark = account.Mark();
+        var first = Succeeded(await InvokeAsync(api, Input(), Ct));
+        var second = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2));
 
-        var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2));
-
-        // From a mark taken after the first attempt, or the assertion would run over that attempt's own write.
-        // One read and no write: the membership the provider already holds is the answer, and answering it is
-        // what makes one crash cost one effect rather than two. The opt-out register is not consulted at all,
-        // because nothing is going to be written.
-        Assert.Equal("already_member", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal([RecoveryRead], PathsSince(account, mark));
-    }
-
-    [Fact]
-    public async Task The_recovery_read_is_reached_by_the_attempt_number_and_not_by_the_key_alone()
-    {
-        // The document words this operation's repeat as "a second call under the same idempotency key", and this
-        // package never reads that key: `docs/plugins.md` §7 says `context.attempt_number` is what tells a plugin
-        // it is being repeated, and that is what the recovery read is hung on. The two move together for every
-        // call the runtime makes — one work item, one key, a rising attempt number — so no test that repeats an
-        // attempt can tell the two apart. This one separates them, and records the answer: the key alone buys
-        // nothing, and a second call that does not say it is a second attempt writes again.
-        using var account = new ReplyAccount();
-        account.WithContact(1001, Address, FirstName).WithList(List, "Q3 LatAm founders");
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct));
-        var mark = account.Mark();
-
-        // The same input, the same idempotency key, and no claim to be a repeat.
-        Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct));
-
-        // No recovery read, and the add is made a second time. That is the honest shape of what this provider
-        // supports: Reply has no ledger under a key to consult, so nothing but the attempt number distinguishes
-        // a repeat, and it is the runtime that raises it.
-        Assert.DoesNotContain(RecoveryRead, PathsSince(account, mark));
-        Assert.Contains($"POST /v3/contact-lists/{List}/add-contacts", PathsSince(account, mark));
-    }
-
-    [Fact]
-    public async Task A_person_who_opted_out_after_the_add_landed_is_not_told_the_add_failed()
-    {
-        // The document says to answer from the recovery read when the effect already happened, so that reading
-        // comes before anything else on a repeated attempt. A person can opt out between two attempts, and
-        // answering `suppressed` here would report a permanent failure for work the provider already did —
-        // sending an operator after an item that is finished.
-        using var account = new ReplyAccount();
-        account.WithContact(1001, Address, FirstName, optedOut: true)
-            .WithList(List, "Q3 LatAm founders", 1001);
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2));
-
-        Assert.Equal("already_member", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.DoesNotContain($"GET /v3/contacts/{Ensured}/statuses", PathsSince(account, 0));
-    }
-
-    [Fact]
-    public async Task An_attempt_after_a_lost_answer_reads_the_membership_before_it_writes()
-    {
-        using var account = new ReplyAccount();
-        account.WithList(List, "Q3 LatAm founders")
-            .LosesTheAnswerAfterWriting("POST", $"/v3/contact-lists/{List}/add-contacts");
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var lost = await InvokeAsync(api, Input(), Ct);
-
-        // The write landed and the answer did not. Nothing about the attempt can say which, so it ends
-        // ambiguous — and it carries out the identifier of the contact it ensured, because after a lost answer
-        // that pin is the only trace that anything happened at all.
-        var failed = Assert.IsType<InvocationOutcome.Failed>(lost.Outcome);
-        Assert.Equal("provider_answer_lost", failed.Error.Code);
-        Assert.Equal(FailureClass.Ambiguous, failed.Error.Class);
-        Assert.Equal(Ensured, failed.Error.ExternalIds!["contact"]!.GetValue<string>());
+        Assert.Equal("added", (string?)first["items"]![0]!["status"]);
+        Assert.Equal("added", (string?)second["items"]![0]!["status"]);
         Assert.Equal([1001], account.MembersOf(List));
+    }
 
-        var mark = account.Mark();
-        var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2));
+    [Fact]
+    public async Task An_attempt_after_a_lost_answer_runs_the_add_again_and_leaves_one_membership()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.LosesTheOutcome("contact-list add-contact");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        // One read, and it is the declared one: the membership the account already holds is the answer, so one
-        // crash left one effect rather than two. The opt-out register is not read here because nothing is going
-        // to be written — it is consulted only on the path that still has a write ahead of it.
-        Assert.Equal("already_member", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal([RecoveryRead], PathsSince(account, mark));
+        var lost = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(), Ct));
+        Assert.Equal("provider_answer_lost", lost.Code);
+        Assert.Equal(FailureClass.Ambiguous, lost.Class);
+        Assert.Equal(Ensured, (string?)lost.ExternalIds!["contact"]);
+
+        var repeat = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2));
+        Assert.Equal("added", (string?)repeat["items"]![0]!["status"]);
+        Assert.Equal([1001], account.MembersOf(List));
+    }
+
+    /// <summary>
+    /// The add refuses a person Reply holds as opted out, so a person who opts out after a first attempt's add landed is
+    /// reported suppressed by the second. That is the one known edge of a single command, and one membership stays.
+    /// </summary>
+    [Fact]
+    public async Task A_person_who_opted_out_between_two_attempts_is_reported_suppressed()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.LosesTheOutcome("contact-list add-contact");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        Assert.Equal("provider_answer_lost", ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(), Ct)).Code);
+        account.WithContact(1001, Address, FirstName, optedOut: true);
+
+        var repeat = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2));
+        Assert.Equal("suppressed", repeat.Code);
+        Assert.Equal([1001], account.MembersOf(List));
+    }
+
+    [Fact]
+    public async Task A_person_without_a_first_name_whom_reply_holds_is_found_by_address_and_added_by_id()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount()).WithContact(2001, Address.ToUpperInvariant(), FirstName);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = Succeeded(await InvokeAsync(api, Input(firstName: null), Ct));
+
+        Assert.Equal("2001", (string?)answer["items"]![0]!["external_ids"]!["contact"]);
+        Assert.Equal(["POST /v3/contacts/filter?top=100&skip=0", "contact-list add-contact 9"], account.Calls.Select(call => call.Line));
+        Assert.Equal("2001", account.Calls[1].Option("--contact-id"));
+        Assert.Null(account.Calls[1].Body);
+        Assert.Equal([2001], account.MembersOf(List));
+    }
+
+    [Fact]
+    public async Task A_person_without_a_first_name_whom_reply_does_not_hold_is_refused_before_any_add()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(firstName: null), Ct));
+
+        Assert.Equal("provider_call_failed", error.Code);
+        Assert.Equal(FailureClass.Permanent, error.Class);
+        Assert.Contains("first name", error.Message, StringComparison.Ordinal);
+        Assert.Equal(["POST /v3/contacts/filter?top=100&skip=0"], account.Calls.Select(call => call.Line));
+        Assert.Empty(account.Contacts);
+    }
+
+    /// <summary>Review focus 1: Reply's search matches by containment; only an exact address is the person.</summary>
+    [Fact]
+    public async Task A_person_without_a_first_name_is_never_added_as_somebody_whose_address_only_contains_theirs()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount()).WithContact(2001, "jo" + Address, "Jo");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(firstName: null), Ct));
+
+        Assert.Equal("provider_call_failed", error.Code);
+        Assert.Contains("first name", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(account.Calls, call => call.Command == "contact-list add-contact");
+        Assert.Empty(account.MembersOf(List));
+    }
+
+    /// <summary>Two contacts under the address: picking one would be guessing whom the work is about, so nobody is added.</summary>
+    [Fact]
+    public async Task A_person_without_a_first_name_held_twice_under_the_address_is_refused_and_nobody_is_added()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount()).WithContact(2001, Address, FirstName).WithDuplicate(2002, of: 2001);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(firstName: null), Ct));
+
+        Assert.Equal("provider_call_failed", error.Code);
+        Assert.Equal(FailureClass.Permanent, error.Class);
+        Assert.Contains("more than one contact under this address", error.Message, StringComparison.Ordinal);
+        Assert.Equal(["POST /v3/contacts/filter?top=100&skip=0"], account.Calls.Select(call => call.Line));
+        Assert.Empty(account.MembersOf(List));
+    }
+
+    /// <summary>
+    /// The search matches by containment and the lookup reads five pages of a hundred. Five hundred addresses that
+    /// hold this one fill them, so the end is never reached and one match could not be told from two: nobody is added.
+    /// </summary>
+    [Fact]
+    public async Task A_lookup_that_cannot_be_read_to_its_end_adds_nobody()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount()).WithContact(2001, Address, FirstName);
+        for (var at = 0; at < 500; at++)
+        {
+            account.WithContact(3000 + at, $"x{at}.{Address}", "Near" + at);
+        }
+
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(firstName: null), Ct));
+
+        Assert.Equal("provider_call_failed", error.Code);
+        Assert.Equal(FailureClass.Permanent, error.Class);
+        Assert.Equal(
+            [.. Enumerable.Range(0, 5).Select(page => $"POST /v3/contacts/filter?top=100&skip={page * 100}")],
+            account.Calls.Select(call => call.Line));
+        Assert.Empty(account.MembersOf(List));
+    }
+
+    /// <summary>
+    /// The CLI says `outcome.unknown` for any POST under `reply api` whose answer was lost, this search included. The
+    /// search changes nothing, so the package's own mark for it decides: asked again, never stopped for a person.
+    /// </summary>
+    [Fact]
+    public async Task A_lookup_whose_outcome_the_cli_could_not_see_is_asked_again()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount()).WithContact(2001, Address, FirstName);
+        account.Prints(
+            "POST",
+            "/v3/contacts/filter?top=100&skip=0",
+            3,
+            string.Empty,
+            """{"error":{"code":"outcome.unknown","title":"The request may have reached Reply, but no answer came back."}}""");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(firstName: null), Ct));
+
+        Assert.Equal("provider_unavailable", error.Code);
+        Assert.Equal(FailureClass.Transient, error.Class);
+        Assert.Empty(account.MembersOf(List));
+    }
+
+    [Fact]
+    public async Task The_person_on_stdin_carries_only_what_the_projection_gives_and_the_cli_takes()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        Succeeded(await InvokeAsync(api, Input(), Ct));
+
+        Assert.Equal(
+            """{"email":"marta@example.com","first_name":"Marta","last_name":"Alvarez","company":"Puerto Analytics","title":"Head of Growth"}""",
+            Assert.Single(account.Calls).Body);
+    }
+
+    [Theory]
+    [InlineData("contact.invalid_email", null)]
+    [InlineData("reply.invalid_request", "email")]
+    public async Task An_address_the_provider_will_not_accept_is_a_validation_failure_rather_than_a_refusal(string code, string? field)
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.Refuses(
+            "contact-list add-contact", code, status: 400,
+            details: field is null ? null : new JsonObject { ["fields"] = new JsonArray(field) });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(), Ct));
+
+        Assert.Equal("invalid_channel_value", error.Code);
+        Assert.Equal(FailureClass.Validation, error.Class);
+    }
+
+    [Fact]
+    public async Task A_field_reply_will_not_accept_that_is_not_the_address_is_a_refusal_this_version_has_no_word_for()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.Refuses("contact-list add-contact", "reply.invalid_request", status: 400, details: new JsonObject { ["fields"] = new JsonArray("firstName") });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(), Ct));
+
+        Assert.Equal("provider_call_failed", error.Code);
+        Assert.Equal(FailureClass.Permanent, error.Class);
+    }
+
+    [Fact]
+    public async Task A_person_the_list_would_not_take_is_a_refusal_carrying_reply_s_own_word()
+    {
+        using var account = ReplyOperations.Plant(new ReplyAccount());
+        account.Refuses(
+            "contact-list add-contact", "reply.refused", status: 200, replyCode: "contactNotProcessed",
+            detail: "Contact was not added to the list", ids: new JsonObject { ["list_id"] = List, ["contact_id"] = 1001 });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(), Ct));
+
+        Assert.Equal("provider_call_failed", error.Code);
+        Assert.Equal("contactNotProcessed", (string?)error.Details!["provider_code"]);
+        Assert.Equal("Contact was not added to the list", (string?)error.Details!["provider_detail"]);
+        Assert.Equal(Ensured, (string?)error.ExternalIds!["contact"]);
     }
 
     [Fact]
@@ -211,7 +347,7 @@ public class ReplyMembershipTests
         Assert.Equal("suppressed", failed.Error.Code);
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal(Ensured, failed.Error.ExternalIds!["contact"]!.GetValue<string>());
-        Assert.Equal([$"GET /v3/contacts/{Ensured}/statuses"], Paths(account));
+        Assert.Equal(["contact-list add-contact 9"], Paths(account));
         Assert.Empty(account.MembersOf(List));
     }
 
@@ -248,72 +384,12 @@ public class ReplyMembershipTests
 
         var answer = Succeeded(await InvokeAsync(api, Input(), Ct));
 
-        // Reply's import deduplicates by email and answers the identifier either way, so one call both matches
-        // the person this account already holds and would have created them — which is why no address ever has
-        // to travel in a query string to find somebody.
-        Assert.Contains("POST /v3/contacts/import", Paths(account));
-        Assert.DoesNotContain("POST /v3/contacts", Paths(account));
+        // The CLI imports the person from stdin, and its import deduplicates by email: one command both matches the
+        // person this account already holds and would have created them.
+        Assert.Equal(["contact-list add-contact 9"], Paths(account));
+        Assert.Equal("-", account.Calls[0].Option("--contact"));
         Assert.Equal(Ensured, answer["items"]![0]!["external_ids"]!["contact"]!.GetValue<string>());
         Assert.Single(account.Contacts);
-    }
-
-    [Fact]
-    public async Task A_person_with_no_first_name_is_created_rather_than_imported()
-    {
-        using var account = new ReplyAccount();
-        account.WithList(List, "Q3 LatAm founders");
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var answer = Succeeded(await InvokeAsync(api, Input(firstName: null), Ct));
-
-        // Reply's import refuses an item that carries no first name, and Jason's own projection allows none.
-        // Inventing one would write data nobody supplied into a customer's own records, so the person is
-        // created instead — that path needs only an address.
-        Assert.Contains("POST /v3/contacts", Paths(account));
-        Assert.DoesNotContain("POST /v3/contacts/import", Paths(account));
-        Assert.Equal(Ensured, answer["items"]![0]!["external_ids"]!["contact"]!.GetValue<string>());
-    }
-
-    [Fact]
-    public async Task An_address_this_account_already_holds_is_reported_on_the_create_path_rather_than_guessed_at()
-    {
-        using var account = new ReplyAccount();
-        account.WithContact(1001, Address).WithList(List, "Q3 LatAm founders");
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var result = await InvokeAsync(api, Input(firstName: null), Ct);
-
-        // Reply publishes no code for a duplicate address on this path, so the stand-in answers one it invented
-        // and the plugin does not read it: a refusal is reported as the refusal it is, with Reply's own word in
-        // the details for whoever has to act on it. That is this version's documented limitation, and mapping a
-        // code nobody publishes would be a mapping of a fiction.
-        Assert.Contains("POST /v3/contacts", Paths(account));
-        var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
-        Assert.Equal("provider_call_failed", failed.Error.Code);
-        Assert.Equal(FailureClass.Permanent, failed.Error.Class);
-        Assert.Equal("contact.duplicate", failed.Error.Details!["provider_code"]!.GetValue<string>());
-        Assert.Empty(account.MembersOf(List));
-    }
-
-    [Fact]
-    public async Task The_import_carries_only_what_the_projection_gives_and_reply_publishes_a_word_for()
-    {
-        using var account = new ReplyAccount();
-        account.WithList(List, "Q3 LatAm founders");
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        Succeeded(await InvokeAsync(api, Input(), Ct));
-
-        // The person's own time zone is projected and deliberately not sent: Reply's `timeZoneId` accepts a
-        // vocabulary published nowhere, and an unrecognised value fails the whole import item — so sending it
-        // would cost the import rather than improve it.
-        var imported = Assert.Single(account.Calls, call => call.Path == "/v3/contacts/import");
-        var item = JsonNode.Parse(imported.Body!)!["items"]![0]!.AsObject();
-        Assert.Equal(["company", "email", "firstName", "lastName", "title"], item.Select(member => member.Key).Order());
-        Assert.DoesNotContain(TimeZone, imported.Body!, StringComparison.Ordinal);
     }
 
     // -------------------------------------------------------------------------------------------------------
@@ -336,7 +412,7 @@ public class ReplyMembershipTests
         Assert.Equal("contact_not_found", failed.Error.Code);
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("contact.notFound", failed.Error.Details!["provider_code"]!.GetValue<string>());
-        Assert.Equal(["GET /v3/contacts/4242/statuses"], Paths(account));
+        Assert.Equal(["contact-list add-contact 9"], Paths(account));
     }
 
     [Fact]
@@ -352,10 +428,9 @@ public class ReplyMembershipTests
         var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
         Assert.Equal("list_not_found", failed.Error.Code);
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
-        Assert.Equal("contactList.notFound", failed.Error.Details!["provider_code"]!.GetValue<string>());
+        Assert.Equal("contact-list.not_found", failed.Error.Details!["cli_code"]!.GetValue<string>());
 
-        // The contact was ensured before the list refused it, so the pin travels out: the next attempt has
-        // something to read the membership by even though this one wrote nothing.
+        // The contact was ensured before the list refused it, so the pin travels out: the next attempt works by it.
         Assert.Equal(Ensured, failed.Error.ExternalIds!["contact"]!.GetValue<string>());
     }
 
@@ -401,7 +476,7 @@ public class ReplyMembershipTests
     {
         using var account = new ReplyAccount();
         account.WithList(List, "Q3 LatAm founders");
-        account.Answers("POST", "/v3/contacts/import", 400, Refusal("contactLimitExceeded").ToJsonString());
+        account.Refuses("contact-list add-contact", "account.contact_limit_reached", status: 400, replyCode: "contact.limitExceeded");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -416,65 +491,18 @@ public class ReplyMembershipTests
     }
 
     [Fact]
-    public async Task An_address_the_provider_will_not_accept_is_a_validation_failure_rather_than_a_refusal()
-    {
-        using var account = new ReplyAccount();
-        account.WithList(List, "Q3 LatAm founders");
-        account.Answers("POST", "/v3/contacts/import", 400, Invalid("/items/0/email").ToJsonString());
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var result = await InvokeAsync(api, Input(), Ct);
-
-        // Reply's 400 is two shapes and which member is present says which: a validation problem carries
-        // `errors[]` and no `code`, a business rejection the other way round. A pointer naming the address is
-        // the provider saying the channel value itself is wrong, which no later attempt would accept either.
-        var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
-        Assert.Equal("invalid_channel_value", failed.Error.Code);
-        Assert.Equal(FailureClass.Validation, failed.Error.Class);
-    }
-
-    [Theory]
-    [InlineData("\"contactNotProcessed\"")]
-    [InlineData("8")]
-    public async Task A_person_the_list_would_not_take_is_read_from_the_key_and_never_from_the_value(string value)
-    {
-        using var account = new ReplyAccount();
-        account.WithContact(1001, Address, FirstName).WithList(List, "Q3 LatAm founders");
-        account.Answers("POST", $"/v3/contact-lists/{List}/add-contacts", 200, $$"""{"{{Ensured}}": {{value}}}""");
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var result = await InvokeAsync(api, Input(pinned: Ensured), Ct);
-
-        // The answer is a failures-only dictionary: an identifier that is absent succeeded. What the value is,
-        // is documented twice and incompatibly — a prose table says `8 | ContactNotProcessed`, the schema says a
-        // camelCase string — so the key's presence is the failure and the value is only ever reported. Both
-        // spellings therefore end the same way, which is the whole claim.
-        Assert.Contains($"POST /v3/contact-lists/{List}/add-contacts", Paths(account));
-        var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
-        Assert.Equal("provider_call_failed", failed.Error.Code);
-        Assert.Equal(FailureClass.Permanent, failed.Error.Class);
-
-        var seen = failed.Error.Details?["provider_item"]?.GetValue<string>();
-        Assert.NotNull(seen);
-        Assert.Contains(value.Trim('"'), seen, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public async Task A_failure_on_the_providers_own_side_during_the_add_is_ambiguous_because_the_call_is_a_write()
     {
         using var account = new ReplyAccount();
         account.WithContact(1001, Address, FirstName).WithList(List, "Q3 LatAm founders");
-        account.Answers("POST", $"/v3/contact-lists/{List}/add-contacts", 503, Refusal("server.unavailable", 503).ToJsonString());
+        account.LosesTheOutcome("contact-list add-contact");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
         var result = await InvokeAsync(api, Input(pinned: Ensured), Ct);
 
-        // The read/write mark in the package's own table is what decides this. The same ending on a read is
-        // transient and simply asked again; here the request may have landed before Reply's own side failed, so
-        // the work item stops for a person rather than repeating a write nobody can say did not happen.
+        // The CLI could not say whether the add happened. On a write that is ambiguous, and the contact the CLI had
+        // already learned travels out with the failure.
         var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
         Assert.Equal("provider_answer_lost", failed.Error.Code);
         Assert.Equal(FailureClass.Ambiguous, failed.Error.Class);
@@ -507,115 +535,13 @@ public class ReplyMembershipTests
             }
         }
 
-        var imported = Assert.Single(account.Calls, call => call.Path == "/v3/contacts/import");
-        Assert.Contains(Address, imported.Body!, StringComparison.Ordinal);
+        var added = Assert.Single(account.Calls);
+        Assert.Contains(Address, added.Body!, StringComparison.Ordinal);
     }
 
     // -------------------------------------------------------------------------------------------------------
     // The recovery read, and the endpoint it is not made with
     // -------------------------------------------------------------------------------------------------------
-
-    [Fact]
-    public async Task The_recovery_read_asks_the_list_and_carries_nothing_about_the_person()
-    {
-        // Reply publishes a read from the person's side, and against a live account it answered `[]` for a
-        // contact provably on a list that was not shared. So the obligation is performed from the list's side,
-        // where the same account answered at once — and the only two things that travel are numbers: the list
-        // this call was given, and the identifier Reply itself issued for this person. Nothing they carry, and
-        // in particular no address, is part of asking.
-        using var account = new ReplyAccount();
-        account.WithContact(1001, Address, FirstName).WithList(List, "Q3 LatAm founders", 1001);
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2));
-
-        Assert.Equal("already_member", answer["items"]![0]!["status"]!.GetValue<string>());
-        var read = Assert.Single(account.Calls, call => call.Path.StartsWith("/v3/contacts/filter", StringComparison.Ordinal));
-        var body = JsonNode.Parse(read.Body!)!.AsObject();
-        Assert.Equal("listId", Assert.Single(body).Key);
-        Assert.Equal(List, body["listId"]!.GetValue<int>());
-        Assert.DoesNotContain(Address, Everything(account), StringComparison.OrdinalIgnoreCase);
-
-        // And Reply's own per-contact read is not what answered, because for this list it would have answered
-        // nothing: the list is not shared, and the stand-in models that because the live account showed it.
-        Assert.DoesNotContain($"GET /v3/contacts/{Ensured}/lists", Paths(account));
-    }
-
-    [Fact]
-    public async Task A_person_the_page_does_not_hold_is_added_and_the_answer_says_so()
-    {
-        // The other direction, or the rule above would hold because the read always says yes: a list the search
-        // answers for in full, without this person in it, is a list they are not on. The add follows, and the
-        // answer is the one the add earns.
-        using var account = new ReplyAccount();
-        account.WithContact(1001, Address, FirstName).WithList(List, "Q3 LatAm founders");
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var result = await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2);
-        var answer = Succeeded(result);
-
-        Assert.Equal("added", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal(
-            [RecoveryRead, $"GET /v3/contacts/{Ensured}/statuses", $"POST /v3/contact-lists/{List}/add-contacts"],
-            Paths(account));
-
-        Assert.Equal([1001], account.MembersOf(List));
-
-        // Nothing is said, because there is nothing to say: the list was read to its end.
-        Assert.Equal(0, Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).Diagnostics.LogLines);
-    }
-
-    [Fact]
-    public async Task A_list_longer_than_one_page_is_added_to_and_the_unfinished_reading_is_said_out_loud()
-    {
-        // Reply publishes no call that asks whether one person is on one list — the only read is the list, and
-        // its largest page holds a thousand — so a longer list cannot be read to the end inside one attempt.
-        // The add is made, because at this provider it leaves one membership whichever was true and this
-        // operation costs nothing; what is not done is claiming the reading finished. The attempt says so in a
-        // diagnostic, so `added` on a long list can be told from `added` on a list that was read in full.
-        using var account = new ReplyAccount();
-        account.WithContact(1001, Address, FirstName).WithList(List, "Q3 LatAm founders", 1001);
-        account.Answers("POST", FilterPath, 200, Page(hasMore: true));
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var result = await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2);
-        var answer = Succeeded(result);
-
-        Assert.Equal("added", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal(
-            [RecoveryRead, $"GET /v3/contacts/{Ensured}/statuses", $"POST /v3/contact-lists/{List}/add-contacts"],
-            Paths(account));
-
-        // And the attempt carries the one diagnostic line that says so, which the reading below does not.
-        Assert.Equal(1, Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).Diagnostics.LogLines);
-    }
-
-    [Fact]
-    public async Task A_conflict_on_the_add_is_the_membership_it_names_rather_than_a_failure()
-    {
-        // The one status whose meaning on this call is not a failure: a conflict on an add names the conflict
-        // there is, which is that the person is on the list already. Reply is not documented to answer it and
-        // the live account answers 200 instead, saying nothing about who was already there — but a provider
-        // that did answer it would have this item fail over work that was already done.
-        using var account = new ReplyAccount();
-        account.WithContact(1001, Address, FirstName).WithList(List, "Q3 LatAm founders", 1001);
-        account.Answers(
-            "POST",
-            $"/v3/contact-lists/{List}/add-contacts",
-            409,
-            Refusal("contactList.contactAlreadyInList", status: 409).ToJsonString());
-
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct));
-
-        Assert.Equal("already_member", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal([1001], account.MembersOf(List));
-    }
 
     // -------------------------------------------------------------------------------------------------------
     // Composing the input, and checking both halves against the published document
@@ -658,43 +584,6 @@ public class ReplyMembershipTests
         ["idempotency_key"] = WorkItemId,
     };
 
-    /// <summary>
-    /// A page of that search as Reply shapes one: the people it holds, and whether the list goes on past them.
-    /// </summary>
-    private static string Page(bool hasMore, int? holds = null)
-    {
-        var items = new JsonArray();
-        if (holds is { } contact)
-        {
-            items.Add(new JsonObject { ["id"] = contact, ["email"] = Address });
-        }
-
-        return new JsonObject { ["items"] = items, ["hasMore"] = hasMore }.ToJsonString();
-    }
-
-    /// <summary>A business rejection of the shape Reply answers one in: a code, and no <c>errors[]</c>.</summary>
-    private static JsonObject Refusal(string code, int status = 400) => new()
-    {
-        ["type"] = "about:blank",
-        ["title"] = "Bad Request",
-        ["status"] = status,
-        ["detail"] = "The stand-in was told to answer this.",
-        ["code"] = code,
-    };
-
-    /// <summary>A validation problem of the shape Reply answers one in: <c>errors[]</c>, and no code.</summary>
-    private static JsonObject Invalid(string pointer) => new()
-    {
-        ["type"] = "about:blank",
-        ["title"] = "Bad Request",
-        ["status"] = 400,
-        ["errors"] = new JsonArray(new JsonObject
-        {
-            ["pointer"] = pointer,
-            ["detail"] = "The stand-in was told to answer this.",
-        }),
-    };
-
     /// <summary>The result the plugin answered with, having first been held to the operation's own document.</summary>
     private static JsonObject Succeeded(PluginInvocationResult result)
     {
@@ -708,10 +597,7 @@ public class ReplyMembershipTests
 
     /// <summary>Every call the account was asked to make, as "METHOD /path", in the order it was asked.</summary>
     private static IReadOnlyList<string> Paths(ReplyAccount account) =>
-        [.. account.Calls.Select(call => call.Method + " " + call.Path)];
-
-    private static IReadOnlyList<string> PathsSince(ReplyAccount account, int mark) =>
-        [.. account.CallsSince(mark).Select(call => call.Method + " " + call.Path)];
+        [.. account.Calls.Select(call => call.Line)];
 
     /// <summary>Everything that left this runtime: every argument of every call, and every body.</summary>
     private static string Everything(ReplyAccount account) =>

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
@@ -27,7 +28,7 @@ public class ReplyPackageTests
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Empty(plugin.Problems);
         Assert.Equal(PluginKind.Provider, plugin.Kind);
-        Assert.Equal("0.2.6", plugin.Version);
+        Assert.Equal("0.3.0", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
         Assert.Equal(
             ["campaign.activate", "campaign.enroll", "campaign.get", "campaign.pause", "conversation.get", "conversation.list", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record"],
@@ -54,7 +55,7 @@ public class ReplyPackageTests
 
         // The manifest asks for a minimum version, so the reload ran the version command on whatever it resolved.
         // That it answered, and that the answer satisfied the minimum, is why the package is valid at all.
-        Assert.Equal("0.5.0", executable.MinVersion);
+        Assert.Equal("0.11.0", executable.MinVersion);
         Assert.NotNull(executable.Version);
         Assert.NotNull(executable.MinVersion);
         Assert.True(Version.Parse(executable.Version) >= Version.Parse(executable.MinVersion));
@@ -62,6 +63,22 @@ public class ReplyPackageTests
         // And what answered is ours. A machine with a real CLI installed must never be the one that answered.
         ReplyPlugins.AssertInsideTheTestTree(executable.Path);
         Assert.Equal(ReplyPlugins.ExecutablePath, executable.Path);
+    }
+
+    /// <summary>
+    /// Reply's endpoints are reply-cli's to know. The package names one, the contact search it makes for a person Reply
+    /// will not import, and no other: an endpoint named anywhere else in it would be a call that none of the CLI's own
+    /// guards — the read before a write, the retries, the one answer for an outcome it could not see — ever reach.
+    /// </summary>
+    [Fact]
+    public void The_package_names_no_reply_endpoint_but_the_contact_search()
+    {
+        var named = Directory.GetFiles(ReplyPlugins.PackageSource, "*.js", SearchOption.AllDirectories)
+            .SelectMany(file => Regex.Matches(File.ReadAllText(file), @"/v3/[A-Za-z0-9_\-/{}.]*").Select(match => match.Value.TrimEnd('.')))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal);
+
+        Assert.Equal(["/v3/contacts/filter"], named);
     }
 
     [Fact]
@@ -86,13 +103,12 @@ public class ReplyPackageTests
     }
 
     /// <summary>
-    /// The memory budget counts what an invocation allocates, and a read of a thread reads two answers, each up to the
-    /// exec capture — the thread with its whole history, and the page. So the package asks for room for both at that
-    /// cap, and asks for memory alone: the timeout stays the installation's, which is what lets the slowest
-    /// operation finish.
+    /// The memory budget counts what an invocation allocates, every answer it reads included, and an answer can be as
+    /// large as the exec capture. The package keeps 256 MiB for that, as its manifest says why, and asks for memory
+    /// alone: the timeout stays the installation's, which is what lets the slowest operation finish.
     /// </summary>
     [Fact]
-    public async Task The_package_asks_for_the_memory_two_answers_at_the_exec_capture_need_and_no_timeout_of_its_own()
+    public async Task The_package_asks_for_its_memory_and_no_timeout_of_its_own()
     {
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -122,7 +138,7 @@ public class ReplyPackageTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("campaign_not_found", failed.Error.Code);
         Assert.Equal(ReplyPlugins.PluginId, result.Provenance.PluginId);
-        Assert.Equal("0.2.6", result.Provenance.Version);
+        Assert.Equal("0.3.0", result.Provenance.Version);
     }
 
     /// <summary>

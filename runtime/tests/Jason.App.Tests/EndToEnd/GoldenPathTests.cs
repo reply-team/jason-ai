@@ -174,7 +174,7 @@ public class GoldenPathTests
 
         // Nothing was asked of the provider a second time: a restart reads state, it does not repeat work.
         Assert.Equal([Person], it.Account.EnrolledIn(Sequence));
-        Assert.Single(it.Account.Calls, call => call.Path.EndsWith("/bulk", StringComparison.Ordinal));
+        Assert.Single(it.Account.Calls, call => call.Command == "sequence add-contact");
 
         await GoldenPath.StopAsync(it);
     }
@@ -220,7 +220,7 @@ public class GoldenPathTests
 
             // The write the enrolment ends at is held open, so the kill lands on a call that is demonstrably in
             // flight rather than on one the test hopes is running.
-            it.Account.HoldsOn("POST", $"/v3/sequences/{Sequence}/contact-links/bulk", started, release);
+            it.Account.HoldsOn("sequence add-contact", started, release);
 
             var item = await EnrolAsync(it, campaign, contact);
             GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, "campaign", "start", campaign));
@@ -270,20 +270,19 @@ public class GoldenPathTests
             Assert.Equal(approval, (string?)repeat["provenance"]!["approval_id"]);
             Assert.Equal(approval, (string?)lost["provenance"]!["approval_id"]);
 
-            // The repeat asks the provider what happened and writes nothing: the participation read is there,
-            // the enrolment write is not, and the answer is the contract's neutral word for "it was already
-            // done". The contact is ensured again first, because the identifier the lost attempt learned was
-            // never recorded — and ensuring is a read by address, so it costs a call and creates nobody.
+            // The repeat runs the enrolment again, and the CLI reads the person's part in the sequence before it writes
+            // anything: the answer is the contract's neutral word for "it was already done". The person is named by
+            // their fields again, because the identifier the lost attempt learned was never recorded — and the import
+            // matches them by address, so it creates nobody.
             var afterwards = it.Account.CallsSince(beforeTheRestart);
-            Assert.Contains(afterwards, call => call.Path == $"/v3/sequences/{Sequence}/contacts/{Person}");
-            Assert.DoesNotContain(afterwards, call => call.Path.EndsWith("/contact-links/bulk", StringComparison.Ordinal));
+            Assert.Single(afterwards, call => call.Command == "sequence add-contact");
             Assert.Equal("already_enrolled", (string?)ended["result"]!["items"]!.AsArray()[0]!["status"]);
             Assert.Single(it.Account.Contacts);
 
-            // 5. And the point of all of it: the person was enrolled once. A crash between the act and the
-            //    record costs a recovery read, not a second enrolment.
+            // 5. And the point of all of it: the command ran twice and the person was enrolled once. A crash between
+            //    the act and the record costs a second run that writes nothing, not a second enrolment.
             Assert.Equal([Person], it.Account.EnrolledIn(Sequence));
-            Assert.Single(it.Account.Calls, call => call.Path.EndsWith("/contact-links/bulk", StringComparison.Ordinal));
+            Assert.Equal(2, it.Account.Calls.Count(call => call.Command == "sequence add-contact"));
 
             // ---------------------------------------------------------------------------------------------
             // The other case: an attempt that was claimed and never launched.

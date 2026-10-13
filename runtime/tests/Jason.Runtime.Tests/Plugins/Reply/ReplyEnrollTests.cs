@@ -34,9 +34,6 @@ public class ReplyEnrollTests
     /// <summary>The sequence every test plants, by an identifier of the shape Reply actually issues.</summary>
     private const int Sequence = 7;
 
-    /// <summary>A second sequence, for the participations this call is not allowed to disturb.</summary>
-    private const int Elsewhere = 8;
-
     /// <summary>The identifier Reply gives the first contact an account creates.</summary>
     private const string Ensured = "1001";
 
@@ -46,16 +43,6 @@ public class ReplyEnrollTests
     private const string Company = "Puerto Analytics";
     private const string Title = "Head of Growth";
     private const string TimeZone = "America/Bogota";
-
-    private static string Bulk => $"POST /v3/sequences/{Sequence}/contact-links/bulk";
-
-    private static string BulkPath => $"/v3/sequences/{Sequence}/contact-links/bulk";
-
-    private static string Participation => $"GET /v3/sequences/{Sequence}/contacts/{Ensured}";
-
-    private static string LiveState => $"GET /v3/sequences/{Sequence}";
-
-    private static string Statuses => $"GET /v3/contacts/{Ensured}/statuses";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -77,10 +64,10 @@ public class ReplyEnrollTests
         // The pin is the whole of it: nothing is imported, nothing is created, and the address this person
         // carries reaches Reply nowhere at all — which is what stops two spellings of one address ever becoming
         // two people, and what keeps an enrollment from going to somebody else of the same name.
-        // A pinned person existed before this call, so whether they already take part is read first — even on a
-        // first attempt — and only then the campaign, the opt-out register and the enrolment.
         Assert.Equal("enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal([Participation, LiveState, Statuses, Bulk], Paths(account));
+        Assert.Equal(["sequence add-contact 7"], Paths(account));
+        Assert.Equal(Ensured, account.Calls[0].Option("--contact-id"));
+        Assert.Null(account.Calls[0].Body);
         Assert.DoesNotContain(Address, Everything(account), StringComparison.OrdinalIgnoreCase);
         Assert.Equal([1001], account.EnrolledIn(Sequence));
     }
@@ -134,43 +121,155 @@ public class ReplyEnrollTests
 
         var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2));
 
-        // From a mark taken after the first attempt, or the assertion would run over that attempt's own write.
-        // Two reads and no write: the participation the provider already holds is the answer, and answering it
-        // is what makes one crash cost one enrollment rather than two — which, in a live campaign, is one email
-        // to a person rather than two.
+        // From a mark taken after the first attempt. The CLI reads the participation the provider already holds and
+        // writes nothing, which is what makes one crash cost one enrollment rather than two — which, in a live
+        // campaign, is one email to a person rather than two.
         Assert.Equal("already_enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal([Participation, LiveState], PathsSince(account, mark));
+        Assert.Equal(["sequence add-contact 7"], PathsSince(account, mark));
         Assert.Equal([1001], account.EnrolledIn(Sequence));
     }
 
     [Fact]
-    public async Task An_attempt_after_a_lost_answer_reads_the_prior_run_first_so_one_crash_leaves_one_enrollment()
+    public async Task An_attempt_after_a_lost_answer_runs_the_add_again_so_one_crash_leaves_one_enrollment()
     {
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-            .WithContact(1001, Address, FirstName)
-            .LosesTheAnswerAfterWriting("POST", BulkPath);
+        using var account = new ReplyAccount().WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11, 12);
+        account.LosesTheOutcome("sequence add-contact");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var lost = await InvokeAsync(api, Input(pinned: Ensured), Ct);
+        var lost = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(), Ct));
+        Assert.Equal("provider_answer_lost", lost.Code);
+        Assert.Equal(FailureClass.Ambiguous, lost.Class);
+        Assert.Equal(Ensured, (string?)lost.ExternalIds!["contact"]);
+        Assert.Equal("7", (string?)lost.ExternalIds!["campaign"]);
 
-        // The enrollment landed and the answer did not. Nothing about the attempt can say which, so it ends
-        // ambiguous and carries out both identifiers: after a lost answer they are the only trace of what was
-        // done, and without the contact's one the next attempt has nobody to read the prior outcome for.
-        var failed = Assert.IsType<InvocationOutcome.Failed>(lost.Outcome);
-        Assert.Equal("provider_answer_lost", failed.Error.Code);
-        Assert.Equal(FailureClass.Ambiguous, failed.Error.Class);
-        Assert.Equal(Ensured, failed.Error.ExternalIds!["contact"]!.GetValue<string>());
-        Assert.Equal("7", failed.Error.ExternalIds?["campaign"]?.GetValue<string>());
+        var repeat = Succeeded(await InvokeAsync(api, Input(pinned: Ensured, collision: "refuse"), Ct, attempt: 2));
+        Assert.Equal("already_enrolled", (string?)repeat["items"]![0]!["status"]);
         Assert.Equal([1001], account.EnrolledIn(Sequence));
+    }
 
-        var mark = account.Mark();
-        var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2));
+    /// <summary>`authored_delay` keeps the step's delay; the other two are one request, because Reply always sends inside the sequence's schedule.</summary>
+    [Theory]
+    [InlineData("authored_delay", false)]
+    [InlineData("next_open_window", true)]
+    [InlineData("immediately", true)]
+    public async Task The_first_touch_is_the_cli_s_ignore_step_delay_switch(string firstTouch, bool ignores)
+    {
+        using var account = new ReplyAccount().WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11, 12);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        Assert.Equal("already_enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.DoesNotContain(Bulk, PathsSince(account, mark));
-        Assert.Equal([1001], account.EnrolledIn(Sequence));
+        Succeeded(await InvokeAsync(api, Input(firstTouch: firstTouch), Ct));
+
+        Assert.Equal(ignores, Assert.Single(account.Calls).Args.Contains("--ignore-step-delay"));
+    }
+
+    [Fact]
+    public async Task A_step_position_is_passed_as_the_cli_s_start_step()
+    {
+        using var account = new ReplyAccount().WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11, 12, 13);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        Succeeded(await InvokeAsync(api, Input(start: Step(2)), Ct));
+
+        Assert.Equal("2", Assert.Single(account.Calls).Option("--start-step"));
+        Assert.Equal(12, (int)account.Enrollments.Single()!["currentStep"]!["stepId"]!);
+    }
+
+    /// <summary>Review focus 4: the import created the person, then the add was refused; the failure still pins them.</summary>
+    [Fact]
+    public async Task A_refusal_after_the_cli_created_the_contact_still_pins_it()
+    {
+        using var account = new ReplyAccount().WithSequence(Sequence, "Q3 LatAm founders", "active");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(), Ct));
+
+        Assert.Equal("campaign_not_enrollable", error.Code);
+        Assert.Equal(Ensured, (string?)error.ExternalIds!["contact"]);
+        Assert.Single(account.Contacts);
+        Assert.Empty(account.EnrolledIn(Sequence));
+    }
+
+    [Fact]
+    public async Task A_refusal_this_version_has_no_word_for_carries_reply_s_own_word()
+    {
+        using var account = new ReplyAccount().WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11);
+        account.Refuses(
+            "sequence add-contact", "reply.refused", status: 200, replyCode: "invalidInput",
+            detail: "Contact could not be added to sequence", ids: new JsonObject { ["sequence_id"] = Sequence, ["contact_id"] = 1001 });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(), Ct));
+
+        Assert.Equal("provider_call_failed", error.Code);
+        Assert.Equal(FailureClass.Permanent, error.Class);
+        Assert.Equal("invalidInput", (string?)error.Details!["provider_code"]);
+        Assert.Equal("Contact could not be added to sequence", (string?)error.Details!["provider_detail"]);
+        Assert.Equal(Ensured, (string?)error.ExternalIds!["contact"]);
+    }
+
+    /// <summary>The CLI never resends a write, so a write it says never reached Reply is safe to repeat.</summary>
+    [Fact]
+    public async Task A_write_that_never_reached_reply_is_only_transient()
+    {
+        using var account = new ReplyAccount().WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11);
+        account.Refuses("sequence add-contact", "reply.unavailable");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(), Ct));
+
+        Assert.Equal("provider_unavailable", error.Code);
+        Assert.Equal(FailureClass.Transient, error.Class);
+    }
+
+    [Fact]
+    public async Task A_person_without_a_first_name_whom_reply_holds_is_found_by_address_and_enrolled_by_id()
+    {
+        using var account = new ReplyAccount().WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
+            .WithContact(2001, Address, FirstName);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = Succeeded(await InvokeAsync(api, Input(firstName: null), Ct));
+
+        Assert.Equal("enrolled", (string?)answer["items"]![0]!["status"]);
+        Assert.Equal(["POST /v3/contacts/filter?top=100&skip=0", "sequence add-contact 7"], account.Calls.Select(call => call.Line));
+        Assert.Equal("2001", account.Calls[1].Option("--contact-id"));
+        Assert.Equal([2001], account.EnrolledIn(Sequence));
+    }
+
+    [Fact]
+    public async Task A_person_without_a_first_name_whom_reply_does_not_hold_is_refused_before_any_add()
+    {
+        using var account = new ReplyAccount().WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(firstName: null), Ct));
+
+        Assert.Equal("provider_call_failed", error.Code);
+        Assert.Contains("first name", error.Message, StringComparison.Ordinal);
+        Assert.Equal("7", (string?)error.ExternalIds!["campaign"]);
+        Assert.DoesNotContain(account.Calls, call => call.Command == "sequence add-contact");
+    }
+
+    [Fact]
+    public async Task An_address_reply_will_not_accept_is_a_validation_failure()
+    {
+        using var account = new ReplyAccount().WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11);
+        account.Refuses("sequence add-contact", "reply.invalid_request", status: 400, details: new JsonObject { ["fields"] = new JsonArray("email") });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(), Ct));
+
+        Assert.Equal("invalid_channel_value", error.Code);
+        Assert.Equal(FailureClass.Validation, error.Class);
     }
 
     [Fact]
@@ -185,14 +284,13 @@ public class ReplyEnrollTests
 
         var result = await InvokeAsync(api, Input(pinned: Ensured, collision: "refuse"), Ct);
 
-        // The caller asked to be refused rather than to have the decision taken for them. Reply's bulk add never
-        // says a person already takes part — it refuses the same step with a generic word, after assigning the
-        // sequence's sending account all the same — so the participation is read before anything is written, and
-        // the refusal is decided from that read. Nothing reaches the bulk add, and the participation is untouched.
+        // The caller asked to be refused rather than to have the decision taken for them. The CLI reads the
+        // participation before it writes anything and says the person already takes part; the refusal is decided
+        // from that answer, and the participation is untouched.
         var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
         Assert.Equal("collision_refused", failed.Error.Code);
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
-        Assert.Equal([Participation, LiveState], Paths(account));
+        Assert.Equal(["sequence add-contact 7"], Paths(account));
         Assert.Equal([1001], account.EnrolledIn(Sequence));
         Assert.Null(Assert.Single(account.Enrollments)!["emailAccountId"]);
         NamesNobody(failed);
@@ -212,155 +310,10 @@ public class ReplyEnrollTests
 
         // The same read, the other policy: leave the participation alone and say so. It is a success because the
         // caller asked for exactly this outcome, and the status distinguishes it from an enrollment this call
-        // made — which is what a caller counting sends has to know. Nothing is written, and with no write ahead
-        // the opt-out register is not read either.
+        // made — which is what a caller counting sends has to know. Nothing is written.
         Assert.Equal("already_enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal([Participation, LiveState], Paths(account));
+        Assert.Equal(["sequence add-contact 7"], Paths(account));
         Assert.Null(Assert.Single(account.Enrollments)!["emailAccountId"]);
-    }
-
-    /// <summary>
-    /// A start step ahead of the person's own is what Reply's bulk add would move them to, skipping the steps between,
-    /// and answer `added` — a send the approved preview never named. Whatever the step asked for, a participation found
-    /// before the write decides the answer by the policy, and the person stays where they were.
-    /// </summary>
-    [Theory]
-    [InlineData("skip", "already_enrolled")]
-    [InlineData("refuse", "collision_refused")]
-    public async Task A_start_step_ahead_of_a_person_already_taking_part_moves_nobody(string collision, string answered)
-    {
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11, 12, 13)
-            .WithContact(1001, Address, FirstName)
-            .WithEnrollment(Sequence, 1001, stepId: 11, stepName: "1");
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var result = await InvokeAsync(api, Input(pinned: Ensured, collision: collision, start: Step(3)), Ct);
-
-        var status = result.Outcome is InvocationOutcome.Failed failed
-            ? NamesNobody(failed).Error.Code
-            : Succeeded(result)["items"]![0]!["status"]!.GetValue<string>();
-        Assert.Equal(answered, status);
-        Assert.DoesNotContain(Bulk, Paths(account));
-        var participation = Assert.Single(account.Enrollments)!;
-        Assert.Equal(11, participation["currentStep"]!["stepId"]!.GetValue<int>());
-    }
-
-    /// <summary>
-    /// A person with no pin whom Reply's import matched by address existed before this call as much as a pinned one
-    /// did, and is read the same way before anything else is written.
-    /// </summary>
-    [Fact]
-    public async Task A_person_the_import_matched_by_address_is_read_before_an_enrolment_like_a_pinned_one()
-    {
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-            .WithContact(1001, Address, FirstName)
-            .WithEnrollment(Sequence, 1001);
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var answer = Succeeded(await InvokeAsync(api, Input(), Ct));
-
-        Assert.Equal("already_enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal(["POST /v3/contacts/import", Participation, LiveState], Paths(account));
-        Assert.Null(Assert.Single(account.Enrollments)!["emailAccountId"]);
-    }
-
-    /// <summary>
-    /// The same person under `refuse`: the read decides the refusal, nothing is written, and the failure — whose
-    /// message and details an attempt keeps — names nobody: neither the address the import matched nor the name.
-    /// </summary>
-    [Fact]
-    public async Task A_person_the_import_matched_is_refused_from_the_read_and_the_failure_names_nobody()
-    {
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-            .WithContact(1001, Address, FirstName)
-            .WithEnrollment(Sequence, 1001);
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var failed = Assert.IsType<InvocationOutcome.Failed>((await InvokeAsync(api, Input(collision: "refuse"), Ct)).Outcome);
-
-        Assert.Equal("collision_refused", failed.Error.Code);
-        Assert.Equal(["POST /v3/contacts/import", Participation, LiveState], Paths(account));
-        NamesNobody(failed);
-    }
-
-    /// <summary>
-    /// The live guard's run, against the stand-in. It reads the campaign before anything else, so a live sequence stops
-    /// it there — no enrolment is asked for — and a sequence nobody started is run through to the end, writing nothing.
-    /// </summary>
-    [Theory]
-    [InlineData("active", true)]
-    [InlineData("new", false)]
-    public async Task The_live_guard_run_reads_the_campaign_first_and_stops_at_a_live_one(string status, bool stopped)
-    {
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", status, false, 11)
-            .WithContact(1001, Address, FirstName)
-            .WithEnrollment(Sequence, 1001);
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var run = ReplyLiveConformanceTests.LeavesAParticipantAloneAsync(
-            (operation, input) => ReplyOperations.InvokeAsync(api, operation, input, Ct),
-            Sequence.ToString(CultureInfo.InvariantCulture),
-            Ensured);
-
-        if (stopped)
-        {
-            var refused = await Assert.ThrowsAnyAsync<Exception>(() => run);
-            Assert.Contains("nothing was enrolled", refused.Message, StringComparison.Ordinal);
-            Assert.Equal([LiveState], Paths(account));
-            return;
-        }
-
-        await run;
-        Assert.Equal(LiveState, Paths(account)[0]);
-        Assert.DoesNotContain(Bulk, Paths(account));
-    }
-
-    /// <summary>
-    /// A person this very call created takes part in nothing yet, so on a first attempt there is no participation to
-    /// read: the import, the campaign, the opt-out register and the enrolment, in that order.
-    /// </summary>
-    [Fact]
-    public async Task A_person_this_call_created_is_enrolled_without_a_participation_read()
-    {
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11);
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var answer = Succeeded(await InvokeAsync(api, Input(), Ct));
-
-        Assert.Equal("enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal(["POST /v3/contacts/import", LiveState, Statuses, Bulk], Paths(account));
-    }
-
-    /// <summary>
-    /// An import status this version has no word for is read as a person who existed: the participation read costs one
-    /// call, and skipping it for somebody already enrolled would cost a send.
-    /// </summary>
-    [Fact]
-    public async Task An_import_status_this_version_does_not_know_is_read_as_a_person_who_existed()
-    {
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-            .WithContact(1001, Address, FirstName)
-            .WithEnrollment(Sequence, 1001)
-            .Answers("POST", "/v3/contacts/import", 200, """{"items":[{"id":1001,"status":"merged","error":null}],"added":0,"updated":0,"skipped":0,"failed":0}""");
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var answer = Succeeded(await InvokeAsync(api, Input(), Ct));
-
-        Assert.Equal("already_enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Contains(Participation, Paths(account));
-        Assert.DoesNotContain(Bulk, Paths(account));
     }
 
     [Fact]
@@ -381,7 +334,7 @@ public class ReplyEnrollTests
         // answer the participation this read finds may well be the one this work item's own earlier attempt
         // made, and reporting that as a collision would call the runtime's own write somebody else's.
         Assert.Equal("already_enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.DoesNotContain(Bulk, Paths(account));
+        Assert.Equal(["sequence add-contact 7"], Paths(account));
         Assert.Equal([1001], account.EnrolledIn(Sequence));
     }
 
@@ -417,67 +370,11 @@ public class ReplyEnrollTests
     // -------------------------------------------------------------------------------------------------------
 
     [Fact]
-    public async Task Both_recovery_reads_happen_in_the_documents_order_before_the_enrollment_is_written()
-    {
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-            .WithContact(1001, Address, FirstName)
-            .Answers("POST", BulkPath, 503, Refusal("server.unavailable", 503).ToJsonString());
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        // The first attempt is told the provider failed on its own side. Nothing was enrolled, but no answer
-        // came back either, so the ending is ambiguous and the next attempt is the one under obligation.
-        var lost = await InvokeAsync(api, Input(pinned: Ensured), Ct);
-        Assert.Equal("provider_answer_lost", Assert.IsType<InvocationOutcome.Failed>(lost.Outcome).Error.Code);
-        Assert.Empty(account.EnrolledIn(Sequence));
-
-        // From a mark taken after that attempt: over the whole lifetime the assertion would pick up attempt
-        // one's own calls, and its POST alone would make the last line below false.
-        var mark = account.Mark();
-        var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2));
-
-        // The contract names two reads and an order: the prior run's outcome for this person, then the
-        // campaign's live state. The call log is the evidence — a plugin that wrote blind would leave exactly
-        // the same state behind, so the state proves nothing and the order proves everything.
-        var since = PathsSince(account, mark).ToList();
-        Assert.Equal([Participation, LiveState], since.Take(2));
-        Assert.True(since.IndexOf(Bulk) > 1, $"the enrollment was written at position {since.IndexOf(Bulk)} of [{string.Join(", ", since)}].");
-        Assert.Equal("enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal([1001], account.EnrolledIn(Sequence));
-    }
-
-    [Fact]
-    public async Task With_no_pin_the_contact_is_ensured_first_and_both_reads_still_precede_the_enrollment()
-    {
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-            .Answers("POST", BulkPath, 503, Refusal("server.unavailable", 503).ToJsonString());
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var lost = await InvokeAsync(api, Input(), Ct);
-        Assert.Equal("provider_answer_lost", Assert.IsType<InvocationOutcome.Failed>(lost.Outcome).Error.Code);
-
-        var mark = account.Mark();
-        var answer = Succeeded(await InvokeAsync(api, Input(), Ct, attempt: 2));
-
-        // Without a pin the participation cannot be read at all until the person has an identifier, so
-        // ensure-contact comes first — and it is itself a write by this package's own table. The claim the
-        // package makes is therefore that both recovery reads precede the *enrollment*, never that they precede
-        // anything being written, which in this order would be plainly false.
-        Assert.Equal(["POST /v3/contacts/import", Participation, LiveState, Statuses, Bulk], PathsSince(account, mark));
-        Assert.Equal("enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal([1001], account.EnrolledIn(Sequence));
-    }
-
-    [Fact]
     public async Task A_person_who_opted_out_after_the_enrollment_landed_is_not_told_it_failed()
     {
-        // The document says to answer from the recovery read when the effect already happened, so that reading
-        // comes before the opt-out check on a repeated attempt. A person can opt out between two attempts, and
-        // reporting `suppressed` for an enrollment that already landed would say the send did not happen when
-        // it did — sending an operator after an item that is finished.
+        // The CLI reads the participation before Reply would refuse an opted-out person, so a person who opted out
+        // between two attempts is reported as enrolled: reporting `suppressed` for an enrollment that already landed
+        // would say the send did not happen when it did.
         using var account = new ReplyAccount();
         account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
             .WithContact(1001, Address, FirstName, optedOut: true)
@@ -488,83 +385,12 @@ public class ReplyEnrollTests
         var answer = Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct, attempt: 2));
 
         Assert.Equal("already_enrolled", answer["items"]![0]!["status"]!.GetValue<string>());
-        Assert.Equal([Participation, LiveState], Paths(account));
+        Assert.Equal(["sequence add-contact 7"], Paths(account));
     }
 
     // -------------------------------------------------------------------------------------------------------
     // The request this provider is actually sent
     // -------------------------------------------------------------------------------------------------------
-
-    [Fact]
-    public async Task Nobody_is_removed_from_another_sequence_by_an_enrollment_that_asked_for_nothing_of_the_kind()
-    {
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-            .WithSequence(Elsewhere, "Nurture", "active", false, 21)
-            .WithContact(1001, Address, FirstName)
-            .WithEnrollment(Elsewhere, 1001);
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct));
-
-        // Reply's own switch would take this person out of every other sequence they are in. Nothing in the
-        // contract asked for that, and doing it silently would be an external effect nobody requested — so the
-        // member is written out as `false` rather than left off, and the participation elsewhere survives.
-        var body = JsonNode.Parse(Assert.Single(account.Calls, call => call.Path == BulkPath).Body!)!.AsObject();
-        Assert.False(body["removeFromExisting"]!.GetValue<bool>());
-        Assert.Equal([1001], account.EnrolledIn(Elsewhere));
-    }
-
-    [Fact]
-    public async Task Immediately_and_the_next_open_window_are_one_request_because_reply_cannot_bypass_a_window()
-    {
-        var bodies = new List<JsonObject>();
-        foreach (var timing in new[] { "immediately", "next_open_window", "authored_delay" })
-        {
-            using var account = new ReplyAccount();
-            account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-                .WithContact(1001, Address, FirstName);
-            using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-            await using var api = await ReplyPlugins.StartAsync(Ct);
-
-            Succeeded(await InvokeAsync(api, Input(pinned: Ensured, firstTouch: timing), Ct));
-            bodies.Add(JsonNode.Parse(Assert.Single(account.Calls, call => call.Path == BulkPath).Body!)!.AsObject());
-        }
-
-        // Reply always sends inside the sequence's own schedule and has no way to bypass a sending window, so
-        // the two timings that ask for one are the same request here. Pretending otherwise would be the plugin
-        // claiming a precision the provider does not have; the package says they are the same instead.
-        Assert.Equal(bodies[0].ToJsonString(), bodies[1].ToJsonString());
-        Assert.True(bodies[0]["ignoreStepDelay"]!.GetValue<bool>());
-
-        // And the one timing Reply can honour is honoured: the step's authored delay is left in place.
-        Assert.False(bodies[2]["ignoreStepDelay"]!.GetValue<bool>());
-    }
-
-    [Fact]
-    public async Task A_step_position_is_resolved_by_walking_the_chain_a_sequence_actually_has()
-    {
-        // The steps arrive in an order that is deliberately not the chain's: the array reads 13, 11, 12 while
-        // the chain runs 11 → 12 → 13. Walking answers 13 for the third step; taking the third element of the
-        // array would answer 12. Planted in chain order the two agree, and the test would prove nothing about
-        // which one the package does.
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-            .WithSteps(Sequence, (13, 12, "email"), (11, null, "email"), (12, 11, "email"))
-            .WithContact(1001, Address, FirstName);
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        Succeeded(await InvokeAsync(api, Input(pinned: Ensured, start: Step(3)), Ct));
-
-        // A Reply step carries no ordering field whatever — the `parentId` graph is the only order there is —
-        // so the third step is the third link of the chain from the step nobody is the parent of, and never the
-        // third element of whatever order the array happened to arrive in.
-        var body = JsonNode.Parse(Assert.Single(account.Calls, call => call.Path == BulkPath).Body!)!.AsObject();
-        Assert.Equal(13, body["startStepId"]!.GetValue<int>());
-        Assert.NotEqual(12, body["startStepId"]!.GetValue<int>());
-    }
 
     [Fact]
     public async Task The_first_step_is_asked_for_by_saying_nothing_about_which_step_to_start_at()
@@ -577,11 +403,9 @@ public class ReplyEnrollTests
 
         Succeeded(await InvokeAsync(api, Input(pinned: Ensured), Ct));
 
-        // `first_step` is Reply's own default, so it is asked for by leaving the member out rather than by
-        // naming the step the chain walk would have found: the two can differ, and the provider's own idea of
-        // where its sequence begins is the one that should win.
-        var body = JsonNode.Parse(Assert.Single(account.Calls, call => call.Path == BulkPath).Body!)!.AsObject();
-        Assert.DoesNotContain("startStepId", body.Select(member => member.Key));
+        // `first_step` is Reply's own default, so it is asked for by naming no step at all: the provider's own idea
+        // of where its sequence begins is the one that should win.
+        Assert.DoesNotContain("--start-step", Assert.Single(account.Calls).Args);
     }
 
     [Fact]
@@ -602,11 +426,7 @@ public class ReplyEnrollTests
         var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
         Assert.Equal("provider_call_failed", failed.Error.Code);
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
-        Assert.Contains("condition", failed.Error.Details!["reason"]!.GetValue<string>(), StringComparison.Ordinal);
-
-        // The person's participation and the sequence were read and nothing else happened: the call could not be
-        // built, so it was not made.
-        Assert.Equal([Participation, LiveState], Paths(account));
+        Assert.Equal(["sequence add-contact 7"], Paths(account));
         Assert.Empty(account.EnrolledIn(Sequence));
     }
 
@@ -625,11 +445,7 @@ public class ReplyEnrollTests
         var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
         Assert.Equal("provider_call_failed", failed.Error.Code);
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
-
-        // The code alone is the one every refusal of the package's own shares, so it says nothing about which
-        // rule was broken. An operator gets the reason or gets nothing they can act on.
-        Assert.Contains("no single step is step 2", failed.Error.Details!["reason"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.Equal([Participation, LiveState], Paths(account));
+        Assert.Equal(["sequence add-contact 7"], Paths(account));
         Assert.Empty(account.EnrolledIn(Sequence));
     }
 
@@ -650,150 +466,13 @@ public class ReplyEnrollTests
         var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
         Assert.Equal("provider_call_failed", failed.Error.Code);
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
-
-        // And it says where the chain actually ended, so an operator can see the position they asked for was
-        // past it rather than being told only that something went wrong.
-        Assert.Contains("chain ends at", failed.Error.Details!["reason"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.Equal([Participation, LiveState], Paths(account));
+        Assert.Equal(["sequence add-contact 7"], Paths(account));
         Assert.Empty(account.EnrolledIn(Sequence));
-    }
-
-    [Fact]
-    public async Task A_refusal_after_the_contact_was_created_still_carries_the_identifier_it_created()
-    {
-        // The person had no pin, so ensuring them created somebody at Reply — and only then did the arguments
-        // turn out to name a step this sequence does not have. The runtime pins what a failure carries, so a
-        // refusal that carried nothing would leave that person behind at the provider with nothing in Jason
-        // pointing at them: for somebody with no first name the next attempt would create them again, and the
-        // one after that, each ending in a duplicate this version has no word for.
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11, 12);
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var result = await InvokeAsync(api, Input(start: Step(4)), Ct);
-
-        var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
-        Assert.Equal("provider_call_failed", failed.Error.Code);
-        Assert.Contains("chain ends at", failed.Error.Details!["reason"]!.GetValue<string>(), StringComparison.Ordinal);
-
-        // The contact this attempt created, and the campaign it was refused against, both on the failure.
-        Assert.Equal(Ensured, failed.Error.ExternalIds!["contact"]!.GetValue<string>());
-        Assert.Equal("7", failed.Error.ExternalIds["campaign"]!.GetValue<string>());
-
-        // And the person really was created, or the pin would be a claim about nothing.
-        Assert.Equal(["POST /v3/contacts/import", LiveState], Paths(account));
-        Assert.Empty(account.EnrolledIn(Sequence));
-    }
-
-    [Fact]
-    public async Task A_lost_answer_to_the_ensure_carries_the_campaign_it_already_knows()
-    {
-        // The one ambiguous ending this operation can reach before the person has an identifier at all: the
-        // import went out and its answer did not come back, so Reply may hold a contact whose number nobody
-        // knows. There is one thing the call does know by then, and it is the campaign the argument named — so
-        // that is pinned, and the attempt after this one starts from a campaign it no longer has to resolve.
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11, 12);
-        account.LosesTheAnswerAfterWriting("POST", "/v3/contacts/import");
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var result = await InvokeAsync(api, Input(), Ct);
-
-        var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
-        Assert.Equal("provider_answer_lost", failed.Error.Code);
-        Assert.Equal(FailureClass.Ambiguous, failed.Error.Class);
-        Assert.Equal("7", failed.Error.ExternalIds!["campaign"]!.GetValue<string>());
-
-        // Nothing is claimed about the person: the call never learned what Reply called them.
-        Assert.Null(failed.Error.ExternalIds?["contact"]);
     }
 
     // -------------------------------------------------------------------------------------------------------
     // The per-item words Reply answers with, and the open half of that set
     // -------------------------------------------------------------------------------------------------------
-
-    [Theory]
-    [InlineData("contactNotFound", "contact_not_found", "permanent")]
-    [InlineData("contactLimitExceeded", "limit_reached", "permanent")]
-    [InlineData("forbidden", "unauthorized", "permanent")]
-    [InlineData("invalidInput", "provider_call_failed", "permanent")]
-    public async Task A_per_item_word_the_published_table_names_is_reported_in_the_contracts_own_vocabulary(
-        string slug,
-        string code,
-        string failureClass)
-    {
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-            .WithContact(1001, Address, FirstName)
-            .Answers("POST", BulkPath, 200, NotProcessed(slug).ToJsonString());
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var result = await InvokeAsync(api, Input(pinned: Ensured), Ct);
-
-        // A 200 that refuses one person inside it: the status says the call was taken, not that the work was
-        // done. Unlike the list add — whose per-item value its own documentation describes two incompatible
-        // ways — this table is published, so the word is read and mapped rather than merely reported.
-        var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
-        Assert.Equal(code, failed.Error.Code);
-        Assert.Equal(Enum.Parse<FailureClass>(failureClass, ignoreCase: true), failed.Error.Class);
-        Assert.Contains(slug, failed.Error.Details!["provider_item"]!.GetValue<string>(), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task A_per_item_word_the_published_table_does_not_name_is_reported_rather_than_guessed_at()
-    {
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-            .WithContact(1001, Address, FirstName)
-            .Answers("POST", BulkPath, 200, NotProcessed("sequenceHasNoSendingAccount").ToJsonString());
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var result = await InvokeAsync(api, Input(pinned: Ensured), Ct);
-
-        // The type behind these words is named in Reply's description and defined nowhere, and the table that
-        // lists them is labelled "Common" — so it is an open set and there will be words like this one. A
-        // refusal nobody published is reported as itself, with Reply's own word in the details for whoever has
-        // to act on it, rather than mapped to whichever known row looks nearest.
-        var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
-        Assert.Equal("provider_call_failed", failed.Error.Code);
-        Assert.Equal(FailureClass.Permanent, failed.Error.Class);
-        Assert.Contains("sequenceHasNoSendingAccount", failed.Error.Details!["provider_item"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.Empty(account.EnrolledIn(Sequence));
-    }
-
-    /// <summary>
-    /// A per-item word that names a property every JavaScript object has is a word this version does not know, like
-    /// any other: it is looked up as the table's own entry, so it ends on the same row, with the same note, Reply's
-    /// own item in the details and both identifiers pinned. The ordinary unknown word is the first case.
-    /// </summary>
-    [Theory]
-    [InlineData("sequenceHasNoSendingAccount")]
-    [InlineData("constructor")]
-    [InlineData("__proto__")]
-    public async Task A_per_item_word_that_names_an_object_property_is_still_a_word_this_version_does_not_know(string slug)
-    {
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-            .WithContact(1001, Address, FirstName)
-            .Answers("POST", BulkPath, 200, NotProcessed(slug).ToJsonString());
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var result = await InvokeAsync(api, Input(pinned: Ensured), Ct);
-
-        var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
-        var row = ReplyErrorTable.Shared["refusal_this_version_has_no_word_for"]!.AsObject();
-        Assert.Equal(row["code"]!.GetValue<string>(), failed.Error.Code);
-        Assert.Equal(FailureClass.Permanent, failed.Error.Class);
-        Assert.Equal(row["note"]!.GetValue<string>(), failed.Error.Message);
-        Assert.Contains(slug, failed.Error.Details!["provider_item"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.Equal(Ensured, failed.Error.ExternalIds!["contact"]!.GetValue<string>());
-        Assert.Equal("7", failed.Error.ExternalIds["campaign"]!.GetValue<string>());
-    }
 
     // -------------------------------------------------------------------------------------------------------
     // The failure rows this operation declares, and only those
@@ -822,7 +501,7 @@ public class ReplyEnrollTests
     }
 
     [Fact]
-    public async Task An_archived_sequence_will_take_no_enrollment_and_is_not_asked_to()
+    public async Task An_archived_sequence_will_take_no_enrollment()
     {
         using var account = new ReplyAccount();
         account.WithSequence(Sequence, "Q3 LatAm founders", "paused", true, 11)
@@ -832,21 +511,19 @@ public class ReplyEnrollTests
 
         var result = await InvokeAsync(api, Input(pinned: Ensured), Ct);
 
-        // The live-state read already says so, so the enrollment is never attempted: un-archiving the sequence
-        // at Reply is what makes this work item runnable, and no number of attempts will do it.
+        // Un-archiving the sequence at Reply is what makes this work item runnable, and no number of attempts will.
         var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
         Assert.Equal("campaign_not_enrollable", failed.Error.Code);
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
-        Assert.Equal([Participation, LiveState], Paths(account));
+        Assert.Equal(["sequence add-contact 7"], Paths(account));
     }
 
     [Fact]
     public async Task A_sequence_with_no_steps_to_send_will_take_no_enrollment_either()
     {
         using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-            .WithContact(1001, Address, FirstName)
-            .Answers("POST", BulkPath, 400, Refusal("sequenceContact.noStepsInSequence").ToJsonString());
+        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false)
+            .WithContact(1001, Address, FirstName);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -878,7 +555,7 @@ public class ReplyEnrollTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal(Ensured, failed.Error.ExternalIds!["contact"]!.GetValue<string>());
         Assert.Equal("7", failed.Error.ExternalIds?["campaign"]?.GetValue<string>());
-        Assert.Equal([Participation, LiveState, Statuses], Paths(account));
+        Assert.Equal(["sequence add-contact 7"], Paths(account));
         Assert.Empty(account.EnrolledIn(Sequence));
     }
 
@@ -904,39 +581,18 @@ public class ReplyEnrollTests
     {
         using var account = new ReplyAccount();
         account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-            .WithContact(1001, Address, FirstName)
-            .Answers("POST", BulkPath, 503, Refusal("server.unavailable", 503).ToJsonString());
+            .WithContact(1001, Address, FirstName);
+        account.LosesTheOutcome("sequence add-contact");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
         var result = await InvokeAsync(api, Input(pinned: Ensured), Ct);
 
-        // The read/write mark in the package's own table is what decides this. The same ending on the live-state
-        // read is transient and simply asked again; here the enrollment may have landed before Reply's own side
-        // failed, and into a live campaign that is an email already sent.
+        // The CLI could not say whether the enrollment happened, and into a live campaign that may be an email
+        // already sent.
         var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
         Assert.Equal("provider_answer_lost", failed.Error.Code);
         Assert.Equal(FailureClass.Ambiguous, failed.Error.Class);
-    }
-
-    [Fact]
-    public async Task A_failure_on_the_providers_own_side_during_the_live_state_read_is_only_transient()
-    {
-        using var account = new ReplyAccount();
-        account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
-            .WithContact(1001, Address, FirstName)
-            .Answers("GET", $"/v3/sequences/{Sequence}", 503, Refusal("server.unavailable", 503).ToJsonString());
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var result = await InvokeAsync(api, Input(pinned: Ensured), Ct);
-
-        // The other side of the same mark: nothing was written, and asking again costs nothing, so the attempt
-        // is simply repeated rather than stopping a person's work item for a human to look at.
-        var failed = Assert.IsType<InvocationOutcome.Failed>(result.Outcome);
-        Assert.Equal("provider_unavailable", failed.Error.Code);
-        Assert.Equal(FailureClass.Transient, failed.Error.Class);
-        Assert.Empty(account.EnrolledIn(Sequence));
     }
 
     // -------------------------------------------------------------------------------------------------------
@@ -992,8 +648,8 @@ public class ReplyEnrollTests
             }
         }
 
-        var imported = Assert.Single(account.Calls, call => call.Path == "/v3/contacts/import");
-        Assert.Contains(Address, imported.Body!, StringComparison.Ordinal);
+        var added = Assert.Single(account.Calls);
+        Assert.Contains(Address, added.Body!, StringComparison.Ordinal);
     }
 
     // -------------------------------------------------------------------------------------------------------
@@ -1064,30 +720,6 @@ public class ReplyEnrollTests
         return failed;
     }
 
-    /// <summary>A bulk enrolment that took the call and refused this one person, in the shape Reply uses.</summary>
-    private static JsonObject NotProcessed(string slug) => new()
-    {
-        ["added"] = new JsonArray(),
-        ["notProcessed"] = new JsonObject
-        {
-            [Ensured] = new JsonObject
-            {
-                ["error"] = slug,
-                ["errorDetails"] = "The stand-in was told to answer this.",
-            },
-        },
-    };
-
-    /// <summary>A business rejection of the shape Reply answers one in: a code, and no <c>errors[]</c>.</summary>
-    private static JsonObject Refusal(string code, int status = 400) => new()
-    {
-        ["type"] = "about:blank",
-        ["title"] = "Bad Request",
-        ["status"] = status,
-        ["detail"] = "The stand-in was told to answer this.",
-        ["code"] = code,
-    };
-
     /// <summary>The result the plugin answered with, having first been held to the operation's own document.</summary>
     private static JsonObject Succeeded(PluginInvocationResult result)
     {
@@ -1099,12 +731,12 @@ public class ReplyEnrollTests
         return outcome.Result!.AsObject();
     }
 
-    /// <summary>Every call the account was asked to make, as "METHOD /path", in the order it was asked.</summary>
+    /// <summary>Every call the account was asked to make, one line each, in the order it was asked.</summary>
     private static IReadOnlyList<string> Paths(ReplyAccount account) =>
-        [.. account.Calls.Select(call => call.Method + " " + call.Path)];
+        [.. account.Calls.Select(call => call.Line)];
 
     private static IReadOnlyList<string> PathsSince(ReplyAccount account, int mark) =>
-        [.. account.CallsSince(mark).Select(call => call.Method + " " + call.Path)];
+        [.. account.CallsSince(mark).Select(call => call.Line)];
 
     /// <summary>Everything that left this runtime: every argument of every call, and every body.</summary>
     private static string Everything(ReplyAccount account) =>

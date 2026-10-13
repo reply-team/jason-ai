@@ -1,93 +1,150 @@
 // What every ending this package can meet means, as a table rather than as a habit.
 //
-// Two things are decided here and nowhere else. The first is the read/write mark of every call the package makes:
-// a lost answer to a read costs nothing to repeat, while a lost answer to a write may already have created a
-// contact or sent a person an email, and with consumption pricing a repeat is a real charge. The second is the
-// code and the failure class each observable condition gets, which is what the runtime acts on — `transient` is
-// retried, `permanent` and `validation` are final, and `ambiguous` stops the work item for a person.
+// Three things are decided here and nowhere else. The first is the read/write mark of every command this package
+// runs: a lost answer to a read costs nothing to repeat, while a lost answer to a write may already have put a person
+// into a sequence. The second is which row each of the Reply CLI's own error codes is, operation by operation. The
+// third is the code and the failure class each row reports, which is what the runtime acts on — `transient` is
+// retried, `permanent` and `validation` are final, and `ambiguous` is repeated only where the operation's contract
+// says a repeat is safe.
 //
-// The two constants below are STRICT JSON: double-quoted keys and strings, no comments inside them, no trailing
-// commas, and each one ends with a closing brace at the start of a line followed by a semicolon. A test on the
-// runtime side parses exactly that span out of this file and holds every code it names to the published contract
-// of the operation that names it — same code, same class — so this table and the runtime cannot drift apart.
-// There is no second copy of it anywhere. Keep editing them as JSON.
+// The constants below are STRICT JSON: double-quoted keys and strings, no comments inside them, no trailing commas,
+// and each one ends with a closing brace at the start of a line followed by a semicolon. A test on the runtime side
+// parses exactly that span out of this file and holds every row to the published contract of the operation that
+// names it, and every mapped code to a row that exists. There is no second copy of it anywhere. Keep editing them as
+// JSON.
 
-// Every Reply API v3 call this package makes, and whether it is a read or a write. The mark is per call rather
-// than per verb: `POST /v3/contacts/import` is a write that creates people and can even enrol them, and a filter
-// search would be a read for all that it is a POST. A call that is not in this table is refused rather than
-// guessed at, because guessing here is how a write comes to be retried.
-export const CALLS = {
-  "GET /v3/sequences/{id}": {
+// Every command this package runs, and whether it is a read or a write. The one raw call is the contact search a list
+// add or an enrolment makes for a person who has no pin and no first name: a POST, and a read all the same.
+export const COMMANDS = {
+  "sequence get": {
     "kind": "read",
-    "note": "The sequence itself: what campaign.get answers from, campaign.enroll's live-state recovery read, the state campaign.pause and campaign.activate read before they write, and the read that confirms a campaign enrollment.stop names for the first time."
+    "note": "The sequence as Reply holds it: what campaign.get answers from, and the read enrollment.stop makes of a campaign it names for the first time."
   },
-  "GET /v3/sequences/{id}/contacts/{contact_id}": {
+  "sequence contacts": {
     "kind": "read",
-    "note": "Whether this person already takes part in the sequence: campaign.enroll's first recovery read, the read it makes before enrolling anybody who existed before the call, and the participation enrollment.stop reads before it removes anything."
+    "note": "One page of the people a sequence holds, and Reply's count of them: what enrollment.list answers from."
   },
-  "GET /v3/sequences/{id}/contacts": {
+  "sequence stats": {
     "kind": "read",
-    "note": "One page of the people the sequence holds, most recently added first: what enrollment.list answers from."
+    "note": "A sequence's counts over one window: what engagement.summarize answers from."
   },
-  "GET /v3/sequences/{id}/contacts/count": {
+  "inbox list": {
     "kind": "read",
-    "note": "How many people the sequence holds: enrollment.list's total, and the population campaign.activate holds a person's approval to."
+    "note": "One page of one of Reply's thread buckets, by person or by sequence: what conversation.list answers from — the inbox alone for inbound threads, the inbox and the sent threads merged for every thread."
   },
-  "POST /v3/sequences/{id}/stats": {
+  "inbox get": {
     "kind": "read",
-    "note": "A sequence's counts over one window: what engagement.summarize answers from. A POST, and a read all the same."
+    "note": "One thread, its subject, and one page of its messages: what conversation.get answers from."
   },
-  "POST /v3/inbox/threads/filter": {
+  "api POST /v3/contacts/filter": {
     "kind": "read",
-    "note": "One page of one of Reply's thread buckets, by person or by sequence: what conversation.list answers from — the inbox alone for inbound threads, the inbox and the sent threads merged for every thread. A POST, and a read all the same."
+    "note": "Reply's contact search by address: the lookup list_membership.add and campaign.enroll make for a person with no pin and no first name. A POST, and a read all the same."
   },
-  "GET /v3/inbox/threads/{id}": {
-    "kind": "read",
-    "note": "One thread, its whole history inline: conversation.get's header, and the reason a history too long to read whole is too large."
-  },
-  "GET /v3/inbox/threads/{id}/messages": {
-    "kind": "read",
-    "note": "One page of a thread's messages, the first sent first: what conversation.get answers from."
-  },
-  "GET /v3/contacts/{id}/statuses": {
-    "kind": "read",
-    "note": "The opt-out register and, by the same call, whether a pinned contact still resolves. No address travels."
-  },
-  "POST /v3/contacts/filter": {
-    "kind": "read",
-    "note": "The people one list holds, a page at a time: list_membership.add's recovery read; and, by a search term, the contacts whose address holds one, a page at a time: the lookup optout.record makes before it creates anybody, and the only way enrollment.stop finds a person it has no pin for. A POST, and a read all the same."
-  },
-  "POST /v3/contacts/import": {
+  "sequence add-contact": {
     "kind": "write",
-    "note": "Ensures a contact by email in one call, matching or creating. A write: it can create a person."
+    "note": "Puts the person into the sequence, importing them first when they are given by their fields. Into a live sequence this is a send, so it is the most expensive repeat of all."
   },
-  "POST /v3/contacts": {
+  "sequence remove-contact": {
     "kind": "write",
-    "note": "Ensures a contact that has no first name to import with. A write, and one with no documented duplicate code."
+    "note": "Takes the person out of the sequence; their history stays. It never creates anybody."
   },
-  "POST /v3/contacts/set-opted-out": {
+  "sequence pause": {
     "kind": "write",
-    "note": "Sets Reply's opt-out flag for the person, by identifier in the body. Only ever set here, never cleared; a contact already opted out counts as updated."
+    "note": "Pauses the sequence."
   },
-  "POST /v3/contact-lists/{id}/add-contacts": {
+  "sequence start": {
     "kind": "write",
-    "note": "Adds the person to the list. Re-adding is documented nowhere, which is why the recovery read exists."
+    "note": "Starts the sequence, or resumes a paused one, only while it holds the population a person approved. Step 1 goes to everybody enrolled, so it is a send."
   },
-  "POST /v3/sequences/{id}/contact-links/bulk": {
+  "contact-list add-contact": {
     "kind": "write",
-    "note": "Enrols the person. Into a live sequence this is a send, so it is the most expensive repeat of all."
+    "note": "Puts the person on the list, importing them first when they are given by their fields."
   },
-  "DELETE /v3/sequences/{id}/contact-links/{contact_id}": {
+  "contact opt-out": {
     "kind": "write",
-    "note": "Takes the person out of the sequence, with no body: their history stays and they are not marked finished. A 404 means they take no part."
+    "note": "Sets Reply's opt-out flag for the person, creating them only when Reply holds nobody under the address."
+  }
+};
+
+// Which row each of the Reply CLI's error codes is. An operation's own mapping wins over the shared one; a code in
+// neither is `auth.*` (who is calling), `usage.*` (refused before anything was sent), or a refusal this version has
+// no word for. `reply.invalid_request:email` is the row for an invalid request whose fields name the email.
+export const CODES = {
+  "shared": {
+    "access.denied": "unauthorized",
+    "access.feature_unavailable": "unauthorized",
+    "rate_limited": "rate_limited",
+    "reply.unavailable": "reply_not_reached",
+    "outcome.unknown": "answer_lost_on_a_write",
+    "sequence.busy": "reply_busy",
+    "reply.refused": "refusal_this_version_has_no_word_for",
+    "reply.invalid_request": "refusal_this_version_has_no_word_for"
   },
-  "POST /v3/sequences/{id}/pause": {
-    "kind": "write",
-    "note": "Pauses the sequence, with no body. Reply documents it as idempotent: a paused sequence answers the same."
-  },
-  "POST /v3/sequences/{id}/start": {
-    "kind": "write",
-    "note": "Starts the sequence, with no body; it also resumes a paused one. Step 1 goes to everybody enrolled, so it is a send."
+  "per_operation": {
+    "optout.record": {
+      "contact.not_found": "contact_not_found",
+      "contact.not_unique": "contact_not_unique",
+      "contact.lookup_incomplete": "lookup_not_finished",
+      "contact.invalid_email": "invalid_channel_value",
+      "account.contact_limit_reached": "limit_reached",
+      "reply.invalid_request:email": "invalid_channel_value"
+    },
+    "enrollment.stop": {
+      "sequence.not_found": "campaign_not_found",
+      "contact.not_unique": "contact_not_unique",
+      "contact.lookup_incomplete": "lookup_not_finished"
+    },
+    "campaign.enroll": {
+      "sequence.not_found": "campaign_not_found",
+      "sequence.archived": "campaign_not_enrollable",
+      "sequence.has_no_steps": "campaign_not_enrollable",
+      "sequence.step_not_found": "call_could_not_be_built",
+      "usage.range": "call_could_not_be_built",
+      "contact.not_found": "contact_not_found",
+      "contact.opted_out": "suppressed",
+      "contact.invalid_email": "invalid_channel_value",
+      "account.contact_limit_reached": "limit_reached",
+      "reply.invalid_request:email": "invalid_channel_value"
+    },
+    "list_membership.add": {
+      "contact-list.not_found": "list_not_found",
+      "contact.not_found": "contact_not_found",
+      "contact.opted_out": "suppressed",
+      "contact.invalid_email": "invalid_channel_value",
+      "account.contact_limit_reached": "limit_reached",
+      "reply.invalid_request:email": "invalid_channel_value"
+    },
+    "campaign.pause": {
+      "sequence.not_found": "campaign_not_found",
+      "sequence.archived": "campaign_not_pausable",
+      "sequence.not_pausable": "campaign_not_pausable"
+    },
+    "campaign.activate": {
+      "sequence.not_found": "campaign_not_found",
+      "sequence.archived": "campaign_not_activatable",
+      "sequence.not_startable": "campaign_not_activatable",
+      "sequence.contact_count_changed": "population_changed"
+    },
+    "conversation.list": {
+      "access.feature_unavailable": "feature_not_included"
+    },
+    "conversation.get": {
+      "inbox.thread_not_found": "conversation_not_found",
+      "access.feature_unavailable": "feature_not_included"
+    },
+    "enrollment.list": {
+      "sequence.not_found": "campaign_not_found",
+      "access.feature_unavailable": "feature_not_included"
+    },
+    "engagement.summarize": {
+      "sequence.not_found": "campaign_not_found",
+      "access.feature_unavailable": "feature_not_included",
+      "usage.stats": "window_refused",
+      "reply.invalid_request": "window_refused"
+    },
+    "campaign.get": {
+      "sequence.not_found": "campaign_not_found"
+    }
   }
 };
 
@@ -105,86 +162,110 @@ export const ROWS = {
       "note": "The Reply CLI could not be started, so nothing reached the account. Install it, make sure the runtime's grant names it, and reload the plugins."
     },
     "call_refused_before_it_was_sent": {
-      "when": "The CLI exited 2, which is its usage error, decided before any request was made.",
+      "when": "The CLI exited 2 with a usage error of its own, decided before any request was made, and the operation has no row of its own for that error.",
       "code": "provider_call_failed",
       "class": "permanent",
       "note": "The Reply CLI refused the call before making it. Nothing reached the account, and a repeat would build the same call, so this is reported rather than retried."
     },
     "answer_lost_on_a_read": {
-      "when": "A call marked `read` timed out, answered 5xx, or exited 1 with nothing on stdout that could be parsed — or its answer was cut off at `Plugins:Exec:OutputBytes` inside an operation with no too-large row of its own, which is every write.",
+      "when": "A read timed out, exited without an error the CLI explained, or printed something that is not a result — or its answer was cut off at `Plugins:Exec:OutputBytes` inside an operation with no too-large row of its own.",
       "code": "provider_unavailable",
       "class": "transient",
       "note": "Reply could not be reached, or did not answer, on a call that changes nothing. Asking again costs nothing, so the attempt is simply repeated."
     },
     "answer_lost_on_a_write": {
-      "when": "A call marked `write` timed out, answered 5xx, exited 1 with nothing on stdout that could be parsed, or had its answer cut off at `Plugins:Exec:OutputBytes`.",
+      "when": "A write exited 3 (the CLI's `outcome.unknown`: the request may have reached Reply and no definite answer came back), timed out, exited without an error the CLI explained, printed something that is not a result, or had its answer cut off at `Plugins:Exec:OutputBytes`.",
       "code": "provider_answer_lost",
       "class": "ambiguous",
-      "note": "A write was sent to Reply and no answer came back, so it may already have happened. The CLI's exit codes cannot tell a request that was never sent from one whose answer was lost, and repeating a write can create a person twice or send to them twice — so the work item stops here for a person rather than guessing."
+      "note": "A write may already have happened at Reply, and no answer says whether it did. Repeating a write can add a person twice or send to them twice, so the attempt is repeated only where the operation's own contract says a repeat is safe, and otherwise the work item stops for a person."
+    },
+    "reply_not_reached": {
+      "when": "The CLI answered `reply.unavailable`: Reply could not be reached, or a read failed after the CLI's own retries. The CLI never resends a write, so a write that ends this way was never sent.",
+      "code": "provider_unavailable",
+      "class": "transient",
+      "note": "Reply could not be reached, or did not answer a call that changes nothing, so nothing happened there. The runtime repeats the attempt."
+    },
+    "reply_busy": {
+      "when": "The CLI answered `sequence.busy`: Reply is still activating the sequence.",
+      "code": "provider_unavailable",
+      "class": "transient",
+      "note": "Reply is still activating this sequence, and nothing was changed. The runtime repeats the attempt once Reply has had time to finish."
     },
     "unauthorized": {
-      "when": "401, whose body Reply leaves empty, or a 403 that the operation has no row of its own for — a read maps the code Reply gives a plan or role without the feature to `feature_unavailable` — and the per-item word `forbidden`, which is how the bulk enrol says the same thing about one person inside a 200.",
+      "when": "The CLI refused for want of a working credential (`auth.*`, exit 2), or answered `access.denied`, or `access.feature_unavailable` for an operation that declares no code of its own for a feature the account lacks.",
       "code": "unauthorized",
       "class": "permanent",
       "note": "The profile this route names is not signed in, or its key does not carry the scope this call needs. Sign in with `reply auth login` for that profile — in Windows PowerShell, `reply.cmd auth login`, because its default execution policy refuses npm's `reply.ps1`; PowerShell 7 and Command Prompt take `reply auth login` as written — or issue a key with the scope; no retry can help."
     },
     "rate_limited": {
-      "when": "429 on any call.",
+      "when": "The CLI answered `rate_limited`: Reply asked to wait longer than the CLI waits on its own, and the wait it asked for travels in the trace as `retry_after`.",
       "code": "rate_limited",
       "class": "transient",
       "note": "Reply asked for this call to be made later. The runtime waits and repeats the attempt."
     },
     "refusal_this_version_has_no_word_for": {
-      "when": "Any other status, or a business code no row below names — the bulk-enrol error set is published as open, so there will be some.",
+      "when": "The CLI answered `reply.refused`, `reply.invalid_request` about a field this operation has no row for, or a code this version does not know.",
       "code": "provider_call_failed",
       "class": "permanent",
-      "note": "Reply refused the call in a word this version of the package does not know; the status and Reply's own code are in the attempt's trace. Nothing was done, so the attempt is not repeated — and a refusal that turns up often enough belongs in this table."
+      "note": "Reply refused the call in a word this version of the package does not know; the CLI's code and Reply's own are in the attempt's trace. Nothing was done, so the attempt is not repeated — and a refusal that turns up often enough belongs in this table."
     }
   },
   "per_operation": {
     "campaign.activate": {
       "campaign_not_found": {
-        "when": "404 on `GET /v3/sequences/{id}`, on its count or on the start itself, all of whose paths name exactly one sequence — Reply's own code is `sequence.notFound` — or an identifier that is not a Reply sequence number at all, which is refused without a call.",
+        "when": "The CLI answered `sequence.not_found`, or an identifier that is not a Reply sequence number, refused without a call.",
         "code": "campaign_not_found",
         "class": "permanent",
         "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
       },
       "campaign_not_activatable": {
-        "when": "The sequence read says it is archived, and the start is not asked for; or the start answers 409 (archived) or 400 (no contacts, no connected sending account, no schedule with sending hours), whose own code travels in `details.provider_code`.",
+        "when": "The CLI answered `sequence.archived`, or `sequence.not_startable` — no contacts, no connected sending account, no sending hours — and Reply's own code travels in the trace.",
         "code": "campaign_not_activatable",
         "class": "permanent",
-        "note": "Reply will not start this sequence, and nothing was started. Either its state says it is archived, or Reply refused the start: no contacts, no connected sending account or no sending hours. The attempt's trace says which, with Reply's own code where Reply gave one; that has to change at Reply before the activation is proposed again."
+        "note": "Reply will not start this sequence, and nothing was started. Either it is archived, or Reply refused the start: no contacts, no connected sending account or no sending hours. The attempt's trace says which, with Reply's own code where Reply gave one; that has to change at Reply before the activation is proposed again."
       },
       "population_changed": {
-        "when": "The sequence's count, read at execution, is not the `args.expected.enrolled` a person approved. The start is not asked for.",
+        "when": "The CLI answered `sequence.contact_count_changed`: the sequence's count at execution is not the `args.expected.enrolled` a person approved, and nothing was started.",
         "code": "population_changed",
         "class": "permanent",
         "note": "The population a person approved is not the one the campaign holds now, so nothing was started. The attempt's trace carries both numbers; read the count again with enrollment.list and propose a new activation for the number it gives."
+      },
+      "count_not_answered": {
+        "when": "The CLI answered `already_active` without a count: the sequence is live, nothing was started, and Reply would not count its people.",
+        "code": "provider_unavailable",
+        "class": "transient",
+        "note": "The sequence is already live, but Reply did not say how many people it holds, and the answer needs that number. Nothing was started; the runtime asks again."
+      },
+      "started_from_a_state_with_no_word": {
+        "when": "The CLI answered `started` from a state other than `new` or `paused` — Reply has a rare `skipped` — which `was` has no word for.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply started the sequence, from a state this version has no word for, so the answer cannot say what it left. The sequence is live now; the attempt's trace names Reply's word for the state."
       }
     },
     "campaign.pause": {
       "campaign_not_found": {
-        "when": "404 on `GET /v3/sequences/{id}` or on the pause itself, both of whose paths name exactly one sequence — Reply's own code is `sequence.notFound` — or an identifier that is not a Reply sequence number at all, which is refused without a call.",
+        "when": "The CLI answered `sequence.not_found`, or an identifier that is not a Reply sequence number, refused without a call.",
         "code": "campaign_not_found",
         "class": "permanent",
         "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
       },
       "campaign_not_pausable": {
-        "when": "The sequence read says it is archived, or that it never started (`new`), and the pause is not asked for — `details.reason` says which; or the pause answers 409 or 400, whose own code travels in `details.provider_code` (the one 400 Reply documents for a pause is `sequenceAction.teamMemberNotFound`).",
+        "when": "The CLI answered `sequence.not_pausable` (Reply refuses to pause a sequence that never started, or refused the pause for another reason) or `sequence.archived`; Reply's own code travels in the trace.",
         "code": "campaign_not_pausable",
         "class": "permanent",
-        "note": "Reply will not pause this sequence, and nothing was changed. Either its state says it cannot be paused — archived, or never started — or Reply refused the pause. The attempt's trace says which, with Reply's own code where Reply gave one; that has to change at Reply before a pause can succeed."
+        "note": "Reply will not pause this sequence, and nothing was changed: it is archived, it never started, or Reply refused the pause. The attempt's trace says which, with Reply's own code where Reply gave one; that has to change at Reply before a pause can succeed."
       }
     },
     "campaign.get": {
       "campaign_not_found": {
-        "when": "404 on `GET /v3/sequences/{id}`, whose path names exactly one sequence — Reply's own code there is `sequence.notFound` — or an identifier that is not a Reply sequence number at all, which is refused without a call.",
+        "when": "The CLI answered `sequence.not_found`, or the identifier is not a Reply sequence number at all, which is refused without a call.",
         "code": "campaign_not_found",
         "class": "permanent",
         "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
       },
       "answer_too_large_on_a_read": {
-        "when": "The host reports the CLI's stdout truncated on a call marked `read`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
+        "when": "The host reports the CLI's stdout truncated on `sequence get`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
         "code": "provider_answer_too_large",
         "class": "permanent",
         "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. The same read would be cut at the same place, so it is not repeated; raising `Plugins:Exec:OutputBytes` is what lets it through."
@@ -192,19 +273,19 @@ export const ROWS = {
     },
     "enrollment.list": {
       "campaign_not_found": {
-        "when": "404 on `GET /v3/sequences/{id}/contacts/count`, where Reply's own code is `sequenceContact.sequenceNotFound` — the page itself answers an empty list for a sequence this account does not hold, so the count is what tells the two apart — or an identifier that is not a Reply sequence number at all, which is refused without a call.",
+        "when": "The CLI answered `sequence.not_found` — Reply's count of a sequence's people refuses a sequence this account does not hold — or an identifier that is not a Reply sequence number, refused without a call.",
         "code": "campaign_not_found",
         "class": "permanent",
         "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
       },
       "feature_not_included": {
-        "when": "403 with Reply's own code `sequenceContact.forbidden` on `GET /v3/sequences/{id}/contacts`. Any other 403 is the shared `unauthorized` row.",
+        "when": "The CLI answered `access.feature_unavailable`: Reply says this account's plan or role may not read a sequence's people.",
         "code": "feature_unavailable",
         "class": "permanent",
         "note": "Reply says this account's plan or role may not read a sequence's people. Signing in again would not change it; a role or a plan that includes it would."
       },
       "answer_too_large_on_a_read": {
-        "when": "The host reports the CLI's stdout truncated on a call marked `read`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
+        "when": "The host reports the CLI's stdout truncated on `sequence contacts`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
         "code": "provider_answer_too_large",
         "class": "permanent",
         "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. The same page would be cut at the same place, so it is not repeated: ask for less — a smaller `limit` — or raise `Plugins:Exec:OutputBytes`."
@@ -212,25 +293,25 @@ export const ROWS = {
     },
     "engagement.summarize": {
       "campaign_not_found": {
-        "when": "404 on `POST /v3/sequences/{id}/stats`, where Reply's own code is `sequenceStats.notFound`, or an identifier that is not a Reply sequence number at all, which is refused without a call.",
+        "when": "The CLI answered `sequence.not_found`, or an identifier that is not a Reply sequence number, refused without a call.",
         "code": "campaign_not_found",
         "class": "permanent",
         "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
       },
       "feature_not_included": {
-        "when": "403 with Reply's own code `sequenceStats.forbidden`. Any other 403 is the shared `unauthorized` row.",
+        "when": "The CLI answered `access.feature_unavailable`: Reply says this account's plan or role may not read a sequence's statistics.",
         "code": "feature_unavailable",
         "class": "permanent",
         "note": "Reply says this account's plan or role may not read a sequence's statistics. Signing in again would not change it; a role or a plan that includes it would."
       },
       "window_refused": {
-        "when": "400 carrying `errors[]` and no `code` on `POST /v3/sequences/{id}/stats`: Reply refused the window, which is the whole of what the call asked.",
+        "when": "The CLI refused the window before sending (`usage.stats`: a span that does not end after it starts), or Reply did not accept it (`reply.invalid_request`). The window is the whole of what this call asked.",
         "code": "window_invalid",
         "class": "validation",
-        "note": "Reply refused the window this work item asked for. The same window would be refused again; correct `args.window`."
+        "note": "The window this work item asked for was refused, and the same window would be refused again; correct `args.window`."
       },
       "answer_too_large_on_a_read": {
-        "when": "The host reports the CLI's stdout truncated on a call marked `read`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
+        "when": "The host reports the CLI's stdout truncated on `sequence stats`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
         "code": "provider_answer_too_large",
         "class": "permanent",
         "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. The same read would be cut at the same place, so it is not repeated; raising `Plugins:Exec:OutputBytes` is what lets it through."
@@ -250,19 +331,19 @@ export const ROWS = {
         "note": "The identifier this read would filter by names nothing a Reply account could hold, so nothing was asked. The pin is wrong; the attempt's trace says which one."
       },
       "call_could_not_be_built": {
-        "when": "`source` is `all` and `offset` plus `limit` passes 1000. Every thread is Reply's inbox and its sent threads, read from the first thread each and merged, and one read reaches at most 1000. Decided before any call.",
+        "when": "`source` is `all` and `offset` plus `limit` passes 1000. Every thread is Reply's inbox and its sent threads, each read from its first thread a hundred at a time and merged, as far as 1000. Decided before any call.",
         "code": "provider_call_failed",
         "class": "permanent",
-        "note": "A page that far into every thread cannot be merged from two reads, so it is refused rather than guessed at. Ask for `source: inbound`, which Reply pages without that bound, or for a page within the first 1000 threads."
+        "note": "A page that far into every thread is not merged from the two buckets, so it is refused rather than guessed at. Ask for `source: inbound`, which Reply pages without that bound, or for a page within the first 1000 threads."
       },
       "feature_not_included": {
-        "when": "403 with Reply's own code `inboxThread.forbidden`: the inbox is not available to this user or team. Any other 403 is the shared `unauthorized` row.",
+        "when": "The CLI answered `access.feature_unavailable`: the inbox is not available to this user or team.",
         "code": "feature_unavailable",
         "class": "permanent",
         "note": "Reply says this account's plan or role does not include the inbox. Signing in again would not change it; a plan or a role that includes it would."
       },
       "answer_too_large_on_a_read": {
-        "when": "The host reports the CLI's stdout truncated on a call marked `read`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
+        "when": "The host reports the CLI's stdout truncated on `inbox list`: the answer passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
         "code": "provider_answer_too_large",
         "class": "permanent",
         "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. The same page would be cut at the same place, so it is not repeated: ask for less — a smaller `limit` — or raise `Plugins:Exec:OutputBytes`."
@@ -270,133 +351,163 @@ export const ROWS = {
     },
     "conversation.get": {
       "conversation_not_found": {
-        "when": "404 on either thread call, where Reply's own code is `inboxThread.notFound`, or an identifier that is not a Reply thread number at all, which is refused without a call.",
+        "when": "The CLI answered `inbox.thread_not_found`, or an identifier that is not a Reply thread number, refused without a call.",
         "code": "conversation_not_found",
         "class": "permanent",
         "note": "This account holds no thread under the identifier the work item carries, or none this account may see. No later attempt will find it."
       },
       "feature_not_included": {
-        "when": "403 with Reply's own code `inboxThread.forbidden`: the inbox is not available to this user or team. Any other 403 is the shared `unauthorized` row.",
+        "when": "The CLI answered `access.feature_unavailable`: the inbox is not available to this user or team.",
         "code": "feature_unavailable",
         "class": "permanent",
         "note": "Reply says this account's plan or role does not include the inbox. Signing in again would not change it; a plan or a role that includes it would."
       },
       "answer_too_large_on_a_read": {
-        "when": "The host reports the CLI's stdout truncated on a call marked `read`. Reply sends a thread's whole history with the thread, so a long enough history passes `Plugins:Exec:OutputBytes` however small the page.",
+        "when": "The host reports the CLI's stdout truncated on `inbox get`: the page of messages passed `Plugins:Exec:OutputBytes` and was cut off before it could be read.",
         "code": "provider_answer_too_large",
         "class": "permanent",
-        "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. Reply sends the thread's whole history with it, so a smaller page cannot help: raising `Plugins:Exec:OutputBytes` lets it through, up to about twice its default of 4 MiB — past that, the two answers a thread read holds outgrow the 256 MiB this package asks for."
+        "note": "Reply's answer was larger than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. The same page would be cut at the same place, so it is not repeated: ask for less — a smaller `limit` — or raise `Plugins:Exec:OutputBytes`."
       }
     },
     "list_membership.add": {
       "list_not_found": {
-        "when": "404 on `POST /v3/contact-lists/{id}/add-contacts`.",
+        "when": "The CLI answered `contact-list.not_found`, or `args.list.external_id` is not a Reply list number, refused without a call.",
         "code": "list_not_found",
         "class": "permanent",
         "note": "This account holds no contact list under `args.list.external_id`. Correct the identifier the work item carries; nothing about repeating the call can change it."
       },
       "contact_not_found": {
-        "when": "404 with code `contact.notFound` on `GET /v3/contacts/{id}/statuses`, read by the pin Jason holds.",
+        "when": "The CLI answered `contact.not_found` for the pinned contact, or the pin is not a Reply contact number, refused without a call.",
         "code": "contact_not_found",
         "class": "permanent",
         "note": "The identifier pinned for this person no longer resolves at Reply — the contact was deleted, or it belongs to another account. The pin has to be cleared before this person can be worked again."
       },
       "suppressed": {
-        "when": "`isOptedOut` is true in `GET /v3/contacts/{id}/statuses`.",
+        "when": "The CLI answered `contact.opted_out`: Reply's own opt-out register holds this person, and this package always asks the CLI to refuse such a person (`--refuse-opted-out`).",
         "code": "suppressed",
         "class": "permanent",
         "note": "Reply's own opt-out register holds this person, so they are not added to an outreach list. This is a refusal on purpose, and the only way past it is the person asking to be reinstated."
       },
       "invalid_channel_value": {
-        "when": "400 carrying `errors[]` and no `code` on the ensure-contact call, where a pointer names the address.",
+        "when": "The CLI answered `contact.invalid_email`, or `reply.invalid_request` naming the email field; or the person carries no value on the channel the call named, decided before any call.",
         "code": "invalid_channel_value",
         "class": "validation",
         "note": "Reply will not accept the address this person carries on the channel the call named. The contact's data has to be corrected; no later attempt would be accepted either."
       },
       "limit_reached": {
-        "when": "400 with code `contactLimitExceeded`, on the ensure-contact call or on the add itself.",
+        "when": "The CLI answered `account.contact_limit_reached`.",
         "code": "limit_reached",
         "class": "permanent",
-        "note": "The account will hold no further contact. A list's own capacity, unlike the account's, publishes no code of its own — a refusal there arrives as an ordinary business 400 and is reported as a refusal this version has no word for, rather than guessed into this row."
+        "note": "The account will hold no further contact. A list's own capacity, unlike the account's, publishes no code of its own — a refusal there arrives as an ordinary refusal and is reported as a refusal this version has no word for, rather than guessed into this row."
+      },
+      "person_has_no_first_name": {
+        "when": "The person has no pin and no first name, and the lookup by address found nobody Reply holds under it. Reply creates nobody without a first name.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply will not create a person without a first name, and it holds nobody under this address, so nothing was added. Give the person a first name in Jason and propose the work again."
+      },
+      "contact_not_unique": {
+        "when": "The person has no pin and no first name, and the lookup by address, read to its end, found more than one contact whose email equals it, ignoring case.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply holds more than one contact under this address, so picking one would be guessing and nothing was added. A person resolves the duplicate at Reply, then proposes the work again."
+      },
+      "lookup_not_finished": {
+        "when": "The person has no pin and no first name, and the lookup by address read five pages of a hundred and Reply said there were more.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply holds more contacts whose address holds this one than one lookup reads, so whether exactly one of them is this person could not be decided, and nothing was added. Give the person a first name in Jason, or a pin, and propose the work again."
       }
     },
     "campaign.enroll": {
       "campaign_not_found": {
-        "when": "404 with code `sequence.notFound` on `GET /v3/sequences/{id}`.",
+        "when": "The CLI answered `sequence.not_found`, or the identifier is not a Reply sequence number at all, which is refused without a call.",
         "code": "campaign_not_found",
         "class": "permanent",
         "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
       },
       "contact_not_found": {
-        "when": "404 with code `contact.notFound` on `GET /v3/contacts/{id}/statuses`, read by the pin Jason holds, or the per-item word `contactNotFound` against this person inside the bulk enrol's `notProcessed`.",
+        "when": "The CLI answered `contact.not_found` for the pinned contact, or the pin is not a Reply contact number, refused without a call.",
         "code": "contact_not_found",
         "class": "permanent",
         "note": "The identifier pinned for this person no longer resolves at Reply — the contact was deleted, or it belongs to another account. The pin has to be cleared before this person can be worked again."
       },
       "campaign_not_enrollable": {
-        "when": "The live-state read answers a sequence that is archived, or a 400 on the sequence carries `sequence.archived` or `sequenceContact.noStepsInSequence`.",
+        "when": "The CLI answered `sequence.archived` or `sequence.has_no_steps`.",
         "code": "campaign_not_enrollable",
         "class": "permanent",
         "note": "The sequence will not take an enrollment: it is archived, or it holds no step to send. Un-archiving it at Reply, or giving it a step, is what makes the work item runnable — so it fails rather than waiting."
       },
       "collision_refused": {
-        "when": "`args.collision` is `refuse` and this person already takes part in the sequence: found by the participation read a first attempt makes for anybody who existed before the call, or answered by the bulk enrol as the per-item word `contactAlreadyInSequence`. Under `skip` the same reading is the successful answer `already_enrolled` instead.",
+        "when": "`args.collision` is `refuse`, this is a first attempt, and the CLI answered `already_in_sequence`: the person already takes part. Under `skip`, and on any repeated attempt, the same answer is `already_enrolled`.",
         "code": "collision_refused",
         "class": "permanent",
         "note": "This person already takes part in the sequence and the call asked to be refused rather than to decide. Choose another collision policy if a second participation is what was meant."
       },
       "suppressed": {
-        "when": "`isOptedOut` is true in `GET /v3/contacts/{id}/statuses`.",
+        "when": "The CLI answered `contact.opted_out`: Reply refused to add a person its opt-out register holds.",
         "code": "suppressed",
         "class": "permanent",
         "note": "Reply's own opt-out register holds this person, so they are not enrolled. This is a refusal on purpose, and the only way past it is the person asking to be reinstated."
       },
       "invalid_channel_value": {
-        "when": "400 carrying `errors[]` and no `code` on the ensure-contact call, where a pointer names the address.",
+        "when": "The CLI answered `contact.invalid_email`, or `reply.invalid_request` naming the email field; or the person carries no value on the channel the call named, decided before any call.",
         "code": "invalid_channel_value",
         "class": "validation",
         "note": "Reply will not accept the address this person carries on the channel the call named. The contact's data has to be corrected; no later attempt would be accepted either."
       },
       "limit_reached": {
-        "when": "400 with code `contactLimitExceeded`, or that same name against this person inside the bulk enrol's `notProcessed`.",
+        "when": "The CLI answered `account.contact_limit_reached`.",
         "code": "limit_reached",
         "class": "permanent",
-        "note": "The account will hold no further contact or enrollment. The sequence's own capacity, unlike the account's, publishes no code of its own — a refusal there arrives as an ordinary business 400 and is reported as a refusal this version has no word for, rather than guessed into this row."
+        "note": "The account will hold no further contact or enrollment. The sequence's own capacity, unlike the account's, publishes no code of its own — a refusal there arrives as an ordinary refusal and is reported as a refusal this version has no word for, rather than guessed into this row."
       },
       "call_could_not_be_built": {
-        "when": "The arguments name a call this provider cannot be asked to make: a start position no shape of this sequence's steps can answer, or a first-touch timing this version has no word for. Decided before anything is sent.",
+        "when": "The CLI answered `sequence.step_not_found` — the start position names no single step of this sequence's chain — or `usage.range` for a step number past the 10000 it takes; or `args.first_touch` is a value this version has no word for, refused without a call.",
         "code": "provider_call_failed",
         "class": "permanent",
         "note": "The enrollment could not be built from the arguments it was given, so nothing was sent. A Reply step carries no ordering field at all — the steps are a graph of parents with branch labels — so a numbered start position has a sound meaning only while they form a single chain, and the attempt's trace says which reading failed. Ask for the first step, or name a position the sequence really has."
       },
-      "request_rejected_as_invalid": {
-        "when": "The bulk enrol answers the per-item word `invalidInput` against this person: Reply read the request and would not take it.",
+      "person_has_no_first_name": {
+        "when": "The person has no pin and no first name, and the lookup by address found nobody Reply holds under it. Reply creates nobody without a first name.",
         "code": "provider_call_failed",
         "class": "permanent",
-        "note": "Reply rejected the enrollment request as invalid. A request built wrong is built the same way on every attempt, so it is reported rather than retried, and what Reply said is in the attempt's trace."
+        "note": "Reply will not create a person without a first name, and it holds nobody under this address, so nobody was enrolled. Give the person a first name in Jason and propose the work again."
+      },
+      "contact_not_unique": {
+        "when": "The person has no pin and no first name, and the lookup by address, read to its end, found more than one contact whose email equals it, ignoring case.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply holds more than one contact under this address, so picking one would be guessing and nobody was enrolled. A person resolves the duplicate at Reply, then proposes the work again."
+      },
+      "lookup_not_finished": {
+        "when": "The person has no pin and no first name, and the lookup by address read five pages of a hundred and Reply said there were more.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply holds more contacts whose address holds this one than one lookup reads, so whether exactly one of them is this person could not be decided, and nobody was enrolled. Give the person a first name in Jason, or a pin, and propose the work again."
       }
     },
     "enrollment.stop": {
       "campaign_not_found": {
-        "when": "404 on `GET /v3/sequences/{id}`, read first when the work item names the campaign for the first time; or an identifier that is not a Reply sequence number at all, which is refused without a call. A campaign already pinned is not read again, and Reply answers its absence with the same lumped 404 as a person who takes no part, which reads `already_stopped`; `sequence.notFound` or `sequenceContact.sequenceNotFound` on the participation read or the removal would still map here.",
+        "when": "The CLI answered `sequence.not_found` — on the read this package makes of a campaign it names for the first time, or when a person the CLI found takes no part in a sequence Reply does not hold — or an identifier that is not a Reply sequence number, refused without a call.",
         "code": "campaign_not_found",
         "class": "permanent",
         "note": "This account holds no sequence under the identifier the call carried. The pin is stale or the sequence was deleted; no later attempt will find it."
       },
       "contact_not_found": {
-        "when": "A pin that is not a Reply contact number at all, refused without a call. A well-formed pin Reply no longer holds is answered with the same 404 as a person who takes no part, so it reads `already_stopped` instead.",
+        "when": "A pin that is not a Reply contact number at all, refused without a call. A well-formed pin Reply no longer holds takes part in nothing, so it reads `already_stopped` instead.",
         "code": "contact_not_found",
         "class": "permanent",
         "note": "The identifier pinned for this person names nobody a Reply account could hold, so there is nobody to take out by it. The pin is wrong and has to be cleared."
       },
       "contact_not_unique": {
-        "when": "The lookup by address, read to its end, answered more than one contact whose `email` equals the channel value, ignoring case.",
+        "when": "The CLI answered `contact.not_unique`: more than one contact's email equals the address, ignoring case.",
         "code": "contact_not_unique",
         "class": "permanent",
         "note": "Reply holds more than one contact under this address, so picking one would be guessing and nobody was taken out. A person resolves the duplicate at Reply, then proposes the work again."
       },
       "lookup_not_finished": {
-        "when": "The lookup by address read five pages of a hundred and Reply said there were more. Reply's search matches by containment, so every one of them holds this address, and the end was not reached.",
+        "when": "The CLI answered `contact.lookup_incomplete`: more than five hundred contacts hold the address, so its lookup could not be read to its end.",
         "code": "provider_call_failed",
         "class": "permanent",
         "note": "Reply holds more contacts whose address holds this one than one lookup reads, so whether exactly one of them is this person could not be decided, and nobody was taken out — it is never read as a person Reply does not hold. A repeat would read the same pages, so it is not repeated: take the person out at Reply by hand, then check with enrollment.list."
@@ -410,31 +521,31 @@ export const ROWS = {
     },
     "optout.record": {
       "contact_not_found": {
-        "when": "404 on `GET /v3/contacts/{id}/statuses`, read by the pin Jason holds or by the identifier the lookup found; a pin that is not a Reply contact number at all, refused without a call; or the per-item word `notFound` against this person inside the opt-out's answer.",
+        "when": "The CLI answered `contact.not_found` for the pinned contact, or the pin is not a Reply contact number, refused without a call.",
         "code": "contact_not_found",
         "class": "permanent",
         "note": "The identifier pinned for this person no longer resolves at Reply — the contact was deleted, or it belongs to another account. The pin has to be cleared before the opt-out can be recorded there."
       },
       "contact_not_unique": {
-        "when": "The lookup by address, read to its end, answered more than one contact whose `email` equals the channel value, ignoring case.",
+        "when": "The CLI answered `contact.not_unique`: more than one contact's email equals the address, ignoring case.",
         "code": "contact_not_unique",
         "class": "permanent",
         "note": "Reply holds more than one contact under this address, so picking one would be guessing and nothing was done. A person resolves the duplicate at Reply, then proposes the work again."
       },
       "lookup_not_finished": {
-        "when": "The lookup by address read five pages of a hundred and Reply said there were more. Reply's search matches by containment, so every one of them holds this address, and the end was not reached.",
+        "when": "The CLI answered `contact.lookup_incomplete`: more than five hundred contacts hold the address, so its lookup could not be read to its end.",
         "code": "provider_call_failed",
         "class": "permanent",
         "note": "Reply holds more contacts whose address holds this one than one lookup reads, so whether exactly one of them is this person could not be decided, and nothing was done: no contact made, no flag set. A repeat would read the same pages, so it is not repeated: record the opt-out at Reply by hand. Where `jason suppression add` recorded the address, Jason's own register already stops Jason's own reach."
       },
       "invalid_channel_value": {
-        "when": "400 carrying `errors[]` and no `code` on the ensure-contact call, where a pointer names the address.",
+        "when": "The CLI answered `contact.invalid_email`, or `reply.invalid_request` naming the email field; or the person carries no value on the channel the call named, decided before any call.",
         "code": "invalid_channel_value",
         "class": "validation",
         "note": "Reply will not accept the address this person carries on the channel the call named, so no contact could be made to record the opt-out on. The contact's data has to be corrected; no later attempt would be accepted either."
       },
       "limit_reached": {
-        "when": "400 with code `contactLimitExceeded` on the ensure-contact call.",
+        "when": "The CLI answered `account.contact_limit_reached`: Reply held nobody under the address, and the account will hold no further contact.",
         "code": "limit_reached",
         "class": "permanent",
         "note": "The account will hold no further contact, so the person who said stop could not be made there. Reply never held them under this address, so it cannot reach them there either."
@@ -455,61 +566,70 @@ function compact(request) {
   return cleaned;
 }
 
-// Which entry of CALLS a concrete call is, by matching the path against the templates segment by segment. The
-// path is the one the package built, so this is a lookup rather than a parse; a call the table does not hold is
-// an omission in this file and says so. Where two templates match, the one with more literal segments is the
-// call: `/v3/sequences/7/contacts/count` is the count, not a person whose identifier happens to be `count`.
-export function callOf(method, path) {
-  const segments = String(path).split("?")[0].split("/");
-  let found = null;
-  let literal = -1;
+function has(table, key) {
+  return table !== null && typeof table === "object" && Object.prototype.hasOwnProperty.call(table, key);
+}
 
-  for (const call of Object.keys(CALLS)) {
-    const space = call.indexOf(" ");
-    if (call.slice(0, space) !== method) {
-      continue;
-    }
+// Read or write, for the one decision that turns on it. A command this package does not declare gets no default:
+// treating an unmarked write as a read is exactly the mistake that ends in a double send.
+export function kindOf(command) {
+  return has(COMMANDS, command) ? COMMANDS[command].kind : null;
+}
 
-    const template = call.slice(space + 1).split("/");
-    if (template.length === segments.length && template.every((part, at) => part.startsWith("{") || part === segments[at])) {
-      const literals = template.filter(part => !part.startsWith("{")).length;
-      if (literals > literal) {
-        found = call;
-        literal = literals;
-      }
-    }
+// Which lost-answer row an ending on this command belongs in. Only a command positively marked a read is treated as
+// one: the expensive side is the safe side.
+export function lostAnswerRow(command) {
+  return kindOf(command) === "read" ? "answer_lost_on_a_read" : "answer_lost_on_a_write";
+}
+
+// The row an answer cut off at the exec capture belongs in. A read whose operation has a row of its own for it fails
+// with that one, permanently: asking again would be cut at the same byte. Anything else keeps the lost-answer ending.
+export function cutAnswerRow(operation, command) {
+  const own = operation !== null && operation !== undefined ? ROWS.per_operation[operation] : undefined;
+  const readsIt = own !== undefined && has(own, "answer_too_large_on_a_read");
+  return kindOf(command) === "read" && readsIt ? "answer_too_large_on_a_read" : lostAnswerRow(command);
+}
+
+// The row an error the CLI explained belongs in, for this operation: its own mapping, then the shared one, then the
+// CLI's namespaces. An invalid request naming the email field has a row of its own wherever the operation takes an
+// address, because there the person's data is what Reply refused rather than a request this package built wrong.
+export function rowOf(operation, error) {
+  const code = typeof error.code === "string" ? error.code : "";
+  const own = has(CODES.per_operation, operation) ? CODES.per_operation[operation] : {};
+  const details = error.details !== null && typeof error.details === "object" ? error.details : {};
+  const fields = Array.isArray(details.fields) ? details.fields : [];
+
+  if (code === "reply.invalid_request" && fields.indexOf("email") >= 0 && has(own, code + ":email")) {
+    return own[code + ":email"];
   }
 
-  return found;
+  if (has(own, code)) {
+    return own[code];
+  }
+
+  if (has(CODES.shared, code)) {
+    return CODES.shared[code];
+  }
+
+  if (code.indexOf("auth.") === 0) {
+    return "unauthorized";
+  }
+
+  if (code.indexOf("usage.") === 0) {
+    return "call_refused_before_it_was_sent";
+  }
+
+  return "refusal_this_version_has_no_word_for";
 }
 
-// Read or write, for the one decision that turns on it. A call this package does not declare gets no default:
-// treating an unmarked write as a read is exactly the mistake that ends in a double send.
-export function kindOf(call) {
-  return call !== null && Object.prototype.hasOwnProperty.call(CALLS, call) ? CALLS[call].kind : null;
+// The canonical code a row reports, for the one decision that turns on it: a campaign Reply has just denied is never
+// pinned.
+export function codeOf(operation, key) {
+  return rowFor(operation, key).code;
 }
 
-// The row an answer cut off at the exec capture belongs in. A read whose operation has a row of its own for it
-// fails with that one, permanently: asking again would be cut at the same byte. Anything else keeps the ending a
-// lost answer has always had — a write's cut answer may still have written, and a read made inside a write is
-// the write's business, which declares no such code.
-export function cutAnswerRow(operation, call) {
-  const own = operation !== null && operation !== undefined ? ROWS.per_operation[operation] : undefined;
-  const readsIt = own !== undefined && Object.prototype.hasOwnProperty.call(own, "answer_too_large_on_a_read");
-  return kindOf(call) === "read" && readsIt ? "answer_too_large_on_a_read" : lostAnswerRow(call);
-}
-
-// Which lost-answer row an ending on this call belongs in — the whole point of the read/write mark. Only a call
-// positively marked a read is treated as one: a call missing from the table above is a gap in this file, and the
-// expensive side is the safe side, so it stops for a person rather than being retried into a second send.
-export function lostAnswerRow(call) {
-  return kindOf(call) === "read" ? "answer_lost_on_a_read" : "answer_lost_on_a_write";
-}
-
-// What was seen on one call, in the shape a failure is reported from. Reply's own code is read only where it is
-// a string on an object, because a 401 arrives with an empty body and parsing one is how a plugin fails on the
-// answer it meets most often. A caller may add `provider_item` afterwards, for the answers that refuse one
-// person inside a 200.
+// What was seen on the one raw call, in the shape a failure is reported from. Reply's own code is read only where it
+// is a string on an object, because a 401 arrives with an empty body.
 export function observe(call, answer, row) {
   const data = answer.data;
   return {
@@ -520,9 +640,8 @@ export function observe(call, answer, row) {
   };
 }
 
-// What came back, short enough to travel in a failure's details. A provider's answer is reported rather than
-// interpreted wherever this package has no word for it, and 200 characters is enough for an operator to
-// recognise it without the details becoming a copy of the body.
+// What came back, short enough to travel in a failure: a provider's answer is reported rather than interpreted
+// wherever this package has no word for it, and 200 characters is enough to recognise it.
 export function describe(value) {
   let text;
   try {
@@ -538,45 +657,24 @@ export function describe(value) {
   return text.length > 200 ? text.slice(0, 200) : text;
 }
 
-// Which row a refusal belongs in, for a call whose 400 has a meaning of its own. Reply's 400 is two shapes and
-// which member is present says which: a validation problem carries `errors[]` and no `code`, a business
-// rejection carries `code` and no `errors[]`. Everything else is decided by the status alone.
-//
-// The two rows this can name are per-operation ones that only the writes declare, so only a write may ask: a
-// `campaign.get` that reached for `invalid_channel_value` would name a code its document does not publish.
-export function refusalRow(answer, call, addressField) {
-  if (answer.code !== 400 && answer.code !== 422) {
-    return statusRow(answer.code, call);
+// What a result of an unexpected shape may say in a failure: the identifiers and words reply-cli's results are
+// documented to carry, and nothing else, because anything else a result held could be part of a person's record.
+const EVIDENCE = ["status", "previous_status", "sequence_id", "list_id", "contact_id", "contacts", "contact_created", "sequence_active"];
+
+export function evidence(result) {
+  const kept = {};
+  if (result !== null && typeof result === "object" && !Array.isArray(result)) {
+    for (const key of EVIDENCE) {
+      if (has(result, key)) {
+        kept[key] = result[key];
+      }
+    }
   }
 
-  const data = answer.data !== null && typeof answer.data === "object" ? answer.data : {};
-  if (Array.isArray(data.errors)) {
-    // A pointer naming the field the channel value went in is the provider saying the value itself is wrong,
-    // which no later attempt would accept either. A pointer naming anything else is a request this package
-    // built wrong, which is a defect rather than a person's data.
-    const named = data.errors.some(entry =>
-      entry !== null && typeof entry === "object" && lastSegment(entry.pointer) === addressField);
-    return named ? "invalid_channel_value" : "refusal_this_version_has_no_word_for";
-  }
-
-  // The account's own contact cap is the one capacity Reply publishes a code for; a list's or a sequence's is
-  // not, and guessing one out of an ordinary business refusal is how a full list comes to look like a full
-  // account.
-  return data.code === "contactLimitExceeded" ? "limit_reached" : "refusal_this_version_has_no_word_for";
+  return describe(kept);
 }
 
-function lastSegment(pointer) {
-  if (typeof pointer !== "string") {
-    return null;
-  }
-
-  const segments = pointer.split("/");
-  return segments[segments.length - 1];
-}
-
-// Which shared row a status Reply answered with belongs in. Only the statuses that mean the same thing on every
-// call are decided here: a business refusal carries a code whose meaning depends on what was asked, so the
-// operation that made the call reads that itself against its own rows and falls back to this for the rest.
+// Which shared row the raw call's status belongs in.
 export function statusRow(status, call) {
   if (status === 401 || status === 403) {
     return "unauthorized";
@@ -587,31 +685,29 @@ export function statusRow(status, call) {
   }
 
   if (status >= 500) {
-    // A failure on Reply's own side is the same ending as an answer that never arrived, and it is the read/write
-    // mark that decides what that costs: nothing on a read, possibly a person's email on a write.
     return lostAnswerRow(call);
   }
 
   return "refusal_this_version_has_no_word_for";
 }
 
-// The one way this package reports a failure. `operation` is the canonical operation being performed, or null for
-// an ending the CLI itself produced, which every operation shares; `observed` names the row and what was seen;
-// `learned` is what the package now knows Reply calls our entities, which travels out with the failure because
-// after a lost answer a pin is the only trace of what was done.
+// The one way this package reports a failure. `operation` is the canonical operation being performed; `observed`
+// names the row and what was seen; `learned` is what the package now knows Reply calls our entities, which travels
+// out with the failure because after a lost answer a pin is the only trace of what was done.
 export function fail(operation, observed, learned) {
   const row = rowFor(operation, observed.row);
   const details = compact({
     call: observed.call,
     status: observed.status,
+    cli_code: observed.cli_code,
     provider_code: observed.provider_code,
-    // What a 200 said about this one person, where it refused one inside an answer that reported success. It is
-    // reported and never read: the shape of that value is documented two incompatible ways.
+    // Reply's own sentence, where the CLI passed one on: "Invalid data" is the only sign that a first name was missing.
+    provider_detail: observed.provider_detail === undefined ? undefined : describe(observed.provider_detail),
+    // What an answer said about this one person where it could not be read as a result. Reported, never read.
     provider_item: observed.provider_item,
-    // What this package itself could not do, for the endings that are its own refusal rather than an answer
-    // from Reply. An operator reading one of those has no status and no provider code to go on, so the reason
-    // is the whole of what they get.
+    // What this package itself could not do, for the endings that are its own refusal.
     reason: observed.reason,
+    retry_after: observed.retry_after,
     // The two numbers a person's decision was about and the one found at execution, where a population moved.
     expected: observed.expected,
     actual: observed.actual,
@@ -630,17 +726,16 @@ export function fail(operation, observed, learned) {
 
 function rowFor(operation, key) {
   const own = operation !== null && operation !== undefined ? ROWS.per_operation[operation] : undefined;
-  if (own !== undefined && Object.prototype.hasOwnProperty.call(own, key)) {
+  if (own !== undefined && has(own, key)) {
     return own[key];
   }
 
-  if (Object.prototype.hasOwnProperty.call(ROWS.shared, key)) {
+  if (has(ROWS.shared, key)) {
     return ROWS.shared[key];
   }
 
-  // A row this package named and did not write is a defect in this package, not an answer from Reply. It is
-  // reported as itself rather than folded into a neighbouring row, so it cannot be mistaken for a provider's
-  // refusal by whoever reads the attempt.
+  // A row this package named and did not write is a defect in this package, not an answer from Reply. It is reported
+  // as itself rather than folded into a neighbouring row.
   throw host.fail({
     class: "permanent",
     code: "provider_call_failed",

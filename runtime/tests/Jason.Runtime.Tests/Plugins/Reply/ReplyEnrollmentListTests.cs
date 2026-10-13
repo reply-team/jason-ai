@@ -17,8 +17,6 @@ public class ReplyEnrollmentListTests
 {
     private const string Operation = "enrollment.list";
     private const int Sequence = ReplyOperations.Sequence;
-    private const string ListPath = "/v3/sequences/7/contacts";
-    private const string CountPath = "/v3/sequences/7/contacts/count";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -45,11 +43,9 @@ public class ReplyEnrollmentListTests
         var outcome = Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
         Assert.Equal("""{"campaign":"7"}""", outcome.ExternalIds!.ToJsonString());
 
-        // Two reads, the page and then the count, each by its own path and nothing on stdin.
-        Assert.Equal(
-            [$"GET {ListPath}?top=100&skip=0", $"GET {CountPath}"],
-            account.Calls.Select(call => call.Method + " " + call.Path));
-        Assert.Equal(["--json", "-q", "api", $"{ListPath}?top=100&skip=0"], account.Calls[0].Args);
+        // One command, the page with its count, and nothing on stdin.
+        Assert.Equal(["sequence contacts 7"], account.Calls.Select(call => call.Line));
+        Assert.Equal(["--json", "-q", "sequence", "contacts", "7", "--limit", "100", "--offset", "0"], account.Calls[0].Args);
         Assert.All(account.Calls, call => Assert.Null(call.Body));
     }
 
@@ -63,7 +59,9 @@ public class ReplyEnrollmentListTests
         var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(limit: 10, offset: 0, pinned: "7")));
 
         Assert.Single(answer["items"]!.AsArray());
-        Assert.StartsWith($"GET {ListPath}?top=10&skip=0", account.Calls[0].Method + " " + account.Calls[0].Path, StringComparison.Ordinal);
+        Assert.Equal("sequence contacts 7", account.Calls[0].Line);
+        Assert.Equal("10", account.Calls[0].Option("--limit"));
+        Assert.Equal("0", account.Calls[0].Option("--offset"));
     }
 
     [Fact]
@@ -75,35 +73,13 @@ public class ReplyEnrollmentListTests
 
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(limit: 10, offset: 0, supplied: "7")));
 
-        // Reply answers the page of a sequence the account does not hold with an empty list, as a live account did;
-        // only the count refuses, and its refusal is the campaign not being found rather than a total nobody gave.
+        // The CLI tells a sequence the account does not hold from an empty one, and says so in its own word.
         Assert.Equal("campaign_not_found", error.Code);
-        Assert.Equal("sequenceContact.sequenceNotFound", (string?)error.Details!["provider_code"]);
+        Assert.Equal("sequence.not_found", (string?)error.Details!["cli_code"]);
 
         // The provider has just denied the link, so it is not recorded.
         Assert.Null(error.ExternalIds);
-        Assert.Equal([$"GET {ListPath}?top=10&skip=0", $"GET {CountPath}"], account.Calls.Select(call => call.Method + " " + call.Path));
-    }
-
-    /// <summary>
-    /// Only Reply's own `sequenceContact.sequenceNotFound` on the count says the sequence is missing. A 404 that says
-    /// anything else — another code, or no body at all — is a count refused like any other: the page stands, the total
-    /// is unknown, and nothing fails.
-    /// </summary>
-    [Theory]
-    [InlineData("route.notFound")]
-    [InlineData(null)]
-    public async Task A_count_404_that_is_not_reply_s_missing_sequence_leaves_the_total_null_and_the_page_answered(string? code)
-    {
-        using var account = Planted(people: 2);
-        account.Answers("GET", CountPath, 404, code is null ? string.Empty : Problem(404, code));
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(limit: 10, offset: 0, pinned: "7")));
-
-        Assert.Null(answer["total"]);
-        Assert.Equal(2, answer["items"]!.AsArray().Count);
+        Assert.Equal(["sequence contacts 7"], account.Calls.Select(call => call.Line));
     }
 
     /// <summary>A sequence the account holds with nobody in it is an empty page with a total of nought, not a missing one.</summary>
@@ -153,7 +129,7 @@ public class ReplyEnrollmentListTests
         Assert.Contains(ReplyOperations.FirstName, answer, StringComparison.Ordinal);
 
         // The stand-in answers all three, as a live account does; the plugin carried none of them on.
-        var (_, said, _) = await account.RunAsync(["--json", "-q", "api", $"{ListPath}?top=10&skip=0"], Ct);
+        var (_, said, _) = await account.RunAsync(["--json", "-q", "sequence", "contacts", "7", "--limit", "10"], Ct);
         Assert.Contains(ReplyOperations.Address, said, StringComparison.Ordinal);
         Assert.Contains(ReplyOperations.Company, said, StringComparison.Ordinal);
         Assert.DoesNotContain(ReplyOperations.Address, answer, StringComparison.Ordinal);
@@ -263,21 +239,32 @@ public class ReplyEnrollmentListTests
         }
 
         Assert.Equal(["1005", "1004", "1003", "1002", "1001"], seen);
-        Assert.Contains(account.Calls, call => call.Path == $"{ListPath}?top=2&skip=4");
+        Assert.Contains(account.Calls, call => call.Option("--limit") == "2" && call.Option("--offset") == "4");
     }
 
     [Fact]
-    public async Task A_count_the_provider_refuses_leaves_the_total_null_and_the_page_answered()
+    public async Task A_count_the_provider_would_not_give_leaves_the_total_null_and_the_page_answered()
     {
-        using var account = Planted(people: 2);
-        account.Answers("GET", CountPath, 403, Problem(403, "sequenceContact.forbidden"));
+        using var account = Planted(people: 1);
+        account.Returns("sequence contacts", new JsonObject
+        {
+            ["items"] = new JsonArray(new JsonObject
+            {
+                ["contactId"] = 1001, ["sequenceId"] = 7, ["email"] = "a@example.com", ["firstName"] = "A", ["lastName"] = "",
+                ["statusInSequence"] = "active", ["currentStep"] = new JsonObject { ["stepId"] = 9901, ["displayName"] = "1" },
+                ["addingDate"] = "2026-10-02T09:15:42.17+03:00", ["isOptedOut"] = false, ["callStatus"] = "none",
+                ["meetingStatus"] = "none", ["emailDisposition"] = null,
+            }),
+            ["has_more"] = false,
+            ["total"] = null,
+        });
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(limit: 10, offset: 0, pinned: "7")));
+        var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(limit: 10, offset: 0, supplied: "7")));
 
         Assert.Null(answer["total"]);
-        Assert.Equal(2, answer["items"]!.AsArray().Count);
+        Assert.Equal("1001", (string?)answer["items"]![0]!["external_id"]);
     }
 
     /// <summary>
@@ -329,7 +316,7 @@ public class ReplyEnrollmentListTests
     public async Task A_role_that_may_not_read_a_sequence_s_people_is_a_feature_the_account_lacks()
     {
         using var account = Planted(people: 1);
-        account.Answers("GET", $"{ListPath}?top=10&skip=0", 403, Problem(403, "sequenceContact.forbidden"));
+        account.Refuses("sequence contacts", "access.feature_unavailable", status: 403, replyCode: "sequenceContact.forbidden");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -343,7 +330,7 @@ public class ReplyEnrollmentListTests
     public async Task Any_other_403_is_the_credential_and_says_so()
     {
         using var account = Planted(people: 1);
-        account.Answers("GET", $"{ListPath}?top=10&skip=0", 403, Problem(403, "auth.scopeMissing"));
+        account.Refuses("sequence contacts", "access.denied", status: 403, replyCode: "TEAM_NOT_ACCESSIBLE");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -365,7 +352,7 @@ public class ReplyEnrollmentListTests
         ReplyOperations.Succeeded(Operation, result);
         var outcome = Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
         Assert.Equal(["campaign"], outcome.ExternalIds!.AsObject().Select(pin => pin.Key));
-        Assert.All(account.Calls, call => Assert.Equal("GET", call.Method));
+        Assert.All(account.Calls, call => Assert.Equal("sequence contacts", call.Command));
         Assert.Equal(before, (account.Contacts.ToJsonString(), account.Enrollments.ToJsonString(), account.Sequences.ToJsonString()));
     }
 
@@ -373,7 +360,7 @@ public class ReplyEnrollmentListTests
     public async Task A_page_that_is_not_a_page_is_no_answer_and_is_asked_again()
     {
         using var account = Planted(people: 1);
-        account.Answers("GET", $"{ListPath}?top=10&skip=0", 200, """{"items":[{"firstName":"Nobody"}],"hasMore":false}""");
+        account.Prints("sequence contacts", 0, """{"items":"nobody","has_more":false,"total":0}""");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -383,22 +370,23 @@ public class ReplyEnrollmentListTests
         Assert.Equal(FailureClass.Transient, error.Class);
     }
 
-    /// <summary>
-    /// A cut answer names the call it was cut on — the count, not a person whose identifier happens to read
-    /// <c>count</c>, which is what a lookup by segment count alone would have called it.
-    /// </summary>
+    /// <summary>A cut answer names the command it was cut on, and a read cut at the capture is too large rather than lost.</summary>
     [Fact]
-    public async Task A_count_cut_off_at_the_capture_is_too_large_and_names_the_count()
+    public async Task A_page_cut_off_at_the_capture_is_too_large_and_names_the_command()
     {
         using var account = Planted(people: 1);
-        account.Answers("GET", CountPath, 200, new JsonObject { ["count"] = 1, ["note"] = new string('a', 200_000) }.ToJsonString());
+        account.Prints(
+            "sequence contacts",
+            0,
+            new JsonObject { ["items"] = new JsonArray(), ["has_more"] = false, ["total"] = 1, ["note"] = new string('a', 200_000) }.ToJsonString());
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct, paths => Capping(paths, 65_536));
 
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(limit: 10, offset: 0, pinned: "7")));
 
         Assert.Equal("provider_answer_too_large", error.Code);
-        Assert.Equal("GET /v3/sequences/{id}/contacts/count", (string?)error.Details!["call"]);
+        Assert.Equal(FailureClass.Permanent, error.Class);
+        Assert.Equal("sequence contacts", (string?)error.Details!["call"]);
     }
 
     // -------------------------------------------------------------------------------------------------------
@@ -441,15 +429,6 @@ public class ReplyEnrollmentListTests
 
     private static Task<PluginInvocationResult> InvokeAsync(RuntimeApiFixture api, JsonObject input) =>
         ReplyOperations.InvokeAsync(api, Operation, input, Ct);
-
-    private static string Problem(int status, string code) => new JsonObject
-    {
-        ["type"] = "about:blank",
-        ["title"] = "Forbidden",
-        ["status"] = status,
-        ["detail"] = "The stand-in was told to answer this.",
-        ["code"] = code,
-    }.ToJsonString();
 
     private static void Capping(JasonPaths paths, int outputBytes)
     {
