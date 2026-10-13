@@ -10,8 +10,8 @@ Eleven operations — the whole set this build publishes: six that write and fiv
 | Operation | What it is at Reply |
 |---|---|
 | `campaign.get` | Reads one sequence: its name, its state, and Reply's own words for both. |
-| `list_membership.add` | Puts one person on one of the account's contact lists. |
-| `campaign.enroll` | Puts one person into a sequence. Into a live sequence, that is a send. |
+| `list_membership.add` | Puts one person on one of the account's contact lists. A person Reply holds as opted out is refused. |
+| `campaign.enroll` | Puts one person into a sequence. Into a live sequence, that is a send. A person already taking part is never moved or added again. |
 | `enrollment.list` | Reads one page of the people a sequence holds, and Reply's count of them. No address is returned. |
 | `engagement.summarize` | Reads a sequence's counts over one window, a row per channel. Counts only: no rate is returned. |
 | `conversation.list` | Reads one page of inbox threads: one person's across the account, or one sequence's. A person is their identifier and the name Reply shows, never an address. |
@@ -21,24 +21,27 @@ Eleven operations — the whole set this build publishes: six that write and fiv
 | `optout.record` | Records that somebody said stop: sets Reply's opt-out flag on the contact it holds under the address, made only when it holds nobody. What they said stays Jason's record. |
 | `enrollment.stop` | Takes one person out of a sequence, once a person approves it. Nobody is created to do it, and the reason stays Jason's record. |
 
-A campaign is a **sequence** at Reply and a person is a **contact**; every call is made by starting the
-Reply CLI — `reply api <path>` — with the request body on its standard input.
+A campaign is a **sequence** at Reply and a person is a **contact**. Each operation runs the Reply CLI command made
+for it — `reply sequence add-contact`, `reply inbox list` and the rest, listed under
+[Which command it was](#which-command-it-was) — and translates: the operation's input into the command's arguments,
+the command's result into the operation's answer, and the CLI's error code into the operation's failure. Which of
+Reply's endpoints to call, in what order, and how to tell its answers apart is the CLI's to know.
 
 **The CLI owns the credential, and Jason never sees it.** Signing in is something you do in your own
 shell, and what it leaves behind stays in the CLI's own profile store: this package declares no
 environment variable, is granted no key, passes none on a command line and reads none. Nothing about a
-person reaches an argument either — bodies travel on stdin — so what `~/.jason/logs/` records of a call
-is the path, the exit code and how long it took.
+person reaches an argument either — a person's details travel on stdin — so what `~/.jason/logs/` records
+of a call is the command line, which carries only Reply's identifiers and flags, the exit code and how long it took.
 
 ## What you need
 
 - **The Reply CLI, installed and signed in.** It is a Node program installed with npm, on Node 20 or
   newer; [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) is where it comes from and
   what documents it. Running `reply auth login` is yours to do, as the person whose account it is.
-- **Version 0.5.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
+- **Version 0.11.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
   the answer. An older CLI makes this plugin `unavailable` with `executable_incompatible`, and work
-  routed to it fails at the claim with `plugin_unavailable` rather than running against an `api`
-  subcommand that answers differently.
+  routed to it fails at the claim with `plugin_unavailable` rather than running commands an older CLI
+  does not have, or answers differently.
 - **A runtime that can find it.** The name `reply` is resolved on the search path the *runtime* sees, at
   every reload — which is not always the path your shell sees, least of all for a runtime started in the
   background. `executable_missing` in `jason plugin list --human` means that and nothing else.
@@ -152,8 +155,9 @@ somewhere a person can read them.
 
 What the child does get is the user's own configuration directory — `APPDATA` on Windows, `HOME` and
 `XDG_CONFIG_HOME` everywhere else — because that is where the CLI keeps its profile store. The one
-variable this package sets is `REPLY_NO_UPDATE_CHECK=1`, on the CLI it starts, so an operation's budget
-is not spent on a version check nobody asked for.
+variable this package sets is `REPLY_NO_UPDATE_CHECK=1`, on the CLI it starts. reply-cli 0.11.0 looks for
+a newer release only under `--version`, which this package never runs, so the variable only keeps a later
+release from spending an operation's budget on a version check nobody asked for.
 
 ## What can go wrong
 
@@ -164,49 +168,45 @@ Every failure carries a code the operation's own contract publishes and a class 
 every code in it to the operation's published contract, the same code under the same class.
 
 A failure's message is all of it that reaches the work item's last error. What it carries beyond its code, class and
-message — Reply's status and code, the package's own reason, the numbers a decision was about — is in the failed
-attempt's trace ([docs/plugins.md](../../docs/plugins.md) §5, "Failing"): `jason workitem get <id>` prints it as
+message — the CLI's own error code, Reply's status, code and sentence where the CLI passed them on, the wait Reply
+asked for, the package's own reason, the numbers a decision was about — is in the failed attempt's trace
+([docs/plugins.md](../../docs/plugins.md) §5, "Failing"): `jason workitem get <id>` prints it as
 `attempts[].error.trace` in its JSON, the default, and the `--human` view does not show it. The tables below say "the
 trace" for it.
 
-### Which call it was
+### Which command it was
 
-Whether a lost answer is cheap or expensive is decided by the call it was lost on, so every call this
-package makes is marked once. The mark is per call rather than per verb: an import is a `POST` that
-creates people.
+Whether a lost answer is cheap or expensive is decided by the command it was lost on, so every command this
+package runs is marked once. Every command line starts `reply --json -q`, then `--profile` and `--team-id` where the
+route's binding names them.
 
-| Call | Mark | What it is for |
+| Command | Mark | What it is for |
 |---|---|---|
-| `GET /v3/sequences/{id}` | read | The sequence itself: what `campaign.get` answers from, the live-state read before an enrollment, and the state read before a pause or a start. |
-| `GET /v3/sequences/{id}/contacts/{contact_id}` | read | Whether this person already takes part: `campaign.enroll`'s first recovery read and, before any enrolment of a contact that existed before the call, whether it already takes part; and what `enrollment.stop` reads before it removes anything. |
-| `GET /v3/sequences/{id}/contacts` | read | One page of the people a sequence holds: what `enrollment.list` answers from. |
-| `GET /v3/sequences/{id}/contacts/count` | read | How many people the sequence holds: `enrollment.list`'s total, and the population `campaign.activate` checks before it starts. |
-| `POST /v3/sequences/{id}/stats` | read | A sequence's counts over one window: what `engagement.summarize` answers from. A `POST` that changes nothing. |
-| `POST /v3/inbox/threads/filter` | read | One page of one of Reply's thread buckets, by person or by sequence: what `conversation.list` answers from — the inbox alone for `inbound`, the inbox and the sent threads merged for `all`. A `POST` that changes nothing. |
-| `GET /v3/inbox/threads/{id}` | read | One thread with its whole history: `conversation.get`'s header. |
-| `GET /v3/inbox/threads/{id}/messages` | read | One page of a thread's messages: what `conversation.get` answers from. |
-| `GET /v3/contacts/{id}/statuses` | read | The opt-out register, and by the same call whether a pin still resolves. |
-| `POST /v3/contacts/filter` | read | The people one list holds, a page of them: `list_membership.add`'s recovery read; and, by a search term, the contacts whose address holds one: the lookup `optout.record` makes before it creates anybody, and the only way `enrollment.stop` finds a person it has no pin for. |
-| `POST /v3/contacts/import` | write | Matches or creates the contact by email, in one call. |
-| `POST /v3/contacts` | write | Creates a contact the import will not take, because it carries no first name. |
-| `POST /v3/contacts/set-opted-out` | write | The opt-out itself: Reply's flag, set for one contact. This package never clears it. |
-| `POST /v3/contact-lists/{id}/add-contacts` | write | The add itself. |
-| `POST /v3/sequences/{id}/contact-links/bulk` | write | The enrollment itself. Into a live sequence, a send. |
-| `DELETE /v3/sequences/{id}/contact-links/{contact_id}` | write | The removal itself, with no body: the person is taken out, never marked finished. |
-| `POST /v3/sequences/{id}/pause` | write | The pause itself, with no body. Reply documents it as idempotent. |
-| `POST /v3/sequences/{id}/start` | write | The start itself, with no body; it also resumes a paused sequence. Step 1 goes to everybody enrolled, so it is a send. |
+| `sequence get <sequence>` | read | The sequence as Reply holds it: what `campaign.get` answers from, and the read `enrollment.stop` makes of a campaign it names for the first time. |
+| `sequence contacts <sequence> --limit --offset` | read | One page of the people a sequence holds, and Reply's count of them: what `enrollment.list` answers from. |
+| `sequence stats <sequence> --preset`, or `--from --to` | read | A sequence's counts over one window: what `engagement.summarize` answers from. |
+| `inbox list --contact-id` or `--sequence-id`, `--source --since --limit --offset` | read | One page of one of Reply's thread buckets, by person or by sequence: what `conversation.list` answers from — the inbox alone for `inbound`, the inbox and the sent threads merged for `all`. |
+| `inbox get <thread> --limit --offset` | read | One thread, its subject, and one page of its messages: what `conversation.get` answers from. |
+| `api /v3/contacts/filter --method POST --body -` | read | Reply's contact search by address: the lookup `list_membership.add` and `campaign.enroll` make for a person with no pin and no first name. A `POST`, and a read all the same. |
+| `sequence add-contact <sequence>` with `--contact-id` or `--contact -`, `[--start-step] [--ignore-step-delay]` | write | Puts the person into the sequence, importing them first when they are given by their details. Into a live sequence, a send. |
+| `sequence remove-contact <sequence>` with `--contact-id` or `--contact -` | write | Takes the person out of the sequence; their history stays. It never creates anybody. |
+| `sequence pause <sequence>` | write | Pauses the sequence. |
+| `sequence start <sequence> --expect-contacts <n>` | write | Starts the sequence, or resumes a paused one, only while it holds the population a person approved. Step 1 goes to everybody enrolled, so it is a send. |
+| `contact-list add-contact <list>` with `--contact-id` or `--contact -`, `--refuse-opted-out` | write | Puts the person on the list, importing them first when they are given by their details, and refuses a person Reply holds as opted out. |
+| `contact opt-out` with `--contact-id` or `--contact -` | write | Sets Reply's opt-out flag for the person, creating them only when Reply holds nobody under the address. This package never clears it. |
 
 ### Endings every operation can meet
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
 | The CLI could not be started at all, so nothing was sent. | `provider_call_failed` | permanent | Install the CLI where the runtime can find it, check that the grant names it, reload. |
-| The CLI refused the call before making it — its own usage error. | `provider_call_failed` | permanent | Nothing reached the account and a repeat builds the same call. Report it: either this package or the CLI's surface has moved. |
-| A **read** timed out, answered 5xx, or exited with nothing that could be parsed — or, made inside a write, was cut off at `Plugins:Exec:OutputBytes`. | `provider_unavailable` | transient | Nothing. The call changed nothing, so the attempt is repeated. |
-| A **write** timed out, answered 5xx, exited with nothing that could be parsed, or its answer was cut off at `Plugins:Exec:OutputBytes`. | `provider_answer_lost` | ambiguous | The item stops for a person. Look at the account — the contact, the list, the sequence — and decide; a blind repeat can create somebody twice or send to them twice. Whatever the attempt had learned travels with the failure, so there are identifiers to look by. |
-| 401 or 403, and the per-item word `forbidden` inside a 200. | `unauthorized` | permanent | Sign that profile in again, or issue a key carrying the scope the call needs. |
-| 429. | `rate_limited` | transient | Nothing. The runtime waits and repeats the attempt. |
-| Any other status, or a business code no row below names. | `provider_call_failed` | permanent | The status and Reply's own code are in the trace. Reply's per-item error set is published as an open one, so there will be some — and a refusal that recurs belongs in the table. |
+| The CLI refused the call before making it: its own usage error. | `provider_call_failed` | permanent | Nothing reached the account and a repeat builds the same call. Report it: either this package or the CLI's surface has moved. |
+| Reply could not be reached, or a read failed after the CLI's own retries (`reply.unavailable`); or a **read** timed out, exited without an error the CLI explained, or printed something that is not a result; or a read made as part of a write — the contact search before a list add or an enrolment, the sequence read before a stop — was cut off at `Plugins:Exec:OutputBytes`. | `provider_unavailable` | transient | Nothing. Nothing changed at Reply — the CLI never resends a write — so the attempt is repeated. |
+| Reply is still activating the sequence (`sequence.busy`). | `provider_unavailable` | transient | Nothing. The attempt is repeated once Reply has had time to finish. |
+| A **write**'s outcome is unknown: the CLI answered `outcome.unknown`, or the write timed out, exited without an error the CLI explained, printed something that is not a result, or had its answer cut off at `Plugins:Exec:OutputBytes`. | `provider_answer_lost` | ambiguous | Where the operation's contract says a repeat is safe, the runtime repeats it; otherwise the item stops for a person. Look at the account — the contact, the list, the sequence — and decide; a blind repeat can create somebody twice or send to them twice. Whatever the attempt had learned, the CLI's own identifiers included, travels with the failure, so there are identifiers to look by. |
+| The profile is not signed in, Reply refused the credential (`access.denied`), or Reply says the account lacks a feature where the operation has no code of its own for that (`access.feature_unavailable`). | `unauthorized` | permanent | Sign that profile in again, or issue a key carrying the scope the call needs. |
+| Reply asked to wait longer than the CLI waits on its own (`rate_limited`). | `rate_limited` | transient | Nothing. The runtime waits and repeats the attempt; the wait Reply asked for is in the trace. |
+| Reply refused the call (`reply.refused`), refused a field no row below names (`reply.invalid_request`), or the CLI answered a code this version does not know. | `provider_call_failed` | permanent | The CLI's code, Reply's own code and its sentence are in the trace. A refusal that recurs belongs in the table. |
 
 A call that runs out of time is the package's to answer, so each call is given what is left of the invocation's
 budget less five seconds (never more than half of what is left) rather than all of it. A call given everything
@@ -219,7 +219,7 @@ A call cut off sooner is one the package hears about, and it answers from the tw
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
-| The identifier is not a Reply sequence number, or Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier the work item carries. A link the provider has denied is not recorded, so there is nothing to undo. |
+| The identifier is not a Reply sequence number, or Reply holds no sequence under it (`sequence.not_found`). | `campaign_not_found` | permanent | Correct the identifier the work item carries. A link the provider has denied is not recorded, so there is nothing to undo. |
 | Reply's answer was longer than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. | `provider_answer_too_large` | permanent | Raise `Plugins:Exec:OutputBytes`. The same read would be cut at the same place, so it is not repeated. |
 
 This operation is one read and nothing else, so the ambiguous ending above cannot arise for it.
@@ -228,19 +228,19 @@ This operation is one read and nothing else, so the ambiguous ending above canno
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
-| The identifier is not a Reply sequence number, or Reply's count of the sequence's participants answers 404 `sequenceContact.sequenceNotFound` — the page itself answers an empty list for a sequence this account does not hold, so the count is what tells the two apart. | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. |
-| Reply answers 403 with its own code `sequenceContact.forbidden`: the account's role may not read a sequence's people. | `feature_unavailable` | permanent | A role or a plan that includes it. Signing in again changes nothing. Any other 403 is `unauthorized` above. |
+| The identifier is not a Reply sequence number, or Reply holds no sequence under it (`sequence.not_found`). | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. |
+| Reply says the account's plan or role may not read a sequence's people (`access.feature_unavailable`). | `feature_unavailable` | permanent | A role or a plan that includes it. Signing in again changes nothing. |
 | Reply's answer was longer than `Plugins:Exec:OutputBytes` lets a plugin read from a program, so it was cut off. | `provider_answer_too_large` | permanent | Ask for a smaller `limit`, or raise `Plugins:Exec:OutputBytes`. |
 
-Any other refusal of the count is not a failure: the page is answered and `total` is null.
+When Reply would not count the sequence's people, the page is still answered and `total` is null.
 
 ### `engagement.summarize`
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
-| The identifier is not a Reply sequence number, or Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier. |
-| Reply answers 403 with its own code `sequenceStats.forbidden`: the account's role may not read a sequence's statistics. | `feature_unavailable` | permanent | A role or a plan that includes it. Any other 403 is `unauthorized` above. |
-| Reply refuses the window — a 400 carrying `errors[]`, such as a span that ends before it starts. | `window_invalid` | validation | Correct `args.window`; the same window is refused every time. |
+| The identifier is not a Reply sequence number, or Reply holds no sequence under it (`sequence.not_found`). | `campaign_not_found` | permanent | Correct the identifier. |
+| Reply says the account's plan or role may not read a sequence's statistics (`access.feature_unavailable`). | `feature_unavailable` | permanent | A role or a plan that includes it. |
+| The window is refused: one that does not end after it starts, which the CLI refuses before anything is sent, or one Reply does not accept (`reply.invalid_request`). | `window_invalid` | validation | Correct `args.window`; the same window is refused every time. |
 | Reply's answer was longer than `Plugins:Exec:OutputBytes` lets a plugin read from a program. | `provider_answer_too_large` | permanent | Raise `Plugins:Exec:OutputBytes`. |
 
 ### `conversation.list`
@@ -249,118 +249,148 @@ Any other refusal of the count is not a failure: the page is answered and `total
 |---|---|---|---|
 | The work item names a person and no Reply contact identifier is pinned for them. Nothing is called. | `contact_not_linked` | permanent | A write that ensures the contact — `list_membership.add` or `campaign.enroll` — is what links them. A read creates nobody. |
 | The pinned contact identifier, or the campaign's, is not a Reply number at all. Nothing is called. | `provider_call_failed` | permanent | The pin is wrong; the trace says which. |
-| `source: all` asks for a page past the first 1000 threads: `offset` plus `limit` over 1000. Nothing is called. | `provider_call_failed` | permanent | Ask for `source: inbound`, which Reply pages without this bound, or for a page within the first 1000. |
-| Reply answers 403 with its own code `inboxThread.forbidden`: the inbox is not available to this user or team. | `feature_unavailable` | permanent | A plan or a role that includes the inbox. Any other 403 is `unauthorized` above. |
+| `source: all` asks for a page past the first 1000 threads: `offset` plus `limit` over 1000. Nothing is called. | `provider_call_failed` | permanent | Ask for `source: inbound`, which has no such bound, or for a page within the first 1000. |
+| The inbox is not available to this user or team (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes the inbox. |
 | Reply's answer was longer than `Plugins:Exec:OutputBytes` lets a plugin read from a program. | `provider_answer_too_large` | permanent | Ask for a smaller `limit`, or raise `Plugins:Exec:OutputBytes`. |
 
 A person or a sequence with no threads is an empty page, not a failure. A contact identifier Reply does not hold is
-answered with a validation problem that names no code, so it arrives as `provider_call_failed`.
+refused by Reply as an invalid request, so it arrives as `provider_call_failed`.
 
 ### `conversation.get`
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
-| The identifier is not a Reply thread number, or Reply holds no thread under it that this account may see. | `conversation_not_found` | permanent | Read the thread by an identifier `conversation.list` returned. |
-| Reply answers 403 with its own code `inboxThread.forbidden`. | `feature_unavailable` | permanent | A plan or a role that includes the inbox. Any other 403 is `unauthorized` above. |
-| Reply's answer was longer than `Plugins:Exec:OutputBytes` lets a plugin read from a program. Reply sends a thread's whole history with the thread, so a long enough history does this whatever page is asked for. | `provider_answer_too_large` | permanent | Raise `Plugins:Exec:OutputBytes`, up to about twice its default: past that, the two answers a thread read holds outgrow the package's memory. A smaller page cannot help. |
+| The identifier is not a Reply thread number, or Reply holds no thread under it that this account may see (`inbox.thread_not_found`). | `conversation_not_found` | permanent | Read the thread by an identifier `conversation.list` returned. |
+| The inbox is not available to this user or team (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes the inbox. |
+| The page of messages was longer than `Plugins:Exec:OutputBytes` lets a plugin read from a program. | `provider_answer_too_large` | permanent | Ask for a smaller `limit`, or raise `Plugins:Exec:OutputBytes`. |
 
 ### `list_membership.add`
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
-| `args.list.external_id` is not a Reply list number, or the account holds no such list. | `list_not_found` | permanent | Correct the identifier. Nothing about repeating the call can change it. |
-| The pinned contact identifier is not a Reply contact number, or no longer resolves there. | `contact_not_found` | permanent | The pin has to be cleared before this person can be worked again, and this version has no repair path for one. |
-| Reply's own opt-out register holds this person. | `suppressed` | permanent | Nothing, on purpose. Only the person themselves can ask to be reinstated. |
-| Reply will not accept the address on the channel the call named. | `invalid_channel_value` | validation | Correct the contact's data; no later attempt would be accepted either. |
-| The account will hold no further contact. | `limit_reached` | permanent | Free capacity at Reply. A **list's** own capacity publishes no code of its own, so a full list arrives as `provider_call_failed` instead of this one. |
+| `args.list.external_id` is not a Reply list number, or the account holds no such list (`contact-list.not_found`). | `list_not_found` | permanent | Correct the identifier. Nothing about repeating the call can change it. |
+| The pinned contact identifier is not a Reply contact number, or no longer resolves there (`contact.not_found`). | `contact_not_found` | permanent | The pin has to be cleared before this person can be worked again, and this version has no repair path for one. |
+| Reply's own opt-out register holds this person (`contact.opted_out`). The package always asks the CLI to refuse such a person. | `suppressed` | permanent | Nothing, on purpose. Only the person themselves can ask to be reinstated. |
+| Reply will not accept the address on the channel the call named (`contact.invalid_email`, or `reply.invalid_request` naming the email), or the person has no value on that channel. | `invalid_channel_value` | validation | Correct the contact's data; no later attempt would be accepted either. |
+| The account will hold no further contact (`account.contact_limit_reached`). | `limit_reached` | permanent | Free capacity at Reply. A **list's** own capacity publishes no code of its own, so a full list arrives as `provider_call_failed` instead of this one. |
+| The person has no pin and no first name, and Reply holds nobody under the address. Nothing is added. | `provider_call_failed` | permanent | Give the person a first name in Jason and propose the work again: Reply creates nobody without one. |
+| The person has no pin and no first name, and Reply holds more than one contact whose address is theirs. Nothing is added. | `provider_call_failed` | permanent | Resolve the duplicate at Reply, then propose the work again. |
+| The person has no pin and no first name, and the lookup read five pages of a hundred and Reply said there were more. Nothing is added. | `provider_call_failed` | permanent | Give the person a first name in Jason, or a pin, and propose the work again. |
+
+Reply keeps one membership however often a person is added and does not say whether they were on the list already,
+so the answer is `added` either way, and a repeat after a lost answer runs the command again.
 
 ### `campaign.enroll`
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
-| The identifier is not a Reply sequence number, or Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier. Nobody is ensured for a campaign that cannot exist. |
-| The pinned contact identifier is not a Reply contact number, or no longer resolves there — including as the per-item word `contactNotFound`. | `contact_not_found` | permanent | The pin has to be cleared before this person can be worked again. |
-| The sequence is archived, or holds no step to send. | `campaign_not_enrollable` | permanent | Un-archive it at Reply, or give it a step. The item fails rather than waiting for either. |
-| `collision: refuse` was asked for and Reply says this person already takes part. | `collision_refused` | permanent | Choose another collision policy if a second participation is what was meant. A repeated attempt answers differently — see below. |
-| Reply's own opt-out register holds this person. | `suppressed` | permanent | Nothing, on purpose. |
-| Reply will not accept the address on the channel the call named. | `invalid_channel_value` | validation | Correct the contact's data. |
-| The account will hold no further contact or enrollment. | `limit_reached` | permanent | Free capacity at Reply. A **sequence's** own capacity publishes no code, so it arrives as `provider_call_failed`. |
-| The arguments name a call that cannot be built: a start position the shape of this sequence's steps cannot answer, or a first touch this version has no word for. Nothing is sent. | `provider_call_failed` | permanent | The trace says which reading failed. Ask for the first step, or name a position the sequence really has. |
-| Reply answers the per-item word `invalidInput` for this person. | `provider_call_failed` | permanent | Reply read the request and would not take it; its own word is in the trace. A request built wrong is built the same way every time. |
+| The identifier is not a Reply sequence number, or Reply holds no sequence under it (`sequence.not_found`). | `campaign_not_found` | permanent | Correct the identifier. Nobody is ensured for a campaign that cannot exist. |
+| The pinned contact identifier is not a Reply contact number, or no longer resolves there (`contact.not_found`). | `contact_not_found` | permanent | The pin has to be cleared before this person can be worked again. |
+| The sequence is archived (`sequence.archived`), or holds no step to send (`sequence.has_no_steps`). | `campaign_not_enrollable` | permanent | Un-archive it at Reply, or give it a step. The item fails rather than waiting for either. |
+| `collision: refuse` was asked for, this is a first attempt, and the person already takes part. Nothing is written. | `collision_refused` | permanent | Choose another collision policy if a second participation is what was meant. A repeated attempt answers differently — see below. |
+| Reply refused to add a person its opt-out register holds (`contact.opted_out`). | `suppressed` | permanent | Nothing, on purpose. |
+| Reply will not accept the address on the channel the call named (`contact.invalid_email`, or `reply.invalid_request` naming the email), or the person has no value on that channel. | `invalid_channel_value` | validation | Correct the contact's data. |
+| The account will hold no further contact (`account.contact_limit_reached`). | `limit_reached` | permanent | Free capacity at Reply. A **sequence's** own capacity publishes no code, so it arrives as `provider_call_failed`. |
+| The start position names no single step of this sequence's chain (`sequence.step_not_found`), or a step number past the 10000 the CLI takes (`usage.range`), or the first touch is a value this version has no word for. Nothing is sent. | `provider_call_failed` | permanent | The trace says which reading failed. Ask for the first step, or name a position the sequence really has. |
+| The person has no pin and no first name, and Reply holds nobody under the address, or more than one contact, or more than the lookup reads. Nothing is enrolled. | `provider_call_failed` | permanent | As for `list_membership.add` above: a first name, a pin, or the duplicate resolved at Reply. |
+
+The CLI reads whether the person already takes part before it adds anybody, so a person already in the sequence is
+never moved or added again, and nothing is written for them. The package answers that `already_enrolled` under
+`collision: skip`, and on any repeated attempt whatever the policy, because after a lost answer the participation
+found may be the one this work item made. `campaign_live` says whether the sequence was live, which is whether the
+enrolment was a send. Reply itself refuses a person its opt-out register holds, so the package reads no register
+first.
 
 ### `campaign.pause`
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
-| The identifier is not a Reply sequence number, or Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. |
-| The sequence is archived, or never started — read from its state, so no pause is asked for — or Reply refuses the pause with 409 or 400. | `campaign_not_pausable` | permanent | Nothing to pause. The trace says which, with Reply's own code where it gave one. |
+| The identifier is not a Reply sequence number, or Reply holds no sequence under it (`sequence.not_found`). | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. |
+| The sequence is archived (`sequence.archived`), or Reply refused the pause (`sequence.not_pausable`) — a sequence that never started is refused. | `campaign_not_pausable` | permanent | Nothing to pause. The trace says which, with Reply's own code where it gave one. |
 
-The pause is idempotent at Reply, so the ambiguous ending above is repeated rather than stopped for a person: the
-next attempt reads the state and answers `already_paused` if the pause landed. A pause runs even while its Jason
-campaign is paused, because the provider's sequence must still stop after somebody paused Jason's first.
+A sequence already paused answers `paused` again: Reply documents the pause as idempotent, so the ambiguous ending
+above is repeated rather than stopped for a person. A pause runs even while its Jason campaign is paused, because the
+provider's sequence must still stop after somebody paused Jason's first.
 
 ### `campaign.activate`
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
-| The identifier is not a Reply sequence number, or Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. |
-| The sequence is archived — read from its state, so no start is asked for — or Reply refuses the start: 409 archived, or 400 with no contacts, no connected sending account or no sending hours. | `campaign_not_activatable` | permanent | Change at Reply what the trace names — Reply's own code, where it gave one — then propose the activation again. |
-| Reply's count, read at execution, is not the population the person approved. Nothing starts. | `population_changed` | permanent | Read the count again and propose a new activation: the trace carries both numbers. |
+| The identifier is not a Reply sequence number, or Reply holds no sequence under it (`sequence.not_found`). | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. |
+| The sequence is archived (`sequence.archived`), or Reply will not start it (`sequence.not_startable`): no contacts, no connected sending account or no sending hours. | `campaign_not_activatable` | permanent | Change at Reply what the trace names — Reply's own code, where it gave one — then propose the activation again. |
+| The sequence's count at execution is not the population the person approved (`sequence.contact_count_changed`). Nothing starts. | `population_changed` | permanent | Read the count again and propose a new activation: the trace carries both numbers. |
+| The sequence is live already and Reply would not count its people, so the answer would have no `enrolled`. Nothing was started. | `provider_unavailable` | transient | Nothing. The attempt is repeated. |
+| The start happened from a state other than draft or paused, which `was` has no word for. | `provider_call_failed` | permanent | The sequence was started. Reply's word for the state it left is in the trace; check the sequence at Reply. |
 
-A start whose answer was lost may already be sending, so the next attempt reads the sequence's state and its count
-first, and answers `already_live` rather than starting twice. A person approves every activation: it waits for them
-before it runs, as `campaign.enroll` does.
+The CLI reads the sequence and its count first, and starts nothing unless the count is the population the person
+approved. `was` is the state the start left — draft or paused — which the CLI reads before it starts, because Reply's
+own answer to a start describes the sequence after it. A start whose answer was lost may already be sending, so the
+next attempt meets a live sequence and answers `already_live` rather than starting twice. A person approves every
+activation: it waits for them before it runs, as `campaign.enroll` does.
 
 ### `optout.record`
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
-| The pinned contact identifier is not a Reply contact number, or no longer resolves there — including as the word `notFound` against this person in the opt-out's answer. | `contact_not_found` | permanent | The pin has to be cleared before the opt-out can be recorded at Reply. |
-| The lookup found more than one contact under the address. Nothing is set. | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the opt-out again. |
-| The lookup read five pages of a hundred and Reply said there were more, so one match could not be told from two. Nothing is made and nothing is set. | `provider_call_failed` | permanent | Record the opt-out at Reply by hand: a repeat would read the same pages. Where `jason suppression add` recorded the address, Jason's own register already stops Jason's own reach. The trace says why. |
-| Reply will not accept the address, so no contact could be made to record the opt-out on. | `invalid_channel_value` | validation | Correct the contact's data. |
-| The account will hold no further contact, so the person could not be made there. | `limit_reached` | permanent | Free capacity at Reply. Reply never held them under this address, so it cannot reach them there either. |
+| The pinned contact identifier is not a Reply contact number, or no longer resolves there (`contact.not_found`). | `contact_not_found` | permanent | The pin has to be cleared before the opt-out can be recorded at Reply. |
+| More than one contact's address is this one, ignoring case (`contact.not_unique`). Nothing is set. | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the opt-out again. |
+| More than five hundred contacts hold the address, so the lookup could not be read to its end (`contact.lookup_incomplete`). Nothing is made and nothing is set. | `provider_call_failed` | permanent | Record the opt-out at Reply by hand: a repeat would read the same pages. Where `jason suppression add` recorded the address, Jason's own register already stops Jason's own reach. |
+| Reply will not accept the address, so no contact could be made to record the opt-out on (`contact.invalid_email`, or `reply.invalid_request` naming the email). | `invalid_channel_value` | validation | Correct the contact's data. |
+| Reply held nobody under the address, and the account will hold no further contact (`account.contact_limit_reached`). | `limit_reached` | permanent | Free capacity at Reply. Reply never held them under this address, so it cannot reach them there either. |
 
-The person is found before anything is written: by the pin, or by looking the address up — Reply's free-text search,
-whose matches the package compares with the address exactly and whatever the case, read to its end. Only when Reply
-holds nobody under it is a contact made, through the import or, without a first name, the create path. The flag is
-then read, and a person Reply already holds as opted out answers `already_recorded` with nothing written; that read is
-also what makes a lost answer safe to repeat. The opt-out runs without anybody approving it — not running is the
-harm — and it runs even while its Jason campaign is paused. Jason's own register is the other half:
-`jason suppression add` stops Jason's reach at once for that address, and is written first.
+The CLI finds the person before anything is written: by the pin, or by the address, compared exactly and whatever the
+case. Only when Reply holds nobody under it is a contact made, and then the flag is set. Setting a flag that is set
+already changes nothing, so the answer is `recorded` either way, and a repeat after a lost answer runs the command
+again. The opt-out runs without anybody approving it — not running is the harm — and it runs even while its Jason
+campaign is paused. Jason's own register is the other half: `jason suppression add` stops Jason's reach at once for
+that address, and is written first.
 
 ### `enrollment.stop`
 
 | When | Code | Class | What to do about it |
 |---|---|---|---|
-| The identifier is not a Reply sequence number, or — read first when the work item names the campaign for the first time — Reply holds no sequence under it. | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. A campaign already pinned is not read again: if Reply no longer holds it, its one lumped 404 reads `already_stopped`. |
+| The identifier is not a Reply sequence number, or Reply holds no sequence under it (`sequence.not_found`). A campaign the work item names for the first time is read before anything else when the person is named by address; for a pinned person the CLI tells a missing sequence apart itself. | `campaign_not_found` | permanent | Correct the identifier. A link the provider has denied is not recorded. |
 | The pinned contact identifier is not a Reply contact number at all. Nothing is called. | `contact_not_found` | permanent | The pin is wrong and has to be cleared. A well-formed pin Reply no longer holds is not this: it reads `already_stopped`. |
-| The lookup found more than one contact under the address. Nobody is taken out. | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the stop again. |
-| The lookup read five pages of a hundred and Reply said there were more, so one match could not be told from two, or from none. Nobody is taken out. | `provider_call_failed` | permanent | Take the person out at Reply by hand, then check with `enrollment.list`: a repeat would read the same pages. It is never read as a person Reply does not hold. The trace says why. |
+| More than one contact's address is this one, ignoring case (`contact.not_unique`). Nobody is taken out. | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the stop again. |
+| More than five hundred contacts hold the address, so the lookup could not be read to its end (`contact.lookup_incomplete`). Nobody is taken out. | `provider_call_failed` | permanent | Take the person out at Reply by hand, then check with `enrollment.list`: a repeat would read the same pages. |
 | The person carries no value on the channel the call named. Nothing is called. | `invalid_channel_value` | validation | Name a channel they have. |
 
-The person is found without creating anybody: by the pin, or by looking the address up as `optout.record` does. A
-person Reply does not hold takes part in nothing, so the stop answers `already_stopped` and asks nothing more. Then the
-participation is read — a person who takes no part, or whose part is finished, is already stopped and nothing is
-removed — and only then is the person taken out, never marked finished. That read is also what makes a lost answer
-safe to repeat. Reply's own opt-out is never read: a stop is for exactly the people it would refuse. A person approves
-every stop before it runs, and its work waits while its Jason campaign is paused.
+The CLI finds the person without creating anybody: by the pin, or by the address, as `optout.record` does. A person
+Reply does not hold takes part in nothing, so the stop answers `already_stopped`. Otherwise the CLI reads the person's
+part in the sequence — a person who takes no part, or whose part is finished, is already stopped and nothing is
+removed — and only then takes them out, never marking them finished. That read is also what makes a lost answer safe
+to repeat. The CLI answers a person Reply does not hold without checking the sequence, so when the person is named by address,
+a campaign the work item names for the first time is read first, and a mistyped identifier is `campaign_not_found`
+rather than a completed stop. A pinned person needs no such read: the CLI tells a missing sequence apart itself.
+Reply's own opt-out is never read: a stop is for exactly the people it would refuse. A person approves every stop
+before it runs, and its work waits while its Jason campaign is paused.
 
 ## What it cannot do
 
-- **An enrolment never moves or re-adds a person already in the sequence.** Reply's bulk add, given a contact who is
-  already taking part, moves them forward to a later start step — skipping the steps between — and refuses a re-add
-  at the same step with a generic error that does not say why, after assigning the sequence's sending account to that
-  contact all the same. So before it enrols anybody who existed before the call — a pinned contact, or one the import
-  matched by address — the package reads that person's participation, and answers `already_enrolled` for
-  `collision: skip` or fails `collision_refused` for `collision: refuse` without writing anything. A participation
-  that appears between that read and the add is the one race left; Reply then does what is described above.
+- **An enrolment never moves or re-adds a person already in the sequence, and that guard is the CLI's.** Reply's own
+  add, given a contact who already takes part, moves them forward to a later start step or refuses a re-add with a
+  generic error. So the CLI reads the person's part in the sequence before it adds anybody, and answers that they
+  take part with nothing written. A participation that appears between that read and the add is the one race left;
+  Reply then does what is described above.
+- **Three answers the contracts publish are never given.** `list_membership.add` never answers `already_member`,
+  `optout.record` never answers `already_recorded`, and `campaign.pause` never answers `already_paused`. Reply does
+  not say whether a person was on the list already, a flag set again changes nothing, and a paused sequence paused
+  again is answered as a pause. The effect at Reply is the same either way, so each answers `added`, `recorded` or
+  `paused`.
+- **A person without a first name.** Reply's import refuses a person without one, even one it already holds, and
+  inventing a first name would write data nobody supplied into a customer's own records. So for `list_membership.add`
+  and `campaign.enroll` the package looks the address up itself — Reply's contact search, the one raw `reply api`
+  call it still makes — compares what comes back with the address exactly and whatever the case, and names the one
+  contact it finds by its identifier. Reply holding nobody under the address is a refusal: nobody can be made for
+  them. `optout.record` hands the address to the CLI, which finds the person the same way; somebody Reply does not
+  hold and who has no first name cannot be made there, so that opt-out fails `provider_call_failed`, with Reply's own
+  words in the trace. `enrollment.stop` creates nobody and needs no first name.
 - **`conversation.list` with `source: all` reads Reply's inbox and its sent threads, and merges them.** Reply's thread
-  filter has no value for "every thread": with no source it answers the inbox — threads with an inbound message —
-  and `sent` answers the threads whose latest message is outbound. The package asks for both from the first thread,
-  merges them by last activity and lists a thread found in both once, so a page with `source: all` can reach at most
-  the first 1000 threads of each (`offset + limit` up to 1000, Reply's largest page); a page further in is refused
-  rather than guessed at. `source: inbound` is one read and has no such bound.
+  filter has no value for "every thread": its inbox holds the threads with an inbound message, and `sent` the threads
+  whose latest message is outbound. The package reads both from the first thread, a hundred at a time, merges them by
+  last activity and lists a thread found in both once, so a page with `source: all` can reach at most the first 1000
+  threads of each (`offset + limit` up to 1000); a page further in is refused rather than guessed at.
+  `source: inbound` is one read and has no such bound.
 - **An opt-out at Reply is a yes or a no.** What they said, where it arrived and when are Jason's record, carried
   by the work item; none of it reaches Reply, whose contact holds only its opt-out flag.
 - **A person Reply holds under another address is not found by this one.** The lookup compares the address the
@@ -368,14 +398,16 @@ every stop before it runs, and its work waits while its Jason campaign is paused
   recorded on the contact for this address — made for it if need be — and the other is untouched: record the stop
   for that address as well. A stop finds nobody under this address and answers `already_stopped`, while the
   participation under the other one stays; `enrollment.list` shows who the sequence still holds.
-- **A pin Reply no longer holds reads as a completed stop.** Reply answers a participation read for a contact or a
-  sequence it no longer holds with the same 404 as for a person who takes no part, so `enrollment.stop` cannot tell
-  them apart and answers `already_stopped`. A campaign the work item names for the first time is read before
-  anything else, so an identifier Reply does not hold is `campaign_not_found` and is never pinned. The reason for a
-  stop is Jason's record; Reply holds none.
-- **The count and the start are two calls.** `campaign.activate` reads Reply's count, compares it with the
-  population the person approved, and then starts the sequence. Somebody enrolled in between is a race Reply offers
-  no way to close: the start is not conditional on a count.
+- **A contact pin Reply no longer holds reads as a completed stop.** Reply answers a participation read for a contact
+  it no longer holds with the same answer as for a person who takes no part, so `enrollment.stop` answers
+  `already_stopped`. A sequence Reply no longer holds is told apart: the CLI reads it, and the stop fails
+  `campaign_not_found`. The reason for a stop is Jason's record; Reply holds none.
+- **The count and the start are two calls.** The CLI reads Reply's count, compares it with the population the person
+  approved, and then starts the sequence. Somebody enrolled in between is a race Reply offers no way to close: the
+  start is not conditional on a count.
+- **A start from a state with no word.** `was` names the state the start left: draft or paused. Reply has a rare
+  third state, `skipped`, from which a start also succeeds; the package then fails `provider_call_failed` with
+  Reply's word in the trace, so a person sees that the sequence was started though the answer could not say from what.
 - **`campaign.enroll` waits for a person before it runs.** That operation's contract asks for an
   approval, so the claim parks the item as `awaiting_approval` with a record of exactly what would be
   enrolled, and nothing reaches Reply until somebody answers — `jason approval list`, then
@@ -385,71 +417,45 @@ every stop before it runs, and its work waits while its Jason campaign is paused
   [docs/plugins.md](../../docs/plugins.md) §7 and §12 say how to do.
 - **`campaign.get` answers no counts.** `counts` is `{}`, which is the contract's way of saying the
   provider reports none: a Reply sequence carries no people counts of its own, and the one count Reply
-  publishes beside it — `GET /v3/sequences/{id}/contacts/count`, which `enrollment.list` reads for its
-  `total` — counts everybody at once rather than by state. An empty object is a different fact from a zero,
-  and the alternative was paging every contact in the sequence inside the operation's own budget.
+  publishes beside it — which `enrollment.list` reads for its `total` — counts everybody at once rather than by
+  state. An empty object is a different fact from a zero, and the alternative was paging every contact in the
+  sequence inside the operation's own budget.
 - **A campaign name longer than 500 characters is truncated.** That is what the contract allows a name
   and Reply agrees to no limit, so the neutral half carries what it can hold and Reply's whole name
   survives beside it under `vendor.name`. Passing the longer one through unchanged would make the answer
   invalid and cost the read of that campaign for good, over a display string.
 - **`immediately` and `next_open_window` are the same request.** Reply always sends inside the sequence's
-  own schedule and publishes no way to bypass a sending window, so those two first touches ask it for
-  exactly the same thing. `authored_delay` is the one that differs: it leaves the step's own delay alone.
-- **Reply has no idempotency key and no per-run ledger.** The recovery read before a repeat therefore
-  reads the membership or the participation itself, which is the nearest answer the provider can give: it
-  cannot tell this work item's own earlier write from somebody else's addition or enrollment of the same
-  person an hour ago. It is a substitution for the reading the contract asks for rather than that reading.
-- **Whether somebody is already on a list is read from the list, and only a page of it.** Reply publishes
-  a read from the person's side — `GET /v3/contacts/{id}/lists` — and against a live account it answered
-  with an empty array for a contact that was provably on the list, checked twice a minute apart, for a
-  list that was not shared. So `list_membership.add` does not use it: the recovery read is
-  `POST /v3/contacts/filter` scoped by `listId`, which answered for that same list at once, and the person
-  is on it when Reply's own identifier for them is among the people it returns. Two consequences follow.
-  Nothing about the person travels to ask — only two numbers — and a match is exact rather than a
-  resemblance. But the read is over the list, and its largest page holds a thousand: on a longer list a
-  person who is not in that page cannot be told from a person who is not on the list, so the attempt
-  writes a `warn` line saying the reading could not be finished and makes the add anyway. The answer is
-  then `added`, which is what that attempt did. Adding somebody who was already there left exactly one
-  membership at the live account, so nothing is done twice — but that is recorded rather than relied on:
-  it is not published anywhere, and the reason the add is made is that this operation's own contract costs
-  nothing and its duplicate is reversible.
-- **A hand-driven invocation gets no recovery read.** The repeat path is reached by
-  `context.attempt_number`, which the runtime raises; an invocation made by hand through the plugin host
-  ([docs/plugins.md](../../docs/plugins.md) §12) that leaves it out is a first attempt, and a first attempt
-  writes — unless the person already takes part, which a first attempt reads for anybody who existed before the
-  call. Say `"attempt_number": 2` in the envelope to exercise the reading.
+  own schedule and publishes no way to bypass a sending window, so both first touches ask the CLI to ignore the
+  first step's own delay. `authored_delay` is the one that differs: it leaves the step's own delay alone.
+- **Reply has no idempotency key.** A repeat after a lost answer runs the command again, and the command's own
+  reading — the person's part in the sequence before an enrolment, the sequence's state and count before a start — is
+  the nearest answer the provider can give. It cannot tell this work item's own earlier write from somebody else's
+  addition of the same person an hour ago.
 - **A repeat with `collision: refuse` against an existing participation answers `already_enrolled`, not
-  `collision_refused`.** The recovery read comes first and the document's instruction is to answer from it
-  when the effect already happened, so that instruction wins over the collision policy — and it has to,
-  because after a lost answer the participation the read finds may well be the one this work item made.
-  `collision_refused` is what a first attempt reports.
-- **A person who opts out between two attempts is not told the add or the enrollment failed.** The
-  recovery read runs before the opt-out register is consulted, so work that already happened is reported
-  as having happened. Reading it the other way round would turn a finished add into a permanent failure
-  over something that arrived after it.
+  `collision_refused`.** After a lost answer, the participation the CLI finds may well be the one this work item
+  made, so a repeated attempt answers from it whatever the policy; `collision_refused` is what a first attempt
+  reports. The attempt number decides it, and an invocation made by hand through the plugin host
+  ([docs/plugins.md](../../docs/plugins.md) §12) that leaves `context.attempt_number` out is a first attempt: say
+  `"attempt_number": 2` in the envelope to exercise the repeat.
+- **A person who opts out between two attempts.** A repeated `campaign.enroll` answers `already_enrolled`: the CLI
+  reads the participation before Reply's register is consulted, so work that already happened is reported as having
+  happened. A repeated `list_membership.add` fails `suppressed`: the CLI reads the register before it adds, as this
+  package always asks it to, and the membership the first attempt made stays.
 - **`start.position: "step"` works only for a sequence whose steps form a single chain.** Reply publishes
   no ordering field on a step at all — the steps are a graph of parents, and a branch is labelled `"2A"` —
-  so "the third step" has a sound meaning only while there is one way through. The plugin walks the chain
-  from the root and takes the Nth link; a condition step in the way, a fork, or an N past the end is
-  refused with the reason named, because taking the Nth element of the array instead would be a guess
-  whose cost is a real person receiving the wrong message.
+  so the CLI walks the chain from the root and takes the Nth link; a condition step in the way, a fork, or an N past
+  the end is refused, because taking the Nth element of the array instead would be a guess whose cost is a real
+  person receiving the wrong message.
 - **List, sequence and contact identifiers have to be Reply's own numbers.** Anything else names nothing
   the account could hold and is refused without a call being made. The published contract illustrates
   `list_membership.add` with `"external_id": "L-1129"` — that is an example of the argument's shape, and
   this plugin refuses it.
-- **`time_zone` is not sent.** Reply's `timeZoneId` accepts a vocabulary published nowhere and an
-  unrecognised value fails the whole import item, so sending a person's own time zone would cost the
-  import rather than improve it.
-- **A person with no first name is created rather than imported**, because Reply's import refuses an item
-  without one and inventing a first name would write data nobody supplied into a customer's own records.
-  That second path publishes no code for an address the account already holds, so a duplicate there is
-  reported as `provider_call_failed` with Reply's own word in the trace, rather than mapped to a code
-  nobody published.
-
-- **The reads page by `limit` and `offset`, never by a cursor**, because Reply pages by `top` and `skip`. A
-  page may come back shorter than `limit` with `has_more: true`: the plugin stops before the result would
-  pass 768 KiB, counted as the runtime counts a result, so the next page starts at `offset` plus what came
-  back. That is the documents' own paging rule, and nothing about it is Reply's.
+- **`time_zone` is not sent.** The person the CLI reads carries an email, names, a company and a title. Reply's own
+  time-zone field accepts a vocabulary published nowhere, and an unrecognised value fails the whole import.
+- **The reads page by `limit` and `offset`, never by a cursor**, as the CLI does. A page may come back shorter than
+  `limit` with `has_more: true`: the plugin stops before the result would pass 768 KiB, counted as the runtime counts
+  a result, so the next page starts at `offset` plus what came back. That is the documents' own paging rule, and
+  nothing about it is Reply's.
 - **`enrollment.list` reads from the campaign's end only.** "Where is this person across everything?" is
   the same read from the person's end, and this version does not serve it. Nor does it filter by status:
   every person carries one, and a page filtered after reading could not say where the next one starts.
@@ -465,26 +471,24 @@ every stop before it runs, and its work waits while its Jason campaign is paused
 - **Only a contact's first reply is read.** Reply marks a contact finished in its sequence at its first
   reply and stops detecting that contact's later replies, so `conversation.list` never lists them and
   Jason's inbound sync says a contact's first reply only.
-- **A thread whose whole history is longer than `Plugins:Exec:OutputBytes` cannot be read at all.** Reply
-  sends the history with the thread, so `conversation.get` fails `provider_answer_too_large` for it however
-  small a page it asks for.
-- **The package asks for 256 MiB of memory.** The budget counts what an invocation allocates, and a read
-  of a thread reads two answers that can each be as large as the exec capture. 256 MiB holds two answers
-  up to about twice the default capture of 4 MiB; a larger `Plugins:Exec:OutputBytes` lets a longer answer
-  arrive and then runs a thread read out of memory. It is under the installation's default ceiling of
-  512 MiB (`Plugins:Limits:MaxMemoryMb`). An installation that lowers that ceiling below 256 has a reload
-  that loads this package refused as `field_invalid` — the whole reload, so every package stays on the
-  previous snapshot until the ceiling is raised.
+- **The package asks for 256 MiB of memory.** The budget counts what an invocation allocates, every answer it reads
+  included, and an answer can be as large as the exec capture (`Plugins:Exec:OutputBytes`, 4 MiB by default). It is
+  under the installation's default ceiling of 512 MiB (`Plugins:Limits:MaxMemoryMb`). An installation that lowers
+  that ceiling below 256 has a reload that loads this package refused as `field_invalid` — the whole reload, so every
+  package stays on the previous snapshot until the ceiling is raised.
 
 ## Versioning
 
 This package carries its own version and its own [changelog](CHANGELOG.md), and versions independently of
 the runtime: SemVer, with the manifest's `contracts` block saying which operation and protocol families it
-speaks. A change at Reply's end — a new field, a moved endpoint, a refusal this table has no word for — is
-absorbed by releasing the package, with no runtime release involved.
+speaks. A change at Reply's end — a new field, a moved endpoint — is absorbed by the CLI; a refusal this table has no
+word for, or a command this package does not run yet, is absorbed by releasing the package, with no runtime release
+involved.
 
 ## Where to look next
 
+- [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) — the commands themselves: `reply <noun> <verb>
+  --help` prints each one's flags, its result and the error codes it can answer.
 - [docs/plugins.md](../../docs/plugins.md) — the mechanism: the manifest and every rule it is held to, the
   Host SDK and its limits, capabilities and grants, the invocation protocol, testing a package locally,
   and what this version of the mechanism cannot do.

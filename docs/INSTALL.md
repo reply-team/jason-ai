@@ -18,6 +18,34 @@ checkout instead, with `--source`.
 You also need a directory you can write to, and — if you want an agent harness taught — that
 harness installed, so §4 has somewhere to deploy.
 
+### If an agent installs it
+
+An act this page marks **Ask first.** needs the word of the person you install for: ask, and do it only on their
+yes. With nobody to ask, leave it undone and say so.
+
+- Start your session without external connectors — on Claude Code, `--strict-mcp-config`. The install needs none.
+- Do §2, then §4 to §6, in order, and stop there. §3 is for a person who has the runtime's source, which is not
+  published here, and §7 takes the installation off again.
+- Write only what those steps write: the executable and its install directory; this account's PATH entry for it;
+  Jason's data directory, which is where the role skills go; the system's temporary directory, which the installer
+  downloads into; and the directory the executable unpacks its native libraries into when it first runs — under
+  the temporary directory on Windows, under `~/.net` in this home directory on macOS and Linux. Nothing in your
+  own agent's configuration unless the person says so (§4). The one-liner's own PATH change is part of the install
+  you were asked for; what needs asking is a PATH edit of your own, by hand (§2) or by the repair (§5).
+- Install nothing else and build nothing: the runtime's source is not here (§3). A 404 from a one-liner is §2's:
+  stop and report exactly that. Leave no long-running process behind except the runtime that
+  `jason runtime start` starts.
+- If your harness refuses to run the one-liner as code from outside — Claude Code's auto mode does — do not work
+  around it: say so, and ask the person to type the line themselves, or to restart the session in a mode that asks
+  before each command.
+- After `jason status` (§5), branch on `ready` in its JSON body, never on the exit code. For each required check
+  that is not ok, run the repair it prints. Optional checks are reported, not repaired: their repairs write into
+  your agent's configuration or into what starts at logon, which is the person's to allow.
+- A profile you append to is read by a login shell, not by your next non-interactive command (§2): carry the
+  `export` half yourself, or call `jason` by its full path.
+- Stop when `ready` is true, or when a required check still fails after its repair. Report which checks failed,
+  exactly what you ran, and what it changed.
+
 ---
 
 ## 2. Install from a release
@@ -33,10 +61,9 @@ irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
 By installing Jason you accept the Jason Runtime Licence: [LICENSE-RUNTIME.md](../LICENSE-RUNTIME.md). If you do
 not accept it, do not install Jason.
 
-Both lines install the **latest release**. A repository with no published release has no latest, so if they
-answer 404 there is nothing to install yet — and nothing in this repository to build instead (§3). That is a fact
-about the repository, not a failure of the tool or of your machine, and it is worth saying that way to whoever
-asked you to install it.
+Both lines install the **latest release**. If either answers 404, the release could not be reached — through the
+address or on GitHub — and that is not a failure of your machine: report it as it stands rather than run the line
+again, and build nothing instead; there is nothing in this repository to build (§3).
 
 Each script works out your platform, downloads the archive for it, **verifies its SHA-256 before unpacking**,
 installs the executable under your own account — with its licence and the third-party notices beside it, as
@@ -67,26 +94,27 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v0.7.0/install.sh | sh -s -- --version 0.7.0
+curl -fsSL https://jasonharness.ai/releases/download/v0.8.0/install.sh | sh -s -- --version 0.8.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.7.0/install.ps1))) -Version 0.7.0
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.8.0/install.ps1))) -Version 0.8.0
 ```
 
-These install 0.7.0 with 0.7.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.8.0 with 0.8.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
 account's Path already names — the entry stays, and so does everything else it puts on the PATH.
 
-**Putting it on the PATH yourself.** With `--no-modify-path` nothing did this for you. On Windows, add its
-directory to your account's `Path`; on macOS and Linux, append an `export` line to the one profile a login shell
-of yours reads — `~/.zprofile` for `zsh`; for `bash` the first of `~/.bash_profile`, `~/.bash_login` and
-`~/.profile` that exists, because bash never reads `~/.profile` once one of the others does; `~/.profile` for
-every other shell. `jason status` prints the exact line for your platform — a PowerShell line on Windows, an `sh`
-line elsewhere — when it finds that `jason` does not resolve (§5), so the simplest path is to run it and type
-what it says.
+**Putting it on the PATH yourself.** With `--no-modify-path` nothing did this for you.
+
+**Ask first.** On Windows, add its directory to your account's `Path`; on macOS and Linux, append an `export` line
+to the one profile a login shell of yours reads — `~/.zprofile` for `zsh`; for `bash` the first of
+`~/.bash_profile`, `~/.bash_login` and `~/.profile` that exists, because bash never reads `~/.profile` once one of
+the others does; `~/.profile` for every other shell. `jason status` prints the exact line for your platform — a
+PowerShell line on Windows, an `sh` line elsewhere — when it finds that `jason` does not resolve (§5), so the
+simplest path is to run it and type what it says.
 
 One thing that line cannot do for you: a login profile is read by a **login** shell. A person opening a new
 terminal gets it; an agent running one command at a time in a non-interactive child shell (`bash -c …`) has
@@ -139,30 +167,38 @@ Look first. Nothing is written, and the one target root is printed — the runti
 directory:
 
 ```sh
-jason skills install --roles-only --dry-run --source .
+jason skills install --roles-only --dry-run
 ```
+
+On a first install there is nothing to look at yet, and the dry run says so and exits 1: it fetches nothing, and
+the skills are not on this machine until the line below has fetched them once. That line fetches them into the
+data directory, prints its one root before it writes a skill there, and writes nowhere else. From then on,
+`--dry-run` previews.
 
 Then do it:
 
 ```sh
-jason skills install --roles-only --source .
+jason skills install --roles-only
 ```
+
+Both fetch the skills with `git` from this repository, at the tag this build was published as (§1).
 
 That is everything a runtime needs, and it writes nowhere else. The other two packs go into your agent's own
 configuration — for Claude Code, `~/.claude/skills` — which is yours to allow rather than Jason's to assume.
-Without `--roles-only` the same verb deploys all three, again printing every root before it writes any:
+
+**Ask first.** Without `--roles-only` the same verb deploys all three, again printing every root before it writes
+any:
 
 ```sh
-jason skills install --dry-run --source .
-jason skills install --source .
+jason skills install --dry-run
+jason skills install
 ```
 
-From a release, leave `--source` off: the build knows the repository and tag it was published from, and fetches
-the skills from there with `git` (§1).
-
+**From a working tree.**
 A build from source knows no published tag. Its version names the release it is on its way to, so the repair
 `jason status` prints for `role_skills` — `jason skills install --roles-only`, with no `--source` — asks for a
-tag that has not been published yet, and refuses, saying so. Add `--source` and the path of your checkout.
+tag that has not been published yet, and refuses, saying so. Add `--source <checkout>`, the path of your checkout
+of this repository, to each of the lines above.
 
 It refuses a deployment the runtime would later refuse to launch, rather than writing one — a role whose
 directory and skill name disagree, or a tree over the runtime's live size cap, stops the whole deployment
@@ -212,8 +248,10 @@ job is to answer when the runtime cannot be asked. The JSON body carries `ready`
 A check reports a fact and, where there is one, the command that repairs it. Most repairs are `jason`
 commands. One is not: putting an executable on a PATH is the shell's own act, so the `path` check prints the
 line your platform needs — a PowerShell line on Windows, an `sh` line elsewhere, the same line this product's
-own installer writes — which you type rather than hand back to `jason`. Typed twice, it changes nothing the
-second time. Read §2's note about login shells before you type it.
+own installer writes — which you type rather than hand back to `jason`.
+
+**Ask first.** That line writes a login profile, or this account's `Path` on Windows. Typed twice, it changes
+nothing the second time. Read §2's note about login shells before you type it.
 
 A shell that started before the installer put Jason on this account's PATH does not see it — and an agent's
 commands usually run in exactly such a shell, because each one inherits the environment the agent itself
@@ -248,7 +286,9 @@ jason runtime stop
 that instance to shut down and returns only once it has really gone. Migrations apply automatically on start,
 after a backup.
 
-Nothing is registered until you ask. To have the runtime start when you log on:
+Nothing is registered until you ask.
+
+**Ask first.** To have the runtime start when you log on:
 
 ```sh
 jason runtime autostart enable
