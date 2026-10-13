@@ -11,7 +11,7 @@ This skill is about the installation, not about the work it performs. A person r
 Jason is up, why nothing is happening, what is installed, where work would go, or whether they are on the
 current version. Campaign work itself is `managed-campaign-work`.
 
-**Status: verified** against Claude Code 2.1.293. It covers what this build does and nothing else.
+**Status: verified** against Claude Code 2.1.296. It covers what this build does and nothing else.
 
 Two things are true throughout and are easy to forget. **Nothing is registered until somebody asks**: Jason
 starts because you started it, or because somebody registered it to start at logon. And **no provider ships
@@ -235,24 +235,25 @@ pointing at a file being swapped. Noticing an update is yours; deciding to take 
 
 ## Installing it in the first place
 
-Installing Jason is a person's job at a terminal rather than something to perform on their behalf, so what
-belongs here is the two lines to hand them and the one fact that decides whether those lines work at all.
+Installing Jason is `docs/INSTALL.md` (<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>),
+followed in order. Hand the person the two lines below; or, if they ask you to install it, follow that page
+yourself, and ask them before every act it marks "Ask first".
 
 ```sh
-curl -fsSL https://github.com/reply-team/jason-ai/releases/latest/download/install.sh | sh
+curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
 ```
 
 ```powershell
-irm https://github.com/reply-team/jason-ai/releases/latest/download/install.ps1 | iex
+irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
 Each script works out the platform, verifies the download's SHA-256 before unpacking it, installs the executable
 under the person's own account — `~/.local/bin` on macOS and Linux, `%LOCALAPPDATA%\Programs\jason` on Windows —
 and puts that directory on the `PATH` unless `--no-modify-path` is passed. Nothing needs administrator rights.
 
-Both lines install the latest release. If they answer 404 the repository has no published release, and the way
-in is to build from source, which `README.md` and `docs/INSTALL.md` explain. Say that, rather than reporting
-the 404 as a failure of the tool or pasting a line again in the hope of a different answer.
+Both lines install the latest release. If either answers 404, the release could not be reached: say that, as it
+stands, and that there is nothing to build instead — the runtime's source is not published. Do not paste a line
+again in the hope of a different answer.
 
 ## Taking it off again
 

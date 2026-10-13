@@ -112,17 +112,28 @@ public partial class InteractiveSkillTests
         Assert.DoesNotContain("Work that was in flight is taken up by the next runtime", skill, StringComparison.Ordinal);
         Assert.Contains("a provider operation that may already have acted waits for a person", skill, StringComparison.Ordinal);
 
-        // The install one-liners resolve to the latest release. A skill that printed them without this would
-        // have a person paste a line, get a 404 and conclude the product does not install - when a repository
-        // with no published release simply has no latest, and building from source is the way in.
-        //
-        // Stated as the rule rather than as today's state, so that it does not turn false the day a release
-        // exists. The sentence this replaces asserted a present fact - "no release has been published yet" -
-        // and this assertion was what kept it alive: the fifth site of that shape in this repository, and the
-        // one the plan for this increment did not name.
-        Assert.Contains("If they answer 404", skill, StringComparison.Ordinal);
-        Assert.Contains("build from source", skill, StringComparison.Ordinal);
+        // The install one-liners go through the product's address and resolve to the latest release. The public
+        // repository has one, so a 404 from them is a fault on the way to it, said as it stands - not a
+        // repository with nothing released, and never a reason to build: the runtime's source is not published.
+        // The sentence this replaces sent a session to build from source, which no reader can do.
+        Assert.Contains("curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh", skill, StringComparison.Ordinal);
+        Assert.Contains("irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex", skill, StringComparison.Ordinal);
+        Assert.Contains("If either answers 404, the release could not be reached", skill, StringComparison.Ordinal);
+        Assert.Contains("there is nothing to build instead — the runtime's source is not published", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("has no published release", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("the way in is to build from source", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("no release has been published yet", skill, StringComparison.Ordinal);
+
+        // And installing is the install page's, which a session may follow itself when the person asks it to,
+        // asking before every act the page marks. The sentence this replaces called it a person's job at a
+        // terminal, which the README's own prompt for an agent contradicts. The page is named by the address the
+        // prompt gives, because the skill is read in a harness on a machine that has no checkout to open it in.
+        Assert.Contains(
+            "Installing Jason is `docs/INSTALL.md` (<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>), followed in order.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("ask them before every act it marks \"Ask first\"", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("rather than something to perform on their behalf", skill, StringComparison.Ordinal);
 
         // The runtime volunteers that a newer version exists, so every session on this installation learns
         // it. Without a bound, every one of them says so, and a person who declined once is told again.

@@ -46,6 +46,7 @@ public sealed class PublishedLinksTests : IDisposable
     [InlineData("[p](https://github.com/reply-team/jason-ai/tree/main/runtime/src)", "README.md [c] runtime/src")]
     [InlineData("https://raw.githubusercontent.com/reply-team/jason-ai/main/CLAUDE.md", "README.md [c] CLAUDE.md")]
     [InlineData("The design is at https://github.com/reply-team/jason-ai/blob/main/docs/private.md.", "README.md [c] docs/private.md")]
+    [InlineData("```text\nThe instructions are\n<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/nothing.md>. Read all of it\n```", "README.md [c] docs/nothing.md")]
     [InlineData("```\n[p](docs/private.md)\n```", "README.md [d] docs/private.md")]
     [InlineData("See `docs/private.md`.", "README.md [d] docs/private.md")]
     [InlineData("See private.md.", "README.md [d] private.md")]
@@ -68,6 +69,7 @@ public sealed class PublishedLinksTests : IDisposable
     [InlineData("The note is published at https://github.com/reply-team/jason-ai/blob/main/docs/public.md. So is https://github.com/reply-team/jason-ai/blob/main/VERSION: read it.")]
     [InlineData("`[not a link](../outside.md)` is code, and code links nowhere")]
     [InlineData("skills/runtime/private.md is another directory's page, and notes.md names no page of docs/.")]
+    [InlineData("```text\nThe instructions are\n<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/public.md>. Read all of it\n```")]
     public void A_published_text_that_stays_in_what_is_published_is_not(string text)
     {
         Write("README.md", text + "\n");

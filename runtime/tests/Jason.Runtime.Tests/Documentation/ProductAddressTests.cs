@@ -58,10 +58,6 @@ public sealed partial class ProductAddressTests : IDisposable
     internal static readonly IReadOnlyList<GitHubException> Exceptions =
     [
         new(
-            "skills/runtime/operating-the-installation/SKILL.md",
-            2,
-            "a verified skill: its text changes only with a new reading by a host, and its two install lines still work, straight from GitHub"),
-        new(
             "install/feeds/schema-1/manifest.json",
             1,
             "the feed fixture is the feed 0.1.0 published with its values taken out, compared with those bytes by a test; no install reads its release page"),

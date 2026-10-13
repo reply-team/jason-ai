@@ -178,6 +178,8 @@ public sealed class PublicCheckTests
     [InlineData("The page is published at https://github.com/reply-team/jason-ai/blob/main/docs/public.md.")]
     [InlineData("Read **https://github.com/reply-team/jason-ai/blob/main/docs/public.md**, _https://github.com/reply-team/jason-ai/blob/main/plugins/p/README.md_ and ~~https://github.com/reply-team/jason-ai/blob/main/README.md~~. Is it *https://github.com/reply-team/jason-ai/blob/main/docs/public.md*? It is https://raw.githubusercontent.com/reply-team/jason-ai/main/README.md! And here: https://github.com/reply-team/jason-ai/blob/main/docs/public.md:")]
     [InlineData("https://github.com/reply-team/jason-ai/blob/main/docs/public.md!#here")]
+    [InlineData("```text\nThe instructions are\n<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/public.md>. Read all of it\n```")]
+    [InlineData("```text\nThe instructions are\n<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/nothing.md>. Read all of it\n```")]
     public void The_link_step_gives_the_verdicts_this_repository_s_guard_gives(string text)
     {
         // The guard's view: this repository, with a page it does not publish.

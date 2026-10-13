@@ -41,7 +41,7 @@ public class DocumentedPageCommandsTests
     /// Lines typed whole rather than by prefix. <c>docs/INSTALL.md</c> prints eighteen <c>jason</c> lines and
     /// these four went untyped while the commit and the pull request said every line was; a prefix would also
     /// catch prose, such as the README prompt's "…other than through jason runtime start." at the end of a
-    /// sentence.
+    /// sentence, which the prompt said until it pointed at the install page instead.
     /// </summary>
     /// <remarks>
     /// Safe to type, all four: <c>--version</c> prints a string, <c>status</c> and <c>stop</c> find no

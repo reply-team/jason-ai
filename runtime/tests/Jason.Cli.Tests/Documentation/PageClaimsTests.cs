@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using Jason.Cli.Doctor;
 
 namespace Jason.Cli.Tests.Documentation;
@@ -12,21 +13,23 @@ namespace Jason.Cli.Tests.Documentation;
 /// Most of these are retractions, which is the one place a negative scan is the right shape: a specific sentence
 /// that was false is kept from coming back, and a positive assertion beside it carries what is true instead.
 /// </remarks>
-public class PageClaimsTests
+public partial class PageClaimsTests
 {
     /// <summary>
-    /// The README prompt repairs required checks only. Its step 4 ran every check's repair, optional ones
-    /// included: the autostart repair registers a runtime to start at logon and the harness repair writes into the
-    /// agent's own configuration — both of which the prompt's own closing rule forbids.
+    /// An agent that installs Jason repairs required checks only. The README prompt's step 4 once ran every check's
+    /// repair, optional ones included: the autostart repair registers a runtime to start at logon and the harness repair
+    /// writes into the agent's own configuration — both the person's to allow. The steps are the install page's now,
+    /// and so is the rule, in its section for an agent.
     /// </summary>
     [Fact]
-    public void The_prompt_repairs_required_checks_only()
+    public void An_agent_that_installs_it_repairs_required_checks_only()
     {
-        var prompt = Prompt();
+        var agent = Flat(Agent());
 
-        Assert.Contains("For each required check that is not ok, run the repair it prints.", prompt, StringComparison.Ordinal);
-        Assert.Contains("Optional checks are reported, not repaired", prompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("For each check that is not ok", prompt, StringComparison.Ordinal);
+        Assert.Contains("For each required check that is not ok, run the repair it prints.", agent, StringComparison.Ordinal);
+        Assert.Contains("Optional checks are reported, not repaired", agent, StringComparison.Ordinal);
+        Assert.DoesNotContain("For each check that is not ok", agent, StringComparison.Ordinal);
+        Assert.DoesNotContain("For each check that is not ok", Prompt(), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -36,7 +39,7 @@ public class PageClaimsTests
     [Fact]
     public void The_pages_name_where_the_executable_unpacks_on_each_platform()
     {
-        Assert.Contains("~/.net", Prompt(), StringComparison.Ordinal);
+        Assert.Contains("~/.net", Agent(), StringComparison.Ordinal);
         Assert.Contains("under\n`~/.net` on macOS and Linux", Page("docs", "INSTALL.md"), StringComparison.Ordinal);
 
         var release = Page("docs", "release-and-update.md");
@@ -77,6 +80,26 @@ public class PageClaimsTests
 
         Assert.Contains("with `git`, over the\nnetwork, at the tag it was published as", install, StringComparison.Ordinal);
         Assert.Contains("asks for a\ntag that has not been published yet, and refuses", install, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A dry run fetches nothing, so on a first install it has nothing to preview: it says the skills are not on this
+    /// machine yet and exits 1. §4 says so, and that the install line is then what fetches them — into the data
+    /// directory, printing its root before it writes a skill — after which the dry run previews.
+    /// </summary>
+    [Fact]
+    public void The_install_page_says_a_first_dry_run_has_nothing_to_preview()
+    {
+        var teach = Flat(Section(Page("docs", "INSTALL.md"), "## 4. "));
+
+        Assert.Contains(
+            "On a first install there is nothing to look at yet, and the dry run says so and exits 1: it fetches nothing, and the skills are not on this machine until the line below has fetched them once.",
+            teach,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "That line fetches them into the data directory, prints its one root before it writes a skill there, and writes nowhere else. From then on, `--dry-run` previews.",
+            teach,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -404,8 +427,8 @@ public class PageClaimsTests
 
     /// <summary>
     /// The prompt needs no connector, and a session started with the account's connectors offers tools the install
-    /// never asked for. That is said to the person who starts the session, above the prompt, so the prompt itself —
-    /// the text real hosts were measured reading — does not change by a byte.
+    /// never asked for. That is said to the person who starts the session, above the prompt, so the prompt itself
+    /// names none.
     /// </summary>
     [Fact]
     public void The_readme_says_to_start_the_install_session_without_connectors_above_the_prompt()
@@ -425,8 +448,28 @@ public class PageClaimsTests
     }
 
     /// <summary>
-    /// The prompt, byte for byte, is held here by its digest: a change to it is a deliberate one, and a real host reads the
-    /// changed prompt again before it is relied on.
+    /// A session in a mode that runs commands without asking refuses the one-liner: Claude Code's auto mode turned down
+    /// the installer an agent had downloaded and checked, as code from outside, and the install stopped at its first
+    /// step. So the person who starts the session is told, above the prompt, to start it in a mode that asks.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_to_start_the_install_session_in_a_mode_that_asks_above_the_prompt()
+    {
+        var readme = Page("README.md");
+        var fence = readme.IndexOf("```text\nInstall Jason on this machine", StringComparison.Ordinal);
+        Assert.True(fence > 0, "the prompt's fence is where the page has it");
+
+        Assert.Contains(
+            "Start it, too, in a mode that asks before it runs a command: on Claude Code, `--permission-mode manual`, not auto mode, which refuses to run a downloaded installer and stops the install at its first step.",
+            Flat(readme[..fence]),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The prompt, byte for byte, is held here by its digest, so a change to it is a deliberate one. No host has read
+    /// this text yet: the reading still to come is a person's own, pasting it from the published page into a fresh
+    /// agent session after the release that publishes it. Until then the digest stands for a deliberate change, not
+    /// for a reading.
     /// </summary>
     [Fact]
     public void The_install_prompt_is_the_text_the_hosts_read_and_names_no_connector()
@@ -437,18 +480,265 @@ public class PageClaimsTests
     }
 
     /// <summary>
-    /// The runtime's source is not published, so the prompt never sends an agent to build it: a 404 from the one-liner
-    /// is reported, and nothing is built.
+    /// The install page's section for an agent, byte for byte, is held here by its digest, as the prompt is: the rules an
+    /// agent follows moved out of the prompt and into it, and a change to them is a deliberate one. The facts that pin
+    /// its sentences say why each matters; this says none of the rest changed by accident. A host rehearsed an earlier
+    /// revision of the section once, from a staged copy, before the release; the reading of record is a person's own
+    /// walk after it. Until that reading, the digest stands for a deliberate change.
+    /// </summary>
+    [Fact]
+    public void The_agent_section_is_the_text_the_hosts_read() =>
+        Assert.Equal(AgentSectionDigest, "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Agent()))));
+
+    /// <summary>
+    /// The runtime's source is not published, so nothing sends an agent to build it: the prompt says nothing of a build,
+    /// and the install page's section for an agent says to build nothing and to report a 404 from a one-liner as it is.
     /// </summary>
     [Fact]
     public void The_install_prompt_builds_nothing()
     {
         var prompt = Fenced(Page("README.md"), "```text\nInstall Jason on this machine");
+        var agent = Flat(Agent());
 
         Assert.DoesNotContain("from source", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(".NET SDK", prompt, StringComparison.Ordinal);
-        Assert.Contains("do not build anything", prompt, StringComparison.Ordinal);
-        Assert.Contains("stop and report exactly that", prompt, StringComparison.Ordinal);
+        Assert.Contains("build nothing", agent, StringComparison.Ordinal);
+        Assert.Contains("stop and report exactly that", agent, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A harness may refuse to run the one-liner as code from outside, as Claude Code's auto mode does. An agent that
+    /// met that stopped and reported, which is right; the section for an agent says so, and names the two ways on that
+    /// are the person's: typing the line themselves, or restarting the session in a mode that asks.
+    /// </summary>
+    [Fact]
+    public void The_agent_section_says_not_to_work_around_a_harness_that_refuses_the_one_liner() =>
+        Assert.Contains(
+            "If your harness refuses to run the one-liner as code from outside — Claude Code's auto mode does — do not work around it: say so, and ask the person to type the line themselves, or to restart the session in a mode that asks before each command.",
+            Flat(Agent()),
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// A person's own agent that lands on the README sees, within its first screen, what Jason is, that installing it
+    /// is the install page, and the prompt: the title, one paragraph, the alpha box, then "Installing" with the prompt
+    /// under it. What the project is, its architecture and its layout follow.
+    /// </summary>
+    [Fact]
+    public void The_readme_opens_with_what_it_is_then_the_install_and_the_prompt()
+    {
+        var lines = OutsideFences(Page("README.md"));
+
+        Assert.Equal(
+            ["## Installing", "## What this is", "## Architecture", "## Repository layout"],
+            lines.Where(line => line.StartsWith("## ", StringComparison.Ordinal)).Take(4));
+
+        var installing = Array.IndexOf(lines, "## Installing");
+        var what = Array.IndexOf(lines, "## What this is");
+        Assert.Equal(["### Ask an agent to do it"], lines[installing..what].Where(line => line.StartsWith("### ", StringComparison.Ordinal)));
+
+        var opening = string.Join('\n', lines[..installing])
+            .Split("\n\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(block => !block.StartsWith("# ", StringComparison.Ordinal) && !block.StartsWith('>'))
+            .ToList();
+        Assert.True(opening.Count == 1, $"Before \"## Installing\" the README has {opening.Count} paragraphs besides the title and the alpha box; it has one.");
+    }
+
+    /// <summary>
+    /// A person who runs only a one-liner learns on the first screen that it is not the whole of it: between the licence
+    /// sentence and the prompt, one paragraph says a one-liner installs the executable, links the install page for the
+    /// rest, and names teaching it its skills, without which every role it launches runs untaught.
+    /// </summary>
+    [Fact]
+    public void The_readme_s_first_screen_says_the_install_page_holds_the_rest()
+    {
+        var readme = Page("README.md");
+        var licence = readme.IndexOf("By installing Jason you accept the Jason Runtime Licence: [LICENSE-RUNTIME.md](LICENSE-RUNTIME.md).", StringComparison.Ordinal);
+        var prompt = readme.IndexOf("### Ask an agent to do it", StringComparison.Ordinal);
+        Assert.True(licence > 0 && prompt > licence, "the README no longer has the licence sentence followed by the prompt's heading.");
+
+        var pointer = readme[licence..prompt].Split("\n\n").Select(Flat).SingleOrDefault(paragraph => paragraph.Contains("[docs/INSTALL.md](docs/INSTALL.md)", StringComparison.Ordinal));
+        Assert.True(pointer is not null, "Between the licence sentence and the prompt, no paragraph links the install page.");
+        Assert.Contains("A one-liner installs the executable.", pointer, StringComparison.Ordinal);
+        Assert.Contains("teaching it its skills", pointer, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The prompt sends the agent to the install page as a single plain file: the raw address at <c>main</c>, which is
+    /// the latest release, because the public <c>main</c> moves only when a release is published.
+    /// </summary>
+    [Fact]
+    public void The_install_prompt_points_at_the_install_page_at_main() =>
+        Assert.Contains("<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>", Prompt(), StringComparison.Ordinal);
+
+    /// <summary>
+    /// The steps live on the install page alone. The prompt names no command and no option, so steps cannot creep back
+    /// into it and disagree with the page, as its <c>--source .</c> once did.
+    /// </summary>
+    [Fact]
+    public void The_install_prompt_names_no_command()
+    {
+        var prompt = Fenced(Page("README.md"), "```text\nInstall Jason on this machine");
+
+        Assert.DoesNotContain("`", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("--", prompt, StringComparison.Ordinal);
+        Assert.DoesNotMatch(new Regex(@"(?<![\w/-])jason(?![\w-])"), prompt);
+        Assert.DoesNotMatch(new Regex(@"\b(?:curl|irm|iex|sh|pwsh|powershell|git|dotnet|winget|brew|npm)\b"), prompt);
+    }
+
+    /// <summary>
+    /// The acts that need the person's word are marked with one phrase, spelled one way in the prompt and on the install
+    /// page. Every mark on the page opens a paragraph inside §2–§6, the sections an agent performs; outside them the
+    /// phrase appears once, where the section for an agent says what it means.
+    /// </summary>
+    [Fact]
+    public void Ask_first_is_spelled_one_way_and_marks_acts_in_sections_2_to_6()
+    {
+        Assert.Contains("\"Ask first\"", Flat(Prompt()), StringComparison.Ordinal);
+        Assert.All(AskFirst().Matches(Prompt()), match => Assert.Equal("Ask first", match.Value));
+
+        var install = Page("docs", "INSTALL.md");
+        var found = AskFirst().Matches(install).ToList();
+        Assert.All(found, match => Assert.Equal("Ask first", match.Value));
+
+        var start = install.IndexOf("\n## 2. ", StringComparison.Ordinal);
+        var end = install.IndexOf("\n## 7. ", StringComparison.Ordinal);
+        Assert.True(start > 0 && end > start, "docs/INSTALL.md no longer has §2 followed by §7.");
+
+        var marks = found.Where(match => match.Index > start && match.Index < end).ToList();
+        Assert.True(marks.Count == 4, $"docs/INSTALL.md marks {marks.Count} acts in §2–§6 \"Ask first.\"; it marks four.");
+        Assert.All(marks, match => Assert.True(
+            install.AsSpan(match.Index - 4).StartsWith("\n\n**Ask first.** ", StringComparison.Ordinal),
+            $"The mark at offset {match.Index} of docs/INSTALL.md does not open a paragraph as \"**Ask first.**\"."));
+
+        var outside = Assert.Single(found, match => match.Index < start || match.Index > end);
+        var agent = install.IndexOf("### If an agent installs it", StringComparison.Ordinal);
+        Assert.InRange(outside.Index, agent, start);
+    }
+
+    /// <summary>
+    /// Each act that needs the person's word carries the mark where it is described: putting Jason on the PATH by hand
+    /// (§2) and by the repair <c>jason status</c> prints (§5), deploying the packs into the agent's own configuration
+    /// (§4), and registering the runtime to start at logon (§6). The mark opens the paragraph before the act's commands,
+    /// or the one after the paragraph that introduces it.
+    /// </summary>
+    [Theory]
+    [InlineData("## 2. ", "**Putting it on the PATH yourself.**", 1)]
+    [InlineData("## 4. ", "```sh\njason skills install --dry-run\n", -1)]
+    [InlineData("## 5. ", "which you type rather than hand back to `jason`.", 1)]
+    [InlineData("## 6. ", "```sh\njason runtime autostart enable\n", -1)]
+    public void Each_act_that_needs_the_person_s_word_is_marked(string section, string act, int neighbour)
+    {
+        var blocks = Section(Page("docs", "INSTALL.md"), section).Split("\n\n");
+        var at = Array.FindIndex(blocks, block => block.Contains(act, StringComparison.Ordinal));
+        Assert.True(at >= 0, $"{section.Trim()} no longer describes the act: {act}");
+
+        var marked = blocks.ElementAtOrDefault(at + neighbour) ?? string.Empty;
+        Assert.True(
+            marked.StartsWith("**Ask first.** ", StringComparison.Ordinal),
+            $"{section.Trim()} does not mark the act with \"**Ask first.**\"; the paragraph there reads: {marked}");
+    }
+
+    /// <summary>
+    /// A release teaches itself from the repository at its published tag, so no page shows a release a command with
+    /// <c>--source</c>: outside a checkout <c>--source .</c> exits 1 with "'.' holds no skills directory". The install
+    /// page keeps <c>--source &lt;checkout&gt;</c> for a working tree, in the paragraph that says so.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md", null)]
+    [InlineData("docs/INSTALL.md", "**From a working tree.**")]
+    public void No_page_teaches_a_release_with_source(string page, string? workingTree)
+    {
+        var text = Page(page.Split('/'));
+        var fenced = false;
+        var taught = new List<string>();
+        foreach (var line in text.Split('\n'))
+        {
+            if (FenceLine().IsMatch(line))
+            {
+                fenced = !fenced;
+                continue;
+            }
+
+            if (fenced && line.Trim().StartsWith("jason skills", StringComparison.Ordinal) && line.Contains("--source", StringComparison.Ordinal))
+            {
+                taught.Add(line.Trim());
+            }
+        }
+
+        Assert.True(taught.Count == 0, $"{page} shows a release how to teach itself with --source:\n" + string.Join('\n', taught));
+
+        if (workingTree is not null)
+        {
+            var paragraph = Section(text, "## 4. ").Split("\n\n").SingleOrDefault(block => block.StartsWith(workingTree, StringComparison.Ordinal));
+            Assert.True(paragraph is not null, $"§4 has no paragraph opening with {workingTree}");
+            Assert.Contains("`--source <checkout>`", paragraph, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The examples of a pinned install name one release everywhere they are printed — the install page's two lines and
+    /// its sentence, and each script's own help — in the address and in the option alike, so a release that moves them
+    /// moves them all.
+    /// </summary>
+    [Fact]
+    public void The_pinned_examples_name_one_version()
+    {
+        var found = new List<(string File, string Version)>();
+        foreach (var (file, text) in new[]
+                 {
+                     ("docs/INSTALL.md", Section(Page("docs", "INSTALL.md"), "## 2. ")),
+                     ("install/install.sh", Page("install", "install.sh")),
+                     ("install/install.ps1", Page("install", "install.ps1")),
+                 })
+        {
+            foreach (Match match in PinnedVersion().Matches(text))
+            {
+                found.AddRange(match.Groups["version"].Captures.Select(capture => (file, capture.Value)));
+            }
+        }
+
+        var expected = new[] { ("docs/INSTALL.md", 6), ("install/install.sh", 2), ("install/install.ps1", 2) };
+        Assert.Equal(expected, found.GroupBy(pin => pin.File).Select(group => (group.Key, group.Count())));
+        Assert.True(
+            found.Select(pin => pin.Version).Distinct().Count() == 1,
+            "The pinned examples name more than one version: " + string.Join(", ", found.Select(pin => $"{pin.File} {pin.Version}")));
+    }
+
+    /// <summary>
+    /// The public repository has a release, so a 404 from a one-liner no longer means there is none yet: it is a fault on
+    /// the way to the release, reported as it is, and never a reason to build. Both pages that print the one-liners say
+    /// so, and neither keeps the sentence from before the repository was public.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md")]
+    [InlineData("docs/INSTALL.md")]
+    public void No_page_says_a_404_means_no_release_yet(string page)
+    {
+        var text = Flat(Page(page.Split('/')));
+
+        Assert.DoesNotContain("no published release to install yet", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("nothing to install yet", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("has no latest", text, StringComparison.Ordinal);
+        Assert.Contains(
+            "If either answers 404, the release could not be reached — through the address or on GitHub — and that is not a failure of your machine: report it as it stands rather than run the line again, and build nothing instead",
+            text,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An agent performs §2, then §4 to §6. §3 is for a person who has the runtime's source, and §7 takes the
+    /// installation off again. And the one-liner's own change to the PATH is part of what it was asked to do; only a
+    /// PATH edit of its own is the person's to allow.
+    /// </summary>
+    [Fact]
+    public void The_agent_section_does_section_2_then_4_to_6()
+    {
+        var agent = Flat(Agent());
+
+        Assert.Contains("Do §2, then §4 to §6, in order, and stop there.", agent, StringComparison.Ordinal);
+        Assert.Contains("§3 is for a person who has the runtime's source, which is not published here, and §7 takes the installation off again.", agent, StringComparison.Ordinal);
+        Assert.DoesNotContain("§2 to §6", agent, StringComparison.Ordinal);
+        Assert.Contains("The one-liner's own PATH change is part of the install you were asked for", agent, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -485,7 +775,10 @@ public class PageClaimsTests
     }
 
     /// <summary>The digest of the README's prompt.</summary>
-    private const string PromptDigest = "sha256:2f2eed5c109e4cdb0d37037d942c5af42f256f8f9190cfe402c6027fc0e1779b";
+    private const string PromptDigest = "sha256:41ae5b247f8e1f5897930c8b4c69212ae889c224f558c5580b0c84968894e77b";
+
+    /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
+    private const string AgentSectionDigest = "sha256:8627ca8b26522a2fdc78a61af7980bc1e80762617e93fbf68eae45f1b781a77f";
 
     /// <summary>
     /// The text between the line that opens a fence and the next line that is exactly three backticks, each line
@@ -520,6 +813,63 @@ public class PageClaimsTests
         Assert.True(open > heading && close > open, "the README's prompt is no longer a fenced block under its heading.");
         return readme[open..close];
     }
+
+    /// <summary>The install page's section for an agent that installs Jason: from its heading to the next heading.</summary>
+    private static string Agent()
+    {
+        const string Heading = "\n### If an agent installs it\n";
+        var install = Page("docs", "INSTALL.md");
+        var heading = install.IndexOf(Heading, StringComparison.Ordinal);
+        Assert.True(heading >= 0, "docs/INSTALL.md has no section for an agent that installs it.");
+
+        var next = NextHeading().Match(install, heading + Heading.Length);
+        return install[heading..(next.Success ? next.Index : install.Length)];
+    }
+
+    /// <summary>The section of a page that opens with a line starting <paramref name="heading"/>, up to the next of its rank.</summary>
+    private static string Section(string page, string heading)
+    {
+        var start = page.IndexOf("\n" + heading, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"the page has no section opening with '{heading.Trim()}'.");
+
+        var end = page.IndexOf("\n" + heading[..(heading.IndexOf(' ') + 1)], start + 1, StringComparison.Ordinal);
+        return page[(start + 1)..(end > start ? end : page.Length)];
+    }
+
+    /// <summary>A page's lines with every line of fenced code, its fences included, made empty.</summary>
+    private static string[] OutsideFences(string page)
+    {
+        var lines = page.Split('\n');
+        var fenced = false;
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var fence = FenceLine().IsMatch(lines[index]);
+            if (fenced || fence)
+            {
+                lines[index] = string.Empty;
+            }
+
+            if (fence)
+            {
+                fenced = !fenced;
+            }
+        }
+
+        return lines;
+    }
+
+    [GeneratedRegex("ask first", RegexOptions.IgnoreCase)]
+    private static partial Regex AskFirst();
+
+    [GeneratedRegex(@"^ {0,3}(?:```|~~~)")]
+    private static partial Regex FenceLine();
+
+    [GeneratedRegex(@"(?m)^#{1,6} ")]
+    private static partial Regex NextHeading();
+
+    /// <summary>A pinned install's version: in a release's address, after the option that names it, or in the sentence that says so.</summary>
+    [GeneratedRegex(@"releases/download/v(?<version>[0-9]+\.[0-9]+\.[0-9]+)/|(?:--version|-Version) (?<version>[0-9]+\.[0-9]+\.[0-9]+)|These install (?<version>[0-9]+\.[0-9]+\.[0-9]+) with (?<version>[0-9]+\.[0-9]+\.[0-9]+)'s own script")]
+    private static partial Regex PinnedVersion();
 
     private static string Page(params string[] path)
     {
