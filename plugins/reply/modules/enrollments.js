@@ -1,16 +1,17 @@
 // `enrollment.list`: one page of the people a sequence holds, read from the campaign's end, and Reply's own count of
 // them beside it.
 //
-// Two reads and nothing written: the page, then the count. The page is mapped person by person onto the published
-// vocabulary, and three of Reply's fields are never mapped at all — the address, the company and the title. A
-// result is stored with its work item, and a page of addresses would become a second copy of the audience nobody
-// meant to keep.
-import { call } from "./cli.js";
-import { callOf, fail, lostAnswerRow, observe, statusRow } from "./errors.js";
+// One command answers both: `reply sequence contacts` returns the page and the total. The page is mapped person by
+// person onto the published vocabulary, and three of Reply's fields are never mapped at all — the address, the company
+// and the title. A result is stored with its work item, and a page of addresses would become a second copy of the
+// audience nobody meant to keep.
+import { run } from "./cli.js";
+import { fail, lostAnswerRow } from "./errors.js";
 import { fill } from "./page.js";
 import { flag, identifier, lookup, sequenceOf, text, utc, word } from "./reading.js";
 
 const OPERATION = "enrollment.list";
+const COMMAND = "sequence contacts";
 
 // Reply's own word for where a person stands, and the neutral word each one is. An out-of-office pause is a pause:
 // the person is not being sent to, and why is the provider's own word, which travels under `vendor`. `inactive` —
@@ -22,43 +23,27 @@ const STATUS = {
   "finished": "finished",
 };
 
-// The refusal Reply gives an account whose role may not read a sequence's people.
-const FORBIDDEN = "sequenceContact.forbidden";
-
 export function enrollmentList(input, context) {
   const sequence = sequenceOf(input, OPERATION);
   const learned = { campaign: sequence };
-  const path = "/v3/sequences/" + sequence + "/contacts?top=" + input.args.limit + "&skip=" + input.args.offset;
-  const known = callOf("GET", path);
+  const page = run(context, {
+    operation: OPERATION,
+    command: COMMAND,
+    operands: [sequence],
+    flags: ["--limit", String(input.args.limit), "--offset", String(input.args.offset)],
+    learned: learned,
+  });
 
-  const answer = call(context, "GET", path, undefined, learned, OPERATION);
-
-  if (answer.code === 404) {
-    // The identifier deliberately does not travel out as a pin: the provider has just denied the link.
-    fail(OPERATION, observe(known, answer, "campaign_not_found"), undefined);
+  const people = Array.isArray(page.items) ? page.items.map(person) : null;
+  if (people === null || people.indexOf(null) >= 0 || typeof page.has_more !== "boolean") {
+    // A result that is not a page of people is not an answer. On a read that costs nothing to ask again.
+    fail(OPERATION, { call: COMMAND, row: lostAnswerRow(COMMAND) }, learned);
   }
 
-  if (answer.code !== 200) {
-    const seen = observe(known, answer, statusRow(answer.code, known));
-    if (answer.code === 403 && seen.provider_code === FORBIDDEN) {
-      seen.row = "feature_not_included";
-    }
-
-    fail(OPERATION, seen, learned);
-  }
-
-  const page = answer.data;
-  const people = page !== null && typeof page === "object" && Array.isArray(page.items) ? page.items.map(person) : null;
-  if (people === null || people.indexOf(null) >= 0) {
-    // A 200 whose body is not a page of people is not an answer, whatever the status said. On a read that costs
-    // nothing to ask again, it is reported as the provider not having answered.
-    fail(OPERATION, observe(known, answer, lostAnswerRow(known)), learned);
-  }
-
-  const result = { total: count(context, sequence, learned), items: [], has_more: false, vendor: { ordering: "added_desc" } };
+  const result = { total: count(page.total), items: [], has_more: false, vendor: { ordering: "added_desc" } };
   const filled = fill(people, result);
   result.items = filled.items;
-  result.has_more = page.hasMore === true || filled.cut;
+  result.has_more = page.has_more || filled.cut;
 
   return { result: result, external_ids: learned };
 }
@@ -95,22 +80,9 @@ function person(row) {
   };
 }
 
-// Reply's own count of the people in the sequence, or null when it refused to count them. A refusal of the count
-// alone does not cost the page that was already read: the document lets `total` be null for exactly that. Except
-// one: for a sequence this account does not hold, Reply answers the page with an empty list and only the count says
-// so, with its 404 `sequenceContact.sequenceNotFound` — and that is the campaign not being found, not a total
-// nobody would give.
-function count(context, sequence, learned) {
-  const path = "/v3/sequences/" + sequence + "/contacts/count";
-  const answer = call(context, "GET", path, undefined, learned, OPERATION);
-  if (answer.code === 404 && answer.data !== null && typeof answer.data === "object"
-      && typeof answer.data.code === "string" && answer.data.code.toLowerCase() === "sequencecontact.sequencenotfound") {
-    fail(OPERATION, observe(callOf("GET", path), answer, "campaign_not_found"), undefined);
-  }
-
-  const counted = answer.code === 200 && answer.data !== null && typeof answer.data === "object" ? answer.data.count : undefined;
-
-  return typeof counted === "number" && isFinite(counted) && counted >= 0 && counted <= 2147483647 && Math.floor(counted) === counted
-    ? counted
+// Reply's own count, or null where it would not count them: the document lets `total` be null for exactly that.
+function count(value) {
+  return typeof value === "number" && isFinite(value) && value >= 0 && value <= 2147483647 && Math.floor(value) === value
+    ? value
     : null;
 }

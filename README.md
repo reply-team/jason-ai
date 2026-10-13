@@ -20,30 +20,47 @@ installed SDR skills, and external execution providers into a durable outbound-s
 > section 7.2 of the [runtime's licence](LICENSE-RUNTIME.md). Nothing else, and no telemetry: the file
 > `jason doctor` writes stays on your machine unless you send it.
 
-What runs today is one executable that hosts the local Runtime API, a CLI that talks to it, and a database layer
-that migrates itself on start. The runtime manages campaigns, their context and their append-only journal, a contact
-directory with campaign membership, a suppression list, and **work items: units of work inside a campaign that a
-deterministic dispatcher claims under a lease and hands to a role's entry command, which reports back through the
-API** — all through the CLI and the Runtime API. **Plugin packages** are validated against the manifest schema,
-listed with their content digest and their requested-versus-granted capabilities, and swapped in atomically by an
-explicit reload; the plugin host runs one invocation of a package's JavaScript in its own process under the Host
-SDK. **Canonical operation contracts** are published under [`docs/contracts/`](docs/contracts) — one
-machine-readable document per operation, embedded into the runtime that enforces it — and a work item naming a
-provider operation is measured against its contract when it is created: an operation this build publishes no
-contract for, or arguments that do not satisfy one, are refused there and then. **Provider operations run through
-routed plugins**: a route says which plugin performs an operation for a campaign and which account of that provider
-it works in, the claim decides everything that could refuse the work before a child process exists, the plugin
-performs it in its own process, and what ran is pinned to the attempt — the package, its digest, both snapshots and
-the account by identity. **No provider is built in.** One arrives as a plugin, and a fresh runtime routes nothing
-anywhere until somebody writes a route: work with no route fails at the claim with `no_route`. An operation that
-needs a person's approval is parked until a person decides, and nothing runs but what they approved. **The first
-such plugin is in this repository**: [`plugins/reply/`](plugins/reply/README.md) performs all eleven published
-operations against a Reply account through the Reply CLI, which owns the credential — so an operator installs that
-CLI, signs in with it, copies the package into `~/.jason/plugins/`, grants it that one program, and writes the
-route. **One run of the whole of it** — an empty installation brought to a routed plugin, one enrolment approved by
-a person and performed against the provider, and the history it leaves — is written up in
-[docs/golden-path.md](docs/golden-path.md), and every command on that page is executed by a test. Releases arrive
-one self-contained increment at a time; no dates, no roadmap promises.
+## Installing
+
+```sh
+curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
+```
+
+```powershell
+irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
+```
+
+By installing Jason you accept the Jason Runtime Licence: [LICENSE-RUNTIME.md](LICENSE-RUNTIME.md). If you do not
+accept it, do not install Jason.
+
+A one-liner installs the executable. [docs/INSTALL.md](docs/INSTALL.md) is the rest, in order — teaching it its
+skills, without which every role it launches runs untaught, asking whether it can work, and starting it — for a
+person or an agent.
+
+### Ask an agent to do it
+
+Start the agent session for the install without external connectors: the prompt below needs none.
+On Claude Code that is `--strict-mcp-config`. Start it, too, in a mode that asks before it runs a command: on
+Claude Code, `--permission-mode manual`, not auto mode, which refuses to run a downloaded installer and stops the
+install at its first step. This is about installing only. Connectors in your agent's SDR work are yours to use.
+
+Paste this into an agent that has a shell on the machine you want Jason on. It is the whole prompt — no
+preamble, no repository tour:
+
+```text
+Install Jason on this machine. The instructions are
+<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>. Read all of it
+first, the whole file word for word rather than a summary of it, then follow it in order from
+section 2.
+
+By installing Jason you accept the Jason Runtime Licence:
+<https://github.com/reply-team/jason-ai/blob/main/LICENSE-RUNTIME.md>. If you do not accept it, do
+not install Jason.
+
+Do the steps yourself. Before any act the instructions mark "Ask first", ask me, and do it only if
+I say yes. At the end, tell me whether Jason can start work, and exactly what you ran and what it
+changed.
+```
 
 ## What this is
 
@@ -77,6 +94,31 @@ Your AI stays yours: Jason ships no AI client, no model account, and no model cr
 Interactive agent sessions drive Jason through skills + CLI; background AI work runs through
 agent environments you already own and have authenticated.
 
+What runs today is one executable that hosts the local Runtime API, a CLI that talks to it, and a database layer
+that migrates itself on start. The runtime manages campaigns, their context and their append-only journal, a contact
+directory with campaign membership, a suppression list, and **work items: units of work inside a campaign that a
+deterministic dispatcher claims under a lease and hands to a role's entry command, which reports back through the
+API** — all through the CLI and the Runtime API. **Plugin packages** are validated against the manifest schema,
+listed with their content digest and their requested-versus-granted capabilities, and swapped in atomically by an
+explicit reload; the plugin host runs one invocation of a package's JavaScript in its own process under the Host
+SDK. **Canonical operation contracts** are published under [`docs/contracts/`](docs/contracts) — one
+machine-readable document per operation, embedded into the runtime that enforces it — and a work item naming a
+provider operation is measured against its contract when it is created: an operation this build publishes no
+contract for, or arguments that do not satisfy one, are refused there and then. **Provider operations run through
+routed plugins**: a route says which plugin performs an operation for a campaign and which account of that provider
+it works in, the claim decides everything that could refuse the work before a child process exists, the plugin
+performs it in its own process, and what ran is pinned to the attempt — the package, its digest, both snapshots and
+the account by identity. **No provider is built in.** One arrives as a plugin, and a fresh runtime routes nothing
+anywhere until somebody writes a route: work with no route fails at the claim with `no_route`. An operation that
+needs a person's approval is parked until a person decides, and nothing runs but what they approved. **The first
+such plugin is in this repository**: [`plugins/reply/`](plugins/reply/README.md) performs all eleven published
+operations against a Reply account through the Reply CLI, which owns the credential — so an operator installs that
+CLI, signs in with it, copies the package into `~/.jason/plugins/`, grants it that one program, and writes the
+route. **One run of the whole of it** — an empty installation brought to a routed plugin, one enrolment approved by
+a person and performed against the provider, and the history it leaves — is written up in
+[docs/golden-path.md](docs/golden-path.md), and every command on that page is executed by a test. Releases arrive
+one self-contained increment at a time; no dates, no roadmap promises.
+
 ## Architecture
 
 One executable, three modes: the runtime service, which owns campaign and work state in SQLite and is the only thing
@@ -101,26 +143,16 @@ source are not published. What a person, an agent or a plugin author needs from 
 The runtime's source is not here. Each release attaches the runtime for every platform, built from that source at the
 release's version, and this tree is published from the same release.
 
-## Installing
+## The installation
 
-```sh
-curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
-```
-
-```powershell
-irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
-```
-
-By installing Jason you accept the Jason Runtime Licence: [LICENSE-RUNTIME.md](LICENSE-RUNTIME.md). If you do not
-accept it, do not install Jason.
-
-Each script works out your platform, verifies the download's SHA-256 before unpacking it, installs the
+Each install script works out your platform, verifies the download's SHA-256 before unpacking it, installs the
 executable under your own account — `~/.local/bin` on macOS and Linux, `%LOCALAPPDATA%\Programs\jason` on
 Windows — with its licence and the third-party notices beside it, as `jason-LICENSE` and
 `jason-THIRD-PARTY-NOTICES`, and puts that directory on your PATH unless you pass `--no-modify-path`. Nothing
-needs administrator rights. Both lines install the **latest release**. If they answer 404 there is no published release to install
-yet: that is a fact about this repository, not a failure of your machine, and there is nothing here to build
-instead ([docs/INSTALL.md](docs/INSTALL.md) §3).
+needs administrator rights. Both one-liners install the **latest release**. If either answers 404, the release
+could not be reached — through the address or on GitHub — and that is not a failure of your machine: report it
+as it stands rather than run the line again, and build nothing instead; there is nothing here to build
+([docs/INSTALL.md](docs/INSTALL.md) §3).
 
 **[docs/INSTALL.md](docs/INSTALL.md)** is the whole of it in order — what you need, from a release, from
 source, teaching it, asking whether it can work, starting it, and taking it off again — written to be
@@ -137,59 +169,6 @@ jason update status
 download, drain, stop, swap, start, health check — driven by a ledger written before each step, so a machine
 that dies half-way is finished or put back by the next run. `status` says where one stands, and reads the
 ledger without needing a runtime.
-
-### Ask an agent to do it
-
-Start the agent session for the install without external connectors: the prompt below needs none.
-On Claude Code that is `--strict-mcp-config`. This is about installing only. Connectors in your agent's SDR work
-are yours to use.
-
-Paste this into an agent that has a shell on the machine you want Jason on. It is the whole prompt — no
-preamble, no repository tour:
-
-```text
-Install Jason on this machine and tell me whether it can start work.
-
-By installing Jason you accept the Jason Runtime Licence:
-<https://github.com/reply-team/jason-ai/blob/main/LICENSE-RUNTIME.md>. If you do not accept it, do
-not install Jason.
-
-Follow docs/INSTALL.md in this repository, in order, from section 2.
-
-1. Run the install one-liner for this platform. If the one-liner itself answers 404, there is no
-   published release yet. That is a fact about the repository and not a failure of anything, and
-   there is nothing in it to build instead: stop and report exactly that. If it installs, or says
-   Jason is already installed, go on to step 2: a 404 from anything else you look up is not that
-   answer.
-2. Teach the runtime its roles before you judge it. Run this first and read where it says it
-   would write:
-   jason skills install --roles-only --dry-run --source .
-   Then run the same line without --dry-run. A runtime with no role skills launches every role
-   untaught, so this is not an optional step.
-3. Ask whether it can work:
-   jason status
-   Branch on "ready" in the JSON body, never on the exit code. This verb exits 0 or 1 and never
-   3, and "the runtime did not answer" is one of its answers rather than an error.
-4. For each required check that is not ok, run the repair it prints. A repair that is a jason
-   command you can run as it stands. The path check's repair is a line for this machine's own
-   shell instead; read section 2's note about login shells before you run it, because a profile
-   you append to is read by a login shell and not by your next non-interactive command.
-   Optional checks are reported, not repaired: their repairs write what the rule below does not
-   allow, into your agent's configuration or into what starts at logon.
-5. Stop when ready is true, or when a required check still fails after you have run its repair.
-   Report which checks failed, exactly what you ran, and what it changed.
-
-Change nothing on this machine except what these steps write: the executable and its install
-directory; this account's PATH entry for it; Jason's data directory, which is where the role
-skills go; the system's temporary directory, which the installer downloads into; the directory
-the executable unpacks its native libraries into when it first runs, which is under the
-temporary directory on Windows and under ~/.net in this home directory on macOS and Linux.
-Nothing in your own agent's configuration:
-without --roles-only, jason skills install would put skills there too, and that is mine to
-decide, so ask.
-Do not install anything else, and do not build anything. Do not leave a long-running process
-behind other than through jason runtime start.
-```
 
 ### Can this installation start work?
 

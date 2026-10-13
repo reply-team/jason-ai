@@ -3,6 +3,37 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.3.0
+
+- Every operation runs the Reply CLI command made for it — `reply sequence add-contact`, `reply contact opt-out`,
+  `reply inbox list` and the rest — instead of calling Reply's API through `reply api`. Which endpoints to call, in
+  what order, and how to tell Reply's answers apart is now the CLI's to know; the package turns the operation's input
+  into the command's arguments, and the CLI's result and error code into the operation's answer or failure. It needs
+  **reply-cli 0.11.0** or newer.
+- The one raw call left is Reply's contact search, which `list_membership.add` and `campaign.enroll` make for a person
+  with no pin and no first name, whom Reply will not import. Reply holding nobody under the address is now a refusal,
+  `provider_call_failed`, saying a first name is needed; such a person is no longer created through a second path.
+- `list_membership.add` answers `added`, `optout.record` answers `recorded` and `campaign.pause` answers `paused`,
+  every time. `already_member`, `already_recorded` and `already_paused` are no longer answered: Reply does not tell
+  them apart, and the effect at Reply is the same.
+- The reads the package made before a write or a repeat — the opt-out register before an enrolment, a person's part
+  in the sequence, the list's members, a sequence's state and count — are gone from it. The CLI reads what each
+  command needs before it writes, and a repeat after a lost answer runs the command again.
+- A person who opted out between two `list_membership.add` attempts is now refused as `suppressed` on the repeat: the
+  CLI reads Reply's register before it adds.
+- `campaign.activate` reads `was` from the state the CLI saw before the start. A sequence already live whose people
+  Reply would not count is `provider_unavailable`, transient; a start from a state with no word for it, such as
+  Reply's `skipped`, is `provider_call_failed` with the state in the trace.
+- `enrollment.stop` fails `campaign_not_found` for a pinned campaign Reply no longer holds, where it answered
+  `already_stopped`: the CLI tells a missing sequence apart from a person who takes no part.
+- `conversation.get` reads a thread with a long history a page at a time. The thread no longer carries its whole
+  history, so the history no longer has to fit within `Plugins:Exec:OutputBytes`.
+- `engagement.summarize` refuses a window that does not end after it starts as `window_invalid`, before anything is
+  sent. Reply answers such a window with a server error, which was asked again.
+- A failure's trace carries the CLI's own error code (`cli_code`), Reply's own sentence where the CLI passed one on
+  (`provider_detail`) and the wait Reply asked for (`retry_after`). Reply still activating a sequence
+  (`sequence.busy`) is `provider_unavailable`, transient.
+
 ## 0.2.6
 
 - `campaign.enroll` reads a person's participation before enrolling anybody who existed before the call, not only on
