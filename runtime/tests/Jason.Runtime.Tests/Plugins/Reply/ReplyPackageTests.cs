@@ -1,10 +1,14 @@
+using System.Net;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Plugins.Invocation;
+using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Plugins.Invocation;
+using Jason.Runtime.Tests.Routing;
 
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
@@ -28,7 +32,7 @@ public class ReplyPackageTests
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Empty(plugin.Problems);
         Assert.Equal(PluginKind.Provider, plugin.Kind);
-        Assert.Equal("0.3.0", plugin.Version);
+        Assert.Equal("0.3.1", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
         Assert.Equal(
             ["campaign.activate", "campaign.enroll", "campaign.get", "campaign.pause", "conversation.get", "conversation.list", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record"],
@@ -138,7 +142,7 @@ public class ReplyPackageTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("campaign_not_found", failed.Error.Code);
         Assert.Equal(ReplyPlugins.PluginId, result.Provenance.PluginId);
-        Assert.Equal("0.3.0", result.Provenance.Version);
+        Assert.Equal("0.3.1", result.Provenance.Version);
     }
 
     /// <summary>
@@ -156,18 +160,119 @@ public class ReplyPackageTests
     }
 
     [Fact]
-    public async Task A_route_to_this_package_may_name_an_account_and_nothing_else()
+    public async Task A_route_to_this_package_may_name_an_account_and_whether_to_derive_a_first_name_and_nothing_else()
     {
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
         var registry = await api.PostOkAsync<PluginRegistryDto>(Operations.PluginList, null, Ct);
 
         // The binding is what an operator writes, so it is closed on purpose: a route names which account to act
-        // as and which team to act in, and a key or a person to impersonate has no field here and never will.
+        // as, which team to act in, and whether a person with no first name may be imported under a derived one. A
+        // key or a person to impersonate has no field here and never will.
         var binding = Assert.Single(registry.Plugins).BindingSchema;
         Assert.NotNull(binding);
         Assert.False(binding["additionalProperties"]!.GetValue<bool>());
-        Assert.Equal(["profile", "team_id"], binding["properties"]!.AsObject().Select(property => property.Key).Order());
+        Assert.Equal(["derive_first_name", "profile", "team_id"], binding["properties"]!.AsObject().Select(property => property.Key).Order());
+        Assert.Equal("boolean", (string?)binding["properties"]!["derive_first_name"]!["type"]);
         Assert.Null(binding["required"]);
+        Assert.Empty(SchemaValidator.Validate(JsonNode.Parse("""{"derive_first_name":false}"""), binding));
+        Assert.Equal("type", Assert.Single(SchemaValidator.Validate(JsonNode.Parse("""{"derive_first_name":"no"}"""), binding)).Reason);
+        Assert.Equal("additional_properties", Assert.Single(SchemaValidator.Validate(JsonNode.Parse("""{"derive_first_names":true}"""), binding)).Reason);
     }
+
+    /// <summary>
+    /// The switch as an operator writes it by hand in <c>settings.json</c>: the configuration store reads <c>false</c>
+    /// and the string <c>"false"</c> alike, and the route the runtime resolves carries the boolean the plugin is given.
+    /// </summary>
+    [Theory]
+    [InlineData("false")]
+    [InlineData("\"false\"")]
+    public async Task A_global_route_in_settings_can_turn_the_derivation_off(string written)
+    {
+        await using var api = await ReplyPlugins.StartAsync(
+            Ct,
+            prepare: paths => TestRoutes.WriteGlobal(
+                paths,
+                new JsonObject
+                {
+                    ["Default"] = new JsonObject
+                    {
+                        ["Plugin"] = ReplyPlugins.PluginId,
+                        ["Binding"] = new JsonObject { ["derive_first_name"] = JsonNode.Parse(written) },
+                    },
+                }.ToJsonString()));
+        var campaign = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { Name = "Routed" }, Ct)).Id;
+
+        var resolved = await api.PostOkAsync<RouteResolutionDto>(
+            Operations.RouteResolve, new { campaign_id = campaign, operation = "list_membership.add" }, Ct);
+
+        Assert.True(resolved.Usable, string.Join("; ", resolved.Problems.Select(problem => problem.Code + " " + problem.Message)));
+        Assert.Equal(JsonValueKind.False, resolved.Binding!["derive_first_name"]!.GetValueKind());
+    }
+
+    /// <summary>
+    /// A switch spelled as anything but a boolean is refused where an operator sets it, and so is never read as on.
+    /// </summary>
+    [Fact]
+    public async Task A_switch_spelled_as_anything_but_a_boolean_is_refused_as_the_route_is_set()
+    {
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+        var campaign = (await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { Name = "Routed" }, Ct)).Id;
+
+        var error = await api.PostErrorAsync(
+            Operations.RouteSet,
+            new { campaign_id = campaign, plugin = ReplyPlugins.PluginId, binding = new { derive_first_name = "no" } },
+            HttpStatusCode.BadRequest,
+            Ct);
+
+        Assert.Equal(RouteProblemCodes.BindingInvalid, Assert.Single(error.Details!).Code);
+    }
+
+    /// <summary>
+    /// The rule a person reads before they route a campaign to Reply: how a first name is derived, the switch that
+    /// forbids it, and that an opt-out derives whatever the switch says. It lives where the binding is described.
+    /// </summary>
+    [Fact]
+    public void The_readme_states_the_first_name_rule_before_a_campaign_is_routed()
+    {
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        var section = Flat(readme[readme.IndexOf("## The account a route names", StringComparison.Ordinal)..readme.IndexOf("### What does not reach it", StringComparison.Ordinal)]);
+
+        Assert.Contains("| `derive_first_name` |", section, StringComparison.Ordinal);
+        Assert.Contains("derived from their last name", section, StringComparison.Ordinal);
+        Assert.Contains("the text of their address before the `@`", section, StringComparison.Ordinal);
+        Assert.Contains("the route forbids deriving a first name", section, StringComparison.Ordinal);
+        Assert.Contains("a first name could not be derived", section, StringComparison.Ordinal);
+        Assert.Contains("The switch does not apply to an opt-out", section, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_changelog_opens_with_0_3_1_and_the_rule()
+    {
+        var changelog = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "CHANGELOG.md")).ReplaceLineEndings("\n");
+        var first = changelog.IndexOf("\n## ", StringComparison.Ordinal);
+        var next = changelog.IndexOf("\n## ", first + 1, StringComparison.Ordinal);
+        var section = changelog[first..next];
+
+        Assert.StartsWith("\n## 0.3.1\n", section, StringComparison.Ordinal);
+        Assert.Contains("`derive_first_name`", section, StringComparison.Ordinal);
+        Assert.Contains("`last_name`", section, StringComparison.Ordinal);
+        Assert.Contains("`email_local_part`", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The switch never applies to an opt-out, which is protective and greets nobody, so the opt-out's own rows hold
+    /// the floor's refusal and never the switch's.
+    /// </summary>
+    [Fact]
+    public void The_opt_out_has_no_row_for_a_forbidden_derivation()
+    {
+        Assert.True(ReplyErrorTable.Own("optout.record").ContainsKey("first_name_not_derivable"));
+        Assert.False(ReplyErrorTable.Own("optout.record").ContainsKey("first_name_derivation_forbidden"));
+        Assert.True(ReplyErrorTable.Own("list_membership.add").ContainsKey("first_name_derivation_forbidden"));
+        Assert.True(ReplyErrorTable.Own("campaign.enroll").ContainsKey("first_name_derivation_forbidden"));
+    }
+
+    /// <summary>A page's text with every run of white space one space, so a sentence is found however it is wrapped.</summary>
+    private static string Flat(string text) => Regex.Replace(text, @"\s+", " ");
 }

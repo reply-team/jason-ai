@@ -764,9 +764,9 @@ internal static partial class Account
         var person = new JsonObject();
         foreach (var field in PersonFields)
         {
-            if (given[field] is JsonValue value && value.TryGetValue<string>(out var text) && text.Trim().Length > 0)
+            if (given[field] is JsonValue value && value.TryGetValue<string>(out var text) && EcmaTrim(text) is { Length: > 0 } kept)
             {
-                person[field] = text.Trim();
+                person[field] = kept;
             }
         }
 
@@ -776,6 +776,32 @@ internal static partial class Account
         }
 
         return (new ContactRef(null, person), null);
+    }
+
+    /// <summary>
+    /// JavaScript's String.prototype.trim, which reply-cli uses on every field of a person: WhiteSpace and
+    /// LineTerminator as ECMAScript defines them. It is not .NET's Trim, which keeps U+FEFF and drops U+0085.
+    /// </summary>
+    private static string EcmaTrim(string value)
+    {
+        // Written as escapes, never as the characters themselves: three of them are invisible in a diff.
+        static bool Blank(char c) =>
+            c is '\t' or '\v' or '\f' or '\uFEFF' or '\n' or '\r' or '\u2028' or '\u2029'
+            || CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.SpaceSeparator;
+
+        var start = 0;
+        var end = value.Length;
+        while (start < end && Blank(value[start]))
+        {
+            start++;
+        }
+
+        while (end > start && Blank(value[end - 1]))
+        {
+            end--;
+        }
+
+        return value[start..end];
     }
 
     /// <summary>

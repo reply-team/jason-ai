@@ -131,21 +131,6 @@ public class ReplyOptoutRecordTests
         Assert.Equal([1001], OptedOut(account));
     }
 
-    /// <summary>Reply creates nobody without a first name, so an opt-out for an address it does not hold is its refusal, with its words.</summary>
-    [Fact]
-    public async Task A_person_reply_does_not_hold_and_cannot_create_without_a_first_name_is_reply_s_refusal()
-    {
-        using var account = new ReplyAccount();
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(firstName: null)));
-
-        Assert.Equal("provider_call_failed", error.Code);
-        Assert.Equal("Invalid data", (string?)error.Details!["provider_detail"]);
-        Assert.Empty(OptedOut(account));
-    }
-
     [Fact]
     public async Task The_flag_is_only_ever_set_and_never_cleared()
     {

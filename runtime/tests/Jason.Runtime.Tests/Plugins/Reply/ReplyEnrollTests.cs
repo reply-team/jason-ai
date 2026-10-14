@@ -244,21 +244,6 @@ public class ReplyEnrollTests
     }
 
     [Fact]
-    public async Task A_person_without_a_first_name_whom_reply_does_not_hold_is_refused_before_any_add()
-    {
-        using var account = new ReplyAccount().WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11);
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(firstName: null), Ct));
-
-        Assert.Equal("provider_call_failed", error.Code);
-        Assert.Contains("first name", error.Message, StringComparison.Ordinal);
-        Assert.Equal("7", (string?)error.ExternalIds!["campaign"]);
-        Assert.DoesNotContain(account.Calls, call => call.Command == "sequence add-contact");
-    }
-
-    [Fact]
     public async Task An_address_reply_will_not_accept_is_a_validation_failure()
     {
         using var account = new ReplyAccount().WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11);

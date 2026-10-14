@@ -70,6 +70,18 @@ public class ReplyLiveConformanceTests
     /// </summary>
     private const string ParticipantKey = "JASON_LIVE_REPLY_PARTICIPANT";
 
+    /// <summary>
+    /// A fresh address its operator controls, which Reply must not hold yet: the person a list add imports under a
+    /// derived first name. A list add sends nothing, so naming it reaches nobody's inbox.
+    /// </summary>
+    private const string NamelessKey = "JASON_LIVE_REPLY_NAMELESS";
+
+    /// <summary>
+    /// Optional: a made-up last name for that person. Set, the first name is derived from it; unset, from the address's
+    /// text before the <c>@</c>.
+    /// </summary>
+    private const string NamelessLastKey = "JASON_LIVE_REPLY_NAMELESS_LAST";
+
     private const string CampaignGet = "campaign.get";
     private const string MembershipAdd = "list_membership.add";
     private const string Enroll = "campaign.enroll";
@@ -88,6 +100,9 @@ public class ReplyLiveConformanceTests
     private const string TheList = "It names the live Reply list this run adds the recipient to.";
 
     private const string TheSequence = "It names the live Reply sequence this run reads and enrolls into.";
+
+    private const string TheNameless =
+        "It names a fresh address its operator controls, which Reply does not hold yet: the person a list add imports under a derived first name. Nothing is sent to it.";
 
     private const string TheParticipant =
         "It names, by Reply's contact identifier, a person already taking part in that sequence; the sequence must be one nobody has started.";
@@ -156,6 +171,52 @@ public class ReplyLiveConformanceTests
         Assert.Equal(pin, repeat["items"]![0]!["external_ids"]!["contact"]!.GetValue<string>());
 
         await AssertNothingLeakedAsync(api, recipient, first, again);
+    }
+
+    /// <summary>
+    /// What Reply accepts as a derived first name, which the stand-in cannot say: a person with no first name, whom Reply
+    /// does not hold, added to a list once. The first name is their last name when one is named, or else the address's
+    /// text before the <c>@</c>, dot and plus and case included. It never enrols, so nothing can be sent. The run leaves a
+    /// contact behind on purpose; its operator deletes it after reading it at Reply.
+    /// </summary>
+    [Fact]
+    public async Task A_live_list_add_of_a_person_reply_does_not_hold_and_who_has_no_first_name_imports_them_under_a_derived_one()
+    {
+        var profile = Require(ProfileKey, TheProfile);
+        var list = Require(ListKey, TheList);
+        var nameless = Require(NamelessKey, TheNameless);
+        var last = Environment.GetEnvironmentVariable(NamelessLastKey) is { Length: > 0 } given ? given.Trim() : null;
+
+        await using var api = await StartAgainstTheMachineAsync(Ct);
+
+        var result = await InvokeAsync(api, MembershipAdd, NamelessInput(list, nameless, last), profile, Ct);
+
+        var added = Succeeded(MembershipAdd, result);
+        Assert.Equal("added", added["items"]![0]!["status"]!.GetValue<string>());
+        var pin = added["items"]![0]!["external_ids"]!["contact"]!.GetValue<string>();
+        Assert.Equal(pin, Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!["contact"]!.GetValue<string>());
+
+        // One line says a name was derived, and from which field. None means the lookup found somebody Reply already
+        // held under the address, and then nothing was derived and this run proved nothing about it.
+        var stderr = ReadShared(Path.Combine(result.Launch!.WorkDir, "stderr.log"));
+        var derived = stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => JsonNode.Parse(line) as JsonObject)
+            .Where(line => line is not null && line["source"]?.GetValue<string>() == "plugin")
+            .ToList();
+        Assert.True(derived.Count > 0, $"No first name was derived, so Reply already held {NamelessKey}'s address: name a fresh address.");
+        Assert.Equal(last is null ? "email_local_part" : "last_name", Assert.Single(derived)!["data"]!["first_name_from"]!.GetValue<string>());
+
+        if (last is not null)
+        {
+            foreach (var argument in ExecArguments(api.Paths).SelectMany(command => command))
+            {
+                AssertAbsent("The last name", last, argument, "a command-line argument");
+            }
+
+            AssertAbsent("The last name", last, ReadAll(api.Paths.PluginWorkDirectory), "a diagnostic");
+        }
+
+        await AssertNothingLeakedAsync(api, nameless, result);
     }
 
     [Fact]
@@ -492,6 +553,32 @@ public class ReplyLiveConformanceTests
         ["idempotency_key"] = WorkItemId,
     };
 
+    /// <summary>
+    /// The person with no first name, as Jason may hold one: the address, and a last name only when the operator named
+    /// one. Nothing else is supplied, so nothing else can reach the account.
+    /// </summary>
+    private static JsonObject NamelessInput(string list, string address, string? last) => new()
+    {
+        ["args"] = new JsonObject
+        {
+            ["list"] = new JsonObject { ["external_id"] = list },
+            ["channel"] = "email",
+        },
+        ["contacts"] = new JsonArray(new JsonObject
+        {
+            ["id"] = ContactId,
+            ["first_name"] = null,
+            ["last_name"] = last,
+            ["company"] = null,
+            ["title"] = null,
+            ["time_zone"] = null,
+            ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = address, ["primary"] = true }),
+            ["external_ids"] = new JsonObject(),
+        }),
+        ["campaign"] = Campaign(),
+        ["idempotency_key"] = WorkItemId,
+    };
+
     private static JsonObject EnrollInput(string sequence, string recipient, string? pinned = null, string collision = "skip") => new()
     {
         ["args"] = new JsonObject
@@ -558,15 +645,12 @@ public class ReplyLiveConformanceTests
     // -------------------------------------------------------------------------------------------------------
 
     /// <summary>The result the plugin answered with, having first been held to the operation's own document.</summary>
-    private static JsonObject Succeeded(string operation, PluginInvocationResult result)
-    {
-        var outcome = Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
-        var contract = OperationCatalog.Find(operation)!;
-
-        Assert.Empty(OutcomeContract.CheckResult(contract, outcome.Result));
-        Assert.Empty(OutcomeContract.CheckExternalIds(contract, outcome.ExternalIds));
-        return outcome.Result!.AsObject();
-    }
+    /// <remarks>
+    /// Held exactly as the recorded runs hold it, so an outcome that is not a success is reported with everything it
+    /// carried: a live run that stops here cannot simply be run again to learn which row it ended on and why.
+    /// </remarks>
+    private static JsonObject Succeeded(string operation, PluginInvocationResult result) =>
+        ReplyOperations.Succeeded(operation, result);
 
     /// <summary>The states a campaign may be reported in, read from the published schema rather than restated.</summary>
     private static IReadOnlyList<string> CampaignStatusWords() =>

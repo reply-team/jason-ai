@@ -3,6 +3,22 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.3.1
+
+- A person with no pin and no first name, whom Reply does not hold, is imported under a first name derived from what
+  Jason holds: their last name, which is then not sent as a last name, or else their address's text before the `@`,
+  as spelled. `list_membership.add`, `campaign.enroll` and `optout.record` all do this. The first two refused such a
+  person before, and an opt-out failed with Reply's "Invalid data". A person Reply holds is still worked by the
+  identifier the lookup finds, and nothing is written to their record. `optout.record` now makes that lookup itself.
+- `derive_first_name` in the route's binding, true when absent. With `false`, such a person is refused instead by a
+  list add or an enrolment: `provider_call_failed`, "the route forbids deriving a first name". An opt-out is
+  protective and derives either way. With no last name and no text before the `@`, the reason is "a first name could
+  not be derived".
+- A first name of nothing but white space counts as none, judged by JavaScript's own trim as the Reply CLI judges it.
+  It used to be sent as it was, and the CLI, which trims it, imported nobody, even when Reply held the person.
+- Each derivation writes one diagnostic line naming the field it used, `last_name` or `email_local_part`, and never
+  the name.
+
 ## 0.3.0
 
 - Every operation runs the Reply CLI command made for it — `reply sequence add-contact`, `reply contact opt-out`,

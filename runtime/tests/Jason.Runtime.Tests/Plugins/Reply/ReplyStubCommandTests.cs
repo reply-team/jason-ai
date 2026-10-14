@@ -133,6 +133,82 @@ public class ReplyStubCommandTests
         Assert.Empty(account.EnrolledIn(7));
     }
 
+    /// <summary>
+    /// reply-cli trims every field of a person with JavaScript's own trim and drops one left empty, so a first name of
+    /// white space never reaches Reply and the import is refused as Reply refuses a missing one. The stand-in has to
+    /// draw the same line, or a test passes on a first name the real CLI would never send.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("\t")]
+    [InlineData("\uFEFF")]
+    [InlineData("\u2028")]
+    [InlineData("\u2029")]
+    [InlineData("\u00A0\u3000")]
+    public async Task A_first_name_of_nothing_but_white_space_is_no_first_name(string blank)
+    {
+        using var account = new ReplyAccount().WithList(9, "Q3 LatAm founders");
+        var person = new JsonObject { ["email"] = "marta@example.com", ["first_name"] = blank }.ToJsonString();
+
+        var (exit, _, stderr) = await account.RunAsync(Line("contact-list", "add-contact", "9", "--contact", "-"), person, Ct);
+
+        Assert.Equal(1, exit);
+        var error = Error(stderr);
+        Assert.Equal("reply.refused", (string?)error["code"]);
+        Assert.Equal("Invalid data", (string?)error["detail"]);
+        Assert.Empty(account.Contacts);
+    }
+
+    /// <summary>The same refusal for somebody Reply holds: its import wants a first name even for a match.</summary>
+    [Fact]
+    public async Task A_blank_first_name_is_refused_even_for_a_person_reply_holds()
+    {
+        using var account = new ReplyAccount().WithList(9, "Q3 LatAm founders").WithContact(2001, "marta@example.com", "Marta");
+        var before = account.Contacts.ToJsonString();
+
+        var (exit, _, stderr) = await account.RunAsync(
+            Line("contact-list", "add-contact", "9", "--contact", "-"), """{"email":"marta@example.com","first_name":" "}""", Ct);
+
+        Assert.Equal(1, exit);
+        Assert.Equal("Invalid data", (string?)Error(stderr)["detail"]);
+        Assert.Equal(before, account.Contacts.ToJsonString());
+        Assert.Empty(account.MembersOf(9));
+    }
+
+    /// <summary>A derived first name is an ordinary one: stored as sent, case and punctuation kept.</summary>
+    [Fact]
+    public async Task A_first_name_made_of_an_address_s_local_part_is_stored_as_it_was_sent()
+    {
+        using var account = new ReplyAccount().WithList(9, "Q3 LatAm founders");
+
+        var (exit, _, _) = await account.RunAsync(
+            Line("contact-list", "add-contact", "9", "--contact", "-"),
+            """{"email":"Marta.Alvarez+q3@example.com","first_name":"Marta.Alvarez+q3"}""",
+            Ct);
+
+        Assert.Equal(0, exit);
+        Assert.Equal("Marta.Alvarez+q3", (string?)Assert.Single(account.Contacts)!["firstName"]);
+    }
+
+    /// <summary>
+    /// The other side of the same line: U+0085 is white space to .NET and not to JavaScript, so the real CLI keeps a
+    /// first name made of it and sends it. The stand-in keeps it too, or a test fails on a name the CLI would send.
+    /// </summary>
+    [Fact]
+    public async Task A_first_name_javascript_does_not_trim_is_kept_as_it_was_sent()
+    {
+        using var account = new ReplyAccount().WithList(9, "Q3 LatAm founders");
+
+        var (exit, _, _) = await account.RunAsync(
+            Line("contact-list", "add-contact", "9", "--contact", "-"),
+            new JsonObject { ["email"] = "marta@example.com", ["first_name"] = "\u0085" }.ToJsonString(),
+            Ct);
+
+        Assert.Equal(0, exit);
+        Assert.Equal("\u0085", (string?)Assert.Single(account.Contacts)!["firstName"]);
+    }
+
     [Fact]
     public async Task Add_contact_for_a_person_already_taking_part_answers_already_in_sequence_and_writes_nothing()
     {

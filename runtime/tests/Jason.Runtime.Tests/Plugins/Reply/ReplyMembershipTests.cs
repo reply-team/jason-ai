@@ -168,23 +168,11 @@ public class ReplyMembershipTests
         Assert.Equal([2001], account.MembersOf(List));
     }
 
-    [Fact]
-    public async Task A_person_without_a_first_name_whom_reply_does_not_hold_is_refused_before_any_add()
-    {
-        using var account = ReplyOperations.Plant(new ReplyAccount());
-        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
-        await using var api = await ReplyPlugins.StartAsync(Ct);
-
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(firstName: null), Ct));
-
-        Assert.Equal("provider_call_failed", error.Code);
-        Assert.Equal(FailureClass.Permanent, error.Class);
-        Assert.Contains("first name", error.Message, StringComparison.Ordinal);
-        Assert.Equal(["POST /v3/contacts/filter?top=100&skip=0"], account.Calls.Select(call => call.Line));
-        Assert.Empty(account.Contacts);
-    }
-
-    /// <summary>Review focus 1: Reply's search matches by containment; only an exact address is the person.</summary>
+    /// <summary>
+    /// Review focus 1: Reply's search matches by containment; only an exact address is the person. A contact whose
+    /// address merely holds this one is somebody else, so this person is imported as a new contact under a derived
+    /// first name, and the other contact is neither added nor touched.
+    /// </summary>
     [Fact]
     public async Task A_person_without_a_first_name_is_never_added_as_somebody_whose_address_only_contains_theirs()
     {
@@ -192,12 +180,14 @@ public class ReplyMembershipTests
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(firstName: null), Ct));
+        var answer = Succeeded(await InvokeAsync(api, Input(firstName: null), Ct));
 
-        Assert.Equal("provider_call_failed", error.Code);
-        Assert.Contains("first name", error.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain(account.Calls, call => call.Command == "contact-list add-contact");
-        Assert.Empty(account.MembersOf(List));
+        var created = Assert.Single(account.Contacts, contact => (string?)contact!["email"] == Address)!;
+        var id = created["id"]!.GetValue<int>();
+        Assert.NotEqual(2001, id);
+        Assert.Equal(LastName, (string?)created["firstName"]);
+        Assert.Equal([id], account.MembersOf(List));
+        Assert.Equal(id.ToString(CultureInfo.InvariantCulture), (string?)answer["items"]![0]!["external_ids"]!["contact"]);
     }
 
     /// <summary>Two contacts under the address: picking one would be guessing whom the work is about, so nobody is added.</summary>
