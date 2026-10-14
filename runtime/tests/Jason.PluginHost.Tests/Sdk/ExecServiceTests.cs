@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Plugins;
 using Jason.PluginHost.Sdk;
@@ -123,16 +124,45 @@ public sealed class ExecServiceTests : IDisposable
         Assert.Equal(65_536, result["stdout"]!.GetValue<string>().Length);
     }
 
+    /// <summary>
+    /// Killed rather than waited for. The program would run for two minutes, and the call is held to half of that, so
+    /// the bound measures whether the call waited for the program and nothing of how loaded the machine is: the same
+    /// call has taken over eleven seconds on a loaded Windows runner, against a few hundred milliseconds at rest. What
+    /// the host itself bounds once the kill is made is the fact below.
+    /// </summary>
     [Fact]
     public void A_program_that_outstays_its_timeout_is_killed_and_the_call_says_so()
     {
         using var harness = Harness();
 
-        var result = Exec(harness, $"{{ executable: \"{Cli}\", args: [\"sleep\", \"30000\"], timeout_ms: 300 }}");
+        var result = Exec(harness, $"{{ executable: \"{Cli}\", args: [\"sleep\", \"120000\"], timeout_ms: 300 }}");
 
         Assert.True(result["timed_out"]!.GetValue<bool>());
-        Assert.True(result["duration_ms"]!.GetValue<long>() < 10_000, "the kill did not wait for the program");
+        Assert.True(result["duration_ms"]!.GetValue<long>() < 60_000, "the kill did not wait for the program");
         NoKillWentUnconfirmed(harness);
+    }
+
+    /// <summary>
+    /// Once a killed program is seen to end, everything the call still waits for — the reading of what the program wrote
+    /// — is bounded by what is left of one grace. The grace here is five seconds: half of the invocation's ten, capped.
+    /// </summary>
+    [Fact]
+    public void A_killed_program_seen_to_end_is_answered_within_the_grace_of_its_kill()
+    {
+        var seen = new Stopwatch();
+        using var harness = new SdkHarness(_package.Root, builder => builder.Grants = Granted, endedWithin: (process, grace) =>
+        {
+            seen.Start();
+            return true;
+        });
+
+        var result = Exec(harness, $"{{ executable: \"{Cli}\", args: [\"sleep\", \"120000\"], timeout_ms: 300 }}");
+
+        Assert.True(result["timed_out"]!.GetValue<bool>());
+        Assert.True(seen.IsRunning, "the call never asked whether the killed program had ended");
+        Assert.True(
+            seen.Elapsed < ExecService.KillGraceCeiling + TimeSpan.FromSeconds(1),
+            $"the call answered {seen.Elapsed.TotalMilliseconds:0} ms after the kill; the grace is {ExecService.KillGraceCeiling.TotalMilliseconds:0} ms");
     }
 
     /// <summary>

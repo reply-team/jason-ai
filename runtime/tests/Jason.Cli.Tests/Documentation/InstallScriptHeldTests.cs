@@ -39,6 +39,19 @@ public sealed class InstallScriptHeldTests : IDisposable
 
     private const string NewText = "The notice the archive holds.\n";
 
+    /// <summary>The two refusals the script's own wait tries again, as their HRESULTs: a sharing and a lock violation.</summary>
+    private const int SharingViolation = unchecked((int)0x80070020);
+
+    private const int LockViolation = unchecked((int)0x80070021);
+
+    /// <summary>
+    /// The time the archive's executable carries. Windows PowerShell's Expand-Archive writes an entry, closes it, and then
+    /// opens it again to set this time on it: a hold taken in between refuses that second open, and the script stops at
+    /// unpacking instead of reaching the step a test means to hold. The file carries this time only once the extractor
+    /// is done with it, so it is the one moment a hold cannot meet the extractor.
+    /// </summary>
+    private static readonly DateTimeOffset Unpacked = new(2001, 1, 1, 12, 0, 0, TimeSpan.Zero);
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private readonly TempTree _tree = new();
@@ -65,7 +78,9 @@ public sealed class InstallScriptHeldTests : IDisposable
         var archive = Path.Combine(_feed, "jason-win-x64.zip");
         using (var zip = ZipFile.Open(archive, ZipArchiveMode.Create))
         {
-            using (var entry = zip.CreateEntry("jason.exe").Open())
+            var executable = zip.CreateEntry("jason.exe");
+            executable.LastWriteTime = Unpacked;
+            using (var entry = executable.Open())
             {
                 entry.Write(_standIn);
             }
@@ -239,7 +254,7 @@ public sealed class InstallScriptHeldTests : IDisposable
         using (await HoldOnceItOpensAsync(await UnpackedAsync()))
         {
             old.Dispose();
-            using (Hold(await AppearsAsync(Previous)))
+            using (await HoldOnceFreeAsync(await AppearsAsync(Previous, install)))
             {
                 (exit, _, stderr) = await install;
             }
@@ -323,7 +338,7 @@ public sealed class InstallScriptHeldTests : IDisposable
         File.WriteAllText(notice, "The notice of the release before.\n");
         var holder = Hold(notice);
         var install = Start(shell);
-        await AppearsAsync(notice + ".installing");
+        await AppearsAsync(notice + ".installing", install);
         await Task.Delay(500, Ct);
         holder.Dispose();
 
@@ -404,7 +419,10 @@ public sealed class InstallScriptHeldTests : IDisposable
         throw new TimeoutException("install.ps1 never unpacked the archive.");
     }
 
-    /// <summary>Held as <see cref="Hold"/> holds it, once whatever is still writing it lets a reader in.</summary>
+    /// <summary>
+    /// Held as <see cref="Hold"/> holds it, once the extractor has set the archive's time on it — its last act on the file
+    /// — and whatever else still has it open, the script's own run of it, lets a reader in.
+    /// </summary>
     private static async Task<FileStream> HoldOnceItOpensAsync(string path)
     {
         var deadline = DateTime.UtcNow.AddSeconds(60);
@@ -412,21 +430,62 @@ public sealed class InstallScriptHeldTests : IDisposable
         {
             try
             {
-                return Hold(path);
+                if (File.GetLastWriteTime(path) == Unpacked.DateTime)
+                {
+                    return Hold(path);
+                }
             }
             catch (IOException) when (DateTime.UtcNow < deadline)
             {
-                await Task.Delay(20, Ct);
             }
+
+            if (DateTime.UtcNow >= deadline)
+            {
+                throw new TimeoutException($"{path} was never unpacked whole and free to hold.");
+            }
+
+            await Task.Delay(20, Ct);
         }
     }
 
-    /// <summary>The file, once something has put it there.</summary>
-    private static async Task<string> AppearsAsync(string path)
+    /// <summary>Held as <see cref="Hold"/> holds it, once whatever has the file the script just made lets go of it.</summary>
+    private static async Task<FileStream> HoldOnceFreeAsync(string path)
+    {
+        // The rename that made it, or a scanner reading it, can still have it open for a moment. Two seconds of trying is
+        // well inside the ten the script spends on the held new executable before it touches this file again; a sharing
+        // or lock violation is all that is tried again, and anything else — the file gone — ends the test at once.
+        var deadline = DateTime.UtcNow.AddSeconds(2);
+        while (true)
+        {
+            try
+            {
+                return Hold(path);
+            }
+            catch (IOException ex) when (ex.HResult is SharingViolation or LockViolation && DateTime.UtcNow < deadline)
+            {
+            }
+
+            await Task.Delay(20, Ct);
+        }
+    }
+
+    /// <summary>
+    /// The file, once the script has put it there. A script that ended first never will, and waiting out the rest of the
+    /// minute would only hide why: the failure says what it said.
+    /// </summary>
+    private static async Task<string> AppearsAsync(string path, Task<(int Exit, string Stdout, string Stderr)> install)
     {
         var deadline = DateTime.UtcNow.AddSeconds(60);
         while (!File.Exists(path))
         {
+            // Looked at again once the script has ended: it may have put the file there just before it did.
+            if (install.IsCompleted && !File.Exists(path))
+            {
+                var (exit, stdout, stderr) = await install;
+                throw new TimeoutException(
+                    $"{path} never appeared: the script ended first, with exit {exit}.{Environment.NewLine}stdout: {stdout}{Environment.NewLine}stderr: {stderr}");
+            }
+
             if (DateTime.UtcNow >= deadline)
             {
                 throw new TimeoutException($"{path} never appeared.");
