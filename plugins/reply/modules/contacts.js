@@ -8,12 +8,14 @@
 // has to travel anywhere on the ordinary path.
 //
 // The second is how a person with no pin is named. The CLI takes the person's fields on stdin and finds or imports
-// them itself, matched by address, so that is the whole of it for a list add, an enrolment, an opt-out and a stop. The
-// one person the CLI cannot import is one without a first name: Reply's import refuses them even when it already
-// holds them, and inventing a name would write data nobody supplied into a customer's own records. For a list add or
-// an enrolment of such a person this package looks the address up itself, through Reply's contact search, and names
-// the one contact it finds by its identifier. Reply holding nobody under the address is a refusal with that reason,
-// because nobody can be made for them.
+// them itself, matched by address, so that is the whole of it for a person with a first name, and for a stop, which
+// creates nobody. Reply requires a first name for every contact it holds and Jason does not, and making one fit the
+// other is this package's job, never the runtime's. Reply's import refuses a person without one even when it already
+// holds them, so for a list add, an enrolment or an opt-out of such a person this package looks the address up
+// itself, through Reply's contact search, and names the one contact it finds by its identifier: nothing is written to
+// a record Reply holds. When Reply holds nobody, the person is imported under a first name derived from what Jason
+// holds — their last name, or else their address's text before the `@` — unless the route's binding forbids it for an
+// add, or there is nothing to derive one from.
 import { call } from "./cli.js";
 import { describe, fail, lostAnswerRow, observe, statusRow } from "./errors.js";
 
@@ -46,12 +48,18 @@ function compact(request) {
 }
 
 /**
- * How a list add or an enrolment names the person to the CLI, which imports anybody given by their fields: the pin;
- * or the person's fields on stdin; or — for a person with no pin and no first name, whom Reply will not import even
- * when it holds them — the identifier this package's own lookup by address finds. Finding that person is this
- * package's job rather than the CLI's: it is a limit of Reply's business rules, and the answer is Jason's to give.
+ * How a write that may create somebody — a list add, an enrolment, an opt-out — names the person to the CLI: the pin;
+ * or the person's fields on stdin; or, for a person with no pin and no first name, the identifier this package's own
+ * lookup by address finds; or, when Reply holds nobody there, the person's fields with a first name derived from what
+ * Jason holds. Reply requires a first name and Jason does not, and adapting one to the other is this package's job,
+ * never the runtime's. A person Reply holds is named by that identifier, so nothing derived can reach their record.
+ *
+ * `options.protective` marks a write that protects the person rather than reaching them: an opt-out greets nobody, so
+ * the route's word against deriving, which exists so that no sequence greets a person by a made-up name, does not
+ * apply to it, and refusing it would leave them unflagged at Reply.
  */
-export function toAdd(operation, context, input, learned) {
+export function toEnsure(operation, context, input, learned, options) {
+  const protective = Boolean(options && options.protective);
   const contact = input.contacts[0];
   const pinned = pinOf(operation, contact, learned);
   if (pinned !== null) {
@@ -64,18 +72,30 @@ export function toAdd(operation, context, input, learned) {
   }
 
   const found = lookedUp(operation, context, channel.value, learned);
-  if (found === null) {
-    fail(operation, {
-      call: null,
-      row: "person_has_no_first_name",
-      reason: "The person has no first name, and Reply holds nobody under the address to add instead.",
-    }, learned);
+  if (found !== null) {
+    return { flags: ["--contact-id", found], learned: withContact(learned, found) };
   }
 
-  return { flags: ["--contact-id", found], learned: withContact(learned, found) };
+  if (!protective && !derivationAllowed(context)) {
+    fail(operation, { call: null, row: "first_name_derivation_forbidden", reason: "the route forbids deriving a first name" }, learned);
+  }
+
+  const named = derived(contact, channel);
+  if (named === null) {
+    fail(operation, { call: null, row: "first_name_not_derivable", reason: "a first name could not be derived" }, learned);
+  }
+
+  // Which field the name came from, and never the name: the runtime keeps this line, and its logs hold no person.
+  host.log("info", "Reply holds nobody under the address and the person has no first name, so one was derived for the import.", {
+    first_name_from: named.source,
+  });
+  return { flags: ["--contact", "-"], stdin: named.person, learned: learned };
 }
 
-/** How an opt-out or a stop names the person: the pin, or the person's fields on stdin for the CLI to look up itself. */
+/**
+ * How a stop names the person: the pin, or the person's fields on stdin for the CLI to look up itself. A stop creates
+ * nobody, so it derives nothing.
+ */
 export function toFind(operation, input, learned) {
   const contact = input.contacts[0];
   const pinned = pinOf(operation, contact, learned);
@@ -200,6 +220,38 @@ function channelOf(operation, contact, name, learned) {
   fail(operation, { call: null, row: "invalid_channel_value" }, learned);
 }
 
+// The first name Reply is given for a person Jason holds none for: their last name, which is then not sent as a last
+// name too — the one name they have is their first at Reply, and a second copy of it would say something untrue —
+// or else the address's text before its `@`, exactly as spelled. Null when there is neither. The CLI accepts an
+// address with exactly one `@` and text on both sides, so for every address it would take, "before the first `@`" and
+// "before the last" are the same text.
+function derived(contact, channel) {
+  const fields = { email: channel.value, company: text(contact.company), title: text(contact.title) };
+  const last = text(contact.last_name);
+  if (last !== undefined) {
+    return { source: "last_name", person: compact(Object.assign(fields, { first_name: last })) };
+  }
+
+  const at = channel.value.indexOf("@");
+  const local = at > 0 ? text(channel.value.slice(0, at)) : undefined;
+  if (local !== undefined) {
+    return { source: "email_local_part", person: compact(Object.assign(fields, { first_name: local })) };
+  }
+
+  return null;
+}
+
+// The route's own word on deriving, from its binding. Only `false` turns it off: the manifest's schema refuses any
+// other type when the route is set or activated, so absent is the one other thing that arrives, and absent is the
+// default.
+function derivationAllowed(context) {
+  const binding = (context && context.binding) || {};
+  return binding.derive_first_name !== false;
+}
+
+// A field as Jason holds it, or undefined when there is nothing in it. "Nothing" is judged as the CLI judges it — by
+// JavaScript's own trim — because a field the CLI trims to nothing never reaches Reply, and a first name of spaces
+// sent as one is a person Reply refuses where the lookup would have found them. The value itself goes out as given.
 function text(value) {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }

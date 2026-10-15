@@ -141,8 +141,8 @@ export function run(context, request) {
 }
 
 /**
- * The one raw call this package still makes, `reply api`: the contact search a list add or an enrolment makes for a
- * person with no pin and no first name. The answer is `{ code, data }` — Reply's own status and its body, whatever
+ * The one raw call this package still makes, `reply api`: the contact search a list add, an enrolment or an opt-out
+ * makes for a person with no pin and no first name. The answer is `{ code, data }` — Reply's own status and its body, whatever
  * that status was — and every ending without one throws `host.fail`. The table knows the call as
  * `api <METHOD> <path without its query>`, which is how its read/write mark is found.
  */

@@ -8,7 +8,7 @@
 // be meeting its own lost write, answers `already_enrolled` whatever the policy.
 import { run } from "./cli.js";
 import { describe, evidence, fail, lostAnswerRow } from "./errors.js";
-import { contactNumber, toAdd } from "./contacts.js";
+import { contactNumber, toEnsure } from "./contacts.js";
 
 const OPERATION = "campaign.enroll";
 const COMMAND = "sequence add-contact";
@@ -41,7 +41,7 @@ export function campaignEnroll(input, context) {
     }, known);
   }
 
-  const named = toAdd(OPERATION, context, input, known);
+  const named = toEnsure(OPERATION, context, input, known);
   let flags = named.flags;
   if (input.args.start.position === "step") {
     // `first_step` is asked for by saying nothing. A numbered position is the CLI's to resolve: Reply's steps have no
