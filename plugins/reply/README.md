@@ -391,11 +391,10 @@ before it runs, and its work waits while its Jason campaign is paused.
   generic error. So the CLI reads the person's part in the sequence before it adds anybody, and answers that they
   take part with nothing written. A participation that appears between that read and the add is the one race left;
   Reply then does what is described above.
-- **Three answers the contracts publish are never given.** `list_membership.add` never answers `already_member`,
-  `optout.record` never answers `already_recorded`, and `campaign.pause` never answers `already_paused`. Reply does
-  not say whether a person was on the list already, a flag set again changes nothing, and a paused sequence paused
-  again is answered as a pause. The effect at Reply is the same either way, so each answers `added`, `recorded` or
-  `paused`.
+- **The `already_*` answers are never given.** The contracts let a repeat answer `already_member`, `already_recorded`
+  or `already_paused` where the provider can tell. Reply cannot: it does not say whether a person was on the list
+  already, a flag set again changes nothing, and it answers a pause of a paused sequence as a pause. So this package
+  answers `added`, `recorded` or `paused`, and the effect at Reply is the same either way.
 - **A person without a first name.** Reply requires a first name; see *A person without a first name* under *The
   account a route names* above.
 - **`conversation.list` with `source: all` reads Reply's inbox and its sent threads, and merges them.** Reply's thread

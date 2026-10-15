@@ -56,14 +56,19 @@ so it is refused, and never taken for nobody (which would create a second contac
 { "items": [ { "contact_id": "cnt_…", "status": "recorded", "external_ids": { "contact": "p_88421" } } ] }
 ```
 
-`status` is `recorded`, or `already_recorded` when the provider already held the person as opted out — in which case
-nothing is written.
+`status` is `recorded`, or `already_recorded` when the provider says it already held the person as opted out — in
+which case nothing is written. A provider whose flag is set idempotently and that cannot tell answers `recorded` for
+both.
 
 ## Repeating after a lost answer
 
 If an attempt ends without an answer, the opt-out may already be recorded. The runtime hands the item back; the next
 attempt reads the contact's flag first and answers `already_recorded` when it is set. Return the contact identifier
 you learned on the failure as well, so the next attempt has a pin to read the flag of.
+
+Or, where setting the provider's flag is idempotent (setting it again changes nothing), the next attempt sets it again,
+worked by the contact you pinned on the failure, and answers `recorded`; with no pin learned, the contact the first
+attempt may have made is found by a read first, never created again from the person's fields.
 
 ## The properties
 
@@ -76,7 +81,7 @@ you learned on the failure as well, so the next attempt has a pin to read the fl
 | `reversibility` | `irreversible` | — |
 | `approval` | `auto` | — |
 | `protective_floor` | `true` | the protective floor — recording that somebody said stop is an operation whose non-performance is itself the harm, and waiting for permission to stop is the destructive choice. |
-| `before_repeating` | the current opt-out state for this person and identifier, with its recorded event time. | — |
+| `before_repeating` | the current opt-out state for this person and identifier, with its recorded event time — or none, where setting the provider's flag is idempotent and the repeat works by the contact pinned on the failure. | — |
 | `idempotency_key` | `required` | — |
 | `per_item_results` | `required` | — |
 | `cost` | `none` | — |
@@ -89,7 +94,7 @@ you learned on the failure as well, so the next attempt has a pin to read the fl
 | precondition | Find the provider's own contact before recording the opt-out: work by `contacts[0].external_ids.contact` when that pin is present, otherwise look the person up by the value of the channel named by `args.channel`, compared exactly and without regard to case, and create the contact from that value only when the provider holds nobody under it; return the provider's identifier under `external_ids.contact`. |
 | preview a person reads | none |
 | pinned identifiers | `contact` names a contact |
-| recovery read | The contact's opt-out flag at the provider. |
+| recovery read | The contact's opt-out flag at the provider. Where setting the provider's flag is idempotent (setting it again changes nothing), a repeat worked by the contact pinned on the failure needs no read; with no pin learned, the contact the first attempt may have made is found by a read first, never created again from the person's fields. |
 | after an ambiguous end | `after_recovery_read` — a later attempt performs the recovery read above and answers from it when the effect already happened |
 | timeout | 120000 ms |
 | invariants | A2, A3, A4, K2 |

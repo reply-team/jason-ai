@@ -11,7 +11,7 @@
   "approval_departs": false,
   "protective_floor": false,
   "approval_reason": null,
-  "before_repeating": "current membership for these people, and the per-item ledger under this key.",
+  "before_repeating": "current membership for these people and the per-item ledger under this key — or none, where the provider's add is idempotent and the repeat works by the contact pinned on the failure.",
   "idempotency_key": "required",
   "per_item_results": "required",
   "accepts_collection": true,
@@ -162,8 +162,8 @@
   },
 
   "recovery_read": {
-    "reads": "The membership of the pinned contact in the list named by `args.list.external_id`, and the ledger entry under this idempotency key.",
-    "justification": "A duplicate add is harmless at most providers, but the contact creation it implies may be metered, and a second contact is a merge nobody asked for. Consumption pricing is the general case: a repeat after a crash is a real charge, not a wasted round trip."
+    "reads": "The membership of the pinned contact in the list named by `args.list.external_id`, and the ledger entry under this idempotency key. Where the provider's add is idempotent (a second add of the same contact leaves one membership), a repeat worked by the contact pinned on the failure needs no read; with no pin learned, the contact the first attempt may have made is found by a read first, never created again from the person's fields.",
+    "justification": "A duplicate add is harmless at most providers, but the contact creation it implies may be metered, and a second contact is a merge nobody asked for. Consumption pricing is the general case: a repeat after a crash is a real charge, not a wasted round trip. Whichever way a repeat goes, it works by the contact the failure pinned, or by the one a read finds first, so it never creates a second one."
   },
   "repeat_after_ambiguous": "after_recovery_read",
 
@@ -177,7 +177,7 @@
     { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it write lists for this account." },
     { "code": "rate_limited", "class": "transient", "when": "The provider refused the write for now and it may be attempted again." },
     { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was written." },
-    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the add may already have happened. The next attempt performs the declared recovery read before it writes." }
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the add may already have happened. The next attempt reads before it writes, or repeats an add the provider makes idempotent, worked by the pin or, with none, by the contact a read finds first." }
   ],
 
   "timeout_ms": 120000,
@@ -185,8 +185,8 @@
   "conformance": [
     "A contact pinned under `contacts[0].external_ids.contact` is worked by that identifier, and never matched again by the channel value.",
     "A contact with no pin is created from the channel value, and the provider's identifier comes back under `external_ids.contact`.",
-    "A second call under the same idempotency key answers `already_member` and performs no second effect.",
-    "An attempt after a lost answer reads the ledger under the key first, so one crash leaves one effect rather than two.",
+    "A second call under the same idempotency key performs no second effect. It answers `already_member` where the provider says the person was on the list already, and `added` where the provider's add is idempotent and it cannot tell.",
+    "An attempt after a lost answer reads before it writes, or repeats an add the provider makes idempotent, worked by the contact pinned on the failure and, with no pin, by the contact a read finds first, so one crash leaves one effect rather than two.",
     "An address the provider suppresses fails `suppressed` as permanent, rather than being added.",
     "The result carries exactly one item, and its `contact_id` is the identifier the call was given."
   ]

@@ -215,6 +215,93 @@ public class ContractDocumentTests
                 .Select(contract => contract.Id));
     }
 
+    /// <summary>
+    /// The three writes a provider can make idempotent, and which it may or may not say were already in effect. Each
+    /// document says, in one conformance entry, that a repeat may answer either word its status enum publishes: the
+    /// `already_*` one where the provider can tell, and the plain one where it cannot. Both words are read from the enum,
+    /// never restated, so the prose cannot drift from the vocabulary it describes.
+    /// </summary>
+    [Theory]
+    [InlineData("list_membership.add")]
+    [InlineData("optout.record")]
+    [InlineData("campaign.pause")]
+    public void A_write_a_provider_makes_idempotent_may_answer_its_plain_word_on_a_repeat(string id)
+    {
+        var words = Contract(id).OutputSchema["properties"]!["items"]!["items"]!["properties"]!["status"]!["enum"]!.AsArray()
+            .Select(word => word!.GetValue<string>())
+            .ToList();
+        var already = Assert.Single(words, word => word.StartsWith("already_", StringComparison.Ordinal));
+        var plain = Assert.Single(words, word => !word.StartsWith("already_", StringComparison.Ordinal));
+
+        Assert.Contains(
+            Conformance(id),
+            entry => entry.Contains($"`{already}`", StringComparison.Ordinal) && entry.Contains($"`{plain}`", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A repeated idempotent write works by the contact the failed attempt pinned. A lost answer can arrive before any
+    /// pin was learned, and a repeat by the person's fields could then make a second contact, so the same entry that
+    /// names the pinned repeat names the read that finds the first attempt's contact when there is no pin.
+    /// </summary>
+    [Theory]
+    [InlineData("list_membership.add")]
+    [InlineData("optout.record")]
+    public void A_repeat_with_no_pin_learned_finds_the_first_attempt_s_contact_by_a_read(string id)
+    {
+        Assert.Contains(
+            Conformance(id),
+            entry => entry.Contains("pinned on the failure", StringComparison.Ordinal)
+                && entry.Contains("with no pin", StringComparison.Ordinal)
+                && entry.Contains("a read finds first", StringComparison.Ordinal));
+        Assert.Contains(
+            "never created again from the person's fields",
+            Document(id)["recovery_read"]!["reads"]!.GetValue<string>(),
+            StringComparison.Ordinal);
+    }
+
+    private static IReadOnlyList<string> Conformance(string id) =>
+        [.. Document(id)["conformance"]!.AsArray().Select(entry => entry!.GetValue<string>())];
+
+    /// <summary>
+    /// And the page beside each of the two documents says the no-pin case in the document's own words, in the
+    /// hand-written section a plugin author reads first. Only a page's generated rows are held to its document
+    /// otherwise, so this sentence could drift from the recovery read it repeats and nothing would say so.
+    /// </summary>
+    [Theory]
+    [InlineData("list_membership.add")]
+    [InlineData("optout.record")]
+    public void A_page_says_the_no_pin_repeat_in_its_document_s_own_words(string id)
+    {
+        Assert.Contains(
+            "with no pin learned, the contact the first attempt may have made is found by a read first, never created again from the person's fields",
+            Section(Path.Combine(ContractFiles.Operations, id + ".md"), "## Repeating after a lost answer"),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The class a prose-only change belongs to is named where the versions are, with what keeps it one: no field, enum
+    /// value, property or schema changed. A change that says more exactly what a document already allows then needs
+    /// no argument for keeping the version.
+    /// </summary>
+    [Fact]
+    public void Versioning_names_a_clarification_that_keeps_the_version()
+    {
+        Assert.Contains(
+            "- **Clarification** — prose that says more exactly what a document's machine fields already allow, with no field, enum value, property or schema changed. It keeps the version.",
+            Section(Path.Combine(ContractFiles.Package, "README.md"), "## Versioning"),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>A page's section under a heading, up to the next heading of its level, with its whitespace run together.</summary>
+    private static string Section(string page, string heading)
+    {
+        var text = File.ReadAllText(page).ReplaceLineEndings("\n");
+        var start = text.IndexOf(heading, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"{ContractFiles.Relative(page)} has no section '{heading}'.");
+        var end = text.IndexOf("\n## ", start + heading.Length, StringComparison.Ordinal);
+        return System.Text.RegularExpressions.Regex.Replace(text[start..(end < 0 ? text.Length : end)], @"\s+", " ");
+    }
+
     [Theory]
     [MemberData(nameof(Published))]
     public void A_repeat_after_a_recovery_read_declares_what_that_read_is(string id)

@@ -159,6 +159,22 @@ public class ReplyPackageTests
         Assert.Contains("PowerShell 7 and Command Prompt take `reply auth login` as written", step, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Reply cannot say whether a repeat's effect was there already, so the package answers the plain word. The
+    /// contracts allow that where the provider cannot tell, and the README says so rather than calling it a departure.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_the_contracts_allow_the_plain_answer()
+    {
+        var readme = Regex.Replace(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")), @"\s+", " ");
+
+        Assert.Contains(
+            "The contracts let a repeat answer `already_member`, `already_recorded` or `already_paused` where the provider can tell.",
+            readme,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("Three answers the contracts publish are never given", readme, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_route_to_this_package_may_name_an_account_and_whether_to_derive_a_first_name_and_nothing_else()
     {

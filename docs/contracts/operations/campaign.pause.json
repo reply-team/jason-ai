@@ -165,7 +165,7 @@
   "timeout_ms": 60000,
 
   "conformance": [
-    "A campaign already paused answers `already_paused` and changes nothing; the provider documents the call as idempotent, which is what makes a repeat after a lost answer safe.",
+    "A campaign already paused changes nothing, and answers `already_paused` where the provider says it was paused before, or `paused` where the provider answers a repeated pause as a pause; the provider documents the call as idempotent, which is what makes a repeat after a lost answer safe.",
     "A campaign that cannot be paused — archived, or never started — fails `campaign_not_pausable`, with the provider's own code under `details.provider_code` where it gave one.",
     "Nothing beyond the campaign is required: `reason` is optional, and it is Jason's record that never reaches the provider.",
     "A campaign named for the first time is pinned, as `campaign.get` pins it, and every later call works by the pin."
