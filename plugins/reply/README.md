@@ -122,12 +122,13 @@ replacing the directory and reloading.
 
 ## The account a route names
 
-The manifest declares a binding of two optional fields, and the schema is closed:
+The manifest declares a binding of three optional fields, and the schema is closed:
 
 | Field | What it selects |
 |---|---|
 | `profile` | Which of the CLI's stored profiles the calls act as — one of those `reply profile list` shows, each with its own credential. |
 | `team_id` | Which team the account acts in, for a credential that spans more than one. |
+| `derive_first_name` | Whether a person with no first name whom Reply does not hold is imported under a derived one. Absent means yes. |
 
 `profile` absent means whichever profile the CLI itself is currently set to; `team_id` absent means
 whatever that profile resolves to on its own. **A route with no binding at all is a valid route**, and it
@@ -142,6 +143,22 @@ CLI's store already holds and is journaled and listed in full.
 string store in which `"12345"` and `12345` are the same five characters by the time anything reads them,
 so the value reaching the binding is a number and the schema refuses it. Write that route per campaign
 instead: `jason route set --binding` carries JSON and never passes through the configuration system.
+
+**A person without a first name.** Reply requires a first name for every contact it holds, and Jason does not.
+Making one fit the other is this package's job. For `list_membership.add`, `campaign.enroll` and `optout.record`, a
+person with no pin and no first name is looked up by address first, exactly and whatever its case. A contact Reply
+already holds is worked by its identifier, and nothing is written to its record. When Reply holds nobody under the
+address, the person is imported under a first name derived from their last name, which is then not sent as a last
+name too, or else from the text of their address before the `@`, exactly as it is spelled. With neither, the work
+fails `provider_call_failed`: "a first name could not be derived". A first name of nothing but white space counts as
+none. The derived name is what Reply holds from then on, and what a sequence's first-name variable puts in front of
+the person. An approval shows the person as Jason holds them, without it. If that is not acceptable for an account,
+set `"derive_first_name": false` in the route's binding. Such a person is then refused by a list add or an
+enrolment, "the route forbids deriving a first name", and is not created at Reply. The switch does not apply to an
+opt-out: it is protective, greets nobody, and derives a first name as above whatever the binding says, because
+refusing it would leave the person unflagged at Reply. Which field a name was derived from, `last_name` or
+`email_local_part`, is written to the invocation's diagnostics, never the name. `enrollment.stop` creates nobody and
+derives nothing.
 
 ### What does not reach it
 
@@ -187,7 +204,7 @@ route's binding names them.
 | `sequence stats <sequence> --preset`, or `--from --to` | read | A sequence's counts over one window: what `engagement.summarize` answers from. |
 | `inbox list --contact-id` or `--sequence-id`, `--source --since --limit --offset` | read | One page of one of Reply's thread buckets, by person or by sequence: what `conversation.list` answers from — the inbox alone for `inbound`, the inbox and the sent threads merged for `all`. |
 | `inbox get <thread> --limit --offset` | read | One thread, its subject, and one page of its messages: what `conversation.get` answers from. |
-| `api /v3/contacts/filter --method POST --body -` | read | Reply's contact search by address: the lookup `list_membership.add` and `campaign.enroll` make for a person with no pin and no first name. A `POST`, and a read all the same. |
+| `api /v3/contacts/filter --method POST --body -` | read | Reply's contact search by address: the lookup `list_membership.add`, `campaign.enroll` and `optout.record` make for a person with no pin and no first name. A `POST`, and a read all the same. |
 | `sequence add-contact <sequence>` with `--contact-id` or `--contact -`, `[--start-step] [--ignore-step-delay]` | write | Puts the person into the sequence, importing them first when they are given by their details. Into a live sequence, a send. |
 | `sequence remove-contact <sequence>` with `--contact-id` or `--contact -` | write | Takes the person out of the sequence; their history stays. It never creates anybody. |
 | `sequence pause <sequence>` | write | Pauses the sequence. |
@@ -273,7 +290,8 @@ refused by Reply as an invalid request, so it arrives as `provider_call_failed`.
 | Reply's own opt-out register holds this person (`contact.opted_out`). The package always asks the CLI to refuse such a person. | `suppressed` | permanent | Nothing, on purpose. Only the person themselves can ask to be reinstated. |
 | Reply will not accept the address on the channel the call named (`contact.invalid_email`, or `reply.invalid_request` naming the email), or the person has no value on that channel. | `invalid_channel_value` | validation | Correct the contact's data; no later attempt would be accepted either. |
 | The account will hold no further contact (`account.contact_limit_reached`). | `limit_reached` | permanent | Free capacity at Reply. A **list's** own capacity publishes no code of its own, so a full list arrives as `provider_call_failed` instead of this one. |
-| The person has no pin and no first name, and Reply holds nobody under the address. Nothing is added. | `provider_call_failed` | permanent | Give the person a first name in Jason and propose the work again: Reply creates nobody without one. |
+| The person has no pin, no first name and no last name, Reply holds nobody under the address, and the address has no text before its `@`. Nothing is added. | `provider_call_failed` | permanent | "A first name could not be derived." Give the person a first name in Jason and propose the work again: Reply creates nobody without one. |
+| The person has no pin and no first name, Reply holds nobody under the address, and the route's binding says `derive_first_name: false`. Nothing is added. | `provider_call_failed` | permanent | "The route forbids deriving a first name." Give the person a first name in Jason, or allow the derivation in the route's binding, and propose the work again. |
 | The person has no pin and no first name, and Reply holds more than one contact whose address is theirs. Nothing is added. | `provider_call_failed` | permanent | Resolve the duplicate at Reply, then propose the work again. |
 | The person has no pin and no first name, and the lookup read five pages of a hundred and Reply said there were more. Nothing is added. | `provider_call_failed` | permanent | Give the person a first name in Jason, or a pin, and propose the work again. |
 
@@ -292,7 +310,7 @@ so the answer is `added` either way, and a repeat after a lost answer runs the c
 | Reply will not accept the address on the channel the call named (`contact.invalid_email`, or `reply.invalid_request` naming the email), or the person has no value on that channel. | `invalid_channel_value` | validation | Correct the contact's data. |
 | The account will hold no further contact (`account.contact_limit_reached`). | `limit_reached` | permanent | Free capacity at Reply. A **sequence's** own capacity publishes no code, so it arrives as `provider_call_failed`. |
 | The start position names no single step of this sequence's chain (`sequence.step_not_found`), or a step number past the 10000 the CLI takes (`usage.range`), or the first touch is a value this version has no word for. Nothing is sent. | `provider_call_failed` | permanent | The trace says which reading failed. Ask for the first step, or name a position the sequence really has. |
-| The person has no pin and no first name, and Reply holds nobody under the address, or more than one contact, or more than the lookup reads. Nothing is enrolled. | `provider_call_failed` | permanent | As for `list_membership.add` above: a first name, a pin, or the duplicate resolved at Reply. |
+| The person has no pin and no first name, and Reply holds more than one contact under the address, or more than the lookup reads; or Reply holds nobody and no first name could be derived, or the route's binding forbids deriving one. Nothing is enrolled. | `provider_call_failed` | permanent | As for `list_membership.add` above: a first name, a pin, the derivation allowed, or the duplicate resolved at Reply. |
 
 The CLI reads whether the person already takes part before it adds anybody, so a person already in the sequence is
 never moved or added again, and nothing is written for them. The package answers that `already_enrolled` under
@@ -333,8 +351,9 @@ activation: it waits for them before it runs, as `campaign.enroll` does.
 | When | Code | Class | What to do about it |
 |---|---|---|---|
 | The pinned contact identifier is not a Reply contact number, or no longer resolves there (`contact.not_found`). | `contact_not_found` | permanent | The pin has to be cleared before the opt-out can be recorded at Reply. |
-| More than one contact's address is this one, ignoring case (`contact.not_unique`). Nothing is set. | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the opt-out again. |
-| More than five hundred contacts hold the address, so the lookup could not be read to its end (`contact.lookup_incomplete`). Nothing is made and nothing is set. | `provider_call_failed` | permanent | Record the opt-out at Reply by hand: a repeat would read the same pages. Where `jason suppression add` recorded the address, Jason's own register already stops Jason's own reach. |
+| More than one contact's address is this one, ignoring case (`contact.not_unique`, or this package's own lookup for a person with no first name). Nothing is set. | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the opt-out again. |
+| More than five hundred contacts hold the address, so the lookup could not be read to its end (`contact.lookup_incomplete`, or this package's own lookup for a person with no first name). Nothing is made and nothing is set. | `provider_call_failed` | permanent | Record the opt-out at Reply by hand: a repeat would read the same pages. Where `jason suppression add` recorded the address, Jason's own register already stops Jason's own reach. |
+| The person has no pin, no first name and no last name, Reply holds nobody under the address, and the address has no text before its `@`. Nothing is made and nothing is set. | `provider_call_failed` | permanent | "A first name could not be derived." Reply holds nobody under this address, so it cannot reach them there either. Where `jason suppression add` recorded the address, Jason's own register already stops Jason's own reach. |
 | Reply will not accept the address, so no contact could be made to record the opt-out on (`contact.invalid_email`, or `reply.invalid_request` naming the email). | `invalid_channel_value` | validation | Correct the contact's data. |
 | Reply held nobody under the address, and the account will hold no further contact (`account.contact_limit_reached`). | `limit_reached` | permanent | Free capacity at Reply. Reply never held them under this address, so it cannot reach them there either. |
 
@@ -377,14 +396,8 @@ before it runs, and its work waits while its Jason campaign is paused.
   not say whether a person was on the list already, a flag set again changes nothing, and a paused sequence paused
   again is answered as a pause. The effect at Reply is the same either way, so each answers `added`, `recorded` or
   `paused`.
-- **A person without a first name.** Reply's import refuses a person without one, even one it already holds, and
-  inventing a first name would write data nobody supplied into a customer's own records. So for `list_membership.add`
-  and `campaign.enroll` the package looks the address up itself — Reply's contact search, the one raw `reply api`
-  call it still makes — compares what comes back with the address exactly and whatever the case, and names the one
-  contact it finds by its identifier. Reply holding nobody under the address is a refusal: nobody can be made for
-  them. `optout.record` hands the address to the CLI, which finds the person the same way; somebody Reply does not
-  hold and who has no first name cannot be made there, so that opt-out fails `provider_call_failed`, with Reply's own
-  words in the trace. `enrollment.stop` creates nobody and needs no first name.
+- **A person without a first name.** Reply requires a first name; see *A person without a first name* under *The
+  account a route names* above.
 - **`conversation.list` with `source: all` reads Reply's inbox and its sent threads, and merges them.** Reply's thread
   filter has no value for "every thread": its inbox holds the threads with an inbound message, and `sent` the threads
   whose latest message is outbound. The package reads both from the first thread, a hundred at a time, merges them by

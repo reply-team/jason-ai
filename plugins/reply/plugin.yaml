@@ -1,6 +1,6 @@
 manifest_version: 1
 id: reply
-version: 0.3.0
+version: 0.3.1
 kind: provider
 name: Reply
 description: >-
@@ -64,3 +64,10 @@ binding:
       description: >-
         The team whose data the account acts in, for a credential that spans more than one. Absent means whatever
         the profile itself resolves to.
+    derive_first_name:
+      type: boolean
+      description: >-
+        Whether a person with no first name, whom Reply holds nobody for under their address, is imported under a
+        first name derived from their last name or, failing that, from their address's text before the @. Absent
+        means true. False refuses such a person instead, and they are not created at Reply. An opt-out derives
+        whatever this says: it greets nobody, and refusing it would leave the person unflagged.

@@ -10,7 +10,7 @@
 // never answered: the effect at Reply is the same either way.
 import { run } from "./cli.js";
 import { evidence, fail, lostAnswerRow } from "./errors.js";
-import { contactNumber, toAdd } from "./contacts.js";
+import { contactNumber, toEnsure } from "./contacts.js";
 
 const OPERATION = "list_membership.add";
 const COMMAND = "contact-list add-contact";
@@ -23,7 +23,7 @@ const LARGEST_LIST_NUMBER = 2147483647;
 export function listMembershipAdd(input, context) {
   const contact = input.contacts[0];
   const list = listOf(input);
-  const named = toAdd(OPERATION, context, input, undefined);
+  const named = toEnsure(OPERATION, context, input, undefined);
 
   const added = run(context, {
     operation: OPERATION,

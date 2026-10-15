@@ -14,7 +14,8 @@
 // JSON.
 
 // Every command this package runs, and whether it is a read or a write. The one raw call is the contact search a list
-// add or an enrolment makes for a person who has no pin and no first name: a POST, and a read all the same.
+// add, an enrolment or an opt-out makes for a person who has no pin and no first name: a POST, and a read all the
+// same.
 export const COMMANDS = {
   "sequence get": {
     "kind": "read",
@@ -38,7 +39,7 @@ export const COMMANDS = {
   },
   "api POST /v3/contacts/filter": {
     "kind": "read",
-    "note": "Reply's contact search by address: the lookup list_membership.add and campaign.enroll make for a person with no pin and no first name. A POST, and a read all the same."
+    "note": "Reply's contact search by address: the lookup list_membership.add, campaign.enroll and optout.record make for a person with no pin and no first name. A POST, and a read all the same."
   },
   "sequence add-contact": {
     "kind": "write",
@@ -400,11 +401,17 @@ export const ROWS = {
         "class": "permanent",
         "note": "The account will hold no further contact. A list's own capacity, unlike the account's, publishes no code of its own — a refusal there arrives as an ordinary refusal and is reported as a refusal this version has no word for, rather than guessed into this row."
       },
-      "person_has_no_first_name": {
-        "when": "The person has no pin and no first name, and the lookup by address found nobody Reply holds under it. Reply creates nobody without a first name.",
+      "first_name_not_derivable": {
+        "when": "The person has no pin, no first name and no last name, the value on the channel the call named has no text before an `@`, and the lookup by address found nobody Reply holds under it.",
         "code": "provider_call_failed",
         "class": "permanent",
-        "note": "Reply will not create a person without a first name, and it holds nobody under this address, so nothing was added. Give the person a first name in Jason and propose the work again."
+        "note": "A first name could not be derived: the person has no first name, no last name and no address to take one from, Reply holds nobody under the value, and Reply creates nobody without a first name, so nothing was added. Give the person a first name in Jason and propose the work again."
+      },
+      "first_name_derivation_forbidden": {
+        "when": "The person has no pin and no first name, the lookup by address found nobody Reply holds under it, and the route's binding says `derive_first_name: false`.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The route forbids deriving a first name, the person has none, and Reply holds nobody under the address and creates nobody without a first name, so nothing was added. Give the person a first name in Jason, or set `derive_first_name` to true in the route's binding (absent means true), and propose the work again."
       },
       "contact_not_unique": {
         "when": "The person has no pin and no first name, and the lookup by address, read to its end, found more than one contact whose email equals it, ignoring case.",
@@ -468,11 +475,17 @@ export const ROWS = {
         "class": "permanent",
         "note": "The enrollment could not be built from the arguments it was given, so nothing was sent. A Reply step carries no ordering field at all — the steps are a graph of parents with branch labels — so a numbered start position has a sound meaning only while they form a single chain, and the attempt's trace says which reading failed. Ask for the first step, or name a position the sequence really has."
       },
-      "person_has_no_first_name": {
-        "when": "The person has no pin and no first name, and the lookup by address found nobody Reply holds under it. Reply creates nobody without a first name.",
+      "first_name_not_derivable": {
+        "when": "The person has no pin, no first name and no last name, the value on the channel the call named has no text before an `@`, and the lookup by address found nobody Reply holds under it.",
         "code": "provider_call_failed",
         "class": "permanent",
-        "note": "Reply will not create a person without a first name, and it holds nobody under this address, so nobody was enrolled. Give the person a first name in Jason and propose the work again."
+        "note": "A first name could not be derived: the person has no first name, no last name and no address to take one from, Reply holds nobody under the value, and Reply creates nobody without a first name, so nobody was enrolled. Give the person a first name in Jason and propose the work again."
+      },
+      "first_name_derivation_forbidden": {
+        "when": "The person has no pin and no first name, the lookup by address found nobody Reply holds under it, and the route's binding says `derive_first_name: false`.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "The route forbids deriving a first name, the person has none, and Reply holds nobody under the address and creates nobody without a first name, so nobody was enrolled. Give the person a first name in Jason, or set `derive_first_name` to true in the route's binding (absent means true), and propose the work again."
       },
       "contact_not_unique": {
         "when": "The person has no pin and no first name, and the lookup by address, read to its end, found more than one contact whose email equals it, ignoring case.",
@@ -526,14 +539,20 @@ export const ROWS = {
         "class": "permanent",
         "note": "The identifier pinned for this person no longer resolves at Reply — the contact was deleted, or it belongs to another account. The pin has to be cleared before the opt-out can be recorded there."
       },
+      "first_name_not_derivable": {
+        "when": "The person has no pin, no first name and no last name, the value on the channel the call named has no text before an `@`, and the lookup by address found nobody Reply holds under it.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "A first name could not be derived: the person has no first name, no last name and no address to take one from, Reply holds nobody under the value, and Reply creates nobody without a first name, so no contact was made and no flag set. Reply holds nobody under this address, so it cannot reach them there either. Where `jason suppression add` recorded the address, Jason's own register already stops Jason's own reach."
+      },
       "contact_not_unique": {
-        "when": "The CLI answered `contact.not_unique`: more than one contact's email equals the address, ignoring case.",
+        "when": "The CLI answered `contact.not_unique`, or this package's own lookup, made for a person with no pin and no first name, read to its end and found more than one contact: more than one contact's email equals the address, ignoring case.",
         "code": "contact_not_unique",
         "class": "permanent",
         "note": "Reply holds more than one contact under this address, so picking one would be guessing and nothing was done. A person resolves the duplicate at Reply, then proposes the work again."
       },
       "lookup_not_finished": {
-        "when": "The CLI answered `contact.lookup_incomplete`: more than five hundred contacts hold the address, so its lookup could not be read to its end.",
+        "when": "The CLI answered `contact.lookup_incomplete`, or this package's own lookup, made for a person with no pin and no first name, read five pages of a hundred and Reply said there were more: more than five hundred contacts hold the address, so the lookup could not be read to its end.",
         "code": "provider_call_failed",
         "class": "permanent",
         "note": "Reply holds more contacts whose address holds this one than one lookup reads, so whether exactly one of them is this person could not be decided, and nothing was done: no contact made, no flag set. A repeat would read the same pages, so it is not repeated: record the opt-out at Reply by hand. Where `jason suppression add` recorded the address, Jason's own register already stops Jason's own reach."
