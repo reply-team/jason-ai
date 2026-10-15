@@ -205,7 +205,7 @@ public static class SkillsPlanner
 
         if (dryRun)
         {
-            output.WriteLine("Dry run: nothing will be written.");
+            output.WriteLine("Dry run: nothing will be deployed.");
         }
     }
 }

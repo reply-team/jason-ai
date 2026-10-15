@@ -309,6 +309,310 @@ public class StatusCommandTests
     }
 
     /// <summary>
+    /// Role skills a default install took from an older release fail the required check, with the repair. An
+    /// installation upgraded with <c>jason update apply</c> otherwise went on teaching every role from the release
+    /// before, and this check said ok, naming the old tag as though it were current.
+    /// </summary>
+    [Fact]
+    public async Task Role_skills_a_default_install_took_from_an_older_release_are_a_required_failure_with_the_repair()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        RoleRootAt(dir, "v1.2.3");
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, build: "1.2.4"), Ct);
+
+        var report = Read(output);
+        var check = Assert.Single(report.Checks, check => check.Name == "role_skills");
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.False(report.Ready);
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Equal("Role skills are from v1.2.3; this runtime is v1.2.4.", check.Fact);
+        Assert.Equal("jason skills install --roles-only", check.Fix);
+
+        // And the person reading it sees the same fact and the line to type.
+        var human = new StringWriter();
+        await CliApp.RunAsync(["status", "--human"], Machine(dir, human, build: "1.2.4"), Ct);
+        var text = human.ToString();
+        Assert.Contains("Role skills are from v1.2.3; this runtime is v1.2.4.", text, StringComparison.Ordinal);
+        var repairs = text[text.IndexOf("To repair:", StringComparison.Ordinal)..].Split(Environment.NewLine).Select(line => line.Trim());
+        Assert.Contains("jason skills install --roles-only", repairs);
+    }
+
+    /// <summary>
+    /// The repair keeps the source the deployment came from: the bare line for the default repository, and the line
+    /// with <c>--source</c> and that source for any other. Typed bare, it would move a deployment taught from a
+    /// mirror, or from a repository on this machine, to the default repository — or fail there, where the tag it asks
+    /// for may not exist yet.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task The_repair_for_role_skills_keeps_the_source_the_deployment_came_from(bool fromTheDefault)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        var source = fromTheDefault ? SkillsSource.DefaultSource : new Uri(Path.Combine(dir.Paths.Root, "origin")).AbsoluteUri;
+        RoleRootAt(dir, "v1.2.3", source: source);
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, build: "1.2.4"), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Equal(
+            fromTheDefault ? "jason skills install --roles-only" : $"jason skills install --roles-only --source {source}",
+            check.Fix);
+    }
+
+    /// <summary>
+    /// A ref chosen with <c>--ref</c> is a deliberate one, and passes — saying both tags and the line that moves it.
+    /// A record an earlier <c>jason skills update</c> marked as chosen reads the same way, which is why the line is
+    /// in the fact: it is how somebody holding such a record gets back to the runtime's own ref.
+    /// </summary>
+    [Fact]
+    public async Task Role_skills_at_a_ref_chosen_with_ref_pass_and_say_how_to_move_them()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        RoleRootAt(dir, "v1.2.3", overridden: true);
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, build: "1.2.4"), Ct);
+
+        var report = Read(output);
+        var check = Assert.Single(report.Checks, check => check.Name == "role_skills");
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.True(report.Ready);
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Null(check.Fix);
+        Assert.Contains("Role skills are from v1.2.3; this runtime is v1.2.4.", check.Fact, StringComparison.Ordinal);
+        Assert.Contains("`jason skills install --roles-only` moves it to v1.2.4.", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Role skills at the tag this build installed, under a runtime not yet restarted into this build, pass and say
+    /// that the runtime catches up when it is: the restart is demanded where it belongs, and one cause is not made two
+    /// failures.
+    /// </summary>
+    [Fact]
+    public async Task Role_skills_at_the_build_s_tag_under_a_runtime_not_yet_restarted_pass_and_say_it_catches_up()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        RoleRootAt(dir, "v1.2.5");
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, build: "1.2.5"), Ct);
+
+        var report = Read(output);
+        var check = Assert.Single(report.Checks, check => check.Name == "role_skills");
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.True(report.Ready);
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Null(check.Fix);
+        Assert.Contains(
+            "Role skills are at v1.2.5, the build installed; this runtime is v1.2.4 and catches up when it is restarted into the new build.",
+            check.Fact,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And role skills at neither tag fail with the repair, on whichever side of them they are: after an update's
+    /// rollback a record can be newer than the runtime and this build both, and no restart makes it current. Equality
+    /// decides, never a version order, and the repair writes this build's tag, so the next status lands in a case that
+    /// passes.
+    /// </summary>
+    [Fact]
+    public async Task Role_skills_at_neither_the_runtime_s_tag_nor_the_build_s_fail_with_the_repair_even_when_newer()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        RoleRootAt(dir, "v1.2.6");
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, build: "1.2.5"), Ct);
+
+        var report = Read(output);
+        var check = Assert.Single(report.Checks, check => check.Name == "role_skills");
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.False(report.Ready);
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Equal("Role skills are from v1.2.6; this runtime is v1.2.4.", check.Fact);
+        Assert.Equal("jason skills install --roles-only", check.Fix);
+    }
+
+    /// <summary>
+    /// A development build compares nothing, as <c>skills update</c> and the harness check already do for one: its pin
+    /// names a release not published yet, so a repair at it would never clear. The role skills pass, and the line still
+    /// names what is deployed, which is what a developer reads.
+    /// </summary>
+    [Fact]
+    public async Task Role_skills_under_a_development_build_compare_nothing()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        RoleRootAt(dir, "v1.2.3");
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, build: "1.2.5-dev"), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Null(check.Fix);
+        Assert.Contains("jason-runtime-skills at v1.2.3", check.Fact, StringComparison.Ordinal);
+        Assert.DoesNotContain("this runtime is", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Nothing to compare, and nothing compared: role skills at the runtime's own ref; a development runtime, whose own
+    /// ref names a release not published yet; and a directory read where it stood, which has no ref at all.
+    /// </summary>
+    [Theory]
+    [InlineData("v1.2.4", "1.2.4", true)]
+    [InlineData("v1.2.3", "1.2.4-dev", true)]
+    [InlineData("(a directory, read where it stands)", "1.2.4", false)]
+    public async Task Role_skills_with_nothing_to_compare_pass_as_they_did(string reference, string version, bool git)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        RoleRootAt(dir, reference, version: version, commit: git ? Commit : null);
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, build: "1.2.4"), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Contains($"jason-runtime-skills at {reference}", check.Fact, StringComparison.Ordinal);
+        Assert.DoesNotContain("this runtime is", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Harness skills a default install took from an older release fail the optional check, compared with this build's
+    /// own ref, and the repair is <c>jason skills update</c> — printed for the person, never run by an agent, because
+    /// the root is the agent's own configuration. Optional, so ready is untouched.
+    /// </summary>
+    [Fact]
+    public async Task Harness_skills_from_an_older_release_fail_the_optional_check_with_the_update_as_the_repair()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var harness = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
+        Deploy(harness, SkillsSource.DefaultSource, "v1.2.3", overridden: false, Commit);
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, harnesses: HarnessLocators.At(harness), build: "1.2.4"), Ct);
+
+        var report = Read(output);
+        var check = Assert.Single(report.Checks, check => check.Name == "harness_skills");
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.True(report.Ready);
+        Assert.False(check.Required);
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Equal($"jason-runtime-skills in {harness} is from v1.2.3; this build is v1.2.4.", check.Fact);
+        Assert.Equal("jason skills update", check.Fix);
+
+        var human = new StringWriter();
+        await CliApp.RunAsync(["status", "--human"], Machine(dir, human, harnesses: HarnessLocators.At(harness), build: "1.2.4"), Ct);
+        var text = human.ToString();
+        var repairs = text[text.IndexOf("To repair:", StringComparison.Ordinal)..].Split(Environment.NewLine).Select(line => line.Trim());
+        Assert.Contains("jason skills update", repairs);
+    }
+
+    /// <summary>
+    /// And the harness passes as it did where there is nothing to move: at this build's own ref, on a development
+    /// build, and from a directory.
+    /// </summary>
+    [Theory]
+    [InlineData("v1.2.4", "1.2.4", true)]
+    [InlineData("v1.2.3", "1.2.4-dev", true)]
+    [InlineData("(a directory, read where it stands)", "1.2.4", false)]
+    public async Task Harness_skills_with_nothing_to_move_pass_as_they_did(string reference, string build, bool git)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var harness = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
+        Deploy(harness, SkillsSource.DefaultSource, reference, overridden: false, git ? Commit : null);
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, harnesses: HarnessLocators.At(harness), build: build), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "harness_skills");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Equal($"jason-runtime-skills at {reference} in {harness}.", check.Fact);
+    }
+
+    /// <summary>
+    /// A harness deployment its record pins passes, and its fact names both tags and the line that moves it: an
+    /// install of that pack, from the source it came from when that is not the default repository. The record pins
+    /// its ref when it was made with <c>--ref</c>, and also when an earlier <c>jason skills update</c> marked it so,
+    /// which nobody chose; <c>update</c> keeps a pinned ref, so it is not the line.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Harness_skills_their_record_pins_at_another_tag_pass_and_name_the_line_that_moves_them(bool fromTheDefault)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var harness = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
+        var source = fromTheDefault ? SkillsSource.DefaultSource : new Uri(Path.Combine(dir.Paths.Root, "origin")).AbsoluteUri;
+        Deploy(harness, source, "v1.2.3", overridden: true, Commit);
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, harnesses: HarnessLocators.At(harness), build: "1.2.4"), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "harness_skills");
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Null(check.Fix);
+        var line = fromTheDefault
+            ? "jason skills install --pack jason-runtime-skills"
+            : $"jason skills install --pack jason-runtime-skills --source {source}";
+        Assert.Equal(
+            $"jason-runtime-skills at v1.2.3 in {harness}. jason-runtime-skills in {harness} is from v1.2.3; this build is v1.2.4. `{line}` moves it to v1.2.4.",
+            check.Fact);
+    }
+
+    /// <summary>
+    /// And the line does what the fact says. Typed as the check prints it, it writes the pack again at this build's
+    /// tag, from the source the deployment came from, and the record no longer pins it — so the next status passes
+    /// with nothing to say. Both installs are real, from a <c>file://</c> repository with both tags.
+    /// </summary>
+    [Fact]
+    public async Task The_line_a_pinned_harness_deployment_is_given_moves_it_to_this_build_s_tag()
+    {
+        using var dir = new TempPaths();
+        Running(dir);
+        var harness = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
+        var source = await Jason.Cli.Tests.Skills.TaggedSource.CreateAsync(dir, Ct, "v1.2.3", "v1.2.4");
+        CliEnvironment At(StringWriter output) =>
+            Machine(dir, output, ProgramRunners.ForThisMachine(), HarnessLocators.At(harness), build: "1.2.4");
+
+        var pinning = new StringWriter();
+        var pinned = await CliApp.RunAsync(["skills", "install", "--pack", SkillPacks.Runtime, "--source", source, "--ref", "v1.2.3"], At(pinning), Ct);
+        Assert.True(pinned == ExitCodes.Success, pinning.ToString());
+
+        var before = new StringWriter();
+        await CliApp.RunAsync(["status"], At(before), Ct);
+        var told = Assert.Single(Read(before).Checks, check => check.Name == "harness_skills");
+        Assert.Equal(CheckState.Ok, told.State);
+        var line = System.Text.RegularExpressions.Regex.Match(told.Fact, "`(jason skills install [^`]*)` moves it to v1\\.2\\.4\\.").Groups[1].Value;
+        Assert.Equal($"jason skills install --pack {SkillPacks.Runtime} --source {source}", line);
+
+        var moving = new StringWriter();
+        var moved = await CliApp.RunAsync([.. line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Skip(1)], At(moving), Ct);
+
+        Assert.True(moved == ExitCodes.Success, moving.ToString());
+        var deployment = Assert.Single(SkillsRecord.Read(harness)!.Packs);
+        Assert.Equal("v1.2.4", deployment.Ref);
+        Assert.False(deployment.RefOverridden);
+        Assert.Equal(source, deployment.Source);
+
+        var after = new StringWriter();
+        await CliApp.RunAsync(["status"], At(after), Ct);
+        var check = Assert.Single(Read(after).Checks, check => check.Name == "harness_skills");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Equal($"{SkillPacks.Runtime} at v1.2.4 in {harness}.", check.Fact);
+    }
+
+    /// <summary>
     /// A required check that failed prints the line that repairs it — and that line is the one this
     /// product's own installer writes, so the repair and the installer cannot drift apart.
     /// </summary>
@@ -473,16 +777,29 @@ public class StatusCommandTests
         Assert.True(asked > 1, $"only {asked} check asked for a runtime to be started, so nothing was de-duplicated.");
     }
 
-    /// <summary>A deployment record in a root, as `jason skills install` leaves one.</summary>
-    private static void Deploy(string root)
+    /// <summary>
+    /// A deployment record in a root, as `jason skills install` leaves one: from a directory read where it stood unless
+    /// a commit is named, which is what a git source records.
+    /// </summary>
+    private static void Deploy(string root, string source = "/somewhere", string reference = "v0.1.0", bool overridden = false, string? commit = null)
     {
         var skill = Path.Combine(root, "researcher", "SKILL.md");
         Directory.CreateDirectory(Path.GetDirectoryName(skill)!);
         File.WriteAllText(skill, "---" + Environment.NewLine + "name: researcher" + Environment.NewLine + "---" + Environment.NewLine);
         SkillsRecord.Write(root, new SkillsRecord(
             SkillsRecord.CurrentVersion,
-            [new SkillsDeployment("jason-runtime-skills", "/somewhere", "v0.1.0", false, null, DateTimeOffset.UnixEpoch,
+            [new SkillsDeployment("jason-runtime-skills", source, reference, overridden, commit, DateTimeOffset.UnixEpoch,
                 [new DeployedFile("researcher/SKILL.md", SkillsRecord.Digest(skill))])]));
+    }
+
+    /// <summary>A commit, as a git source records one.</summary>
+    private const string Commit = "0123456789abcdef0123456789abcdef01234567";
+
+    /// <summary>A runtime at release 1.2.4 whose own role root holds a deployment from a git source at a ref.</summary>
+    private static void RoleRootAt(TempPaths dir, string reference, bool overridden = false, string source = SkillsSource.DefaultSource, string version = "1.2.4", string? commit = Commit)
+    {
+        Running(dir, skills: new SkillsInfo(dir.Paths.RoleSkillsDirectory, 1048576, [Taught("researcher")]), version: version);
+        Deploy(dir.Paths.RoleSkillsDirectory, source, reference, overridden, commit);
     }
 
     /// <summary>The human shape says the same thing, and prints the repairs under their own heading.</summary>
@@ -590,6 +907,24 @@ public class StatusCommandTests
         Assert.Contains("PowerShell on Windows", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// And the skills checks' comparison, in the verb's own help: what each compares with, which deployments pass, and
+    /// that the harness repair is the person's to run.
+    /// </summary>
+    [Fact]
+    public async Task Help_publishes_how_the_skills_checks_compare()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["status", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), Ct);
+
+        var text = string.Join(' ', output.ToString().Split((char[])[' ', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
+        Assert.Contains("On a release, the role skills check compares the ref their record names with the runtime's own", text, StringComparison.Ordinal);
+        Assert.Contains("a deployment made with --ref passes", text, StringComparison.Ordinal);
+        Assert.Contains("compares the harness the same way with this build's own ref", text, StringComparison.Ordinal);
+    }
+
     private static DeployedRoleSkill Taught(string role) => new(role, 4096, null);
 
     internal static StatusReport Read(StringWriter output) =>
@@ -597,17 +932,19 @@ public class StatusCommandTests
 
     /// <summary>A descriptor on disk and a runtime behind it answering the three operations status asks.</summary>
     /// <summary>A descriptor and a runtime behind it. <paramref name="roles"/> null makes role.list fail.</summary>
-    internal static void Running(TempPaths dir, IReadOnlyList<string>? roles = null, SkillsInfo? skills = null, bool rosterFails = false, NotificationsInfo? notifications = null, DateTimeOffset? startedAt = null)
+    /// <remarks><paramref name="version"/> is the version the runtime says it is, a development one unless a fact names another.</remarks>
+    internal static void Running(TempPaths dir, IReadOnlyList<string>? roles = null, SkillsInfo? skills = null, bool rosterFails = false, NotificationsInfo? notifications = null, DateTimeOffset? startedAt = null, string version = "0.1.0-dev")
     {
         dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_01J"));
         Answers[dir.Paths.Root] = (
             rosterFails ? null : roles ?? ["researcher"],
             skills ?? new SkillsInfo("/data/skills/roles", 1048576, [Taught("researcher")]),
             notifications,
-            startedAt ?? DateTimeOffset.UnixEpoch);
+            startedAt ?? DateTimeOffset.UnixEpoch,
+            version);
     }
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (IReadOnlyList<string>? Roles, SkillsInfo Skills, NotificationsInfo? Notifications, DateTimeOffset StartedAt)> Answers = [];
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (IReadOnlyList<string>? Roles, SkillsInfo Skills, NotificationsInfo? Notifications, DateTimeOffset StartedAt, string Version)> Answers = [];
 
     /// <summary>
     /// The machine these run against: this test's own data directory, a runtime that exists only in a handler,
@@ -626,7 +963,8 @@ public class StatusCommandTests
         IHarnessLocator? harnesses = null,
         bool onPath = true,
         IInstallationRemover? machine = null,
-        string? installPath = null) =>
+        string? installPath = null,
+        string? build = null) =>
         new(
             output,
             new StringWriter(),
@@ -638,7 +976,8 @@ public class StatusCommandTests
             Harnesses: harnesses ?? HarnessLocators.At(Path.Combine(dir.Paths.Root, "no-harness-here")),
             Programs: programs ?? new FakeProgramRunner(_ => new ProgramResult(-1, string.Empty, "not found", false)),
             SearchPath: onPath ? Installed(dir) : Path.Combine(dir.Paths.Root, "nowhere"),
-            Removes: machine);
+            Removes: machine,
+            BuildVersion: build);
 
     /// <summary>A directory on this test's PATH with a file in it that a bare `jason` would resolve to.</summary>
     private static string Installed(TempPaths dir)
@@ -658,7 +997,7 @@ public class StatusCommandTests
         var route = request.RequestUri!.AbsolutePath;
         if (route.EndsWith(Operations.SystemInfo, StringComparison.Ordinal))
         {
-            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills) with { Notifications = answers.Notifications, StartedAt = answers.StartedAt }, JasonJson.Options));
+            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills) with { RuntimeVersion = answers.Version, Notifications = answers.Notifications, StartedAt = answers.StartedAt }, JasonJson.Options));
         }
 
         if (route.EndsWith(Operations.RoleList, StringComparison.Ordinal))

@@ -163,17 +163,16 @@ Jason's skills are what teach an agent the job — one directory per launched ro
 every launch, and two packs for your own agent: one for operating the installation, one for the SDR
 profession. **A runtime with no role skills launches every role untaught**, so the first half is not optional.
 
-Look first. Nothing is written, and the one target root is printed — the runtime's own, inside its data
+Look first. Nothing is deployed, and the one target root is printed — the runtime's own, inside its data
 directory:
 
 ```sh
 jason skills install --roles-only --dry-run
 ```
 
-On a first install there is nothing to look at yet, and the dry run says so and exits 1: it fetches nothing, and
-the skills are not on this machine until the line below has fetched them once. That line fetches them into the
-data directory, prints its one root before it writes a skill there, and writes nowhere else. From then on,
-`--dry-run` previews.
+On a first install the dry run fetches the skills first, with `git`, into Jason's staging directory inside the
+data directory, so that there is something to show; it deploys nothing. The line below deploys them: it prints
+its one root before it writes a skill there, and writes nowhere else.
 
 Then do it:
 
@@ -211,9 +210,20 @@ Later, to move an existing deployment to a newer set:
 jason skills update
 ```
 
-It updates only where a deployment was made, and each root from the source and ref its own record names: an
+It updates only where a deployment was made, and each root from the source its own record names: an
 installation taught with `--roles-only` stays that way, and a harness installed from one source is not updated
-from another.
+from another. A deployment made at the tag of the build that installed it moves to the tag this build carries. One
+made with `--ref` stays at its ref, a directory is read where it stands, and a development build keeps the ref the
+record names, because the tag its own version names is not published yet.
+
+After `jason update apply`, run `jason status`: role skills a default install took at another release's tag fail
+`role_skills`, and the repair it prints moves them to the runtime's own tag. That repair is
+`jason skills install --roles-only`, with the `--source` they came from when it was not this repository. A
+deployment made with `--ref` stays where it is and passes, in the runtime's own root and in an agent's, and so does
+one an older Jason's `jason skills update` touched, which recorded it as though it had been made with `--ref`. The
+check's fact names both tags and the line that moves it: `jason skills install --roles-only` for the role skills,
+and `jason skills install --pack <pack>` for a pack in an agent's root, each with the `--source` it came from when
+that was not this repository. The line for `jason-runtime-skills` moves its role half as well.
 
 [`skills/README.md`](../skills/README.md) is the contract both verbs keep, including the record each root
 carries — which is what §7 removes by.

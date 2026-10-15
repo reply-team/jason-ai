@@ -224,8 +224,147 @@ public class SkillsUpdateTests
             deployment => Assert.Equal(source, deployment.Source));
     }
 
+    /// <summary>
+    /// An update of a deployment that named no ref records that it named none.
+    /// </summary>
+    /// <remarks>
+    /// The update hands the record's ref back to staging, and staging decided "overridden" from whether a ref had been
+    /// handed in at all. So the first update wrote every record it touched as overridden, and from then on a
+    /// deployment made at this build's own pin could not be told from one made with <c>--ref</c>.
+    /// </remarks>
+    [Fact]
+    public async Task An_update_of_a_deployment_that_named_no_ref_records_that_it_named_none()
+    {
+        using var dir = new TempPaths();
+        var origin = await TaggedSource.CreateAsync(dir, Ct, "v1.2.3", "v1.2.4");
+        var install = await AtBuildAsync(dir, "1.2.3", ["skills", "install", "--source", origin, "--root", Harness(dir)]);
+        Assert.True(install.Exit == ExitCodes.Success, install.Error);
+        Assert.All(Deployments(dir), deployment => Assert.False(deployment.RefOverridden));
+
+        var update = await AtBuildAsync(dir, "1.2.3", ["skills", "update", "--root", Harness(dir)]);
+
+        Assert.True(update.Exit == ExitCodes.Success, update.Error);
+        Assert.All(Deployments(dir), deployment =>
+        {
+            Assert.Equal("v1.2.3", deployment.Ref);
+            Assert.False(deployment.RefOverridden, $"The update recorded {deployment.Pack} as made with --ref, and nobody typed one.");
+        });
+    }
+
+    /// <summary>
+    /// A deployment made at the pin of the build that installed it follows the build that runs now. An installation
+    /// upgraded since then otherwise kept teaching from the release before, and the one verb meant to move it said it
+    /// was current.
+    /// </summary>
+    [Fact]
+    public async Task An_update_of_a_default_ref_deployment_moves_to_the_ref_this_build_carries()
+    {
+        using var dir = new TempPaths();
+        var origin = await TaggedSource.CreateAsync(dir, Ct, "v1.2.3", "v1.2.4");
+        Assert.Equal(ExitCodes.Success, (await AtBuildAsync(dir, "1.2.3", ["skills", "install", "--source", origin, "--root", Harness(dir)])).Exit);
+
+        var update = await AtBuildAsync(dir, "1.2.4", ["skills", "update", "--root", Harness(dir)]);
+
+        Assert.True(update.Exit == ExitCodes.Success, update.Error);
+        Assert.Contains("at v1.2.4, the ref this build carries; its record named v1.2.3.", update.Output, StringComparison.Ordinal);
+        Assert.Contains(TaggedSource.Body("v1.2.4"), await File.ReadAllTextAsync(Path.Combine(dir.Paths.RoleSkillsDirectory, "researcher", "SKILL.md"), Ct), StringComparison.Ordinal);
+        Assert.Contains(TaggedSource.Body("v1.2.4"), await File.ReadAllTextAsync(Path.Combine(Harness(dir), "operating", "SKILL.md"), Ct), StringComparison.Ordinal);
+        Assert.All(Deployments(dir), deployment =>
+        {
+            Assert.Equal("v1.2.4", deployment.Ref);
+            Assert.False(deployment.RefOverridden);
+        });
+    }
+
+    /// <summary>A ref chosen over this build's own stays chosen: an update is the same deployment repeated.</summary>
+    [Fact]
+    public async Task An_update_of_an_overridden_deployment_stays_at_its_ref()
+    {
+        using var dir = new TempPaths();
+        var origin = await TaggedSource.CreateAsync(dir, Ct, "v1.2.3", "v1.2.4");
+        Assert.Equal(ExitCodes.Success, (await AtBuildAsync(dir, "1.2.4", ["skills", "install", "--source", origin, "--ref", "v1.2.3", "--root", Harness(dir)])).Exit);
+
+        var update = await AtBuildAsync(dir, "1.2.4", ["skills", "update", "--root", Harness(dir)]);
+
+        Assert.True(update.Exit == ExitCodes.Success, update.Error);
+        Assert.Contains("at v1.2.3, the ref its record says was chosen over this build's own.", update.Output, StringComparison.Ordinal);
+        Assert.Contains(TaggedSource.Body("v1.2.3"), await File.ReadAllTextAsync(Path.Combine(dir.Paths.RoleSkillsDirectory, "researcher", "SKILL.md"), Ct), StringComparison.Ordinal);
+        Assert.All(Deployments(dir), deployment =>
+        {
+            Assert.Equal("v1.2.3", deployment.Ref);
+            Assert.True(deployment.RefOverridden);
+        });
+    }
+
+    /// <summary>
+    /// A development build keeps the record's ref, and says why: the ref it carries names the release it is on its way
+    /// to, which is not published yet, so moving to it would be a fetch that fails.
+    /// </summary>
+    [Fact]
+    public async Task An_update_on_a_development_build_keeps_the_record_s_ref_and_says_why()
+    {
+        using var dir = new TempPaths();
+        var origin = await TaggedSource.CreateAsync(dir, Ct, "v1.2.3", "v1.2.4");
+        Assert.Equal(ExitCodes.Success, (await AtBuildAsync(dir, "1.2.3", ["skills", "install", "--source", origin, "--root", Harness(dir)])).Exit);
+
+        var update = await AtBuildAsync(dir, "1.2.4-dev", ["skills", "update", "--root", Harness(dir)]);
+
+        Assert.True(update.Exit == ExitCodes.Success, update.Error);
+        Assert.Contains("at v1.2.3, as its record names it: this build, 1.2.4-dev, is not a release, so the ref it carries is not published yet.", update.Output, StringComparison.Ordinal);
+        Assert.Contains(TaggedSource.Body("v1.2.3"), await File.ReadAllTextAsync(Path.Combine(dir.Paths.RoleSkillsDirectory, "researcher", "SKILL.md"), Ct), StringComparison.Ordinal);
+        Assert.All(Deployments(dir), deployment =>
+        {
+            Assert.Equal("v1.2.3", deployment.Ref);
+            Assert.False(deployment.RefOverridden);
+        });
+    }
+
+    /// <summary>A directory has no ref to move to: it is read where it stands, on any build, and the line says so.</summary>
+    [Fact]
+    public async Task An_update_of_a_directory_source_reads_it_where_it_stands()
+    {
+        using var dir = new TempPaths();
+        var source = Source(dir);
+        Assert.Equal(ExitCodes.Success, (await AtBuildAsync(dir, "1.2.3", ["skills", "install", "--source", source, "--root", Harness(dir)])).Exit);
+        Change(source, "roles/researcher", "the directory, moved on");
+
+        var update = await AtBuildAsync(dir, "1.2.4", ["skills", "update", "--root", Harness(dir)]);
+
+        Assert.True(update.Exit == ExitCodes.Success, update.Error);
+        Assert.Contains($"from {source}, a directory, which is read where it stands rather than at a ref.", update.Output, StringComparison.Ordinal);
+        Assert.Contains("the directory, moved on", await File.ReadAllTextAsync(Path.Combine(dir.Paths.RoleSkillsDirectory, "researcher", "SKILL.md"), Ct), StringComparison.Ordinal);
+        Assert.All(Deployments(dir), deployment => Assert.False(deployment.RefOverridden));
+    }
+
+    /// <summary>Every deployment the harness root and the role root record.</summary>
+    private static IEnumerable<Jason.Contracts.Skills.SkillsDeployment> Deployments(TempPaths dir) =>
+        [.. Jason.Contracts.Skills.SkillsRecord.Read(Harness(dir))!.Packs, .. Jason.Contracts.Skills.SkillsRecord.Read(dir.Paths.RoleSkillsDirectory)!.Packs];
+
     private static string Harness(TempPaths dir) =>
         Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
+
+    /// <summary>
+    /// The verb, as a build of this version runs it, against a git source: with a runner that really runs git, which
+    /// only ever reaches a <c>file://</c> repository this test made.
+    /// </summary>
+    private static async Task<(int Exit, string Output, string Error)> AtBuildAsync(TempPaths dir, string build, string[] arguments)
+    {
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var exit = await CliApp.RunAsync(
+            arguments,
+            new CliEnvironment(
+                output,
+                error,
+                dir.Paths,
+                Processes: new FakeProcessControl(),
+                Autostart: new RecordingRegistrar(),
+                Programs: Jason.Cli.Process.ProgramRunners.ForThisMachine(),
+                BuildVersion: build),
+            Ct);
+
+        return (exit, output.ToString(), error.ToString());
+    }
 
     private static async Task<(int Exit, string Output, string Error)> RunAsync(TempPaths dir, string[] arguments)
     {

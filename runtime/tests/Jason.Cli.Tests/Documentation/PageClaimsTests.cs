@@ -83,23 +83,46 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// A dry run fetches nothing, so on a first install it has nothing to preview: it says the skills are not on this
-    /// machine yet and exits 1. §4 says so, and that the install line is then what fetches them — into the data
-    /// directory, printing its root before it writes a skill — after which the dry run previews.
+    /// A first dry run fetches the skills into Jason's staging directory, so it has something to show, and deploys
+    /// nothing. §4 says so — that it fetches, which is a write into the data directory — and that the install line is
+    /// what deploys them, printing its one root first.
     /// </summary>
+    /// <remarks>
+    /// It said the dry run fetched nothing and exited 1 on a first install, which was true while the dry run refused;
+    /// the sentence is kept from coming back.
+    /// </remarks>
     [Fact]
-    public void The_install_page_says_a_first_dry_run_has_nothing_to_preview()
+    public void The_install_page_says_a_first_dry_run_fetches_into_staging_and_deploys_nothing()
     {
         var teach = Flat(Section(Page("docs", "INSTALL.md"), "## 4. "));
 
         Assert.Contains(
-            "On a first install there is nothing to look at yet, and the dry run says so and exits 1: it fetches nothing, and the skills are not on this machine until the line below has fetched them once.",
+            "On a first install the dry run fetches the skills first, with `git`, into Jason's staging directory inside the data directory, so that there is something to show; it deploys nothing.",
             teach,
             StringComparison.Ordinal);
         Assert.Contains(
-            "That line fetches them into the data directory, prints its one root before it writes a skill there, and writes nowhere else. From then on, `--dry-run` previews.",
+            "The line below deploys them: it prints its one root before it writes a skill there, and writes nowhere else.",
             teach,
             StringComparison.Ordinal);
+        Assert.DoesNotContain("the dry run says so and exits 1", teach, StringComparison.Ordinal);
+        Assert.DoesNotContain("Nothing is written, and the one target root is printed", teach, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// §4 says what moves a deployment its record pins, in both roots — the role skills' line and an agent's pack's,
+    /// each with the source it came from — which are the lines the two checks print. And it says another tag rather
+    /// than an older one, because the check compares by equality: a record newer than the runtime fails as well.
+    /// </summary>
+    [Fact]
+    public void The_install_page_names_the_line_that_moves_a_pinned_deployment_in_either_root()
+    {
+        var teach = Flat(Section(Page("docs", "INSTALL.md"), "## 4. "));
+
+        Assert.Contains(
+            "`jason skills install --roles-only` for the role skills, and `jason skills install --pack <pack>` for a pack in an agent's root, each with the `--source` it came from when that was not this repository.",
+            teach,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("at the older release's tag", teach, StringComparison.Ordinal);
     }
 
     /// <summary>

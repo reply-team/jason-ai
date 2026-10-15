@@ -111,6 +111,48 @@ public partial class StatusDisciplineTests
     }
 
     /// <summary>
+    /// And the one repair composed from a record — the role repair that keeps the source a deployment came from — is a
+    /// command this program understands too, typed as a check prints it.
+    /// </summary>
+    /// <remarks>
+    /// The guard above reads constants, and this one is a constant with <c>--source</c> and a record's source after it,
+    /// so it is typed from a run that prints it: a runtime at a release, and a role root deployed from a
+    /// <c>file://</c> repository at an older tag.
+    /// </remarks>
+    [Fact]
+    public async Task The_repair_that_keeps_a_deployment_s_source_is_a_command_this_program_understands()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        var source = new Uri(Path.Combine(dir.Paths.Root, "origin")).AbsoluteUri;
+        StatusCommandTests.Running(dir, skills: new Jason.Contracts.Api.SkillsInfo(dir.Paths.RoleSkillsDirectory, 1048576, [new Jason.Contracts.Api.DeployedRoleSkill("researcher", 4096, null)]), version: "1.2.4");
+        var skill = Path.Combine(dir.Paths.RoleSkillsDirectory, "researcher", "SKILL.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(skill)!);
+        File.WriteAllText(skill, "---\nname: researcher\n---\n");
+        Jason.Contracts.Skills.SkillsRecord.Write(dir.Paths.RoleSkillsDirectory, new Jason.Contracts.Skills.SkillsRecord(
+            Jason.Contracts.Skills.SkillsRecord.CurrentVersion,
+            [new Jason.Contracts.Skills.SkillsDeployment("jason-runtime-skills", source, "v1.2.3", false, "0123456789abcdef0123456789abcdef01234567", DateTimeOffset.UnixEpoch,
+                [new Jason.Contracts.Skills.DeployedFile("researcher/SKILL.md", Jason.Contracts.Skills.SkillsRecord.Digest(skill))])]));
+
+        await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output, build: "1.2.4"), Ct);
+
+        var repair = Assert.Single(StatusCommandTests.Read(output).Checks, check => check.Name == "role_skills").Fix;
+        Assert.NotNull(repair);
+        Assert.StartsWith("jason skills install --roles-only --source ", repair, StringComparison.Ordinal);
+
+        using var typing = new TempPaths();
+        var error = new StringWriter();
+        var exit = await CliApp.RunAsync(
+            [.. repair.Split(' ', StringSplitOptions.RemoveEmptyEntries).Skip(1)],
+            new CliEnvironment(new StringWriter(), error, typing.Paths, Autostart: new RecordingRegistrar()),
+            Ct);
+
+        Assert.True(
+            exit != ExitCodes.Usage,
+            $"A check prints '{repair}' as the way to repair it, and this program does not understand it:{Environment.NewLine}{error}");
+    }
+
+    /// <summary>
     /// And the repair that is not a <c>jason</c> command is a line this machine's own shell can run.
     /// </summary>
     /// <remarks>
@@ -238,9 +280,14 @@ public partial class StatusDisciplineTests
                 read++;
 
                 // One member of the class, and nothing after it: `Repair.Install + " --force"` began with
-                // "Repair." too, and is a repair spelled here rather than there.
+                // "Repair." too, and is a repair spelled here rather than there. One member is handed something
+                // other than the environment, and only it, and only a record's source: the role repair that keeps
+                // the source a deployment came from. Its prefix is a constant the guard above types, and the fact
+                // below types what it composes.
                 Assert.True(
-                    fix is "null" || System.Text.RegularExpressions.Regex.IsMatch(fix, @"^Repair\.[A-Za-z]+(\(env\))?$"),
+                    fix is "null"
+                    || System.Text.RegularExpressions.Regex.IsMatch(fix, @"^Repair\.[A-Za-z]+(\(env\))?$")
+                    || System.Text.RegularExpressions.Regex.IsMatch(fix, @"^Repair\.InstallRolesFrom\([A-Za-z]+\.Source\)$"),
                     $"{name}:{line} gives a check the repair `{fix}`. Every repair is composed in the Repair "
                     + "class, because that class is what the guards above read; a repair spelled anywhere "
                     + "else is one nothing types and nothing checks.");

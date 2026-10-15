@@ -91,6 +91,44 @@ internal static class StatusChecks
         public const string Reinstall = InstallRoles;
 
         /// <summary>
+        /// <see cref="InstallRoles"/>, from the source a deployment came from wherever that is not this build's
+        /// default: the repair for role skills at neither the runtime's tag nor the one this build installs.
+        /// </summary>
+        /// <remarks>
+        /// Bare, it would move a deployment taught from a mirror, or from a repository on this machine, to the default
+        /// repository — or fail there, where the tag it asks for may not exist yet — and its record would then say it
+        /// had always come from there. The record names its source, and that is the one value a repair here is
+        /// composed from: a guard reads this as the one member handed anything but the environment, and types what it
+        /// composes.
+        /// </remarks>
+        public static string InstallRolesFrom(string source) =>
+            string.Equals(source, SkillsSource.DefaultSource, StringComparison.Ordinal) ? InstallRoles : $"{InstallRoles} --source {source}";
+
+        /// <summary>
+        /// Every deployment Jason made, carried to the ref this build carries: the repair for an agent's packs not at
+        /// this build's tag.
+        /// </summary>
+        /// <remarks>
+        /// Printed for the person and never run by an agent. The check is optional, and the roots it rewrites are the
+        /// agent's own configuration, which is the person's to allow.
+        /// </remarks>
+        public const string UpdateSkills = "jason skills update";
+
+        /// <summary>
+        /// <see cref="Install"/> for one pack, from the source a deployment came from wherever that is not this build's
+        /// default: the line that moves a harness deployment its record pins to this build's tag.
+        /// </summary>
+        /// <remarks>
+        /// Printed in a fact, not as a repair, because the check passes: the record pins its ref, made with --ref or
+        /// marked so by an earlier <c>skills update</c>, and <see cref="UpdateSkills"/> keeps a pinned ref. An install
+        /// that names no ref writes the pack again at this build's tag, and its record no longer pins it. Its reach is
+        /// the pack's: for the runtime pack that includes the role half in the runtime's own root, which no flag
+        /// separates.
+        /// </remarks>
+        public static string InstallPackFrom(string pack, string source) =>
+            string.Equals(source, SkillsSource.DefaultSource, StringComparison.Ordinal) ? $"{Install} --pack {pack}" : $"{Install} --pack {pack} --source {source}";
+
+        /// <summary>
         /// The repair that is not a <c>jason</c> command: the line putting this executable's directory on
         /// this account's PATH, spelled as this product's own installer spells it.
         /// </summary>
@@ -155,7 +193,7 @@ internal static class StatusChecks
             checks.Add(Runtime(descriptor, info));
             checks.Add(Migrations(info));
             checks.Add(Plugins(info));
-            checks.Add(await RoleSkillsAsync(client, info, cancellationToken).ConfigureAwait(false));
+            checks.Add(await RoleSkillsAsync(env, client, info, cancellationToken).ConfigureAwait(false));
             checks.Add(Path(env));
 
             checks.Add(ProviderPlugin(info));
@@ -231,7 +269,7 @@ internal static class StatusChecks
     /// whatever else is true — and the check is not only presence: a deployment the launcher would refuse is
     /// worse than none, because it refuses every launch of that role rather than running it untaught.
     /// </summary>
-    private static async Task<StatusCheck> RoleSkillsAsync(RuntimeClient? client, SystemInfoResponse? info, CancellationToken cancellationToken)
+    private static async Task<StatusCheck> RoleSkillsAsync(CliEnvironment env, RuntimeClient? client, SystemInfoResponse? info, CancellationToken cancellationToken)
     {
         if (info?.Skills is not { } skills)
         {
@@ -293,13 +331,87 @@ internal static class StatusChecks
         var note = stranger.Count == 0
             ? string.Empty
             : $" {string.Join(", ", stranger.Select(name => $"'{name}'"))} is deployed and is not a role this runtime seeds, so nothing reads it.";
+        var taught = string.Create(CultureInfo.InvariantCulture, $"{deployed.Count} roles taught, all within the {skills.MaxSkillBytes}-byte cap.{note}");
+
+        // Present and launchable is not current. After `jason update apply` the roles went on being taught from the
+        // tag the build before installed, and this said ok, naming that tag as though it were the runtime's own.
+        // Three cases, decided by equality and never by a version order. At the runtime's own tag: ok. At the tag
+        // this build installed, under a runtime not yet restarted into this build: ok, and said, because that restart
+        // is demanded where it belongs and one cause is not made two failures. At any other tag, older or newer --
+        // a rollback leaves a record newer than both: failed, with the line that writes this build's tag, so the
+        // next status lands in one of the first two. A record that pins its ref, made with --ref or marked so by an
+        // earlier `skills update`, passes with that line.
+        var version = SkillsSource.BuildVersion(env);
+        if (Away(skills.RoleSkillsDirectory, info.RuntimeVersion, version) is (var deployment, var runtime, var build))
+        {
+            if (deployment.RefOverridden)
+            {
+                return new StatusCheck("role_skills", true, CheckState.Ok, $"{taught} Role skills are from {deployment.Ref}; this runtime is {runtime}. `{Repair.InstallRolesFrom(deployment.Source)}` moves it to {build}.", null);
+            }
+
+            if (string.Equals(deployment.Ref, build, StringComparison.Ordinal))
+            {
+                return new StatusCheck("role_skills", true, CheckState.Ok, $"{taught} Role skills are at {build}, the build installed; this runtime is {runtime} and catches up when it is restarted into the new build.", null);
+            }
+
+            return new StatusCheck("role_skills", true, CheckState.Failed, $"Role skills are from {deployment.Ref}; this runtime is {runtime}.", Repair.InstallRolesFrom(deployment.Source));
+        }
 
         return new StatusCheck(
             "role_skills",
             true,
             CheckState.Ok,
-            string.Create(CultureInfo.InvariantCulture, $"{deployed.Count} roles taught, all within the {skills.MaxSkillBytes}-byte cap.{note}{Deployment(skills.RoleSkillsDirectory)}"),
+            taught + Deployment(skills.RoleSkillsDirectory),
             null);
+    }
+
+    /// <summary>
+    /// The deployment in the role root that is not at the tag the runtime's own release carries, with that tag and the
+    /// tag this build installs; null where there is nothing to compare.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two consumers, two versions. The role root is the runtime's: the runtime reports it and the roles it launches
+    /// read it, so it is held to the runtime's tag rather than this CLI's, and until the runtime is restarted into a
+    /// new build the old one is still the one teaching. The tag this build installs is carried beside it, because it
+    /// is what the repair writes, and a deployment already there waits only for that restart.
+    /// </para>
+    /// <para>
+    /// Compared only where both sides have a tag. A runtime that is not a release carries the pin of a release not
+    /// published yet, which every development runtime would fail against; and so does a build that is not a release,
+    /// whose repair would write that pin and so never clear. A development build compares nothing here, as it moves
+    /// nothing in <c>skills update</c> and compares nothing in the harness check. A directory read where it stood has
+    /// no ref at all, and its record says so by naming no commit. A record that cannot be read compares nothing either;
+    /// <see cref="Deployment"/> reports it. Where packs differ, the one to repair is named first, then one its record
+    /// pins, then one at this build's tag.
+    /// </para>
+    /// </remarks>
+    private static (SkillsDeployment Deployment, string Runtime, string Build)? Away(string roleSkillsRoot, string runtimeVersion, string buildVersion)
+    {
+        if (!SkillsSource.IsRelease(runtimeVersion) || !SkillsSource.IsRelease(buildVersion))
+        {
+            return null;
+        }
+
+        SkillsRecord? record;
+        try
+        {
+            record = SkillsRecord.Read(roleSkillsRoot);
+        }
+        catch (SkillsRecordUnreadable)
+        {
+            return null;
+        }
+
+        var runtime = SkillsSource.DefaultRef(runtimeVersion);
+        var build = SkillsSource.DefaultRef(buildVersion);
+        var away = (record?.Packs ?? [])
+            .Where(pack => pack.Commit is not null && !string.Equals(pack.Ref, runtime, StringComparison.Ordinal))
+            .ToList();
+        var named = away.Find(pack => !pack.RefOverridden && !string.Equals(pack.Ref, build, StringComparison.Ordinal))
+            ?? away.Find(pack => pack.RefOverridden)
+            ?? away.FirstOrDefault();
+        return named is null ? null : (named, runtime, build);
     }
 
     /// <summary>
@@ -557,7 +669,19 @@ internal static class StatusChecks
             return new StatusCheck("harness_skills", false, CheckState.Absent, "No agent harness was found on this machine.", null);
         }
 
+        // Two consumers, two versions. The role root is the runtime's: the runtime reports it and the roles it
+        // launches read it, so `role_skills` holds it to the runtime's tag. These roots are read by the person's own
+        // agent, which drives this CLI and works with no runtime at all, so they are held to this build's tag -- and
+        // their repair, `jason skills update`, moves a deployment to exactly that tag, so it converges by
+        // construction. A pack its record pins, made with --ref or marked so by an earlier `skills update`, passes
+        // with the line that moves it, since an update keeps a pinned ref. A build that is not a release, and a
+        // directory, whose record names no commit, compare nothing.
+        var build = SkillsSource.BuildVersion(env);
+        var own = SkillsSource.IsRelease(build) ? SkillsSource.DefaultRef(build) : null;
+
         var deployed = new List<string>();
+        var behind = new List<string>();
+        var pinned = new List<string>();
         foreach (var root in roots.Select(root => root.Directory).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             try
@@ -566,6 +690,15 @@ internal static class StatusChecks
                 if (record is not null)
                 {
                     deployed.AddRange(record.Packs.Select(pack => $"{pack.Pack} at {pack.Ref} in {root}"));
+                    var away = record.Packs
+                        .Where(pack => own is not null && pack.Commit is not null && !string.Equals(pack.Ref, own, StringComparison.Ordinal))
+                        .ToList();
+                    behind.AddRange(away
+                        .Where(pack => !pack.RefOverridden)
+                        .Select(pack => $"{pack.Pack} in {root} is from {pack.Ref}; this build is {own}."));
+                    pinned.AddRange(away
+                        .Where(pack => pack.RefOverridden)
+                        .Select(pack => $"{pack.Pack} in {root} is from {pack.Ref}; this build is {own}. `{Repair.InstallPackFrom(pack.Pack, pack.Source)}` moves it to {own}."));
                 }
             }
             catch (SkillsRecordUnreadable unreadable)
@@ -575,9 +708,14 @@ internal static class StatusChecks
             }
         }
 
-        return deployed.Count == 0
-            ? new StatusCheck("harness_skills", false, CheckState.Absent, $"Nothing is deployed into {string.Join(", ", roots.Select(root => root.Directory))}.", Repair.Install)
-            : new StatusCheck("harness_skills", false, CheckState.Ok, string.Join("; ", deployed) + ".", null);
+        if (deployed.Count == 0)
+        {
+            return new StatusCheck("harness_skills", false, CheckState.Absent, $"Nothing is deployed into {string.Join(", ", roots.Select(root => root.Directory))}.", Repair.Install);
+        }
+
+        return behind.Count > 0
+            ? new StatusCheck("harness_skills", false, CheckState.Failed, string.Join(" ", behind.Concat(pinned)), Repair.UpdateSkills)
+            : new StatusCheck("harness_skills", false, CheckState.Ok, string.Join("; ", deployed) + "." + string.Concat(pinned.Select(note => " " + note)), null);
     }
 
     private static StatusCheck Autostart(CliEnvironment env)

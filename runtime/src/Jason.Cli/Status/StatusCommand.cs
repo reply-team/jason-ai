@@ -51,6 +51,14 @@ public static class StatusCommand
         line for this machine's own shell — PowerShell on Windows, sh elsewhere — the same line the installer
         writes, which changes nothing when typed twice.
 
+        On a release, the role skills check compares the ref their record names with the runtime's own: skills
+        a default install took at another tag fail it, and its repair keeps the source they came from; skills
+        at the tag this build installed pass while the runtime waits to be restarted into it; and a deployment
+        made with --ref passes, and the check says how to move it. harness_skills compares the harness the same
+        way with this build's own ref, and its repair, 'jason skills update', is yours to run; a pack its record
+        pins passes there too, with the line that moves it. A development version, and a directory read where
+        it stands, compare nothing.
+
         The provider CLI is only checked when you name it: --provider-cli <program> runs '<program> --version'
         with a ten-second bound and reports whether it answered. Which provider you use is yours, so this build
         knows no vendor's command by heart.

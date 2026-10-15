@@ -58,7 +58,13 @@ namespace Jason.Cli;
 /// variable acts on nothing, but a test that read the real environment would describe whatever the person running the
 /// suite happens to have set, so it hands in variables of its own.
 /// </param>
-public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null)
+/// <param name="BuildVersion">
+/// The version this build goes by, which decides the ref its skills are pinned to. Null is this build's own stamp, the
+/// answer everywhere but a test, and <see cref="Default"/> never names one: a release compares its skills with itself.
+/// A test names one because the suite runs at whatever stamp CI gave it, a development one or a release, and a fact
+/// about what a release does with an older deployment has to hold at both.
+/// </param>
+public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null)
 {
     public static CliEnvironment Default() =>
         new(

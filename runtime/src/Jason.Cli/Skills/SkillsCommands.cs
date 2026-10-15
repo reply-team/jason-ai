@@ -20,6 +20,14 @@ namespace Jason.Cli.Skills;
 /// </remarks>
 public static class SkillsCommands
 {
+    /// <summary>
+    /// What <c>--dry-run</c> does, on both verbs: it deploys nothing, and it says that a source not here yet is
+    /// fetched into staging first — which is a write into Jason's own data directory, and the reason a first look
+    /// has anything to show.
+    /// </summary>
+    private const string DryRunHelp =
+        "Print exactly what would be written where, and deploy nothing. A source not on this machine yet is fetched into Jason's staging directory first, so there is something to show.";
+
     public static Command Build(CliEnvironment env)
     {
         ArgumentNullException.ThrowIfNull(env);
@@ -41,12 +49,12 @@ public static class SkillsCommands
     /// </remarks>
     private static Command Update(CliEnvironment env)
     {
-        var update = new Command("update", "Re-run the deployment against the source and ref its record names.");
+        var update = new Command("update", "Re-run the deployment against the source its record names, at the ref this build carries unless the record chose another.");
 
         var root = new Option<string?>("--root") { Description = "Update this directory as a harness root, instead of detection." };
         var host = new Option<string?>("--host") { Description = "Update only this detected harness." };
         var pack = new Option<string?>("--pack") { Description = "Update only this pack." };
-        var dryRun = new Option<bool>("--dry-run") { Description = "Print exactly what would be written where, and change nothing. A source not already on this machine is refused rather than fetched." };
+        var dryRun = new Option<bool>("--dry-run") { Description = DryRunHelp };
         var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept." };
 
         foreach (var option in new Option[] { root, host, pack, dryRun, force })
@@ -85,7 +93,7 @@ public static class SkillsCommands
         // the harness was "updated" from the second and its record rewritten to say it had always come from
         // there. And a root is carried only where its record says a deployment was made there, so an
         // installation taught with --roles-only is never written into an agent's configuration by an update.
-        var groups = new SortedDictionary<(string Source, string Ref, string Pack), List<string>>();
+        var groups = new SortedDictionary<(string Source, string Ref, bool Overridden, string Pack), List<string>>();
         foreach (var root in roots)
         {
             SkillsRecord? record;
@@ -107,7 +115,7 @@ public static class SkillsCommands
                 }
 
                 var own = pack.MaxBy(deployment => deployment.InstalledAt)!;
-                var key = (own.Source, own.Ref, own.Pack);
+                var key = (own.Source, own.Ref, own.RefOverridden, own.Pack);
                 if (!groups.TryGetValue(key, out var members))
                 {
                     groups[key] = members = [];
@@ -124,17 +132,17 @@ public static class SkillsCommands
         }
 
         var exit = ExitCodes.Success;
-        foreach (var ((source, reference, pack), members) in groups)
+        foreach (var ((source, reference, overridden, pack), members) in groups)
         {
-            env.Out.WriteLine($"Updating {pack} in {string.Join(", ", members)} from {source} at {reference}, as its record names it.");
+            var (pin, why) = UpdatePin(env, source, reference, overridden);
+            env.Out.WriteLine($"Updating {pack} in {string.Join(", ", members)} from {source}{why}");
 
-            // The record's ref, always. Passing null where the record did not override re-derived this build's
-            // own pin, so on a runtime upgraded since the install the line above said "at v0.1.0, as the record
-            // names it" and the plan underneath it described v0.2.0. Every update test used a directory source,
-            // where the ref never reaches staging at all.
+            // The line and staging are handed the same ref, decided once, above. Passing null where the record did
+            // not override let staging re-derive this build's pin on its own, so on a runtime upgraded since the
+            // install the line said "at v0.1.0, as the record names it" and the plan underneath it described v0.2.0.
             var carried = await DeployAsync(
                     env,
-                    options with { Source = source, Ref = reference, Pack = pack },
+                    options with { Source = source, Ref = pin, RecordedOverride = overridden, Pack = pack },
                     [.. harnesses.Where(harness => members.Contains(harness.Directory, StringComparer.OrdinalIgnoreCase))],
                     cancellationToken,
                     members.Contains(roleRoot, StringComparer.OrdinalIgnoreCase))
@@ -146,6 +154,44 @@ public static class SkillsCommands
         return exit;
     }
 
+    /// <summary>
+    /// The ref an update stages for one recorded deployment, and the end of the line that says why.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The ref this build carries, for a git source whose record took the pin of the build that installed it. That
+    /// pin was the older build's, and keeping it is how an installation upgraded with <c>jason update apply</c> went
+    /// on teaching from the release before, while the one verb meant to move it reported it current.
+    /// </para>
+    /// <para>
+    /// The record's ref is kept in three cases only, and the line names the one that applies. A ref the record says
+    /// was chosen stays chosen: an update is the same deployment repeated, not a second decision about where things
+    /// come from. A directory is read where it stands and has no ref to move to. And a build that is not a release
+    /// carries the pin of a release that is not published yet, so moving to it would be a fetch that fails.
+    /// </para>
+    /// </remarks>
+    private static (string Ref, string Why) UpdatePin(CliEnvironment env, string source, string reference, bool overridden)
+    {
+        if (Directory.Exists(source))
+        {
+            return (reference, ", a directory, which is read where it stands rather than at a ref.");
+        }
+
+        if (overridden)
+        {
+            return (reference, $" at {reference}, the ref its record says was chosen over this build's own.");
+        }
+
+        var build = SkillsSource.BuildVersion(env);
+        if (!SkillsSource.IsRelease(build))
+        {
+            return (reference, $" at {reference}, as its record names it: this build, {build}, is not a release, so the ref it carries is not published yet.");
+        }
+
+        var own = SkillsSource.DefaultRef(build);
+        return (own, $" at {own}, the ref this build carries; its record named {reference}.");
+    }
+
     private static Command Install(CliEnvironment env)
     {
         var install = new Command("install", "Deploy the skill packs into this runtime and your agent harnesses.");
@@ -155,7 +201,7 @@ public static class SkillsCommands
         var root = new Option<string?>("--root") { Description = "Deploy into this directory as a harness root, instead of detection." };
         var host = new Option<string?>("--host") { Description = "Deploy only into this detected harness." };
         var pack = new Option<string?>("--pack") { Description = "Deploy only this pack." };
-        var dryRun = new Option<bool>("--dry-run") { Description = "Print exactly what would be written where, and change nothing. A source not already on this machine is refused rather than fetched." };
+        var dryRun = new Option<bool>("--dry-run") { Description = DryRunHelp };
         var force = new Option<bool>("--force") { Description = "Overwrite files you have edited. Without it they are reported and kept." };
         var rolesOnly = new Option<bool>("--roles-only") { Description = "Deploy only the role skills, into this runtime's own directory, and nothing into any agent harness. The role half is the one a runtime cannot work without; the harness half is yours to choose." };
 
@@ -188,7 +234,11 @@ public static class SkillsCommands
     /// pack, and <c>--root</c> moves only the harness half — so the way to deploy what a runtime needs, and
     /// nothing else, did not exist.
     /// </param>
-    private sealed record InstallOptions(string? Source, string? Ref, string? Root, string? Host, string? Pack, bool DryRun, bool Force, bool RolesOnly);
+    /// <param name="RecordedOverride">
+    /// What the record being updated says about its ref, carried to staging beside it. Null for an install, where
+    /// whether the ref was chosen is whether <c>--ref</c> was typed.
+    /// </param>
+    private sealed record InstallOptions(string? Source, string? Ref, string? Root, string? Host, string? Pack, bool DryRun, bool Force, bool RolesOnly, bool? RecordedOverride = null);
 
     private static async Task<int> RunAsync(CliEnvironment env, InstallOptions options, CancellationToken cancellationToken)
     {
@@ -238,7 +288,7 @@ public static class SkillsCommands
         StagedSource staged;
         try
         {
-            staged = await SkillsSource.StageAsync(env, options.Source, options.Ref, options.DryRun, cancellationToken).ConfigureAwait(false);
+            staged = await SkillsSource.StageAsync(env, options.Source, options.Ref, options.RecordedOverride, cancellationToken).ConfigureAwait(false);
         }
         catch (SkillsSourceUnavailable unavailable)
         {

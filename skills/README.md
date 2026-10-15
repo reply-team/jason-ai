@@ -25,15 +25,20 @@ jason skills install --roles-only
 jason skills update
 ```
 
-The first prints exactly what would be written where and changes nothing; the second does it. **The
+The first prints exactly what would be written where and deploys nothing — a source not on this machine
+yet is fetched into Jason's staging directory first, so there is something to show; the second does it. **The
 target roots are printed before anything is written, in every mode** — writing into somebody's home
 directory is not a silent act.
 
-`update` re-runs the deployment against the source and ref its own record names, which is why it takes
-neither `--source` nor `--ref`: an update is the same act repeated, not a second decision about where
-things come from. A verb that accepted both would let you "update" a deployment into one from somewhere
-else and leave a record saying it had always been that way. With nothing to update it says so and names
-`jason skills install` rather than quietly installing.
+`update` re-runs the deployment against the source its own record names, which is why it takes neither
+`--source` nor `--ref`: an update is the same act repeated, not a second decision about where things come
+from. A verb that accepted both would let you "update" a deployment into one from somewhere else and leave
+a record saying it had always been that way. From a git source it takes the ref this build carries, so a
+deployment made at an older build's pin moves to this one's — unless its record says the ref was chosen
+with `--ref`, which stays chosen. A directory is read where it stands, and a development build keeps the
+record's ref, since the release its own pin names is not published yet; the line `update` prints says
+which of these applies. With nothing to update it says so and names `jason skills install` rather than
+quietly installing.
 
 These are the rules both verbs keep:
 
@@ -56,7 +61,10 @@ These are the rules both verbs keep:
   current, and it is what an uninstall removes by — a verb that deleted by pattern would eventually
   delete somebody's own file. A root whose record cannot be read is reported `unknown` and nothing
   guesses at it. **Both roots are read**: the harness roots a person chose and the runtime's own, which
-  is the half this document calls not optional.
+  is the half this document calls not optional. On a release, a deployment a default install made at
+  another tag fails its check — the runtime's own root against the runtime's tag, a harness against this
+  build's — and the repair printed moves it; one its record pins, made with `--ref`, passes, and the
+  check says how to move it.
 - **Two destinations, because there are two readers.** The role halves go to the runtime's own data
   directory, where the runtime reads them at every launch to teach a role its job; the interactive
   and business packs go to the agent harnesses a person actually uses. The first is not optional: a
@@ -65,9 +73,10 @@ These are the rules both verbs keep:
   into no agent harness, and it is what `jason status` prints as the repair for `role_skills`. The harness
   half is somebody's own agent configuration, and a required check whose only repair also wrote there could
   not be repaired by anybody who would not allow that. `update` carries a root only where its record says a
-  deployment was made, and each pack in it from the source and ref that record names — so an installation
-  taught with `--roles-only` stays that way, and a harness installed from one source is not updated from
-  another. A directory source is recorded as its full path, so `update` finds it from anywhere.
+  deployment was made, and each pack in it from the source that record names, at the ref the paragraph
+  above gives — so an installation taught with `--roles-only` stays that way, and a harness installed from
+  one source is not updated from another. A directory source is recorded as its full path, so `update`
+  finds it from anywhere.
 - **Nothing is written until the whole tree is known to be deliverable.** The runtime refuses to launch
   a role whose skill file is a link, cannot be read, gives itself no name or names itself differently from
   its directory, or whose tree is over `Roles:MaxSkillBytes`; `jason status` reports each of these in a

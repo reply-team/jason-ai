@@ -329,6 +329,13 @@ the skills, not the logs, not the work directories. Nor does it touch anything y
 to start Jason — a systemd unit, a scheduled task, a login item — because the file at the install path is
 replaced in place rather than moved elsewhere, so whatever points at that path still points at Jason.
 
+So the skills stay at the tag the build before installed them from, and `jason status` is what tells you. Once the
+new build is running, role skills a default install took at that tag fail `role_skills`, which is required,
+and its repair — `jason skills install --roles-only`, with the `--source` they came from when that was not the
+default source, `reply-team/jason-ai` — moves them to the new build's tag. An agent's own packs fail
+`harness_skills`, which is optional, and `jason skills update` moves them; it is printed for you, not run for you.
+A deployment made at a tag chosen with `--ref` passes both, and stays where it is until you move it.
+
 The one thing an update does change beyond the executable is the database, and not by itself: the new build's
 first start migrates it, exactly as any start does, after taking the backup that every migration takes. `healthy`
 records which migrations that was and where the backup went, which is what makes the undo below possible.

@@ -107,11 +107,68 @@ public class SkillsInstallTests
         Assert.False(Directory.Exists(dir.Paths.RoleSkillsDirectory));
         Assert.Empty(Directory.EnumerateFileSystemEntries(Harness(dir)));
         // The plan is stated in the same words either way -- what differs between a dry run and a real one
-        // is what happens next -- and the dry run says so on a line of its own.
+        // is what happens next -- and the dry run says so on a line of its own. It says deployed, not written:
+        // a git source not here yet is fetched into staging first, which is a write, and the line said none.
         var printed = output.ToString();
         Assert.Contains("Target:", printed, StringComparison.Ordinal);
-        Assert.Contains("Dry run: nothing will be written.", printed, StringComparison.Ordinal);
+        Assert.Contains("Dry run: nothing will be deployed.", printed, StringComparison.Ordinal);
+        Assert.DoesNotContain("nothing will be written", printed, StringComparison.Ordinal);
         Assert.DoesNotContain("Writing", printed, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The first look on a new installation shows the plan: <c>--roles-only --dry-run</c> fetches the source into
+    /// staging, prints the one root it would write, exits 0, and deploys nothing.
+    /// </summary>
+    /// <remarks>
+    /// It exited 1 with "not on this machine yet", so the command the install page puts first answered a person
+    /// following it with a refusal and an instruction to skip it.
+    /// </remarks>
+    [Fact]
+    public async Task A_first_roles_only_dry_run_fetches_into_staging_prints_the_plan_and_deploys_nothing()
+    {
+        using var dir = new TempPaths();
+        var origin = await TaggedSource.CreateAsync(dir, Ct, "v1.2.3");
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var env = new CliEnvironment(
+            output,
+            error,
+            dir.Paths,
+            Processes: new FakeProcessControl(),
+            Autostart: new RecordingRegistrar(),
+            Programs: ProgramRunners.ForThisMachine(),
+            BuildVersion: "1.2.3");
+
+        var exit = await CliApp.RunAsync(["skills", "install", "--source", origin, "--roles-only", "--dry-run"], env, Ct);
+
+        Assert.True(exit == ExitCodes.Success, error.ToString());
+        var target = Assert.Single(output.ToString().Split('\n'), line => line.StartsWith("Target:", StringComparison.Ordinal));
+        Assert.Contains(dir.Paths.RoleSkillsDirectory, target, StringComparison.Ordinal);
+        Assert.Contains("Dry run: nothing will be deployed.", output.ToString(), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(dir.Paths.RoleSkillsDirectory), "The dry run deployed into the role root.");
+        Assert.True(
+            File.Exists(Path.Combine(dir.Paths.SkillsStagedSourceDirectory("v1.2.3"), "skills", "runtime", "roles", "researcher", "SKILL.md")),
+            "The dry run left nothing in staging to show.");
+    }
+
+    /// <summary>The flag's own help says what a dry run writes, on both verbs that take it.</summary>
+    [Theory]
+    [InlineData("install")]
+    [InlineData("update")]
+    public async Task The_dry_run_help_says_a_source_not_here_yet_is_fetched_into_staging_first(string verb)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+
+        await CliApp.RunAsync(["skills", verb, "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), Ct);
+
+        var text = string.Join(' ', output.ToString().Split((char[])[' ', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
+        Assert.Contains(
+            "Print exactly what would be written where, and deploy nothing. A source not on this machine yet is fetched into Jason's staging directory first, so there is something to show.",
+            text,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("refused rather than fetched", text, StringComparison.Ordinal);
     }
 
     /// <summary>

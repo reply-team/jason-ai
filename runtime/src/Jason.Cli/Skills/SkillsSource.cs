@@ -62,27 +62,53 @@ public static class SkillsSource
                 $"This build reports its version as '{runtimeVersion}', which is not a version, so it carries no pinned ref. Name one with --ref, or a directory with --source.");
 
     /// <summary>
+    /// The version this build goes by: its own stamp, or the one a test named through the environment.
+    /// </summary>
+    public static string BuildVersion(CliEnvironment env)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+        return env.BuildVersion ?? JasonVersion.Current;
+    }
+
+    /// <summary>
+    /// Whether a version is a release: one that parses, with no pre-release after it. A development build's pin names
+    /// the release it is on its way to, which is not published yet, so nothing moves a deployment to it or calls a
+    /// deployment stale against it.
+    /// </summary>
+    public static bool IsRelease(string version) =>
+        SemanticVersion.TryParse(version, out var parsed) && parsed.PreRelease is null;
+
+    /// <summary>
     /// The source, resolved to a directory on this machine. A directory is read where it stands; anything else
     /// is cloned by <c>git</c> at the ref, into the data directory, through the program seam — so an
     /// environment with no runner refuses rather than reaching for the network.
     /// </summary>
-    /// <param name="dryRun">
-    /// True when the caller has promised to change nothing. A source already on this machine is still used; a
-    /// source that is not there is refused rather than fetched, because a clone into the data directory is a
-    /// change and the network it reaches for is one the flag's own help says will not happen.
+    /// <remarks>
+    /// The same for a dry run as for a real one. A dry run promises that nothing is deployed, and staging deploys
+    /// nothing: it refused instead, so the look before the act — the first skills command the install page prints —
+    /// exited 1 on every new installation, with nothing to show. The clone it makes is a write into Jason's own
+    /// staging directory, and the flag's help says so.
+    /// </remarks>
+    /// <param name="reference">The ref to take, or null for the pin this build carries.</param>
+    /// <param name="overriddenByRecord">
+    /// Whether the ref was chosen over this build's own pin, where a record already says so: an update hands back
+    /// its record's flag beside its record's ref. Null for an install, where the answer is whether a ref was named.
     /// </param>
     public static async Task<StagedSource> StageAsync(
         CliEnvironment env,
         string? source,
         string? reference,
-        bool dryRun,
+        bool? overriddenByRecord,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(env);
 
-        var overridden = !string.IsNullOrWhiteSpace(reference);
+        // Never decided from the ref alone. An update passes its record's ref back, and nobody typed that one: deciding
+        // from it wrote every record the first update touched as made with --ref, and a deployment at this build's own
+        // pin could no longer be told from a deliberate choice.
+        var overridden = overriddenByRecord ?? !string.IsNullOrWhiteSpace(reference);
         var where = string.IsNullOrWhiteSpace(source) ? DefaultSource : source;
-        var pin = overridden ? reference! : DefaultRef(JasonVersion.Current);
+        var pin = string.IsNullOrWhiteSpace(reference) ? DefaultRef(BuildVersion(env)) : reference;
 
         if (Directory.Exists(where))
         {
@@ -111,22 +137,13 @@ public static class SkillsSource
         }
 
         // A tree already fetched at this ref is used as it is. It was cloned at a pinned ref, which is one
-        // commit and cannot have moved, so re-fetching buys nothing -- and this is the one place a dry run
-        // would otherwise spend a network fetch and destroy a cache while promising to change nothing.
+        // commit and cannot have moved, so re-fetching buys nothing -- and a dry run after the first one spends
+        // no network fetch and destroys no cache.
         if (Directory.Exists(staged) && Directory.Exists(Path.Combine(staged, "skills")))
         {
             RequirePacks(staged, where);
             var known = await runner.RunAsync("git", ["rev-parse", "HEAD"], staged, FetchTimeout, cancellationToken).ConfigureAwait(false);
             return new StagedSource(staged, where, pin, overridden, known.ExitCode == 0 ? known.StandardOutput.Trim() : null);
-        }
-
-        if (dryRun)
-        {
-            // The flag's own help says it changes nothing, and a clone into the data directory is a change --
-            // never mind the network it reaches for. Refused rather than performed quietly, and the refusal
-            // says the one thing that makes it actionable.
-            throw new SkillsSourceUnavailable(
-                $"'{where}' at '{pin}' is not on this machine yet, and a dry run does not fetch it. Run the install without --dry-run to fetch it once, or name a directory with --source.");
         }
 
         if (Directory.Exists(staged))
