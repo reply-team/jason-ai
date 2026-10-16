@@ -6,7 +6,7 @@
 # the same version downloads nothing and says so, unless a licence file is missing beside it, which it then writes.
 #
 #   curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
-#   curl -fsSL https://jasonharness.ai/releases/download/v0.8.1/install.sh | sh -s -- --version 0.8.1 --no-modify-path
+#   curl -fsSL https://jasonharness.ai/releases/download/v0.9.0/install.sh | sh -s -- --version 0.9.0 --no-modify-path
 #
 # JASON_INSTALL_FEED (or --feed) points it at a directory or a base URL holding the same files a release holds
 # — the archives, manifest.json and checksums.txt — which is how CI runs it against the archives it has just

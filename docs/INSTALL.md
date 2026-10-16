@@ -94,14 +94,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v0.8.1/install.sh | sh -s -- --version 0.8.1
+curl -fsSL https://jasonharness.ai/releases/download/v0.9.0/install.sh | sh -s -- --version 0.9.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.8.1/install.ps1))) -Version 0.8.1
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.9.0/install.ps1))) -Version 0.9.0
 ```
 
-These install 0.8.1 with 0.8.1's own script: a pinned install fetches the script from the release it installs.
+These install 0.9.0 with 0.9.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every

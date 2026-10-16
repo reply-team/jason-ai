@@ -15,7 +15,8 @@ public sealed class PublicCheckTests
 
     /// <summary>
     /// Each kind of pointer the check refuses, spelled here in pieces so that this file is not one: a tracker key, an
-    /// Atlassian address, each attribution trailer, a session link, and another repository of ours.
+    /// Atlassian address, each attribution trailer, a session link, another repository of ours, and the private
+    /// repository's own name with nothing before it.
     /// </summary>
     public static TheoryData<string, string> Pointers() => new()
     {
@@ -26,6 +27,7 @@ public sealed class PublicCheckTests
         { "Generated with [" + "Claude Code](https://example.invalid)", "an attribution trailer" },
         { "https://claude" + ".ai/code/session_x", "a session link" },
         { "Built from reply-team/jason-" + "internal.", "another repository of ours" },
+        { "Built from jason-" + "internal.", "the private repository by name" },
     };
 
     [Fact]
@@ -119,6 +121,62 @@ public sealed class PublicCheckTests
     }
 
     /// <summary>
+    /// Every line a release publishes passes the hygiene step as an added line: the open set, the public repository's own
+    /// files and VERSION, projected by the release's own script onto an empty first commit. The rows above hold the step
+    /// to one pointer at a time; this holds a pattern it gains to what a release will actually publish, so the release's
+    /// own pull request never meets a refusal of the step's own making.
+    /// </summary>
+    [Fact]
+    public void The_hygiene_step_passes_every_line_a_release_publishes_from_this_tree()
+    {
+        using var repository = new Repository();
+        Git(repository.Root, "commit", "--quiet", "--allow-empty", "-m", "Nothing yet");
+        var basis = repository.Head();
+        var projected = Script(
+            new Dictionary<string, string>(),
+            Path.Combine(RepositoryRoot(), ".github", "scripts", "Publish-OpenSet.ps1"),
+            "-Source", RepositoryRoot(), "-Target", repository.Root, "-Version", "0.6.0");
+        Assert.True(projected.Exit == 0, projected.Stderr);
+        Git(repository.Root, "add", "-A");
+        Git(repository.Root, "commit", "--quiet", "-m", "Jason 0.6.0");
+
+        var run = Hygiene(repository, basis, "Jason 0.6.0", "A release.");
+
+        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
+    }
+
+    /// <summary>
+    /// The private repository's name, with nothing before it, in a published file that is not Markdown is refused by both
+    /// twins: by the change's hygiene step, as a line the change adds, and by this repository's guard, which reads every
+    /// published file for another repository of ours. Either twin moved alone turns this red.
+    /// </summary>
+    [Fact]
+    public void The_private_repository_s_bare_name_in_a_published_script_is_refused_by_both_twins()
+    {
+        var bare = "jason-" + "internal";
+        var line = $"// Built from {bare}.";
+
+        // The guard's view: this repository, publishing a plugin.
+        using var tree = new TempTree();
+        var source = tree.NewDirectory("private");
+        WriteTo(source, ".github/publish/open-set.txt", "README.md\nplugins/\n");
+        WriteTo(source, "README.md", "# Jason\n");
+        WriteTo(source, "plugins/p/main.js", line + "\n");
+        var guard = Links.Violations(source, OpenSet.Lines(source), new Dictionary<string, int>()).Select(violation => violation.Key).ToList();
+
+        // The check's view: the same line, added to the public repository by a change.
+        using var repository = new Repository();
+        repository.Commit("README.md", "# Jason\n");
+        var basis = repository.Head();
+        repository.Commit("plugins/p/main.js", line + "\n");
+        var run = Hygiene(repository, basis, "Jason 0.6.0", "A release.");
+
+        Assert.Equal([$"plugins/p/main.js [b] {bare}"], guard);
+        Assert.NotEqual(0, run.Exit);
+        Assert.Contains("plugins/p/main.js:1: the private repository by name", run.Stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The pull request a release opens passes the check it meets there: its title, and the body the release writes
     /// for it from what it staged.
     /// </summary>
@@ -178,6 +236,7 @@ public sealed class PublicCheckTests
     [InlineData("The page is published at https://github.com/reply-team/jason-ai/blob/main/docs/public.md.")]
     [InlineData("Read **https://github.com/reply-team/jason-ai/blob/main/docs/public.md**, _https://github.com/reply-team/jason-ai/blob/main/plugins/p/README.md_ and ~~https://github.com/reply-team/jason-ai/blob/main/README.md~~. Is it *https://github.com/reply-team/jason-ai/blob/main/docs/public.md*? It is https://raw.githubusercontent.com/reply-team/jason-ai/main/README.md! And here: https://github.com/reply-team/jason-ai/blob/main/docs/public.md:")]
     [InlineData("https://github.com/reply-team/jason-ai/blob/main/docs/public.md!#here")]
+    [InlineData("The page is at https://github.com/reply-team/jason-ai/blob/main/docs/public.md; read it.")]
     [InlineData("```text\nThe instructions are\n<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/public.md>. Read all of it\n```")]
     [InlineData("```text\nThe instructions are\n<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/nothing.md>. Read all of it\n```")]
     public void The_link_step_gives_the_verdicts_this_repository_s_guard_gives(string text)

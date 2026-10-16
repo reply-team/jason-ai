@@ -19,7 +19,8 @@ public sealed class NotificationsCheckTests
         + "and so does a runtime that 0.1.0's logon task started. If 0.1.0's task started it: from an ordinary prompt, run "
         + "`jason runtime autostart enable` (or `disable`) once — if that answers Access is denied, follow its message first — "
         + "then `jason runtime stop` once, then `jason runtime start` (or sign in again, with autostart enabled). "
-        + "docs/release-and-update.md §8 says why.";
+        + "0.1.0's task ran the runtime for the whole machine, in session 0; this version's task runs it in your own session, "
+        + "where what it shows reaches you.";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

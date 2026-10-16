@@ -33,6 +33,7 @@ jobs:
             'an attribution trailer'    = 'Co-Authored-B[y]:|Claude-Sessio[n]:|Generated wit[h] \[Claude'
             'a session link'            = 'claude\.ai/code'
             'another repository of ours' = 'reply-team/jaso[n]-(?!ai(?![\w-]))[\w-]+'
+            'the private repository by name' = '(?<![\w/-])jason-interna[l](?![\w-])'
           }
           $found = [Collections.Generic.List[string]]::new()
           function Read-Text([string] $where, [string] $text) {
@@ -146,9 +147,9 @@ jobs:
             foreach ($match in [regex]::Matches($text, $address)) {
               if ($match.Groups['repository'].Value -cne 'jason-ai') { continue }
               $pattern = if ($match.Groups['host'].Value -eq 'raw.githubusercontent.com') { '^/[^/]+/(?<path>.+)$' } else { '^/(?:blob|tree|raw|edit)/[^/]+/(?<path>.+)$' }
-              # The punctuation that ends a sentence or closes emphasis after an address is not part of it: GitHub's
-              # links leave it out, and so does the release process.
-              $rest = $match.Groups['rest'].Value.TrimEnd('.', '?', '!', ':', '*', '_', '~')
+              # The punctuation that ends a sentence or a clause, or closes emphasis, after an address is not part of
+              # it: GitHub's links leave it out, and so does the release process.
+              $rest = $match.Groups['rest'].Value.TrimEnd('.', '?', '!', ':', ';', '*', '_', '~')
               $named = [regex]::Match($rest, $pattern)
               if (-not $named.Success) { continue }
               $path = [Uri]::UnescapeDataString($named.Groups['path'].Value.Split('#', 2)[0].Split('?', 2)[0]).TrimEnd('/')

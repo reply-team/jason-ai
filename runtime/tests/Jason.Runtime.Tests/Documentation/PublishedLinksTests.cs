@@ -69,12 +69,27 @@ public sealed class PublishedLinksTests : IDisposable
     [InlineData("The note is published at https://github.com/reply-team/jason-ai/blob/main/docs/public.md. So is https://github.com/reply-team/jason-ai/blob/main/VERSION: read it.")]
     [InlineData("`[not a link](../outside.md)` is code, and code links nowhere")]
     [InlineData("skills/runtime/private.md is another directory's page, and notes.md names no page of docs/.")]
+    [InlineData("The page is at https://github.com/reply-team/jason-ai/blob/main/docs/public.md; read it.")]
     [InlineData("```text\nThe instructions are\n<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/public.md>. Read all of it\n```")]
     public void A_published_text_that_stays_in_what_is_published_is_not(string text)
     {
         Write("README.md", text + "\n");
 
         Assert.Empty(Found());
+    }
+
+    /// <summary>
+    /// Another repository of ours is read in every published file, not only in Markdown: a plugin's module, a manifest or
+    /// an install script is published text too, and its readers can open no private repository either.
+    /// </summary>
+    [Fact]
+    public void Another_repository_of_ours_named_in_a_published_file_that_is_not_markdown_is_named()
+    {
+        var bare = "jason-" + "internal";
+        Write("README.md", "# Readme\n");
+        Write("plugins/p/main.js", $"// Built from {bare}, see reply-team/{bare}.\n");
+
+        Assert.Equal([$"plugins/p/main.js [b] {bare}", $"plugins/p/main.js [b] reply-team/{bare}"], Found());
     }
 
     /// <summary>The public repository's own files land at its root, so their links are read from there.</summary>

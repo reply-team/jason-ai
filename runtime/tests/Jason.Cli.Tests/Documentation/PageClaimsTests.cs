@@ -699,12 +699,13 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// The examples of a pinned install name one release everywhere they are printed — the install page's two lines and
-    /// its sentence, and each script's own help — in the address and in the option alike, so a release that moves them
-    /// moves them all.
+    /// The examples of a pinned install name the release this tree builds everywhere they are printed — the install
+    /// page's two lines and its sentence, and each script's own help — in the address and in the option alike. A release
+    /// publishes this tree at the tag of the version it builds, so the published page names the release it comes with;
+    /// and a development bump that moves the version without them is red until it moves them too.
     /// </summary>
     [Fact]
-    public void The_pinned_examples_name_one_version()
+    public void The_pinned_examples_name_the_release_this_tree_builds()
     {
         var found = new List<(string File, string Version)>();
         foreach (var (file, text) in new[]
@@ -722,9 +723,12 @@ public partial class PageClaimsTests
 
         var expected = new[] { ("docs/INSTALL.md", 6), ("install/install.sh", 2), ("install/install.ps1", 2) };
         Assert.Equal(expected, found.GroupBy(pin => pin.File).Select(group => (group.Key, group.Count())));
+        var builds = TreeVersion.Prefix();
+        var other = found.Where(pin => pin.Version != builds).ToList();
         Assert.True(
-            found.Select(pin => pin.Version).Distinct().Count() == 1,
-            "The pinned examples name more than one version: " + string.Join(", ", found.Select(pin => $"{pin.File} {pin.Version}")));
+            other.Count == 0,
+            $"This tree builds {builds} (VersionPrefix in runtime/Directory.Build.props), and the pinned examples name: "
+            + string.Join(", ", other.Select(pin => $"{pin.File} {pin.Version}")));
     }
 
     /// <summary>
