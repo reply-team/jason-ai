@@ -406,6 +406,7 @@ public partial class PageClaimsTests
     [InlineData(".github/release-notes-template.md", "If you then put the executable in place by hand, keep `LICENSE` and `THIRD-PARTY-NOTICES` beside it, named `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`.")]
     [InlineData("docs/INSTALL.md", "nothing but the executable, its two notice files (`jason-LICENSE`, `jason-THIRD-PARTY-NOTICES`) and the `jason.previous.exe` an upgrade can leave beside it")]
     [InlineData("docs/INSTALL.md", "on macOS and Linux it removes those two files by name from a directory other tools share")]
+    [InlineData("docs/INSTALL.md", "with `LICENSE` and `THIRD-PARTY-NOTICES` beside it, named `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`")]
     [InlineData("README.md", "holds nothing but Jason — the executable, its two notice files and what an upgrade left beside it")]
     [InlineData("docs/release-and-update.md", "holds nothing but Jason — the executable, its two notice files and what an upgrade left beside it")]
     [InlineData("docs/release-and-update.md", "beside the executable only the executable and its two notice files")]
@@ -471,28 +472,32 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// A session in a mode that runs commands without asking refuses the one-liner: Claude Code's auto mode turned down
-    /// the installer an agent had downloaded and checked, as code from outside, and the install stopped at its first
-    /// step. So the person who starts the session is told, above the prompt, to start it in a mode that asks.
+    /// What auto mode does at the install depends on whether anything can ask the person. A session that can ask asks
+    /// before the download runs, and with the person's yes the install goes on; a session nothing can ask — one run
+    /// headless — refuses the download and says so. So the page no longer says auto mode stops the install at its first
+    /// step, which is true only of the second. It says to expect either, that both are right, what the person does about
+    /// each, and that a mode asking before every command is the other way, with one agent's spelling of it as the example.
     /// </summary>
     [Fact]
-    public void The_readme_says_to_start_the_install_session_in_a_mode_that_asks_above_the_prompt()
+    public void The_readme_says_what_auto_mode_does_at_the_install_above_the_prompt()
     {
         var readme = Page("README.md");
         var fence = readme.IndexOf("```text\nInstall Jason on this machine", StringComparison.Ordinal);
         Assert.True(fence > 0, "the prompt's fence is where the page has it");
+        var above = Flat(readme[..fence]);
 
         Assert.Contains(
-            "Start it, too, in a mode that asks before it runs a command: on Claude Code, `--permission-mode manual`, not auto mode, which refuses to run a downloaded installer and stops the install at its first step.",
-            Flat(readme[..fence]),
+            "If your agent's default mode is auto, expect one of two things at the install: it asks you before the download runs, or, where nothing can ask you, it refuses and says so. Both are right. Say yes, or type the one-liner above yourself; never let it work around a refusal. A mode that asks before every command is the other way: on Claude Code, `--permission-mode manual` (`default` before 2.1.200), or shift-tab in an open session; in any other agent, the mode that asks before it runs a command.",
+            above,
             StringComparison.Ordinal);
+        Assert.DoesNotContain("not auto mode, which refuses to run a downloaded installer", Flat(readme), StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// The prompt, byte for byte, is held here by its digest, so a change to it is a deliberate one. No host has read
-    /// this text yet: the reading still to come is a person's own, pasting it from the published page into a fresh
-    /// agent session after the release that publishes it. Until then the digest stands for a deliberate change, not
-    /// for a reading.
+    /// The prompt, byte for byte, is held here by its digest, so a change to it is a deliberate one. Hosts have read this
+    /// text from a local copy before the release, with the install page beside it rather than at its address; the
+    /// reading of record is still a person's own, pasting it from the published page into a fresh agent session after the
+    /// release that publishes it. Until then the digest stands for a deliberate change, not for a reading.
     /// </summary>
     [Fact]
     public void The_install_prompt_is_the_text_the_hosts_read_and_names_no_connector()
@@ -530,14 +535,104 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// A harness may refuse to run the one-liner as code from outside, as Claude Code's auto mode does. An agent that
-    /// met that stopped and reported, which is right; the section for an agent says so, and names the two ways on that
-    /// are the person's: typing the line themselves, or restarting the session in a mode that asks.
+    /// A refusal — a harness that will not run a command, a package manager that will not install — is reported once and
+    /// never worked around, and the section says what working around is, so the rule cannot be read as forbidding the
+    /// next route. It no longer speaks of the one-liner alone: an agent's routes are a package and the steps by hand,
+    /// and the one-liner is the person's.
     /// </summary>
     [Fact]
-    public void The_agent_section_says_not_to_work_around_a_harness_that_refuses_the_one_liner() =>
+    public void The_agent_section_reports_a_refusal_once_and_never_works_around_it()
+    {
+        var agent = Flat(Agent());
+
         Assert.Contains(
-            "If your harness refuses to run the one-liner as code from outside — Claude Code's auto mode does — do not work around it: say so, and ask the person to type the line themselves, or to restart the session in a mode that asks before each command.",
+            "A refusal — by your harness, or by a package manager — is reported once, as it stands, and never worked around. Working around it is a retry, the same command rewrapped, or the refused code run by another means, such as a downloaded script run another way. Taking the next route in the order above is not working around it.",
+            agent,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("If your harness refuses to run the one-liner as code from outside", agent, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An agent installs by the first route that fits: a package, where the page names one for the platform and its
+    /// package manager is already there — installing a package manager to reach it would be installing something else —
+    /// then the steps by hand. It never pipes a download into a shell, and the install scripts are the person's, handed
+    /// to them where even the steps by hand are refused. The order is what is held, as well as the words.
+    /// </summary>
+    [Fact]
+    public void The_agent_section_takes_a_package_then_the_route_by_hand()
+    {
+        var agent = Flat(Agent());
+
+        var package = agent.IndexOf("Where §2 names a package for this platform and its package manager is already on this machine, use it (*With a package manager*).", StringComparison.Ordinal);
+        var byHand = agent.IndexOf("say so once and take §2 *By hand*: download the archive and `checksums.txt` from the release, check the digest and stop on a mismatch, unpack, keep the two notice files beside the executable, and run `jason --version` by its full path.", StringComparison.Ordinal);
+        var person = agent.IndexOf("The install scripts are the person's: where your harness refuses even the route by hand, say so and give the person the one-liner to type themselves.", StringComparison.Ordinal);
+
+        Assert.True(package >= 0, "The section for an agent does not take a package first, where its package manager is already on this machine.");
+        Assert.True(byHand > package, "The section for an agent does not take §2 by hand after the package.");
+        Assert.True(person > byHand, "The section for an agent does not hand the person the one-liner after the route by hand.");
+    }
+
+    /// <summary>
+    /// A package manager that is there and refuses — or fails, or that the agent's harness will not run — is the same
+    /// case for the person as one that is not there: the agent says so once and takes the steps by hand, which is the
+    /// next route rather than a way around the refusal.
+    /// </summary>
+    [Fact]
+    public void The_agent_section_falls_through_to_by_hand_when_the_package_manager_refuses()
+    {
+        var agent = Flat(Agent());
+
+        Assert.Contains("Where it is not, where it fails, or where it or your harness refuses it, say so once and take §2 *By hand*", agent, StringComparison.Ordinal);
+        Assert.Contains("That is the next route, not a way around the refusal.", agent, StringComparison.Ordinal);
+        Assert.DoesNotContain("no other way of running the same code", agent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_agent_section_never_pipes_a_download_into_a_shell() =>
+        Assert.Contains("Never pipe a download into a shell.", Flat(Agent()), StringComparison.Ordinal);
+
+    /// <summary>
+    /// The route by hand is the last an agent takes. Where even that is refused, the install is the person's to type, and
+    /// the agent hands them the line rather than finding another way to run it.
+    /// </summary>
+    [Fact]
+    public void The_agent_section_gives_the_person_the_one_liner_where_even_the_route_by_hand_is_refused() =>
+        Assert.Contains(
+            "The install scripts are the person's: where your harness refuses even the route by hand, say so and give the person the one-liner to type themselves.",
+            Flat(Agent()),
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// The PATH entry an agent would make by hand is the person's to allow, and an installation <c>jason</c> cannot be
+    /// called by name from is not ready. So a no makes it the person's own step: the agent finishes the rest and hands
+    /// over the exact line <c>jason status</c> prints, with the command that proves it — never "not ready" alone.
+    /// </summary>
+    [Fact]
+    public void The_agent_section_hands_over_a_declined_path_entry_with_the_line_and_the_proof() =>
+        Assert.Contains(
+            "With a no to the PATH entry, it is the person's own step: finish everything else, then hand them the exact line `jason status` prints for `path`, and say that `jason status` again proves it. Never end on \"not ready\" alone: name the step that remains.",
+            Flat(Agent()),
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// A session run headless has a question tool that answers nothing: the person is not there. That is nobody to ask,
+    /// and an act that needs their word is left undone.
+    /// </summary>
+    [Fact]
+    public void The_agent_section_says_an_unanswered_question_is_nobody_to_ask() =>
+        Assert.Contains(
+            "With nobody to ask, leave it undone and say so. A question tool that comes back with no answer is nobody to ask.",
+            Flat(Agent()),
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// A ready installation is not the end of what the person came for: the agent says it can work, and that one word
+    /// starts its first run in the same session.
+    /// </summary>
+    [Fact]
+    public void The_agent_section_points_at_the_first_run_after_ready() =>
+        Assert.Contains(
+            "When `ready` is true, tell the person Jason is installed and can work, and that one word from them starts [its first run](golden-path.md) in this session.",
             Flat(Agent()),
             StringComparison.Ordinal);
 
@@ -586,6 +681,41 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// Before anything runs, the agent asks the person one question: what it will install and from where, what it writes
+    /// and where, and each act the page marks, one by one — and offers the other way, a mode that asks before every
+    /// command. The person's answer is the consent the rest of the install acts on.
+    /// </summary>
+    [Fact]
+    public void The_install_prompt_asks_one_question_before_anything_runs() =>
+        Assert.Contains(
+            "Before you run anything, ask me one question in plain words: what you will install and from where, what it writes and where (the executable and its directory, the PATH entry, Jason's data directory, the role skills), and each act the instructions mark \"Ask first\", offered to me one by one as a choice. Offer me the other way too: switching this session to a mode that asks me before every command. Then do the steps yourself, in order from section 2, doing only what I said yes to.",
+            Flat(Prompt()),
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// The prompt names where Jason comes from, in the person's own words: the releases at the product's address, which
+    /// redirect to the public repository's, or the package the install page names for the platform. It names no package
+    /// and no package manager — those are the page's to name — so the guard against commands holds.
+    /// </summary>
+    [Fact]
+    public void The_install_prompt_names_the_release_source_in_the_person_s_voice() =>
+        Assert.Contains(
+            "Jason is downloaded from its releases at <https://jasonharness.ai/releases/>, which redirect to <https://github.com/reply-team/jason-ai/releases>; install it from there, or with the package section 2 names for this platform.",
+            Flat(Prompt()),
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// The agent's report at the end names the next step, so an install never ends on whether it worked alone: after a
+    /// ready installation the next step is the first run, and after one that is not ready it is the step that remains.
+    /// </summary>
+    [Fact]
+    public void The_install_prompt_asks_for_the_next_step() =>
+        Assert.Contains(
+            "At the end, tell me whether Jason can start work, what the next step is, and exactly what you ran and what it changed.",
+            Flat(Prompt()),
+            StringComparison.Ordinal);
+
+    /// <summary>
     /// The prompt sends the agent to the install page as a single plain file: the raw address at <c>main</c>, which is
     /// the latest release, because the public <c>main</c> moves only when a release is published.
     /// </summary>
@@ -611,7 +741,7 @@ public partial class PageClaimsTests
     /// <summary>
     /// The acts that need the person's word are marked with one phrase, spelled one way in the prompt and on the install
     /// page. Every mark on the page opens a paragraph inside §2–§6, the sections an agent performs; outside them the
-    /// phrase appears once, where the section for an agent says what it means.
+    /// phrase appears only in the section for an agent, which says what it means and which of its own acts carry it.
     /// </summary>
     [Fact]
     public void Ask_first_is_spelled_one_way_and_marks_acts_in_sections_2_to_6()
@@ -633,9 +763,10 @@ public partial class PageClaimsTests
             install.AsSpan(match.Index - 4).StartsWith("\n\n**Ask first.** ", StringComparison.Ordinal),
             $"The mark at offset {match.Index} of docs/INSTALL.md does not open a paragraph as \"**Ask first.**\"."));
 
-        var outside = Assert.Single(found, match => match.Index < start || match.Index > end);
+        var outside = found.Where(match => match.Index < start || match.Index > end).ToList();
         var agent = install.IndexOf("### If an agent installs it", StringComparison.Ordinal);
-        Assert.InRange(outside.Index, agent, start);
+        Assert.NotEmpty(outside);
+        Assert.All(outside, match => Assert.InRange(match.Index, agent, start));
     }
 
     /// <summary>
@@ -732,6 +863,304 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// §2 says how to install without running a downloaded script: the steps the script takes, in its order. The digest is
+    /// checked, and a mismatch stops, before anything is unpacked; the notices keep the names the uninstall removes them
+    /// by; the executable is run by its full path; and only then does the PATH come, as the act its own paragraph marks.
+    /// </summary>
+    [Fact]
+    public void The_install_page_s_hand_path_checks_the_digest_before_it_unpacks()
+    {
+        var hand = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### By hand"));
+
+        string[] steps =
+        [
+            "1. Download the archive for this machine and `checksums.txt` beside it: for the latest release,",
+            "2. Check the archive's SHA-256 against its line in `checksums.txt`",
+            "and stop if they differ.",
+            "3. Unpack it into a new temporary directory",
+            "named `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`.",
+            "4. Run `jason --version` there, by its full path.",
+            "5. Put that directory on the PATH, as *Putting it on the PATH yourself* above says",
+        ];
+
+        var at = -1;
+        foreach (var step in steps)
+        {
+            var next = hand.IndexOf(step, StringComparison.Ordinal);
+            Assert.True(next > at, $"§2 *By hand* does not say, after what comes before it: {step}");
+            at = next;
+        }
+    }
+
+    /// <summary>
+    /// The archive is unpacked somewhere of its own and the executable moved in. Unpacked straight into the install
+    /// directory, it would write a bare <c>LICENSE</c> there — and on macOS and Linux that directory is
+    /// <c>~/.local/bin</c>, which other tools share, so the file it overwrote would be another tool's.
+    /// </summary>
+    [Fact]
+    public void The_hand_path_unpacks_outside_the_install_directory()
+    {
+        var hand = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### By hand"));
+
+        Assert.Contains("Unpack it into a new temporary directory, and move the executable into the install directory", hand, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unpack it into the install directory", hand, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An archive can carry the mark of the web, and what it unpacks inherits it, so an executable placed by hand is
+    /// stopped the first time it runs. The script clears the mark from the executable it unpacks; the steps by hand say
+    /// to do the same.
+    /// </summary>
+    [Fact]
+    public void The_hand_path_unblocks_the_executable_on_Windows() =>
+        Assert.Contains(
+            "`Unblock-File` the executable, as `install.ps1` does.",
+            Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### By hand")),
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// The install page ends where the first run begins: §6's last paragraph links the page that walks it, so a person who
+    /// followed the install to its end — or an agent that did it for them — knows what comes next.
+    /// </summary>
+    [Fact]
+    public void The_install_page_ends_with_the_first_run()
+    {
+        var start = Section(Page("docs", "INSTALL.md"), "## 6. ").TrimEnd().TrimEnd('-').TrimEnd();
+        var last = start[(start.LastIndexOf("\n\n", StringComparison.Ordinal) + 2)..];
+
+        Assert.Contains("](golden-path.md)", last, StringComparison.Ordinal);
+        Assert.Contains("one word from you", Flat(last), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The golden path's section for an agent, byte for byte, is held by its digest, as the install page's is: the rules an
+    /// agent follows on a first run against a real account are in it, and a change to them is a deliberate one.
+    /// </summary>
+    [Fact]
+    public void The_golden_path_s_agent_section_is_the_text_the_hosts_read() =>
+        Assert.Equal(GoldenAgentSectionDigest, "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(GoldenAgent()))));
+
+    /// <summary>
+    /// The golden path marks two kinds of act: one that needs the person's word, and one that is the person's own and never
+    /// the agent's. Each phrase is spelled one way. Each mark opens a paragraph where its act is described, and each phrase
+    /// appears once more, in the section for an agent, where it is said what it means.
+    /// </summary>
+    [Fact]
+    public void The_golden_path_marks_are_spelled_one_way()
+    {
+        var page = Page("docs", "golden-path.md");
+        var agent = page.IndexOf("\n### If an agent runs it\n", StringComparison.Ordinal);
+        var end = agent + GoldenAgent().Length;
+        Assert.True(agent > 0, "docs/golden-path.md has no section for an agent that runs it.");
+
+        foreach (var mark in new[] { "Ask first", "Yours to do" })
+        {
+            var found = Regex.Matches(page, Regex.Escape(mark), RegexOptions.IgnoreCase).ToList();
+            Assert.All(found, match => Assert.Equal(mark, match.Value));
+
+            var inside = found.Where(match => match.Index > agent && match.Index < end).ToList();
+            Assert.True(inside.Count == 1, $"The section for an agent names \"{mark}.\" {inside.Count} times; it names it once.");
+
+            var outside = found.Where(match => match.Index < agent || match.Index > end).ToList();
+            Assert.NotEmpty(outside);
+            Assert.All(outside, match => Assert.True(
+                page.AsSpan(match.Index - 4).StartsWith($"\n\n**{mark}.** ", StringComparison.Ordinal),
+                $"The mark \"{mark}.\" at offset {match.Index} of docs/golden-path.md does not open a paragraph."));
+        }
+    }
+
+    /// <summary>
+    /// Each act of the first run that is the person's carries its mark where it is described: installing Node is a system
+    /// package, theirs to allow; the sign-in is theirs alone, so the key never passes through an agent; so is making the
+    /// sequence the run uses; the approval is their decision; and of the two ways back, deleting the sequence is theirs
+    /// and taking themselves out of it asks for their word.
+    /// </summary>
+    [Theory]
+    [InlineData("### The Reply CLI", "Where Node is missing, or older than 20", 0, "Ask first.")]
+    [InlineData("### The Reply CLI", "```\nreply auth login\n", -1, "Yours to do.")]
+    [InlineData("## 6. ", "Make a sequence at Reply for this run: add nobody to it, and never start it.", 0, "Yours to do.")]
+    [InlineData("## 7. ", "```\njason approval list\n", -1, "Ask first.")]
+    [InlineData("### The way back", "Delete the trial sequence at Reply.", 0, "Yours to do.")]
+    [InlineData("### The way back", "--operation enrollment.stop", -1, "Ask first.")]
+    public void Each_act_on_the_golden_path_that_is_the_person_s_is_marked(string section, string act, int neighbour, string mark)
+    {
+        var page = Page("docs", "golden-path.md");
+        var text = section.StartsWith("## ", StringComparison.Ordinal) ? Section(page, section) : Subsection(page, section);
+        var blocks = text.Split("\n\n");
+        var at = Array.FindIndex(blocks, block => block.Contains(act, StringComparison.Ordinal));
+        Assert.True(at >= 0, $"{section.Trim()} no longer describes the act: {act}");
+
+        var marked = blocks.ElementAtOrDefault(at + neighbour) ?? string.Empty;
+        Assert.True(
+            marked.StartsWith($"**{mark}** ", StringComparison.Ordinal),
+            $"{section.Trim()} does not mark the act with \"**{mark}**\"; the paragraph there reads: {marked}");
+    }
+
+    /// <summary>
+    /// A stranger has no checkout, so the package is copied from the tree <c>jason skills install</c> already fetched: this
+    /// repository at the runtime's own tag, kept in the data directory. Where that tree is not there, the release's tree is
+    /// fetched into a temporary directory first. Neither is a copy out of a checkout.
+    /// </summary>
+    [Fact]
+    public void The_golden_path_copies_the_package_from_the_staged_tree()
+    {
+        var page = Page("docs", "golden-path.md");
+        var step = Section(page, "## 3. ");
+
+        Assert.Contains("cp -r ~/.jason/skills/staged/v<version>/plugins/reply ~/.jason/plugins/reply", step, StringComparison.Ordinal);
+        Assert.Contains("git clone --depth 1 --branch v<version> https://github.com/reply-team/jason-ai <temporary directory>", step, StringComparison.Ordinal);
+        Assert.Contains("cp -r <temporary directory>/plugins/reply ~/.jason/plugins/reply", step, StringComparison.Ordinal);
+        Assert.DoesNotContain("cp -r plugins/reply ~/.jason/plugins/reply", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The first run is started from wherever the person happens to be, which is often no repository at all, so the page
+    /// assumes none: nothing in the run writes into that folder, and the one file it makes goes to the temporary directory.
+    /// </summary>
+    [Fact]
+    public void The_golden_path_assumes_no_repository_or_folder()
+    {
+        var page = Flat(Page("docs", "golden-path.md"));
+
+        Assert.Contains("It assumes no repository and no particular folder: start in any folder of yours, and nothing in this run writes there", Flat(GoldenAgent()), StringComparison.Ordinal);
+        Assert.Contains("`contacts.json`, in the system's temporary directory, holds your address and nothing else.", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Step 6 is two acts, and an agent that joins them into one shell line hands its harness one command to refuse whole:
+    /// the file first, written by the agent's own file tool, then each command alone. The file is printed as it is
+    /// meant to be, the address and nothing else, and the command names it where it was written.
+    /// </summary>
+    [Fact]
+    public void The_golden_path_writes_the_contacts_file_on_its_own_and_runs_each_command_alone()
+    {
+        var step = Section(Page("docs", "golden-path.md"), "## 6. ");
+
+        Assert.Contains("First the file, on its own:", Flat(step), StringComparison.Ordinal);
+        Assert.Contains("An agent writes it with its own file tool, not from a shell line:", Flat(step), StringComparison.Ordinal);
+        Assert.Contains("Then the commands, one at a time:", Flat(step), StringComparison.Ordinal);
+
+        var fenced = FencedLines(step);
+        Assert.Contains("[{\"channels\":[{\"channel\":\"email\",\"value\":\"<your address>\"}]}]", fenced);
+        Assert.DoesNotContain("first_name", step, StringComparison.Ordinal);
+        Assert.Contains("jason campaign add-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --file <temporary directory>/contacts.json --match-by email", fenced);
+        Assert.DoesNotContain(fenced, line => line.Contains("--file contacts.json", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The golden path's arguments are single-quoted JSON, which bash, zsh and PowerShell 7.3 and later hand over as
+    /// written; a double-quoted argument with escaped quotes inside reaches the CLI split in two under PowerShell. Windows
+    /// PowerShell 5.1 strips the quotes inside even single quotes, so the page names the form that takes no quoting at
+    /// all: the arguments in a file, given with <c>--file</c>.
+    /// </summary>
+    [Fact]
+    public void The_golden_path_gives_its_arguments_in_a_form_each_shell_takes()
+    {
+        var page = Page("docs", "golden-path.md");
+        var inputs = FencedLines(page).Where(line => line.Contains("--input", StringComparison.Ordinal)).ToList();
+
+        Assert.Equal(5, inputs.Count);
+        Assert.All(inputs, line => Assert.Contains("--input '{", line, StringComparison.Ordinal));
+        Assert.DoesNotContain(inputs, line => line.Contains("\\\"", StringComparison.Ordinal));
+        Assert.Contains(
+            "Windows PowerShell 5.1 strips the quotes inside them, and the CLI then refuses the line with exit 2 before anything is made. There, write the arguments into a file as `{\"context\":{\"input\":…}}`, with your own file tool if you are an agent, and pass it with `--file` in place of `--input`.",
+            Flat(Section(page, "## 6. ")),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The Reply CLI signs in by its own route, which may be a page in the browser: said where the sign-in is, so that a
+    /// person is not surprised by it, and outside the section for an agent, whose digest it does not move.
+    /// </summary>
+    [Fact]
+    public void The_golden_path_says_the_sign_in_may_open_a_browser() =>
+        Assert.Contains(
+            "**Yours to do.** Sign in, in your own terminal, as the person whose account it is. It may open your browser:",
+            Subsection(Page("docs", "golden-path.md"), "### The Reply CLI"),
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// The first run enrols only into a sequence nobody has started and that holds nobody: the read of the sequence must
+    /// say it is a draft, and the read of its people that their count is 0. Anything else — a started sequence, somebody
+    /// already in it, a count the provider would not give — stops the run before anything is written.
+    /// </summary>
+    [Fact]
+    public void The_golden_path_stops_on_anything_but_a_draft_sequence_and_an_empty_one()
+    {
+        var agent = Flat(GoldenAgent());
+
+        Assert.Contains("`campaign.get` must answer `draft` before anything else. Any other status stops the run, and you say why.", agent, StringComparison.Ordinal);
+        Assert.Contains("`enrollment.list` must answer a `total` of 0 before the enrolment. Any other count, null included, stops the run.", agent, StringComparison.Ordinal);
+        Assert.Contains("The enrolment refuses a collision (`collision: refuse`), and `total` is 1 after it.", agent, StringComparison.Ordinal);
+        Assert.Contains(
+            "Anything else stops the run here: a sequence that has started, or that already holds somebody, is not one this run enrols into.",
+            Flat(Section(Page("docs", "golden-path.md"), "## 6. ")),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What keeps a first run from sending is that nothing in it starts the sequence: the page says so, tells an agent never
+    /// to start one, and prints no command that would.
+    /// </summary>
+    [Fact]
+    public void The_golden_path_never_starts_the_trial_sequence()
+    {
+        var page = Page("docs", "golden-path.md");
+
+        Assert.Contains("A sequence nobody started sends nothing, and this run never starts one.", Flat(page), StringComparison.Ordinal);
+        Assert.Contains("never run `campaign.activate`", Flat(GoldenAgent()), StringComparison.Ordinal);
+
+        // The run does start something: Jason's own campaign, so its work can run. Said beside the command, so that
+        // "this run never starts one" is not read as forbidding it, nor the command as starting the sequence.
+        Assert.Contains(
+            "`jason campaign start` starts Jason's own campaign, so the work below can run; your sequence at Reply stays unstarted.",
+            Flat(Section(page, "## 6. ")),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            FencedLines(page),
+            line => line.Contains("campaign.activate", StringComparison.Ordinal) || line.Contains("sequence start", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A first run that stops — at a read that said no, at a refusal — names what comes next, and the end of the run gives
+    /// the person the way back.
+    /// </summary>
+    [Fact]
+    public void The_golden_path_names_the_next_step_when_it_stops() =>
+        Assert.Contains(
+            "When you stop, name the next step. At the end, give the person the way back, in two lines.",
+            Flat(GoldenAgent()),
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// What working around a refusal is, is said once, on the install page. The golden path refers to it and says nothing
+    /// of its own about it, so the two pages cannot come to say different things.
+    /// </summary>
+    [Fact]
+    public void The_golden_path_refers_a_refusal_to_the_install_page_s_rule()
+    {
+        var page = Flat(Page("docs", "golden-path.md"));
+
+        Assert.Contains(
+            "A refusal by your harness, by npm or by the provider is reported once, as it stands, and never worked around, as [the install page](INSTALL.md) says.",
+            Flat(GoldenAgent()),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("rewrapped", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("by another means", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Before anything runs, an agent asks the person one question that names what the first run installs and from where —
+    /// the Reply CLI from npm's registry, and Node where it is missing — so the person's yes names its sources.
+    /// </summary>
+    [Fact]
+    public void The_golden_path_asks_one_question_naming_its_sources_first() =>
+        Assert.Contains(
+            "Before anything, ask the person one question in plain words: what you will install and from where — the Reply CLI from npm's registry, and Node if it is missing;",
+            Flat(GoldenAgent()),
+            StringComparison.Ordinal);
+
+    /// <summary>
     /// The public repository has a release, so a 404 from a one-liner no longer means there is none yet: it is a fault on
     /// the way to the release, reported as it is, and never a reason to build. Both pages that print the one-liners say
     /// so, and neither keeps the sentence from before the repository was public.
@@ -754,8 +1183,8 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// An agent performs §2, then §4 to §6. §3 is for a person who has the runtime's source, and §7 takes the
-    /// installation off again. And the one-liner's own change to the PATH is part of what it was asked to do; only a
-    /// PATH edit of its own is the person's to allow.
+    /// installation off again. And a package manager's own change to the PATH is part of what it was asked to do, as the
+    /// one-liner's is when the person types it; only a PATH edit of its own is the person's to allow.
     /// </summary>
     [Fact]
     public void The_agent_section_does_section_2_then_4_to_6()
@@ -765,7 +1194,11 @@ public partial class PageClaimsTests
         Assert.Contains("Do §2, then §4 to §6, in order, and stop there.", agent, StringComparison.Ordinal);
         Assert.Contains("§3 is for a person who has the runtime's source, which is not published here, and §7 takes the installation off again.", agent, StringComparison.Ordinal);
         Assert.DoesNotContain("§2 to §6", agent, StringComparison.Ordinal);
-        Assert.Contains("The one-liner's own PATH change is part of the install you were asked for", agent, StringComparison.Ordinal);
+        Assert.Contains(
+            "A package manager's own PATH change is part of the install you were asked for, and so is the one-liner's when the person types it; a PATH edit of your own, by hand (§2) or by the repair (§5), is marked **Ask first.**",
+            agent,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("The one-liner's own PATH change is part of the install you were asked for", agent, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -802,10 +1235,13 @@ public partial class PageClaimsTests
     }
 
     /// <summary>The digest of the README's prompt.</summary>
-    private const string PromptDigest = "sha256:41ae5b247f8e1f5897930c8b4c69212ae889c224f558c5580b0c84968894e77b";
+    private const string PromptDigest = "sha256:a218dac2de2fb843c275be0aeff7586ee6c99a5ceed033f63857941d04a162e7";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:8627ca8b26522a2fdc78a61af7980bc1e80762617e93fbf68eae45f1b781a77f";
+    private const string AgentSectionDigest = "sha256:1f35159aa82fe5f4c53ecbb02611a1dad4507b9f86f8ccb843e8fadbac0522df";
+
+    /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
+    private const string GoldenAgentSectionDigest = "sha256:37ea25245d6df2823a4ad5d8358cfcfed5178bfa605104596d7cd96c33a51434";
 
     /// <summary>
     /// The text between the line that opens a fence and the next line that is exactly three backticks, each line
@@ -861,6 +1297,50 @@ public partial class PageClaimsTests
 
         var end = page.IndexOf("\n" + heading[..(heading.IndexOf(' ') + 1)], start + 1, StringComparison.Ordinal);
         return page[(start + 1)..(end > start ? end : page.Length)];
+    }
+
+    /// <summary>The golden path's section for an agent that runs it: from its heading to the next heading.</summary>
+    private static string GoldenAgent()
+    {
+        const string Heading = "\n### If an agent runs it\n";
+        var page = Page("docs", "golden-path.md");
+        var heading = page.IndexOf(Heading, StringComparison.Ordinal);
+        Assert.True(heading >= 0, "docs/golden-path.md has no section for an agent that runs it.");
+
+        var next = NextHeading().Match(page, heading + Heading.Length);
+        return page[heading..(next.Success ? next.Index : page.Length)];
+    }
+
+    /// <summary>The lines of fenced code in a page, without their fences.</summary>
+    private static List<string> FencedLines(string page)
+    {
+        var lines = new List<string>();
+        var fenced = false;
+        foreach (var line in page.Split('\n'))
+        {
+            if (FenceLine().IsMatch(line))
+            {
+                fenced = !fenced;
+                continue;
+            }
+
+            if (fenced)
+            {
+                lines.Add(line);
+            }
+        }
+
+        return lines;
+    }
+
+    /// <summary>The part of a section under a heading of its own: from that heading to the next heading of any rank.</summary>
+    private static string Subsection(string section, string heading)
+    {
+        var start = section.IndexOf("\n" + heading + "\n", StringComparison.Ordinal);
+        Assert.True(start >= 0, $"the section has no subsection headed '{heading}'.");
+
+        var next = NextHeading().Match(section, start + heading.Length + 2);
+        return section[(start + 1)..(next.Success ? next.Index : section.Length)];
     }
 
     /// <summary>A page's lines with every line of fenced code, its fences included, made empty.</summary>

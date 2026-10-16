@@ -154,6 +154,29 @@ public class WorkItemCommandsTests
             "{\"kind\":\"provider_op\",\"operation\":\"campaign.get\",\"context\":{\"brief\":\"from the file\",\"input\":{}},\"campaign_id\":\"cmp_A\"}");
     }
 
+    /// <summary>
+    /// Where a shell will not pass JSON on the command line as written, the golden path puts the arguments in a file as
+    /// <c>{"context":{"input":…}}</c> and gives it with <c>--file</c>. That has to be the same request as <c>--input</c>,
+    /// or the page would be offering a second, different act.
+    /// </summary>
+    [Fact]
+    public async Task An_input_in_a_file_body_is_the_same_request_as_the_input_option()
+    {
+        const string Arguments = "{\"campaign\":{\"external_id\":\"7\"}}";
+        using var file = new TempFile("{\"context\":{\"input\":" + Arguments + "}}");
+        using var byOption = new CliRun();
+        using var byFile = new CliRun();
+
+        string[] common = ["workitem", "create", "cmp_A", "--kind", "provider_op", "--operation", "campaign.get"];
+        Assert.Equal(ExitCodes.Success, await byOption.RunAsync([.. common, "--input", Arguments, "--idempotency-key", "trial-run-sequence"]));
+        Assert.Equal(ExitCodes.Success, await byFile.RunAsync([.. common, "--file", file.Path, "--idempotency-key", "trial-run-sequence"]));
+
+        const string Expected =
+            "{\"context\":{\"input\":{\"campaign\":{\"external_id\":\"7\"}}},\"campaign_id\":\"cmp_A\",\"kind\":\"provider_op\",\"operation\":\"campaign.get\",\"idempotency_key\":\"trial-run-sequence\"}";
+        byFile.AssertPosted(Operations.WorkItemCreate, Expected);
+        byOption.AssertPosted(Operations.WorkItemCreate, Expected);
+    }
+
     [Fact]
     public async Task An_input_the_context_already_carries_is_a_usage_error()
     {

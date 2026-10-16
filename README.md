@@ -40,9 +40,14 @@ person or an agent.
 ### Ask an agent to do it
 
 Start the agent session for the install without external connectors: the prompt below needs none.
-On Claude Code that is `--strict-mcp-config`. Start it, too, in a mode that asks before it runs a command: on
-Claude Code, `--permission-mode manual`, not auto mode, which refuses to run a downloaded installer and stops the
-install at its first step. This is about installing only. Connectors in your agent's SDR work are yours to use.
+On Claude Code that is `--strict-mcp-config`. This is about installing only. Connectors in your agent's SDR work
+are yours to use.
+
+If your agent's default mode is auto, expect one of two things at the install: it asks you before the download
+runs, or, where nothing can ask you, it refuses and says so. Both are right. Say yes, or type the one-liner above
+yourself; never let it work around a refusal. A mode that asks before every command is the other way: on Claude
+Code, `--permission-mode manual` (`default` before 2.1.200), or shift-tab in an open session; in any other agent,
+the mode that asks before it runs a command.
 
 Paste this into an agent that has a shell on the machine you want Jason on. It is the whole prompt — no
 preamble, no repository tour:
@@ -50,16 +55,24 @@ preamble, no repository tour:
 ```text
 Install Jason on this machine. The instructions are
 <https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>. Read all of it
-first, the whole file word for word rather than a summary of it, then follow it in order from
-section 2.
+first, the whole file word for word rather than a summary of it.
+
+Before you run anything, ask me one question in plain words: what you will install and from
+where, what it writes and where (the executable and its directory, the PATH entry, Jason's data
+directory, the role skills), and each act the instructions mark "Ask first", offered to me one by
+one as a choice. Offer me the other way too: switching this session to a mode that asks me before
+every command. Then do the steps yourself, in order from section 2, doing only what I said yes to.
+
+Jason is downloaded from its releases at <https://jasonharness.ai/releases/>, which redirect to
+<https://github.com/reply-team/jason-ai/releases>; install it from there, or with the package
+section 2 names for this platform.
 
 By installing Jason you accept the Jason Runtime Licence:
 <https://github.com/reply-team/jason-ai/blob/main/LICENSE-RUNTIME.md>. If you do not accept it, do
 not install Jason.
 
-Do the steps yourself. Before any act the instructions mark "Ask first", ask me, and do it only if
-I say yes. At the end, tell me whether Jason can start work, and exactly what you ran and what it
-changed.
+At the end, tell me whether Jason can start work, what the next step is, and exactly what you ran
+and what it changed.
 ```
 
 ## What this is

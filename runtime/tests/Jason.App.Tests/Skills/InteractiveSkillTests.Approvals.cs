@@ -3,15 +3,13 @@ namespace Jason.App.Tests.Skills;
 public partial class InteractiveSkillTests
 {
     /// <summary>
-    /// The two skills that teach notifications are verified by the host that read them as they ship: the front matter,
-    /// the body and the catalog's bullet say so, the catalog's row for each names that host, and the pack's own rule
-    /// holds the row's digest to the text. The operating skill was read again after its install lines changed — the
-    /// address they go through, what a 404 from them means, and following the install page — so its row names that
-    /// later reading.
+    /// A skill that teaches notifications and is verified is verified by the host that read it as it ships: the front
+    /// matter, the body and the catalog's bullet say so, the catalog's row names that host, and the pack's own rule holds
+    /// the row's digest to the text. The operating skill teaches them too, and is a draft until a host has read its new
+    /// install and update text; it returns here with the row that reading gives it.
     /// </summary>
     [Theory]
     [InlineData("approvals-and-questions", "Claude Code 2.1.293 (claude-opus-5) | 0.5.0")]
-    [InlineData("operating-the-installation", "Claude Code 2.1.296 (Opus 5.5) | 0.7.0")]
     public void The_skills_that_teach_notifications_are_verified_by_the_host_that_read_them(string name, string reading)
     {
         var host = reading[..reading.IndexOf(" (", StringComparison.Ordinal)];

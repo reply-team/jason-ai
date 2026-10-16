@@ -26,6 +26,9 @@ namespace Jason.Cli.Tests.Documentation;
 [Collection(WorkingDirectoryCollection.Name)]
 public class DocumentedCommandsTests
 {
+    /// <summary>How a page writes the system's temporary directory in a command a person types.</summary>
+    private const string TemporaryDirectory = "<temporary directory>";
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -68,13 +71,18 @@ public class DocumentedCommandsTests
         foreach (var command in commands)
         {
             using var dir = new TempPaths();
-            using var named = new NamedFiles(Arguments(command), dir.Paths.Root);
+
+            // A page names the system's temporary directory by a placeholder, since it is a different path on every
+            // machine; here it is this test's own directory, which is where the files below are made. It is put in
+            // before the line is split, as a person types the path in its place, and quoted, as a path may hold a space.
+            var arguments = Arguments(command.Replace(TemporaryDirectory, "'" + dir.Paths.Root + "'", StringComparison.Ordinal));
+            using var named = new NamedFiles(arguments, dir.Paths.Root);
             var error = new StringWriter();
 
             // Nothing here may act on the machine. The data directory is this test's own and holds no
             // descriptor, so every command that needs a runtime ends at "nothing is running" — and the one
             // command that would start one is handed a process table that launches nothing.
-            var exit = await CliApp.RunAsync([.. Arguments(command)], Machine(dir, error), Ct);
+            var exit = await CliApp.RunAsync([.. arguments], Machine(dir, error), Ct);
 
             Assert.True(
                 exit != ExitCodes.Usage,

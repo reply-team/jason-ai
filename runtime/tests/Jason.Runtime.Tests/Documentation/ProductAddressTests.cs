@@ -30,7 +30,9 @@ public sealed partial class ProductAddressTests : IDisposable
     /// <summary>
     /// What the address answers, one row per shape. Each answers 302 with the same path under
     /// <c>https://github.com/reply-team/jason-ai</c>, the root with the repository itself. An asset is one of the
-    /// files a release publishes, by its name in <see cref="ReleaseAssets.Published"/>.
+    /// files a release publishes, by its name in <see cref="ReleaseAssets.Published"/>. The releases index is the
+    /// path under <c>/releases/</c> that names nothing further, and it is written with its slash: without it the
+    /// address is not under <c>/releases/</c>, the redirect does not take it, and nothing behind it answers.
     /// </summary>
     internal static readonly IReadOnlyList<(string Shape, Regex Pattern)> Shapes =
     [
@@ -38,6 +40,7 @@ public sealed partial class ProductAddressTests : IDisposable
         ("the latest release's asset", LatestAsset()),
         ("a release's asset", PinnedAsset()),
         ("a release's page", ReleasePage()),
+        ("the releases index", ReleasesIndex()),
     ];
 
     /// <summary>
@@ -142,6 +145,7 @@ public sealed partial class ProductAddressTests : IDisposable
     [InlineData("irm https://jasonharness.ai/releases/download/v{{version}}/install.ps1", "a release's asset")]
     [InlineData("-ReleaseNotesUrl \"https://jasonharness.ai/releases/tag/v$env:VERSION\"", "a release's page")]
     [InlineData("\"release_notes_url\": \"https://jasonharness.ai/releases/tag/v0.2.0\",", "a release's page")]
+    [InlineData("<https://jasonharness.ai/releases/>, which redirect to", "the releases index")]
     [InlineData("\"url\": \"https://jasonharness.ai\"", "the root")]
     [InlineData("Documentation=https://jasonharness.ai", "the root")]
     [InlineData("https://jasonharness.ai/download/manifest.json", null)]
@@ -399,6 +403,9 @@ public sealed partial class ProductAddressTests : IDisposable
 
     [GeneratedRegex(@"^https://jasonharness\.ai/releases/tag/v" + Version + "$")]
     private static partial Regex ReleasePage();
+
+    [GeneratedRegex(@"^https://jasonharness\.ai/releases/$")]
+    private static partial Regex ReleasesIndex();
 
     private sealed record Finding(string File, int Line, string What)
     {

@@ -29,6 +29,9 @@ public class GoldenPathTests
 
     private const string FirstName = "Marta";
 
+    /// <summary>The address a trial run enrols: the person's own, standing in for whoever follows the page.</summary>
+    private const string TrialAddress = "ada@example.test";
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -393,18 +396,163 @@ public class GoldenPathTests
         Assert.Fail(never);
     }
 
-    /// <summary>The person this campaign is about, added the way an agent would add them.</summary>
-    private static async Task<string> AddPersonAsync(Installation it, string campaign)
+    /// <summary>
+    /// The first run the golden path walks a stranger through, with the page's own arguments: a sequence the person made
+    /// and never started is read before anything is written to it — a draft, holding nobody — and only then is the
+    /// person's own address enrolled, refusing rather than deciding if they already take part. The enrolment waits for
+    /// the person's word, the read after it finds exactly them, and the way back takes them out again, waiting for its own
+    /// word. Nothing in the run starts the sequence, so nothing in it can send.
+    /// </summary>
+    /// <remarks>
+    /// The arguments are read from the page, not written here, so the page and what this proves cannot drift apart. The
+    /// account at the far end is the stand-in vendor CLI; the same run against a real account is a person's own.
+    /// </remarks>
+    [Fact]
+    public async Task A_first_run_reads_a_trial_sequence_before_it_enrols_and_after()
     {
-        var contactsFile = Path.Combine(it.Root, Guid.NewGuid().ToString("N") + ".json");
-        await File.WriteAllTextAsync(
-            contactsFile,
+        var page = TrialInputs();
+        Assert.Equal("refuse", (string?)page["campaign.enroll"]["collision"]);
+
+        using var it = GoldenPath.Create("trial");
+        it.Account.WithSequence(Sequence, "Trial run", "new", false, 11);
+
+        await GoldenPath.WriteSettingsAsync(it, new SettingsShape());
+        await GoldenPath.StartAsync(it);
+        GoldenPath.InstallReplyPackage(it);
+        await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: true);
+
+        var campaign = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
+            it, "campaign", "create", "--name", "Trial run", "--idempotency-key", "trial-run")))["id"]!;
+        var contact = await AddPeopleAsync(it, campaign, TrialContacts().Replace("<your address>", TrialAddress, StringComparison.Ordinal));
+        GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, "campaign", "start", campaign));
+
+        // 1. Two reads before anything is written, and neither waits for anybody: reading changes nothing at the
+        //    provider. The sequence is a draft — Reply's "new" in the contract's own word — and it holds nobody.
+        var sequence = await RunAsync(it, campaign, null, "campaign.get", page["campaign.get"], "trial-run-sequence");
+        Assert.Equal("draft", (string?)sequence["result"]!["campaign"]!["status"]);
+        var nobody = await RunAsync(it, campaign, null, "enrollment.list", page["enrollment.list"], "trial-run-people");
+        Assert.Equal(0, (int)nobody["result"]!["total"]!);
+        Assert.DoesNotContain(it.Account.Calls, call => call.Command == "sequence add-contact");
+
+        // 2. The enrolment parks for the person's word, is given it, and runs.
+        var enrolled = await DecidedAsync(it, campaign, contact, "campaign.enroll", page["campaign.enroll"], "trial-run-enrol");
+        Assert.Equal("enrolled", (string?)enrolled["result"]!["items"]!.AsArray()[0]!["status"]);
+        Assert.False((bool)enrolled["result"]!["campaign_live"]!);
+
+        // 3. The read after it finds exactly the one person this run is about.
+        var you = await RunAsync(it, campaign, null, "enrollment.list", page["enrollment.list"], "trial-run-people-after");
+        Assert.Equal(1, (int)you["result"]!["total"]!);
+        Assert.Single(it.Account.EnrolledIn(Sequence));
+
+        // 4. The way back waits for its own word, and leaves the sequence holding nobody.
+        await DecidedAsync(it, campaign, contact, "enrollment.stop", page["enrollment.stop"], "trial-run-stop");
+        Assert.Empty(it.Account.EnrolledIn(Sequence));
+
+        // And nothing in the run started the sequence, which is what keeps a trial from sending.
+        Assert.DoesNotContain(it.Account.Calls, call => call.Command == "sequence start");
+
+        await GoldenPath.StopAsync(it);
+    }
+
+    /// <summary>
+    /// The <c>--input</c> of each provider operation the golden path's commands create, by operation: the page's own
+    /// arguments, single-quoted JSON, which a shell hands over as written. An operation the page creates twice says the
+    /// same both times.
+    /// </summary>
+    /// <remarks>
+    /// Single quotes because PowerShell takes no backslash escape: a double-quoted argument with its quotes escaped for a
+    /// POSIX shell reaches the CLI split in two there, and an agent's first read failed on exactly that.
+    /// </remarks>
+    private static Dictionary<string, JsonObject> TrialInputs()
+    {
+        var page = TrialPage();
+        var inputs = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+        foreach (var line in page.Split('\n').Select(line => line.Trim()).Where(line => line.StartsWith("jason workitem create ", StringComparison.Ordinal)))
+        {
+            var operation = System.Text.RegularExpressions.Regex.Match(line, @"--operation (\S+)").Groups[1].Value;
+            var quoted = System.Text.RegularExpressions.Regex.Match(line, "--input '([^']*)'");
+            Assert.True(quoted.Success, $"docs/golden-path.md gives {operation} its --input as something other than single-quoted JSON: {line}");
+            var parsed = JsonNode.Parse(quoted.Groups[1].Value)!.AsObject();
+            if (inputs.TryGetValue(operation, out var seen))
+            {
+                Assert.Equal(seen.ToJsonString(JasonJson.Options), parsed.ToJsonString(JasonJson.Options));
+                continue;
+            }
+
+            inputs[operation] = parsed;
+        }
+
+        foreach (var operation in new[] { "campaign.get", "enrollment.list", "campaign.enroll", "enrollment.stop" })
+        {
+            Assert.True(inputs.ContainsKey(operation), $"docs/golden-path.md creates no {operation} work item.");
+        }
+
+        return inputs;
+    }
+
+    /// <summary>
+    /// The one line <c>contacts.json</c> holds on the golden path, as the page prints it: the person's own address and
+    /// nothing else, not even a first name, which the package derives from the address.
+    /// </summary>
+    private static string TrialContacts()
+    {
+        var file = Assert.Single(TrialPage().Split('\n'), line => line.StartsWith("[{\"channels\":", StringComparison.Ordinal));
+        Assert.Contains("<your address>", file, StringComparison.Ordinal);
+        return file;
+    }
+
+    private static string TrialPage() =>
+        File.ReadAllText(Path.Combine(Skills.SkillPack.RepositoryRoot(), "docs", "golden-path.md")).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    /// <summary>One provider operation as a work item, run to its end without anybody's word: a read.</summary>
+    private static async Task<JsonObject> RunAsync(Installation it, string campaign, string? contact, string operation, JsonObject input, string key)
+    {
+        var item = await CreateAsync(it, campaign, contact, operation, input, key);
+        var ran = await GoldenPath.PollAsync(it, item, read => GoldenPath.Finished((string?)read["status"]));
+        GoldenPath.AssertSucceeded(ran);
+        return ran;
+    }
+
+    /// <summary>One provider operation that parks for a person's word, given that word, and run to its end.</summary>
+    private static async Task<JsonObject> DecidedAsync(Installation it, string campaign, string contact, string operation, JsonObject input, string key)
+    {
+        var item = await CreateAsync(it, campaign, contact, operation, input, key);
+        await GoldenPath.PollAsync(it, item, read => (string?)read["status"] == "awaiting_approval");
+
+        var waiting = Assert.Single(
+            GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "approval", "list")))["items"]!.AsArray(),
+            approval => (string?)approval!["work_item_id"] == item)!;
+        GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(
+            it, "approval", "approve", (string)waiting["id"]!, "--actor", "human:ada", "--reason", "my own trial run"));
+
+        var ran = await GoldenPath.PollAsync(it, item, read => GoldenPath.Finished((string?)read["status"]));
+        GoldenPath.AssertSucceeded(ran);
+        return ran;
+    }
+
+    private static async Task<string> CreateAsync(Installation it, string campaign, string? contact, string operation, JsonObject input, string key)
+    {
+        string[] about = contact is null ? [] : ["--contact", contact];
+        string[] arguments = ["workitem", "create", campaign, "--kind", "provider_op", "--operation", operation, .. about, "--input", input.ToJsonString(JasonJson.Options), "--idempotency-key", key];
+        return (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, arguments)))["id"]!;
+    }
+
+    /// <summary>The person this campaign is about, added the way an agent would add them.</summary>
+    private static Task<string> AddPersonAsync(Installation it, string campaign, string address = Address, string firstName = FirstName) =>
+        AddPeopleAsync(
+            it,
+            campaign,
             new JsonArray(new JsonObject
             {
-                ["first_name"] = FirstName,
-                ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = Address }),
-            }).ToJsonString(JasonJson.Options),
-            Ct);
+                ["first_name"] = firstName,
+                ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = address }),
+            }).ToJsonString(JasonJson.Options));
+
+    /// <summary>The one person a <c>contacts.json</c> holds, added from that file, and their contact id.</summary>
+    private static async Task<string> AddPeopleAsync(Installation it, string campaign, string contacts)
+    {
+        var contactsFile = Path.Combine(it.Root, Guid.NewGuid().ToString("N") + ".json");
+        await File.WriteAllTextAsync(contactsFile, contacts, Ct);
 
         await GoldenPath.Ok(GoldenPath.JasonAsync(
             it, "campaign", "add-contacts", campaign, "--file", contactsFile, "--match-by", "email"));

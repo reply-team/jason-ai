@@ -129,11 +129,35 @@ public partial class InteractiveSkillTests
         // terminal, which the README's own prompt for an agent contradicts. The page is named by the address the
         // prompt gives, because the skill is read in a harness on a machine that has no checkout to open it in.
         Assert.Contains(
-            "Installing Jason is `docs/INSTALL.md` (<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>), followed in order.",
+            "Installing Jason is `docs/INSTALL.md` (<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>), followed in order,",
             skill,
             StringComparison.Ordinal);
         Assert.Contains("ask them before every act it marks \"Ask first\"", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("rather than something to perform on their behalf", skill, StringComparison.Ordinal);
+
+        // Followed in order means its teaching section too: a host that installed from an earlier text listed its steps
+        // and left that one out, and an installation with no role skills launches every role untaught.
+        Assert.Contains("its §4 included: that section teaches the installation its role skills", skill, StringComparison.Ordinal);
+
+        // A session that installs takes the routes the page gives an agent, in its order, never pipes a download into a
+        // shell, and hands the one-liners to the person where neither route is open to it.
+        Assert.Contains(
+            "a package where the page names one for this platform and its package manager is already there, otherwise the steps it gives by hand",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("Never pipe a download into a shell", skill, StringComparison.Ordinal);
+        Assert.Contains("The two lines are the person's: where neither route is open to you, hand them the lines to type.", skill, StringComparison.Ordinal);
+
+        // And a ready installation is followed by its first run, started by one word in the same session.
+        Assert.Contains("the next step is the first run, `docs/golden-path.md`", skill, StringComparison.Ordinal);
+
+        // After an update the role skills can be another release's. The skill says what `jason status` says about it and
+        // that the repair is the line it prints — no more, because the repair's own words are the check's to give. Only
+        // what a default install took fails: a deployment pinned with --ref passes, so the sentence names the default.
+        Assert.Contains(
+            "role skills a default install took at another release's tag fail its `role_skills` check, which names both tags, and its repair is the line it prints",
+            skill,
+            StringComparison.Ordinal);
 
         // The runtime volunteers that a newer version exists, so every session on this installation learns
         // it. Without a bound, every one of them says so, and a person who declined once is told again.

@@ -21,30 +21,43 @@ harness installed, so §4 has somewhere to deploy.
 ### If an agent installs it
 
 An act this page marks **Ask first.** needs the word of the person you install for: ask, and do it only on their
-yes. With nobody to ask, leave it undone and say so.
+yes. With nobody to ask, leave it undone and say so. A question tool that comes back with no answer is nobody to
+ask.
 
 - Start your session without external connectors — on Claude Code, `--strict-mcp-config`. The install needs none.
 - Do §2, then §4 to §6, in order, and stop there. §3 is for a person who has the runtime's source, which is not
   published here, and §7 takes the installation off again.
+- Install by the first route that fits. Where §2 names a package for this platform and its package manager is
+  already on this machine, use it (*With a package manager*). Where it is not, where it fails, or where it or your
+  harness refuses it, say so once and take §2 *By hand*: download the archive and `checksums.txt` from the release,
+  check the digest and stop on a mismatch, unpack, keep the two notice files beside the executable, and run
+  `jason --version` by its full path. That is the next route, not a way around the refusal. Never pipe a download
+  into a shell. The install scripts are the person's: where your harness refuses even the route by hand, say so and
+  give the person the one-liner to type themselves.
 - Write only what those steps write: the executable and its install directory; this account's PATH entry for it;
-  Jason's data directory, which is where the role skills go; the system's temporary directory, which the installer
-  downloads into; and the directory the executable unpacks its native libraries into when it first runs — under
+  Jason's data directory, which is where the role skills go; the system's temporary directory, which the download
+  goes into; and the directory the executable unpacks its native libraries into when it first runs — under
   the temporary directory on Windows, under `~/.net` in this home directory on macOS and Linux. Nothing in your
-  own agent's configuration unless the person says so (§4). The one-liner's own PATH change is part of the install
-  you were asked for; what needs asking is a PATH edit of your own, by hand (§2) or by the repair (§5).
-- Install nothing else and build nothing: the runtime's source is not here (§3). A 404 from a one-liner is §2's:
+  own agent's configuration unless the person says so (§4). A package manager's own PATH change is part of the
+  install you were asked for, and so is the one-liner's when the person types it; a PATH edit of your own, by hand
+  (§2) or by the repair (§5), is marked **Ask first.**
+- With a no to the PATH entry, it is the person's own step: finish everything else, then hand them the exact line
+  `jason status` prints for `path`, and say that `jason status` again proves it. Never end on "not ready" alone:
+  name the step that remains.
+- Install nothing else and build nothing: the runtime's source is not here (§3). A 404 from a download is §2's:
   stop and report exactly that. Leave no long-running process behind except the runtime that
   `jason runtime start` starts.
-- If your harness refuses to run the one-liner as code from outside — Claude Code's auto mode does — do not work
-  around it: say so, and ask the person to type the line themselves, or to restart the session in a mode that asks
-  before each command.
+- A refusal — by your harness, or by a package manager — is reported once, as it stands, and never worked around.
+  Working around it is a retry, the same command rewrapped, or the refused code run by another means, such as a
+  downloaded script run another way. Taking the next route in the order above is not working around it.
 - After `jason status` (§5), branch on `ready` in its JSON body, never on the exit code. For each required check
   that is not ok, run the repair it prints. Optional checks are reported, not repaired: their repairs write into
   your agent's configuration or into what starts at logon, which is the person's to allow.
 - A profile you append to is read by a login shell, not by your next non-interactive command (§2): carry the
   `export` half yourself, or call `jason` by its full path.
 - Stop when `ready` is true, or when a required check still fails after its repair. Report which checks failed,
-  exactly what you ran, and what it changed.
+  exactly what you ran, and what it changed. When `ready` is true, tell the person Jason is installed and can work,
+  and that one word from them starts [its first run](golden-path.md) in this session.
 
 ---
 
@@ -138,6 +151,23 @@ the runtime's version, including its build. `Update:CheckEnabled` set to `false`
 `jason update apply` make, go to `jasonharness.ai`, an address Reply.io operates, which redirects them to this
 repository's releases on GitHub. What that address keeps, and for how long, is section 7.2 of the
 [licence](../LICENSE-RUNTIME.md).
+
+### By hand
+
+To install without running a downloaded script, take the steps the script takes, yourself:
+
+1. Download the archive for this machine and `checksums.txt` beside it: for the latest release,
+   `https://jasonharness.ai/releases/latest/download/jason-win-x64.zip`, `…/jason-linux-x64.tar.gz` or
+   `…/jason-osx-arm64.tar.gz`, and `https://jasonharness.ai/releases/latest/download/checksums.txt`. For a
+   particular release, use the address the pinned lines above use, with the file's name in place of the script's.
+2. Check the archive's SHA-256 against its line in `checksums.txt` (`Get-FileHash -Algorithm SHA256` on Windows,
+   `sha256sum` or `shasum -a 256` elsewhere), and stop if they differ.
+3. Unpack it into a new temporary directory, and move the executable into the install directory —
+   `%LOCALAPPDATA%\Programs\jason` on Windows, `~/.local/bin` elsewhere — with `LICENSE` and `THIRD-PARTY-NOTICES`
+   beside it, named `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`. On Windows a downloaded archive may carry the
+   mark of the web, and hands it to what it unpacks: `Unblock-File` the executable, as `install.ps1` does.
+4. Run `jason --version` there, by its full path. It prints the version you downloaded.
+5. Put that directory on the PATH, as *Putting it on the PATH yourself* above says: that is the act it marks.
 
 ---
 
@@ -312,6 +342,9 @@ runtime then runs in your own session when you sign in, shows no window on Windo
 when you sign out. On Windows that is a logon task named for this account; on macOS a LaunchAgent,
 `ai.jason.runtime`; on Linux a `systemd --user` unit, `jason.service`. `jason runtime autostart status` says what
 is registered.
+
+That is the installation. [Its first run](golden-path.md) is a page of its own, and an agent that installed
+Jason starts it in the same session on one word from you.
 
 ---
 
