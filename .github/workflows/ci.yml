@@ -1,9 +1,13 @@
 name: CI
 
+# A draft pull request's pushes run the Linux set: the version, linux-x64, install.sh on ubuntu and the update on
+# linux-x64. Marking it ready for review, every push after that, and every push to main run all ten checks the main
+# branch's ruleset requires. The version job decides which a run is, once, and every other job needs it.
 on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -25,6 +29,10 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
+      full: ${{ steps.legs.outputs.full }}
+      platforms: ${{ steps.legs.outputs.platforms }}
+      updates: ${{ steps.legs.outputs.updates }}
+      rids: ${{ steps.legs.outputs.rids }}
     steps:
       - uses: actions/checkout@v7
 
@@ -50,6 +58,33 @@ jobs:
           Write-Host "release -> $release"
           "release=$release" >> $env:GITHUB_OUTPUT
 
+      # Whether this run is full, and which legs each matrix runs. A matrix cannot be cut by a job's own condition, so
+      # its legs are decided here, from the whole list, and handed on: every leg on a full run, the Linux leg alone on
+      # a draft pull request's push. A job only a full run needs carries `if: needs.version.outputs.full == 'true'`,
+      # and a job its condition skips reports success to the checks the ruleset requires.
+      - id: legs
+        name: Decide which checks this run needs
+        shell: pwsh
+        env:
+          FULL: ${{ github.event_name == 'push' || github.event.pull_request.draft == false }}
+          PLATFORMS: '[{"rid":"linux-x64","os":"ubuntu-latest"},{"rid":"win-x64","os":"windows-latest"},{"rid":"osx-arm64","os":"macos-latest"}]'
+          UPDATES: '[{"rid":"linux-x64","os":"ubuntu-latest"},{"rid":"win-x64","os":"windows-latest"}]'
+        run: |
+          $full = $env:FULL -eq 'true'
+          function Legs([string] $all) {
+            $legs = @($all | ConvertFrom-Json)
+            if (-not $full) { $legs = @($legs | Where-Object { $_.rid -eq 'linux-x64' }) }
+            , $legs
+          }
+
+          $platforms = Legs $env:PLATFORMS
+          $updates = Legs $env:UPDATES
+          "full=$(if ($full) { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
+          "platforms=$(@{ include = $platforms } | ConvertTo-Json -Compress -Depth 3)" >> $env:GITHUB_OUTPUT
+          "updates=$(@{ include = $updates } | ConvertTo-Json -Compress -Depth 3)" >> $env:GITHUB_OUTPUT
+          "rids=$(@($platforms | ForEach-Object { $_.rid }) -join ',')" >> $env:GITHUB_OUTPUT
+          Write-Host "full -> $full; platforms -> $(@($platforms | ForEach-Object { $_.rid }) -join ', '); updates -> $(@($updates | ForEach-Object { $_.rid }) -join ', ')"
+
   # A pull request is stamped with -dev after the version and a release with the bare version, and a test can pass
   # under one and fail under the other: three update tests once advertised the release this tree was on its way to
   # as the newer one, which a -dev build is older than and the release is not, so every pull request passed and the
@@ -58,6 +93,7 @@ jobs:
   release-stamp:
     name: The suite under a release's version
     needs: version
+    if: needs.version.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -92,14 +128,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            rid: linux-x64
-          - os: windows-latest
-            rid: win-x64
-          - os: macos-latest
-            rid: osx-arm64
+      # linux-x64, win-x64 and osx-arm64 on a full run; linux-x64 alone on a draft pull request's push.
+      matrix: ${{ fromJSON(needs.version.outputs.platforms) }}
     steps:
       - uses: actions/checkout@v7
 
@@ -139,6 +169,8 @@ jobs:
         with:
           rid: ${{ matrix.rid }}
           version: ${{ needs.version.outputs.version }}
+          # For the jobs of this run and a person looking at a failure; a release keeps its own.
+          retention-days: 3
 
       - name: Smoke-test the published executable
         shell: pwsh
@@ -259,6 +291,7 @@ jobs:
   older-windows:
     name: jason.exe on a Windows older than 24H2
     needs: [version, build-test-publish]
+    if: needs.version.outputs.full == 'true'
     runs-on: windows-2022
     steps:
       - uses: actions/download-artifact@v7
@@ -309,12 +342,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            rid: linux-x64
-          - os: windows-latest
-            rid: win-x64
+      # linux-x64 and win-x64 on a full run; linux-x64 alone on a draft pull request's push.
+      matrix: ${{ fromJSON(needs.version.outputs.updates) }}
     steps:
       - uses: actions/checkout@v7
 
@@ -354,6 +383,7 @@ jobs:
           rid: ${{ matrix.rid }}
           version: ${{ steps.next.outputs.next }}
           artifact: next-jason-${{ matrix.rid }}
+          retention-days: 3
 
       - name: Serve that version from a feed on this machine
         shell: pwsh
@@ -581,9 +611,10 @@ jobs:
           merge-multiple: true
           path: feed
 
+      # Every archive this run packaged: all three on a full run, the Linux one alone on a draft pull request's push.
       - name: Assemble the feed the way a release is assembled
         shell: pwsh
-        run: ./.github/scripts/Write-Manifest.ps1 -Version ${{ needs.version.outputs.version }} -Directory feed -Require win-x64,linux-x64,osx-arm64
+        run: ./.github/scripts/Write-Manifest.ps1 -Version ${{ needs.version.outputs.version }} -Directory feed -Require ${{ needs.version.outputs.rids }}
 
       - name: Install, twice over, and once more without touching the PATH
         shell: bash
@@ -635,7 +666,9 @@ jobs:
           # A login shell reads the line the script wrote and finds jason by name.
           sh -l -c 'jason --version'
 
+      # The fixture names all three archives, which only a full run packages.
       - name: Install from the schema-1 fixture, the feed layout 0.1.0 published
+        if: needs.version.outputs.full == 'true'
         shell: bash
         env:
           JASON_Update__CheckEnabled: 'false'
@@ -720,6 +753,7 @@ jobs:
   install-ps1:
     name: install.ps1 on windows
     needs: [version, build-test-publish]
+    if: needs.version.outputs.full == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7

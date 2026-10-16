@@ -548,29 +548,51 @@ public class ReleaseWorkflowTests
             "install.ps1 on windows",
         ];
 
+        var jobs = Mapping(Parse(Read(Ci)), "jobs");
         var reported = new List<string>();
-        foreach (var (key, value) in Mapping(Parse(Read(Ci)), "jobs").Children)
+        foreach (var (key, value) in jobs.Children)
         {
             var job = (YamlMappingNode)value;
             var name = Scalar(job, "name") ?? key.ToString();
-            var legs = Node(job, "strategy") is YamlMappingNode strategy
-                && Node(strategy, "matrix") is YamlMappingNode matrix
-                && Node(matrix, "include") is YamlSequenceNode include
-                    ? include.Children.Cast<YamlMappingNode>().ToList()
-                    : null;
+            var legs = Node(job, "strategy") is YamlMappingNode strategy ? MatrixLegs(jobs, Node(strategy, "matrix")) : null;
             if (legs is null)
             {
                 reported.Add(name);
                 continue;
             }
 
-            reported.AddRange(legs.Select(leg => Regex.Replace(name, @"\$\{\{\s*matrix\.(\w+)\s*\}\}", match => Scalar(leg, match.Groups[1].Value) ?? match.Value)));
+            reported.AddRange(legs.Select(leg => Regex.Replace(name, @"\$\{\{\s*matrix\.(\w+)\s*\}\}", match => leg.TryGetValue(match.Groups[1].Value, out var said) ? said : match.Value)));
         }
 
         Assert.True(
             required.Order(StringComparer.Ordinal).SequenceEqual(reported.Order(StringComparer.Ordinal)),
             $"ci.yml reports {string.Join(", ", reported.Select(name => $"'{name}'"))}, and the ruleset requires "
             + $"{string.Join(", ", required.Select(name => $"'{name}'"))}. A check renamed here is renamed in the ruleset in the same change.");
+    }
+
+    /// <summary>
+    /// Every leg a matrix can run: a literal <c>include</c> as written, or — where the version job decides the legs — the
+    /// whole list that job's deciding step is given, which is what a full run runs.
+    /// </summary>
+    private static List<Dictionary<string, string>>? MatrixLegs(YamlMappingNode jobs, YamlNode? matrix)
+    {
+        if (matrix is YamlMappingNode written && Node(written, "include") is YamlSequenceNode include)
+        {
+            return [.. include.Children.Cast<YamlMappingNode>()
+                .Select(leg => leg.Children.ToDictionary(pair => pair.Key.ToString(), pair => pair.Value.ToString(), StringComparer.Ordinal))];
+        }
+
+        var decided = Regex.Match((matrix as YamlScalarNode)?.Value ?? string.Empty, @"^\$\{\{\s*fromJSON\(needs\.version\.outputs\.(\w+)\)\s*\}\}$");
+        if (!decided.Success)
+        {
+            return null;
+        }
+
+        var deciding = Assert.IsType<YamlSequenceNode>(Node(Mapping(jobs, "version"), "steps")).Children.Cast<YamlMappingNode>()
+            .Single(step => Scalar(step, "id") == "legs");
+        using var all = JsonDocument.Parse(Scalar(Mapping(deciding, "env"), decided.Groups[1].Value.ToUpperInvariant())!);
+        return [.. all.RootElement.EnumerateArray()
+            .Select(leg => leg.EnumerateObject().ToDictionary(property => property.Name, property => property.Value.GetString()!, StringComparer.Ordinal))];
     }
 
     // --- release.yml -------------------------------------------------------------------------------------
@@ -1453,12 +1475,25 @@ public class ReleaseWorkflowTests
     /// The runner's own substitutions, and nothing else: the workflow expression that carries the version, the
     /// environment variables the jobs export, and the directory the artifacts arrive in.
     /// </summary>
+    /// <summary>
+    /// What a full run's version job hands on as <c>rids</c>: every platform its deciding step is given, comma-separated,
+    /// as the runner puts it into a line — which PowerShell then reads as an array, as it reads a list written out.
+    /// </summary>
+    private static string FullRunRids()
+    {
+        var deciding = Assert.IsType<YamlSequenceNode>(Node(Mapping(Mapping(Parse(Read(Ci)), "jobs"), "version"), "steps")).Children.Cast<YamlMappingNode>()
+            .Single(step => Scalar(step, "id") == "legs");
+        using var platforms = JsonDocument.Parse(Scalar(Mapping(deciding, "env"), "PLATFORMS")!);
+        return string.Join(',', platforms.RootElement.EnumerateArray().Select(leg => leg.GetProperty("rid").GetString()));
+    }
+
     private static string ExpandForThisMachine(string invocation, string directory)
     {
         var script = Path.Combine(RepositoryRoot(), Path.Combine(Script));
         var expanded = invocation
             .Replace("./.github/scripts/Write-Manifest.ps1", $"& '{script}'", StringComparison.Ordinal)
             .Replace("${{ needs.version.outputs.version }}", "0.2.0", StringComparison.Ordinal)
+            .Replace("${{ needs.version.outputs.rids }}", FullRunRids(), StringComparison.Ordinal)
             .Replace("$env:VERSION", "0.2.0", StringComparison.Ordinal)
             .Replace("$env:NEXT", "0.2.1", StringComparison.Ordinal)
             .Replace("$env:RID", ReleaseAssets.Rids[0], StringComparison.Ordinal);

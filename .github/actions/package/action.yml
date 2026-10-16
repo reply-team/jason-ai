@@ -22,6 +22,14 @@ inputs:
     required: false
     default: ''
 
+  retention-days:
+    description: >
+      How many days the uploaded artifact is kept. 0, the default, is upload-artifact's own word for the repository's
+      retention, which is what a release keeps; a pull request's run says fewer, because what it uploads is for the
+      jobs of that run and for a person looking at a failure.
+    required: false
+    default: '0'
+
 outputs:
   executable:
     description: The published executable, for the caller's smoke test.
@@ -156,3 +164,4 @@ runs:
           ${{ steps.name.outputs.archive }}.sha256
           artifacts/release/jason-${{ inputs.rid }}.fragment.json
         if-no-files-found: error
+        retention-days: ${{ inputs.retention-days }}
