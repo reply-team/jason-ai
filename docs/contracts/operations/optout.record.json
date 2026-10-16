@@ -11,7 +11,7 @@
   "approval_departs": true,
   "protective_floor": true,
   "approval_reason": "the protective floor — recording that somebody said stop is an operation whose non-performance is itself the harm, and waiting for permission to stop is the destructive choice.",
-  "before_repeating": "the current opt-out state for this person and identifier, with its recorded event time.",
+  "before_repeating": "the current opt-out state for this person and identifier, with its recorded event time — or none, where setting the provider's flag is idempotent and the repeat works by the contact pinned on the failure.",
   "idempotency_key": "required",
   "per_item_results": "required",
   "accepts_collection": true,
@@ -174,7 +174,7 @@
   },
 
   "recovery_read": {
-    "reads": "The contact's opt-out flag at the provider.",
+    "reads": "The contact's opt-out flag at the provider. Where setting the provider's flag is idempotent (setting it again changes nothing), a repeat worked by the contact pinned on the failure needs no read; with no pin learned, the contact the first attempt may have made is found by a read first, never created again from the person's fields.",
     "justification": "The ensure step is a write that can create a person; the flag read is one call and decides whether anything is left to do."
   },
   "repeat_after_ambiguous": "after_recovery_read",
@@ -188,7 +188,7 @@
     { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it record an opt-out for this account." },
     { "code": "rate_limited", "class": "transient", "when": "The provider refused the opt-out for now and it may be attempted again." },
     { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was written." },
-    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the opt-out may already be recorded. The next attempt reads the contact's flag before it writes." }
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the opt-out may already be recorded. The next attempt reads the contact's flag before it writes, or sets a flag the provider makes idempotent, worked by the pin or, with none, by the contact a read finds first." }
   ],
 
   "timeout_ms": 120000,
@@ -196,7 +196,7 @@
   "conformance": [
     "A contact pinned under `contacts[0].external_ids.contact` is worked by that identifier, and never matched again by the channel value.",
     "What they said, where it arrived and when are Jason's record: none of it reaches the provider, which holds only the flag.",
-    "A person the provider already holds as opted out answers `already_recorded`, and nothing is written.",
+    "A person the provider already holds as opted out is flagged once. The answer is `already_recorded` where the provider says so, with nothing written, and `recorded` where setting the flag is idempotent and the provider cannot tell; a repeat after a lost answer works by the contact pinned on the failure and, with no pin, by the contact a read finds first.",
     "The flag is only ever set, never cleared: this operation cannot undo an opt-out.",
     "An opt-out never creates a second contact for an address the provider already holds: the person is looked up first, compared exactly, and created only when nobody matches.",
     "More than one contact under one address is refused with `contact_not_unique`, never guessed at.",

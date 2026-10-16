@@ -1,8 +1,8 @@
 # The golden path
 
 One run of the whole product, from an installation that knows nothing to a provider operation that has been
-approved by a person, performed by a plugin, and recorded where you can read it afterwards. Every command below
-is a command the end-to-end tests execute, and the three guarantees at the end are the three tests that prove
+approved by a person, performed by a plugin, and recorded where you can read it afterwards. Every `jason` command
+below is a command the end-to-end tests execute, and the three guarantees at the end are the three tests that prove
 them.
 
 The provider here is [Reply](https://reply.io) through [`plugins/reply/`](../plugins/reply/README.md), because
@@ -17,6 +17,54 @@ different package and a different route, and the sequence is the same.
 - **The Reply CLI**, installed and signed in, if you are following this against a real account. It owns the
   credential; Jason never sees one. *(The tests run against a stand-in that answers like it, so nothing in CI
   touches a real account.)*
+
+### If an agent runs it
+
+Read this whole page first, word for word, and follow it in order. It assumes no repository and no particular
+folder: start in any folder of yours, and nothing in this run writes there — the one file step 6 makes goes in the
+system's temporary directory.
+
+Before anything, ask the person one question in plain words: what you will install and from where — the Reply CLI
+from npm's registry, and Node if it is missing; what this run writes — the package into Jason's data directory,
+the grant and the route into its `settings.json`; which acts are theirs to do; and which need their yes. Then do
+the rest yourself, in order.
+
+An act this page marks **Ask first.** needs the person's word, as on [the install page](INSTALL.md): ask, and do
+it only on their yes; with nobody to ask, leave it undone and say so. An act marked **Yours to do.** is the
+person's own and never yours: say what it is, and wait until they say it is done. Signing in to the Reply CLI is
+theirs because the key must not pass through this conversation — never ask for it, and never read the CLI's
+profile store — and so is making the sequence this run uses.
+
+- The contact is the person's own address, which they type.
+- The sequence is one they made for this run and never started.
+- `campaign.get` must answer `draft` before anything else. Any other status stops the run, and you say why.
+- `enrollment.list` must answer a `total` of 0 before the enrolment. Any other count, null included, stops the
+  run.
+- The enrolment refuses a collision (`collision: refuse`), and `total` is 1 after it.
+- A sequence nobody started sends nothing, and this run never starts one: never run `campaign.activate`.
+- A refusal by your harness, by npm or by the provider is reported once, as it stands, and never worked around,
+  as [the install page](INSTALL.md) says.
+- When you stop, name the next step. At the end, give the person the way back, in two lines.
+
+### The Reply CLI
+
+It is a Node program, installed with npm, and it needs Node 20 or newer:
+
+```
+npm install -g reply-cli
+```
+
+**Ask first.** Where Node is missing, or older than 20, install it first: it is a system package, so it is the
+person's to allow.
+
+**Yours to do.** Sign in, in your own terminal, as the person whose account it is. It may open your browser:
+
+```
+reply auth login
+```
+
+In Windows PowerShell, type `reply.cmd auth login`: its default execution policy refuses the `reply.ps1` that npm
+installs beside the command.
 
 ## 1. Start the runtime
 
@@ -41,10 +89,22 @@ you did not choose.
 
 ## 3. Install the package
 
-Installing a plugin is copying its directory into `~/.jason/plugins/<id>/`. There is no install verb:
+Installing a plugin is copying its directory into `~/.jason/plugins/<id>/`. There is no install verb. The package
+comes from the tree `jason skills install` fetched when the installation was taught — this repository at the tag
+of the release you run, kept in Jason's data directory — where `<version>` is what `jason --version` prints, up to
+any `+`:
 
 ```
-cp -r plugins/reply ~/.jason/plugins/reply
+cp -r ~/.jason/skills/staged/v<version>/plugins/reply ~/.jason/plugins/reply
+```
+
+So the package is the one released with your runtime, and nothing is fetched a second time. Where that tree is not
+there — the skills came from a directory, or from another ref — fetch the release's tree into a temporary directory
+first, and copy the package from it:
+
+```
+git clone --depth 1 --branch v<version> https://github.com/reply-team/jason-ai <temporary directory>
+cp -r <temporary directory>/plugins/reply ~/.jason/plugins/reply
 ```
 
 Nothing is loaded yet. A package on disk is a candidate; what makes it active is the reload in step 5.
@@ -96,12 +156,42 @@ campaign, and why it could not.
 
 ## 6. Create the work
 
+**Yours to do.** Make a sequence at Reply for this run: add nobody to it, and never start it. Its number is the one
+in its address at Reply; below it is `7`.
+
+The one person in this run is you, by your own address. First the file, on its own: `contacts.json`, in the
+system's temporary directory, holds your address and nothing else. An agent writes it with its own file tool, not
+from a shell line:
+
+```json
+[{"channels":[{"channel":"email","value":"<your address>"}]}]
 ```
-jason campaign create --name "Q3 LatAm founders" --idempotency-key q3-latam
-jason campaign add-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --file contacts.json --match-by email
+
+Then the commands, one at a time: the campaign, the person, from the file where you wrote it, and two reads of the
+sequence before anything is written to it:
+
+```
+jason campaign create --name "Trial run" --idempotency-key trial-run
+jason campaign add-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --file <temporary directory>/contacts.json --match-by email
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.enroll --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input "{\"campaign\":{\"external_id\":\"7\"},\"channel\":\"email\",\"collision\":\"skip\",\"start\":{\"position\":\"first_step\"},\"first_touch\":\"authored_delay\"}" --idempotency-key q3-latam-enrol-marta
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.get --input '{"campaign":{"external_id":"7"}}' --idempotency-key trial-run-sequence
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation enrollment.list --input '{"campaign":{"external_id":"7"},"limit":10,"offset":0}' --idempotency-key trial-run-people
+jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
+
+`jason campaign start` starts Jason's own campaign, so the work below can run; your sequence at Reply stays
+unstarted. Both reads run without a question: reading changes nothing at the provider. The first links the campaign
+to your sequence, and its `result` must say the sequence is a `draft`; the second must say its `total` is 0. Anything
+else stops the run here: a sequence that has started, or that already holds somebody, is not one this run enrols
+into.
+
+Then the enrolment, which refuses rather than decides if you already take part:
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.enroll --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"campaign":{"external_id":"7"},"channel":"email","collision":"refuse","start":{"position":"first_step"},"first_touch":"authored_delay"}' --idempotency-key trial-run-enrol
+```
+
+A sequence nobody started sends nothing, and this run never starts one.
 
 Each create carries a key you chose. If an answer never comes back, send the same command with the same key: it
 answers with what the first one made rather than making it twice.
@@ -110,11 +200,18 @@ The arguments under `--input` are measured against the operation's own published
 ([`docs/contracts/operations/`](contracts/operations)) when the item is created, so a mistake is caught here
 rather than at the provider.
 
+They are single-quoted JSON. Windows PowerShell 5.1 strips the quotes inside them, and the CLI then refuses the
+line with exit 2 before anything is made. There, write the arguments into a file as `{"context":{"input":…}}`,
+with your own file tool if you are an agent, and pass it with `--file` in place of `--input`.
+
 ## 7. Answer the question it raises
 
 `campaign.enroll` reaches a real person at a provider, and its contract says somebody must confirm it. The
 dispatcher therefore **parks** the work instead of performing it: the item's status becomes `awaiting_approval`,
 no attempt is made, and nothing is sent.
+
+**Ask first.** The decision is the person's: show them what `approval get` says, and approve only on their yes, in
+their name.
 
 ```
 jason approval list
@@ -132,11 +229,25 @@ again with a fresh question.
 ```
 jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason journal list --work-item wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation enrollment.list --input '{"campaign":{"external_id":"7"},"limit":10,"offset":0}' --idempotency-key trial-run-people-after
 ```
 
 The attempt carries what actually ran: the package and its content digest, the operation and its contract
 version, both snapshots the decision was made against, the account by identity, and the approval that released
 it. The result is the contract's own neutral word — `enrolled`, `already_enrolled` — not the provider's phrasing.
+The read after it says the sequence's `total` is 1: you, and nobody else.
+
+### The way back
+
+Either of two acts undoes the run.
+
+**Yours to do.** Delete the trial sequence at Reply. A sequence that is gone holds nobody and sends nothing.
+
+**Ask first.** Or take yourself out of it, which asks its own question, as the enrolment did in step 7:
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation enrollment.stop --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"campaign":{"external_id":"7"},"channel":"email","reason":{"code":"other","note":"the end of a trial run"}}' --idempotency-key trial-run-stop
+```
 
 ## What this guarantees
 
