@@ -60,8 +60,9 @@ ledger under this key answerable.
 ```
 
 One item per person, with the reason — a partial success reported as a single verdict is a defect. `contact_id` is
-the identifier the call gave you, so the caller can match the answer to the person. `status` is `added` or
-`already_member`; a refusal by the provider is a **failed outcome with its class**, not an item status.
+the identifier the call gave you, so the caller can match the answer to the person. `status` is `added`, or
+`already_member` where the provider says the person was on the list already; a provider that cannot tell answers
+`added` for both. A refusal by the provider is a **failed outcome with its class**, not an item status.
 
 ## Repeating after a lost answer
 
@@ -70,6 +71,10 @@ the next attempt number and **the same idempotency key**; it does not reason abo
 
 - Read the membership of the pinned contact in the list, and the ledger entry under the idempotency key.
 - If either says the effect already happened, answer from that reading — `already_member` — and write nothing.
+- Or, where the provider's add is idempotent (a second add of the same contact leaves one membership), repeat the add
+  worked by the contact you pinned on the failure, and answer `added`: the effect is one membership either way; with
+  no pin learned, the contact the first attempt may have made is found by a read first, never created again from the
+  person's fields.
 
 Return the contact identifier you learned on the failure as well — `host.fail({ external_ids: { contact: … } })`.
 It is recorded by the same rule as on a success, and after a lost answer it is the only trace of the contact the
@@ -89,7 +94,7 @@ contact creation it implies may be metered, and a second contact is a merge nobo
 | `reversibility` | `reversible` | — |
 | `approval` | `auto` | — |
 | `protective_floor` | `false` | — |
-| `before_repeating` | current membership for these people, and the per-item ledger under this key. | — |
+| `before_repeating` | current membership for these people and the per-item ledger under this key — or none, where the provider's add is idempotent and the repeat works by the contact pinned on the failure. | — |
 | `idempotency_key` | `required` | — |
 | `per_item_results` | `required` | — |
 | `cost` | `none` | — |
@@ -102,7 +107,7 @@ contact creation it implies may be metered, and a second contact is a merge nobo
 | precondition | Ensure the provider's own contact exists before adding it: work by `contacts[0].external_ids.contact` when that pin is present, otherwise create the contact from the value of the channel named by `args.channel`, and return the provider's identifier under `external_ids.contact`. |
 | preview a person reads | none |
 | pinned identifiers | `contact` names a contact |
-| recovery read | The membership of the pinned contact in the list named by `args.list.external_id`, and the ledger entry under this idempotency key. |
+| recovery read | The membership of the pinned contact in the list named by `args.list.external_id`, and the ledger entry under this idempotency key. Where the provider's add is idempotent (a second add of the same contact leaves one membership), a repeat worked by the contact pinned on the failure needs no read; with no pin learned, the contact the first attempt may have made is found by a read first, never created again from the person's fields. |
 | after an ambiguous end | `after_recovery_read` — a later attempt performs the recovery read above and answers from it when the effect already happened |
 | timeout | 120000 ms |
 | invariants | D3 |

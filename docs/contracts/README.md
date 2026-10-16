@@ -317,6 +317,8 @@ lists.
   kind — keeps the version.
 - **Breaking** — a newly required field, a removed field, a changed enum, a changed property such as `reach` —
   bumps the operation's version *and* the family version. A plugin then declares `[1, 2]` to serve both.
+- **Clarification** — prose that says more exactly what a document's machine fields already allow, with no field,
+  enum value, property or schema changed. It keeps the version.
 
 A route to a plugin whose family versions do not contain the operation's version is refused when the
 route is activated, as `route_contract_incompatible`, and again at the claim as

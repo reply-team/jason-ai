@@ -2,7 +2,7 @@
 name: operating-the-installation
 description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, and installing Jason or taking it off again.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Operating the installation
@@ -11,7 +11,8 @@ This skill is about the installation, not about the work it performs. A person r
 Jason is up, why nothing is happening, what is installed, where work would go, or whether they are on the
 current version. Campaign work itself is `managed-campaign-work`.
 
-**Status: verified** against Claude Code 2.1.296. It covers what this build does and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. It covers what this build does and
+nothing else.
 
 Two things are true throughout and are easy to forget. **Nothing is registered until somebody asks**: Jason
 starts because you started it, or because somebody registered it to start at logon. And **no provider ships
@@ -225,6 +226,28 @@ the runtime, replaces the executable and starts it again. `jason update rollback
 update replaced. `jason update status` says where an in-flight update stands, or what the last completed one
 recorded; it needs no runtime either.
 
+After an update, `jason status` says whether the role skills still belong to this build: role skills a default
+install took at another release's tag fail its `role_skills` check, which names both tags, and its repair is the
+line it prints.
+
+**Installed by a package manager.** Where Homebrew or winget installed Jason, `jason update check` names the
+manager's own upgrade, and `jason update apply` refuses the installation. The manager's upgrade is typed as three
+lines, the runtime stopped first and started after, and only when the person asked for it, as for
+`jason update apply`:
+
+```sh
+jason runtime stop
+winget upgrade Reply.Jason
+jason runtime start
+```
+
+with `brew upgrade jason` in the middle under Homebrew. Ask before you run `jason runtime stop`: it stops work in
+flight. On Windows winget cannot replace the executable while the runtime runs: it answers Access is denied and keeps
+the old version. Under Homebrew the upgrade removes the previous version's keg by default (unless
+`HOMEBREW_NO_INSTALL_CLEANUP` is set), and a running runtime starts every plugin host from its own executable's
+path, which is then gone: work after the upgrade fails until the runtime restarts, which `jason status`'s
+`runtime_version` names.
+
 **How to behave about a version you noticed.** When `jason runtime status` reports that a newer version exists,
 you may mention it conversationally — one sentence, **at most once** per session — and then get on with what was
 asked. **Never interrupt** the task the person actually came with in order to talk about a version.
@@ -236,8 +259,12 @@ pointing at a file being swapped. Noticing an update is yours; deciding to take 
 ## Installing it in the first place
 
 Installing Jason is `docs/INSTALL.md` (<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>),
-followed in order. Hand the person the two lines below; or, if they ask you to install it, follow that page
-yourself, and ask them before every act it marks "Ask first".
+followed in order, its §4 included: that section teaches the installation its role skills, and without them every
+role it launches runs untaught. A person installs it with the two lines below. If they ask you to install it, follow
+that page yourself, by its section for an agent: a package where the page names one for this platform and its
+package manager is already there, otherwise the steps it gives by hand. Never pipe a download into a shell, and
+ask them before every act it marks "Ask first". The two lines are the person's: where neither route is open to
+you, hand them the lines to type.
 
 ```sh
 curl -fsSL https://jasonharness.ai/releases/latest/download/install.sh | sh
@@ -254,6 +281,9 @@ and puts that directory on the `PATH` unless `--no-modify-path` is passed. Nothi
 Both lines install the latest release. If either answers 404, the release could not be reached: say that, as it
 stands, and that there is nothing to build instead — the runtime's source is not published. Do not paste a line
 again in the hope of a different answer.
+
+When `jason status` says `ready`, the next step is the first run, `docs/golden-path.md`: one word from the person
+starts it in the same session.
 
 ## Taking it off again
 

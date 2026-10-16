@@ -21,30 +21,43 @@ harness installed, so §4 has somewhere to deploy.
 ### If an agent installs it
 
 An act this page marks **Ask first.** needs the word of the person you install for: ask, and do it only on their
-yes. With nobody to ask, leave it undone and say so.
+yes. With nobody to ask, leave it undone and say so. A question tool that comes back with no answer is nobody to
+ask.
 
 - Start your session without external connectors — on Claude Code, `--strict-mcp-config`. The install needs none.
 - Do §2, then §4 to §6, in order, and stop there. §3 is for a person who has the runtime's source, which is not
   published here, and §7 takes the installation off again.
+- Install by the first route that fits. Where §2 names a package for this platform and its package manager is
+  already on this machine, use it (*With a package manager*). Where it is not, where it fails, or where it or your
+  harness refuses it, say so once and take §2 *By hand*: download the archive and `checksums.txt` from the release,
+  check the digest and stop on a mismatch, unpack, keep the two notice files beside the executable, and run
+  `jason --version` by its full path. That is the next route, not a way around the refusal. Never pipe a download
+  into a shell. The install scripts are the person's: where your harness refuses even the route by hand, say so and
+  give the person the one-liner to type themselves.
 - Write only what those steps write: the executable and its install directory; this account's PATH entry for it;
-  Jason's data directory, which is where the role skills go; the system's temporary directory, which the installer
-  downloads into; and the directory the executable unpacks its native libraries into when it first runs — under
+  Jason's data directory, which is where the role skills go; the system's temporary directory, which the download
+  goes into; and the directory the executable unpacks its native libraries into when it first runs — under
   the temporary directory on Windows, under `~/.net` in this home directory on macOS and Linux. Nothing in your
-  own agent's configuration unless the person says so (§4). The one-liner's own PATH change is part of the install
-  you were asked for; what needs asking is a PATH edit of your own, by hand (§2) or by the repair (§5).
-- Install nothing else and build nothing: the runtime's source is not here (§3). A 404 from a one-liner is §2's:
+  own agent's configuration unless the person says so (§4). A package manager's own PATH change is part of the
+  install you were asked for, and so is the one-liner's when the person types it; a PATH edit of your own, by hand
+  (§2) or by the repair (§5), is marked **Ask first.**
+- With a no to the PATH entry, it is the person's own step: finish everything else, then hand them the exact line
+  `jason status` prints for `path`, and say that `jason status` again proves it. Never end on "not ready" alone:
+  name the step that remains.
+- Install nothing else and build nothing: the runtime's source is not here (§3). A 404 from a download is §2's:
   stop and report exactly that. Leave no long-running process behind except the runtime that
   `jason runtime start` starts.
-- If your harness refuses to run the one-liner as code from outside — Claude Code's auto mode does — do not work
-  around it: say so, and ask the person to type the line themselves, or to restart the session in a mode that asks
-  before each command.
+- A refusal — by your harness, or by a package manager — is reported once, as it stands, and never worked around.
+  Working around it is a retry, the same command rewrapped, or the refused code run by another means, such as a
+  downloaded script run another way. Taking the next route in the order above is not working around it.
 - After `jason status` (§5), branch on `ready` in its JSON body, never on the exit code. For each required check
   that is not ok, run the repair it prints. Optional checks are reported, not repaired: their repairs write into
   your agent's configuration or into what starts at logon, which is the person's to allow.
 - A profile you append to is read by a login shell, not by your next non-interactive command (§2): carry the
   `export` half yourself, or call `jason` by its full path.
 - Stop when `ready` is true, or when a required check still fails after its repair. Report which checks failed,
-  exactly what you ran, and what it changed.
+  exactly what you ran, and what it changed. When `ready` is true, tell the person Jason is installed and can work,
+  and that one word from them starts [its first run](golden-path.md) in this session.
 
 ---
 
@@ -94,14 +107,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v0.8.1/install.sh | sh -s -- --version 0.8.1
+curl -fsSL https://jasonharness.ai/releases/download/v0.9.0/install.sh | sh -s -- --version 0.9.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.8.1/install.ps1))) -Version 0.8.1
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.9.0/install.ps1))) -Version 0.9.0
 ```
 
-These install 0.8.1 with 0.8.1's own script: a pinned install fetches the script from the release it installs.
+These install 0.9.0 with 0.9.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
@@ -139,6 +152,32 @@ the runtime's version, including its build. `Update:CheckEnabled` set to `false`
 repository's releases on GitHub. What that address keeps, and for how long, is section 7.2 of the
 [licence](../LICENSE-RUNTIME.md).
 
+### With a package manager
+
+On macOS, with Homebrew: `brew install reply-team/tap/jason`.
+
+Installing this way accepts the same licence. The package manager owns that installation: it updates it and takes it
+off, and `jason update apply` refuses it — it "would replace a file the package manager owns" — and names the
+manager's command. That command is typed between `jason runtime stop` and `jason runtime start`, because Homebrew's
+upgrade removes the previous version's keg by default, the path a running runtime starts its plugin hosts from.
+
+### By hand
+
+To install without running a downloaded script, take the steps the script takes, yourself:
+
+1. Download the archive for this machine and `checksums.txt` beside it: for the latest release,
+   `https://jasonharness.ai/releases/latest/download/jason-win-x64.zip`, `…/jason-linux-x64.tar.gz` or
+   `…/jason-osx-arm64.tar.gz`, and `https://jasonharness.ai/releases/latest/download/checksums.txt`. For a
+   particular release, use the address the pinned lines above use, with the file's name in place of the script's.
+2. Check the archive's SHA-256 against its line in `checksums.txt` (`Get-FileHash -Algorithm SHA256` on Windows,
+   `sha256sum` or `shasum -a 256` elsewhere), and stop if they differ.
+3. Unpack it into a new temporary directory, and move the executable into the install directory —
+   `%LOCALAPPDATA%\Programs\jason` on Windows, `~/.local/bin` elsewhere — with `LICENSE` and `THIRD-PARTY-NOTICES`
+   beside it, named `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`. On Windows a downloaded archive may carry the
+   mark of the web, and hands it to what it unpacks: `Unblock-File` the executable, as `install.ps1` does.
+4. Run `jason --version` there, by its full path. It prints the version you downloaded.
+5. Put that directory on the PATH, as *Putting it on the PATH yourself* above says: that is the act it marks.
+
 ---
 
 ## 3. Build from source
@@ -163,17 +202,16 @@ Jason's skills are what teach an agent the job — one directory per launched ro
 every launch, and two packs for your own agent: one for operating the installation, one for the SDR
 profession. **A runtime with no role skills launches every role untaught**, so the first half is not optional.
 
-Look first. Nothing is written, and the one target root is printed — the runtime's own, inside its data
+Look first. Nothing is deployed, and the one target root is printed — the runtime's own, inside its data
 directory:
 
 ```sh
 jason skills install --roles-only --dry-run
 ```
 
-On a first install there is nothing to look at yet, and the dry run says so and exits 1: it fetches nothing, and
-the skills are not on this machine until the line below has fetched them once. That line fetches them into the
-data directory, prints its one root before it writes a skill there, and writes nowhere else. From then on,
-`--dry-run` previews.
+On a first install the dry run fetches the skills first, with `git`, into Jason's staging directory inside the
+data directory, so that there is something to show; it deploys nothing. The line below deploys them: it prints
+its one root before it writes a skill there, and writes nowhere else.
 
 Then do it:
 
@@ -211,9 +249,20 @@ Later, to move an existing deployment to a newer set:
 jason skills update
 ```
 
-It updates only where a deployment was made, and each root from the source and ref its own record names: an
+It updates only where a deployment was made, and each root from the source its own record names: an
 installation taught with `--roles-only` stays that way, and a harness installed from one source is not updated
-from another.
+from another. A deployment made at the tag of the build that installed it moves to the tag this build carries. One
+made with `--ref` stays at its ref, a directory is read where it stands, and a development build keeps the ref the
+record names, because the tag its own version names is not published yet.
+
+After `jason update apply`, run `jason status`: role skills a default install took at another release's tag fail
+`role_skills`, and the repair it prints moves them to the runtime's own tag. That repair is
+`jason skills install --roles-only`, with the `--source` they came from when it was not this repository. A
+deployment made with `--ref` stays where it is and passes, in the runtime's own root and in an agent's, and so does
+one an older Jason's `jason skills update` touched, which recorded it as though it had been made with `--ref`. The
+check's fact names both tags and the line that moves it: `jason skills install --roles-only` for the role skills,
+and `jason skills install --pack <pack>` for a pack in an agent's root, each with the `--source` it came from when
+that was not this repository. The line for `jason-runtime-skills` moves its role half as well.
 
 [`skills/README.md`](../skills/README.md) is the contract both verbs keep, including the record each root
 carries — which is what §7 removes by.
@@ -234,11 +283,11 @@ this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `
 | Required — a failure exits 1 | Optional — absent never fails |
 |---|---|
 | the runtime answers | a provider plugin is installed |
-| migrations are applied | a route is configured |
-| the plugin registry is alive (zero plugins is alive) | a binding names an account |
-| role skills are present, named after their directories and within the runtime's live cap | a provider CLI **you name** answers |
-| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | the skill packs are deployed to an agent harness |
-| | autostart is registered |
+| the running runtime is the build this CLI is | a route is configured |
+| migrations are applied | a binding names an account |
+| the plugin registry is alive (zero plugins is alive) | a provider CLI **you name** answers |
+| role skills are present, named after their directories and within the runtime's live cap | the skill packs are deployed to an agent harness |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | autostart is registered |
 | | notifications reach you |
 
 **It exits 0 or 1 and never 3.** Exit 3 means "I could not ask the runtime", and this is the verb whose whole
@@ -263,8 +312,13 @@ before the install, and every command it runs, keeps failing a bare `jason` whil
 full path the check names, or restart the host.
 
 A fresh installation that has done §2 through §4 but has not yet started the runtime is expected to report
-`runtime`, `migrations`, `plugin_registry` and `role_skills` as failed-or-unknown with `jason runtime start`
-as the repair. That is §6.
+`runtime`, `runtime_version`, `migrations`, `plugin_registry` and `role_skills` as failed-or-unknown with
+`jason runtime start` as the repair. That is §6.
+
+`runtime_version` compares the version the running runtime reports with this CLI's own. It fails when a runtime
+was left running across an upgrade that replaced the executable — a package manager's, or a file copied over by
+hand — because that runtime is still the old build and starts its plugin hosts from the old image. Its repair is
+`jason runtime restart`.
 
 To check a provider's own CLI as well, name it — this build knows no vendor's command by heart:
 
@@ -302,6 +356,9 @@ runtime then runs in your own session when you sign in, shows no window on Windo
 when you sign out. On Windows that is a logon task named for this account; on macOS a LaunchAgent,
 `ai.jason.runtime`; on Linux a `systemd --user` unit, `jason.service`. `jason runtime autostart status` says what
 is registered.
+
+That is the installation. [Its first run](golden-path.md) is a page of its own, and an agent that installed
+Jason starts it in the same session on one word from you.
 
 ---
 
@@ -345,6 +402,11 @@ running process. So it is moved out of the install directory, to a directory on 
 goes, before the verb returns — and a cleanup it starts removes the moved copy as soon as the verb has exited.
 The report names both, and the line that removes the copy by hand should it still be there; where no cleanup
 could be started, that copy is a problem and the verb exits 1.
+
+Where Homebrew or winget installed Jason, the executable, its directory and the PATH entry that reaches it are the
+package manager's: the dry run and the report list them as left to it, with the command that takes them off —
+`brew uninstall jason`, or `winget uninstall Reply.Jason` — and `jason uninstall` removes the rest as above, the
+runtime stopped first.
 
 **Three things are this account's rather than this installation's**: the logon registration, the notification
 registration on Windows, and the agent harnesses. An uninstall of a second installation on the same account — a build from

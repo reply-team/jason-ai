@@ -3,7 +3,7 @@
 Skills that teach an AI agent how to operate Jason itself: turning an objective into durable campaign work,
 presenting what is waiting on a person, running the installation, reading why something stopped, and telling
 Jason about effects produced outside it. They move in lockstep with the runtime's API and **ship with it**:
-this pack ships with Jason **0.8.1**.
+this pack ships with Jason **0.9.0**.
 
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
@@ -26,10 +26,10 @@ description that promises everything matches nothing.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
   person to decide: the approvals parked at a claim and the questions a running role raised — including when a
   notification brought the person — presented in their own words and recorded as their decision.
-- [`operating-the-installation`](operating-the-installation/SKILL.md) — **verified.** The installation itself:
-  whether the runtime is up, starting and stopping it, having it start at logon, the plugins and routes it
-  has, the hosts it can launch, whether notifications reach the person and turning them off, whether a newer
-  version exists, and installing it or taking it off again.
+- [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft** until a host reads its new text.
+  The installation itself: whether the runtime is up, starting and stopping it, having it start at logon, the
+  plugins and routes it has, the hosts it can launch, whether notifications reach the person and turning them
+  off, whether a newer version exists, and installing it or taking it off again.
 - [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **draft** until a host reads its new text. Why
   work stopped: the runtime, the work item's error code and the chronicle; the states a person needs told
   apart, the repairs that are safe, and the diagnostic file `jason doctor` writes.
@@ -137,5 +137,4 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 |---|---|---|---|
 | `managed-campaign-work` | Claude Code 2.1.289 (claude-opus-5) | 0.4.0 | `sha256:091277c2bb8735def47e7e3637f8a046bfddf378444f2f4d6a43f25f43310924` |
 | `approvals-and-questions` | Claude Code 2.1.293 (claude-opus-5) | 0.5.0 | `sha256:ffe1e5d291e7d8f475ee549e9a0887232949768734bfede855d6d93a06c6079c` |
-| `operating-the-installation` | Claude Code 2.1.296 (Opus 5.5) | 0.7.0 | `sha256:f064dfc226e9cf0aa5d9718ca44fa2c621b59111d610bb6fb09e5b3cfdf4527c` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:9fb55ca5364ec65c9b629df5538ff26d7ce380e8d09017989e0d222fca4eb037` |

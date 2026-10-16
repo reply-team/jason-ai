@@ -39,13 +39,15 @@ The campaign is named by its pin, or the first time by `args.campaign.external_i
 { "items": [ { "campaign_external_id": "c_7714", "status": "paused" } ] }
 ```
 
-`status` is `paused`, or `already_paused` when the campaign was paused before this call — which is not an error.
+`status` is `paused`, or `already_paused` when the provider says the campaign was paused before this call — which
+is not an error. A provider that answers a repeated pause as a pause answers `paused` both times.
 
 ## Repeating after a lost answer
 
 The provider documents the pause as idempotent: it answers the same whether the campaign was just paused or already
 was. So an attempt that ended without an answer is simply handed out again (`safe`), and the next one answers
-`already_paused` if the first one landed.
+`already_paused` if the first one landed, where the provider can tell, or `paused` where it answers a repeated pause
+as a pause.
 
 ## When it fails
 
