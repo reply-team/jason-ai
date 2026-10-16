@@ -1,3 +1,5 @@
+using Jason.Cli.Installation;
+
 namespace Jason.Cli.Uninstall;
 
 /// <summary>One file a receipt names, and whether what is on disk is still what Jason wrote.</summary>
@@ -55,6 +57,11 @@ public sealed record UnknownRoot(string Root, string Reason);
 /// installer wrote them, so they go with the executable, and nothing else of that directory is taken for them.
 /// </param>
 /// <param name="DataDirectory">Where it is, so the kept-it line can name it.</param>
+/// <param name="LeftTo">
+/// The package manager that installed this Jason, where one did. Its executable, the directory it put it in and the PATH
+/// entry that reaches it are the manager's, so none of them is in this plan to remove — the fields above that would name
+/// them are empty — and this names them instead, with the command that takes them off.
+/// </param>
 public sealed record UninstallPlan(
     bool AutostartRegistered,
     string? AutostartArtifact,
@@ -71,7 +78,8 @@ public sealed record UninstallPlan(
     string DataDirectory,
     IReadOnlyList<string>? NotificationKeys = null,
     string? NotificationKeysUnreadable = null,
-    IReadOnlyList<string>? Notices = null)
+    IReadOnlyList<string>? Notices = null,
+    PackageOwner? LeftTo = null)
 {
     /// <summary>How many files the receipts name that are still there and still ours.</summary>
     public int Removable => Roots.Sum(root => root.Files.Count(file => file.Present && !file.Edited));

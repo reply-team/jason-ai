@@ -3,8 +3,10 @@ using System.Text.Json;
 using Jason.Cli.Autostart;
 using Jason.Cli.Discovery;
 using Jason.Cli.Http;
+using Jason.Cli.Installation;
 using Jason.Cli.Skills;
 using Jason.Cli.Uninstall;
+using Jason.Contracts;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
@@ -191,6 +193,7 @@ internal static class StatusChecks
             }
 
             checks.Add(Runtime(descriptor, info));
+            checks.Add(RuntimeVersion(info, SkillsSource.BuildVersion(env)));
             checks.Add(Migrations(info));
             checks.Add(Plugins(info));
             checks.Add(await RoleSkillsAsync(env, client, info, cancellationToken).ConfigureAwait(false));
@@ -223,6 +226,32 @@ internal static class StatusChecks
         return info is null
             ? new StatusCheck("runtime", true, CheckState.Failed, $"A descriptor names {descriptor.BaseUrl} and nothing answered there.", Repair.Start)
             : new StatusCheck("runtime", true, CheckState.Ok, $"Running: version {info.RuntimeVersion}, pid {info.Pid.ToString(CultureInfo.InvariantCulture)}, data directory {info.DataDir}.", null);
+    }
+
+    /// <summary>
+    /// Whether the runtime answering is the build this CLI is. Required, because a binary can change under a running
+    /// runtime — a package manager's upgrade, a file copied over by hand — and the runtime goes on running the old one,
+    /// starting every plugin host from its own image, which under Homebrew the upgrade has deleted: provider work then
+    /// fails at launch until the runtime is restarted, and <c>ready</c> must not say yes to that.
+    /// </summary>
+    /// <remarks>
+    /// The whole string, compared as it is: the pre-release part and the build metadata included. A development build and
+    /// the release it is on its way to are two builds, and so are two builds of one version. The strings carry build
+    /// metadata, so this is identity, not precedence: both sides are <see cref="JasonVersion.Current"/> of the build that
+    /// wrote them, and a runtime test holds the runtime's side to it. A runtime that did not
+    /// answer is not asked, and is unknown with the start the <c>runtime</c> check already asks for: one cause, failed
+    /// once.
+    /// </remarks>
+    private static StatusCheck RuntimeVersion(SystemInfoResponse? info, string build)
+    {
+        if (info is null)
+        {
+            return new StatusCheck("runtime_version", true, CheckState.Unknown, "The runtime did not answer, so which build it is was not asked.", Repair.Start);
+        }
+
+        return string.Equals(info.RuntimeVersion, build, StringComparison.Ordinal)
+            ? new StatusCheck("runtime_version", true, CheckState.Ok, $"The runtime running is {build}, the build this CLI is.", null)
+            : new StatusCheck("runtime_version", true, CheckState.Failed, $"The runtime running is {info.RuntimeVersion}; this CLI is {build}.", Repair.Restart);
     }
 
     private static StatusCheck Migrations(SystemInfoResponse? info)
@@ -452,6 +481,15 @@ internal static class StatusChecks
     private static StatusCheck Path(CliEnvironment env)
     {
         var resolved = Executables.OnPath("jason", env.SearchPath);
+
+        // A package manager puts its installation on the PATH itself, through its link or its own directory, and the file
+        // answering is then the one behind that link: one installation, reached the manager's way.
+        var owner = PackageOwner.Of(env);
+        if (resolved is not null && owner is not null && Through(owner, resolved) is { } through)
+        {
+            return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}, through {owner.Manager}'s {through}.", null);
+        }
+
         if (resolved is null && Persisted(env) is { } persisted)
         {
             // Two different facts had one answer. The PATH this process inherited is the shell's, fixed when
@@ -464,6 +502,19 @@ internal static class StatusChecks
                 true,
                 CheckState.Ok,
                 $"'jason' does not resolve in this shell, but {persisted.Where} carries {persisted.Directory}, so {persisted.Reader} started from now on finds it: this one started before it was put there. Here, type it by its full path, {persisted.Executable}.",
+                null);
+        }
+
+        if (resolved is null && owner is not null)
+        {
+            // Required all the same, and with no line: the entry that puts a manager's installation on the PATH is the
+            // manager's to make, and one written into a profile or this account's Path would be a second entry the
+            // manager knows nothing about and never takes off.
+            return new StatusCheck(
+                "path",
+                true,
+                CheckState.Failed,
+                $"'jason' does not resolve on PATH, so nothing can be typed by name. {owner.Manager} installed this Jason and puts it on the PATH itself, so no line is offered here for an entry that is {owner.Manager}'s to make.",
                 null);
         }
 
@@ -497,6 +548,20 @@ internal static class StatusChecks
         }
 
         return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
+    }
+
+    /// <summary>
+    /// How a name on the PATH reaches a manager's installation: its link, or its own directory. Null where it is neither.
+    /// </summary>
+    private static string? Through(PackageOwner owner, string resolved)
+    {
+        static bool Same(string? left, string? right) =>
+            left is not null && right is not null
+            && string.Equals(System.IO.Path.GetFullPath(left), System.IO.Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
+
+        return Same(resolved, owner.Link) ? "link"
+            : Same(System.IO.Path.GetDirectoryName(resolved), owner.Directory) ? "directory"
+            : null;
     }
 
     /// <summary>

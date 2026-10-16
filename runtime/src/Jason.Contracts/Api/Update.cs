@@ -6,7 +6,12 @@ namespace Jason.Contracts.Api;
 /// the feed itself, so that the question can be asked on a machine whose runtime will not start — but shaped
 /// like one, so an agent parses it the way it parses everything else.
 /// </summary>
-public sealed record UpdateCheckResponse(string Current, string Latest, bool Available, DateTimeOffset CheckedAt, string? ReleaseNotesUrl);
+/// <param name="UpgradeCommand">
+/// The one command that updates this installation: <c>jason update apply</c> on Jason's own, and the package manager's
+/// upgrade where one installed it. One command and never the sequence around it: the runtime is stopped before a
+/// manager's upgrade and started after, and the operating skill says so.
+/// </param>
+public sealed record UpdateCheckResponse(string Current, string Latest, bool Available, DateTimeOffset CheckedAt, string? ReleaseNotesUrl, string UpgradeCommand);
 
 /// <summary>
 /// What an update did: the version it came from, the version it installed, the step it reached, and the steps

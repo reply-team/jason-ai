@@ -159,6 +159,14 @@ public partial class InteractiveSkillTests
             skill,
             StringComparison.Ordinal);
 
+        // An installation a package manager owns is updated through the manager, and `jason update apply` refuses it. The
+        // update check names the manager's one command, so the skill is where a session learns to type it between the
+        // runtime's stop and its start.
+        Assert.Contains(
+            "Where Homebrew or winget installed Jason, `jason update check` names the manager's own upgrade, and `jason update apply` refuses the installation.",
+            skill,
+            StringComparison.Ordinal);
+
         // The runtime volunteers that a newer version exists, so every session on this installation learns
         // it. Without a bound, every one of them says so, and a person who declined once is told again.
         Assert.Contains("at most once", skill, StringComparison.Ordinal);

@@ -3,6 +3,7 @@ using Jason.Cli.Autostart;
 using Jason.Cli.Commands;
 using Jason.Cli.Discovery;
 using Jason.Cli.Doctor;
+using Jason.Cli.Installation;
 using Jason.Cli.Process;
 using Jason.Contracts.Skills;
 
@@ -378,6 +379,14 @@ public static class UninstallRunner
         List<string> kept,
         List<string> problems)
     {
+        if (plan.LeftTo is { } owner)
+        {
+            // Never removed, and never a problem: the manager installed them, keeps its own record of them, and takes them
+            // off with its own command. Removing them behind its back would leave it a record of files that are gone.
+            kept.Add(LeftTo(owner));
+            return;
+        }
+
         if (plan.Executable is not { } executable)
         {
             // Not a bare "nothing named one". This is a build run from source -- `dotnet jason.dll`, or the
@@ -462,6 +471,14 @@ public static class UninstallRunner
         }
 
         RemoveExtractedLibraries(env, plan, done, kept, problems);
+    }
+
+    /// <summary>What is left to the package manager that installed this Jason, and the command that takes it off.</summary>
+    private static string LeftTo(PackageOwner owner)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        return $"Left to {owner.Manager}, which installed them: '{owner.Executable}', the directory '{owner.Directory}' and the "
+            + $"PATH entry that reaches it. `{owner.UninstallCommand}` takes them off.";
     }
 
     /// <summary>
@@ -569,6 +586,12 @@ public static class UninstallRunner
         List<string> kept,
         List<string> problems)
     {
+        // The manager's entry, said once with the rest of what is left to it, at the step for the executable.
+        if (plan.LeftTo is not null)
+        {
+            return;
+        }
+
         if (plan.PathEntry is not { } entry)
         {
             kept.Add("Nothing named an install directory, so no PATH entry was looked for.");

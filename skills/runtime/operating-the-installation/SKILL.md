@@ -230,6 +230,24 @@ After an update, `jason status` says whether the role skills still belong to thi
 install took at another release's tag fail its `role_skills` check, which names both tags, and its repair is the
 line it prints.
 
+**Installed by a package manager.** Where Homebrew or winget installed Jason, `jason update check` names the
+manager's own upgrade, and `jason update apply` refuses the installation. The manager's upgrade is typed as three
+lines, the runtime stopped first and started after, and only when the person asked for it, as for
+`jason update apply`:
+
+```sh
+jason runtime stop
+winget upgrade Reply.Jason
+jason runtime start
+```
+
+with `brew upgrade jason` in the middle under Homebrew. Ask before you run `jason runtime stop`: it stops work in
+flight. On Windows winget cannot replace the executable while the runtime runs: it answers Access is denied and keeps
+the old version. Under Homebrew the upgrade removes the previous version's keg by default (unless
+`HOMEBREW_NO_INSTALL_CLEANUP` is set), and a running runtime starts every plugin host from its own executable's
+path, which is then gone: work after the upgrade fails until the runtime restarts, which `jason status`'s
+`runtime_version` names.
+
 **How to behave about a version you noticed.** When `jason runtime status` reports that a newer version exists,
 you may mention it conversationally — one sentence, **at most once** per session — and then get on with what was
 asked. **Never interrupt** the task the person actually came with in order to talk about a version.

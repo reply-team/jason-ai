@@ -573,6 +573,86 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// The section for an agent sends it to §2's package subsection by name, so that subsection is there: a route named
+    /// and not written would leave an agent nowhere to go.
+    /// </summary>
+    [Fact]
+    public void The_agent_sections_package_route_names_a_subsection_that_is_there()
+    {
+        Assert.Contains("(*With a package manager*)", Flat(Agent()), StringComparison.Ordinal);
+        Assert.Contains("\n### With a package manager\n", Section(Page("docs", "INSTALL.md"), "## 2. "), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// §2's package subsection sits after the one-liners and before the route by hand: the order a person reads the routes
+    /// in, and the order an agent takes them.
+    /// </summary>
+    [Fact]
+    public void With_a_package_manager_comes_before_by_hand_and_after_the_one_liners()
+    {
+        var install = Section(Page("docs", "INSTALL.md"), "## 2. ");
+        var oneLiner = install.IndexOf("irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex", StringComparison.Ordinal);
+        var package = install.IndexOf("\n### With a package manager\n", StringComparison.Ordinal);
+        var byHand = install.IndexOf("\n### By hand\n", StringComparison.Ordinal);
+
+        Assert.True(oneLiner >= 0 && package > oneLiner && byHand > package, "§2 does not give the one-liners, then the package subsection, then the route by hand.");
+    }
+
+    /// <summary>
+    /// The package subsection names the tap, and only a package that is there: the winget package is not published yet,
+    /// so no line installs it.
+    /// </summary>
+    [Fact]
+    public void The_package_subsection_names_the_tap_and_no_winget_install_yet()
+    {
+        var package = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### With a package manager"));
+
+        Assert.Contains("On macOS, with Homebrew: `brew install reply-team/tap/jason`.", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("winget install", package, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And it says who owns such an installation, in the words <c>jason update apply</c>'s refusal uses, and how the
+    /// manager's upgrade is typed, with the reason: Homebrew removes the keg a running runtime starts its plugin hosts from.
+    /// </summary>
+    [Fact]
+    public void The_package_subsection_says_how_the_managers_upgrade_is_typed_and_why()
+    {
+        var package = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### With a package manager"));
+
+        Assert.Contains("would replace a file the package manager owns", package, StringComparison.Ordinal);
+        Assert.Contains(
+            "That command is typed between `jason runtime stop` and `jason runtime start`, because Homebrew's upgrade removes the previous version's keg by default, the path a running runtime starts its plugin hosts from.",
+            package,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The operating skill teaches a manager's upgrade in one paragraph: the runtime stopped, the manager's upgrade, the
+    /// runtime started, the stop asked first, and why on each platform. <c>jason update check</c>'s one command leaves
+    /// the sequence to the skill, so the skill is held to saying it.
+    /// </summary>
+    [Fact]
+    public void The_operating_skill_types_a_managers_upgrade_between_the_stop_and_the_start()
+    {
+        var skill = Page("skills", "runtime", "operating-the-installation", "SKILL.md");
+        var start = skill.IndexOf("**Installed by a package manager.**", StringComparison.Ordinal);
+        Assert.True(start >= 0, "the operating skill has no paragraph on an installation a package manager made.");
+        var end = skill.IndexOf("\n**", start + 1, StringComparison.Ordinal);
+        var paragraph = Flat(skill[start..(end > start ? end : skill.Length)]);
+
+        var stop = paragraph.IndexOf("jason runtime stop", StringComparison.Ordinal);
+        var upgrade = paragraph.IndexOf("winget upgrade Reply.Jason", StringComparison.Ordinal);
+        var started = paragraph.IndexOf("jason runtime start", upgrade + 1, StringComparison.Ordinal);
+        Assert.True(stop >= 0 && upgrade > stop && started > upgrade, "the paragraph does not give the stop, the manager's upgrade and the start in that order.");
+        Assert.Contains("`brew upgrade jason`", paragraph, StringComparison.Ordinal);
+        Assert.Contains("Ask before you run `jason runtime stop`: it stops work in flight.", paragraph, StringComparison.Ordinal);
+        Assert.Contains("On Windows winget cannot replace the executable while the runtime runs: it answers Access is denied and keeps the old version.", paragraph, StringComparison.Ordinal);
+        Assert.Contains("HOMEBREW_NO_INSTALL_CLEANUP", paragraph, StringComparison.Ordinal);
+        Assert.Contains("`runtime_version`", paragraph, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A package manager that is there and refuses — or fails, or that the agent's harness will not run — is the same
     /// case for the person as one that is not there: the agent says so once and takes the steps by hand, which is the
     /// next route rather than a way around the refusal.
@@ -1232,6 +1312,42 @@ public partial class PageClaimsTests
 
         Assert.Equal(printed, rows);
         Assert.Contains("notifications reach you", rows);
+    }
+
+    /// <summary>
+    /// The required check that the running runtime is the build this CLI is, in both pages' tables as the help lists it. A
+    /// required check missing from the table an agent reads before it branches on <c>ready</c> is a <c>false</c> nobody
+    /// told it could come.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md")]
+    [InlineData("docs/INSTALL.md")]
+    public void The_pages_list_the_running_build_among_the_required_checks(string page)
+    {
+        var rows = Page(page.Split('/'))
+            .Split('\n')
+            .SkipWhile(line => !line.StartsWith("| Required — a failure exits 1 | Optional — absent never fails |", StringComparison.Ordinal))
+            .Skip(2)
+            .TakeWhile(line => line.StartsWith('|'))
+            .Select(line => line.Split('|', StringSplitOptions.TrimEntries)[1])
+            .Where(cell => cell.Length > 0)
+            .ToList();
+
+        Assert.Contains("the running runtime is the build this CLI is", rows);
+    }
+
+    /// <summary>
+    /// The install page's section on taking Jason off says what <c>jason uninstall</c> leaves to a package manager that
+    /// installed it, and the command that takes that off.
+    /// </summary>
+    [Fact]
+    public void The_install_page_says_what_an_uninstall_leaves_to_a_package_manager()
+    {
+        var section = Flat(Section(Page("docs", "INSTALL.md"), "## 7. Take it off again"));
+
+        Assert.Contains("Where Homebrew or winget installed Jason", section, StringComparison.Ordinal);
+        Assert.Contains("`brew uninstall jason`", section, StringComparison.Ordinal);
+        Assert.Contains("`winget uninstall Reply.Jason`", section, StringComparison.Ordinal);
     }
 
     /// <summary>The digest of the README's prompt.</summary>

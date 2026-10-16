@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Text.Json;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Cli.Installation;
 using Jason.Cli.Update;
 using Jason.Contracts.Update;
 
@@ -99,6 +100,12 @@ public static class UpdateCommands
     {
         ArgumentNullException.ThrowIfNull(env);
 
+        // Before anything at all: before the ledger is read, a byte is fetched, or the runtime is asked to drain.
+        if (RefusedAsManaged(env, "apply"))
+        {
+            return ExitCodes.ApiError;
+        }
+
         var request = new UpdateRequest(
             Address(feed),
             Wanted(version),
@@ -175,6 +182,11 @@ public static class UpdateCommands
     {
         ArgumentNullException.ThrowIfNull(env);
 
+        if (RefusedAsManaged(env, "rollback"))
+        {
+            return ExitCodes.ApiError;
+        }
+
         var rollback = new UpdateRollback(env, new UpdatePaths(env.Paths), TimeProvider.System);
         try
         {
@@ -199,6 +211,32 @@ public static class UpdateCommands
             env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
             return ExitCodes.ApiError;
         }
+    }
+
+    /// <summary>
+    /// Refuses, and says so, where a package manager installed this Jason. The manager keeps its own record of the
+    /// version and owns the file these verbs would replace, so they leave it alone and print what to type instead.
+    /// </summary>
+    /// <remarks>
+    /// Three lines and never one, because the manager knows nothing of the runtime Jason keeps running: it replaces the
+    /// image every plugin host that runtime starts is launched from — under Homebrew it deletes the old keg — so the
+    /// runtime is stopped before the manager's upgrade and started from the new image after it.
+    /// </remarks>
+    private static bool RefusedAsManaged(CliEnvironment env, string verb)
+    {
+        if (PackageOwner.Of(env) is not { } owner)
+        {
+            return false;
+        }
+
+        env.Out.WriteLine(CliErrors.Serialize(
+            UpdateCodes.ManagedByPackageManager,
+            $"This Jason was installed by {owner.Manager}, which keeps its own record of the version, so `jason update {verb}` "
+            + $"would replace a file the package manager owns. Its version is changed through {owner.Manager}, with the "
+            + "runtime stopped first and started after:\n"
+            + string.Join("\n", owner.TypedUpgrade().Select(line => "  " + line)),
+            retryable: false));
+        return true;
     }
 
     private static void Print(CliEnvironment env, bool human, IReadOnlyList<string> steps, UpdateLedger ledger)
@@ -315,18 +353,23 @@ public static class UpdateCommands
         }
 
         var running = SemanticVersion.Current;
+        var owner = PackageOwner.Of(env);
         var answer = new UpdateCheckResponse(
             running.ToString(),
             manifest.Version.ToString(),
             manifest.IsNewerThan(running),
             DateTimeOffset.UtcNow,
-            manifest.ReleaseNotesUrl);
+            manifest.ReleaseNotesUrl,
+            owner?.UpgradeCommand ?? OwnUpgrade);
 
-        env.Out.WriteLine(human ? Sentence(answer) : JsonSerializer.Serialize(answer, JasonJson.Options));
+        env.Out.WriteLine(human ? Sentence(answer, owner) : JsonSerializer.Serialize(answer, JasonJson.Options));
         return ExitCodes.Success;
     }
 
-    private static string Sentence(UpdateCheckResponse answer)
+    /// <summary>What updates an installation that is Jason's own.</summary>
+    private const string OwnUpgrade = "jason update apply";
+
+    private static string Sentence(UpdateCheckResponse answer, PackageOwner? owner)
     {
         if (!answer.Available)
         {
@@ -334,6 +377,19 @@ public static class UpdateCommands
         }
 
         var notes = answer.ReleaseNotesUrl is null ? string.Empty : $" Release notes: {answer.ReleaseNotesUrl}";
-        return $"A newer version is available: {answer.Latest} (this is {answer.Current}).{notes}";
+        if (owner is null)
+        {
+            return $"A newer version is available: {answer.Latest} (this is {answer.Current}). Install it with `{OwnUpgrade}`.{notes}";
+        }
+
+        // Three lines a person types, never the one: the manager replaces the image the running runtime starts its
+        // plugin hosts from, and knows nothing of that runtime.
+        return string.Join(
+            Environment.NewLine,
+            [
+                $"A newer version is available: {answer.Latest} (this is {answer.Current}).{notes}",
+                $"{owner.Manager} installed this Jason, so it is updated through {owner.Manager}, with the runtime stopped first and started after:",
+                .. owner.TypedUpgrade().Select(line => "  " + line),
+            ]);
     }
 }

@@ -32,10 +32,11 @@ public static class StatusCommand
     /// </summary>
     private const string Partition =
         """
-        Required — a failure exits 1:   the runtime answers · migrations are applied · the plugin registry is
-                                        alive (zero plugins is alive) · role skills are present, named after
-                                        their directories and within the runtime's live cap · 'jason' resolves
-                                        on PATH, in this shell or in every shell started from now on
+        Required — a failure exits 1:   the runtime answers · the running runtime is the build this CLI is ·
+                                        migrations are applied · the plugin registry is alive (zero plugins is
+                                        alive) · role skills are present, named after their directories and
+                                        within the runtime's live cap · 'jason' resolves on PATH, in this shell
+                                        or in every shell started from now on
         Optional — absent never fails:  a provider plugin is installed · a route is configured · a binding
                                         names an account · a provider CLI you name answers · the skill packs
                                         are deployed to an agent harness · autostart is registered ·
@@ -49,7 +50,9 @@ public static class StatusCommand
         an agent host started before the install, and every command it runs, still fails a bare 'jason' while
         ready is true, until the host is restarted. Where neither holds the check fails, and its repair is a
         line for this machine's own shell — PowerShell on Windows, sh elsewhere — the same line the installer
-        writes, which changes nothing when typed twice.
+        writes, which changes nothing when typed twice. Where Homebrew or winget installed Jason, 'jason'
+        reached through the manager's link or its own directory is ok, and no line is ever offered: that
+        entry is the manager's.
 
         On a release, the role skills check compares the ref their record names with the runtime's own: skills
         a default install took at another tag fail it, and its repair keeps the source they came from; skills
@@ -58,6 +61,10 @@ public static class StatusCommand
         way with this build's own ref, and its repair, 'jason skills update', is yours to run; a pack its record
         pins passes there too, with the line that moves it. A development version, and a directory read where
         it stands, compare nothing.
+
+        The build check compares the version the runtime reports with this CLI's own, as whole strings: a
+        runtime left running across an upgrade that replaced the executable fails it, and its repair is
+        'jason runtime restart'. A runtime that did not answer is not asked.
 
         The provider CLI is only checked when you name it: --provider-cli <program> runs '<program> --version'
         with a ten-second bound and reports whether it answered. Which provider you use is yours, so this build

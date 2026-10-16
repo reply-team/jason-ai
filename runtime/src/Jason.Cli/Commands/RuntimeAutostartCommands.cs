@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Globalization;
 using System.Text.Json;
 using Jason.Cli.Autostart;
+using Jason.Cli.Installation;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
@@ -127,10 +128,15 @@ public static class RuntimeAutostartCommands
     /// </summary>
     internal static IAutostartRegistrar Registrar(CliEnvironment env) => env.Autostart ?? AutostartRegistrars.Unsupported;
 
+    /// <remarks>
+    /// Where a package manager installed this Jason, what is registered is the manager's stable entry and never the file
+    /// this process resolved to: under Homebrew that is a keg the next <c>brew upgrade</c> deletes, and a registration
+    /// naming it fails at every logon from then on without saying anything to anybody.
+    /// </remarks>
     internal static AutostartRegistration Registration(CliEnvironment env, AutostartPlatform platform) =>
         AutostartArtifacts.Compose(
             platform,
-            env.InstallPath is { } installed ? [installed] : SelfExecutable.Command,
+            PackageOwner.Of(env) is { } owner ? [owner.StableEntry] : env.InstallPath is { } installed ? [installed] : SelfExecutable.Command,
             env.Paths.Root,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             AutostartRegistrars.ThisAccount());

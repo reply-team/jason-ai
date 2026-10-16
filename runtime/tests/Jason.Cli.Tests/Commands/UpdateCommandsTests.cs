@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using Jason.Cli.Tests.Installation;
 using Jason.Cli.Tests.Process;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
@@ -200,6 +202,75 @@ public class UpdateCommandsTests
         Assert.Contains("up to date", text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(SemanticVersion.Current.ToString(), text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The answer names the command that updates this installation. On Jason's own that is <c>jason update apply</c>, and
+    /// a person reading the sentence is told so.
+    /// </summary>
+    [Fact]
+    public async Task Check_names_jason_update_apply_for_jasons_own_installation()
+    {
+        using var dir = new TempPaths();
+        var (env, stdout, _) = RuntimeVerbs.Environment(dir, FeedOnly([], () => Ok(Manifest(Newer))), new FakeProcessControl());
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check"], env, Ct));
+        Assert.Equal("jason update apply", (string?)JsonNode.Parse(stdout.ToString())?["upgrade_command"]);
+
+        stdout.GetStringBuilder().Clear();
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check", "--human"], env, Ct));
+        Assert.Contains("`jason update apply`", stdout.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Under a package manager the answer names the manager's own upgrade, as one command: the field is what an agent
+    /// runs between stopping the runtime and starting it, which the operating skill says, not the field.
+    /// </summary>
+    [Theory]
+    [InlineData("Homebrew", "brew upgrade jason")]
+    [InlineData("winget", "winget upgrade Reply.Jason")]
+    public async Task Check_names_the_managers_upgrade_as_one_command(string manager, string upgrade)
+    {
+        using var dir = new TempPaths();
+        using var layouts = new ManagedLayouts();
+        var (env, stdout, _) = RuntimeVerbs.Environment(dir, FeedOnly([], () => Ok(Manifest(Newer))), new FakeProcessControl());
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check"], Managed(env, layouts, manager), Ct));
+
+        Assert.Equal(upgrade, (string?)JsonNode.Parse(stdout.ToString())?["upgrade_command"]);
+    }
+
+    /// <summary>
+    /// And a person is given the three lines to type, never one: the runtime stopped, the manager's upgrade, the runtime
+    /// started. Never <c>jason update apply</c>, which refuses such an installation.
+    /// </summary>
+    [Theory]
+    [InlineData("Homebrew", "brew upgrade jason")]
+    [InlineData("winget", "winget upgrade Reply.Jason")]
+    public async Task Human_mode_gives_the_managers_upgrade_as_three_lines(string manager, string upgrade)
+    {
+        using var dir = new TempPaths();
+        using var layouts = new ManagedLayouts();
+        var (env, stdout, _) = RuntimeVerbs.Environment(dir, FeedOnly([], () => Ok(Manifest(Newer))), new FakeProcessControl());
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "check", "--human"], Managed(env, layouts, manager), Ct));
+
+        var text = stdout.ToString();
+        Assert.Contains(string.Join(Environment.NewLine, "  jason runtime stop", $"  {upgrade}", "  jason runtime start"), text, StringComparison.Ordinal);
+        Assert.Contains(manager, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("jason update apply", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>The environment, naming a planted installation that <paramref name="manager"/> owns, with its record.</summary>
+    private static CliEnvironment Managed(CliEnvironment env, ManagedLayouts layouts, string manager)
+    {
+        if (manager == "Homebrew")
+        {
+            return env with { InstallPath = layouts.Homebrew().Executable, Managers = new PlantedRecords() };
+        }
+
+        var winget = layouts.Winget();
+        return env with { InstallPath = winget.Executable, Managers = new PlantedRecords(winget.Registration()) };
     }
 
     /// <summary>

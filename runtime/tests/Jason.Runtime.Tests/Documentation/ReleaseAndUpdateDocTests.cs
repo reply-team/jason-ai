@@ -908,6 +908,88 @@ public class ReleaseAndUpdateDocTests
         Assert.Contains("While it holds the data directory, the task this version registers starts a runtime at every sign-in that finds the directory taken and exits without a word.", paragraph, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Installing through a package manager is the third way in, and the page says who then updates the installation and
+    /// who takes it off: the manager, with its own commands, because it keeps its own record of what it installed.
+    /// </summary>
+    [Fact]
+    public void The_page_says_a_package_manager_updates_and_takes_off_what_it_installed()
+    {
+        var installing = Flat(Section(Read(), "## 6. Installing"));
+
+        Assert.Contains("### Through a package manager", Section(Read(), "## 6. Installing"), StringComparison.Ordinal);
+        foreach (var command in new[] { "`brew upgrade jason`", "`brew uninstall jason`", "`winget upgrade Reply.Jason`", "`winget uninstall Reply.Jason`" })
+        {
+            Assert.Contains(command, installing, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("keeps its own record", installing, StringComparison.Ordinal);
+
+        // The table names each upgrade bare, so the sentence that leads into it says how it is run.
+        Assert.Contains("updates the installation, with the runtime stopped first and started after (§7)", installing, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Why an update under a manager is three lines and never one: the manager replaces the image the running runtime
+    /// starts its plugin hosts from, and knows nothing of that runtime.
+    /// </summary>
+    [Fact]
+    public void The_page_says_why_the_runtime_is_stopped_around_a_managers_upgrade()
+    {
+        var updating = Flat(Section(Read(), "## 7. Updating"));
+
+        Assert.Contains("refuses an installation a package manager owns", updating, StringComparison.Ordinal);
+        Assert.Contains("plugin host", updating, StringComparison.Ordinal);
+        var stop = updating.IndexOf("jason runtime stop", StringComparison.Ordinal);
+        var upgrade = updating.IndexOf("brew upgrade jason", StringComparison.Ordinal);
+        var start = updating.IndexOf("jason runtime start", upgrade + 1, StringComparison.Ordinal);
+        Assert.True(stop >= 0 && upgrade > stop && start > upgrade, "the page does not give the stop, the manager's upgrade and the start in that order.");
+        Assert.Contains("jason runtime restart", updating, StringComparison.Ordinal);
+
+        // What winget does under a running runtime, and with it stopped, as a real install of the release showed it.
+        Assert.Contains("winget cannot remove the executable a running runtime holds: its upgrade fails and leaves the old version in place", updating, StringComparison.Ordinal);
+        Assert.Contains("With the runtime stopped, the same upgrade replaces it and keeps the uninstall entry, its install location and the package directory as they were", updating, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The answer to <c>jason update check</c> names one command, and the page says why a person is printed three lines
+    /// around it under a manager: the reason a real install of the release showed.
+    /// </summary>
+    [Fact]
+    public void The_page_says_why_update_check_prints_three_lines_under_a_manager()
+    {
+        var asking = Flat(Section(Read(), "## 5. Asking by hand"));
+
+        Assert.Contains("the field stays one command", asking, StringComparison.Ordinal);
+        Assert.Contains("winget cannot replace the executable a running runtime holds", asking, StringComparison.Ordinal);
+    }
+
+    /// <summary>What <c>jason uninstall</c> leaves to the manager, and the command that takes it off.</summary>
+    [Fact]
+    public void The_page_says_what_an_uninstall_leaves_to_a_package_manager()
+    {
+        var uninstalling = Flat(Section(Read(), "## 9. Taking an installation off the machine"));
+
+        Assert.Contains("left to the package manager", uninstalling, StringComparison.Ordinal);
+        Assert.Contains("`brew uninstall jason`", uninstalling, StringComparison.Ordinal);
+        Assert.Contains("`winget uninstall Reply.Jason`", uninstalling, StringComparison.Ordinal);
+    }
+
+    /// <summary>The architecture's register of accepted decisions records whose an installation is.</summary>
+    [Fact]
+    public void The_decision_register_records_whose_an_installation_is()
+    {
+        var architecture = Source("docs/architecture.md");
+        var start = architecture.IndexOf("\n## 18. Accepted decision register", StringComparison.Ordinal);
+        var end = architecture.IndexOf("\n## 19. ", StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start, "docs/architecture.md no longer has §18 followed by §19.");
+
+        Assert.Contains(
+            "| DEC-UPDATE-003 | An installation is Jason's own unless a package manager's own record says otherwise; a managed installation is updated and taken off by its manager, and Jason's verbs act only on what is Jason's (autostart, skills by receipt, data); and a status check says when the running runtime is not the build installed. |",
+            architecture[start..end],
+            StringComparison.Ordinal);
+    }
+
     /// <summary>A page's text from a heading to the next heading of the same level, or to its end.</summary>
     private static string Section(string page, string heading)
     {

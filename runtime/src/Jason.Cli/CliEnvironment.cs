@@ -1,5 +1,6 @@
 using Jason.Cli.Autostart;
 using Jason.Cli.Doctor;
+using Jason.Cli.Installation;
 using Jason.Cli.Process;
 using Jason.Cli.Skills;
 using Jason.Cli.Uninstall;
@@ -59,12 +60,19 @@ namespace Jason.Cli;
 /// suite happens to have set, so it hands in variables of its own.
 /// </param>
 /// <param name="BuildVersion">
-/// The version this build goes by, which decides the ref its skills are pinned to. Null is this build's own stamp, the
-/// answer everywhere but a test, and <see cref="Default"/> never names one: a release compares its skills with itself.
-/// A test names one because the suite runs at whatever stamp CI gave it, a development one or a release, and a fact
-/// about what a release does with an older deployment has to hold at both.
+/// The version this build goes by, which decides the ref its skills are pinned to and which <c>jason status</c> compares
+/// with the version the running runtime reports. Null is this build's own stamp, the answer everywhere but a test, and
+/// <see cref="Default"/> never names one: a release compares its skills and its runtime with itself. A test names one
+/// because the suite runs at whatever stamp CI gave it, a development one or a release, and a fact about what a release
+/// does with an older deployment, or about a runtime that is not this build, has to hold at both.
 /// </param>
-public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null)
+/// <param name="Managers">
+/// What the package managers recorded about what they installed, which decides whether this installation is Jason's own
+/// or a manager's. Null is "no manager recorded anything", which leaves every installation Jason's own — and the
+/// default for the reason <paramref name="Removes"/> gives: winget's record is in this account's registry, and a test
+/// that read it would read the registry of whoever ran the suite. <see cref="Default"/> names this machine's.
+/// </param>
+public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null, IManagerRecords? Managers = null)
 {
     public static CliEnvironment Default() =>
         new(
@@ -79,5 +87,6 @@ public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths
             HarnessLocators.ForThisMachine(),
             ProgramRunners.ForThisMachine(),
             null,
-            InstallationRemovers.ForThisMachine());
+            InstallationRemovers.ForThisMachine(),
+            Managers: ManagerRecords.ForThisMachine());
 }

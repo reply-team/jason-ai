@@ -1,4 +1,5 @@
 using Jason.Cli.Discovery;
+using Jason.Cli.Installation;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Skills;
 using Jason.Contracts.Update;
@@ -59,7 +60,11 @@ public static class UninstallReader
         //
         // The remover seam does not catch this. It is a decision taken before the seam is reached, which is
         // why every test that substitutes the seam stayed green.
-        var executable = env.InstallPath ?? SelfExecutable.InstalledImage;
+        //
+        // And a file a package manager installed is the manager's, with its directory and the PATH entry that reaches
+        // it: none of the three is planned for removal, and the plan names them as left to the manager instead.
+        var owner = PackageOwner.Of(env);
+        var executable = owner is null ? env.InstallPath ?? SelfExecutable.InstalledImage : null;
 
         var directory = executable is null ? null : Path.GetDirectoryName(executable);
         var descriptor = new DescriptorReader(env.Paths).Read();
@@ -81,7 +86,8 @@ public static class UninstallReader
             env.Paths.Root,
             notificationKeys,
             registryUnreadable,
-            Notices(executable));
+            Notices(executable),
+            owner);
     }
 
     /// <summary>

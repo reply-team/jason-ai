@@ -152,6 +152,15 @@ the runtime's version, including its build. `Update:CheckEnabled` set to `false`
 repository's releases on GitHub. What that address keeps, and for how long, is section 7.2 of the
 [licence](../LICENSE-RUNTIME.md).
 
+### With a package manager
+
+On macOS, with Homebrew: `brew install reply-team/tap/jason`.
+
+Installing this way accepts the same licence. The package manager owns that installation: it updates it and takes it
+off, and `jason update apply` refuses it — it "would replace a file the package manager owns" — and names the
+manager's command. That command is typed between `jason runtime stop` and `jason runtime start`, because Homebrew's
+upgrade removes the previous version's keg by default, the path a running runtime starts its plugin hosts from.
+
 ### By hand
 
 To install without running a downloaded script, take the steps the script takes, yourself:
@@ -274,11 +283,11 @@ this CLI with no API operation behind it — `status`, `uninstall`, `logs` and `
 | Required — a failure exits 1 | Optional — absent never fails |
 |---|---|
 | the runtime answers | a provider plugin is installed |
-| migrations are applied | a route is configured |
-| the plugin registry is alive (zero plugins is alive) | a binding names an account |
-| role skills are present, named after their directories and within the runtime's live cap | a provider CLI **you name** answers |
-| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | the skill packs are deployed to an agent harness |
-| | autostart is registered |
+| the running runtime is the build this CLI is | a route is configured |
+| migrations are applied | a binding names an account |
+| the plugin registry is alive (zero plugins is alive) | a provider CLI **you name** answers |
+| role skills are present, named after their directories and within the runtime's live cap | the skill packs are deployed to an agent harness |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | autostart is registered |
 | | notifications reach you |
 
 **It exits 0 or 1 and never 3.** Exit 3 means "I could not ask the runtime", and this is the verb whose whole
@@ -303,8 +312,13 @@ before the install, and every command it runs, keeps failing a bare `jason` whil
 full path the check names, or restart the host.
 
 A fresh installation that has done §2 through §4 but has not yet started the runtime is expected to report
-`runtime`, `migrations`, `plugin_registry` and `role_skills` as failed-or-unknown with `jason runtime start`
-as the repair. That is §6.
+`runtime`, `runtime_version`, `migrations`, `plugin_registry` and `role_skills` as failed-or-unknown with
+`jason runtime start` as the repair. That is §6.
+
+`runtime_version` compares the version the running runtime reports with this CLI's own. It fails when a runtime
+was left running across an upgrade that replaced the executable — a package manager's, or a file copied over by
+hand — because that runtime is still the old build and starts its plugin hosts from the old image. Its repair is
+`jason runtime restart`.
 
 To check a provider's own CLI as well, name it — this build knows no vendor's command by heart:
 
@@ -388,6 +402,11 @@ running process. So it is moved out of the install directory, to a directory on 
 goes, before the verb returns — and a cleanup it starts removes the moved copy as soon as the verb has exited.
 The report names both, and the line that removes the copy by hand should it still be there; where no cleanup
 could be started, that copy is a problem and the verb exits 1.
+
+Where Homebrew or winget installed Jason, the executable, its directory and the PATH entry that reaches it are the
+package manager's: the dry run and the report list them as left to it, with the command that takes them off —
+`brew uninstall jason`, or `winget uninstall Reply.Jason` — and `jason uninstall` removes the rest as above, the
+runtime stopped first.
 
 **Three things are this account's rather than this installation's**: the logon registration, the notification
 registration on Windows, and the agent harnesses. An uninstall of a second installation on the same account — a build from

@@ -52,6 +52,12 @@ public static class UpdateCodes
     /// </summary>
     public const string RollbackUnsafe = "update_rollback_unsafe";
 
+    /// <summary>
+    /// A package manager installed this Jason and keeps its own record of the version, so its file is not this
+    /// build's to replace: the manager upgrades it, with the runtime stopped first.
+    /// </summary>
+    public const string ManagedByPackageManager = "update_managed_by_package_manager";
+
     /// <summary>Every code above, for the page's guard to read rather than for anything to iterate at runtime.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -68,6 +74,7 @@ public static class UpdateCodes
         FileRefused,
         NothingToRollBack,
         RollbackUnsafe,
+        ManagedByPackageManager,
     ];
 }
 

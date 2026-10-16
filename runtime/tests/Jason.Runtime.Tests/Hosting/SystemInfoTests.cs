@@ -2,11 +2,13 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Jason.Contracts;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Contracts.Skills;
 using Jason.Contracts.Update;
+using Jason.Runtime.Discovery;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Execution;
@@ -25,6 +27,22 @@ namespace Jason.Runtime.Tests.Hosting;
 public class SystemInfoTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>
+    /// The version a runtime reports is the build's own, the very string the CLI compares it with. <c>jason status</c>
+    /// requires the two to be identical, build metadata and all, so a runtime that reported anything else — a parsed
+    /// version, a prefix, its own assembly's attribute — would fail that check on every machine with nothing red here.
+    /// </summary>
+    [Fact]
+    public async Task System_info_reports_the_version_string_the_build_carries()
+    {
+        Assert.Equal(JasonVersion.Current, RuntimeInfo.Create().RuntimeVersion);
+
+        await using var fixture = await RuntimeApiFixture.StartAsync(Ct);
+        var info = await fixture.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, null, Ct);
+
+        Assert.Equal(JasonVersion.Current, info.RuntimeVersion);
+    }
 
     /// <summary>
     /// A start that migrated says what it applied and where it put the backup. Both are things only that start

@@ -404,8 +404,7 @@ public class StatusCommandTests
 
         var report = Read(output);
         var check = Assert.Single(report.Checks, check => check.Name == "role_skills");
-        Assert.Equal(ExitCodes.Success, exit);
-        Assert.True(report.Ready);
+        NotReadyThroughTheBuildCheckAlone(report, exit);
         Assert.Equal(CheckState.Ok, check.State);
         Assert.Null(check.Fix);
         Assert.Contains(
@@ -452,8 +451,9 @@ public class StatusCommandTests
 
         var exit = await CliApp.RunAsync(["status"], Machine(dir, output, build: "1.2.5-dev"), Ct);
 
-        var check = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
-        Assert.Equal(ExitCodes.Success, exit);
+        var report = Read(output);
+        var check = Assert.Single(report.Checks, check => check.Name == "role_skills");
+        NotReadyThroughTheBuildCheckAlone(report, exit);
         Assert.Equal(CheckState.Ok, check.State);
         Assert.Null(check.Fix);
         Assert.Contains("jason-runtime-skills at v1.2.3", check.Fact, StringComparison.Ordinal);
@@ -461,12 +461,12 @@ public class StatusCommandTests
     }
 
     /// <summary>
-    /// Nothing to compare, and nothing compared: role skills at the runtime's own ref; a development runtime, whose own
-    /// ref names a release not published yet; and a directory read where it stood, which has no ref at all.
+    /// Nothing to compare, and nothing compared: role skills at the runtime's own ref, and a directory read where it stood,
+    /// which has no ref at all. The runtime here is the build the CLI is; a development runtime beside a release build is
+    /// a fact of its own, below.
     /// </summary>
     [Theory]
     [InlineData("v1.2.4", "1.2.4", true)]
-    [InlineData("v1.2.3", "1.2.4-dev", true)]
     [InlineData("(a directory, read where it stands)", "1.2.4", false)]
     public async Task Role_skills_with_nothing_to_compare_pass_as_they_did(string reference, string version, bool git)
     {
@@ -474,12 +474,36 @@ public class StatusCommandTests
         var output = new StringWriter();
         RoleRootAt(dir, reference, version: version, commit: git ? Commit : null);
 
-        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, build: "1.2.4"), Ct);
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, build: version), Ct);
 
         var check = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal(CheckState.Ok, check.State);
         Assert.Contains($"jason-runtime-skills at {reference}", check.Fact, StringComparison.Ordinal);
+        Assert.DoesNotContain("this runtime is", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A development runtime compares nothing, whatever the build beside it: its own ref names a release not published
+    /// yet, so a deployment held to it would fail at every release and a repair at it would never clear. The role skills
+    /// pass and the line still names what is deployed; the runtime is not the build the CLI is, which the build check
+    /// alone says.
+    /// </summary>
+    [Fact]
+    public async Task Role_skills_under_a_development_runtime_compare_nothing()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        RoleRootAt(dir, "v1.2.3", version: "1.2.4-dev");
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, build: "1.2.4"), Ct);
+
+        var report = Read(output);
+        var check = Assert.Single(report.Checks, check => check.Name == "role_skills");
+        NotReadyThroughTheBuildCheckAlone(report, exit);
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Null(check.Fix);
+        Assert.Contains("jason-runtime-skills at v1.2.3", check.Fact, StringComparison.Ordinal);
         Assert.DoesNotContain("this runtime is", check.Fact, StringComparison.Ordinal);
     }
 
@@ -493,7 +517,7 @@ public class StatusCommandTests
     {
         using var dir = new TempPaths();
         var output = new StringWriter();
-        Running(dir);
+        Running(dir, version: "1.2.4");
         var harness = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
         Deploy(harness, SkillsSource.DefaultSource, "v1.2.3", overridden: false, Commit);
 
@@ -551,7 +575,7 @@ public class StatusCommandTests
     {
         using var dir = new TempPaths();
         var output = new StringWriter();
-        Running(dir);
+        Running(dir, version: "1.2.4");
         var harness = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
         var source = fromTheDefault ? SkillsSource.DefaultSource : new Uri(Path.Combine(dir.Paths.Root, "origin")).AbsoluteUri;
         Deploy(harness, source, "v1.2.3", overridden: true, Commit);
@@ -795,6 +819,17 @@ public class StatusCommandTests
     /// <summary>A commit, as a git source records one.</summary>
     private const string Commit = "0123456789abcdef0123456789abcdef01234567";
 
+    /// <summary>
+    /// Not ready, and through the build check alone. The runtime here is not the build the CLI is, which jason status
+    /// requires of every installation, and that one cause is failed once: never a second time by the check a fact is about.
+    /// </summary>
+    private static void NotReadyThroughTheBuildCheckAlone(StatusReport report, int exit)
+    {
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.False(report.Ready);
+        Assert.Equal(["runtime_version"], report.Checks.Where(check => check.Required && check.State != CheckState.Ok).Select(check => check.Name));
+    }
+
     /// <summary>A runtime at release 1.2.4 whose own role root holds a deployment from a git source at a ref.</summary>
     private static void RoleRootAt(TempPaths dir, string reference, bool overridden = false, string source = SkillsSource.DefaultSource, string version = "1.2.4", string? commit = Commit)
     {
@@ -933,7 +968,7 @@ public class StatusCommandTests
     /// <summary>A descriptor on disk and a runtime behind it answering the three operations status asks.</summary>
     /// <summary>A descriptor and a runtime behind it. <paramref name="roles"/> null makes role.list fail.</summary>
     /// <remarks><paramref name="version"/> is the version the runtime says it is, a development one unless a fact names another.</remarks>
-    internal static void Running(TempPaths dir, IReadOnlyList<string>? roles = null, SkillsInfo? skills = null, bool rosterFails = false, NotificationsInfo? notifications = null, DateTimeOffset? startedAt = null, string version = "0.1.0-dev")
+    internal static void Running(TempPaths dir, IReadOnlyList<string>? roles = null, SkillsInfo? skills = null, bool rosterFails = false, NotificationsInfo? notifications = null, DateTimeOffset? startedAt = null, string version = Version)
     {
         dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_01J"));
         Answers[dir.Paths.Root] = (
@@ -944,12 +979,16 @@ public class StatusCommandTests
             version);
     }
 
+    /// <summary>The version the runtime here says it is, and the build the CLI under test goes by, unless a fact names others.</summary>
+    internal const string Version = "0.1.0-dev";
+
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (IReadOnlyList<string>? Roles, SkillsInfo Skills, NotificationsInfo? Notifications, DateTimeOffset StartedAt, string Version)> Answers = [];
 
     /// <summary>
     /// The machine these run against: this test's own data directory, a runtime that exists only in a handler,
     /// a process table that launches nothing, a recording registrar, a harness root inside the test's tree, a
-    /// runner that runs nothing -- and a PATH of this test's own.
+    /// runner that runs nothing -- and a PATH of this test's own, and a CLI that is the build the runtime here says
+    /// it is unless <paramref name="build"/> names another.
     /// </summary>
     /// <remarks>
     /// The last one is not a nicety. Whether `jason` resolves by name is a fact about the machine, and reading
@@ -977,7 +1016,7 @@ public class StatusCommandTests
             Programs: programs ?? new FakeProgramRunner(_ => new ProgramResult(-1, string.Empty, "not found", false)),
             SearchPath: onPath ? Installed(dir) : Path.Combine(dir.Paths.Root, "nowhere"),
             Removes: machine,
-            BuildVersion: build);
+            BuildVersion: build ?? Version);
 
     /// <summary>A directory on this test's PATH with a file in it that a bare `jason` would resolve to.</summary>
     private static string Installed(TempPaths dir)

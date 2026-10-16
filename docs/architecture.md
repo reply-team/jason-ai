@@ -1716,6 +1716,7 @@ original chat session.
 | DEC-INSTALL-001 | Standalone and Reply-assisted installation are both legitimate paths to the same user Runtime. |
 | DEC-UPDATE-001 | Runtime may advertise updates; a short-lived CLI/installer performs controlled replacement. |
 | DEC-UPDATE-002 | The feed, the install lines and the release page name the product's own address, `jasonharness.ai`, which redirects `/releases/*` to the same path in the public repository's releases with a temporary redirect; the licence page, links into the tree and the skills source stay on GitHub, and the runtime's licence never names the address. |
+| DEC-UPDATE-003 | An installation is Jason's own unless a package manager's own record says otherwise; a managed installation is updated and taken off by its manager, and Jason's verbs act only on what is Jason's (autostart, skills by receipt, data); and a status check says when the running runtime is not the build installed. |
 | DEC-INFRA-001 | Docker, server database, message broker, and vendor-specific background services are not required by the local architecture. |
 | DEC-DOC-001 | This document describes the complete target vision without releases, milestones, implementation order, or backlog decomposition. |
 

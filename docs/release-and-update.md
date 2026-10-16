@@ -219,6 +219,12 @@ not start — which is one of the times you most want to know what the newest ve
 answer, or 1 with an error envelope: `update_feed_unreachable` when nobody answered, `update_feed_invalid` when
 what answered was not a manifest, `update_feed_insecure` when the feed is not an address this build will fetch.
 
+The answer also names `upgrade_command`, the one command that updates this installation: `jason update apply` on
+Jason's own, and the package manager's upgrade — `brew upgrade jason`, `winget upgrade Reply.Jason` — where one
+installed it (§6). Under a manager `--human` prints the three lines to type, the runtime stopped before the manager's
+upgrade and started after it, because winget cannot replace the executable a running runtime holds and Homebrew
+replaces the image a running runtime starts its plugin hosts from (§7); the field stays one command.
+
 ## 6. Installing
 
 ```sh
@@ -248,6 +254,26 @@ once it is, a branch's own version can be run from it (`gh workflow run release.
 change to the pipeline is rehearsed before it merges. The dry run builds the draft in `reply-team/jason-ai` and opens
 no pull request.
 
+### Through a package manager
+
+Where a package manager installed Jason — Homebrew on macOS and Linux, winget on Windows — the installation is the
+manager's. The manager keeps its own record of what it installed: Homebrew a receipt in the keg, winget an entry in
+this account's list of installed programs. That record, and not the path, is how Jason tells such an installation from
+its own, so a directory that merely looks like the manager's is still Jason's own.
+
+The manager then updates the installation, with the runtime stopped first and started after (§7), and takes it off,
+with its own commands; Jason's verbs act only on what is Jason's:
+
+| | Homebrew | winget |
+|---|---|---|
+| updates it | `brew upgrade jason` | `winget upgrade Reply.Jason` |
+| takes it off | `brew uninstall jason` | `winget uninstall Reply.Jason` |
+
+`jason update check` names the command (§5) and `jason update apply` refuses (§7). `jason runtime autostart enable`
+registers the manager's own entry, which stays put across its upgrades, rather than the keg a link resolves to (§8).
+`jason uninstall` takes off the logon registration, the skills and, on the word, the data directory, and leaves the
+rest to the manager (§9).
+
 ## 7. Updating
 
 ```sh
@@ -261,6 +287,26 @@ jason update apply --feed http://127.0.0.1:8080/manifest.json
 downloads the release for your platform, proves its digest, drains and stops the runtime, puts the new
 executable where the old one was, starts it again and checks that what came up is what was installed. It is the
 same command whether a runtime is running or not.
+
+**It refuses an installation a package manager owns** (§6), with `update_managed_by_package_manager`, before anything
+is staged, drained or stopped, and so does `jason update rollback`. The manager keeps its own record of the version,
+and a file replaced behind its back would leave that record wrong. Such an installation is updated through its
+manager, in three lines rather than one:
+
+```sh
+jason runtime stop
+brew upgrade jason
+jason runtime start
+```
+
+— or `winget upgrade Reply.Jason` in the middle on Windows. The runtime is stopped first because the manager knows
+nothing about it. On Windows, winget cannot remove the executable a running runtime holds: its upgrade fails and leaves
+the old version in place. With the runtime stopped, the same upgrade replaces it and keeps the uninstall entry, its
+install location and the package directory as they were. Homebrew replaces the image behind a running runtime and
+deletes the old keg, and a running runtime starts every plugin host from its own image, so provider work fails at launch
+until the runtime is restarted. A runtime left running across such an upgrade, or across a file copied over by hand, is
+still the old build; `jason status` says so in its required `runtime_version` check, whose repair is
+`jason runtime restart`.
 
 Where the feed names no release, `jason update apply` answers `update_feed_unreachable` and does nothing;
 there is nothing to apply until one is published. The feed resolves to the latest release, and a repository
@@ -432,6 +478,7 @@ a code on its own tells nobody what to do next.
 | `update_in_progress` | a *different* version is already in flight. The same version is resumed rather than refused, so re-running `jason update apply` after a kill is always the right move |
 | `update_not_directly_applicable` | the release's `min_upgrade_from` is above the version installed. The message names the version to pass through first |
 | `update_not_updatable` | this Jason runs through `dotnet`, so there is no single executable to replace. Install a published release with the one-liner in §6 |
+| `update_managed_by_package_manager` | a package manager — Homebrew or winget — installed this Jason and keeps its own record of the version, so the file is not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message prints the three lines to type instead: `jason runtime stop`, the manager's upgrade, `jason runtime start` |
 | `update_cross_volume` | the staged file and the install path are on different volumes. An update renames rather than copies, because a half-copied executable is the one state nothing can recover from. Point `JASON_DATA_DIR` at the executable's volume, or install Jason on the data directory's |
 | `update_runtime_unreachable` | the runtime would not drain or would not stop, so nothing was replaced |
 | `update_not_healthy` | the new version is in place, but the runtime it starts is not the one this update installed. The executable can be put back |
@@ -480,6 +527,10 @@ plist path, same unit name — and `status` shows which directory the one that i
 `status` also says whether the executable the registration names is still on disk. That is how a registration
 rots: an update that moved the binary, or a directory somebody deleted, leaves something that fails at every
 logon without saying anything to anybody.
+
+That is also why, where a package manager installed Jason (§6), what is registered is the manager's own entry, which
+its upgrades keep in place: Homebrew's link in its prefix, winget's link where it made one, and otherwise the
+executable in winget's package directory. Never the keg a link resolves to, which the next `brew upgrade` deletes.
 
 ### Windows: an ordinary prompt, no window, and what it costs
 
@@ -647,6 +698,12 @@ The order is the order that makes a half-finished run safe:
 A recorded file whose bytes have changed since is reported and kept, because the record says what Jason wrote
 and a mismatch says somebody else wrote it afterwards. `--force` removes it anyway, and the containing
 directory is not empty until it does.
+
+**Where a package manager installed Jason** (§6), the last two steps are the manager's. The executable, the directory it
+is in and the PATH entry that reaches it are left to the package manager, and so are the native libraries the executable
+unpacked, which stay with it; the plan and the report name them as left to it, with the command that takes them off —
+`brew uninstall jason`, or `winget uninstall Reply.Jason`. Everything above them goes as it always does, the runtime
+stopped first, and the plan an agent reads carries the same as `left_to`.
 
 **Never touched:** a skill there is no receipt for, including one copied into a harness by hand; any other
 skill in that harness; any provider CLI; any model credential; a PATH entry the installer did not write; another

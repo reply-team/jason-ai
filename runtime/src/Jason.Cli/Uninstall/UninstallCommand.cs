@@ -63,6 +63,9 @@ public static class UninstallCommand
                                    any provider CLI, any model credential, a PATH entry the installer did
                                    not write, another account's logon registration, the notifications
                                    already in the notification center, which are the person's to dismiss.
+        Installed by a package manager (Homebrew, winget): steps 5 and 6 are the manager's. The executable, its
+        directory and the PATH entry that reaches it are left to it, and the plan names the command that takes
+        them off: brew uninstall jason, or winget uninstall Reply.Jason. The runtime is still stopped first.
         This account's, not this installation's: the logon registration, the notification registration and the
         agent harnesses. Uninstalling a second installation on one account takes the first one's registrations
         and harness skills too.
@@ -313,7 +316,7 @@ public static class UninstallCommand
         {
             env.Out.WriteLine($"  the executable at {executable}");
         }
-        else
+        else if (plan.LeftTo is null)
         {
             // Said here as well as in the report, because a dry run never reaches the report: the plan is the
             // whole of what a person sees, and a list with no executable in it reads as one that forgot. It sat
@@ -345,6 +348,14 @@ public static class UninstallCommand
         foreach (var unknown in plan.Unknown)
         {
             env.Out.WriteLine($"  NOT touched: {unknown.Root} — {unknown.Reason}");
+        }
+
+        if (plan.LeftTo is { } owner)
+        {
+            // The runtime is stopped by this verb whoever installed it, and before the manager is asked: a runtime left
+            // running from a file the manager then deletes is how a machine ends up with neither.
+            env.Out.WriteLine($"Left to {owner.Manager}, which installed them, and not removed here: {owner.Executable}, the directory it is in, and the PATH entry that reaches it.");
+            env.Out.WriteLine($"  This uninstall stops the runtime first, as it always does; then `{owner.UninstallCommand}` takes them off.");
         }
 
         if (plan.Edited > 0)
