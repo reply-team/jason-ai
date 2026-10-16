@@ -185,8 +185,14 @@ public sealed class InstallScriptHeldTests : IDisposable
     /// PowerShell's own words, exactly as before — a running program ends when somebody stops it, not in ten seconds.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// "At once" is counted, not timed: the script runs with its pause stood in for by one that only writes each pause down,
     /// and none may be written. A whole run of the script on a loaded machine takes as long as a wait would.
+    /// </para>
+    /// <para>
+    /// PowerShell's words for the refusal are the system's, in the machine's language, so what is read is what stopped the
+    /// script: an <c>IOException</c> with <c>0x800700B7</c>, the file that already exists, which the run writes down.
+    /// </para>
     /// </remarks>
     [Theory]
     [InlineData(Pwsh)]
@@ -195,15 +201,18 @@ public sealed class InstallScriptHeldTests : IDisposable
     {
         Placeholder(Target);
         File.Copy(Path.Combine(Environment.SystemDirectory, "PING.EXE"), Previous);
-        using var running = System.Diagnostics.Process.Start(new ProcessStartInfo(Previous, "-n 60 127.0.0.1") { CreateNoWindow = true, UseShellExecute = false })!;
+        // The program runs until it is killed below: a copy run for a fixed minute ended before a slow script reached the
+        // leftover, which the script then cleared, and the case was never run.
+        using var running = System.Diagnostics.Process.Start(new ProcessStartInfo(Previous, "-t 127.0.0.1") { CreateNoWindow = true, UseShellExecute = false })!;
         try
         {
             var pauses = Path.Combine(_tree.NewDirectory("pauses"), "pauses.txt");
             var (exit, _, stderr) = await Start(shell, pauses);
 
+            Assert.False(running.HasExited, $"The program the leftover runs had ended before the script reached it, so this case was not run. The script said: {stderr}");
             Assert.False(File.Exists(pauses), $"The script paused {(File.Exists(pauses) ? File.ReadAllLines(pauses).Length : 0)} time(s) before it refused: {stderr}");
             Assert.NotEqual(0, exit);
-            Assert.Contains("Cannot create a file when that file already exists.", stderr, StringComparison.Ordinal);
+            Assert.Contains("The script stopped on System.IO.IOException 0x800700B7.", stderr, StringComparison.Ordinal);
             Assert.DoesNotContain("held open", stderr, StringComparison.Ordinal);
             Assert.True(File.Exists(Target));
         }
@@ -228,7 +237,7 @@ public sealed class InstallScriptHeldTests : IDisposable
         var install = Start(WindowsPowerShell);
         int exit;
         string stderr;
-        using (await HoldOnceItOpensAsync(await UnpackedAsync()))
+        using (await HoldOnceItOpensAsync(await UnpackedAsync(install), install))
         {
             old.Dispose();
             (exit, _, stderr) = await install;
@@ -251,7 +260,7 @@ public sealed class InstallScriptHeldTests : IDisposable
         var install = Start(WindowsPowerShell);
         int exit;
         string stderr;
-        using (await HoldOnceItOpensAsync(await UnpackedAsync()))
+        using (await HoldOnceItOpensAsync(await UnpackedAsync(install), install))
         {
             old.Dispose();
             using (await HoldOnceFreeAsync(await AppearsAsync(Previous, install)))
@@ -279,7 +288,7 @@ public sealed class InstallScriptHeldTests : IDisposable
         int exit;
         string stderr;
         string stdout;
-        using (await HoldOnceItOpensAsync(await UnpackedAsync()))
+        using (await HoldOnceItOpensAsync(await UnpackedAsync(install), install))
         {
             leftover.Dispose();
             (exit, stdout, stderr) = await install;
@@ -302,10 +311,10 @@ public sealed class InstallScriptHeldTests : IDisposable
         var placeholder = Placeholder(Target);
         var old = Hold(Target);
         var install = Start(shell);
-        var unpacked = await UnpackedAsync();
+        var unpacked = await UnpackedAsync(install);
 
         // Opened once, to know the archive has finished writing it, then denied its deletion: no hold, a refusal.
-        (await HoldOnceItOpensAsync(unpacked)).Dispose();
+        (await HoldOnceItOpensAsync(unpacked, install)).Dispose();
         var undo = DenyDeletion(unpacked);
         int exit;
         string stderr;
@@ -399,12 +408,17 @@ public sealed class InstallScriptHeldTests : IDisposable
     private static void AssertSaid(string sentence, string stderr) =>
         Assert.True(Regex.Replace(stderr, @"\s+", string.Empty).Contains(Regex.Replace(sentence, @"\s+", string.Empty), StringComparison.Ordinal), $"Expected: {sentence}{Environment.NewLine}Said: {stderr}");
 
-    /// <summary>The unpacked copy in the script's temporary directory, once it is there.</summary>
-    private async Task<string> UnpackedAsync()
+    /// <summary>
+    /// The unpacked copy in the script's temporary directory, once it is there. As with <see cref="AppearsAsync"/>, there is
+    /// no clock of its own: a minute of its own failed a slow script still on its way to the unpack, so the wait lasts as
+    /// long as the script's own run, and a script that ended first is said with what it said.
+    /// </summary>
+    private async Task<string> UnpackedAsync(Task<(int Exit, string Stdout, string Stderr)> install)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(60);
-        while (DateTime.UtcNow < deadline)
+        while (true)
         {
+            // Looked at again once the script has ended: it may have unpacked just before it did.
+            var ended = install.IsCompleted;
             var found = Directory.EnumerateDirectories(_temp, "jason-install-*")
                 .Select(directory => Path.Combine(directory, "unpacked", "jason.exe"))
                 .FirstOrDefault(File.Exists);
@@ -413,21 +427,27 @@ public sealed class InstallScriptHeldTests : IDisposable
                 return found;
             }
 
+            if (ended)
+            {
+                var (exit, stdout, stderr) = await install;
+                throw new TimeoutException(
+                    $"install.ps1 never unpacked the archive: the script ended first, with exit {exit}.{Environment.NewLine}stdout: {stdout}{Environment.NewLine}stderr: {stderr}");
+            }
+
             await Task.Delay(20, Ct);
         }
-
-        throw new TimeoutException("install.ps1 never unpacked the archive.");
     }
 
     /// <summary>
     /// Held as <see cref="Hold"/> holds it, once the extractor has set the archive's time on it — its last act on the file
-    /// — and whatever else still has it open, the script's own run of it, lets a reader in.
+    /// — and whatever else still has it open, the script's own run of it, lets a reader in. No clock of its own either: the
+    /// wait lasts as long as the script's run, and a script that ended first is said with what it said.
     /// </summary>
-    private static async Task<FileStream> HoldOnceItOpensAsync(string path)
+    private static async Task<FileStream> HoldOnceItOpensAsync(string path, Task<(int Exit, string Stdout, string Stderr)> install)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(60);
         while (true)
         {
+            var ended = install.IsCompleted;
             try
             {
                 if (File.GetLastWriteTime(path) == Unpacked.DateTime)
@@ -435,13 +455,16 @@ public sealed class InstallScriptHeldTests : IDisposable
                     return Hold(path);
                 }
             }
-            catch (IOException) when (DateTime.UtcNow < deadline)
+            catch (IOException)
             {
+                // Still being written, or still open to the script's own run of it.
             }
 
-            if (DateTime.UtcNow >= deadline)
+            if (ended)
             {
-                throw new TimeoutException($"{path} was never unpacked whole and free to hold.");
+                var (exit, stdout, stderr) = await install;
+                throw new TimeoutException(
+                    $"{path} was never unpacked whole and free to hold: the script ended first, with exit {exit}.{Environment.NewLine}stdout: {stdout}{Environment.NewLine}stderr: {stderr}");
             }
 
             await Task.Delay(20, Ct);
@@ -470,25 +493,21 @@ public sealed class InstallScriptHeldTests : IDisposable
     }
 
     /// <summary>
-    /// The file, once the script has put it there. A script that ended first never will, and waiting out the rest of the
-    /// minute would only hide why: the failure says what it said.
+    /// The file, once the script has put it there. A script that ended first never will, and the failure says what it
+    /// said. There is no clock of its own here: a minute of its own failed a slow script that was still on its way, so the
+    /// wait lasts as long as the script's own run, whose bound ends it and says what it had printed.
     /// </summary>
     private static async Task<string> AppearsAsync(string path, Task<(int Exit, string Stdout, string Stderr)> install)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(60);
         while (!File.Exists(path))
         {
-            // Looked at again once the script has ended: it may have put the file there just before it did.
+            // Looked at again once the script has ended: it may have put the file there just before it did. A script
+            // killed at its bound ends the run here with that failure.
             if (install.IsCompleted && !File.Exists(path))
             {
                 var (exit, stdout, stderr) = await install;
                 throw new TimeoutException(
                     $"{path} never appeared: the script ended first, with exit {exit}.{Environment.NewLine}stdout: {stdout}{Environment.NewLine}stderr: {stderr}");
-            }
-
-            if (DateTime.UtcNow >= deadline)
-            {
-                throw new TimeoutException($"{path} never appeared.");
             }
 
             await Task.Delay(20, Ct);
@@ -525,12 +544,96 @@ public sealed class InstallScriptHeldTests : IDisposable
         };
     }
 
+    /// <summary>
+    /// A script that outlives its bound is killed with everything it started, before the test's own tree goes, and the
+    /// failure says so with what it had printed. Left running, a slow script went on beside the next test's script and
+    /// into files its own test had deleted.
+    /// </summary>
+    [Fact]
+    public async Task A_script_that_outlives_its_bound_is_killed_with_what_it_started()
+    {
+        var pids = Path.Combine(_tree.NewDirectory("pids"), "pids.txt");
+        var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var argument in (string[])["-NoProfile", "-NonInteractive", "-Command",
+                     "$child = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32/PING.EXE') -ArgumentList '-t', '127.0.0.1' -WindowStyle Hidden -PassThru; "
+                     + $"Set-Content -LiteralPath {Quoted(pids)} -Value @($PID, $child.Id); Write-Output 'started'; Start-Sleep -Seconds 600"])
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        try
+        {
+            var failure = await Assert.ThrowsAsync<Xunit.Sdk.FailException>(() => RunAsync(start, TimeSpan.FromSeconds(15)));
+
+            Assert.True(File.Exists(pids), "The script was killed before it had started anything, so nothing here says what a kill ends.");
+            Assert.Contains("was killed", failure.Message, StringComparison.Ordinal);
+            Assert.Contains("started", failure.Message, StringComparison.Ordinal);
+            foreach (var pid in File.ReadAllLines(pids).Select(int.Parse))
+            {
+                Assert.True(Gone(pid, TimeSpan.FromSeconds(10)), $"Process {pid}, which the script started or was, still runs after the kill.");
+            }
+        }
+        finally
+        {
+            // Whatever a failure here left behind is ended, so a red run does not leave a ping running for ten minutes.
+            foreach (var pid in File.Exists(pids) ? File.ReadAllLines(pids).Select(int.Parse) : Enumerable.Empty<int>())
+            {
+                try
+                {
+                    using var left = System.Diagnostics.Process.GetProcessById(pid);
+                    left.Kill(entireProcessTree: true);
+                }
+                catch (ArgumentException)
+                {
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }
+        }
+    }
+
+    /// <summary>Whether the process with this id has gone, or goes within the time given.</summary>
+    private static bool Gone(int pid, TimeSpan within)
+    {
+        var deadline = DateTime.UtcNow + within;
+        while (true)
+        {
+            try
+            {
+                using var process = System.Diagnostics.Process.GetProcessById(pid);
+                if (process.HasExited)
+                {
+                    return true;
+                }
+            }
+            catch (ArgumentException)
+            {
+                return true;
+            }
+
+            if (DateTime.UtcNow >= deadline)
+            {
+                return false;
+            }
+
+            Thread.Sleep(50);
+        }
+    }
+
     /// <summary>The real <c>install.ps1</c> under the shell named, against this test's feed and directories.</summary>
     /// <param name="shell">Which PowerShell runs it.</param>
     /// <param name="pauses">
     /// Where to count the script's pauses, or null to run it as a file as a person's shell would. With a file, the script is
     /// run under a <c>Start-Sleep</c> of the test's own, a function that outranks the cmdlet and writes each pause down
-    /// instead of taking it.
+    /// instead of taking it, and inside a <c>catch</c> of the test's own that writes what stopped it, in words no language
+    /// changes: the exception's type and its HResult.
     /// </param>
     private Task<(int Exit, string Stdout, string Stderr)> Start(string shell, string? pauses = null)
     {
@@ -545,7 +648,8 @@ public sealed class InstallScriptHeldTests : IDisposable
         string[] run = pauses is null
             ? ["-File", script, "-InstallDir", _install, "-NoModifyPath", "-Feed", _feed]
             : ["-Command", "function global:Start-Sleep { param([int] $Milliseconds) Add-Content -LiteralPath $env:JASON_TEST_PAUSES -Value $Milliseconds }; "
-                + $"& {Quoted(script)} -InstallDir {Quoted(_install)} -NoModifyPath -Feed {Quoted(_feed)}"];
+                + $"try {{ & {Quoted(script)} -InstallDir {Quoted(_install)} -NoModifyPath -Feed {Quoted(_feed)} }} "
+                + "catch { [Console]::Error.WriteLine(('The script stopped on {0} 0x{1:X8}.' -f $_.Exception.GetType().FullName, $_.Exception.HResult)); throw }"];
         foreach (var argument in (string[])["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", .. run])
         {
             start.ArgumentList.Add(argument);
@@ -573,12 +677,32 @@ public sealed class InstallScriptHeldTests : IDisposable
     /// <summary>A path as a PowerShell literal.</summary>
     private static string Quoted(string path) => "'" + path.Replace("'", "''", StringComparison.Ordinal) + "'";
 
-    private static async Task<(int Exit, string Stdout, string Stderr)> RunAsync(ProcessStartInfo start)
+    /// <summary>
+    /// The script, run to its end or to its bound. At the bound its whole tree is killed, before the test's own tree is
+    /// deleted, and the failure says so with what it had printed: a script left running went on beside the next test's
+    /// script and into files its own test had deleted. The two sibling helpers already end a script so.
+    /// </summary>
+    private static async Task<(int Exit, string Stdout, string Stderr)> RunAsync(ProcessStartInfo start, TimeSpan? bound = null)
     {
+        var limit = bound ?? TimeSpan.FromSeconds(120);
         using var process = System.Diagnostics.Process.Start(start)!;
         var stdout = process.StandardOutput.ReadToEndAsync(Ct);
         var stderr = process.StandardError.ReadToEndAsync(Ct);
-        await process.WaitForExitAsync(Ct).WaitAsync(TimeSpan.FromSeconds(120), Ct);
+        try
+        {
+            await process.WaitForExitAsync(Ct).WaitAsync(limit, Ct);
+        }
+        catch (TimeoutException)
+        {
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit(TimeSpan.FromSeconds(10));
+            await Task.WhenAny(Task.WhenAll(stdout, stderr), Task.Delay(TimeSpan.FromSeconds(10), Ct));
+            Assert.Fail(
+                $"The script did not finish in {limit.TotalSeconds:0.#} s and was killed, with everything it had started.{Environment.NewLine}"
+                + $"stdout so far: {(stdout.IsCompletedSuccessfully ? stdout.Result : "(not readable)")}{Environment.NewLine}"
+                + $"stderr so far: {(stderr.IsCompletedSuccessfully ? stderr.Result : "(not readable)")}");
+        }
+
         return (process.ExitCode, await stdout, await stderr);
     }
 

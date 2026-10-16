@@ -92,6 +92,20 @@ public sealed class PublishedLinksTests : IDisposable
         Assert.Equal([$"plugins/p/main.js [b] {bare}", $"plugins/p/main.js [b] reply-team/{bare}"], Found());
     }
 
+    /// <summary>
+    /// And so is one in a file the public repository holds of its own: its workflows are published beside the open set,
+    /// read there by the same readers.
+    /// </summary>
+    [Fact]
+    public void Another_repository_of_ours_named_in_a_public_repository_file_that_is_not_markdown_is_named()
+    {
+        var bare = "jason-" + "internal";
+        Write("README.md", "# Readme\n");
+        Write(".github/publish/public/.github/workflows/check.yml", $"# What reaches the public repository, built from {bare}.\n");
+
+        Assert.Equal([$".github/publish/public/.github/workflows/check.yml [b] {bare}"], Found());
+    }
+
     /// <summary>The public repository's own files land at its root, so their links are read from there.</summary>
     [Fact]
     public void A_public_repository_file_is_read_as_it_is_at_that_repository_s_root()

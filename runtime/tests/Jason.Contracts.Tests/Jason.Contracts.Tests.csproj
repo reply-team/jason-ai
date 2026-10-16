@@ -11,5 +11,8 @@
 
     <!-- The suite's one timing that makes a pattern's match time out on demand, so no test has to be slow to show one. -->
     <Compile Include="../Jason.Runtime.Tests/TimingOut.cs" Link="TimingOut.cs" />
+
+    <!-- The one rule against a test matching a sentence the system words in the machine's language: each test assembly reads itself. -->
+    <Compile Include="../Jason.Runtime.Tests/SystemSentenceTests.cs" Link="SystemSentenceTests.cs" />
   </ItemGroup>
 </Project>

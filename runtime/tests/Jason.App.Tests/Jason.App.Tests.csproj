@@ -33,5 +33,7 @@
     <Compile Include="../Jason.Runtime.Tests/TreeVersion.cs" Link="TreeVersion.cs" />
     <!-- The one list of properties a runtime log line may carry: the scan of the source holds templates to it, and the run of the real executable holds its log to the same list. -->
     <Compile Include="../Jason.Runtime.Tests/Logging/ReviewedLogProperties.cs" Link="EndToEnd/ReviewedLogProperties.cs" />
+    <!-- The one rule against a test matching a sentence the system words in the machine's language: each test assembly reads itself. -->
+    <Compile Include="../Jason.Runtime.Tests/SystemSentenceTests.cs" Link="SystemSentenceTests.cs" />
   </ItemGroup>
 </Project>

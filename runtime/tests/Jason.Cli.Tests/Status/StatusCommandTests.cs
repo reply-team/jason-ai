@@ -438,6 +438,62 @@ public class StatusCommandTests
     }
 
     /// <summary>
+    /// Where the packs of a record differ, the one to repair is the one named: a pack from an older release fails the
+    /// check beside a pack at this build's tag, which on its own would only wait for the restart.
+    /// </summary>
+    [Fact]
+    public async Task Of_two_packs_the_one_from_an_older_release_is_named_before_one_at_the_build_s_tag()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir, skills: new SkillsInfo(dir.Paths.RoleSkillsDirectory, 1048576, [Taught("researcher")]), version: "1.2.4");
+
+        // The pack at this build's tag comes first, so a choice that took the first pack would name it and pass.
+        DeployPacks(
+            dir.Paths.RoleSkillsDirectory,
+            (SkillPacks.Runtime, "researcher", "v1.2.5", false),
+            (SkillPacks.Business, "analyst", "v1.2.3", false));
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, build: "1.2.5"), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "role_skills");
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Equal("Role skills are from v1.2.3; this runtime is v1.2.4.", check.Fact);
+        Assert.Equal("jason skills install --roles-only", check.Fix);
+    }
+
+    /// <summary>
+    /// And a pack at a ref somebody chose is named before a pack at this build's tag: it passes with the line that moves
+    /// it, which the restart alone never would.
+    /// </summary>
+    [Fact]
+    public async Task Of_two_packs_one_at_a_chosen_ref_is_named_before_one_at_the_build_s_tag()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir, skills: new SkillsInfo(dir.Paths.RoleSkillsDirectory, 1048576, [Taught("researcher")]), version: "1.2.4");
+
+        // The pack at this build's tag comes first, so a choice that took the first pack would name it and pass.
+        DeployPacks(
+            dir.Paths.RoleSkillsDirectory,
+            (SkillPacks.Runtime, "researcher", "v1.2.5", false),
+            (SkillPacks.Business, "analyst", "v1.2.3", true));
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, build: "1.2.5"), Ct);
+
+        var report = Read(output);
+        var check = Assert.Single(report.Checks, check => check.Name == "role_skills");
+        NotReadyThroughTheBuildCheckAlone(report, exit);
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.Null(check.Fix);
+        Assert.Contains(
+            "Role skills are from v1.2.3; this runtime is v1.2.4. `jason skills install --roles-only` moves it to v1.2.5.",
+            check.Fact,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A development build compares nothing, as <c>skills update</c> and the harness check already do for one: its pin
     /// names a release not published yet, so a repair at it would never clear. The role skills pass, and the line still
     /// names what is deployed, which is what a developer reads.
@@ -814,6 +870,25 @@ public class StatusCommandTests
             SkillsRecord.CurrentVersion,
             [new SkillsDeployment("jason-runtime-skills", source, reference, overridden, commit, DateTimeOffset.UnixEpoch,
                 [new DeployedFile("researcher/SKILL.md", SkillsRecord.Digest(skill))])]));
+    }
+
+    /// <summary>
+    /// A record of several packs in a root, in the order given, each from the default source at a commit and teaching a
+    /// role of its own.
+    /// </summary>
+    private static void DeployPacks(string root, params (string Pack, string Role, string Reference, bool Overridden)[] packs)
+    {
+        var deployments = new List<SkillsDeployment>();
+        foreach (var (pack, role, reference, overridden) in packs)
+        {
+            var skill = Path.Combine(root, role, "SKILL.md");
+            Directory.CreateDirectory(Path.GetDirectoryName(skill)!);
+            File.WriteAllText(skill, "---" + Environment.NewLine + "name: " + role + Environment.NewLine + "---" + Environment.NewLine);
+            deployments.Add(new SkillsDeployment(pack, SkillsSource.DefaultSource, reference, overridden, Commit, DateTimeOffset.UnixEpoch,
+                [new DeployedFile(role + "/SKILL.md", SkillsRecord.Digest(skill))]));
+        }
+
+        SkillsRecord.Write(root, new SkillsRecord(SkillsRecord.CurrentVersion, deployments));
     }
 
     /// <summary>A commit, as a git source records one.</summary>

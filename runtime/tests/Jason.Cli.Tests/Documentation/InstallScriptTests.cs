@@ -660,8 +660,9 @@ public partial class InstallScriptTests
         Assert.Equal(path, AccountPath());
         Assert.True(exit == 1, $"{shell} {form} exited {exit}. It said: {stderr}");
         Assert.False(Directory.Exists(programs) && Directory.EnumerateFileSystemEntries(programs).Any(), $"{shell} {form} installed something.");
+        // The refusal is the system's, in the machine's language; the path it names is not, so the path is what is read.
         Assert.True(
-            Regex.Replace(stderr, @"\s+", string.Empty).Contains("Accesstothepath", StringComparison.Ordinal),
+            Regex.Replace(stderr, @"\s+", string.Empty).Contains(@"unpacked\jason.exe", StringComparison.Ordinal),
             $"{shell} {form} did not say the unpack was refused. It said: {stderr}");
     }
 

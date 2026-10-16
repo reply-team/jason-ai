@@ -38,6 +38,12 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
     public HashSet<string> Denied { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// What a failure of this remover says, in words of its own: the system words these failures in the machine's
+    /// language, and a fact matching its English would pass only where that is the language.
+    /// </summary>
+    public static string Said(string path, string failure) => $"'{path}' {failure}, the stand-in says.";
+
+    /// <summary>
     /// Whether the file operations really happen. Off by default: most of these tests are about what was
     /// <em>asked</em>, and a test that wants the tree afterwards says so rather than every test risking it.
     /// </summary>
@@ -202,7 +208,7 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
 
         if (Locked.Contains(path))
         {
-            throw new IOException($"The process cannot access the file '{path}' because it is being used by another process.");
+            throw new IOException(Said(path, "is locked"));
         }
 
         if (HeldOpen.Contains(path))
@@ -211,12 +217,12 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
                 path,
                 verb is "directory.remove_if_empty" or "tree.remove" or "extracted.remove",
                 InstallationRemovers.HeldFiles,
-                new IOException($"The process cannot access the file '{path}' because it is being used by another process.", unchecked((int)0x80070020)));
+                new IOException(Said(path, "is in use"), unchecked((int)0x80070020)));
         }
 
         if (Denied.Contains(path))
         {
-            throw new UnauthorizedAccessException($"Access to the path '{path}' is denied.");
+            throw new UnauthorizedAccessException(Said(path, "is denied"));
         }
 
         Calls.Add($"{verb} {path}");

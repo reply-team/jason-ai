@@ -53,13 +53,24 @@ public sealed class ConformanceTests : IDisposable
         return ModeRun.Outcome(stdout);
     }
 
+    /// <summary>
+    /// The result of an outcome that had to succeed. One that did not is said with its status, code and message, where
+    /// reading the result it does not have would only throw, naming neither.
+    /// </summary>
+    private static JsonNode Succeeded(PluginOutcome outcome)
+    {
+        Assert.True(
+            outcome.Status == OutcomeStatus.Succeeded,
+            $"The outcome is {outcome.Status}, not Succeeded: {outcome.Error?.Code}: {outcome.Error?.Message}");
+        return outcome.Result!;
+    }
+
     [Fact]
     public async Task An_operation_the_plugin_implements_answers_with_its_result()
     {
         var outcome = await OutcomeAsync("echo.run", new JsonObject { ["value"] = 7 });
 
-        Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
-        Assert.Equal(7, outcome.Result!["echo"]!["value"]!.GetValue<int>());
+        Assert.Equal(7, Succeeded(outcome)["echo"]!["value"]!.GetValue<int>());
         Assert.Null(outcome.Error);
     }
 
@@ -74,7 +85,7 @@ public sealed class ConformanceTests : IDisposable
                 builder.Context = new InvocationContext(null, "att_1", 2, "wi_1", "cmp_1", "0.1.0");
             });
 
-        var context = outcome.Result!;
+        var context = Succeeded(outcome);
         Assert.Equal(2, context["attempt_number"]!.GetValue<int>());
         Assert.Equal("att_conformance", context["correlation_id"]!.GetValue<string>());
         Assert.Equal("fake-provider", context["plugin"]!["id"]!.GetValue<string>());
@@ -92,9 +103,9 @@ public sealed class ConformanceTests : IDisposable
                 ["args"] = new JsonArray(FakeProviderCli.Dll, "echo-args", "hi"),
             });
 
-        Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
-        Assert.Equal(0, outcome.Result!["exit_code"]!.GetValue<int>());
-        Assert.Equal("hi\n", outcome.Result!["stdout"]!.GetValue<string>().ReplaceLineEndings("\n"));
+        var result = Succeeded(outcome);
+        Assert.Equal(0, result["exit_code"]!.GetValue<int>());
+        Assert.Equal("hi\n", result["stdout"]!.GetValue<string>().ReplaceLineEndings("\n"));
         Assert.Equal(1, outcome.Diagnostics.ExecCalls);
     }
 
@@ -108,10 +119,16 @@ public sealed class ConformanceTests : IDisposable
                 ["executable"] = "dotnet",
                 ["args"] = new JsonArray(FakeProviderCli.Dll, "spew", "300000"),
             },
-            builder => builder.Limits = builder.Limits with { Exec = new ExecLimits(65_536, 64) });
+            // The program is given the time it needs, as the timeout facts below set theirs: this measures the cap, not
+            // the speed, and on a loaded machine the flood outlasted the invocation's ten seconds.
+            builder => builder.Limits = builder.Limits with { Exec = new ExecLimits(65_536, 64), TimeoutMs = 120_000 });
 
-        Assert.True(outcome.Result!["truncated"]!["stdout"]!.GetValue<bool>());
-        Assert.Equal(65_536, outcome.Result!["stdout"]!.GetValue<string>().Length);
+        var result = Succeeded(outcome);
+        Assert.False(
+            result["timed_out"]!.GetValue<bool>(),
+            $"The program was stopped at its timeout after {result["duration_ms"]} ms and {result["stdout"]!.GetValue<string>().Length} characters, so the cap was never reached.");
+        Assert.True(result["truncated"]!["stdout"]!.GetValue<bool>());
+        Assert.Equal(65_536, result["stdout"]!.GetValue<string>().Length);
     }
 
     [Fact]
@@ -123,9 +140,9 @@ public sealed class ConformanceTests : IDisposable
         var declared = await OutcomeAsync("env.read", new JsonObject { ["name"] = "FAKE_OTHER" });
         var everythingElse = await OutcomeAsync("env.read", new JsonObject { ["name"] = "PATH" });
 
-        Assert.Equal(TokenValue, granted.Result!["value"]!.GetValue<string>());
-        Assert.Null(declared.Result!["value"]);
-        Assert.Null(everythingElse.Result!["value"]);
+        Assert.Equal(TokenValue, Succeeded(granted)["value"]!.GetValue<string>());
+        Assert.Null(Succeeded(declared)["value"]);
+        Assert.Null(Succeeded(everythingElse)["value"]);
     }
 
     [Fact]
@@ -254,7 +271,7 @@ public sealed class ConformanceTests : IDisposable
     {
         var outcome = await OutcomeAsync("module.import", new JsonObject { ["value"] = "v" });
 
-        Assert.Equal("helped:v", outcome.Result!["helper"]!.GetValue<string>());
+        Assert.Equal("helped:v", Succeeded(outcome)["helper"]!.GetValue<string>());
     }
 
     [Fact]

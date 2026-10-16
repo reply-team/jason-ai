@@ -431,10 +431,53 @@ public class RuntimeStartCommandTests
 
         Assert.Equal(ExitCodes.ApiError, exit);
         var envelope = RuntimeVerbs.Envelope(output.ToString());
-        Assert.Contains($"published an endpoint descriptor at {RuntimeVerbs.BaseUrl}, and {said}", envelope.Message, StringComparison.Ordinal);
-        Assert.Contains("still running", envelope.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("did not answer", envelope.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("SENTINEL", envelope.Message, StringComparison.Ordinal);
+
+        // Each failure carries the whole sentence: a cut-off one cannot say which clause was said instead.
+        var message = envelope.Message;
+        Assert.True(message.Contains($"published an endpoint descriptor at {RuntimeVerbs.BaseUrl}, and {said}", StringComparison.Ordinal), message);
+        Assert.True(message.Contains("still running", StringComparison.Ordinal), message);
+        Assert.False(message.Contains("did not answer", StringComparison.Ordinal), message);
+        Assert.False(message.Contains("SENTINEL", StringComparison.Ordinal), message);
+    }
+
+    /// <summary>
+    /// A runtime that answered and then went quiet only in the wait's last moments is said as what it answered. The last
+    /// question before the wait runs out is given only what is left of it, and on a busy machine an answer cannot come in
+    /// that time; taken for silence, it replaced what every earlier question had heard with "it did not answer". Here the
+    /// first question is answered at once with a refused token and every later one is never answered, so the last one can
+    /// only end by the wait's own end.
+    /// </summary>
+    [Fact]
+    public async Task A_runtime_that_answered_and_went_quiet_as_the_wait_ran_out_is_said_as_what_it_answered()
+    {
+        using var dir = new TempPaths();
+        var processes = new FakeProcessControl { OnLaunch = RuntimeVerbs.PublishedAtLaunch(dir, RuntimeVerbs.Descriptor("rt_NEW")) };
+        var (env, output, _) = RuntimeVerbs.Environment(dir, new AnswersOnceThenSilent(), processes);
+
+        var exit = await RuntimeStartCommand.RunAsync(env, human: false, Ct, TimeSpan.FromSeconds(1), RuntimeVerbs.Poll);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var message = RuntimeVerbs.Envelope(output.ToString()).Message;
+        Assert.True(message.Contains($"published an endpoint descriptor at {RuntimeVerbs.BaseUrl}, and what answered there did not accept the token the descriptor holds", StringComparison.Ordinal), message);
+        Assert.False(message.Contains("did not answer", StringComparison.Ordinal), message);
+    }
+
+    /// <summary>
+    /// And a runtime that never answered is still said not to have answered, however short the wait: a question the wait
+    /// cut short replaces nothing, but with nothing heard before it, silence is what was seen.
+    /// </summary>
+    [Fact]
+    public async Task A_runtime_that_never_answers_a_short_wait_is_said_not_to_have_answered()
+    {
+        using var dir = new TempPaths();
+        var processes = new FakeProcessControl { OnLaunch = RuntimeVerbs.PublishedAtLaunch(dir, RuntimeVerbs.Descriptor("rt_NEW")) };
+        var (env, output, _) = RuntimeVerbs.Environment(dir, new Silent(), processes);
+
+        var exit = await RuntimeStartCommand.RunAsync(env, human: false, Ct, TimeSpan.FromSeconds(0.5), RuntimeVerbs.Poll);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var message = RuntimeVerbs.Envelope(output.ToString()).Message;
+        Assert.True(message.Contains($"published an endpoint descriptor at {RuntimeVerbs.BaseUrl}, and it did not answer within 0.5 s", StringComparison.Ordinal), message);
     }
 
     /// <summary>
@@ -650,6 +693,23 @@ public class RuntimeStartCommandTests
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            throw new InvalidOperationException("unreachable");
+        }
+    }
+
+    /// <summary>A runtime whose first question is answered at once with a refused token, and whose every later one is never answered.</summary>
+    private sealed class AnswersOnceThenSilent : HttpMessageHandler
+    {
+        private int _asked;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref _asked) == 1)
+            {
+                return RuntimeVerbs.Response(System.Net.HttpStatusCode.Unauthorized, """{"error":{"code":"unauthorized","message":"SENTINEL_TOKEN","retryable":false}}""");
+            }
+
             await Task.Delay(Timeout.Infinite, cancellationToken);
             throw new InvalidOperationException("unreachable");
         }

@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
 using Jason.Contracts.Discovery;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Hosting;
@@ -106,8 +109,18 @@ public sealed class SettingsWatchReleaseTests
         await runtime.StopAsync();
         var after = InotifyInstances();
 
-        Assert.Equal(before + 1, running);
-        Assert.Equal(before, after);
+        // A count that is off says which instance it is and whether it goes on its own: every descriptor at each moment,
+        // what the ones opened since the start watch, and the count once more two seconds on.
+        var later = after;
+        if (running.Count != before.Count + 1 || after.Count != before.Count)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), Ct);
+            later = InotifyInstances();
+        }
+
+        var inventory = Inventory(data.Paths.Root, before, running, after, later);
+        Assert.True(running.Count == before.Count + 1, inventory);
+        Assert.True(after.Count == before.Count, inventory);
     }
 
     /// <summary>
@@ -182,20 +195,110 @@ public sealed class SettingsWatchReleaseTests
         return (files, provider.Source.Path!);
     }
 
-    /// <summary>The inotify instances this process holds open, as its file descriptors name them.</summary>
-    private static int InotifyInstances() =>
-        new DirectoryInfo("/proc/self/fd").EnumerateFileSystemInfos().Count(link =>
+    /// <summary>
+    /// The inotify instances this process holds open, as its file descriptors name them, each with the watches its
+    /// fdinfo lists while it is open.
+    /// </summary>
+    private static SortedDictionary<int, IReadOnlyList<string>> InotifyInstances()
+    {
+        var instances = new SortedDictionary<int, IReadOnlyList<string>>();
+        foreach (var link in new DirectoryInfo("/proc/self/fd").EnumerateFileSystemInfos())
         {
             try
             {
-                return link.LinkTarget == "anon_inode:inotify";
+                if (link.LinkTarget == "anon_inode:inotify" && int.TryParse(link.Name, CultureInfo.InvariantCulture, out var descriptor))
+                {
+                    instances[descriptor] = [.. File.ReadLines($"/proc/self/fdinfo/{descriptor}").Where(line => line.StartsWith("inotify ", StringComparison.Ordinal))];
+                }
             }
             catch (IOException)
             {
-                // A descriptor closed between the listing and the reading of its link.
-                return false;
+                // A descriptor closed between the listing and the reading of its link or its fdinfo.
             }
-        });
+        }
+
+        return instances;
+    }
+
+    /// <summary>
+    /// The instances at each moment by descriptor, and for each one opened or changed since the start what it watches at
+    /// each moment after: the kernel's inode in hexadecimal, resolved to its path when it is under the test's data
+    /// directory.
+    /// </summary>
+    private static string Inventory(
+        string root,
+        SortedDictionary<int, IReadOnlyList<string>> before,
+        SortedDictionary<int, IReadOnlyList<string>> running,
+        SortedDictionary<int, IReadOnlyList<string>> after,
+        SortedDictionary<int, IReadOnlyList<string>> later)
+    {
+        var text = new StringBuilder();
+        text.AppendLine(CultureInfo.InvariantCulture, $"inotify instances: {before.Count} before the start, {running.Count} while it ran, {after.Count} after it stopped, {later.Count} two seconds after that.");
+        foreach (var (moment, instances) in new[] { ("before", before), ("running", running), ("after", after), ("later", later) })
+        {
+            text.AppendLine(CultureInfo.InvariantCulture, $"{moment}: {string.Join(", ", instances.Keys)}");
+        }
+
+        var since = new[] { ("running", running), ("after", after), ("later", later) };
+        var changed = since
+            .SelectMany(moment => moment.Item2)
+            .Where(instance => !before.TryGetValue(instance.Key, out var was) || !was.SequenceEqual(instance.Value))
+            .Select(instance => instance.Key)
+            .Distinct()
+            .Order();
+        var paths = Inodes(root);
+        foreach (var descriptor in changed)
+        {
+            text.AppendLine(CultureInfo.InvariantCulture, $"descriptor {descriptor}, opened or changed since the start:");
+            foreach (var (moment, instances) in since)
+            {
+                if (!instances.TryGetValue(descriptor, out var watches))
+                {
+                    text.AppendLine(CultureInfo.InvariantCulture, $"  {moment}: closed");
+                    continue;
+                }
+
+                if (watches.Count == 0)
+                {
+                    text.AppendLine(CultureInfo.InvariantCulture, $"  {moment}: open, watching nothing");
+                }
+
+                foreach (var watch in watches)
+                {
+                    var inode = Regex.Match(watch, @"\bino:([0-9a-f]+)");
+                    var path = inode.Success && paths.TryGetValue(Convert.ToUInt64(inode.Groups[1].Value, 16), out var found) ? found : "not under the data directory";
+                    text.AppendLine(CultureInfo.InvariantCulture, $"  {moment}: {watch} -> {path}");
+                }
+            }
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>Every inode under the directory, with its path, as find reads them.</summary>
+    private static Dictionary<ulong, string> Inodes(string root)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("find") { RedirectStandardOutput = true, UseShellExecute = false };
+        foreach (var argument in new[] { root, "-xdev", "-printf", "%i %p\n" })
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var find = System.Diagnostics.Process.Start(start)!;
+        var listed = find.StandardOutput.ReadToEnd();
+        find.WaitForExit();
+        var inodes = new Dictionary<ulong, string>();
+        foreach (var line in listed.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var space = line.IndexOf(' ', StringComparison.Ordinal);
+            if (space > 0 && ulong.TryParse(line.AsSpan(0, space), CultureInfo.InvariantCulture, out var inode))
+            {
+                inodes.TryAdd(inode, line[(space + 1)..]);
+            }
+        }
+
+        return inodes;
+    }
 
     /// <summary>A service of the host's that throws when the host starts it.</summary>
     private sealed class RefusesToStart : IHostedService

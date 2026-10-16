@@ -12,6 +12,9 @@
     <!-- And the one stand-in for the product's address: a redirect in front of a release's files, which the update
          check and both install scripts are run through. -->
     <Compile Include="../Jason.Runtime.Tests/LoopbackReleases.cs" Link="LoopbackReleases.cs" />
+
+    <!-- The one rule against a test matching a sentence the system words in the machine's language: each test assembly reads itself. -->
+    <Compile Include="../Jason.Runtime.Tests/SystemSentenceTests.cs" Link="SystemSentenceTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <!-- What the repository teaches somebody to type, linked beside the tests that hand every printed command to the real parser. -->

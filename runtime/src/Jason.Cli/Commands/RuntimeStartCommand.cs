@@ -100,8 +100,15 @@ public static class RuntimeStartCommand
                     return ExitCodes.Success;
                 }
 
-                // What was seen of a descriptor is kept over a question that was not put to it.
-                if (answer != Answer.NotAsked || unanswered?.Descriptor.InstanceId != published.InstanceId)
+                // What was seen of a descriptor is kept over a question that was not put to it, and over a silence the
+                // wait's own end cut short: a question given only what was left of the wait, less than any question is
+                // given otherwise, says nothing of the runtime by going unanswered, and on a busy machine it replaced what
+                // the runtime had answered with "it did not answer". With nothing else seen of it, silence stands.
+                var cutShort = answer == Answer.PublishedButSilent && bound < PollCeiling;
+                var seenOtherwise = unanswered is { } earlier
+                    && string.Equals(earlier.Descriptor.InstanceId, published.InstanceId, StringComparison.Ordinal)
+                    && earlier.Answer is not (Answer.NotAsked or Answer.PublishedButSilent);
+                if ((answer != Answer.NotAsked || unanswered?.Descriptor.InstanceId != published.InstanceId) && !(cutShort && seenOtherwise))
                 {
                     unanswered = (published, answer);
                 }
