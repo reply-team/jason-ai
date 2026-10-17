@@ -28,7 +28,7 @@
   },
   "precondition": "Find the provider's own contact without creating one: by `contacts[0].external_ids.contact` when that pin is present, otherwise by the value of the channel named by `args.channel`, compared exactly and without regard to case. A person the provider does not hold takes part in nothing, which is a completed stop.",
   "preview": {
-    "summary": "Take {/contacts/0/first_name} {/contacts/0/last_name} ({/contacts/0/channels/0/value}) out of campaign {/campaign/name} at the provider, reason {/args/reason/code}. Their history stays; nothing further is sent to them from this campaign.",
+    "summary": "Take {/contacts/0/channels/0/value} out of the provider's campaign for Jason's campaign {/campaign/name}, reason {/args/reason/code}. Their history stays; nothing further is sent to them from that campaign.",
     "highlights": [
       "/args/reason",
       "/contacts/0/channels/0/value",

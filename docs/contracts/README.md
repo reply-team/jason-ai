@@ -128,7 +128,7 @@ the input it singles out.
 
 ```json
 "preview": {
-  "summary": "Enroll {/contacts/0/first_name} {/contacts/0/last_name} ({/contacts/0/channels/0/value}) in campaign {/campaign/name} …",
+  "summary": "Enroll {/contacts/0/channels/0/value} in the provider's campaign for Jason's campaign {/campaign/name}: …",
   "highlights": ["/contacts/0/channels/0/value", "/campaign/name", "/args/start", "/args/first_touch", "/args/collision"]
 }
 ```

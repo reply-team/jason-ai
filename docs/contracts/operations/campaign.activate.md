@@ -58,13 +58,13 @@ the campaign's live state and its count first, and answers `already_live` when t
 The runtime renders this summary from the composed input when it parks the work for a person, and prints it first in
 `jason approval get --human`:
 
-> Start sending campaign Q3 LatAm founders at the provider. People enrolled there: 240. Step 1 goes to each of them
-> on the campaign's own schedule, and the cost is metered per message released. If the provider's count is not 240 at
-> execution, nothing starts.
+> Start sending the provider's campaign for Jason's campaign Q3 LatAm founders. People enrolled there: 240. Step 1
+> goes to each of them on that campaign's own schedule, and the cost is metered per message released. If the
+> provider's count is not 240 at execution, nothing starts.
 
-It highlights the number, the campaign's name, the provider's identifier for it once Jason holds one, and the campaign
-as the arguments name it, so that on a first link, before any identifier is pinned, the person still sees which of the
-provider's campaigns starts. The fixtures
+It highlights the number, the name of Jason's campaign, the provider's identifier for it once Jason holds one, and the
+campaign as the arguments name it, so that on a first link, before any identifier is pinned, the person still sees
+which of the provider's campaigns starts. The fixtures
 [`fixtures/campaign.activate/preview-*.json`](../fixtures/campaign.activate) show each case.
 
 ## When it fails
@@ -96,7 +96,7 @@ every document spells them.
 | in a paused campaign | `waits` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | The campaign exists at the provider and is not archived, and the provider's enrolled count equals `args.expected.enrolled`. |
-| preview a person reads | `Start sending campaign {/campaign/name} at the provider. People enrolled there: {/args/expected/enrolled}. Step 1 goes to each of them on the campaign's own schedule, and the cost is metered per message released. If the provider's count is not {/args/expected/enrolled} at execution, nothing starts.`; highlighted: `/args/expected/enrolled`, `/campaign/name`, `/campaign/external_ids/campaign`, `/args/campaign` |
+| preview a person reads | `Start sending the provider's campaign for Jason's campaign {/campaign/name}. People enrolled there: {/args/expected/enrolled}. Step 1 goes to each of them on that campaign's own schedule, and the cost is metered per message released. If the provider's count is not {/args/expected/enrolled} at execution, nothing starts.`; highlighted: `/args/expected/enrolled`, `/campaign/name`, `/campaign/external_ids/campaign`, `/args/campaign` |
 | pinned identifiers | `campaign` names a campaign |
 | recovery read | The campaign's live state and its enrolled count. |
 | after an ambiguous end | `after_recovery_read` — a later attempt performs the recovery read above and answers from it when the effect already happened |

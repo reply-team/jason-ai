@@ -1,0 +1,167 @@
+{
+  "id": "campaign.create",
+  "version": 1,
+  "l1": { "name": "campaign.create", "contract_version": "2.0.0", "family": 5, "core": false },
+  "intent": "\"Start a new campaign\" — always a draft; creating never sends and never arms anything.",
+
+  "reach": "control",
+  "reversibility": "reversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "list campaigns for one already created under this key",
+  "idempotency_key": "required",
+  "per_item_results": "not_applicable",
+  "accepts_collection": false,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": ["E1"],
+
+  "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked" },
+  "dispatch": { "in_paused_campaign": "waits" },
+  "contact_projection": null,
+  "precondition": "Jason's campaign is not linked yet to a provider's campaign of this plugin's: `campaign.external_ids.campaign` is absent. A linked one is refused as `campaign_already_linked` before the provider is called, because a second create would make a second provider's campaign beside the first link.",
+  "preview": null,
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:campaign.create:1:input",
+    "title": "campaign.create input",
+    "description": "The name the provider's campaign is given, and Jason's campaign it is made for. Nothing else: steps, a schedule and a sender are later operations' to set.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "campaign", "idempotency_key"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The name the provider's campaign is given. The provider keeps no key on its campaigns, so this name is also how a repeat finds what an earlier attempt made, compared exactly and without regard to case."
+          }
+        }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" },
+      "idempotency_key": {
+        "type": "string",
+        "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+        "description": "The work item's own identifier: stable across every attempt, and the moment it carries is the earliest the provider's campaign this item made can have been created."
+      }
+    },
+    "$defs": {
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it. A campaign pin here means Jason's campaign is linked already, which the precondition refuses."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:campaign.create:1:output",
+    "title": "campaign.create result",
+    "description": "The campaign it makes is the provider's, not Jason's own (that one is made by `jason campaign create`): a draft that holds nobody, has never been started, and has sent and armed nothing. Starting it is `campaign.activate`, a separate act with its own confirmation. A provider that cannot hold a campaign with no steps may give it the least step it needs to exist, one that reaches nobody even once the campaign runs — a task for its owner, never a message — and the result says how many it added.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "One outcome for the one campaign made.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["campaign_external_id", "name", "status", "state", "enrolled", "steps_added"],
+          "properties": {
+            "campaign_external_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "description": "The provider's identifier for the campaign made."
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "description": "The campaign's name as the provider holds it."
+            },
+            "status": {
+              "const": "created",
+              "description": "Also the answer of a repeat that found the campaign an earlier attempt of this work item made."
+            },
+            "state": {
+              "const": "draft",
+              "description": "The provider's campaign has never been started. Anything else is not what this operation makes, and fails the result."
+            },
+            "enrolled": {
+              "const": 0,
+              "description": "The campaign holds nobody. Enrolling somebody is `campaign.enroll`, a separate act."
+            },
+            "steps_added": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "How many steps the provider needed its campaign to have to exist at all, each one reaching nobody; 0 where it holds a campaign with none."
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "external_ids": {
+    "campaign": {
+      "entity": "campaign",
+      "description": "The provider's identifier for the provider's campaign this call made, pinned beside the result: that is the first link, and every later operation for Jason's campaign works by it."
+    }
+  },
+
+  "recovery_read": {
+    "reads": "The provider's campaigns, every page, each name compared with `args.name` exactly and without regard to case. The provider's campaign an earlier attempt made is the only one of that name, a draft that holds nobody, created no earlier than the moment the work item's identifier carries less ten minutes for the two clocks; nothing of the name means nothing was made.",
+    "justification": "The provider keeps no key on its campaigns, so the name the request carried is what finds it. Adopting only what is exactly this item's own, and leaving anything else to a person, is what keeps a lost answer from making a second campaign of the name or claiming somebody else's."
+  },
+  "repeat_after_ambiguous": "after_recovery_read",
+
+  "failure_codes": [
+    { "code": "campaign_already_linked", "class": "validation", "when": "Jason's campaign already carries this plugin's campaign pin, so it is linked to a provider's campaign already. Refused before the provider is called." },
+    { "code": "campaign_name_taken", "class": "validation", "when": "On a first attempt, the provider already holds a campaign whose name is `args.name`, compared exactly and without regard to case. Nothing is made: a second campaign of a name is never made, and one that exists is never adopted by surprise." },
+    { "code": "campaign_name_ambiguous", "class": "permanent", "when": "On an attempt after one that may have made the campaign, the provider's campaigns of that name are not exactly one draft that holds nobody and was created no earlier than the work item: one is older, holds somebody, has been started or archived, or there is more than one. Nothing is made, and a person decides which campaign is meant." },
+    { "code": "campaign_not_draft", "class": "permanent", "when": "The provider answered the create with a campaign that has been started or archived. Never expected; said if it ever happens. The campaign's identifier is pinned on the failure, so a person can find it." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, or the plugin could not read the provider's campaigns to their end to tell whether the name is taken, so nothing the operation asks for was done. Repeating it runs the same call again." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it list or create campaigns for this account." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now and it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was written." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was asked to create the campaign and no answer arrived, so it may exist already. The next attempt lists the provider's campaigns by the name before it makes anything." }
+  ],
+
+  "timeout_ms": 120000,
+
+  "conformance": [
+    "Jason's campaign linked already — `campaign.external_ids.campaign` present — fails `campaign_already_linked` before the provider is called.",
+    "Every attempt lists the provider's campaigns first, every page, and compares each name with `args.name` exactly and without regard to case. On a first attempt a campaign of that name fails `campaign_name_taken`, and nothing is made.",
+    "An attempt after a lost answer finds what the earlier one made: no campaign of the name — it creates one; exactly one, a draft that holds nobody, created no earlier than the work item less ten minutes — it is this item's own, pinned and answered `created`; anything else — `campaign_name_ambiguous`. A second campaign of a name that exists is never made, on any attempt.",
+    "What is made is a draft that holds nobody and has never been started: `state` is `draft` and `enrolled` is `0`, and a provider that answers the create with a campaign started or archived fails `campaign_not_draft`.",
+    "A provider that cannot hold a campaign with no steps gives it the least step it needs to exist, one that reaches nobody even once the campaign runs — a task for its owner, never a message — and `steps_added` says how many.",
+    "The campaign made is pinned beside the result, so every later operation for Jason's campaign works by the pin and needs no identifier in its arguments."
+  ]
+}
