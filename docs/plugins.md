@@ -412,7 +412,12 @@ its own accord says nothing about what it left behind, and the call comes back w
 captured rather than waiting for a handle the program it ran no longer holds. A killed program that is
 not seen to end within the grace is said once, as an `exec_kill_unconfirmed` line with its process id
 and the grace in milliseconds, and the call still returns `timed_out: true`; a read that ran out after
-the program was seen to end is not a kill that failed, and says nothing. A granted program that will not start at all is an answer too: `exit_code: -1` with the
+the program was seen to end is not a kill that failed, and says nothing. A kill that is itself slow
+does not hold the call past its grace, and the host does not exit before a kill it started has ended:
+one still running at the invocation's deadline is said once, as an `exec_kill_unfinished` line with
+its process id and the deadline, and the host goes on waiting; should the runtime's own kill come
+first, it ends the host with the program, and the invocation ends `plugin_timeout` rather than with
+your answer. A granted program that will not start at all is an answer too: `exit_code: -1` with the
 reason in `stderr`, and an `exec_launch_failed` line on stderr. At most `Plugins:Exec:MaxCalls` (64)
 calls per invocation; the next fails `exec_limit`. Every call is logged as one `exec` line:
 executable, what the runtime resolved that name to (`launch`), arguments, exit code, duration, timed
@@ -948,7 +953,7 @@ identifier of a kind the operation never declared or carrying a control characte
 
 `source` is `host` or `plugin`; `data` and `truncated` appear only when they apply. The host's own
 messages are `invocation_rejected`, `digest_unverified`, `env_probe`, `exec`, `exec_launch_failed`,
-`exec_kill_unconfirmed`, `http`, `http_failed` and `log_truncated`. The runtime copies the stream, redacted, to
+`exec_kill_unconfirmed`, `exec_kill_unfinished`, `http`, `http_failed` and `log_truncated`. The runtime copies the stream, redacted, to
 `stderr.log` in the invocation directory and keeps the last 4096 characters as the trace that travels
 with a protocol failure. It is read in fixed chunks and copied line by line, up to
 `Plugins:Invoker:StderrBytes` (4 MiB); past that the file ends with a single `[stderr truncated]`

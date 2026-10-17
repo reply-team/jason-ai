@@ -536,12 +536,72 @@ public class PluginInvokerTests
     }
 
     /// <summary>
+    /// The runtime's own kill still stands behind a host that will not exit before its kill has ended. The host here is
+    /// the real one with a kill that never comes back: the program it runs times out, the call and then the plugin
+    /// answer, and the host waits for the kill, saying it unfinished at the invocation's deadline and waiting on. The
+    /// runtime's lifetime kill then ends the host's whole tree, the program with it, and the invocation is a timeout
+    /// rather than the answer the host wrote: nobody saw that program end, so it may still have acted.
+    /// </summary>
+    /// <remarks>
+    /// Bounded twice. The runtime's own kill comes three seconds after a three-second invocation; three seconds is also
+    /// the room the host's start has before its deadline falls behind that kill, and a loaded runner's start has taken
+    /// seconds. And the test gives the invocation a minute of its own, after which whatever the host and the program
+    /// wrote down about themselves is ended by number.
+    /// </remarks>
+    [Fact]
+    public async Task A_host_waiting_on_a_kill_that_never_ends_is_ended_by_the_runtime_with_its_program()
+    {
+        const string ShortGrace = """{"Dispatcher":{"Enabled":false},"Plugins":{"Invoker":{"KillGraceMs":3000}}}""";
+        await using var api = await StartAsync(settings: ShortGrace, host: new StuckKillHostLocator());
+        var gone = new HashSet<int>();
+        try
+        {
+            var input = new JsonObject
+            {
+                ["executable"] = FakeProviderCli.ExecutableName,
+                ["args"] = new JsonArray("sleep", "120000"),
+                ["timeout_ms"] = 300,
+            };
+
+            var result = await InvokeAsync(api, Request("exec.run", input, timeout: TimeSpan.FromSeconds(3)), Ct)
+                .WaitAsync(TimeSpan.FromMinutes(1), Ct);
+
+            Assert.True(
+                result.Outcome is InvocationOutcome.ProtocolFailure { Code: ProtocolCodes.PluginTimeout },
+                $"Expected plugin_timeout; the invocation ended {result.Outcome}");
+            var said = HostLines(Path.Combine(result.Launch!.WorkDir, "stderr.log"));
+            var unconfirmed = said.Where(line => line["message"]?.GetValue<string>() == "exec_kill_unconfirmed").ToList();
+            Assert.True(unconfirmed.Count == 1, $"Expected the call to say its kill unconfirmed once; the host said: {string.Join('\n', said)}");
+            var program = unconfirmed[0]["data"]!["pid"]!.GetValue<int>();
+
+            // The host reached the invocation's deadline with the kill still running, and said so, and did not exit.
+            var unfinished = said.Where(line => line["message"]?.GetValue<string>() == "exec_kill_unfinished").ToList();
+            Assert.True(
+                unfinished.Count == 1 && unfinished[0]["data"]!["pid"]!.GetValue<int>() == program,
+                $"Expected the host to say the kill of {program} unfinished once; the host said: {string.Join('\n', said)}");
+
+            Assert.True(Gone(result.Launch.Pid!.Value, TimeSpan.FromSeconds(10)), $"The host, {result.Launch.Pid}, still runs after the runtime's kill.");
+            gone.Add(result.Launch.Pid.Value);
+            Assert.True(Gone(program, TimeSpan.FromSeconds(10)), $"Process {program}, which the plugin started, still runs after the runtime ended its host.");
+            gone.Add(program);
+        }
+        finally
+        {
+            // Whatever a failure left: the host and the program, by the numbers they wrote down, and only those not seen gone.
+            foreach (var (pid, name) in LeftBehind(api.Paths).Where(each => !gone.Contains(each.Pid)))
+            {
+                EndByNumber(pid, name);
+            }
+        }
+    }
+
+    /// <summary>
     /// A busy loop spends statements, not time, so the engine's statement budget would end it long before its
     /// timeout. Raising that budget is what makes the timeout the thing under test.
     /// </summary>
     private const string PatientEngine = """{"Dispatcher":{"Enabled":false},"Plugins":{"Limits":{"MaxStatements":1000000000}}}""";
 
-    internal static Task<RuntimeApiFixture> StartAsync(Action<JasonPaths>? extra = null, string? settings = null) =>
+    internal static Task<RuntimeApiFixture> StartAsync(Action<JasonPaths>? extra = null, string? settings = null, IPluginHostLocator? host = null) =>
         RuntimeApiFixture.StartAsync(
             Ct,
             prepare: paths =>
@@ -556,7 +616,7 @@ public class PluginInvokerTests
             },
             configureServices: services =>
             {
-                services.AddSingleton<IPluginHostLocator>(new JasonDllLocator());
+                services.AddSingleton<IPluginHostLocator>(host ?? new JasonDllLocator());
                 services.AddSingleton(TestPlugins.SearchPath);
             });
 
@@ -597,5 +657,117 @@ public class PluginInvokerTests
         {
             // Gone entirely, which is the same answer.
         }
+    }
+
+    /// <summary>Whether the process with this id has gone, or goes within the time given.</summary>
+    private static bool Gone(int pid, TimeSpan within)
+    {
+        var waited = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                using var process = Process.GetProcessById(pid);
+                if (process.HasExited)
+                {
+                    return true;
+                }
+            }
+            catch (ArgumentException)
+            {
+                return true;
+            }
+
+            if (waited.Elapsed >= within)
+            {
+                return false;
+            }
+
+            Thread.Sleep(50);
+        }
+    }
+
+    /// <summary>
+    /// A process a failed test may have left running, ended by its number and its tree — only while that number still
+    /// belongs to a process of the name it was written down with, so that a number the system has since given to another
+    /// program is left alone. Linux keeps the first fifteen characters of a name, so those are what is compared.
+    /// </summary>
+    private static void EndByNumber(int pid, string name)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            var seen = process.ProcessName;
+            if (seen.Length >= Math.Min(name.Length, 15) && name.StartsWith(seen, StringComparison.OrdinalIgnoreCase))
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch (ArgumentException)
+        {
+            // Already gone.
+        }
+        catch (InvalidOperationException)
+        {
+            // Gone between the lookup and the kill.
+        }
+    }
+
+    /// <summary>
+    /// What the stand-in host and the program it ran wrote down about themselves in this runtime's invocation directories:
+    /// the host its own number as it started, the call its program's as it timed out. Read whatever the invocation got to.
+    /// </summary>
+    private static List<(int Pid, string Name)> LeftBehind(JasonPaths paths)
+    {
+        var left = new List<(int Pid, string Name)>();
+        if (!Directory.Exists(paths.PluginWorkDirectory))
+        {
+            return left;
+        }
+
+        foreach (var log in Directory.EnumerateFiles(paths.PluginWorkDirectory, "stderr.log", SearchOption.AllDirectories))
+        {
+            foreach (var line in HostLines(log))
+            {
+                var pid = line["data"] is JsonObject data && data["pid"] is JsonValue number && number.TryGetValue<int>(out var read) ? read : 0;
+                switch (line["message"]?.GetValue<string>())
+                {
+                    case StuckKillHostLocator.StartedMessage when pid > 0:
+                        left.Add((pid, StuckKillHostLocator.ProcessName));
+                        break;
+                    case "exec_kill_unconfirmed" or "exec_kill_unfinished" when pid > 0:
+                        left.Add((pid, FakeProviderCli.ExecutableName));
+                        break;
+                }
+            }
+        }
+
+        return [.. left.Distinct()];
+    }
+
+    /// <summary>
+    /// The JSON Lines the host wrote, as the runtime kept them; anything else in the file is not a line of the host's. Read
+    /// beside a writer that may still hold the file, as after a test that gave up on its invocation.
+    /// </summary>
+    private static List<JsonObject> HostLines(string stderrLog)
+    {
+        var lines = new List<JsonObject>();
+        using var stream = new FileStream(stderrLog, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream);
+        while (reader.ReadLine() is { } line)
+        {
+            try
+            {
+                if (JsonNode.Parse(line) is JsonObject record)
+                {
+                    lines.Add(record);
+                }
+            }
+            catch (System.Text.Json.JsonException)
+            {
+            }
+        }
+
+        return lines;
     }
 }

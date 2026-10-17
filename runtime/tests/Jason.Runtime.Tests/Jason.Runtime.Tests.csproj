@@ -11,6 +11,8 @@
     <ProjectReference Include="../Jason.FakeProviderCli/Jason.FakeProviderCli.csproj" />
     <!-- The stand-in for the Reply CLI, whose apphost is named `reply`, so the official package's own manifest resolves to it rather than to anything the machine has installed. -->
     <ProjectReference Include="../Jason.ReplyCliStub/Jason.ReplyCliStub.csproj" />
+    <!-- The plugin host with a kill that never comes back, started in place of the shipped executable: what the runtime's own kill does about a host that will not exit. -->
+    <ProjectReference Include="../Jason.StuckKillPluginHost/Jason.StuckKillPluginHost.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- The canonical plugin package, kept in one place and linked into every test project that installs it. -->

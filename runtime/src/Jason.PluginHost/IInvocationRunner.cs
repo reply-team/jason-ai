@@ -9,5 +9,9 @@ namespace Jason.PluginHost;
 /// </summary>
 public interface IInvocationRunner
 {
-    PluginOutcome Run(PluginInvocation invocation, HostDiagnostics diagnostics, CancellationToken deadline);
+    /// <summary>
+    /// Runs the invocation to its one outcome. A kill a call stopped waiting for is left in <paramref name="kills"/>,
+    /// for the host to see end before it exits.
+    /// </summary>
+    PluginOutcome Run(PluginInvocation invocation, HostDiagnostics diagnostics, UnfinishedKills kills, CancellationToken deadline);
 }

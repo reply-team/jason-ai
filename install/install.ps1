@@ -110,15 +110,18 @@ function Install-Jason {
     # A file another program holds open - a scanner reading the executable that was just run or just unpacked - can be
     # neither renamed nor removed until it lets go. Such a file is tried again for 10 seconds, every quarter of a second,
     # as jason itself does; held means a sharing or a lock violation and nothing else, and any other refusal is thrown at
-    # once. True once the act went through, false when the file was still held at the end.
+    # once. A violation is read from the exception inside as well: Expand-Archive reports one as the method call that
+    # failed. True once the act went through, false when the file was still held at the end.
     function Held([scriptblock] $act) {
         $deadline = [DateTime]::UtcNow.AddSeconds(10)
+        $violations = @(-2147024864, -2147024863)
         while ($true) {
             try {
                 & $act
                 return $true
             } catch {
-                if (@(-2147024864, -2147024863) -notcontains $_.Exception.HResult) { throw }
+                $inner = $_.Exception.InnerException
+                if ($violations -notcontains $_.Exception.HResult -and -not ($inner -and $violations -contains $inner.HResult)) { throw }
                 if ([DateTime]::UtcNow -ge $deadline) { return $false }
                 Start-Sleep -Milliseconds 250
             }
@@ -159,10 +162,16 @@ function Install-Jason {
 
     # The archive unpacked into the temporary directory. Expand-Archive refuses an archive that names a file twice or a
     # file outside the directory, but as an error the caller's preference does not reach: told to stop, it stops the
-    # install before anything is installed.
+    # install before anything is installed. A file it has just unpacked can be held as the move's can - Windows
+    # PowerShell's Expand-Archive closes each file and opens it again to set its time - so the unpacking is waited out
+    # too, and what a refused try unpacked is cleared before the next, since Expand-Archive refuses a file that exists.
     function Expand-Checked([string] $archive) {
         $unpacked = Join-Path $tmp 'unpacked'
-        Expand-Archive -LiteralPath $archive -DestinationPath $unpacked -ErrorAction Stop
+        $done = Held {
+            if (Test-Path -LiteralPath $unpacked) { Remove-Item -LiteralPath $unpacked -Recurse -Force -ErrorAction Stop }
+            Expand-Archive -LiteralPath $archive -DestinationPath $unpacked -ErrorAction Stop
+        }
+        if (-not $done) { throw "The downloaded archive could not be unpacked: '$(FromHome $unpacked)' or a file in it $held Nothing was installed: run this script again." }
         return $unpacked
     }
 

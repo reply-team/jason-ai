@@ -324,7 +324,11 @@ public partial class InstallScriptTests
         Assert.Contains(FormattableString.Invariant($"$deadline = [DateTime]::UtcNow.AddSeconds({rule.Wait.TotalSeconds})"), script, StringComparison.Ordinal);
         Assert.Contains(FormattableString.Invariant($"Start-Sleep -Milliseconds {rule.Interval.TotalMilliseconds}"), script, StringComparison.Ordinal);
         Assert.False(rule.AccessDeniedCounts);
-        Assert.Contains("if (@(-2147024864, -2147024863) -notcontains $_.Exception.HResult) { throw }", script, StringComparison.Ordinal);
+        Assert.Contains("$violations = @(-2147024864, -2147024863)", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "if ($violations -notcontains $_.Exception.HResult -and -not ($inner -and $violations -contains $inner.HResult)) { throw }",
+            script,
+            StringComparison.Ordinal);
     }
 
     [Fact]

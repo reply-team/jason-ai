@@ -7,5 +7,7 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Jason.PluginHost.Tests" />
+    <!-- The runtime tests' stand-in host, which runs this host with a kill that never comes back. -->
+    <InternalsVisibleTo Include="Jason.StuckKillPluginHost" />
   </ItemGroup>
 </Project>

@@ -386,6 +386,52 @@ public sealed class InstallScriptHeldTests : IDisposable
         Assert.False(File.Exists(notice + ".installing"));
     }
 
+    /// <summary>
+    /// A file another program opens while the archive is being unpacked — a scanner reading what was just written — is a
+    /// hold like any other: what was unpacked so far is cleared and the archive unpacked again, once a quarter second has
+    /// passed. Expand-Archive reports the hold wrapped, as a method call that failed, so it is read from the exception
+    /// inside as well.
+    /// </summary>
+    /// <remarks>
+    /// The hold is stood in for rather than staged: the extractor's own gap is a moment wide, in a directory of a fresh name.
+    /// An Expand-Archive of the test's own outranks the cmdlet. Its first call unpacks for real, leaving the files behind as
+    /// a refused unpacking does, and then throws what the cmdlet throws: a <c>MethodInvocationException</c> around an
+    /// <c>IOException</c> with <c>0x80070020</c>, in words of its own, since the script reads the code and never the
+    /// message. Its later calls are the cmdlet's.
+    /// </remarks>
+    [Theory]
+    [InlineData(Pwsh)]
+    [InlineData(WindowsPowerShell)]
+    public async Task An_archive_held_for_a_moment_while_it_is_unpacked_is_unpacked_again(string shell)
+    {
+        var pauses = Path.Combine(_tree.NewDirectory("pauses"), "pauses.txt");
+
+        var (exit, _, stderr) = await Start(shell, pauses, refusedUnpacks: 1);
+
+        Assert.True(exit == 0, stderr);
+        Assert.Equal(_standIn, File.ReadAllBytes(Target));
+        var paused = File.Exists(pauses) ? File.ReadAllLines(pauses) : [];
+        Assert.True(paused is ["250"], $"Expected one pause of 250 ms; the script paused {paused.Length} time(s): {string.Join(", ", paused)}. It said: {stderr}");
+    }
+
+    /// <summary>An unpacking held for the whole wait: said in a sentence of its own, and nothing was installed.</summary>
+    [Fact]
+    public async Task An_archive_held_for_the_whole_wait_while_it_is_unpacked_is_said_and_nothing_is_installed()
+    {
+        var placeholder = Placeholder(Target);
+
+        var (exit, stdout, stderr) = await Start(WindowsPowerShell, refusedUnpacks: int.MaxValue);
+
+        Assert.True(exit == 1, $"The install exited {exit}.{Environment.NewLine}stdout: {stdout}{Environment.NewLine}stderr: {stderr}");
+        var said = Regex.Replace(stderr, @"\s+", string.Empty);
+        var sentence = Regex.Escape($"The downloaded archive could not be unpacked: '{FromHome(_temp)}\\jason-install-")
+            + "[0-9a-f]{32}"
+            + Regex.Escape($"\\unpacked' or a file in it {Held} Nothing was installed: run this script again.");
+        Assert.True(Regex.IsMatch(said, Regex.Replace(sentence, @"(\\ |\s)+", string.Empty)), $"Expected the unpacking's own sentence. Said: {stderr}");
+        Assert.Equal(placeholder, File.ReadAllBytes(Target));
+        Assert.False(File.Exists(Previous));
+    }
+
     /// <summary>A file that is not a program, where an earlier jason would be: its <c>--version</c> fails, so it is replaced.</summary>
     private static byte[] Placeholder(string path)
     {
@@ -635,7 +681,12 @@ public sealed class InstallScriptHeldTests : IDisposable
     /// instead of taking it, and inside a <c>catch</c> of the test's own that writes what stopped it, in words no language
     /// changes: the exception's type and its HResult.
     /// </param>
-    private Task<(int Exit, string Stdout, string Stderr)> Start(string shell, string? pauses = null)
+    /// <param name="refusedUnpacks">
+    /// How many of the script's unpackings are refused as held, or null for none. With a number, the script is run as with
+    /// <paramref name="pauses"/>, and under an <c>Expand-Archive</c> of the test's own that unpacks for real and then, that
+    /// many times, throws what the cmdlet throws when a file it unpacks is held.
+    /// </param>
+    private Task<(int Exit, string Stdout, string Stderr)> Start(string shell, string? pauses = null, int? refusedUnpacks = null)
     {
         var script = Path.Combine(RepositoryRoot(), "install", "install.ps1");
         var start = shell == Pwsh
@@ -645,9 +696,22 @@ public sealed class InstallScriptHeldTests : IDisposable
         start.RedirectStandardError = true;
         start.UseShellExecute = false;
         start.CreateNoWindow = true;
-        string[] run = pauses is null
+        var pause = pauses is null
+            ? string.Empty
+            : "function global:Start-Sleep { param([int] $Milliseconds) Add-Content -LiteralPath $env:JASON_TEST_PAUSES -Value $Milliseconds }; ";
+        // The module is imported before the stand-in is defined: importing it later - which the first call of the cmdlet by
+        // its full name would do - puts the module's own Expand-Archive over the stand-in.
+        var unpack = refusedUnpacks is not { } refused
+            ? string.Empty
+            : "Import-Module Microsoft.PowerShell.Archive; $global:refusedUnpacks = " + refused.ToString(System.Globalization.CultureInfo.InvariantCulture) + "; "
+                + "function global:Expand-Archive { [CmdletBinding()] param([string] $LiteralPath, [string] $DestinationPath) "
+                + "Microsoft.PowerShell.Archive\\Expand-Archive -LiteralPath $LiteralPath -DestinationPath $DestinationPath -ErrorAction Stop; "
+                + "if ($global:refusedUnpacks -le 0) { return }; $global:refusedUnpacks--; "
+                + "$held = New-Object System.IO.IOException(('This test holds {0} open.' -f (Join-Path $DestinationPath 'jason.exe')), -2147024864); "
+                + "throw (New-Object System.Management.Automation.MethodInvocationException(('The unpacking this test stands in for was refused: {0}' -f $held.Message), $held)) }; ";
+        string[] run = pauses is null && refusedUnpacks is null
             ? ["-File", script, "-InstallDir", _install, "-NoModifyPath", "-Feed", _feed]
-            : ["-Command", "function global:Start-Sleep { param([int] $Milliseconds) Add-Content -LiteralPath $env:JASON_TEST_PAUSES -Value $Milliseconds }; "
+            : ["-Command", pause + unpack
                 + $"try {{ & {Quoted(script)} -InstallDir {Quoted(_install)} -NoModifyPath -Feed {Quoted(_feed)} }} "
                 + "catch { [Console]::Error.WriteLine(('The script stopped on {0} 0x{1:X8}.' -f $_.Exception.GetType().FullName, $_.Exception.HResult)); throw }"];
         foreach (var argument in (string[])["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", .. run])

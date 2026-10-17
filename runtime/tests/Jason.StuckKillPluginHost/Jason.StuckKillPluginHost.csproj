@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The plugin host as the shipped executable runs it, but for one thing: a timed-out program's kill never comes
+       back. No real program can be made to do that, and it is what shows the runtime's own kill of the host's tree
+       still standing behind a host that will not exit before its kill has ended. It is test scaffolding, never
+       published, and its name does not end in .Tests so the test-runner properties do not apply to it; the runtime's
+       tests reference it only so its assembly and its runtimeconfig are copied next to theirs, to be started in place
+       of the shipped executable. It references the plugin host and nothing else: it is that host, unchanged. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Jason.StuckKillPluginHost</AssemblyName>
+    <RootNamespace>Jason.StuckKillPluginHost</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Jason.PluginHost/Jason.PluginHost.csproj" />
+  </ItemGroup>
+</Project>

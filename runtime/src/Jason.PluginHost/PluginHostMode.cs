@@ -21,17 +21,32 @@ public static class PluginHostMode
     /// </summary>
     public static IInvocationRunner Runner { get; set; } = new InvocationRunner();
 
-    public static async Task<int> RunAsync(
+    public static Task<int> RunAsync(
         IReadOnlyList<string> args,
         TextReader stdin,
         TextWriter stdout,
         TextWriter stderr,
+        CancellationToken cancellationToken) =>
+        RunAsync(args, stdin, stdout, stderr, TimeProvider.System, cancellationToken);
+
+    /// <summary>The mode on a clock a test can hold still: the one the host's deadline and its lines are read from.</summary>
+    internal static async Task<int> RunAsync(
+        IReadOnlyList<string> args,
+        TextReader stdin,
+        TextWriter stdout,
+        TextWriter stderr,
+        TimeProvider clock,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(stdin);
         ArgumentNullException.ThrowIfNull(stdout);
         ArgumentNullException.ThrowIfNull(stderr);
+        ArgumentNullException.ThrowIfNull(clock);
+
+        // The invocation's own deadline is counted from the host's start: no later than the deadline the plugin is told,
+        // and below the runtime's kill of this process by the runtime's grace less the time this process took to start.
+        var startedAt = clock.GetUtcNow();
 
         PluginHostArguments arguments;
         try
@@ -52,7 +67,7 @@ public static class PluginHostMode
 
         // Until the envelope has been read the host knows of no secrets, so it masks nothing; from then on it
         // masks the values of every variable the plugin was granted.
-        var diagnostics = new HostDiagnostics(stderr, Redactor.None, EarlyLogLimits, arguments.PluginId, "unknown", TimeProvider.System);
+        var diagnostics = new HostDiagnostics(stderr, Redactor.None, EarlyLogLimits, arguments.PluginId, "unknown", clock);
 
         PluginInvocation invocation;
         try
@@ -71,31 +86,48 @@ public static class PluginHostMode
             invocation.Limits.Log,
             invocation.Plugin.Id,
             invocation.InvocationId,
-            TimeProvider.System);
+            clock);
 
-        PluginOutcome outcome;
-        using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+        var kills = new UnfinishedKills();
+        try
         {
-            // A second beyond the engine's own timeout: the runner is expected to end the invocation itself and
-            // report a timed-out outcome, and this is only the backstop for a runner that does not.
-            deadline.CancelAfter(TimeSpan.FromMilliseconds((long)invocation.Limits.TimeoutMs + 1000));
-
-            try
+            PluginOutcome outcome;
+            using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
             {
-                outcome = Runner.Run(invocation, diagnostics, deadline.Token);
-            }
+                // A second beyond the engine's own timeout: the runner is expected to end the invocation itself and
+                // report a timed-out outcome, and this is only the backstop for a runner that does not.
+                deadline.CancelAfter(TimeSpan.FromMilliseconds((long)invocation.Limits.TimeoutMs + 1000));
+
+                try
+                {
+                    outcome = Runner.Run(invocation, diagnostics, kills, deadline.Token);
+                }
 #pragma warning disable CA1031 // The host's last line of defence: anything unexpected is reported and exits 4.
-            catch (Exception ex)
+                catch (Exception ex)
 #pragma warning restore CA1031
-            {
-                await stderr.WriteLineAsync(ex.ToString()).ConfigureAwait(false);
-                await stderr.FlushAsync(cancellationToken).ConfigureAwait(false);
-                return HostExitCodes.HostFailure;
+                {
+                    await stderr.WriteLineAsync(ex.ToString()).ConfigureAwait(false);
+                    await stderr.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    return HostExitCodes.HostFailure;
+                }
             }
-        }
 
-        await OutcomeWriter.WriteAsync(stdout, outcome).ConfigureAwait(false);
-        return HostExitCodes.Completed;
+            await OutcomeWriter.WriteAsync(stdout, outcome).ConfigureAwait(false);
+            return HostExitCodes.Completed;
+        }
+        finally
+        {
+            // A kill an exec stopped waiting for is still ending its program, and this process does not exit before it
+            // has, whichever way the invocation ended. An exit would cut it short: on Unix .NET stops the program
+            // (SIGSTOP), finds its children and only then kills (SIGKILL), so a cut between the two leaves the program
+            // stopped for good; on Windows the program outlives its parent, out of reach of a kill of this tree. And the
+            // runtime, seeing this process exit, would never use its own kill. Past the invocation's deadline the wait is
+            // said and goes on: should the runtime's lifetime kill come first, it ends this process's whole tree, the
+            // program still in it, and the attempt is a timeout rather than what this process wrote. A host told to stop
+            // by its own token or a console signal exits without waiting for its kill; that is not the runtime's path,
+            // which cancels nothing and ends the tree, and the shipped executable passes no token.
+            await kills.WaitAsync(startedAt.AddMilliseconds(invocation.Limits.TimeoutMs), clock, diagnostics, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>

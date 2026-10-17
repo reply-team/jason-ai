@@ -37,8 +37,8 @@ public sealed partial class ExecService(HostServices services)
     /// <summary>
     /// The most a call's kill grace can be. The grace is this or half of what is left of the invocation when the call
     /// is made, whichever is smaller; it is kept back from a call that asked for no timeout of its own, and it bounds
-    /// everything the host waits for once the program has ended — the program going, when it was killed, and the
-    /// reading of what it wrote.
+    /// everything the call waits for once the program has ended or its time is up — the kill, the killed program going,
+    /// and the reading of what it wrote.
     /// </summary>
     internal static readonly TimeSpan KillGraceCeiling = TimeSpan.FromSeconds(5);
 
@@ -52,6 +52,12 @@ public sealed partial class ExecService(HostServices services)
     /// arrange from outside — a kill that does not take is the operating system's doing — so a test answers it.
     /// </summary>
     internal Func<Process, TimeSpan, bool> EndedWithin { get; init; } = static (process, grace) => process.WaitForExit(grace);
+
+    /// <summary>
+    /// How a timed-out program is ended: its whole tree. It is the one step whose length the host cannot bound from
+    /// inside — .NET walks every process on the machine before it kills anything — so a test answers it.
+    /// </summary>
+    internal Action<Process> Kill { get; init; } = TryKill;
 
     public JsValue Invoke(Engine engine, JsValue[] args)
     {
@@ -183,7 +189,12 @@ public sealed partial class ExecService(HostServices services)
             };
         }
 
-        using (process)
+        // The process is disposed once the call is done with it, unless a kill is still ending it: then it belongs to the
+        // kill, and goes when the kill does. Disposed under a running kill, it would leave the kill nothing to end — .NET
+        // reaches for the process it was handed only after walking every process on the machine — and the program the
+        // plugin was told had timed out would run on.
+        Task? kill = null;
+        try
         {
             var pid = process.Id;
             var stdout = new BoundedCapture(services.Limits.Exec.OutputBytes);
@@ -207,15 +218,20 @@ public sealed partial class ExecService(HostServices services)
                 catch (OperationCanceledException)
                 {
                     timedOut = true;
-                    TryKill(process);
+                    kill = StartKill(process);
                 }
             }
 
-            // From here the program has ended, or has been told to, and one grace bounds everything the host still
-            // waits for. A killed program is waited for first: when it is not seen to go, that is said once below,
-            // and the call still answers in time.
+            // From here the program has ended, or is being ended, and one grace bounds everything the host still waits
+            // for. A kill is waited for first, then the program it killed going: when either has not happened in time,
+            // that is said once below, and the call still answers in time. A kill still running is left to the host,
+            // which does not exit before it has ended.
             var ending = Stopwatch.StartNew();
-            var killUnconfirmed = timedOut && !EndedQuietly(process, grace);
+            var killUnconfirmed = timedOut && !(Finished(kill!, Left(grace, ending)) && EndedQuietly(process, Left(grace, ending)));
+            if (kill is { IsCompleted: false })
+            {
+                services.Kills.Add(pid, kill);
+            }
 
             // The wait for the pipes is bounded by what is left of the same grace whether the program was ended or
             // exited of its own accord. A program may leave something running that inherited its standard handles,
@@ -223,8 +239,8 @@ public sealed partial class ExecService(HostServices services)
             // that would hold this call open for as long as the helper lived, and a program exiting cleanly says
             // nothing about what it left behind. What was captured by then is what the plugin is told — and a read
             // that ran out after the program was seen to end is not a kill that failed.
-            Settle(pumps, grace - ending.Elapsed);
-            Settle(written, grace - ending.Elapsed);
+            Settle(pumps, Left(grace, ending));
+            Settle(written, Left(grace, ending));
 
             // The same letting go, said out loud: an abandoned pump keeps running, and what the plugin is told
             // must be what was captured by now rather than whatever the helper goes on writing afterwards.
@@ -270,6 +286,48 @@ public sealed partial class ExecService(HostServices services)
 
             return result;
         }
+        finally
+        {
+            if (kill is { IsCompleted: false })
+            {
+                _ = kill.ContinueWith(
+                    static (ended, owned) =>
+                    {
+                        _ = ended.Exception;
+                        ((Process)owned!).Dispose();
+                    },
+                    process,
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+            }
+            else
+            {
+                _ = kill?.Exception;
+                process.Dispose();
+            }
+        }
+    }
+
+    /// <summary>
+    /// The kill, on a thread of its own rather than the call's: it takes as long as the operating system makes it, and
+    /// the call waits for it only within its grace.
+    /// </summary>
+    private Task StartKill(Process process) =>
+        Task.Factory.StartNew(() => Kill(process), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+    /// <summary>Whether the work ended within the time given; work still running is left running.</summary>
+    private static bool Finished(Task work, TimeSpan within)
+    {
+        Task.WhenAny(work, Task.Delay(within)).GetAwaiter().GetResult();
+        return work.IsCompleted;
+    }
+
+    /// <summary>What is left of the grace once the time on <paramref name="ending"/> is spent, and never less than none.</summary>
+    private static TimeSpan Left(TimeSpan grace, Stopwatch ending)
+    {
+        var left = grace - ending.Elapsed;
+        return left > TimeSpan.Zero ? left : TimeSpan.Zero;
     }
 
     private static async Task WriteStdinAsync(Process process, string? stdin)
@@ -316,7 +374,7 @@ public sealed partial class ExecService(HostServices services)
         work.GetAwaiter().GetResult();
     }
 
-    private static void TryKill(Process process)
+    internal static void TryKill(Process process)
     {
         try
         {

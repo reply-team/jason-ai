@@ -20,7 +20,8 @@ public sealed class SdkHarness : IDisposable
         string packageRoot,
         Action<InvocationBuilder>? configure = null,
         TimeSpan? remaining = null,
-        Func<Process, TimeSpan, bool>? endedWithin = null)
+        Func<Process, TimeSpan, bool>? endedWithin = null,
+        Action<Process>? kill = null)
     {
         Invocation = InvocationFactory.Create(packageRoot, "echo.run", configure: configure);
         Diagnostics = new HostDiagnostics(
@@ -33,11 +34,13 @@ public sealed class SdkHarness : IDisposable
 
         Budget = new CallBudget(Invocation.Limits.Exec.MaxCalls, Invocation.Limits.Http.MaxCalls);
         var left = remaining ?? TimeSpan.FromMilliseconds(Invocation.Limits.TimeoutMs);
-        Services = new HostServices(Invocation, Diagnostics, Budget, () => left, packageRoot, CancellationToken.None);
+        Kills = new UnfinishedKills();
+        Services = new HostServices(Invocation, Diagnostics, Budget, Kills, () => left, packageRoot, CancellationToken.None);
 
         Engine = EngineFactory.Create(Invocation.Limits, new PackageModuleLoader(packageRoot), CancellationToken.None);
         Http = new HttpService(Services);
-        var exec = endedWithin is null ? new ExecService(Services) : new ExecService(Services) { EndedWithin = endedWithin };
+        var defaults = new ExecService(Services);
+        var exec = new ExecService(Services) { EndedWithin = endedWithin ?? defaults.EndedWithin, Kill = kill ?? defaults.Kill };
         Engine.SetValue("host", HostObject.Build(Engine, Services, exec, Http, new EnvService(Services), new LogService(Services)));
     }
 
@@ -50,6 +53,9 @@ public sealed class SdkHarness : IDisposable
     public HostDiagnostics Diagnostics { get; }
 
     public CallBudget Budget { get; }
+
+    /// <summary>The kills a call stopped waiting for, as the host would be left to wait for them.</summary>
+    public UnfinishedKills Kills { get; }
 
     public HttpService Http { get; }
 

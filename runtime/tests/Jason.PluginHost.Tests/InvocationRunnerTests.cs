@@ -21,7 +21,7 @@ public sealed class InvocationRunnerTests
         var diagnostics = SdkHarness.DiagnosticsFor(stderr, invocation);
         using var deadline = new CancellationTokenSource(TimeSpan.FromMilliseconds(invocation.Limits.TimeoutMs + 1000));
 
-        return new InvocationRunner().Run(invocation, diagnostics, deadline.Token);
+        return new InvocationRunner().Run(invocation, diagnostics, new UnfinishedKills(), deadline.Token);
     }
 
     private static OutcomeError Error(PluginOutcome outcome)

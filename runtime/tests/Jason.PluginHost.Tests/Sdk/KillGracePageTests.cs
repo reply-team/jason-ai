@@ -48,6 +48,28 @@ public sealed partial class KillGracePageTests
         Assert.Contains("an `exec_kill_unconfirmed` line with its process id and the grace in milliseconds", page, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The page says what a plugin author meets when a kill outlives its call: the call answers in time, the host waits for
+    /// the kill before it exits, and past the invocation's deadline the line the host writes and the code the invocation
+    /// ends with.
+    /// </summary>
+    [Fact]
+    public void The_page_says_the_host_waits_for_a_kill_and_names_the_unfinished_kill()
+    {
+        var page = Flat(Source("docs/plugins.md"));
+        var list = OwnMessages().Match(page);
+        Assert.True(list.Success, "docs/plugins.md no longer has its \"The host's own messages are …\" sentence.");
+
+        Assert.Contains($"`{UnfinishedKills.Message}`", list.Value, StringComparison.Ordinal);
+        Assert.Contains(
+            "A kill that is itself slow does not hold the call past its grace, and the host does not exit before a kill it started has ended: "
+            + $"one still running at the invocation's deadline is said once, as an `{UnfinishedKills.Message}` line with its process id and the deadline, "
+            + "and the host goes on waiting; should the runtime's own kill come first, it ends the host with the program, "
+            + "and the invocation ends `plugin_timeout` rather than with your answer.",
+            page,
+            StringComparison.Ordinal);
+    }
+
     private static string Seconds(TimeSpan span) => string.Create(CultureInfo.InvariantCulture, $"{span.TotalSeconds:0.###} s");
 
     [GeneratedRegex(@"The host's own messages are [^.]+\.")]

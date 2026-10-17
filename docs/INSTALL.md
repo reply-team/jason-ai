@@ -85,7 +85,7 @@ already installed, it downloads nothing and says so, unless a licence file is mi
 it downloads the archive, checks it the same way, and writes the file, leaving the executable as it is.
 
 On Windows, `install.ps1` waits up to 10 seconds for a file another program holds open — a virus scanner reading
-the executable it has just unpacked or run — before it gives up and says which file. And if the new `jason.exe`
+the executable it has just unpacked or run — before it gives up and names the file, or the directory it was unpacking into. And if the new `jason.exe`
 cannot move in, it puts the one you had back — or, when it cannot, says where it is — so an install that fails never
 leaves you without the version you started with.
 

@@ -22,15 +22,23 @@ public sealed class InvocationRunner : IInvocationRunner
 {
     private const string ResultProperty = "result";
     private const string ExternalIdsProperty = "external_ids";
-    private const string DeadlineFormat = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";
+    /// <summary>How a moment of the invocation's time is written: the plugin's deadline, and the host's lines that name it.</summary>
+    internal const string DeadlineFormat = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";
 
     /// <summary>Never zero: a call made in the last instant of the budget still needs a timeout it can use.</summary>
     private static readonly TimeSpan MinimumRemaining = TimeSpan.FromMilliseconds(1);
 
-    public PluginOutcome Run(PluginInvocation invocation, HostDiagnostics diagnostics, CancellationToken deadline)
+    /// <summary>
+    /// How <c>host.exec</c> ends a timed-out program, when not as it always does. Set by a test's own host, never by a
+    /// plugin: a kill that does not come back cannot be made any other way.
+    /// </summary>
+    internal Action<Process>? Kill { get; init; }
+
+    public PluginOutcome Run(PluginInvocation invocation, HostDiagnostics diagnostics, UnfinishedKills kills, CancellationToken deadline)
     {
         ArgumentNullException.ThrowIfNull(invocation);
         ArgumentNullException.ThrowIfNull(diagnostics);
+        ArgumentNullException.ThrowIfNull(kills);
 
         var limits = invocation.Limits;
         var watch = Stopwatch.StartNew();
@@ -40,14 +48,16 @@ public sealed class InvocationRunner : IInvocationRunner
             invocation,
             diagnostics,
             budget,
+            kills,
             () => Remaining(limits, watch),
             Directory.GetCurrentDirectory(),
             deadline);
 
         using var http = new HttpService(services);
+        var exec = Kill is null ? new ExecService(services) : new ExecService(services) { Kill = Kill };
         engine.SetValue(
             HostObject.Name,
-            HostObject.Build(engine, services, new ExecService(services), http, new EnvService(services), new LogService(services)));
+            HostObject.Build(engine, services, exec, http, new EnvService(services), new LogService(services)));
 
         var end = new Ending(invocation, diagnostics, watch, budget);
         try

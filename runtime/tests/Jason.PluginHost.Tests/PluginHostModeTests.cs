@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Json;
@@ -41,25 +43,336 @@ public sealed class PluginHostModeTests : IDisposable
         return (exit, stdout.ToString(), stderr.ToString());
     }
 
-    private sealed class StubRunner(Func<PluginInvocation, PluginOutcome> run) : IInvocationRunner
+    /// <param name="run">The outcome, from the envelope the runner was handed.</param>
+    /// <param name="leave">What the run leaves behind for the host to wait for: a kill an exec stopped waiting for.</param>
+    private sealed class StubRunner(Func<PluginInvocation, PluginOutcome> run, Action<UnfinishedKills>? leave = null) : IInvocationRunner
     {
         public int Calls { get; private set; }
 
-        public PluginOutcome Run(PluginInvocation invocation, HostDiagnostics diagnostics, CancellationToken deadline)
+        public PluginOutcome Run(PluginInvocation invocation, HostDiagnostics diagnostics, UnfinishedKills kills, CancellationToken deadline)
         {
             Calls++;
+            leave?.Invoke(kills);
             return run(invocation);
         }
     }
 
-    private static StubRunner Succeeding() => new(invocation => new PluginOutcome(
+    private static StubRunner Succeeding(Action<UnfinishedKills>? leave = null) => new(Succeeded, leave);
+
+    private static PluginOutcome Succeeded(PluginInvocation invocation) => new(
         PluginProtocol.CurrentVersion,
         invocation.InvocationId,
         OutcomeStatus.Succeeded,
         JsonNode.Parse("""{"ok":true}"""),
         null,
         null,
-        new OutcomeDiagnostics(1, 0, 0, 0)));
+        new OutcomeDiagnostics(1, 0, 0, 0));
+
+    /// <summary>A process id the stand-in kill names; nothing is ever done to it.</summary>
+    private const int KilledPid = 4242;
+
+    /// <summary>
+    /// The mode run as the process runs it, with its streams watched while it is still running: an exec's kill that
+    /// outlived its call is left in the ledger by the runner, and ends when the test says.
+    /// </summary>
+    private static (Task<int> Run, WatchedWriter Stdout, WatchedWriter Stderr) StartWithAnUnfinishedKill(PluginInvocation invocation, Task kill) =>
+        Start(invocation, Succeeding(kills => kills.Add(KilledPid, kill)));
+
+    private static (Task<int> Run, WatchedWriter Stdout, WatchedWriter Stderr) Start(
+        PluginInvocation invocation,
+        IInvocationRunner runner,
+        TimeProvider? clock = null)
+    {
+        PluginHostMode.Runner = runner;
+        var stdout = new WatchedWriter();
+        var stderr = new WatchedWriter();
+        var stdin = new StringReader(JsonSerializer.Serialize(invocation, JasonJson.Options));
+        return (PluginHostMode.RunAsync(Argv(), stdin, stdout, stderr, clock ?? TimeProvider.System, Ct), stdout, stderr);
+    }
+
+    /// <summary>Waits for something the test cannot be told about, for no longer than the time given.</summary>
+    private static async Task<bool> WithinAsync(Func<bool> condition, TimeSpan within)
+    {
+        var waited = Stopwatch.StartNew();
+        while (!condition())
+        {
+            if (waited.Elapsed > within)
+            {
+                return false;
+            }
+
+            await Task.Delay(20, Ct);
+        }
+
+        return true;
+    }
+
+    private static IReadOnlyList<JsonObject> Unfinished(WatchedWriter stderr) =>
+    [
+        .. ModeRun.Records(ModeRun.Lines(stderr.Text))
+            .Where(line => line["message"]?.GetValue<string>() == UnfinishedKills.Message),
+    ];
+
+    /// <summary>
+    /// A kill an exec stopped waiting for is still ending its program when the outcome is written, and the host does not
+    /// exit before it has: an exit would cut the kill short and leave the program running where the runtime's own kill no
+    /// longer reaches it. The outcome is on stdout from the moment it was written all the same.
+    /// </summary>
+    [Fact]
+    public async Task The_host_writes_its_outcome_and_does_not_exit_before_an_unfinished_kill_has_ended()
+    {
+        var kill = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var invocation = InvocationFactory.Create(_root, "echo.run", configure: builder => builder.Limits = builder.Limits with { TimeoutMs = 60_000 });
+
+        var (run, stdout, stderr) = StartWithAnUnfinishedKill(invocation, kill.Task);
+        try
+        {
+            await stdout.SeenAsync("\"status\":\"succeeded\"", run, Ct);
+
+            // A moment for a host that would exit now to have done it.
+            await Task.WhenAny(run, Task.Delay(500, Ct));
+            Assert.False(run.IsCompleted, $"The host returned ({run.Status}) with a kill still unfinished. It said: {stderr.Text}");
+        }
+        finally
+        {
+            kill.TrySetResult();
+        }
+
+        Assert.Equal(HostExitCodes.Completed, await run.WaitAsync(TimeSpan.FromSeconds(30), Ct));
+        Assert.Equal(OutcomeStatus.Succeeded, ModeRun.Outcome(stdout.Text).Status);
+        Assert.True(Unfinished(stderr).Count == 0, $"A kill that ended before the deadline was said unfinished: {stderr.Text}");
+    }
+
+    /// <summary>
+    /// At the invocation's deadline a kill still running is said, once, with its process id and the deadline, and the host
+    /// goes on waiting rather than exit: what ends it then is the runtime's kill of its whole tree, with the program still
+    /// in it, and the attempt is a timeout. The deadline is counted from the host's start, so the line comes no earlier
+    /// than the invocation's timeout after the test started the host.
+    /// </summary>
+    [Fact]
+    public async Task At_the_deadline_an_unfinished_kill_is_said_once_and_the_host_goes_on_waiting()
+    {
+        const int TimeoutMs = 500;
+        var kill = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var invocation = InvocationFactory.Create(_root, "echo.run", configure: builder => builder.Limits = builder.Limits with { TimeoutMs = TimeoutMs });
+
+        var before = DateTimeOffset.UtcNow;
+        var watch = Stopwatch.StartNew();
+        var (run, stdout, stderr) = StartWithAnUnfinishedKill(invocation, kill.Task);
+        try
+        {
+            await stderr.SeenAsync(UnfinishedKills.Message, run, Ct);
+            var saidAfter = watch.Elapsed;
+            var seen = DateTimeOffset.UtcNow;
+            Assert.True(
+                saidAfter >= TimeSpan.FromMilliseconds(TimeoutMs),
+                $"The kill was said unfinished {saidAfter.TotalMilliseconds:0} ms after the host started, before its {TimeoutMs} ms deadline.");
+
+            // A moment for a host that would exit at its deadline to have done it.
+            await Task.WhenAny(run, Task.Delay(500, Ct));
+            Assert.False(run.IsCompleted, $"The host returned ({run.Status}) at its deadline with a kill still unfinished. It said: {stderr.Text}");
+
+            var line = Assert.Single(Unfinished(stderr));
+            Assert.Equal("warn", line["level"]!.GetValue<string>());
+            Assert.Equal("host", line["source"]!.GetValue<string>());
+            var data = line["data"]!.AsObject();
+            Assert.Equal(["deadline", "pid"], data.Select(pair => pair.Key).Order(StringComparer.Ordinal));
+            Assert.Equal(KilledPid, data["pid"]!.GetValue<int>());
+            var deadline = DateTimeOffset.Parse(data["deadline"]!.GetValue<string>(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+            Assert.True(
+                deadline >= before.AddMilliseconds(TimeoutMs - 1) && deadline <= seen,
+                $"The line names {deadline:O} as the deadline; the host started after {before:O} with a {TimeoutMs} ms timeout, and the line was read at {seen:O}.");
+        }
+        finally
+        {
+            kill.TrySetResult();
+        }
+
+        Assert.Equal(HostExitCodes.Completed, await run.WaitAsync(TimeSpan.FromSeconds(30), Ct));
+        Assert.Equal(OutcomeStatus.Succeeded, ModeRun.Outcome(stdout.Text).Status);
+        Assert.True(Unfinished(stderr).Count == 1, $"The unfinished kill was said more than once: {stderr.Text}");
+    }
+
+    /// <summary>
+    /// The host breaking does not let it exit under a kill either. A program's kill can still be running when something
+    /// goes wrong after its call answered; the host says what broke, and exits 4 only once the kill has ended.
+    /// </summary>
+    [Fact]
+    public async Task A_host_that_breaks_with_a_kill_unfinished_exits_only_once_the_kill_has_ended()
+    {
+        var kill = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var invocation = InvocationFactory.Create(_root, "echo.run", configure: builder => builder.Limits = builder.Limits with { TimeoutMs = 60_000 });
+
+        var (run, stdout, stderr) = Start(
+            invocation,
+            new StubRunner(_ => throw new InvalidOperationException("the host broke"), kills => kills.Add(KilledPid, kill.Task)));
+        try
+        {
+            await stderr.SeenAsync("the host broke", run, Ct);
+
+            // A moment for a host that would exit now to have done it.
+            await Task.WhenAny(run, Task.Delay(500, Ct));
+            Assert.False(run.IsCompleted, $"The host returned ({run.Status}) with a kill still unfinished. It said: {stderr.Text}");
+        }
+        finally
+        {
+            kill.TrySetResult();
+        }
+
+        Assert.Equal(HostExitCodes.HostFailure, await run.WaitAsync(TimeSpan.FromSeconds(30), Ct));
+        Assert.Equal(string.Empty, stdout.Text);
+    }
+
+    /// <summary>
+    /// The deadline is the invocation's own, counted from the host's start and not from the moment its outcome was written:
+    /// a runner that takes three times the invocation's timeout writes its outcome long after that deadline, and the line
+    /// names the deadline the plugin was given.
+    /// </summary>
+    [Fact]
+    public async Task The_deadline_is_counted_from_the_host_s_start_and_not_from_its_outcome()
+    {
+        const int TimeoutMs = 500;
+        const int RunMs = 1500;
+        var kill = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var invocation = InvocationFactory.Create(_root, "echo.run", configure: builder => builder.Limits = builder.Limits with { TimeoutMs = TimeoutMs });
+        var slow = new StubRunner(
+            given =>
+            {
+                Thread.Sleep(RunMs);
+                return Succeeded(given);
+            },
+            kills => kills.Add(KilledPid, kill.Task));
+
+        var before = DateTimeOffset.UtcNow;
+        var (run, _, stderr) = Start(invocation, slow);
+        try
+        {
+            await stderr.SeenAsync(UnfinishedKills.Message, run, Ct);
+            var line = Assert.Single(Unfinished(stderr));
+            var deadline = DateTimeOffset.Parse(line["data"]!["deadline"]!.GetValue<string>(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+            Assert.True(
+                deadline >= before.AddMilliseconds(TimeoutMs - 1) && deadline < before.AddMilliseconds(RunMs),
+                $"The line names {deadline:O} as the deadline; the host started after {before:O} with a {TimeoutMs} ms timeout, and its runner took {RunMs} ms.");
+        }
+        finally
+        {
+            kill.TrySetResult();
+        }
+
+        Assert.Equal(HostExitCodes.Completed, await run.WaitAsync(TimeSpan.FromSeconds(30), Ct));
+    }
+
+    /// <summary>
+    /// And it is exactly that: the host's start plus the invocation's timeout, the deadline the plugin is told, which sits
+    /// below the runtime's kill by the runtime's grace less the host's start. On a clock that moves only when the test moves
+    /// it, the line is not said a millisecond before that moment, is said at it, and names it.
+    /// </summary>
+    [Fact]
+    public async Task The_deadline_is_the_host_s_start_plus_the_invocation_s_timeout_exactly()
+    {
+        const int TimeoutMs = 500;
+        var start = new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
+        var clock = new ManualClock(start);
+        var kill = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var invocation = InvocationFactory.Create(_root, "echo.run", configure: builder => builder.Limits = builder.Limits with { TimeoutMs = TimeoutMs });
+
+        var (run, stdout, stderr) = Start(invocation, Succeeding(kills => kills.Add(KilledPid, kill.Task)), clock);
+        try
+        {
+            await stdout.SeenAsync("\"status\":\"succeeded\"", run, Ct);
+            Assert.True(await WithinAsync(() => clock.Waiting > 0, TimeSpan.FromSeconds(30)), $"The host never began to wait for its deadline. It said: {stderr.Text}");
+
+            clock.Advance(TimeSpan.FromMilliseconds(TimeoutMs - 1));
+
+            // A moment for a line said early to have been written.
+            await Task.WhenAny(run, Task.Delay(200, Ct));
+            Assert.True(Unfinished(stderr).Count == 0, $"The kill was said unfinished a millisecond before the deadline, at {clock.GetUtcNow():O}: {stderr.Text}");
+
+            clock.Advance(TimeSpan.FromMilliseconds(1));
+            await WithinAsync(() => Unfinished(stderr).Count > 0, TimeSpan.FromSeconds(5));
+            var said = Unfinished(stderr);
+            Assert.True(
+                said.Count == 1,
+                $"Expected the kill said unfinished once at {start.AddMilliseconds(TimeoutMs):O}, the host's start plus {TimeoutMs} ms; at {clock.GetUtcNow():O} the host said: {stderr.Text}");
+            var deadline = DateTimeOffset.Parse(said[0]["data"]!["deadline"]!.GetValue<string>(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+            Assert.True(deadline == start.AddMilliseconds(TimeoutMs), $"The line names {deadline:O}; the host started at {start:O} with a {TimeoutMs} ms timeout.");
+            Assert.False(run.IsCompleted, $"The host returned ({run.Status}) at its deadline with a kill still unfinished. It said: {stderr.Text}");
+        }
+        finally
+        {
+            kill.TrySetResult();
+        }
+
+        Assert.Equal(HostExitCodes.Completed, await run.WaitAsync(TimeSpan.FromSeconds(30), Ct));
+    }
+
+    /// <summary>
+    /// An outcome can be written after the deadline has passed — a program's call keeps its grace even when its own timeout
+    /// reached the end of the invocation — and a kill still running then is said at once, and waited for all the same.
+    /// </summary>
+    [Fact]
+    public async Task An_outcome_written_past_the_deadline_says_an_unfinished_kill_at_once_and_waits_for_it()
+    {
+        const int TimeoutMs = 300;
+        var kill = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var invocation = InvocationFactory.Create(_root, "echo.run", configure: builder => builder.Limits = builder.Limits with { TimeoutMs = TimeoutMs });
+        var late = new StubRunner(
+            given =>
+            {
+                Thread.Sleep(TimeoutMs + 500);
+                return Succeeded(given);
+            },
+            kills => kills.Add(KilledPid, kill.Task));
+
+        var (run, stdout, stderr) = Start(invocation, late);
+        try
+        {
+            await stdout.SeenAsync("\"status\":\"succeeded\"", run, Ct);
+            await stderr.SeenAsync(UnfinishedKills.Message, run, Ct);
+
+            // A moment for a host that would exit now to have done it.
+            await Task.WhenAny(run, Task.Delay(500, Ct));
+            Assert.False(run.IsCompleted, $"The host returned ({run.Status}) with a kill still unfinished. It said: {stderr.Text}");
+        }
+        finally
+        {
+            kill.TrySetResult();
+        }
+
+        Assert.Equal(HostExitCodes.Completed, await run.WaitAsync(TimeSpan.FromSeconds(30), Ct));
+        Assert.True(Unfinished(stderr).Count == 1, $"Expected the unfinished kill said once: {stderr.Text}");
+    }
+
+    /// <summary>Every kill is waited for: the first of two ending does not let the host exit under the second.</summary>
+    [Fact]
+    public async Task The_host_waits_for_every_unfinished_kill_and_not_only_the_first_to_end()
+    {
+        var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var second = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var invocation = InvocationFactory.Create(_root, "echo.run", configure: builder => builder.Limits = builder.Limits with { TimeoutMs = 60_000 });
+
+        var (run, stdout, stderr) = Start(invocation, Succeeding(kills =>
+        {
+            kills.Add(KilledPid, first.Task);
+            kills.Add(KilledPid + 1, second.Task);
+        }));
+        try
+        {
+            await stdout.SeenAsync("\"status\":\"succeeded\"", run, Ct);
+            first.TrySetResult();
+
+            // A moment for a host that would exit once one kill had ended to have done it.
+            await Task.WhenAny(run, Task.Delay(500, Ct));
+            Assert.False(run.IsCompleted, $"The host returned ({run.Status}) with its second kill still unfinished. It said: {stderr.Text}");
+        }
+        finally
+        {
+            first.TrySetResult();
+            second.TrySetResult();
+        }
+
+        Assert.Equal(HostExitCodes.Completed, await run.WaitAsync(TimeSpan.FromSeconds(30), Ct));
+    }
 
     [Fact]
     public async Task Without_arguments_it_is_a_usage_error_and_stdout_stays_empty()

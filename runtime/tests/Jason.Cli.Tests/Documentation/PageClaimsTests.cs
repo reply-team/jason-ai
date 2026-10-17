@@ -63,6 +63,11 @@ public partial class PageClaimsTests
 
         var install = Flat(Page("docs", "INSTALL.md"));
         Assert.Contains($"On Windows, `install.ps1` waits up to {wait} for a file another program holds open", install, StringComparison.Ordinal);
+
+        // A file held while the archive unpacks is said by the directory it unpacks into, "or a file in it": the script
+        // cannot know which file it was, so "says which file" is no longer what it does.
+        Assert.Contains("before it gives up and names the file, or the directory it was unpacking into.", install, StringComparison.Ordinal);
+        Assert.DoesNotContain("before it gives up and says which file.", install, StringComparison.Ordinal);
         Assert.Contains(
             "if the new `jason.exe` cannot move in, it puts the one you had back — or, when it cannot, says where it is — so an install that fails never leaves you without the version you started with.",
             install,

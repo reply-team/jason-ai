@@ -32,8 +32,8 @@ public sealed class KillGraceTests : IDisposable
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private SdkHarness Harness(Func<Process, TimeSpan, bool>? endedWithin = null) =>
-        new(_package.Root, builder => builder.Grants = Granted, remaining: FourSeconds, endedWithin: endedWithin);
+    private SdkHarness Harness(Func<Process, TimeSpan, bool>? endedWithin = null, Action<Process>? kill = null) =>
+        new(_package.Root, builder => builder.Grants = Granted, remaining: FourSeconds, endedWithin: endedWithin, kill: kill);
 
     private static JsonObject Exec(SdkHarness harness, string request) =>
         (JsonObject)JsJson.ToJson(harness.Engine, harness.Evaluate("host.exec(" + request + ")"))!;
@@ -97,7 +97,7 @@ public sealed class KillGraceTests : IDisposable
         using var stderr = new StringWriter();
         using var deadline = new CancellationTokenSource(budget + TimeSpan.FromSeconds(1));
 
-        var outcome = new InvocationRunner().Run(invocation, SdkHarness.DiagnosticsFor(stderr, invocation), deadline.Token);
+        var outcome = new InvocationRunner().Run(invocation, SdkHarness.DiagnosticsFor(stderr, invocation), new UnfinishedKills(), deadline.Token);
 
         Assert.True(
             outcome.Status == OutcomeStatus.Failed && outcome.Error?.Code == "exec_timed_out",
@@ -140,9 +140,9 @@ public sealed class KillGraceTests : IDisposable
 
         Assert.True(result["timed_out"]!.GetValue<bool>());
 
-        // The grace kept back from four seconds is two, and everything after the kill fits in it: the wait for the
-        // program and the reads its helper holds open alike.
-        Assert.Equal(TimeSpan.FromSeconds(2), given);
+        // The grace kept back from four seconds is two, and everything after the kill fits in it: the kill itself, the wait
+        // for the program and the reads its helper holds open alike. The wait for the program is given what the kill left.
+        Assert.True(given > TimeSpan.Zero && given <= TimeSpan.FromSeconds(2), $"The wait for the killed program was given {given.TotalMilliseconds:0} ms of a 2000 ms grace.");
         var afterTheKill = watch.Elapsed - killedAt;
         Assert.True(afterTheKill < TimeSpan.FromSeconds(2.5), $"The call spent {afterTheKill.TotalMilliseconds:0} ms after the kill, of a 2000 ms grace.");
 
@@ -153,6 +153,89 @@ public sealed class KillGraceTests : IDisposable
         Assert.Equal(["grace_ms", "pid"], data.Select(pair => pair.Key).Order(StringComparer.Ordinal));
         Assert.Equal("2000", data["grace_ms"]!.ToJsonString());
         Assert.True(data["pid"]!.GetValue<int>() > 0, lines[0].ToJsonString());
+    }
+
+    /// <summary>
+    /// A kill that does not come back is waited for within the grace and no longer. .NET walks every process on the machine
+    /// before it kills anything, so the kill is the one step after a timeout whose length the host cannot bound; the call
+    /// still answers as a timeout when the grace runs out, says the kill unconfirmed, and leaves the kill to finish on its
+    /// own. The kill here stands still for thirty seconds, and what is measured is the call's time from the moment it began.
+    /// </summary>
+    [Fact]
+    public void A_kill_that_does_not_come_back_within_the_grace_does_not_hold_the_call()
+    {
+        WarmUp();
+        var watch = Stopwatch.StartNew();
+        var killedAt = TimeSpan.Zero;
+        var pid = 0;
+        using var release = new ManualResetEventSlim();
+        using var harness = Harness(kill: process =>
+        {
+            killedAt = watch.Elapsed;
+            pid = process.Id;
+            release.Wait(TimeSpan.FromSeconds(30));
+        });
+
+        try
+        {
+            watch.Restart();
+            var result = Exec(harness, $"{{ executable: \"{Cli}\", args: [\"sleep\", \"120000\"], timeout_ms: 300 }}");
+            var afterTheKill = watch.Elapsed - killedAt;
+
+            Assert.True(result["timed_out"]!.GetValue<bool>());
+
+            // The grace kept back from four seconds is two; three seconds more is the host's own time to answer, on a busy machine.
+            Assert.True(afterTheKill < TimeSpan.FromSeconds(5), $"The call answered {afterTheKill.TotalMilliseconds:0} ms after its kill began, of a 2000 ms grace.");
+            var lines = Unconfirmed(harness);
+            Assert.True(lines.Count == 1, $"Expected one exec_kill_unconfirmed line; the host wrote: {harness.Stderr}");
+            Assert.Equal("2000", lines[0]["data"]!["grace_ms"]!.ToJsonString());
+        }
+        finally
+        {
+            release.Set();
+            EndByNumber(pid);
+        }
+    }
+
+    /// <summary>
+    /// A kill that outlives the grace still ends the program. The call has answered and let go of everything else by then,
+    /// but not of the process the kill is ending: disposed under a kill still running, it leaves the kill no process to
+    /// end, and the program the plugin was told had timed out runs on. The real kill is run here only once the call has
+    /// answered, and three seconds later still — longer than the whole two-second grace — so the process is held for as
+    /// long as the kill takes, not for a grace more.
+    /// </summary>
+    [Fact]
+    public async Task A_kill_that_finishes_after_the_call_has_answered_still_ends_the_program()
+    {
+        var pid = 0;
+        using var answered = new ManualResetEventSlim();
+        var killed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var harness = Harness(kill: process =>
+        {
+            pid = process.Id;
+            answered.Wait(TimeSpan.FromSeconds(30));
+            Thread.Sleep(TimeSpan.FromSeconds(3));
+            ExecService.TryKill(process);
+            killed.SetResult();
+        });
+
+        try
+        {
+            var result = Exec(harness, $"{{ executable: \"{Cli}\", args: [\"sleep\", \"120000\"], timeout_ms: 300 }}");
+            answered.Set();
+            await killed.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+
+            Assert.True(result["timed_out"]!.GetValue<bool>());
+            Assert.True(Gone(pid, TimeSpan.FromSeconds(10)), $"Process {pid} still runs after the kill that finished once the call had answered.");
+
+            // Seen gone: the number may now be another program's.
+            pid = 0;
+        }
+        finally
+        {
+            answered.Set();
+            EndByNumber(pid);
+        }
     }
 
     /// <summary>
@@ -182,5 +265,56 @@ public sealed class KillGraceTests : IDisposable
 
         Assert.False(result["timed_out"]!.GetValue<bool>());
         Assert.True(Unconfirmed(harness).Count == 0, $"A clean exit was said to be a kill that failed: {harness.Stderr}");
+    }
+
+    /// <summary>Whether the process with this id has gone, or goes within the time given.</summary>
+    internal static bool Gone(int pid, TimeSpan within)
+    {
+        var deadline = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                using var process = Process.GetProcessById(pid);
+                if (process.HasExited)
+                {
+                    return true;
+                }
+            }
+            catch (ArgumentException)
+            {
+                return true;
+            }
+
+            if (deadline.Elapsed >= within)
+            {
+                return false;
+            }
+
+            Thread.Sleep(50);
+        }
+    }
+
+    /// <summary>A program a test's kill stood in for is ended by its number, whatever the test found.</summary>
+    internal static void EndByNumber(int pid)
+    {
+        if (pid <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            process.Kill(entireProcessTree: true);
+        }
+        catch (ArgumentException)
+        {
+            // Already gone.
+        }
+        catch (InvalidOperationException)
+        {
+            // Gone between the lookup and the kill.
+        }
     }
 }
