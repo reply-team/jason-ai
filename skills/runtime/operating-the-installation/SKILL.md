@@ -2,7 +2,7 @@
 name: operating-the-installation
 description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, and installing Jason or taking it off again.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Operating the installation
@@ -11,7 +11,8 @@ This skill is about the installation, not about the work it performs. A person r
 Jason is up, why nothing is happening, what is installed, where work would go, or whether they are on the
 current version. Campaign work itself is `managed-campaign-work`.
 
-**Status: verified** against Claude Code 2.1.301. It covers what this build does and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. It covers what this build does and
+nothing else.
 
 Two things are true throughout and are easy to forget. **Nothing is registered until somebody asks**: Jason
 starts because you started it, or because somebody registered it to start at logon. And **no provider ships
@@ -109,8 +110,10 @@ that runs anything else.
 Only when `jason status` says the runtime runs in session 0, or the person tells you 0.1.0 had autostart enabled,
 is the runtime that 0.1.0's task started likely to be holding the data directory. If `enable` or `disable` answers
 `ERROR: Access is denied.`, follow its message first, as below. After `enable` or `disable` once, `jason runtime stop`
-once ends it, but ask before you run `jason runtime stop`: it stops work in flight. Then `jason runtime start` starts
-the runtime this version runs, or the person signs in again with autostart enabled.
+once ends it, but ask before you run `jason runtime stop`: it stops the runtime claiming new work and gives what is in
+flight up to ten seconds to finish; it cancels nothing, and a provider operation already under way may still act,
+ending at its own lease. Then `jason runtime start` starts the runtime this version runs, or the person signs in again
+with autostart enabled.
 
 **If `enable` or `disable` answers `ERROR: Access is denied.`**, read the rest of its message to the person. It
 names the task and the likely case: that task was registered from an elevated prompt — by an earlier version of
@@ -240,9 +243,10 @@ winget upgrade Reply.Jason
 jason runtime start
 ```
 
-with `brew upgrade jason` in the middle under Homebrew. Ask before you run `jason runtime stop`: it stops work in
-flight. On Windows winget cannot replace the executable while the runtime runs: it answers Access is denied and keeps
-the old version. Under Homebrew the upgrade removes the previous version's keg by default (unless
+with `brew upgrade jason` in the middle under Homebrew. Ask before you run `jason runtime stop`: nothing new is claimed
+from then on, what is in flight finishes or ends at its own lease, and a stop does not take back a send already under
+way. On Windows winget cannot replace the executable while the runtime runs: it answers Access is denied and keeps the
+old version. Under Homebrew the upgrade removes the previous version's keg by default (unless
 `HOMEBREW_NO_INSTALL_CLEANUP` is set), and a running runtime starts every plugin host from its own executable's
 path, which is then gone: work after the upgrade fails until the runtime restarts, which `jason status`'s
 `runtime_version` names.

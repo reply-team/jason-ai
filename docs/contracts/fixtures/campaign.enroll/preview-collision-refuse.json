@@ -43,7 +43,7 @@
     "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
   },
   "expect": {
-    "summary": "Enroll Marta Alvarez (marta@example.com) in campaign Q3 LatAm founders at the provider: start at step, first touch next_open_window, refuse if they already take part. If the campaign is live there, its messages start going to this person on that timing.",
+    "summary": "Enroll marta@example.com in the provider's campaign for Jason's campaign Q3 LatAm founders: start at step, first touch next_open_window, refuse if they already take part. If the provider's campaign is live, its messages start going to this person on that timing.",
     "highlights": {
       "/contacts/0/channels/0/value": "marta@example.com",
       "/campaign/name": "Q3 LatAm founders",

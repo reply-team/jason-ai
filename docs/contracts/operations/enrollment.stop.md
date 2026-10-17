@@ -64,12 +64,13 @@ whether the person still takes part, and answers `already_stopped` when they do 
 
 The runtime renders this summary from the composed input when it parks the work for a person:
 
-> Take Marta Alvarez (marta@example.com) out of campaign Q3 LatAm founders at the provider, reason not_interested.
-> Their history stays; nothing further is sent to them from this campaign.
+> Take marta@example.com out of the provider's campaign for Jason's campaign Q3 LatAm founders, reason
+> not_interested. Their history stays; nothing further is sent to them from that campaign.
 
-It highlights the whole reason, the address, the campaign's name, the provider's identifier for it once Jason holds
-one, and the campaign as the arguments name it, so that whoever decides sees which of the provider's campaigns the
-person leaves, on a first link as well as after it. The fixtures
+The person is named by the address the stop consumes, which every input holds, so a contact known only by an address
+reads like any other. It highlights the whole reason, the address, the name of Jason's campaign, the provider's
+identifier for it once Jason holds one, and the campaign as the arguments name it, so that whoever decides sees which
+of the provider's campaigns the person leaves, on a first link as well as after it. The fixtures
 [`fixtures/enrollment.stop/preview-*.json`](../fixtures/enrollment.stop) show each case.
 
 ## The properties
@@ -94,7 +95,7 @@ person leaves, on a first link as well as after it. The fixtures
 | in a paused campaign | `waits` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | Find the provider's own contact without creating one: by `contacts[0].external_ids.contact` when that pin is present, otherwise by the value of the channel named by `args.channel`, compared exactly and without regard to case. A person the provider does not hold takes part in nothing, which is a completed stop. |
-| preview a person reads | `Take {/contacts/0/first_name} {/contacts/0/last_name} ({/contacts/0/channels/0/value}) out of campaign {/campaign/name} at the provider, reason {/args/reason/code}. Their history stays; nothing further is sent to them from this campaign.`; highlighted: `/args/reason`, `/contacts/0/channels/0/value`, `/campaign/name`, `/campaign/external_ids/campaign`, `/args/campaign` |
+| preview a person reads | `Take {/contacts/0/channels/0/value} out of the provider's campaign for Jason's campaign {/campaign/name}, reason {/args/reason/code}. Their history stays; nothing further is sent to them from that campaign.`; highlighted: `/args/reason`, `/contacts/0/channels/0/value`, `/campaign/name`, `/campaign/external_ids/campaign`, `/args/campaign` |
 | pinned identifiers | `contact` names a contact; `campaign` names a campaign |
 | recovery read | Whether this person still takes part in the campaign. |
 | after an ambiguous end | `after_recovery_read` — a later attempt performs the recovery read above and answers from it when the effect already happened |

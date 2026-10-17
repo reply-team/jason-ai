@@ -156,6 +156,11 @@ repository's releases on GitHub. What that address keeps, and for how long, is s
 
 On macOS, with Homebrew: `brew install reply-team/tap/jason`.
 
+Every macOS route on this page — the one-liner, Homebrew and the archive by hand — is for Apple silicon only: no
+build for an Intel Mac is published, so on an Intel Mac Homebrew answers "formula requires at least a URL",
+`install.sh` names the platforms it has, and the way to Jason today is another machine: Linux x64, Windows x64 or an
+Apple silicon Mac.
+
 Installing this way accepts the same licence. The package manager owns that installation: it updates it and takes it
 off, and `jason update apply` refuses it — it "would replace a file the package manager owns" — and names the
 manager's command. That command is typed between `jason runtime stop` and `jason runtime start`, because Homebrew's
@@ -177,6 +182,10 @@ To install without running a downloaded script, take the steps the script takes,
    mark of the web, and hands it to what it unpacks: `Unblock-File` the executable, as `install.ps1` does.
 4. Run `jason --version` there, by its full path. It prints the version you downloaded.
 5. Put that directory on the PATH, as *Putting it on the PATH yourself* above says: that is the act it marks.
+
+Once `jason --version` answers there, the archive, `checksums.txt` and the temporary directory you unpacked into
+have done their work: you may delete those three — only those — with `Remove-Item -Recurse <path>` on Windows and
+`rm -r <path>` elsewhere.
 
 ---
 

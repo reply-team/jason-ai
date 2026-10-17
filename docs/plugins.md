@@ -182,6 +182,7 @@ it in full:
 ```json
 {
   "snapshot": { "id": "snp_01J4…", "loaded_at": "2026-09-14T12:00:00.000Z", "source": "reload", "plugin_count": 1 },
+  "routing_snapshot_id": "rts_01J4…",
   "plugins": [
     { "id": "fake-provider", "version": "1.0.0", "kind": "provider", "name": "Fake provider",
       "description": "…", "homepage": null, "root": "<data dir>/plugins/fake-provider",
@@ -191,12 +192,18 @@ it in full:
         "exec": { "requested": [ { "name": "provider-cli", "path": "/usr/local/bin/provider-cli", "version": "2.4.1", "min_version": null, "launch": null } ], "granted": ["provider-cli"] },
         "http": { "requested": ["localhost:5555", "api.example.com"], "granted": [] },
         "env":  { "requested": ["FAKE_TOKEN", "OTHER_TOKEN"], "granted": ["FAKE_TOKEN"] } },
-      "limits": { "timeout_ms": 20000, "memory_mb": 64 }, "status": "valid", "problems": [] } ],
+      "limits": { "timeout_ms": 20000, "memory_mb": 64 }, "binding_schema": null, "status": "valid", "problems": [] } ],
   "last_reload": { "at": "2026-09-14T12:00:00.000Z", "source": "reload", "activated": true,
-                   "candidates": [ { "directory": "fake-provider", "id": "fake-provider", "status": "valid", "problems": [] } ] },
+                   "candidates": [ { "directory": "fake-provider", "id": "fake-provider", "status": "valid", "problems": [] } ],
+                   "routes": [] },
   "activated": true
 }
 ```
+
+`last_reload.routes` lists the routes that load refused, each named the way it is written — `Routes:Default`,
+`Routes:Operations:<operation>`, `campaign:<cmp_…>/routes/<operation>` or `…/routes/default` — with its code and
+message, so it is empty when the load activated. The routes a load froze are not listed there: `routing_snapshot_id`
+names the snapshot they are in, and the activation journals them in `plugins_reloaded` (below).
 
 ### Two kinds of problem
 
@@ -250,7 +257,8 @@ Plugins:    none active · last reload rejected
 ```
 
 An **activated** load writes one global journal entry of the reserved kind `plugins_reloaded`
-carrying the snapshot id, its source and `{id, version, digest, status}` per plugin — actor `system`
+carrying the snapshot id, its source, `{id, version, digest, status}` per plugin, and the routes it
+froze as `{snapshot_id, global_default, override_count, campaign_route_count}` — actor `system`
 for the load at startup, the request's actor and reason for a reload. A **rejected** load writes
 none; it is visible in the log and in `last_reload`. `journal.append` refuses the kind, so nothing
 but a real activation can write one.

@@ -612,6 +612,22 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// No build for an Intel Mac is published, and Homebrew says so in words that never name the architecture: it
+    /// stops at the formula, before any dependency is read. So the page says it where the macOS route is given, with
+    /// what a person on such a machine can do today.
+    /// </summary>
+    [Fact]
+    public void The_package_subsection_says_an_Intel_Mac_has_no_build()
+    {
+        var package = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### With a package manager"));
+
+        Assert.Contains(
+            "Every macOS route on this page — the one-liner, Homebrew and the archive by hand — is for Apple silicon only: no build for an Intel Mac is published, so on an Intel Mac Homebrew answers \"formula requires at least a URL\", `install.sh` names the platforms it has, and the way to Jason today is another machine: Linux x64, Windows x64 or an Apple silicon Mac.",
+            package,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// And it says who owns such an installation, in the words <c>jason update apply</c>'s refusal uses, and how the
     /// manager's upgrade is typed, with the reason: Homebrew removes the keg a running runtime starts its plugin hosts from.
     /// </summary>
@@ -646,7 +662,10 @@ public partial class PageClaimsTests
         var started = paragraph.IndexOf("jason runtime start", upgrade + 1, StringComparison.Ordinal);
         Assert.True(stop >= 0 && upgrade > stop && started > upgrade, "the paragraph does not give the stop, the manager's upgrade and the start in that order.");
         Assert.Contains("`brew upgrade jason`", paragraph, StringComparison.Ordinal);
-        Assert.Contains("Ask before you run `jason runtime stop`: it stops work in flight.", paragraph, StringComparison.Ordinal);
+        Assert.Contains(
+            "Ask before you run `jason runtime stop`: nothing new is claimed from then on, what is in flight finishes or ends at its own lease, and a stop does not take back a send already under way.",
+            paragraph,
+            StringComparison.Ordinal);
         Assert.Contains("On Windows winget cannot replace the executable while the runtime runs: it answers Access is denied and keeps the old version.", paragraph, StringComparison.Ordinal);
         Assert.Contains("HOMEBREW_NO_INSTALL_CLEANUP", paragraph, StringComparison.Ordinal);
         Assert.Contains("`runtime_version`", paragraph, StringComparison.Ordinal);
@@ -946,6 +965,7 @@ public partial class PageClaimsTests
     /// §2 says how to install without running a downloaded script: the steps the script takes, in its order. The digest is
     /// checked, and a mismatch stops, before anything is unpacked; the notices keep the names the uninstall removes them
     /// by; the executable is run by its full path; and only then does the PATH come, as the act its own paragraph marks.
+    /// Last, what the steps left in the temporary directory may go, named one by one so that nothing else goes with it.
     /// </summary>
     [Fact]
     public void The_install_page_s_hand_path_checks_the_digest_before_it_unpacks()
@@ -961,6 +981,7 @@ public partial class PageClaimsTests
             "named `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`.",
             "4. Run `jason --version` there, by its full path.",
             "5. Put that directory on the PATH, as *Putting it on the PATH yourself* above says",
+            "Once `jason --version` answers there, the archive, `checksums.txt` and the temporary directory you unpacked into have done their work: you may delete those three — only those — with `Remove-Item -Recurse <path>` on Windows and `rm -r <path>` elsewhere.",
         ];
 
         var at = -1;

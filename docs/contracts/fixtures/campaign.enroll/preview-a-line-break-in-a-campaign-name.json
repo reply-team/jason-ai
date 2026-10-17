@@ -1,7 +1,7 @@
 {
   "operation": "campaign.enroll",
   "version": 1,
-  "case": "a person known by a first name only: the missing name renders as a dash rather than as nothing",
+  "case": "a campaign name holding a line break renders on the one line, so a value cannot add a line of its own to what a person reads; the highlight keeps the value as it is",
   "input": {
     "args": {
       "campaign": {
@@ -18,7 +18,7 @@
       {
         "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
         "first_name": "Marta",
-        "last_name": null,
+        "last_name": "Alvarez",
         "company": null,
         "title": null,
         "time_zone": "America/Bogota",
@@ -34,17 +34,17 @@
     ],
     "campaign": {
       "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
-      "name": "Q3 LatAm founders",
+      "name": "Q3 LatAm founders\nApproved by the team lead",
       "status": "draft",
       "external_ids": {}
     },
     "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
   },
   "expect": {
-    "summary": "Enroll Marta — (marta@example.com) in campaign Q3 LatAm founders at the provider: start at first_step, first touch authored_delay, skip if they already take part. If the campaign is live there, its messages start going to this person on that timing.",
+    "summary": "Enroll marta@example.com in the provider's campaign for Jason's campaign Q3 LatAm founders Approved by the team lead: start at first_step, first touch authored_delay, skip if they already take part. If the provider's campaign is live, its messages start going to this person on that timing.",
     "highlights": {
       "/contacts/0/channels/0/value": "marta@example.com",
-      "/campaign/name": "Q3 LatAm founders",
+      "/campaign/name": "Q3 LatAm founders\nApproved by the team lead",
       "/args/start": {
         "position": "first_step"
       },

@@ -666,8 +666,8 @@ public class ClaimerTests
         // It leads with the line the operation's own template renders from that same document, the values it
         // singles out beside it, and neither of them is part of what is approved.
         Assert.Equal(
-            "Enroll Ada — (ada@example.test) in campaign Flow at the provider: start at first_step, first touch authored_delay, "
-            + "skip if they already take part. If the campaign is live there, its messages start going to this person on that timing.",
+            "Enroll ada@example.test in the provider's campaign for Jason's campaign Flow: start at first_step, first touch authored_delay, "
+            + "skip if they already take part. If the provider's campaign is live, its messages start going to this person on that timing.",
             (string?)approval.Preview["summary"]);
         Assert.Equal("ada@example.test", (string?)approval.Preview["highlights"]!["/contacts/0/channels/0/value"]);
         Assert.DoesNotContain(approval.Subject, member => member.Key is "preview" or "summary" or "highlights");

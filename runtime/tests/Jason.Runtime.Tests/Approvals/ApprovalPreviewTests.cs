@@ -79,8 +79,8 @@ public class ApprovalPreviewTests
         var preview = ApprovalPreview.Of(Enroll, Composed(campaign, "Autumn outreach"), campaign, NewContact(), "email");
 
         Assert.Equal(
-            "Enroll Alex Rivera (alex@example.test) in campaign Autumn outreach at the provider: start at step, first touch next_open_window, "
-            + "refuse if they already take part. If the campaign is live there, its messages start going to this person on that timing.",
+            "Enroll alex@example.test in the provider's campaign for Jason's campaign Autumn outreach: start at step, first touch next_open_window, "
+            + "refuse if they already take part. If the provider's campaign is live, its messages start going to this person on that timing.",
             (string?)preview["summary"]);
         Assert.Equal(
             """{"/contacts/0/channels/0/value":"alex@example.test","/campaign/name":"Autumn outreach","/args/start":{"position":"step","step":3},"/args/first_touch":"next_open_window","/args/collision":"refuse"}""",
@@ -98,7 +98,7 @@ public class ApprovalPreviewTests
 
         var preview = ApprovalPreview.Of(Enroll, Composed(campaign, "Autumn outreach"), campaign, NewContact(), "email");
 
-        Assert.Contains("in campaign Autumn outreach at the provider", (string?)preview["summary"], StringComparison.Ordinal);
+        Assert.Contains("for Jason's campaign Autumn outreach:", (string?)preview["summary"], StringComparison.Ordinal);
         Assert.Equal("Renamed since", (string?)preview["campaign"]!["name"]);
     }
 
@@ -116,7 +116,7 @@ public class ApprovalPreviewTests
 
         var preview = ApprovalPreview.Of(Enroll, Composed(campaign, "Autumn outreach"), campaign, elsewhere, "email");
 
-        Assert.StartsWith("Enroll Alex Rivera (alex@example.test) in campaign", (string?)preview["summary"], StringComparison.Ordinal);
+        Assert.StartsWith("Enroll alex@example.test in the provider's campaign", (string?)preview["summary"], StringComparison.Ordinal);
         Assert.Equal("alex@example.test", (string?)preview["highlights"]!["/contacts/0/channels/0/value"]);
         Assert.Equal("Someone Else", (string?)preview["contact"]!["name"]);
     }

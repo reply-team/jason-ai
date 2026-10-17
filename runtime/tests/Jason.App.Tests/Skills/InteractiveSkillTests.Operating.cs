@@ -90,10 +90,15 @@ public partial class InteractiveSkillTests
             StringComparison.Ordinal);
 
         // After an upgrade from 0.1.0 the runtime that 0.1.0's task started may still hold the data directory. The
-        // sentence is keyed to evidence a session can have, and the stop waits for the person's word, because a stop
-        // ends work in flight.
+        // sentence is keyed to evidence a session can have, and the stop waits for the person's word. What it says a stop
+        // does is what the work-execution contract says: a stop drains and cancels nothing, so a provider operation
+        // already under way may still act. "It stops work in flight" promised the opposite.
         Assert.Contains("Only when `jason status` says the runtime runs in session 0, or the person tells you 0.1.0 had autostart enabled", skill, StringComparison.Ordinal);
-        Assert.Contains("ask before you run `jason runtime stop`: it stops work in flight", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "ask before you run `jason runtime stop`: it stops the runtime claiming new work and gives what is in flight up to ten seconds to finish; it cancels nothing, and a provider operation already under way may still act, ending at its own lease.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("it stops work in flight", skill, StringComparison.Ordinal);
         Assert.Contains("If `enable` or `disable` answers `ERROR: Access is denied.`, follow its message first, as below.", skill, StringComparison.Ordinal);
         Assert.Contains("Then `jason runtime start` starts the runtime this version runs, or the person signs in again with autostart enabled.", skill, StringComparison.Ordinal);
         var stopAt = skill.IndexOf("`jason runtime stop` once ends it", StringComparison.Ordinal);

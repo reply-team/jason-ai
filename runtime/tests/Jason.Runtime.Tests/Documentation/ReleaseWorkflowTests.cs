@@ -1472,10 +1472,6 @@ public class ReleaseWorkflowTests
     }
 
     /// <summary>
-    /// The runner's own substitutions, and nothing else: the workflow expression that carries the version, the
-    /// environment variables the jobs export, and the directory the artifacts arrive in.
-    /// </summary>
-    /// <summary>
     /// What a full run's version job hands on as <c>rids</c>: every platform its deciding step is given, comma-separated,
     /// as the runner puts it into a line — which PowerShell then reads as an array, as it reads a list written out.
     /// </summary>
@@ -1487,6 +1483,10 @@ public class ReleaseWorkflowTests
         return string.Join(',', platforms.RootElement.EnumerateArray().Select(leg => leg.GetProperty("rid").GetString()));
     }
 
+    /// <summary>
+    /// The runner's own substitutions, and nothing else: the workflow expressions that carry the version and a full
+    /// run's platforms, the environment variables the jobs export, and the directory the artifacts arrive in.
+    /// </summary>
     private static string ExpandForThisMachine(string invocation, string directory)
     {
         var script = Path.Combine(RepositoryRoot(), Path.Combine(Script));
