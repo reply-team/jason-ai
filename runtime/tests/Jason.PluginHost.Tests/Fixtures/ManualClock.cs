@@ -2,7 +2,8 @@ namespace Jason.PluginHost.Tests.Fixtures;
 
 /// <summary>
 /// A clock that moves only when the test moves it, so a deadline can be read as an exact value and a wait for it seen
-/// not to end a millisecond early. Its timers fire on the thread that advances it, in the order they fall due.
+/// not to end a millisecond early. Its timers fire on the thread that advances it, in the order they fall due, or
+/// before they fall due when the test says so.
 /// </summary>
 public sealed class ManualClock(DateTimeOffset start) : TimeProvider
 {
@@ -41,14 +42,34 @@ public sealed class ManualClock(DateTimeOffset start) : TimeProvider
         return timer;
     }
 
+    /// <summary>When the first of the waiting timers falls due, or nothing when none is waiting.</summary>
+    public DateTimeOffset? NextDue
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _timers.Count == 0 ? null : _timers.Min(timer => timer.Due);
+            }
+        }
+    }
+
     /// <summary>Moves the clock on and fires every timer that has fallen due by then.</summary>
-    public void Advance(TimeSpan by)
+    public void Advance(TimeSpan by) => Fire(by, early: false);
+
+    /// <summary>
+    /// Fires every waiting timer now, before it has fallen due, as a real timer's tick can come before the moment it was
+    /// set for; the clock does not move.
+    /// </summary>
+    public void FireEarly() => Fire(TimeSpan.Zero, early: true);
+
+    private void Fire(TimeSpan by, bool early)
     {
         List<ManualTimer> due;
         lock (_gate)
         {
             _now += by;
-            due = [.. _timers.Where(timer => timer.Due <= _now).OrderBy(timer => timer.Due)];
+            due = [.. _timers.Where(timer => early || timer.Due <= _now).OrderBy(timer => timer.Due)];
             foreach (var timer in due)
             {
                 _timers.Remove(timer);

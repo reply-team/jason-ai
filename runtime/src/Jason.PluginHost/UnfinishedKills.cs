@@ -52,8 +52,17 @@ public sealed class UnfinishedKills
         var left = deadline - clock.GetUtcNow();
         if (left > TimeSpan.Zero)
         {
+            // A delay counts whole milliseconds and drops the rest, and a timer's tick can come before the moment it was set
+            // for: the host reads its own clock again after each, and waits what is left rounded up to a whole millisecond,
+            // so that the line is never said before the deadline by the clock the host keeps it on.
             using var quiet = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            await Task.WhenAny(all, Task.Delay(left, clock, quiet.Token)).ConfigureAwait(false);
+            do
+            {
+                await Task.WhenAny(all, Task.Delay(TimeSpan.FromMilliseconds(Math.Ceiling(left.TotalMilliseconds)), clock, quiet.Token)).ConfigureAwait(false);
+                left = deadline - clock.GetUtcNow();
+            }
+            while (left > TimeSpan.Zero && !all.IsCompleted && !cancellationToken.IsCancellationRequested);
+
             await quiet.CancelAsync().ConfigureAwait(false);
         }
 
