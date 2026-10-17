@@ -155,7 +155,7 @@ public class WorkItemCommandsTests
     }
 
     /// <summary>
-    /// Where a shell will not pass JSON on the command line as written, the golden path puts the arguments in a file as
+    /// Where a shell will not pass JSON on the command line as written, the wiring check puts the arguments in a file as
     /// <c>{"context":{"input":…}}</c> and gives it with <c>--file</c>. That has to be the same request as <c>--input</c>,
     /// or the page would be offering a second, different act.
     /// </summary>
@@ -168,11 +168,11 @@ public class WorkItemCommandsTests
         using var byFile = new CliRun();
 
         string[] common = ["workitem", "create", "cmp_A", "--kind", "provider_op", "--operation", "campaign.get"];
-        Assert.Equal(ExitCodes.Success, await byOption.RunAsync([.. common, "--input", Arguments, "--idempotency-key", "trial-run-sequence"]));
-        Assert.Equal(ExitCodes.Success, await byFile.RunAsync([.. common, "--file", file.Path, "--idempotency-key", "trial-run-sequence"]));
+        Assert.Equal(ExitCodes.Success, await byOption.RunAsync([.. common, "--input", Arguments, "--idempotency-key", "wiring-check-read"]));
+        Assert.Equal(ExitCodes.Success, await byFile.RunAsync([.. common, "--file", file.Path, "--idempotency-key", "wiring-check-read"]));
 
         const string Expected =
-            "{\"context\":{\"input\":{\"campaign\":{\"external_id\":\"7\"}}},\"campaign_id\":\"cmp_A\",\"kind\":\"provider_op\",\"operation\":\"campaign.get\",\"idempotency_key\":\"trial-run-sequence\"}";
+            "{\"context\":{\"input\":{\"campaign\":{\"external_id\":\"7\"}}},\"campaign_id\":\"cmp_A\",\"kind\":\"provider_op\",\"operation\":\"campaign.get\",\"idempotency_key\":\"wiring-check-read\"}";
         byFile.AssertPosted(Operations.WorkItemCreate, Expected);
         byOption.AssertPosted(Operations.WorkItemCreate, Expected);
     }

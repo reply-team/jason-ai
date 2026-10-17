@@ -29,8 +29,8 @@ public class GoldenPathTests
 
     private const string FirstName = "Marta";
 
-    /// <summary>The address a trial run enrols: the person's own, standing in for whoever follows the page.</summary>
-    private const string TrialAddress = "ada@example.test";
+    /// <summary>The address the wiring check enrols: the person's own, standing in for whoever follows the page.</summary>
+    private const string YourAddress = "ada@example.test";
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -397,24 +397,28 @@ public class GoldenPathTests
     }
 
     /// <summary>
-    /// The first run the golden path walks a stranger through, with the page's own arguments: a sequence the person made
-    /// and never started is read before anything is written to it — a draft, holding nobody — and only then is the
-    /// person's own address enrolled, refusing rather than deciding if they already take part. The enrolment waits for
-    /// the person's word, the read after it finds exactly them, and the way back takes them out again, waiting for its own
-    /// word. Nothing in the run starts the sequence, so nothing in it can send.
+    /// The wiring check a stranger follows, with the page's own arguments. Jason's campaign is started; the provider's
+    /// campaign for it is made by <c>campaign.create</c>, which runs without a park because its contract asks nobody —
+    /// the question before it is the page's own — and is pinned on Jason's campaign. The two reads work by that pin and
+    /// find a draft that holds nobody; only then is the person's own address enrolled, refusing rather than deciding if
+    /// they already take part. The enrolment waits for the person's word, the read after it finds exactly them, and the
+    /// way back takes them out on its own word and leaves the provider's campaign where it is. Nothing in the run starts
+    /// it, so nothing in it can send.
     /// </summary>
     /// <remarks>
     /// The arguments are read from the page, not written here, so the page and what this proves cannot drift apart. The
-    /// account at the far end is the stand-in vendor CLI; the same run against a real account is a person's own.
+    /// account at the far end is the stand-in vendor CLI, and it holds no sequence until the run makes one; the same run
+    /// against a real account is a person's own.
     /// </remarks>
     [Fact]
-    public async Task A_first_run_reads_a_trial_sequence_before_it_enrols_and_after()
+    public async Task The_wiring_check_makes_the_provider_s_campaign_reads_it_and_enrols_only_you()
     {
-        var page = TrialInputs();
-        Assert.Equal("refuse", (string?)page["campaign.enroll"]["collision"]);
+        var page = WiringCheckCommands();
+        Assert.Equal("refuse", (string?)page.Inputs["campaign.enroll"]["collision"]);
+        var people = page.Keys["enrollment.list"];
+        Assert.True(people.Count == 2, $"docs/golden-path.md reads the provider's campaign's people {people.Count} times; it reads them before the enrolment and after it.");
 
-        using var it = GoldenPath.Create("trial");
-        it.Account.WithSequence(Sequence, "Trial run", "new", false, 11);
+        using var it = GoldenPath.Create("wiring");
 
         await GoldenPath.WriteSettingsAsync(it, new SettingsShape());
         await GoldenPath.StartAsync(it);
@@ -422,54 +426,100 @@ public class GoldenPathTests
         await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: true);
 
         var campaign = (string)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
-            it, "campaign", "create", "--name", "Trial run", "--idempotency-key", "trial-run")))["id"]!;
-        var contact = await AddPeopleAsync(it, campaign, TrialContacts().Replace("<your address>", TrialAddress, StringComparison.Ordinal));
+            it, "campaign", "create", "--name", page.CampaignName, "--idempotency-key", page.CampaignKey)))["id"]!;
+        var contact = await AddPeopleAsync(it, campaign, WiringCheckContacts().Replace("<your address>", YourAddress, StringComparison.Ordinal));
         GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, "campaign", "start", campaign));
 
-        // 1. Two reads before anything is written, and neither waits for anybody: reading changes nothing at the
-        //    provider. The sequence is a draft — Reply's "new" in the contract's own word — and it holds nobody.
-        var sequence = await RunAsync(it, campaign, null, "campaign.get", page["campaign.get"], "trial-run-sequence");
-        Assert.Equal("draft", (string?)sequence["result"]!["campaign"]!["status"]);
-        var nobody = await RunAsync(it, campaign, null, "enrollment.list", page["enrollment.list"], "trial-run-people");
+        // 1. The provider's campaign for Jason's campaign. Nobody is asked by the runtime: the operation reaches nobody.
+        //    It is a draft that holds nobody, with the one task step the provider needs a sequence to have, and nothing
+        //    else in the account is touched.
+        var made = await RunAsync(it, campaign, null, "campaign.create", page.Inputs["campaign.create"], page.Keys["campaign.create"][0]);
+        Assert.Null(Assert.Single(made["attempts"]!.AsArray())!["provenance"]!["approval_id"]);
+        Assert.Empty(GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "approval", "list")))["items"]!.AsArray());
+        var created = made["result"]!["items"]!.AsArray()[0]!;
+        Assert.Equal("draft", (string?)created["state"]);
+        Assert.Equal(0, (int)created["enrolled"]!);
+        Assert.Equal(1, (int)created["steps_added"]!);
+
+        var external = (string)created["campaign_external_id"]!;
+        var sequence = int.Parse(external, CultureInfo.InvariantCulture);
+        var held = Assert.Single(it.Account.Sequences)!;
+        Assert.Equal(sequence, (int)held["id"]!);
+        Assert.Equal((string?)page.Inputs["campaign.create"]["name"], (string?)held["name"]);
+        Assert.Equal("new", (string?)held["status"]);
+        Assert.Equal("task", (string?)Assert.Single(held["steps"]!.AsArray())!["type"]);
+
+        // And Jason's campaign carries it as its pin, which is what every later command works by.
+        var pins = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "campaign", "get", campaign)))["external_ids"]!.AsArray();
+        var pin = Assert.Single(pins, one => (string?)one!["kind"] == "campaign")!;
+        Assert.Equal(external, (string?)pin["value"]);
+        Assert.Equal(GoldenPath.PluginId, (string?)pin["plugin_id"]);
+
+        // 2. Two reads before anything is written to it, neither naming it and neither waiting for anybody: reading
+        //    changes nothing at the provider. It is a draft — Reply's "new" in the contract's own word — holding nobody.
+        var draft = await RunAsync(it, campaign, null, "campaign.get", page.Inputs["campaign.get"], page.Keys["campaign.get"][0]);
+        Assert.Equal("draft", (string?)draft["result"]!["campaign"]!["status"]);
+        var nobody = await RunAsync(it, campaign, null, "enrollment.list", page.Inputs["enrollment.list"], people[0]);
         Assert.Equal(0, (int)nobody["result"]!["total"]!);
         Assert.DoesNotContain(it.Account.Calls, call => call.Command == "sequence add-contact");
 
-        // 2. The enrolment parks for the person's word, is given it, and runs.
-        var enrolled = await DecidedAsync(it, campaign, contact, "campaign.enroll", page["campaign.enroll"], "trial-run-enrol");
+        // 3. The enrolment parks for the person's word, is given it, and runs.
+        var enrolled = await DecidedAsync(it, campaign, contact, "campaign.enroll", page.Inputs["campaign.enroll"], page.Keys["campaign.enroll"][0]);
         Assert.Equal("enrolled", (string?)enrolled["result"]!["items"]!.AsArray()[0]!["status"]);
         Assert.False((bool)enrolled["result"]!["campaign_live"]!);
 
-        // 3. The read after it finds exactly the one person this run is about.
-        var you = await RunAsync(it, campaign, null, "enrollment.list", page["enrollment.list"], "trial-run-people-after");
+        // 4. The read after it finds exactly the one person this run is about.
+        var you = await RunAsync(it, campaign, null, "enrollment.list", page.Inputs["enrollment.list"], people[1]);
         Assert.Equal(1, (int)you["result"]!["total"]!);
-        Assert.Single(it.Account.EnrolledIn(Sequence));
+        Assert.Single(it.Account.EnrolledIn(sequence));
 
-        // 4. The way back waits for its own word, and leaves the sequence holding nobody.
-        await DecidedAsync(it, campaign, contact, "enrollment.stop", page["enrollment.stop"], "trial-run-stop");
-        Assert.Empty(it.Account.EnrolledIn(Sequence));
+        // 5. The way back waits for its own word, takes the person out, and leaves the provider's campaign where it is:
+        //    still there, still a draft, holding nobody.
+        await DecidedAsync(it, campaign, contact, "enrollment.stop", page.Inputs["enrollment.stop"], page.Keys["enrollment.stop"][0]);
+        Assert.Empty(it.Account.EnrolledIn(sequence));
+        Assert.Equal("new", (string?)Assert.Single(it.Account.Sequences)!["status"]);
 
-        // And nothing in the run started the sequence, which is what keeps a trial from sending.
+        // 6. And it ends, once the stop has finished, by pausing Jason's campaign: Jason stops reading the provider's
+        //    campaign, which stays where it is.
+        GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, "campaign", "pause", campaign));
+        var paused = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "campaign", "get", campaign)));
+        Assert.Equal("paused", (string?)paused["status"]);
+        Assert.Equal("new", (string?)Assert.Single(it.Account.Sequences)!["status"]);
+
+        // And nothing in the run started it, which is what keeps a wiring check from sending.
         Assert.DoesNotContain(it.Account.Calls, call => call.Command == "sequence start");
 
         await GoldenPath.StopAsync(it);
     }
 
     /// <summary>
-    /// The <c>--input</c> of each provider operation the golden path's commands create, by operation: the page's own
-    /// arguments, single-quoted JSON, which a shell hands over as written. An operation the page creates twice says the
-    /// same both times.
+    /// What the wiring check's commands carry, read from the page rather than copied here: the name and key Jason's
+    /// campaign is created with; the <c>--input</c> of each provider operation, by operation — the page's own arguments,
+    /// single-quoted JSON, which a shell hands over as written, the same each time an operation is created twice; and
+    /// each work item's <c>--idempotency-key</c>, by operation in the order the page gives them.
     /// </summary>
     /// <remarks>
     /// Single quotes because PowerShell takes no backslash escape: a double-quoted argument with its quotes escaped for a
     /// POSIX shell reaches the CLI split in two there, and an agent's first read failed on exactly that.
     /// </remarks>
-    private static Dictionary<string, JsonObject> TrialInputs()
+    private static WiringCheck WiringCheckCommands()
     {
-        var page = TrialPage();
+        var lines = WiringCheckPage().Split('\n').Select(line => line.Trim()).ToList();
+
+        var create = Assert.Single(lines, line => line.StartsWith("jason campaign create ", StringComparison.Ordinal));
+        var named = System.Text.RegularExpressions.Regex.Match(create, "^jason campaign create --name \"([^\"]+)\" --idempotency-key (\\S+)$");
+        Assert.True(named.Success, $"docs/golden-path.md creates Jason's campaign with something other than a name and a key: {create}");
+
         var inputs = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
-        foreach (var line in page.Split('\n').Select(line => line.Trim()).Where(line => line.StartsWith("jason workitem create ", StringComparison.Ordinal)))
+        var keys = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var line in lines.Where(line => line.StartsWith("jason workitem create ", StringComparison.Ordinal)))
         {
             var operation = System.Text.RegularExpressions.Regex.Match(line, @"--operation (\S+)").Groups[1].Value;
+            var key = System.Text.RegularExpressions.Regex.Match(line, @"--idempotency-key (\S+)");
+            Assert.True(key.Success, $"docs/golden-path.md creates {operation} without a key of its own: {line}");
+            keys.TryAdd(operation, []);
+            keys[operation].Add(key.Groups[1].Value);
+
             var quoted = System.Text.RegularExpressions.Regex.Match(line, "--input '([^']*)'");
             Assert.True(quoted.Success, $"docs/golden-path.md gives {operation} its --input as something other than single-quoted JSON: {line}");
             var parsed = JsonNode.Parse(quoted.Groups[1].Value)!.AsObject();
@@ -482,26 +532,38 @@ public class GoldenPathTests
             inputs[operation] = parsed;
         }
 
-        foreach (var operation in new[] { "campaign.get", "enrollment.list", "campaign.enroll", "enrollment.stop" })
+        foreach (var operation in new[] { "campaign.create", "campaign.get", "enrollment.list", "campaign.enroll", "enrollment.stop" })
         {
             Assert.True(inputs.ContainsKey(operation), $"docs/golden-path.md creates no {operation} work item.");
         }
 
-        return inputs;
+        // The way back ends by pausing Jason's campaign, after the stop: the run below does the same.
+        var stop = lines.FindIndex(line => line.Contains("--operation enrollment.stop ", StringComparison.Ordinal));
+        var pause = lines.FindIndex(line => line.StartsWith("jason campaign pause ", StringComparison.Ordinal));
+        Assert.True(stop >= 0 && pause > stop, $"docs/golden-path.md pauses Jason's campaign at its line {pause} and stops the enrolment at its line {stop}.");
+
+        return new WiringCheck(named.Groups[1].Value, named.Groups[2].Value, inputs, keys);
     }
 
+    /// <summary>The wiring check's commands as the page prints them; see <see cref="WiringCheckCommands"/>.</summary>
+    private sealed record WiringCheck(
+        string CampaignName,
+        string CampaignKey,
+        Dictionary<string, JsonObject> Inputs,
+        Dictionary<string, List<string>> Keys);
+
     /// <summary>
-    /// The one line <c>contacts.json</c> holds on the golden path, as the page prints it: the person's own address and
+    /// The one line <c>contacts.json</c> holds on the wiring check, as the page prints it: the person's own address and
     /// nothing else, not even a first name, which the package derives from the address.
     /// </summary>
-    private static string TrialContacts()
+    private static string WiringCheckContacts()
     {
-        var file = Assert.Single(TrialPage().Split('\n'), line => line.StartsWith("[{\"channels\":", StringComparison.Ordinal));
+        var file = Assert.Single(WiringCheckPage().Split('\n'), line => line.StartsWith("[{\"channels\":", StringComparison.Ordinal));
         Assert.Contains("<your address>", file, StringComparison.Ordinal);
         return file;
     }
 
-    private static string TrialPage() =>
+    private static string WiringCheckPage() =>
         File.ReadAllText(Path.Combine(Skills.SkillPack.RepositoryRoot(), "docs", "golden-path.md")).Replace("\r\n", "\n", StringComparison.Ordinal);
 
     /// <summary>One provider operation as a work item, run to its end without anybody's word: a read.</summary>
@@ -523,7 +585,7 @@ public class GoldenPathTests
             GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "approval", "list")))["items"]!.AsArray(),
             approval => (string?)approval!["work_item_id"] == item)!;
         GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(
-            it, "approval", "approve", (string)waiting["id"]!, "--actor", "human:ada", "--reason", "my own trial run"));
+            it, "approval", "approve", (string)waiting["id"]!, "--actor", "human:ada", "--reason", "my own wiring check"));
 
         var ran = await GoldenPath.PollAsync(it, item, read => GoldenPath.Finished((string?)read["status"]));
         GoldenPath.AssertSucceeded(ran);

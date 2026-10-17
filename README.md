@@ -127,9 +127,11 @@ needs a person's approval is parked until a person decides, and nothing runs but
 such plugin is in this repository**: [`plugins/reply/`](plugins/reply/README.md) performs all twelve published
 operations against a Reply account through the Reply CLI, which owns the credential — so an operator installs that
 CLI, signs in with it, copies the package into `~/.jason/plugins/`, grants it that one program, and writes the
-route. **One run of the whole of it** — an empty installation brought to a routed plugin, one enrolment approved by
-a person and performed against the provider, and the history it leaves — is written up in
-[docs/golden-path.md](docs/golden-path.md), and every command on that page is executed by a test. Releases arrive
+route. **The wiring check** — an empty installation brought to a routed plugin, one enrolment of your own address
+approved by you and performed against the provider, and the history it leaves — is
+[docs/golden-path.md](docs/golden-path.md), and every command on that page is executed by a test. It proves the
+wiring and is not the real work, which begins with a campaign planned with the business skills
+([`campaign-planning`](skills/business/campaign-planning/SKILL.md) first) and worked by Jason's roles. Releases arrive
 one self-contained increment at a time; no dates, no roadmap promises.
 
 ## Architecture
@@ -149,7 +151,7 @@ source are not published. What a person, an agent or a plugin author needs from 
 | `skills/runtime/` | Skills that teach an agent to operate Jason: the interactive ones, and one per launched role |
 | `skills/business/` | Skills that teach an agent the SDR profession, independently of any provider or runtime |
 | `.claude-plugin/` | The skills marketplace: offers both packs to an agent harness by relative path. Distinct from `plugins/`, which is the plugin marketplace |
-| `docs/` | The install manual, the first-use walkthrough, the plugin author's guide and the operation contracts |
+| `docs/` | The install manual, the wiring check, the plugin author's guide and the operation contracts |
 | `install/` | The install scripts every release attaches, and the update feed's schema |
 | `VERSION` | The runtime version this tree describes |
 

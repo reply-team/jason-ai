@@ -57,7 +57,9 @@ ask.
   `export` half yourself, or call `jason` by its full path.
 - Stop when `ready` is true, or when a required check still fails after its repair. Report which checks failed,
   exactly what you ran, and what it changed. When `ready` is true, tell the person Jason is installed and can work,
-  and that one word from them starts [its first run](golden-path.md) in this session.
+  and that one word from them runs [the wiring check](golden-path.md) in this session: it connects their provider
+  and proves it with their own address. The real work comes after it, and begins with a campaign planned with the
+  `campaign-planning` skill and worked by Jason's roles.
 
 ---
 
@@ -366,8 +368,10 @@ when you sign out. On Windows that is a logon task named for this account; on ma
 `ai.jason.runtime`; on Linux a `systemd --user` unit, `jason.service`. `jason runtime autostart status` says what
 is registered.
 
-That is the installation. [Its first run](golden-path.md) is a page of its own, and an agent that installed
-Jason starts it in the same session on one word from you.
+That is the installation. [The wiring check](golden-path.md) is a page of its own — your provider connected and
+proven with your own address — and an agent that installed Jason runs it in the same session on one word from you.
+The real work comes after it, and begins with a campaign planned with the business skills,
+[`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first, and worked by Jason's roles.
 
 ---
 

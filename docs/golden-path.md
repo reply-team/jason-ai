@@ -1,13 +1,14 @@
-# The golden path
+# The wiring check
 
-One run of the whole product, from an installation that knows nothing to a provider operation that has been
-approved by a person, performed by a plugin, and recorded where you can read it afterwards. Every `jason` command
-below is a command the end-to-end tests execute, and the three guarantees at the end are the three tests that prove
-them.
+This page checks the wiring — the runtime, the plugin, its grant and its route, one contact and one enrolment —
+and reads it back. It is not the real work, which begins with a campaign planned with the business skills,
+[`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first, and worked by
+[Jason's roles](../skills/runtime/roles). Every `jason` command below is a command the end-to-end tests execute,
+and the three guarantees at the end are the three tests that prove them.
 
 The provider here is [Reply](https://reply.io) through [`plugins/reply/`](../plugins/reply/README.md), because
 that is the plugin this repository ships. Nothing in the runtime knows about it: a different provider is a
-different package and a different route, and the sequence is the same.
+different package and a different route, and the steps are the same.
 
 ## What you need
 
@@ -26,25 +27,28 @@ system's temporary directory.
 
 Before anything, ask the person one question in plain words: what you will install and from where — the Reply CLI
 from npm's registry, and Node if it is missing; what this run writes — the package into Jason's data directory,
-the grant and the route into its `settings.json`; which acts are theirs to do; and which need their yes. Then do
-the rest yourself, in order.
+the grant and the route into its `settings.json`, and one draft campaign in their account at the provider; which
+acts are theirs to do; and which need their yes. Then do the rest yourself, in order.
 
 An act this page marks **Ask first.** needs the person's word, as on [the install page](INSTALL.md): ask, and do
 it only on their yes; with nobody to ask, leave it undone and say so. An act marked **Yours to do.** is the
 person's own and never yours: say what it is, and wait until they say it is done. Signing in to the Reply CLI is
 theirs because the key must not pass through this conversation — never ask for it, and never read the CLI's
-profile store — and so is making the sequence this run uses.
+profile store.
 
 - The contact is the person's own address, which they type.
-- The sequence is one they made for this run and never started.
-- `campaign.get` must answer `draft` before anything else. Any other status stops the run, and you say why.
+- The provider's campaign is the one step 6 makes on their yes, never one that was there before.
+- `campaign.get` must answer `draft` before anything is written to it. Any other status stops the run, and you say
+  why.
 - `enrollment.list` must answer a `total` of 0 before the enrolment. Any other count, null included, stops the
   run.
 - The enrolment refuses a collision (`collision: refuse`), and `total` is 1 after it.
-- A sequence nobody started sends nothing, and this run never starts one: never run `campaign.activate`.
+- A provider's campaign nobody started sends nothing, and this run never starts one: never run
+  `campaign.activate`.
 - A refusal by your harness, by npm or by the provider is reported once, as it stands, and never worked around,
   as [the install page](INSTALL.md) says.
-- When you stop, name the next step. At the end, give the person the way back, in two lines.
+- When you stop, name the next step. At the end, give the person the way back in two lines: the stop, and the
+  pause after it.
 
 ### The Reply CLI
 
@@ -156,9 +160,6 @@ campaign, and why it could not.
 
 ## 6. Create the work
 
-**Yours to do.** Make a sequence at Reply for this run: add nobody to it, and never start it. Its number is the one
-in its address at Reply; below it is `7`.
-
 The one person in this run is you, by your own address. First the file, on its own: `contacts.json`, in the
 system's temporary directory, holds your address and nothing else. An agent writes it with its own file tool, not
 from a shell line:
@@ -167,31 +168,56 @@ from a shell line:
 [{"channels":[{"channel":"email","value":"<your address>"}]}]
 ```
 
-Then the commands, one at a time: the campaign, the person, from the file where you wrote it, and two reads of the
-sequence before anything is written to it:
+Then the commands, one at a time: Jason's campaign, the person, from the file where you wrote it, and the start of
+Jason's campaign:
 
 ```
-jason campaign create --name "Trial run" --idempotency-key trial-run
+jason campaign create --name "Wiring check" --idempotency-key wiring-check
 jason campaign add-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --file <temporary directory>/contacts.json --match-by email
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.get --input '{"campaign":{"external_id":"7"}}' --idempotency-key trial-run-sequence
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation enrollment.list --input '{"campaign":{"external_id":"7"},"limit":10,"offset":0}' --idempotency-key trial-run-people
+```
+
+`jason campaign start` starts Jason's own campaign, so the work below can run; nothing at the provider is started.
+
+**Ask first.** The next command makes the provider's campaign, the first thing this installation writes to your
+account at the provider. Its contract asks no question, because a draft that holds nobody reaches nobody; this page
+asks, because it is the first write.
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.create --input '{"name":"Jason wiring check"}' --idempotency-key wiring-check-campaign
+jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+This `campaign.create` is the provider operation: it makes the provider's campaign for Jason's campaign Wiring
+check — at Reply, a sequence — and links the two. It is not `jason campaign create` above, which made Jason's own
+campaign: an operation and a verb can share their words ([two namespaces](contracts/README.md)). Read the item
+until its `status` is `succeeded`. Its `result` holds one item, which says what was made: `state` is `draft`,
+`enrolled` is 0 and `steps_added` is 1; its `campaign_external_id` is the provider's identifier for it, which
+Jason's campaign now carries as its pin — `jason campaign get` lists it under `external_ids`. Every command below
+works by that pin and names no provider identifier. A provider's campaign of that name already there, from a wiring
+check run before on this account, fails `campaign_name_taken`, and nothing is made: ask the person for another name,
+and create it with a key of its own.
+
+Then two reads of the provider's campaign, before anything is written to it:
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.get --input '{}' --idempotency-key wiring-check-read
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation enrollment.list --input '{"limit":10,"offset":0}' --idempotency-key wiring-check-people
 jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-`jason campaign start` starts Jason's own campaign, so the work below can run; your sequence at Reply stays
-unstarted. Both reads run without a question: reading changes nothing at the provider. The first links the campaign
-to your sequence, and its `result` must say the sequence is a `draft`; the second must say its `total` is 0. Anything
-else stops the run here: a sequence that has started, or that already holds somebody, is not one this run enrols
-into.
+Both reads run without a question: reading changes nothing at the provider. The first must say the provider's
+campaign is a `draft`; the second must say its `total` is 0. Anything else stops the run here: a provider's
+campaign that has started, or that already holds somebody, is not one this run enrols into.
 
 Then the enrolment, which refuses rather than decides if you already take part:
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.enroll --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"campaign":{"external_id":"7"},"channel":"email","collision":"refuse","start":{"position":"first_step"},"first_touch":"authored_delay"}' --idempotency-key trial-run-enrol
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.enroll --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","collision":"refuse","start":{"position":"first_step"},"first_touch":"authored_delay"}' --idempotency-key wiring-check-enrol
 ```
 
-A sequence nobody started sends nothing, and this run never starts one.
+A provider's campaign nobody started sends nothing, and this run never starts one.
 
 Each create carries a key you chose. If an answer never comes back, send the same command with the same key: it
 answers with what the first one made rather than making it twice.
@@ -229,25 +255,40 @@ again with a fresh question.
 ```
 jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason journal list --work-item wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation enrollment.list --input '{"campaign":{"external_id":"7"},"limit":10,"offset":0}' --idempotency-key trial-run-people-after
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation enrollment.list --input '{"limit":10,"offset":0}' --idempotency-key wiring-check-people-after
 ```
 
 The attempt carries what actually ran: the package and its content digest, the operation and its contract
 version, both snapshots the decision was made against, the account by identity, and the approval that released
 it. The result is the contract's own neutral word — `enrolled`, `already_enrolled` — not the provider's phrasing.
-The read after it says the sequence's `total` is 1: you, and nobody else.
+The read after it says the provider's campaign's `total` is 1: you, and nobody else.
+
+So the provider's campaign this run made was never started, holds nobody but you, and has one task step, added
+only so that it can exist.
 
 ### The way back
 
-Either of two acts undoes the run.
-
-**Yours to do.** Delete the trial sequence at Reply. A sequence that is gone holds nobody and sends nothing.
-
-**Ask first.** Or take yourself out of it, which asks its own question, as the enrolment did in step 7:
+**Ask first.** Take yourself out of the provider's campaign, which asks its own question, as the enrolment did in
+step 7:
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation enrollment.stop --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"campaign":{"external_id":"7"},"channel":"email","reason":{"code":"other","note":"the end of a trial run"}}' --idempotency-key trial-run-stop
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation enrollment.stop --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","reason":{"code":"other","note":"the end of a wiring check"}}' --idempotency-key wiring-check-stop
 ```
+
+Then leave it: the provider's campaign this run made holds nobody and sends nothing. Archiving or deleting it is
+yours to choose, whenever you like, and no step of this page.
+
+Last, once the stop's work item has finished — or at once, if you said no and the stop was never made: you then stay
+in the provider's campaign, which was never started and sends nothing — pause Jason's campaign:
+
+```
+jason campaign pause cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+With Jason's campaign paused, Jason stops reading the provider's campaign, and nothing at the provider changes: the
+pause is Jason's own, `jason campaign start` undoes it, and step 8's chronicle is kept. It waits for the stop to
+finish because work in a paused campaign waits too, the stop's included; and whatever you later do with the
+provider's campaign, no read of Jason's fails over it.
 
 ## What this guarantees
 
@@ -272,6 +313,8 @@ working keep working.
 
 ## Where to go next
 
+- [`campaign-planning`](../skills/business/campaign-planning/SKILL.md) — the real work after this check: a campaign
+  planned with the business skills and worked by [Jason's roles](../skills/runtime/roles).
 - [`docs/plugins.md`](plugins.md) — writing a package for another provider.
 - [`docs/contracts/`](contracts/README.md) — the operations themselves, one document each, and what a plugin has to
   demonstrate.

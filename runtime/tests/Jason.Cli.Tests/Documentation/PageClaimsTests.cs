@@ -730,13 +730,14 @@ public partial class PageClaimsTests
             StringComparison.Ordinal);
 
     /// <summary>
-    /// A ready installation is not the end of what the person came for: the agent says it can work, and that one word
-    /// starts its first run in the same session.
+    /// A ready installation is not the end of what the person came for: the agent says it can work, that one word runs
+    /// the wiring check in the same session, and that the real work comes after it — a campaign planned and worked, not
+    /// the check.
     /// </summary>
     [Fact]
-    public void The_agent_section_points_at_the_first_run_after_ready() =>
+    public void The_agent_section_points_at_the_wiring_check_and_the_real_work_after_ready() =>
         Assert.Contains(
-            "When `ready` is true, tell the person Jason is installed and can work, and that one word from them starts [its first run](golden-path.md) in this session.",
+            "When `ready` is true, tell the person Jason is installed and can work, and that one word from them runs [the wiring check](golden-path.md) in this session: it connects their provider and proves it with their own address. The real work comes after it, and begins with a campaign planned with the `campaign-planning` skill and worked by Jason's roles.",
             Flat(Agent()),
             StringComparison.Ordinal);
 
@@ -1025,17 +1026,83 @@ public partial class PageClaimsTests
             StringComparison.Ordinal);
 
     /// <summary>
-    /// The install page ends where the first run begins: §6's last paragraph links the page that walks it, so a person who
-    /// followed the install to its end — or an agent that did it for them — knows what comes next.
+    /// The install page ends where the wiring check begins: §6's last paragraph links the page that walks it, so a person
+    /// who followed the install to its end — or an agent that did it for them — knows what comes next, and says that the
+    /// real work comes after the check rather than being it.
     /// </summary>
     [Fact]
-    public void The_install_page_ends_with_the_first_run()
+    public void The_install_page_ends_with_the_wiring_check_and_the_real_work_after_it()
     {
         var start = Section(Page("docs", "INSTALL.md"), "## 6. ").TrimEnd().TrimEnd('-').TrimEnd();
-        var last = start[(start.LastIndexOf("\n\n", StringComparison.Ordinal) + 2)..];
+        var last = Flat(start[(start.LastIndexOf("\n\n", StringComparison.Ordinal) + 2)..]);
 
-        Assert.Contains("](golden-path.md)", last, StringComparison.Ordinal);
-        Assert.Contains("one word from you", Flat(last), StringComparison.Ordinal);
+        Assert.Contains("[The wiring check](golden-path.md)", last, StringComparison.Ordinal);
+        Assert.Contains("one word from you", last, StringComparison.Ordinal);
+        Assert.Contains(
+            "The real work comes after it, and begins with a campaign planned with the business skills, [`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first, and worked by Jason's roles.",
+            last,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The page is named what it is. It proves the wiring — runtime, plugin, grant, route, one contact, one enrolment, read
+    /// back — and its opening says so and points at the real work; so does the first place it sends a reader next.
+    /// </summary>
+    [Fact]
+    public void The_page_is_named_the_wiring_check_and_points_at_the_real_work()
+    {
+        var page = Page("docs", "golden-path.md");
+        var opening = Flat(page.Split("\n\n")[1]);
+
+        Assert.StartsWith("# The wiring check\n", page, StringComparison.Ordinal);
+        Assert.StartsWith(
+            "This page checks the wiring — the runtime, the plugin, its grant and its route, one contact and one enrolment — and reads it back. It is not the real work, which begins with a campaign planned with the business skills, [`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first, and worked by [Jason's roles](../skills/runtime/roles).",
+            opening,
+            StringComparison.Ordinal);
+
+        var further = Section(page, "## Where to go next");
+        var first = further.IndexOf("\n- ", StringComparison.Ordinal) + 1;
+        var second = further.IndexOf("\n- ", first, StringComparison.Ordinal);
+        Assert.True(first > 0 && second > first, "\"Where to go next\" no longer opens with a list of at least two places.");
+        var next = Flat(further[first..second]).Trim();
+        Assert.Equal(
+            "- [`campaign-planning`](../skills/business/campaign-planning/SKILL.md) — the real work after this check: a campaign planned with the business skills and worked by [Jason's roles](../skills/runtime/roles).",
+            next);
+    }
+
+    /// <summary>
+    /// The README names the page for what it proves, and says where the real work begins.
+    /// </summary>
+    [Fact]
+    public void The_readme_names_the_wiring_check_and_where_the_real_work_begins()
+    {
+        var readme = Flat(Page("README.md"));
+
+        Assert.Contains("**The wiring check** — an empty installation brought to a routed plugin, one enrolment of your own address approved by you and performed against the provider, and the history it leaves — is [docs/golden-path.md](docs/golden-path.md), and every command on that page is executed by a test.", readme, StringComparison.Ordinal);
+        Assert.Contains(
+            "It proves the wiring and is not the real work, which begins with a campaign planned with the business skills ([`campaign-planning`](skills/business/campaign-planning/SKILL.md) first) and worked by Jason's roles.",
+            readme,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// No page that hands a reader to the wiring check calls it by a name it had before — the first run, the golden path,
+    /// the first-use walkthrough: it is a check of the wiring, and the real work is a campaign. A file path is not prose,
+    /// and the executable's own "first runs" is another matter, so neither is read as one.
+    /// </summary>
+    [Theory]
+    [InlineData("README.md")]
+    [InlineData("docs/INSTALL.md")]
+    [InlineData("docs/golden-path.md")]
+    [InlineData("skills/runtime/operating-the-installation/SKILL.md")]
+    [InlineData("skills/runtime/managed-campaign-work/SKILL.md")]
+    public void No_page_calls_the_wiring_check_by_a_name_it_had_before(string page)
+    {
+        var said = Regex.Match(
+            Flat(Page(page.Split('/'))),
+            @"\b(?:first run|golden path|first[- ]use walkthrough)\b",
+            RegexOptions.IgnoreCase);
+        Assert.False(said.Success, $"{page} still says '{said.Value}' at offset {said.Index} of its flattened text.");
     }
 
     /// <summary>
@@ -1076,17 +1143,16 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// Each act of the first run that is the person's carries its mark where it is described: installing Node is a system
-    /// package, theirs to allow; the sign-in is theirs alone, so the key never passes through an agent; so is making the
-    /// sequence the run uses; the approval is their decision; and of the two ways back, deleting the sequence is theirs
-    /// and taking themselves out of it asks for their word.
+    /// Each act of the wiring check that is the person's carries its mark where it is described: installing Node is a
+    /// system package, theirs to allow; the sign-in is theirs alone, so the key never passes through an agent; making the
+    /// provider's campaign is the first write to their account there, so it waits for their word; the approval is their
+    /// decision; and the way back takes them out of the provider's campaign on their word.
     /// </summary>
     [Theory]
     [InlineData("### The Reply CLI", "Where Node is missing, or older than 20", 0, "Ask first.")]
     [InlineData("### The Reply CLI", "```\nreply auth login\n", -1, "Yours to do.")]
-    [InlineData("## 6. ", "Make a sequence at Reply for this run: add nobody to it, and never start it.", 0, "Yours to do.")]
+    [InlineData("## 6. ", "--operation campaign.create", -1, "Ask first.")]
     [InlineData("## 7. ", "```\njason approval list\n", -1, "Ask first.")]
-    [InlineData("### The way back", "Delete the trial sequence at Reply.", 0, "Yours to do.")]
     [InlineData("### The way back", "--operation enrollment.stop", -1, "Ask first.")]
     public void Each_act_on_the_golden_path_that_is_the_person_s_is_marked(string section, string act, int neighbour, string mark)
     {
@@ -1165,7 +1231,7 @@ public partial class PageClaimsTests
         var page = Page("docs", "golden-path.md");
         var inputs = FencedLines(page).Where(line => line.Contains("--input", StringComparison.Ordinal)).ToList();
 
-        Assert.Equal(5, inputs.Count);
+        Assert.Equal(6, inputs.Count);
         Assert.All(inputs, line => Assert.Contains("--input '{", line, StringComparison.Ordinal));
         Assert.DoesNotContain(inputs, line => line.Contains("\\\"", StringComparison.Ordinal));
         Assert.Contains(
@@ -1186,40 +1252,40 @@ public partial class PageClaimsTests
             StringComparison.Ordinal);
 
     /// <summary>
-    /// The first run enrols only into a sequence nobody has started and that holds nobody: the read of the sequence must
-    /// say it is a draft, and the read of its people that their count is 0. Anything else — a started sequence, somebody
-    /// already in it, a count the provider would not give — stops the run before anything is written.
+    /// The wiring check enrols only into a provider's campaign nobody has started and that holds nobody: the read of it
+    /// must say it is a draft, and the read of its people that their count is 0. Anything else — a started campaign,
+    /// somebody already in it, a count the provider would not give — stops the run before anything is written to it.
     /// </summary>
     [Fact]
-    public void The_golden_path_stops_on_anything_but_a_draft_sequence_and_an_empty_one()
+    public void The_wiring_check_stops_on_anything_but_a_draft_that_holds_nobody()
     {
         var agent = Flat(GoldenAgent());
 
-        Assert.Contains("`campaign.get` must answer `draft` before anything else. Any other status stops the run, and you say why.", agent, StringComparison.Ordinal);
+        Assert.Contains("`campaign.get` must answer `draft` before anything is written to it. Any other status stops the run, and you say why.", agent, StringComparison.Ordinal);
         Assert.Contains("`enrollment.list` must answer a `total` of 0 before the enrolment. Any other count, null included, stops the run.", agent, StringComparison.Ordinal);
         Assert.Contains("The enrolment refuses a collision (`collision: refuse`), and `total` is 1 after it.", agent, StringComparison.Ordinal);
         Assert.Contains(
-            "Anything else stops the run here: a sequence that has started, or that already holds somebody, is not one this run enrols into.",
+            "Anything else stops the run here: a provider's campaign that has started, or that already holds somebody, is not one this run enrols into.",
             Flat(Section(Page("docs", "golden-path.md"), "## 6. ")),
             StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// What keeps a first run from sending is that nothing in it starts the sequence: the page says so, tells an agent never
-    /// to start one, and prints no command that would.
+    /// What keeps the wiring check from sending is that nothing in it starts the provider's campaign: the page says so,
+    /// tells an agent never to start one, and prints no command that would.
     /// </summary>
     [Fact]
-    public void The_golden_path_never_starts_the_trial_sequence()
+    public void The_wiring_check_never_starts_the_provider_s_campaign()
     {
         var page = Page("docs", "golden-path.md");
 
-        Assert.Contains("A sequence nobody started sends nothing, and this run never starts one.", Flat(page), StringComparison.Ordinal);
-        Assert.Contains("never run `campaign.activate`", Flat(GoldenAgent()), StringComparison.Ordinal);
+        Assert.Contains("A provider's campaign nobody started sends nothing, and this run never starts one.", Flat(page), StringComparison.Ordinal);
+        Assert.Contains("A provider's campaign nobody started sends nothing, and this run never starts one: never run `campaign.activate`.", Flat(GoldenAgent()), StringComparison.Ordinal);
 
         // The run does start something: Jason's own campaign, so its work can run. Said beside the command, so that
-        // "this run never starts one" is not read as forbidding it, nor the command as starting the sequence.
+        // "this run never starts one" is not read as forbidding it, nor the command as starting the provider's campaign.
         Assert.Contains(
-            "`jason campaign start` starts Jason's own campaign, so the work below can run; your sequence at Reply stays unstarted.",
+            "`jason campaign start` starts Jason's own campaign, so the work below can run; nothing at the provider is started.",
             Flat(Section(page, "## 6. ")),
             StringComparison.Ordinal);
         Assert.DoesNotContain(
@@ -1228,13 +1294,272 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// A first run that stops — at a read that said no, at a refusal — names what comes next, and the end of the run gives
-    /// the person the way back.
+    /// Making the provider's campaign is the first thing an installation writes to the person's account there. Its
+    /// contract runs it without a question — a draft that holds nobody reaches nobody — so the question is the page's
+    /// own, said with its reason, and the one question an agent asks first names it among what the run writes. The
+    /// person no longer makes it themselves.
+    /// </summary>
+    [Fact]
+    public void The_wiring_check_asks_before_its_first_write_to_the_provider_and_says_why()
+    {
+        var step = Flat(Section(Page("docs", "golden-path.md"), "## 6. "));
+        var agent = Flat(GoldenAgent());
+
+        Assert.Contains(
+            "**Ask first.** The next command makes the provider's campaign, the first thing this installation writes to your account at the provider. Its contract asks no question, because a draft that holds nobody reaches nobody; this page asks, because it is the first write.",
+            step,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "what this run writes — the package into Jason's data directory, the grant and the route into its `settings.json`, and one draft campaign in their account at the provider;",
+            agent,
+            StringComparison.Ordinal);
+        Assert.Contains("- The provider's campaign is the one step 6 makes on their yes, never one that was there before.", agent, StringComparison.Ordinal);
+        Assert.DoesNotContain("making the sequence", agent, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Two things are called <c>campaign.create</c>. The page says which one it runs — the provider operation, which makes
+    /// the provider's campaign for Jason's campaign by its name, in the voice the approval summaries use — and that it is
+    /// not the verb that made Jason's own; and a name the provider already holds is said with what to do next.
+    /// </summary>
+    [Fact]
+    public void The_wiring_check_says_which_campaign_create_it_means()
+    {
+        var step = Flat(Section(Page("docs", "golden-path.md"), "## 6. "));
+
+        Assert.Contains(
+            "This `campaign.create` is the provider operation: it makes the provider's campaign for Jason's campaign Wiring check — at Reply, a sequence — and links the two. It is not `jason campaign create` above, which made Jason's own campaign:",
+            step,
+            StringComparison.Ordinal);
+        Assert.Contains("](contracts/README.md)", step, StringComparison.Ordinal);
+        Assert.Contains(
+            "Its `result` holds one item, which says what was made: `state` is `draft`, `enrolled` is 0 and `steps_added` is 1; its `campaign_external_id` is the provider's identifier for it,",
+            step,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "`campaign_external_id` is the provider's identifier for it, which Jason's campaign now carries as its pin — `jason campaign get` lists it under `external_ids`. Every command below works by that pin and names no provider identifier.",
+            step,
+            StringComparison.Ordinal);
+        Assert.Contains("fails `campaign_name_taken`, and nothing is made: ask the person for another name, and create it with a key of its own.", step, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A provider operation is claimed only in an active Jason campaign — a draft one is a backlog — so Jason's campaign is
+    /// started before the create's work item, and every other provider operation comes after the create: it works by the
+    /// pin the create leaves, and names no provider identifier of its own.
+    /// </summary>
+    [Fact]
+    public void The_wiring_check_starts_Jason_s_campaign_before_the_create_and_reads_after_it()
+    {
+        var page = Page("docs", "golden-path.md");
+        var lines = FencedLines(Section(page, "## 6. "));
+        var start = lines.FindIndex(line => line.StartsWith("jason campaign start ", StringComparison.Ordinal));
+        var create = lines.FindIndex(line => line.Contains("--operation campaign.create ", StringComparison.Ordinal));
+        var others = lines
+            .Select((line, index) => (line, index))
+            .Where(row => row.line.Contains("--kind provider_op", StringComparison.Ordinal) && row.index != create)
+            .ToList();
+
+        Assert.True(start >= 0 && create > start, $"Step 6 creates the provider's campaign at line {create} of its commands and starts Jason's campaign at line {start}.");
+        Assert.NotEmpty(others);
+        Assert.All(others, row => Assert.True(row.index > create, $"Step 6 runs this before the create: {row.line}"));
+        Assert.DoesNotContain(
+            FencedLines(page),
+            line => line.Contains("--kind provider_op", StringComparison.Ordinal) && line.Contains("external_id", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// No step of the wiring check sends the person to the provider's own interface. The one act that is theirs alone is
+    /// the sign-in, because the key must not pass through an agent; so outside the section for an agent, which says what
+    /// the mark means, "Yours to do." marks that act and no other.
+    /// </summary>
+    [Fact]
+    public void The_only_person_s_own_act_on_the_wiring_check_is_the_sign_in()
+    {
+        const string Mark = "**Yours to do.**";
+        var page = Page("docs", "golden-path.md");
+        var agent = page.IndexOf("\n### If an agent runs it\n", StringComparison.Ordinal);
+        var end = agent + GoldenAgent().Length;
+        Assert.True(agent > 0, "docs/golden-path.md has no section for an agent that runs it.");
+
+        var marked = Regex.Matches(page, Regex.Escape(Mark))
+            .Where(match => match.Index < agent || match.Index > end)
+            .Select(match => page[match.Index..page.IndexOf("\n", match.Index, StringComparison.Ordinal)])
+            .ToList();
+        Assert.True(
+            marked.Count == 1 && marked[0].StartsWith($"{Mark} Sign in, in your own terminal", StringComparison.Ordinal),
+            "Outside the section for an agent, docs/golden-path.md marks these acts as the person's own:\n" + string.Join('\n', marked));
+    }
+
+    /// <summary>
+    /// Each create on the page carries a key of its own. A key the page gave twice would answer the second create with
+    /// <c>idempotency_key_reused</c>, exit 1, in front of a person following it.
+    /// </summary>
+    [Fact]
+    public void Every_create_on_the_wiring_check_has_a_key_of_its_own()
+    {
+        var keys = FencedLines(Page("docs", "golden-path.md"))
+            .Select(line => Regex.Match(line, @"--idempotency-key (\S+)"))
+            .Where(match => match.Success)
+            .Select(match => match.Groups[1].Value)
+            .ToList();
+        var twice = keys.GroupBy(key => key, StringComparer.Ordinal).Where(group => group.Count() > 1).Select(group => group.Key).ToList();
+
+        Assert.True(keys.Count >= 7, $"docs/golden-path.md gives {keys.Count} creates a key: {string.Join(", ", keys)}.");
+        Assert.True(twice.Count == 0, $"docs/golden-path.md gives more than one create the key {string.Join(", ", twice)}.");
+    }
+
+    /// <summary>
+    /// The page names Jason's campaign in its prose by the name its command creates it with, so the sentence that tells
+    /// the two campaigns apart is about the campaign the reader made.
+    /// </summary>
+    [Fact]
+    public void The_wiring_check_names_Jason_s_campaign_as_it_creates_it()
+    {
+        var step = Section(Page("docs", "golden-path.md"), "## 6. ");
+        var create = Assert.Single(FencedLines(step), line => line.StartsWith("jason campaign create ", StringComparison.Ordinal));
+        var name = Regex.Match(create, "--name \"([^\"]+)\"");
+        Assert.True(name.Success, $"Step 6 creates Jason's campaign without a quoted name: {create}");
+
+        Assert.Contains($"the provider's campaign for Jason's campaign {name.Groups[1].Value} —", Flat(step), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What the page claims about the provider's campaign it made is three facts, said once: it was never started, it holds
+    /// nobody but you, and its one step is a task, there only so that it can exist. Nothing about a mailbox, a sender or a
+    /// schedule: the provider attaches its own default mailbox and schedule to a campaign it makes, so a sentence saying
+    /// none is attached would be false.
+    /// </summary>
+    /// <remarks>
+    /// The mailbox and sender words are refused on the whole page. The schedule words are refused from step 6 to the end
+    /// of step 8, where the provider's campaign is made, read and left, because step 1 says rightly that the runtime owns
+    /// "the schedule" of its own work.
+    /// </remarks>
+    [Fact]
+    public void The_wiring_check_claims_three_facts_about_the_provider_s_campaign_and_nothing_about_a_sender()
+    {
+        var page = Page("docs", "golden-path.md");
+
+        Assert.Contains(
+            "So the provider's campaign this run made was never started, holds nobody but you, and has one task step, added only so that it can exist.",
+            Flat(Section(page, "## 8. ")),
+            StringComparison.Ordinal);
+
+        var sender = Regex.Match(page, @"\b(?:mailbox(?:es)?|senders?|sending accounts?|email accounts?)\b", RegexOptions.IgnoreCase);
+        Assert.False(sender.Success, $"docs/golden-path.md says something about the provider's sending side: '{sender.Value}' at offset {sender.Index}.");
+
+        var from = page.IndexOf("\n## 6. ", StringComparison.Ordinal);
+        var to = page.IndexOf("\n## What this guarantees", StringComparison.Ordinal);
+        Assert.True(from > 0 && to > from, "docs/golden-path.md no longer has step 6 followed by \"What this guarantees\".");
+        var made = Regex.Match(page[from..to], @"\b(?:schedules?|sending address(?:es)?|sends? from)\b", RegexOptions.IgnoreCase);
+        Assert.False(made.Success, $"Steps 6 to 8 say something about the provider's schedule or sending address: '{made.Value}' at offset {from + made.Index}.");
+    }
+
+    /// <summary>
+    /// The way back takes the person out of the provider's campaign, on their word, and then leaves the campaign where it
+    /// is: it holds nobody and sends nothing. Archiving or deleting it is the person's choice and never a step, and the
+    /// page has one name for it — no "trial" anything. Its commands are the stop and, after it, the pause of Jason's own
+    /// campaign, and nothing else.
+    /// </summary>
+    [Fact]
+    public void The_way_back_takes_you_out_and_then_leaves_the_provider_s_campaign()
+    {
+        const string LeaveIt = "Then leave it: the provider's campaign this run made holds nobody and sends nothing. Archiving or deleting it is yours to choose, whenever you like, and no step of this page.";
+        var page = Page("docs", "golden-path.md");
+        var back = Subsection(page, "### The way back");
+
+        Assert.Contains(LeaveIt, Flat(back), StringComparison.Ordinal);
+
+        // Deleting and archiving are named once, as the person's choice, and nowhere else as something to do.
+        var act = Regex.Match(Flat(back).Replace(LeaveIt, string.Empty, StringComparison.Ordinal), @"\b(?:delet|archiv)\w*", RegexOptions.IgnoreCase);
+        Assert.False(act.Success, $"The way back names '{act.Value}' outside the sentence that leaves the provider's campaign where it is.");
+        var commands = FencedLines(back);
+        Assert.True(
+            commands.Count == 2
+                && commands[0].Contains("--operation enrollment.stop ", StringComparison.Ordinal)
+                && commands[1] == "jason campaign pause cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+            "The way back prints commands other than the stop and then the pause of Jason's campaign:\n" + string.Join('\n', commands));
+        Assert.DoesNotContain("Yours to do", back, StringComparison.Ordinal);
+
+        var trial = Regex.Match(page, @"\btrial\b", RegexOptions.IgnoreCase);
+        Assert.False(trial.Success, $"docs/golden-path.md still says '{trial.Value}' at offset {trial.Index}.");
+    }
+
+    /// <summary>
+    /// The way back ends by pausing Jason's campaign. The pause is Jason's own, undone by a start, and reaches nothing
+    /// outside Jason, so nobody is asked for it. It comes once the stop's work item has finished — work waits in a paused
+    /// campaign, the stop's included — and it stands when the person said no to the stop as well, which leaves them in
+    /// the provider's campaign, never started and sending nothing; the introduction says so. Paused, Jason stops reading
+    /// the provider's campaign, so nothing the person later does with that campaign makes a read of Jason's fail.
+    /// </summary>
+    [Fact]
+    public void The_way_back_ends_by_pausing_Jason_s_campaign_once_the_stop_has_finished()
+    {
+        var back = Subsection(Page("docs", "golden-path.md"), "### The way back");
+        var blocks = back.Split("\n\n");
+        var stop = Array.FindIndex(blocks, block => block.Contains("--operation enrollment.stop ", StringComparison.Ordinal));
+        var pause = Array.FindIndex(blocks, block => block.Contains("\njason campaign pause cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD\n", StringComparison.Ordinal));
+
+        Assert.True(stop > 0 && pause > stop, $"The way back pauses Jason's campaign in its block {pause} and stops the enrolment in its block {stop}.");
+        Assert.True(
+            Flat(blocks[pause - 1]) == "Last, once the stop's work item has finished — or at once, if you said no and the stop was never made: you then stay in the provider's campaign, which was never started and sends nothing — pause Jason's campaign:",
+            $"The way back introduces the pause otherwise: {blocks[pause - 1]}");
+        Assert.Contains(
+            "With Jason's campaign paused, Jason stops reading the provider's campaign, and nothing at the provider changes: the pause is Jason's own, `jason campaign start` undoes it, and step 8's chronicle is kept. It waits for the stop to finish because work in a paused campaign waits too, the stop's included; and whatever you later do with the provider's campaign, no read of Jason's fails over it.",
+            Flat(back),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The way back asks the person once, for the stop, which takes them out of the provider's campaign. The pause after
+    /// it is Jason's own and reaches nothing outside Jason, so it asks nobody, in its own line or in a paragraph of its own.
+    /// </summary>
+    [Fact]
+    public void The_way_back_asks_first_only_for_the_stop()
+    {
+        var blocks = Subsection(Page("docs", "golden-path.md"), "### The way back").Split("\n\n");
+        var asked = blocks.Select((block, index) => (block, index)).Where(row => row.block.Contains("Ask first", StringComparison.Ordinal)).ToList();
+
+        Assert.True(
+            asked.Count == 1 && blocks[asked[0].index + 1].Contains("--operation enrollment.stop ", StringComparison.Ordinal),
+            "The way back asks first here, and only the paragraph before the stop may:\n" + string.Join("\n---\n", asked.Select(row => row.block)));
+    }
+
+    /// <summary>
+    /// The page's prose wraps at its width, 120 characters, as the rest of the repository's pages do; a command in a fence
+    /// is typed whole and keeps its length.
+    /// </summary>
+    [Fact]
+    public void The_wiring_check_s_prose_wraps_at_the_page_s_width()
+    {
+        var lines = Page("docs", "golden-path.md").Split('\n');
+        var fenced = false;
+        var wide = new List<string>();
+        for (var index = 0; index < lines.Length; index++)
+        {
+            if (FenceLine().IsMatch(lines[index]))
+            {
+                fenced = !fenced;
+                continue;
+            }
+
+            if (!fenced && lines[index].Length > 120)
+            {
+                wide.Add($"line {index + 1}, {lines[index].Length} characters");
+            }
+        }
+
+        Assert.True(wide.Count == 0, "docs/golden-path.md has prose wider than 120 characters: " + string.Join("; ", wide));
+    }
+
+    /// <summary>
+    /// A wiring check that stops — at a read that said no, at a refusal — names what comes next, and the end of the run
+    /// gives the person the way back: the two commands, the stop and the pause after it.
     /// </summary>
     [Fact]
     public void The_golden_path_names_the_next_step_when_it_stops() =>
         Assert.Contains(
-            "When you stop, name the next step. At the end, give the person the way back, in two lines.",
+            "When you stop, name the next step. At the end, give the person the way back in two lines: the stop, and the pause after it.",
             Flat(GoldenAgent()),
             StringComparison.Ordinal);
 
@@ -1380,10 +1705,10 @@ public partial class PageClaimsTests
     private const string PromptDigest = "sha256:a218dac2de2fb843c275be0aeff7586ee6c99a5ceed033f63857941d04a162e7";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:1f35159aa82fe5f4c53ecbb02611a1dad4507b9f86f8ccb843e8fadbac0522df";
+    private const string AgentSectionDigest = "sha256:1b88e177af7b5769390446cc68c76e6715fc72aeb34c32ca9cdbf340e892e2e2";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
-    private const string GoldenAgentSectionDigest = "sha256:37ea25245d6df2823a4ad5d8358cfcfed5178bfa605104596d7cd96c33a51434";
+    private const string GoldenAgentSectionDigest = "sha256:5a6ef884d8162978623f044253c5e5b8ac9da5bf198b6707b2720ef04440f95c";
 
     /// <summary>
     /// The text between the line that opens a fence and the next line that is exactly three backticks, each line

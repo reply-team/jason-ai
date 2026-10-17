@@ -15,6 +15,23 @@ public partial class InteractiveSkillTests
         Assert.Contains("no_route", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("out of the box", skill, StringComparison.OrdinalIgnoreCase);
 
+        // The wiring check proves a provider is reached, and it is not campaign work: the real work begins with a plan,
+        // and this skill is how the plan becomes work. A session that took the check for the job would stop there.
+        Assert.Contains(
+            "The wiring check, `docs/golden-path.md`, connects a provider and proves it with the person's own address; it is not campaign work. The real work begins with a campaign planned with the business pack's `campaign-planning` skill, and this skill is how that plan becomes work the runtime and Jason's roles perform.",
+            skill,
+            StringComparison.Ordinal);
+
+        // And it says so where a session checks whether a provider is connected: at the end of "Before you start", after
+        // the sentence that sends setting one up to the operating skill, and before the work itself.
+        var text = File.ReadAllText(SkillPack.Find("managed-campaign-work").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var setUp = text.IndexOf("Setting one up is `operating-the-installation`", StringComparison.Ordinal);
+        var wiring = text.IndexOf("The wiring check, `docs/golden-path.md`, connects a provider", StringComparison.Ordinal);
+        var work = text.IndexOf("\n## The work itself\n", StringComparison.Ordinal);
+        Assert.True(
+            setUp >= 0 && wiring > setUp && work > wiring,
+            $"managed-campaign-work says where the wiring check stands at offset {wiring}; it belongs after the operating skill's sentence (offset {setUp}) and before \"## The work itself\" (offset {work}).");
+
         // Arguments are judged when the item is created, against the operation's own published document — so
         // a refusal there is about what was asked for, and not about the provider being unreachable.
         Assert.Contains("validated when the item is created", skill, StringComparison.Ordinal);

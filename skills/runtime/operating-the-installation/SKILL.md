@@ -285,8 +285,9 @@ Both lines install the latest release. If either answers 404, the release could 
 stands, and that there is nothing to build instead — the runtime's source is not published. Do not paste a line
 again in the hope of a different answer.
 
-When `jason status` says `ready`, the next step is the first run, `docs/golden-path.md`: one word from the person
-starts it in the same session.
+When `jason status` says `ready`, the next step is the wiring check, `docs/golden-path.md`: one word from the person
+starts it in the same session. It connects their provider and proves it with their own address; the real work comes
+after it, and begins with a campaign planned with the `campaign-planning` skill and worked by Jason's roles.
 
 ## Taking it off again
 

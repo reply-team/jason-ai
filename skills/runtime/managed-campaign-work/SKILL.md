@@ -2,7 +2,7 @@
 name: managed-campaign-work
 description: Use when an interactive agent session should turn an outbound objective into durable campaign work that Jason performs - creating a campaign, adding the people it is about, submitting managed provider operations and AI role work, and following what the runtime does with them.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Managed campaign work
@@ -12,7 +12,8 @@ the Jason CLI has not happened: it will not survive the session, will not be dis
 anybody, and will leave no history. This skill is the managed path — how to put work where the runtime can
 perform it, and what to do while it waits.
 
-**Status: verified** against Claude Code 2.1.289. It covers the operations this build publishes and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. It covers the operations this build
+publishes and nothing else.
 
 ## What you are responsible for, and what the runtime is
 
@@ -47,6 +48,10 @@ jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation campai
 ```
 
 Setting one up is `operating-the-installation`, which is where plugins, routes, profiles and updates live.
+
+The wiring check, `docs/golden-path.md`, connects a provider and proves it with the person's own address; it is
+not campaign work. The real work begins with a campaign planned with the business pack's `campaign-planning`
+skill, and this skill is how that plan becomes work the runtime and Jason's roles perform.
 
 ## The work itself
 

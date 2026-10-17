@@ -153,8 +153,12 @@ public partial class InteractiveSkillTests
         Assert.Contains("Never pipe a download into a shell", skill, StringComparison.Ordinal);
         Assert.Contains("The two lines are the person's: where neither route is open to you, hand them the lines to type.", skill, StringComparison.Ordinal);
 
-        // And a ready installation is followed by its first run, started by one word in the same session.
-        Assert.Contains("the next step is the first run, `docs/golden-path.md`", skill, StringComparison.Ordinal);
+        // And a ready installation is followed by the wiring check, started by one word in the same session — and the
+        // real work, a campaign planned and worked by the roles, comes after it rather than being it.
+        Assert.Contains(
+            "When `jason status` says `ready`, the next step is the wiring check, `docs/golden-path.md`: one word from the person starts it in the same session. It connects their provider and proves it with their own address; the real work comes after it, and begins with a campaign planned with the `campaign-planning` skill and worked by Jason's roles.",
+            skill,
+            StringComparison.Ordinal);
 
         // After an update the role skills can be another release's. The skill says what `jason status` says about it and
         // that the repair is the line it prints — no more, because the repair's own words are the check's to give. Only
