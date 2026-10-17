@@ -50,7 +50,7 @@ public sealed class DescriptorRemovalAtStopTests
             var log = Log(data);
             Assert.Single(Lines(log, Template));
             Assert.Contains("\"Why\":\"removing it was refused\"", log, StringComparison.Ordinal);
-            Assert.DoesNotContain("Access to the path", log, StringComparison.Ordinal);
+            SystemRefusalInLog.AssertNone(log, data.Paths);
         }
         finally
         {

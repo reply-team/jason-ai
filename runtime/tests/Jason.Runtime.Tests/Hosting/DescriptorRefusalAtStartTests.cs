@@ -39,7 +39,7 @@ public sealed class DescriptorRefusalAtStartTests
         var log = Log(data);
         Assert.Contains("The runtime did not start: its endpoint descriptor at {Descriptor} could not be published: {Why}", log, StringComparison.Ordinal);
         Assert.Contains("\"Why\":\"replacing it was refused for 0.3 seconds\"", log, StringComparison.Ordinal);
-        Assert.DoesNotContain("Access to the path", log, StringComparison.Ordinal);
+        SystemRefusalInLog.AssertNone(log, data.Paths);
 
         // Nothing of the refused start is held: once the reader has let go, the next start publishes.
         await using var runtime = await RuntimeHost.StartAsync(data.Paths, TestRuntimeOptions.Quiet, Ct);

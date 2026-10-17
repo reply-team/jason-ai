@@ -39,15 +39,7 @@ public sealed partial class SystemSentenceTests
     /// What a test assembly carries although it matches, by assembly, by string and by how many instructions load it,
     /// each with why.
     /// </summary>
-    private static readonly Dictionary<string, Dictionary<string, (int Loads, string Why)>> CarriedOnPurpose = new(StringComparer.Ordinal)
-    {
-        ["Jason.Runtime.Tests"] = new(StringComparer.Ordinal)
-        {
-            // DescriptorRefusalAtStartTests and DescriptorRemovalAtStopTests, each an Assert.DoesNotContain over the log. The
-            // string is put together from its words, so this file does not load it whole.
-            [string.Join(' ', Sentences[0])] = (2, "a DoesNotContain on an OS sentence passes vacuously on another UI language; follow-up"),
-        },
-    };
+    private static readonly Dictionary<string, Dictionary<string, (int Loads, string Why)>> CarriedOnPurpose = new(StringComparer.Ordinal);
 
     private static readonly Dictionary<short, OpCode> Codes = typeof(OpCodes)
         .GetFields(BindingFlags.Public | BindingFlags.Static)

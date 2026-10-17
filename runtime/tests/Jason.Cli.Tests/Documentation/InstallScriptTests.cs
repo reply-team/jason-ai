@@ -5,6 +5,7 @@ using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using Jason.Cli.Uninstall;
 using Jason.Contracts.Update;
 using Microsoft.Win32;
 
@@ -398,6 +399,42 @@ public partial class InstallScriptTests
         // registration and the harnesses are the account's, and this step is rehearsed on developer machines.
         var guard = ci.IndexOf("$plan.autostart_registered -or @($plan.roots).Count -gt 0 -or $plan.path_entry.ours", step, StringComparison.Ordinal);
         Assert.True(guard > step && guard < ci.IndexOf("uninstall --purge-data --yes", step, StringComparison.Ordinal), "the uninstall step no longer refuses on an account with a registration, recorded skills or a PATH entry.");
+    }
+
+    /// <summary>
+    /// On Windows that step waits for the cleanup the uninstall names, by its process, before it looks for the moved copy.
+    /// The cleanup's own retries begin only once the verb has exited and Windows PowerShell has started, so a wait of the
+    /// same length counted from the verb's exit could end while the cleanup was still within its own. The step reads the
+    /// process and the directory out of what the uninstall says, so what it reads is held here against the sentence the
+    /// uninstall writes.
+    /// </summary>
+    [Fact]
+    public void Ci_waits_for_the_cleanup_the_uninstall_names_before_it_looks_for_the_moved_copy()
+    {
+        var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml"));
+        var start = ci.IndexOf("- name: Uninstall the published executable, from its own image", StringComparison.Ordinal);
+        Assert.True(start >= 0, "ci.yml no longer uninstalls the published executable.");
+        var next = Regex.Match(ci[(start + 1)..], @"\n      - name: |\n  [a-z]");
+        var step = next.Success ? ci.Substring(start, next.Index + 1) : ci[start..];
+
+        var read = Regex.Match(step, @"\[regex\]::Match\(\(\$report\.kept -join ' '\), ""(?<pattern>[^""]+)""\)");
+        Assert.True(read.Success, $"The uninstall step no longer reads the report's notes with one pattern:\n{step}");
+        var pattern = read.Groups["pattern"].Value;
+
+        using var dir = new TempPaths();
+        var executable = Path.Combine(Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "install")).FullName, "jason.exe");
+        File.WriteAllText(executable, "an executable");
+        var temporary = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "tmp")).FullName;
+        var outcome = InstallationRemovers.MoveAside(executable, temporary, (from, to) => File.Move(from, to), _ => 4242);
+
+        var found = Regex.Match(outcome.Note!, pattern);
+        Assert.True(found.Success && found.Groups.Count == 3, $"The step's pattern \"{pattern}\" does not read a process and a directory out of what the uninstall says: {outcome.Note}");
+        Assert.Equal("4242", found.Groups[1].Value);
+        Assert.Equal(Path.GetDirectoryName(outcome.MovedTo), found.Groups[2].Value);
+
+        var waits = step.IndexOf(".WaitForExit(", StringComparison.Ordinal);
+        var looks = step.LastIndexOf("Test-Path -LiteralPath $aside", StringComparison.Ordinal);
+        Assert.True(waits > read.Index && waits < looks, $"The uninstall step does not wait for the cleanup's process between reading it ({read.Index}) and looking for the moved copy ({looks}); it waits at {waits}.");
     }
 
     /// <summary>

@@ -4,8 +4,10 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Runtime.Api;
 using Jason.Runtime.Hosting;
+using Jason.Runtime.Tests.Integration;
 using Microsoft.AspNetCore.Http;
 
 namespace Jason.Runtime.Tests.Logging;
@@ -69,27 +71,38 @@ public class RequestLineTests
     /// status of a request its caller closed, and not the 200 that a response never written would otherwise keep. Nothing
     /// of the half of the body that arrived reaches the log.
     /// </summary>
+    /// <remarks>
+    /// The caller resets the connection only once the runtime has said it is reading the body: a head that asks to be
+    /// told so (<c>Expect: 100-continue</c>) is answered <c>100 Continue</c> when the endpoint starts to read. A reset that
+    /// came before the runtime had read the head would leave no request at all, and so no line.
+    /// </remarks>
     [Fact]
     public async Task A_request_whose_caller_went_away_mid_body_is_logged_as_closed_and_not_as_answered()
     {
         var route = Operations.Route(Operations.JournalList);
-        var (logs, lines) = await LoggedAsync(async (http, token) =>
+        var (logs, lines) = await LoggedAsync(async (http, token, paths) =>
         {
             var address = http.BaseAddress!;
             using (var client = new TcpClient())
             {
                 await client.ConnectAsync(address.Host, address.Port, Ct);
-                var head = $"POST {route} HTTP/1.1\r\nHost: {address.Authority}\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: 500\r\n\r\n{{\"since\":\"SENTINEL_HALF_A_BODY";
-                await client.GetStream().WriteAsync(Encoding.ASCII.GetBytes(head), Ct);
-                await client.GetStream().FlushAsync(Ct);
+                var stream = client.GetStream();
+                var head = $"POST {route} HTTP/1.1\r\nHost: {address.Authority}\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: 500\r\nExpect: 100-continue\r\n\r\n";
+                await stream.WriteAsync(Encoding.ASCII.GetBytes(head), Ct);
+                await stream.FlushAsync(Ct);
 
-                // The runtime is reading the body when the caller resets the connection.
-                await Task.Delay(300, Ct);
+                var answer = await FirstLineAsync(stream, Bound);
+                Assert.True(
+                    answer == "HTTP/1.1 100 Continue",
+                    $"Asked to say when it reads the body, the runtime said {(answer is null ? "nothing" : $"'{answer}'")} within {Bound.TotalSeconds} s.");
+
+                await stream.WriteAsync("{\"since\":\"SENTINEL_HALF_A_BODY"u8.ToArray(), Ct);
+                await stream.FlushAsync(Ct);
                 client.LingerState = new LingerOption(enable: true, seconds: 0);
             }
 
             // The line is written as the request ends, which is the runtime's to finish after the reset.
-            await Task.Delay(500, Ct);
+            await RequestLineAsync(paths, route);
         });
 
         var line = Assert.Single(lines, line => (string?)line["RequestPath"] == route);
@@ -167,18 +180,76 @@ public class RequestLineTests
     private static Microsoft.AspNetCore.Connections.ConnectionResetException Reset() =>
         new("Connection reset by peer", new System.Net.Sockets.SocketException((int)System.Net.Sockets.SocketError.ConnectionReset));
 
+    /// <summary>How long a step that is the runtime's to take is waited for: generously, since only a broken one reaches it.</summary>
+    private static TimeSpan Bound => TimeSpan.FromSeconds(30);
+
+    /// <summary>The first line the server sends, or null where it sent none within the bound.</summary>
+    private static async Task<string?> FirstLineAsync(NetworkStream stream, TimeSpan bound)
+    {
+        using var within = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        within.CancelAfter(bound);
+        var line = new StringBuilder();
+        var one = new byte[1];
+        try
+        {
+            while (!line.ToString().EndsWith("\r\n", StringComparison.Ordinal))
+            {
+                if (await stream.ReadAsync(one, within.Token) == 0)
+                {
+                    return null;
+                }
+
+                line.Append((char)one[0]);
+            }
+        }
+        catch (OperationCanceledException) when (!Ct.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        return line.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// Waits, within the bound, for the running runtime's log to carry a request line for the route. The line is written
+    /// as the request ends, which is the runtime's to finish after the caller has gone.
+    /// </summary>
+    private static async Task RequestLineAsync(JasonPaths paths, string route)
+    {
+        var deadline = DateTime.UtcNow + Bound;
+        var seen = new List<JsonObject>();
+        while (DateTime.UtcNow < deadline)
+        {
+            seen = RequestLines(string.Concat(Directory.GetFiles(paths.LogsDirectory, "*", SearchOption.AllDirectories).Select(FakeHostRuntime.ReadShared)), partial: true);
+            if (seen.Any(line => (string?)line["RequestPath"] == route))
+            {
+                return;
+            }
+
+            await Task.Delay(50, Ct);
+        }
+
+        Assert.Fail(
+            $"No request line for {route} within {Bound.TotalSeconds} s; the log's request lines were: "
+            + (seen.Count == 0 ? "none" : string.Join(", ", seen.Select(line => line.ToJsonString()))));
+    }
+
     /// <summary>
     /// Starts a runtime, sends what the test sends, stops it — stopping flushes and closes the file sink, so what is
     /// on disk then is everything there is — and hands back the whole log as text and its request lines as events.
     /// </summary>
-    private static async Task<(string Logs, List<JsonObject> RequestLines)> LoggedAsync(Func<HttpClient, string, Task> send)
+    private static Task<(string Logs, List<JsonObject> RequestLines)> LoggedAsync(Func<HttpClient, string, Task> send) =>
+        LoggedAsync((http, token, _) => send(http, token));
+
+    /// <summary>The same, with the runtime's paths for a test that reads its log while it runs.</summary>
+    private static async Task<(string Logs, List<JsonObject> RequestLines)> LoggedAsync(Func<HttpClient, string, JasonPaths, Task> send)
     {
         using var dir = new TempDataDir();
         var runtime = await RuntimeHost.StartAsync(dir.Paths, TestRuntimeOptions.Quiet, Ct);
         try
         {
             using var http = new HttpClient { BaseAddress = runtime.BaseUrl };
-            await send(http, runtime.Token);
+            await send(http, runtime.Token, dir.Paths);
         }
         finally
         {
@@ -186,12 +257,35 @@ public class RequestLineTests
         }
 
         var logs = string.Concat(Directory.GetFiles(dir.Paths.LogsDirectory, "*", SearchOption.AllDirectories).Select(File.ReadAllText));
-        var requestLines = logs
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(line => JsonNode.Parse(line)!.AsObject())
-            .Where(line => line.ContainsKey("RequestPath") && line.ContainsKey("StatusCode"))
-            .ToList();
-        return (logs, requestLines);
+        return (logs, RequestLines(logs, partial: false));
+    }
+
+    /// <summary>
+    /// The request lines of a log. One read while the runtime writes may end halfway through a line, which is skipped
+    /// there; a log read after the stop is whole, and every line of it must parse.
+    /// </summary>
+    private static List<JsonObject> RequestLines(string logs, bool partial)
+    {
+        var lines = new List<JsonObject>();
+        foreach (var text in logs.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            JsonObject line;
+            try
+            {
+                line = JsonNode.Parse(text)!.AsObject();
+            }
+            catch (System.Text.Json.JsonException) when (partial)
+            {
+                continue;
+            }
+
+            if (line.ContainsKey("RequestPath") && line.ContainsKey("StatusCode"))
+            {
+                lines.Add(line);
+            }
+        }
+
+        return lines;
     }
 
     private static async Task<HttpStatusCode> SendAsync(HttpClient http, HttpMethod method, string path, string? token)

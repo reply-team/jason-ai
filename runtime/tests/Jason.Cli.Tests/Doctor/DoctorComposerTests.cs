@@ -829,13 +829,12 @@ public sealed class DoctorComposerTests
     public async Task After_a_read_times_out_no_later_read_is_attempted_and_the_sections_say_so()
     {
         using var dir = new TempPaths();
-        var hangs = new HangsAfter(Running(dir), Timeout, Operations.SystemInfo, Operations.RoleList, Operations.RouteList);
+        var clock = new PassingClock();
+        var hangs = new HangsAfter(Running(dir), clock, Timeout, Operations.SystemInfo, Operations.RoleList, Operations.RouteList);
 
-        var watch = Stopwatch.StartNew();
         var bundle = await ComposeAsync(dir, hangs, includeJournal: true);
-        watch.Stop();
 
-        Assert.True(watch.Elapsed < Timeout + TimeSpan.FromSeconds(2), $"Composing against a runtime that hangs took {watch.Elapsed}.");
+        Assert.Equal([Timeout], clock.Waits);
         Assert.Equal([Operations.PluginList], hangs.Hung);
         Assert.DoesNotContain(hangs.Seen, operation => operation is Operations.JournalList or Operations.WorkItemList or Operations.WorkItemGet);
 
@@ -854,13 +853,12 @@ public sealed class DoctorComposerTests
     public async Task A_status_read_that_times_out_leaves_every_read_after_it_unattempted()
     {
         using var dir = new TempPaths();
-        var hangs = new HangsAfter(Running(dir), Timeout, Operations.SystemInfo, Operations.RoleList);
+        var clock = new PassingClock();
+        var hangs = new HangsAfter(Running(dir), clock, Timeout, Operations.SystemInfo, Operations.RoleList);
 
-        var watch = Stopwatch.StartNew();
         var bundle = await ComposeAsync(dir, hangs);
-        watch.Stop();
 
-        Assert.True(watch.Elapsed < Timeout + TimeSpan.FromSeconds(2), $"Composing against a runtime that hangs took {watch.Elapsed}.");
+        Assert.Equal([Timeout], clock.Waits);
         Assert.Equal([Operations.RouteList], hangs.Hung);
         Assert.Equal([Operations.SystemInfo, Operations.RouteList], hangs.Seen);
 
@@ -908,21 +906,20 @@ public sealed class DoctorComposerTests
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "journal_entries")["not_read"]));
     }
 
-    /// <summary>The same, held for as long as a client waits: about one wait in all, not one for every read left.</summary>
+    /// <summary>The same, held for as long as a client waits: one wait in all, not one for every read left.</summary>
     [Fact]
     public async Task A_body_that_stalls_costs_one_wait_in_all()
     {
         using var dir = new TempPaths();
         var runtime = Running(dir);
+        var clock = new PassingClock();
         runtime.Fails = (operation, _) => operation is Operations.PluginList or Operations.JournalList or Operations.WorkItemList
-            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StallingContent(Timeout) }
+            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StallingContent(Timeout, clock) }
             : null;
 
-        var watch = Stopwatch.StartNew();
         var bundle = await ComposeAsync(dir, runtime);
-        watch.Stop();
 
-        Assert.True(watch.Elapsed < Timeout + TimeSpan.FromSeconds(2), $"Composing against a runtime whose bodies stall took {watch.Elapsed}.");
+        Assert.Equal([Timeout], clock.Waits);
         Assert.Equal(1, runtime.Requests.Count(request => request.Operation is Operations.PluginList or Operations.JournalList or Operations.WorkItemList));
         Assert.Equal(DoctorComposer.NotAttempted, Text(Section(bundle, "work_items")["not_read"]));
     }
@@ -2318,9 +2315,9 @@ public sealed class DoctorComposerTests
 
 /// <summary>
 /// A body that starts and never finishes: a runtime that sent its headers and stalled. After the wait it plays the
-/// client's timeout giving up while the body is read.
+/// client's timeout giving up while the body is read, on the clock a test gives it.
 /// </summary>
-internal sealed class StallingContent(TimeSpan wait) : HttpContent
+internal sealed class StallingContent(TimeSpan wait, TimeProvider? clock = null) : HttpContent
 {
     protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
         SerializeToStreamAsync(stream, context, CancellationToken.None);
@@ -2328,7 +2325,7 @@ internal sealed class StallingContent(TimeSpan wait) : HttpContent
     protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context, CancellationToken cancellationToken)
     {
         await stream.WriteAsync("{\"snapshot\":"u8.ToArray(), cancellationToken).ConfigureAwait(false);
-        await Task.Delay(wait, cancellationToken).ConfigureAwait(false);
+        await Task.Delay(wait, clock ?? TimeProvider.System, cancellationToken).ConfigureAwait(false);
         throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout elapsing.", new TimeoutException());
     }
 
@@ -2341,9 +2338,9 @@ internal sealed class StallingContent(TimeSpan wait) : HttpContent
 
 /// <summary>
 /// A runtime that answers some operations and then holds every other request until the client would give up: what a
-/// runtime looks like whose process is alive and stuck. It plays the client's own timeout, at a length a test can wait.
+/// runtime looks like whose process is alive and stuck. It plays the client's own timeout, on the clock a test gives it.
 /// </summary>
-internal sealed class HangsAfter(StubRuntime inner, TimeSpan timeout, params string[] answered) : DelegatingHandler(inner)
+internal sealed class HangsAfter(StubRuntime inner, TimeProvider clock, TimeSpan timeout, params string[] answered) : DelegatingHandler(inner)
 {
     public List<string> Seen { get; } = [];
 
@@ -2367,8 +2364,51 @@ internal sealed class HangsAfter(StubRuntime inner, TimeSpan timeout, params str
             Hung.Add(operation);
         }
 
-        await Task.Delay(timeout, cancellationToken).ConfigureAwait(false);
+        await Task.Delay(timeout, clock, cancellationToken).ConfigureAwait(false);
         throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout elapsing.", new TimeoutException());
+    }
+}
+
+/// <summary>
+/// A clock on which every wait passes at once and is kept with its length: what a stand-in's play of the client's timeout
+/// cost a bundle is read from here, and never from how busy the machine running the suite is.
+/// </summary>
+internal sealed class PassingClock : TimeProvider
+{
+    private readonly List<TimeSpan> _waits = [];
+
+    /// <summary>Each wait begun on this clock, in turn, by its length.</summary>
+    public IReadOnlyList<TimeSpan> Waits
+    {
+        get
+        {
+            lock (_waits)
+            {
+                return [.. _waits];
+            }
+        }
+    }
+
+    public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+    {
+        lock (_waits)
+        {
+            _waits.Add(dueTime);
+        }
+
+        ThreadPool.QueueUserWorkItem(_ => callback(state));
+        return new Passed();
+    }
+
+    private sealed class Passed : ITimer
+    {
+        public bool Change(TimeSpan dueTime, TimeSpan period) => false;
+
+        public void Dispose()
+        {
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }
 

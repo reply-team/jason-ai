@@ -275,12 +275,22 @@ jobs:
           if ($plan.extracted_libraries -and (Test-Path -LiteralPath $plan.extracted_libraries)) { throw "what the build unpacked is still at '$($plan.extracted_libraries)'" }
 
           # On Windows the running image is moved aside rather than deleted, and a cleanup removes the copy
-          # once the verb has exited. The report names the directory; it has to be gone shortly afterwards.
+          # once the verb has exited. The report names the cleanup's process and the directory. The cleanup is a
+          # Windows PowerShell 5.1 child that waits for the verb and then tries 40 times, 250 ms apart: about ten
+          # seconds, counted from when it has started rather than from the verb's exit. So this waits for the
+          # cleanup itself, up to 60 seconds - six times its own retries, which only a cleanup that hangs reaches -
+          # and then looks for the copy.
           if ($IsWindows) {
-            $aside = [regex]::Match(($report.kept -join ' '), "removes '([^']+)'").Groups[1].Value
-            if (-not $aside) { throw "the report names no cleanup: $($report.kept -join ' | ')" }
-            for ($i = 0; $i -lt 40 -and (Test-Path -LiteralPath $aside); $i++) { Start-Sleep -Milliseconds 250 }
-            if (Test-Path -LiteralPath $aside) { throw "the moved copy is still at '$aside' ten seconds after the verb exited" }
+            $cleanup = [regex]::Match(($report.kept -join ' '), "a cleanup, process (\d+), removes '([^']+)'")
+            if (-not $cleanup.Success) { throw "the report names no cleanup process: $($report.kept -join ' | ')" }
+            $cleanupId = [int]$cleanup.Groups[1].Value
+            $aside = $cleanup.Groups[2].Value
+            # A cleanup that has already ended is not waited for, and neither is a program that took its id since.
+            $process = Get-Process -Id $cleanupId -ErrorAction SilentlyContinue | Where-Object ProcessName -eq 'powershell'
+            if ($process -and -not $process.WaitForExit(60000)) {
+              throw "the cleanup, process $cleanupId, was still running 60 s after the verb exited; its own retries end about ten seconds after it starts"
+            }
+            if (Test-Path -LiteralPath $aside) { throw "the cleanup, process $cleanupId, ended and left the moved copy at '$aside'" }
           }
 
           Write-Host "the published executable took itself off this runner and left nothing of its own behind"
