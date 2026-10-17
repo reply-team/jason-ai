@@ -182,6 +182,7 @@ it in full:
 ```json
 {
   "snapshot": { "id": "snp_01J4…", "loaded_at": "2026-09-14T12:00:00.000Z", "source": "reload", "plugin_count": 1 },
+  "routing_snapshot_id": "rts_01J4…",
   "plugins": [
     { "id": "fake-provider", "version": "1.0.0", "kind": "provider", "name": "Fake provider",
       "description": "…", "homepage": null, "root": "<data dir>/plugins/fake-provider",
@@ -191,12 +192,18 @@ it in full:
         "exec": { "requested": [ { "name": "provider-cli", "path": "/usr/local/bin/provider-cli", "version": "2.4.1", "min_version": null, "launch": null } ], "granted": ["provider-cli"] },
         "http": { "requested": ["localhost:5555", "api.example.com"], "granted": [] },
         "env":  { "requested": ["FAKE_TOKEN", "OTHER_TOKEN"], "granted": ["FAKE_TOKEN"] } },
-      "limits": { "timeout_ms": 20000, "memory_mb": 64 }, "status": "valid", "problems": [] } ],
+      "limits": { "timeout_ms": 20000, "memory_mb": 64 }, "binding_schema": null, "status": "valid", "problems": [] } ],
   "last_reload": { "at": "2026-09-14T12:00:00.000Z", "source": "reload", "activated": true,
-                   "candidates": [ { "directory": "fake-provider", "id": "fake-provider", "status": "valid", "problems": [] } ] },
+                   "candidates": [ { "directory": "fake-provider", "id": "fake-provider", "status": "valid", "problems": [] } ],
+                   "routes": [] },
   "activated": true
 }
 ```
+
+`last_reload.routes` lists the routes that load refused, each named the way it is written — `Routes:Default`,
+`Routes:Operations:<operation>`, `campaign:<cmp_…>/routes/<operation>` or `…/routes/default` — with its code and
+message, so it is empty when the load activated. The routes a load froze are not listed there: `routing_snapshot_id`
+names the snapshot they are in, and the activation journals them in `plugins_reloaded` (below).
 
 ### Two kinds of problem
 
@@ -250,7 +257,8 @@ Plugins:    none active · last reload rejected
 ```
 
 An **activated** load writes one global journal entry of the reserved kind `plugins_reloaded`
-carrying the snapshot id, its source and `{id, version, digest, status}` per plugin — actor `system`
+carrying the snapshot id, its source, `{id, version, digest, status}` per plugin, and the routes it
+froze as `{snapshot_id, global_default, override_count, campaign_route_count}` — actor `system`
 for the load at startup, the request's actor and reason for a reload. A **rejected** load writes
 none; it is visible in the log and in `last_reload`. `journal.append` refuses the kind, so nothing
 but a real activation can write one.
@@ -404,7 +412,12 @@ its own accord says nothing about what it left behind, and the call comes back w
 captured rather than waiting for a handle the program it ran no longer holds. A killed program that is
 not seen to end within the grace is said once, as an `exec_kill_unconfirmed` line with its process id
 and the grace in milliseconds, and the call still returns `timed_out: true`; a read that ran out after
-the program was seen to end is not a kill that failed, and says nothing. A granted program that will not start at all is an answer too: `exit_code: -1` with the
+the program was seen to end is not a kill that failed, and says nothing. A kill that is itself slow
+does not hold the call past its grace, and the host does not exit before a kill it started has ended:
+one still running at the invocation's deadline is said once, as an `exec_kill_unfinished` line with
+its process id and the deadline, and the host goes on waiting; should the runtime's own kill come
+first, it ends the host with the program, and the invocation ends `plugin_timeout` rather than with
+your answer. A granted program that will not start at all is an answer too: `exit_code: -1` with the
 reason in `stderr`, and an `exec_launch_failed` line on stderr. At most `Plugins:Exec:MaxCalls` (64)
 calls per invocation; the next fails `exec_limit`. Every call is logged as one `exec` line:
 executable, what the runtime resolved that name to (`launch`), arguments, exit code, duration, timed
@@ -612,8 +625,8 @@ document's `precondition` says what to do, and they differ on purpose:
   holds, never on a second contact made for them.
 - `enrollment.stop` never creates anybody: a person the provider does not hold takes part in nothing, which
   is a completed stop.
-- A write about a campaign — `campaign.pause`, `campaign.activate` — names no person, and has no contact to
-  find.
+- A write about a campaign — `campaign.create`, `campaign.pause`, `campaign.activate` — names no person, and has no
+  contact to find.
 
 Once a pin exists nobody matches that person by address again, which is what stops two spellings of one
 address becoming two people.
@@ -748,7 +761,7 @@ recorded rather than the one it disputes.
 
 ### The worked example
 
-`plugins/reply/` is the one to read: a marketplace package that implements all eleven published
+`plugins/reply/` is the one to read: a marketplace package that implements all twelve published
 operations against a real provider by driving that provider's own command-line program. Its README
 says what each operation maps onto, what the provider will not answer, and which of its claims were
 checked against a live account; its `modules/errors.js` is the whole error table written as data, so
@@ -940,7 +953,7 @@ identifier of a kind the operation never declared or carrying a control characte
 
 `source` is `host` or `plugin`; `data` and `truncated` appear only when they apply. The host's own
 messages are `invocation_rejected`, `digest_unverified`, `env_probe`, `exec`, `exec_launch_failed`,
-`exec_kill_unconfirmed`, `http`, `http_failed` and `log_truncated`. The runtime copies the stream, redacted, to
+`exec_kill_unconfirmed`, `exec_kill_unfinished`, `http`, `http_failed` and `log_truncated`. The runtime copies the stream, redacted, to
 `stderr.log` in the invocation directory and keeps the last 4096 characters as the trace that travels
 with a protocol failure. It is read in fixed chunks and copied line by line, up to
 `Plugins:Invoker:StderrBytes` (4 MiB); past that the file ends with a single `[stderr truncated]`

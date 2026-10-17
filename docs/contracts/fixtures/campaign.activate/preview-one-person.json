@@ -13,7 +13,7 @@
     "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
   },
   "expect": {
-    "summary": "Start sending campaign Q3 LatAm founders at the provider. People enrolled there: 1. Step 1 goes to each of them on the campaign's own schedule, and the cost is metered per message released. If the provider's count is not 1 at execution, nothing starts.",
+    "summary": "Start sending the provider's campaign for Jason's campaign Q3 LatAm founders. People enrolled there: 1. Step 1 goes to each of them on that campaign's own schedule, and the cost is metered per message released. If the provider's count is not 1 at execution, nothing starts.",
     "highlights": {
       "/args/expected/enrolled": 1,
       "/campaign/name": "Q3 LatAm founders",

@@ -1,0 +1,16 @@
+{
+  "operation": "campaign.create",
+  "version": 1,
+  "case": "a campaign already linked is an input the schema accepts; the plugin refuses it before it calls the provider",
+  "input": {
+    "args": { "name": "Q3 LatAm founders" },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "draft",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": "valid"
+}

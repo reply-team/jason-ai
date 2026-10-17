@@ -129,10 +129,11 @@ function exec(context, args, stdin) {
 
 /**
  * One reply-cli work command: its result object when it exits 0, and `host.fail` with the row the table decides for
- * every other ending. `request` is `{ operation, command, operands, flags, stdin, learned }`: the canonical operation
- * the command serves, the command's two words, its ids, its flags, the person for stdin, and what this package
- * already knows Reply calls our entities — which travels out with a failure, joined by whatever the CLI says it had
- * learned before it failed.
+ * every other ending. `request` is `{ operation, command, operands, flags, stdin, learned, pins }`: the canonical
+ * operation the command serves, the command's two words, its ids, its flags, the person for stdin, and what this
+ * package already knows Reply calls our entities — which travels out with a failure, joined by whatever the CLI says it
+ * had learned before it failed. `pins: false` keeps what the CLI learned out of the failure, for a command that names
+ * something which is not ours yet.
  */
 export function run(context, request) {
   const stdin = request.stdin === undefined || request.stdin === null ? undefined : JSON.stringify(request.stdin);
@@ -141,9 +142,10 @@ export function run(context, request) {
 }
 
 /**
- * The one raw call this package still makes, `reply api`: the contact search a list add, an enrolment or an opt-out
- * makes for a person with no pin and no first name. The answer is `{ code, data }` — Reply's own status and its body, whatever
- * that status was — and every ending without one throws `host.fail`. The table knows the call as
+ * The raw call this package still makes, `reply api`, where reply-cli has no command for the request: the contact
+ * search a list add, an enrolment or an opt-out makes for a person with no pin and no first name, and the list and the
+ * create of sequences `campaign.create` makes. The answer is `{ code, data }` — Reply's own status and its body,
+ * whatever that status was — and every ending without one throws `host.fail`. The table knows the call as
  * `api <METHOD> <path without its query>`, which is how its read/write mark is found.
  */
 export function call(context, method, path, body, learned, operation) {
@@ -223,7 +225,7 @@ function ended(answer, request) {
     observed.row = lostAnswerRow(command);
   }
 
-  fail(operation, observed, learnedWith(request.learned, said, operation, observed.row));
+  fail(operation, observed, request.pins === false ? request.learned : learnedWith(request.learned, said, operation, observed.row));
 }
 
 // Every ending of the raw call. `reply api` prints `{code, data}` for any status Reply answered, with exit 0 or 1, and

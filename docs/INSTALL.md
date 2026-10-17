@@ -57,7 +57,9 @@ ask.
   `export` half yourself, or call `jason` by its full path.
 - Stop when `ready` is true, or when a required check still fails after its repair. Report which checks failed,
   exactly what you ran, and what it changed. When `ready` is true, tell the person Jason is installed and can work,
-  and that one word from them starts [its first run](golden-path.md) in this session.
+  and that one word from them runs [the wiring check](golden-path.md) in this session: it connects their provider
+  and proves it with their own address. The real work comes after it, and begins with a campaign planned with the
+  `campaign-planning` skill and worked by Jason's roles.
 
 ---
 
@@ -85,7 +87,7 @@ already installed, it downloads nothing and says so, unless a licence file is mi
 it downloads the archive, checks it the same way, and writes the file, leaving the executable as it is.
 
 On Windows, `install.ps1` waits up to 10 seconds for a file another program holds open — a virus scanner reading
-the executable it has just unpacked or run — before it gives up and says which file. And if the new `jason.exe`
+the executable it has just unpacked or run — before it gives up and names the file, or the directory it was unpacking into. And if the new `jason.exe`
 cannot move in, it puts the one you had back — or, when it cannot, says where it is — so an install that fails never
 leaves you without the version you started with.
 
@@ -107,14 +109,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v0.9.0/install.sh | sh -s -- --version 0.9.0
+curl -fsSL https://jasonharness.ai/releases/download/v0.10.0/install.sh | sh -s -- --version 0.10.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.9.0/install.ps1))) -Version 0.9.0
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.10.0/install.ps1))) -Version 0.10.0
 ```
 
-These install 0.9.0 with 0.9.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.10.0 with 0.10.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
@@ -156,6 +158,11 @@ repository's releases on GitHub. What that address keeps, and for how long, is s
 
 On macOS, with Homebrew: `brew install reply-team/tap/jason`.
 
+Every macOS route on this page — the one-liner, Homebrew and the archive by hand — is for Apple silicon only: no
+build for an Intel Mac is published, so on an Intel Mac Homebrew answers "formula requires at least a URL",
+`install.sh` names the platforms it has, and the way to Jason today is another machine: Linux x64, Windows x64 or an
+Apple silicon Mac.
+
 Installing this way accepts the same licence. The package manager owns that installation: it updates it and takes it
 off, and `jason update apply` refuses it — it "would replace a file the package manager owns" — and names the
 manager's command. That command is typed between `jason runtime stop` and `jason runtime start`, because Homebrew's
@@ -177,6 +184,10 @@ To install without running a downloaded script, take the steps the script takes,
    mark of the web, and hands it to what it unpacks: `Unblock-File` the executable, as `install.ps1` does.
 4. Run `jason --version` there, by its full path. It prints the version you downloaded.
 5. Put that directory on the PATH, as *Putting it on the PATH yourself* above says: that is the act it marks.
+
+Once `jason --version` answers there, the archive, `checksums.txt` and the temporary directory you unpacked into
+have done their work: you may delete those three — only those — with `Remove-Item -Recurse <path>` on Windows and
+`rm -r <path>` elsewhere.
 
 ---
 
@@ -357,8 +368,10 @@ when you sign out. On Windows that is a logon task named for this account; on ma
 `ai.jason.runtime`; on Linux a `systemd --user` unit, `jason.service`. `jason runtime autostart status` says what
 is registered.
 
-That is the installation. [Its first run](golden-path.md) is a page of its own, and an agent that installed
-Jason starts it in the same session on one word from you.
+That is the installation. [The wiring check](golden-path.md) is a page of its own — your provider connected and
+proven with your own address — and an agent that installed Jason runs it in the same session on one word from you.
+The real work comes after it, and begins with a campaign planned with the business skills,
+[`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first, and worked by Jason's roles.
 
 ---
 

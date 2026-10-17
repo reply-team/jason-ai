@@ -78,13 +78,15 @@ The document declares a `preview`: one line its template renders from the compos
 as `summary`, ahead of everything else, with the values it highlights beside it under `highlights` — the address, the
 campaign, the start, the first touch and the collision policy:
 
-> Enroll Marta Alvarez (marta@example.com) in campaign Q3 LatAm founders at the provider: start at first_step, first
-> touch authored_delay, skip if they already take part. If the campaign is live there, its messages start going to
-> this person on that timing.
+> Enroll marta@example.com in the provider's campaign for Jason's campaign Q3 LatAm founders: start at first_step,
+> first touch authored_delay, skip if they already take part. If the provider's campaign is live, its messages start
+> going to this person on that timing.
 
-A value the input does not hold renders as `—`, and a line break inside a value renders as a space, so the summary is
-always one line. It is not part of what is approved: the subject carries the composed input, not the summary, so
-wording the summary differently never turns a pending decision into another one. The fixtures
+The person is named by the address the enrollment consumes, which every input holds, so a contact known only by an
+address reads like any other. Two campaigns are named apart: Jason's campaign by its own name, and the provider's
+campaign as the one this call enrolls into. A line break inside a value renders as a space, so the summary is always
+one line. It is not part of what is approved: the subject carries the composed input, not the summary, so wording the
+summary differently never turns a pending decision into another one. The fixtures
 [`fixtures/campaign.enroll/preview-*.json`](../fixtures/campaign.enroll) show each case.
 
 ## The properties
@@ -109,7 +111,7 @@ wording the summary differently never turns a pending decision into another one.
 | in a paused campaign | `waits` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
 | precondition | Ensure the provider's own contact exists before enrolling it: work by `contacts[0].external_ids.contact` when that pin is present, otherwise create the contact from the value of the channel named by `args.channel`, and return the provider's identifier under `external_ids.contact`. |
-| preview a person reads | `Enroll {/contacts/0/first_name} {/contacts/0/last_name} ({/contacts/0/channels/0/value}) in campaign {/campaign/name} at the provider: start at {/args/start/position}, first touch {/args/first_touch}, {/args/collision} if they already take part. If the campaign is live there, its messages start going to this person on that timing.`; highlighted: `/contacts/0/channels/0/value`, `/campaign/name`, `/args/start`, `/args/first_touch`, `/args/collision` |
+| preview a person reads | `Enroll {/contacts/0/channels/0/value} in the provider's campaign for Jason's campaign {/campaign/name}: start at {/args/start/position}, first touch {/args/first_touch}, {/args/collision} if they already take part. If the provider's campaign is live, its messages start going to this person on that timing.`; highlighted: `/contacts/0/channels/0/value`, `/campaign/name`, `/args/start`, `/args/first_touch`, `/args/collision` |
 | pinned identifiers | `contact` names a contact; `campaign` names a campaign |
 | recovery read | The per-item outcome of the prior run under this idempotency key, and the campaign's live state. |
 | after an ambiguous end | `after_recovery_read` — a later attempt performs the recovery read above and answers from it when the effect already happened |

@@ -1,0 +1,21 @@
+{
+  "operation": "campaign.create",
+  "version": 1,
+  "case": "the provider answered the create with a campaign already started, which is pinned so a person can find it",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "permanent",
+      "code": "campaign_not_draft",
+      "message": "The provider answered the create with a campaign that is not a draft.",
+      "details": null,
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "diagnostics": { "duration_ms": 410, "exec_calls": 2, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "permanent", "retriable": false, "pinned": { "campaign": "c_7714" } }
+}
