@@ -3,14 +3,29 @@ namespace Jason.App.Tests.Skills;
 public partial class InteractiveSkillTests
 {
     /// <summary>
-    /// A skill that teaches notifications and is verified is verified by the host that read it as it ships: the front
-    /// matter, the body and the catalog's bullet say so, the catalog's row names that host, and the pack's own rule holds
-    /// the row's digest to the text. The operating skill teaches them too, and is a draft until a host has read its new
-    /// install and update text; it returns here with the row that reading gives it.
+    /// The two skills that teach notifications are verified by the host that read them as they ship: the front matter,
+    /// the body and the catalog's bullet say so, the catalog's row for each names that host, and the pack's own rule
+    /// holds the row's digest to the text. The operating skill was read again after its text changed — a runtime stop
+    /// that cancels nothing in flight, and a ready installation handed on to the wiring check — so its row names that
+    /// later reading.
     /// </summary>
     [Theory]
     [InlineData("approvals-and-questions", "Claude Code 2.1.293 (claude-opus-5) | 0.5.0")]
-    public void The_skills_that_teach_notifications_are_verified_by_the_host_that_read_them(string name, string reading)
+    [InlineData("operating-the-installation", "Claude Code 2.1.301 (Opus 5.5) | 0.10.0")]
+    public void The_skills_that_teach_notifications_are_verified_by_the_host_that_read_them(string name, string reading) =>
+        IsVerifiedByTheHostThatReadIt(name, reading);
+
+    /// <summary>
+    /// The managed path teaches no notifications, so it is held on its own to the same rule: verified by the host that
+    /// read it as it ships. It was read again after it gained the paragraph that tells the wiring check from campaign
+    /// work, so its row names that later reading.
+    /// </summary>
+    [Theory]
+    [InlineData("managed-campaign-work", "Claude Code 2.1.301 (Opus 5.5) | 0.10.0")]
+    public void The_managed_path_is_verified_by_the_host_that_read_it(string name, string reading) =>
+        IsVerifiedByTheHostThatReadIt(name, reading);
+
+    private static void IsVerifiedByTheHostThatReadIt(string name, string reading)
     {
         var host = reading[..reading.IndexOf(" (", StringComparison.Ordinal)];
         Assert.Equal("verified", SkillFrontMatter.Read(SkillPack.Find(name).File).Metadata.GetValueOrDefault("status"));
