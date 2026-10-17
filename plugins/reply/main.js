@@ -5,6 +5,7 @@
 // This file knows operations and nothing about Reply; the operation modules know Reply and nothing about command
 // lines; `modules/cli.js` knows command lines and nothing about operations.
 import { campaignGet } from "./modules/campaign.js";
+import { campaignCreate } from "./modules/create.js";
 import { listMembershipAdd } from "./modules/membership.js";
 import { campaignEnroll } from "./modules/enroll.js";
 import { enrollmentList } from "./modules/enrollments.js";
@@ -18,6 +19,9 @@ export function invoke(operation, input, context) {
   switch (operation) {
     case "campaign.get":
       return campaignGet(input, context);
+
+    case "campaign.create":
+      return campaignCreate(input, context);
 
     case "list_membership.add":
       return listMembershipAdd(input, context);

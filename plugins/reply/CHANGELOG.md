@@ -3,6 +3,25 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.3.2
+
+- `campaign.create` makes the sequence a Jason campaign works with, so nobody has to make it at Reply by hand first. It
+  takes a name and nothing else, and the sequence it makes is a draft that holds nobody and has never been started.
+  Reply refuses a sequence with no step, so it is given one: a task for its owner, which reaches nobody even once the
+  sequence runs, and says it is to be replaced before the sequence is ever started. `steps_added` is 1. No schedule
+  and no sender are sent; Reply attaches the account's default schedule and default mailbox by itself, and the draft
+  still sends nothing. The sequence is pinned to the Jason campaign, so every later operation works by it.
+- Reply keeps no key on a sequence, so the name is what a repeat finds an earlier attempt's sequence by. Every attempt
+  lists the account's sequences to the end first and compares whole names, ignoring case. A first attempt that finds
+  the name taken makes nothing: `campaign_name_taken`, an archived holder included. Any attempt after the first takes
+  the one sequence of the name only when it is a draft that holds nobody, made no earlier than ten minutes before the
+  work item; anything else is `campaign_name_ambiguous`, for a person to decide. A Jason campaign already linked is refused before any call:
+  `campaign_already_linked`. The list is read to twenty thousand sequences at most; an account holding more makes
+  nothing, `provider_call_failed`, because whether the name is taken could not be decided.
+- The name never reaches a command line: the list is asked for every sequence, and the name travels in the create's
+  body, on stdin. Two raw calls join the contact search, `reply api /v3/sequences` to list and, with `POST`, to create:
+  reply-cli has no command that creates a sequence.
+
 ## 0.3.1
 
 - A person with no pin and no first name, whom Reply does not hold, is imported under a first name derived from what

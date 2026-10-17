@@ -237,9 +237,12 @@ public class ReplyErrorTableTests
             Assert.True(kind is "read" or "write", $"'{command}' is marked '{kind}', which decides nothing.");
         }
 
-        // The mark is per command, and the one raw call is a POST that only reads.
+        // The mark is per command: the contact search is a POST that only reads, and of the two calls on sequences the
+        // list reads and the create writes.
         Assert.Equal("write", Text(commands["sequence add-contact"]!.AsObject(), "kind"));
         Assert.Equal("read", Text(commands["api POST /v3/contacts/filter"]!.AsObject(), "kind"));
+        Assert.Equal("read", Text(commands["api GET /v3/sequences"]!.AsObject(), "kind"));
+        Assert.Equal("write", Text(commands["api POST /v3/sequences"]!.AsObject(), "kind"));
     }
 
     /// <summary>

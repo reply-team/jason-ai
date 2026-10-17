@@ -41,7 +41,7 @@ public class ContractDocumentTests
     {
         Assert.Equal(
             [
-                "campaign.activate", "campaign.enroll", "campaign.get", "campaign.pause", "conversation.get", "conversation.list",
+                "campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "conversation.get", "conversation.list",
                 "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record",
             ],
             OperationCatalog.All.Select(c => c.Id));

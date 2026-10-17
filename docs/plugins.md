@@ -625,8 +625,8 @@ document's `precondition` says what to do, and they differ on purpose:
   holds, never on a second contact made for them.
 - `enrollment.stop` never creates anybody: a person the provider does not hold takes part in nothing, which
   is a completed stop.
-- A write about a campaign — `campaign.pause`, `campaign.activate` — names no person, and has no contact to
-  find.
+- A write about a campaign — `campaign.create`, `campaign.pause`, `campaign.activate` — names no person, and has no
+  contact to find.
 
 Once a pin exists nobody matches that person by address again, which is what stops two spellings of one
 address becoming two people.
@@ -761,7 +761,7 @@ recorded rather than the one it disputes.
 
 ### The worked example
 
-`plugins/reply/` is the one to read: a marketplace package that implements all eleven published
+`plugins/reply/` is the one to read: a marketplace package that implements all twelve published
 operations against a real provider by driving that provider's own command-line program. Its README
 says what each operation maps onto, what the provider will not answer, and which of its claims were
 checked against a live account; its `modules/errors.js` is the whole error table written as data, so

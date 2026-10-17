@@ -32,10 +32,10 @@ public class ReplyPackageTests
         Assert.Equal(PluginStatus.Valid, plugin.Status);
         Assert.Empty(plugin.Problems);
         Assert.Equal(PluginKind.Provider, plugin.Kind);
-        Assert.Equal("0.3.1", plugin.Version);
+        Assert.Equal("0.3.2", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
         Assert.Equal(
-            ["campaign.activate", "campaign.enroll", "campaign.get", "campaign.pause", "conversation.get", "conversation.list", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record"],
+            ["campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "conversation.get", "conversation.list", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record"],
             plugin.Operations.Order());
 
         // Declaration is not permission, and this package declares nothing it does not use: one program, no
@@ -70,19 +70,20 @@ public class ReplyPackageTests
     }
 
     /// <summary>
-    /// Reply's endpoints are reply-cli's to know. The package names one, the contact search it makes for a person Reply
-    /// will not import, and no other: an endpoint named anywhere else in it would be a call that none of the CLI's own
-    /// guards — the read before a write, the retries, the one answer for an outcome it could not see — ever reach.
+    /// Reply's endpoints are reply-cli's to know. The package names two, each where reply-cli has no command for the
+    /// request: the contact search it makes for a person Reply will not import, and the sequences it lists and creates
+    /// for <c>campaign.create</c>. No other: an endpoint named anywhere else in it would be a call that none of the CLI's
+    /// own guards — the read before a write, the retries, the one answer for an outcome it could not see — ever reach.
     /// </summary>
     [Fact]
-    public void The_package_names_no_reply_endpoint_but_the_contact_search()
+    public void The_package_names_no_reply_endpoint_but_the_contact_search_and_the_sequences()
     {
         var named = Directory.GetFiles(ReplyPlugins.PackageSource, "*.js", SearchOption.AllDirectories)
             .SelectMany(file => Regex.Matches(File.ReadAllText(file), @"/v3/[A-Za-z0-9_\-/{}.]*").Select(match => match.Value.TrimEnd('.')))
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal);
 
-        Assert.Equal(["/v3/contacts/filter"], named);
+        Assert.Equal(["/v3/contacts/filter", "/v3/sequences"], named);
     }
 
     [Fact]
@@ -142,7 +143,7 @@ public class ReplyPackageTests
         Assert.Equal(FailureClass.Permanent, failed.Error.Class);
         Assert.Equal("campaign_not_found", failed.Error.Code);
         Assert.Equal(ReplyPlugins.PluginId, result.Provenance.PluginId);
-        Assert.Equal("0.3.1", result.Provenance.Version);
+        Assert.Equal("0.3.2", result.Provenance.Version);
     }
 
     /// <summary>
@@ -263,12 +264,20 @@ public class ReplyPackageTests
     }
 
     [Fact]
-    public void The_changelog_opens_with_0_3_1_and_the_rule()
+    public void The_changelog_opens_with_0_3_2_and_the_operation_it_adds()
     {
-        var changelog = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "CHANGELOG.md")).ReplaceLineEndings("\n");
-        var first = changelog.IndexOf("\n## ", StringComparison.Ordinal);
-        var next = changelog.IndexOf("\n## ", first + 1, StringComparison.Ordinal);
-        var section = changelog[first..next];
+        var section = ChangelogSection(0);
+
+        Assert.StartsWith("\n## 0.3.2\n", section, StringComparison.Ordinal);
+        Assert.Contains("`campaign.create`", section, StringComparison.Ordinal);
+        Assert.Contains("`campaign_name_taken`", section, StringComparison.Ordinal);
+        Assert.Contains("`campaign_name_ambiguous`", section, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_changelog_keeps_0_3_1_and_the_rule()
+    {
+        var section = ChangelogSection(1);
 
         Assert.StartsWith("\n## 0.3.1\n", section, StringComparison.Ordinal);
         Assert.Contains("`derive_first_name`", section, StringComparison.Ordinal);
@@ -287,6 +296,20 @@ public class ReplyPackageTests
         Assert.False(ReplyErrorTable.Own("optout.record").ContainsKey("first_name_derivation_forbidden"));
         Assert.True(ReplyErrorTable.Own("list_membership.add").ContainsKey("first_name_derivation_forbidden"));
         Assert.True(ReplyErrorTable.Own("campaign.enroll").ContainsKey("first_name_derivation_forbidden"));
+    }
+
+    /// <summary>The changelog's section at this position, newest first, from its heading up to the next one.</summary>
+    private static string ChangelogSection(int position)
+    {
+        var changelog = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "CHANGELOG.md")).ReplaceLineEndings("\n");
+        var start = changelog.IndexOf("\n## ", StringComparison.Ordinal);
+        for (var skipped = 0; skipped < position; skipped++)
+        {
+            start = changelog.IndexOf("\n## ", start + 1, StringComparison.Ordinal);
+        }
+
+        var next = changelog.IndexOf("\n## ", start + 1, StringComparison.Ordinal);
+        return changelog[start..next];
     }
 
     /// <summary>A page's text with every run of white space one space, so a sentence is found however it is wrapped.</summary>

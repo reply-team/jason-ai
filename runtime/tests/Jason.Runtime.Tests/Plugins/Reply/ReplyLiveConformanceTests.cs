@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Plugins.Invocation;
@@ -11,7 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>
-/// <c>campaign.get</c>, <c>list_membership.add</c> and <c>campaign.enroll</c> against a real Reply account, through
+/// <c>campaign.get</c>, <c>campaign.create</c>, <c>list_membership.add</c> and <c>campaign.enroll</c> against a real Reply account, through
 /// the real package, the real plugin host and the operator's own vendor CLI. It is the only test in this package
 /// that is not offline, and everything about it is arranged so that it cannot happen by accident: it runs only when
 /// an operator has named, in the environment, the account to act as and the one recipient it may touch, and it skips
@@ -82,7 +83,14 @@ public class ReplyLiveConformanceTests
     /// </summary>
     private const string NamelessLastKey = "JASON_LIVE_REPLY_NAMELESS_LAST";
 
+    /// <summary>
+    /// A made-up name for the draft sequence <c>campaign.create</c> makes, which the account must not hold yet. The run
+    /// leaves that draft behind on purpose; its operator deletes it after reading it at Reply.
+    /// </summary>
+    private const string DraftNameKey = "JASON_LIVE_REPLY_DRAFT_NAME";
+
     private const string CampaignGet = "campaign.get";
+    private const string CampaignCreate = "campaign.create";
     private const string MembershipAdd = "list_membership.add";
     private const string Enroll = "campaign.enroll";
     private const string EnrollmentList = "enrollment.list";
@@ -103,6 +111,9 @@ public class ReplyLiveConformanceTests
 
     private const string TheNameless =
         "It names a fresh address its operator controls, which Reply does not hold yet: the person a list add imports under a derived first name. Nothing is sent to it.";
+
+    private const string TheDraftName =
+        "It names the made-up name of the draft sequence this run makes, which the account must not hold yet. The draft holds nobody and is never started, so nothing is sent; the run leaves it for its operator to delete.";
 
     private const string TheParticipant =
         "It names, by Reply's contact identifier, a person already taking part in that sequence; the sequence must be one nobody has started.";
@@ -141,6 +152,57 @@ public class ReplyLiveConformanceTests
         Assert.Equal(sequence, outcome.ExternalIds!["campaign"]!.GetValue<string>());
 
         await AssertNothingLeakedAsync(api, address: null, result);
+    }
+
+    /// <summary>
+    /// What Reply makes of a create, which the stand-in cannot say: a sequence under a made-up name, answered as a draft
+    /// that holds nobody with the one step it needs, pinned, and read back through <c>campaign.get</c> as a draft. Then
+    /// the two other rows a live list decides: a first attempt at the same name is refused as taken, and a repeat after a
+    /// lost answer finds the draft this run made and answers it, making nothing. Nothing is enrolled and nothing is
+    /// started, so nothing is sent. The run leaves the draft behind on purpose; its operator deletes it at Reply.
+    /// </summary>
+    [Fact]
+    public async Task A_live_create_makes_an_empty_draft_pins_it_and_never_makes_a_second_of_its_name()
+    {
+        var profile = Require(ProfileKey, TheProfile);
+        var name = Require(DraftNameKey, TheDraftName);
+
+        await using var api = await StartAgainstTheMachineAsync(Ct);
+        var key = "wi_" + Ulid.NewUlid(DateTimeOffset.UtcNow);
+
+        var result = await InvokeAsync(api, CampaignCreate, CreateInput(name, key), profile, Ct);
+
+        var item = Assert.Single(Succeeded(CampaignCreate, result)["items"]!.AsArray())!.AsObject();
+        Assert.Equal("created", item["status"]!.GetValue<string>());
+        Assert.Equal("draft", item["state"]!.GetValue<string>());
+        Assert.Equal(0, item["enrolled"]!.GetValue<int>());
+        Assert.Equal(1, item["steps_added"]!.GetValue<int>());
+        var pin = item["campaign_external_id"]!.GetValue<string>();
+        Assert.Equal(pin, Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!["campaign"]!.GetValue<string>());
+
+        // What Reply holds now, read through the operation an agent would read it with.
+        var read = Succeeded(CampaignGet, await InvokeAsync(api, CampaignGet, CampaignGetInput(pin), profile, Ct));
+        Assert.Equal("draft", read["campaign"]!["status"]!.GetValue<string>());
+
+        // A first attempt at the name this run just gave is refused, and makes nothing.
+        var taken = Assert.IsType<InvocationOutcome.Failed>(
+            (await InvokeAsync(api, CampaignCreate, CreateInput(name, "wi_" + Ulid.NewUlid(DateTimeOffset.UtcNow)), profile, Ct)).Outcome);
+        Assert.Equal("campaign_name_taken", taken.Error.Code);
+
+        // A repeat of the first work item finds the draft it made — the one of the name, empty, made after the item —
+        // and answers it, making nothing.
+        var again = await InvokeAsync(api, CampaignCreate, CreateInput(name, key), profile, Ct, attempt: 2);
+        Assert.Equal(pin, Assert.Single(Succeeded(CampaignCreate, again)["items"]!.AsArray())!["campaign_external_id"]!.GetValue<string>());
+
+        // One create reached Reply, and the name reached no command line.
+        var commands = ExecArguments(api.Paths);
+        Assert.Equal(1, commands.Count(command => command.Contains("POST") && command.Contains("/v3/sequences")));
+        foreach (var argument in commands.SelectMany(command => command))
+        {
+            AssertAbsent("The draft's name", name, argument, "a command-line argument");
+        }
+
+        await AssertNothingLeakedAsync(api, address: null, result, again);
     }
 
     [Fact]
@@ -528,6 +590,23 @@ public class ReplyLiveConformanceTests
     {
         ["args"] = new JsonObject { ["campaign"] = new JsonObject { ["external_id"] = sequence } },
         ["campaign"] = Campaign(),
+    };
+
+    /// <summary>
+    /// A draft to make under the name the operator chose, for a Jason campaign linked to nothing yet. The key is the work
+    /// item's own identifier, whose moment is what a repeat holds the draft's creation to.
+    /// </summary>
+    private static JsonObject CreateInput(string name, string key) => new()
+    {
+        ["args"] = new JsonObject { ["name"] = name },
+        ["campaign"] = new JsonObject
+        {
+            ["id"] = CampaignId,
+            ["name"] = "Live conformance",
+            ["status"] = "draft",
+            ["external_ids"] = new JsonObject(),
+        },
+        ["idempotency_key"] = key,
     };
 
     private static JsonObject EnrollmentListInput(string sequence) => new()

@@ -235,6 +235,22 @@ public sealed class ReplyAccount : IDisposable
     }
 
     /// <summary>
+    /// When a planted sequence was created, written as a live account writes it: two fractional digits and an offset. A
+    /// sequence planted without one is answered as created long before any test's work item.
+    /// </summary>
+    public ReplyAccount CreatedAt(int sequence, DateTimeOffset at) =>
+        CreatedAt(sequence, at.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.ff'+00:00'", System.Globalization.CultureInfo.InvariantCulture));
+
+    /// <summary>The same, written exactly as given: another offset, another number of fractional digits.</summary>
+    public ReplyAccount CreatedAt(int sequence, string written)
+    {
+        var record = ReadArray(SequencesFile).OfType<JsonObject>().Single(existing => existing["id"]!.GetValue<int>() == sequence);
+        var changed = (JsonObject)record.DeepClone();
+        changed["created"] = written;
+        return Replace(SequencesFile, sequence, changed);
+    }
+
+    /// <summary>
     /// A planted sequence with no connected account to send from, so a start is refused. The stand-in keeps this
     /// under a key of its own and never shows it in an answer.
     /// </summary>
@@ -423,6 +439,13 @@ public sealed class ReplyAccount : IDisposable
             ["until"] = until,
             ["timeout_ms"] = capMs,
         });
+
+    /// <summary>
+    /// The next raw call to this method and path does everything it would have done, and then answers as reply-cli
+    /// answers a write whose answer never came back: nothing on stdout, <c>outcome.unknown</c> on stderr, exit 3.
+    /// </summary>
+    public ReplyAccount LosesTheOutcomeOf(string method, string path) =>
+        Script(new JsonObject { ["kind"] = "lost", ["method"] = method, ["path"] = path });
 
     /// <summary>The next raw call to this method and path takes this long before it answers.</summary>
     public ReplyAccount Hangs(string method, string path, int milliseconds) =>

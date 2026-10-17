@@ -9,9 +9,9 @@ using System.Text.Json.Nodes;
 
 /// <summary>
 /// One Reply account, held as a directory of JSON files: its contacts, lists, sequences, enrollments, opt-outs,
-/// statistics and threads. The work commands read and change those files (<c>Account.Commands.cs</c>), and the one raw
-/// call the official plugin still makes — the contact search — is answered here, in the shape a live account answered
-/// it.
+/// statistics and threads. The work commands read and change those files (<c>Account.Commands.cs</c>), and the raw calls
+/// the official plugin still makes — the contact search here, the list and the create of sequences in
+/// <c>Account.Sequences.cs</c> — are answered in the shape a live account answered them.
 /// </summary>
 /// <remarks>
 /// Nothing here touches the network or a shell, and nothing is written outside the account directory, so a test says
@@ -122,6 +122,20 @@ internal static partial class Account
                 }
 
                 return Number(instruction!, "exit_code");
+
+            case "lost":
+                // Everything the call would have done is done, and then the answer is gone: reply-cli says so of a
+                // write whose outcome it could not see, with nothing on stdout and exit 3.
+                Answer(root, method, path, body);
+                await Console.Error.WriteLineAsync(new JsonObject
+                {
+                    ["error"] = new JsonObject
+                    {
+                        ["code"] = "outcome.unknown",
+                        ["title"] = "The request may have reached Reply, but no answer came back.",
+                    },
+                }.ToJsonString());
+                return 3;
         }
 
         var (code, answer) = Answer(root, method, path, body);
@@ -166,7 +180,7 @@ internal static partial class Account
     }
 
     // -------------------------------------------------------------------------------------------------------
-    // The one raw call the official package still makes
+    // The raw calls the official package still makes
     // -------------------------------------------------------------------------------------------------------
 
     private static (int Code, JsonNode? Body) Answer(string root, string method, string path, string? body)
@@ -178,6 +192,8 @@ internal static partial class Account
         return (bare, method) switch
         {
             ("/v3/contacts/filter", "POST") => Filter(root, query, body),
+            ("/v3/sequences", "GET") => SequenceList(root, query),
+            ("/v3/sequences", "POST") => SequenceCreate(root, body),
             _ => (404, Problem(404, "Not Found", "route.notFound", $"This account answers no {method} {bare}.")),
         };
     }

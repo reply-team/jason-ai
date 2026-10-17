@@ -1,0 +1,16 @@
+{
+  "operation": "campaign.create",
+  "version": 1,
+  "case": "a name for the provider's campaign, for a Jason campaign linked to none yet",
+  "input": {
+    "args": { "name": "Q3 LatAm founders" },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "draft",
+      "external_ids": {}
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": "valid"
+}

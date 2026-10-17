@@ -1,0 +1,20 @@
+{
+  "operation": "campaign.create",
+  "version": 1,
+  "case": "an answer that holds no item says nothing about the campaign made, so the draft and the nobody it holds are never shown",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": { "items": [] },
+    "external_ids": { "campaign": "c_7714" },
+    "error": null,
+    "diagnostics": { "duration_ms": 640, "exec_calls": 2, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": false,
+    "invalid": [{ "pointer": "/items", "reason": "min_items" }]
+  }
+}

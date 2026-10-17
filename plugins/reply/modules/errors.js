@@ -13,9 +13,9 @@
 // names it, and every mapped code to a row that exists. There is no second copy of it anywhere. Keep editing them as
 // JSON.
 
-// Every command this package runs, and whether it is a read or a write. The one raw call is the contact search a list
-// add, an enrolment or an opt-out makes for a person who has no pin and no first name: a POST, and a read all the
-// same.
+// Every command this package runs, and whether it is a read or a write. The raw calls are the contact search a list
+// add, an enrolment or an opt-out makes for a person who has no pin and no first name — a POST, and a read all the
+// same — and the list and the create of sequences, for which reply-cli has no command.
 export const COMMANDS = {
   "sequence get": {
     "kind": "read",
@@ -23,7 +23,7 @@ export const COMMANDS = {
   },
   "sequence contacts": {
     "kind": "read",
-    "note": "One page of the people a sequence holds, and Reply's count of them: what enrollment.list answers from."
+    "note": "One page of the people a sequence holds, and Reply's count of them: what enrollment.list answers from, and the read campaign.create makes of a sequence an earlier attempt may have made, to see that it holds nobody."
   },
   "sequence stats": {
     "kind": "read",
@@ -40,6 +40,10 @@ export const COMMANDS = {
   "api POST /v3/contacts/filter": {
     "kind": "read",
     "note": "Reply's contact search by address: the lookup list_membership.add, campaign.enroll and optout.record make for a person with no pin and no first name. A POST, and a read all the same."
+  },
+  "api GET /v3/sequences": {
+    "kind": "read",
+    "note": "Reply's list of sequences, a thousand at a time and read to its end: the names campaign.create compares with the one it is to give, before it makes anything. The name is compared here and never put on a command line."
   },
   "sequence add-contact": {
     "kind": "write",
@@ -64,6 +68,10 @@ export const COMMANDS = {
   "contact opt-out": {
     "kind": "write",
     "note": "Sets Reply's opt-out flag for the person, creating them only when Reply holds nobody under the address."
+  },
+  "api POST /v3/sequences": {
+    "kind": "write",
+    "note": "Makes the sequence campaign.create answers with: a draft that holds nobody, with one task step for its owner. The name travels in the body, on stdin."
   }
 };
 
@@ -212,6 +220,38 @@ export const ROWS = {
     }
   },
   "per_operation": {
+    "campaign.create": {
+      "campaign_already_linked": {
+        "when": "The Jason campaign already carries this plugin's campaign pin. Decided before any call.",
+        "code": "campaign_already_linked",
+        "class": "validation",
+        "note": "This Jason campaign is linked to a Reply sequence already, so no other is made: a second would sit beside the first link. Work with the linked sequence, or make the new one for a new Jason campaign."
+      },
+      "campaign_name_taken": {
+        "when": "A first attempt, and Reply's list of sequences, read to its end, holds one whose name equals `args.name`, ignoring case. Nothing is made.",
+        "code": "campaign_name_taken",
+        "class": "validation",
+        "note": "Reply holds a sequence of this name already, so no second one is made, and the one there is not taken over. Choose another name, or link the sequence Reply holds with campaign.get."
+      },
+      "campaign_name_ambiguous": {
+        "when": "An attempt after the first, and Reply's sequences of the name, read to their end, are not exactly one sequence in the `new` state, not archived, created no earlier than the work item less ten minutes, and holding nobody: one is older, has been started or archived, or holds somebody, or there is more than one. Nothing is made.",
+        "code": "campaign_name_ambiguous",
+        "class": "permanent",
+        "note": "An earlier attempt of this work item may have made the sequence, and what Reply holds under the name does not say which sequence that is, so nothing more is made. Look at the sequences of this name at Reply; the attempt's trace says what was found. Link the one that is meant with campaign.get."
+      },
+      "campaign_not_draft": {
+        "when": "Reply answered the create with a sequence whose status is not `new`, or that is archived. Never expected; the sequence's identifier is pinned on the failure.",
+        "code": "campaign_not_draft",
+        "class": "permanent",
+        "note": "Reply made the sequence but answered it as started or archived rather than as a draft. It is linked, so it can be found: look at it at Reply before anything else is done with it."
+      },
+      "list_not_finished": {
+        "when": "Reply's list of sequences was read to its cap, twenty pages of a thousand, and said there were more. Nothing is made.",
+        "code": "provider_call_failed",
+        "class": "permanent",
+        "note": "Reply's list of sequences was read to twenty thousand, twenty pages of a thousand, and Reply said there were more, so whether the name is taken could not be decided, and nothing was made. Make the sequence at Reply and link it with campaign.get."
+      }
+    },
     "campaign.activate": {
       "campaign_not_found": {
         "when": "The CLI answered `sequence.not_found`, or an identifier that is not a Reply sequence number, refused without a call.",

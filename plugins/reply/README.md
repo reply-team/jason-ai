@@ -5,11 +5,12 @@ Reply CLI.
 
 ## What it does
 
-Eleven operations — the whole set this build publishes: six that write and five that only read.
+Twelve operations — the whole set this build publishes: seven that write and five that only read.
 
 | Operation | What it is at Reply |
 |---|---|
 | `campaign.get` | Reads one sequence: its name, its state, and Reply's own words for both. |
+| `campaign.create` | Makes the sequence a Jason campaign works with: a draft that holds nobody, with the one step Reply needs it to have, a task for its owner. A name Reply holds already is refused. |
 | `list_membership.add` | Puts one person on one of the account's contact lists. A person Reply holds as opted out is refused. |
 | `campaign.enroll` | Puts one person into a sequence. Into a live sequence, that is a send. A person already taking part is never moved or added again. |
 | `enrollment.list` | Reads one page of the people a sequence holds, and Reply's count of them. No address is returned. |
@@ -25,12 +26,15 @@ A campaign is a **sequence** at Reply and a person is a **contact**. Each operat
 for it — `reply sequence add-contact`, `reply inbox list` and the rest, listed under
 [Which command it was](#which-command-it-was) — and translates: the operation's input into the command's arguments,
 the command's result into the operation's answer, and the CLI's error code into the operation's failure. Which of
-Reply's endpoints to call, in what order, and how to tell its answers apart is the CLI's to know.
+Reply's endpoints to call, in what order, and how to tell its answers apart is the CLI's to know. Where the CLI has
+no command for a request — the contact search, and the list and the create of sequences `campaign.create` makes —
+the package makes the CLI's raw call, `reply api`, itself.
 
 **The CLI owns the credential, and Jason never sees it.** Signing in is something you do in your own
 shell, and what it leaves behind stays in the CLI's own profile store: this package declares no
 environment variable, is granted no key, passes none on a command line and reads none. Nothing about a
-person reaches an argument either — a person's details travel on stdin — so what `~/.jason/logs/` records
+person reaches an argument either — a person's details travel on stdin, and so does the name a sequence is given —
+so what `~/.jason/logs/` records
 of a call is the command line, which carries only Reply's identifiers and flags, the exit code and how long it took.
 
 ## What you need
@@ -200,17 +204,19 @@ route's binding names them.
 | Command | Mark | What it is for |
 |---|---|---|
 | `sequence get <sequence>` | read | The sequence as Reply holds it: what `campaign.get` answers from, and the read `enrollment.stop` makes of a campaign it names for the first time. |
-| `sequence contacts <sequence> --limit --offset` | read | One page of the people a sequence holds, and Reply's count of them: what `enrollment.list` answers from. |
+| `sequence contacts <sequence> --limit --offset` | read | One page of the people a sequence holds, and Reply's count of them: what `enrollment.list` answers from, and the read `campaign.create` makes of a sequence an earlier attempt may have made, to see that it holds nobody. |
 | `sequence stats <sequence> --preset`, or `--from --to` | read | A sequence's counts over one window: what `engagement.summarize` answers from. |
 | `inbox list --contact-id` or `--sequence-id`, `--source --since --limit --offset` | read | One page of one of Reply's thread buckets, by person or by sequence: what `conversation.list` answers from — the inbox alone for `inbound`, the inbox and the sent threads merged for `all`. |
 | `inbox get <thread> --limit --offset` | read | One thread, its subject, and one page of its messages: what `conversation.get` answers from. |
 | `api /v3/contacts/filter --method POST --body -` | read | Reply's contact search by address: the lookup `list_membership.add`, `campaign.enroll` and `optout.record` make for a person with no pin and no first name. A `POST`, and a read all the same. |
+| `api /v3/sequences?top=1000&skip=<n>` | read | Reply's list of sequences, a thousand at a time and read to its end: the names `campaign.create` compares with the one it is to give, before it makes anything. The name is compared by the package and never put on the command line. |
 | `sequence add-contact <sequence>` with `--contact-id` or `--contact -`, `[--start-step] [--ignore-step-delay]` | write | Puts the person into the sequence, importing them first when they are given by their details. Into a live sequence, a send. |
 | `sequence remove-contact <sequence>` with `--contact-id` or `--contact -` | write | Takes the person out of the sequence; their history stays. It never creates anybody. |
 | `sequence pause <sequence>` | write | Pauses the sequence. |
 | `sequence start <sequence> --expect-contacts <n>` | write | Starts the sequence, or resumes a paused one, only while it holds the population a person approved. Step 1 goes to everybody enrolled, so it is a send. |
 | `contact-list add-contact <list>` with `--contact-id` or `--contact -`, `--refuse-opted-out` | write | Puts the person on the list, importing them first when they are given by their details, and refuses a person Reply holds as opted out. |
 | `contact opt-out` with `--contact-id` or `--contact -` | write | Sets Reply's opt-out flag for the person, creating them only when Reply holds nobody under the address. This package never clears it. |
+| `api /v3/sequences --method POST --body -` | write | Makes the sequence `campaign.create` answers with: the name and one task step, in the body on stdin. |
 
 ### Endings every operation can meet
 
@@ -218,7 +224,7 @@ route's binding names them.
 |---|---|---|---|
 | The CLI could not be started at all, so nothing was sent. | `provider_call_failed` | permanent | Install the CLI where the runtime can find it, check that the grant names it, reload. |
 | The CLI refused the call before making it: its own usage error. | `provider_call_failed` | permanent | Nothing reached the account and a repeat builds the same call. Report it: either this package or the CLI's surface has moved. |
-| Reply could not be reached, or a read failed after the CLI's own retries (`reply.unavailable`); or a **read** timed out, exited without an error the CLI explained, or printed something that is not a result; or a read made as part of a write — the contact search before a list add or an enrolment, the sequence read before a stop — was cut off at `Plugins:Exec:OutputBytes`. | `provider_unavailable` | transient | Nothing. Nothing changed at Reply — the CLI never resends a write — so the attempt is repeated. |
+| Reply could not be reached, or a read failed after the CLI's own retries (`reply.unavailable`); or a **read** timed out, exited without an error the CLI explained, or printed something that is not a result; or a read made as part of a write — the contact search before a list add or an enrolment, the sequence read before a stop, the list of sequences before a create — was cut off at `Plugins:Exec:OutputBytes`. | `provider_unavailable` | transient | Nothing. Nothing changed at Reply — the CLI never resends a write — so the attempt is repeated. |
 | Reply is still activating the sequence (`sequence.busy`). | `provider_unavailable` | transient | Nothing. The attempt is repeated once Reply has had time to finish. |
 | A **write**'s outcome is unknown: the CLI answered `outcome.unknown`, or the write timed out, exited without an error the CLI explained, printed something that is not a result, or had its answer cut off at `Plugins:Exec:OutputBytes`. | `provider_answer_lost` | ambiguous | Where the operation's contract says a repeat is safe, the runtime repeats it; otherwise the item stops for a person. Look at the account — the contact, the list, the sequence — and decide; a blind repeat can create somebody twice or send to them twice. Whatever the attempt had learned, the CLI's own identifiers included, travels with the failure, so there are identifiers to look by. |
 | The profile is not signed in, Reply refused the credential (`access.denied`), or Reply says the account lacks a feature where the operation has no code of its own for that (`access.feature_unavailable`). | `unauthorized` | permanent | Sign that profile in again, or issue a key carrying the scope the call needs. |
@@ -240,6 +246,31 @@ A call cut off sooner is one the package hears about, and it answers from the tw
 | Reply's answer was longer than this installation lets a plugin read from a program (`Plugins:Exec:OutputBytes`), so it was cut off. | `provider_answer_too_large` | permanent | Raise `Plugins:Exec:OutputBytes`. The same read would be cut at the same place, so it is not repeated. |
 
 This operation is one read and nothing else, so the ambiguous ending above cannot arise for it.
+
+### `campaign.create`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The Jason campaign already carries this plugin's campaign pin. Nothing is called. | `campaign_already_linked` | validation | Work with the sequence it is linked to, or make the new one for a new Jason campaign: a second would sit beside the first link. |
+| A first attempt, and Reply holds a sequence whose whole name is this one, ignoring case. Nothing is made. | `campaign_name_taken` | validation | Choose another name, or link the sequence Reply holds with `campaign.get`. |
+| An attempt after a lost answer, and Reply's sequences of the name are not exactly one draft that holds nobody, made no earlier than the work item less ten minutes: one is older, has been started or archived, or holds somebody, or there are more. Nothing is made. | `campaign_name_ambiguous` | permanent | Look at the sequences of this name at Reply — the trace says what was found — and link the one that is meant with `campaign.get`. |
+| Reply answered the create with a sequence started or archived. Never expected; the sequence is pinned so it can be found. | `campaign_not_draft` | permanent | Look at the sequence at Reply before anything else is done with it. |
+| The list of sequences was read to its cap, twenty thousand — twenty pages of a thousand — and Reply said there were more. Nothing is made. | `provider_call_failed` | permanent | Make the sequence at Reply and link it with `campaign.get`. |
+
+Every attempt lists the account's sequences first, a thousand at a time to the end, and compares whole names with
+the one it is to give, ignoring case: Reply's own filter matches part of a name, and would put the name on the command
+line. A name that is free is given to a new sequence with one step, a task for its owner — "Added because a sequence
+needs one step to exist; replace it before this sequence is ever started." — because Reply refuses a sequence with
+none; `steps_added` is 1. No schedule, no sender and no settings are sent. Reply attaches the account's default
+schedule and default mailbox by itself, even when an empty list of mailboxes is sent; the draft still sends nothing: it
+is never started here, it holds nobody, and its one step is a task for its owner. Starting it is `campaign.activate`,
+which waits for a person.
+
+Reply keeps no key on a sequence, so after a lost answer the name is what finds the sequence the earlier attempt made.
+The package cannot tell why an earlier attempt ended, so any attempt after the first takes the sequence only when it is
+the one sequence of the name, in Reply's `new` state, not archived, created no earlier than ten minutes before the
+moment the work item's identifier carries, and holding nobody — `sequence contacts` reads one person to tell. Finding
+none, it makes one; finding anything else, it makes nothing and fails `campaign_name_ambiguous`.
 
 ### `enrollment.list`
 
@@ -414,6 +445,13 @@ before it runs, and its work waits while its Jason campaign is paused.
   it no longer holds with the same answer as for a person who takes no part, so `enrollment.stop` answers
   `already_stopped`. A sequence Reply no longer holds is told apart: the CLI reads it, and the stop fails
   `campaign_not_found`. The reason for a stop is Jason's record; Reply holds none.
+- **A sequence's name is its only key, and one race is left.** Reply accepts two sequences of one name and keeps no
+  key on either, so `campaign.create` refuses a name it finds taken rather than make a second. A sequence somebody
+  makes under the same name between the list and the create is a race Reply offers no way to close. And any attempt
+  after the first — whatever ended the one before, a list that failed included, when nothing was made — takes the one
+  sequence of the name for the one its earlier attempt made, whoever made it, when it is an empty draft made at any
+  moment from ten minutes before the work item was made up to that attempt, which can be hours later for work that
+  waited.
 - **The count and the start are two calls.** The CLI reads Reply's count, compares it with the population the person
   approved, and then starts the sequence. Somebody enrolled in between is a race Reply offers no way to close: the
   start is not conditional on a count.

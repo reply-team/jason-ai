@@ -5,8 +5,8 @@
 //
 // It stands in for the program from the outside: each work command prints what reply-cli 0.11.0 documents — its
 // result as JSON on stdout, or one `{"error":…}` line on stderr with exit 1, 2 or 3 — from a small record of what the
-// account holds, so a test can plant a world and read back what happened. It never imitates Reply's API; the one raw
-// call it still answers is the contact search, the one the plugin still makes. A flag this program does not know is a
+// account holds, so a test can plant a world and read back what happened. It never imitates Reply's API beyond the raw
+// calls the plugin still makes: the contact search, and the list and the create of sequences. A flag this program does not know is a
 // usage error, so a plugin that reached for `--api-key`, `--verbose`, `--user-id`, `--user-email`, `--pretty` or
 // `--idempotency-key` fails here, before any assertion about the argument vector runs. Which account it works in is
 // never on the command line: it finds its store the way the real CLI does, from the platform's own configuration
@@ -80,7 +80,7 @@ var rest = args[index..];
 var stdin = Commands.ReadsStdin(rest) ? await Console.In.ReadToEndAsync() : null;
 return await Account.RunCommandAsync(profile, command, rest, stdin, args);
 
-// `api <path> [--method <verb>] [--body -]`: the raw call, kept for the one request the plugin still makes that way.
+// `api <path> [--method <verb>] [--body -]`: the raw call, kept for the requests the plugin still makes that way.
 static async Task<int> ApiAsync(string profile, string[] args, int index)
 {
     if (index >= args.Length)
