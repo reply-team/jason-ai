@@ -168,8 +168,9 @@ public sealed record SkillsRecord(int Version, IReadOnlyList<SkillsDeployment> P
     /// <summary>Whether a path a record names is a file under its root, spelled the way this product spells one.</summary>
     private static bool Inside(string root, string path)
     {
+        // A NUL names no file on any platform, and resolving one throws rather than answering, past every reader's catch.
         if (path.Length == 0 || path.StartsWith('/') || path.Contains('\\', StringComparison.Ordinal) || path.Contains(':', StringComparison.Ordinal)
-            || path.Split('/').Any(segment => segment == ".."))
+            || path.Contains('\0', StringComparison.Ordinal) || path.Split('/').Any(segment => segment == ".."))
         {
             return false;
         }

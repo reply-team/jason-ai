@@ -22,7 +22,8 @@ namespace Jason.Cli;
 /// </para>
 /// <para>
 /// <c>skills</c> and <c>update</c> are nouns with no operation behind them either. Both change this
-/// installation — fetching, verifying and copying files on this machine, or replacing the executable — which
+/// installation — fetching, verifying and copying files on this machine, or replacing the executable and
+/// redeploying the recorded skills — which
 /// the runtime neither performs nor is asked about. <c>Operations</c> carries no <c>skills.*</c> and no
 /// <c>update.*</c>, and saying the map is one-to-one with one exception was false of two more.
 /// </para>

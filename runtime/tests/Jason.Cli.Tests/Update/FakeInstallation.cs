@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Jason.Cli;
 using Jason.Cli.Process;
+using Jason.Cli.Skills;
 using Jason.Cli.Tests.Process;
 using Jason.Cli.Update;
 using Jason.Contracts.Api;
@@ -79,8 +80,9 @@ public sealed class FakeInstallation : HttpMessageHandler
         Out = new StringWriter();
         Error = new StringWriter();
         // Including which file this installation is installed as. A verb that worked that out for itself here
-        // would work out the test host, and replace it.
-        Env = new CliEnvironment(Out, Error, Paths, this, null, Processes, InstallPath);
+        // would work out the test host, and replace it. And where its agent harnesses are: a home directory of its
+        // own, with none in it, so the skills an update redeploys are only ever ones a test put there.
+        Env = new CliEnvironment(Out, Error, Paths, this, null, Processes, InstallPath, Harnesses: HarnessLocators.ForHome(Path.Combine(_tree.Root, "home")));
     }
 
     public SemanticVersion From { get; }

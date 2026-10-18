@@ -131,6 +131,40 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// And §4 says that the apply itself redeploys the skills, and what an update applied by an older build still needs:
+    /// "after an update, run status" alone told every updater to repair by hand what the apply now does.
+    /// </summary>
+    [Fact]
+    public void The_install_page_says_the_apply_redeploys_the_skills_and_what_an_older_build_s_update_needs()
+    {
+        var teach = Flat(Section(Page("docs", "INSTALL.md"), "## 4. "));
+
+        Assert.Contains(
+            "`jason update apply` ends by running `jason skills update` at the new release's tag; an update applied by a build before 0.12.0 needs one `jason skills update` after it.",
+            teach,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "A package manager's upgrade does not run `jason update apply`, so `jason skills update` follows it.",
+            teach,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The README is the page a person on an older build reads before typing that build's own <c>jason update apply</c>,
+    /// so it says what that update still needs, as the two pages behind it do.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_what_an_update_applied_by_an_older_build_needs()
+    {
+        var readme = Flat(Page("README.md"));
+
+        Assert.Contains(
+            "an update applied by a build before 0.12.0 needs one `jason skills update` after it",
+            readme,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Six names have no API operation behind them — <c>status</c>, <c>uninstall</c>, <c>logs</c> and <c>doctor</c>,
     /// and the <c>skills</c> and <c>update</c> nouns — and no page says two, or the four it said before the two verbs
     /// that read the installation's files arrived.

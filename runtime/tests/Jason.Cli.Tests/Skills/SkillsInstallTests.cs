@@ -76,6 +76,29 @@ public class SkillsInstallTests
         Assert.Contains("this runtime did not answer", output.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A descriptor no client can be made from — an address that is not one, or none at all — is a runtime that did not
+    /// answer, as one that is not listening is. It reached the verb's last-resort handler instead, so an install exited 1
+    /// over a question it asks only to pick a cap, and <c>jason update apply</c>, which runs the same code after its
+    /// update is complete, reported a finished update as refused.
+    /// </summary>
+    [Theory]
+    [InlineData("not an address")]
+    [InlineData(null)]
+    [InlineData("ftp://127.0.0.1:1/")]
+    public async Task A_descriptor_no_client_can_be_made_from_is_a_runtime_that_did_not_answer(string? address)
+    {
+        using var dir = new TempPaths();
+        var source = Source(dir);
+        dir.WriteDescriptor(new Jason.Contracts.Discovery.RuntimeDescriptor("v1", "0.1.0", "rt_X", 1, address!, "tok", DateTimeOffset.UnixEpoch));
+        var (env, output, error) = Machine(dir);
+
+        var exit = await CliApp.RunAsync(["skills", "install", "--source", source, "--root", Harness(dir)], env, Ct);
+
+        Assert.True(exit == ExitCodes.Success, $"The install exited {exit} over a descriptor naming '{address}': {error}");
+        Assert.Contains("1048576 bytes, the documented default", output.ToString(), StringComparison.Ordinal);
+    }
+
     /// <summary>The roots are printed before anything is written, in every mode and not only under --dry-run.</summary>
     [Fact]
     public async Task The_target_roots_are_printed_before_the_first_byte_is_written()

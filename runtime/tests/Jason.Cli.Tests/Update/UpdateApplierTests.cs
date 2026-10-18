@@ -258,7 +258,7 @@ public class UpdateApplierTests
 
         // No runtime was ever started here, so the drain and the stop are the sentences that used to hide.
         Assert.Equal(
-            ["staged", "drained", "stopped", "kept", "swapped", "started", "healthy", "complete"],
+            ["staged", "drained", "stopped", "kept", "swapped", "started", "healthy", "complete", "skills"],
             applier.Steps.Select(step => step.Split(':')[0]));
         Assert.All(applier.Steps, step => Assert.Contains(": ", step, StringComparison.Ordinal));
     }

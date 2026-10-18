@@ -297,6 +297,47 @@ public class SkillsUpdateTests
     }
 
     /// <summary>
+    /// A skill whose replacement is refused leaves its pack's record at the source, ref and commit the old tree came from.
+    /// The record went to the new ref with that skill's old files under it, so it said the pack was current while one of
+    /// its skills was the tree before: the next <c>jason status</c> named no repair, and the next update found nothing
+    /// to move, after a command that had said nothing was changed for that skill.
+    /// </summary>
+    [Fact]
+    public async Task A_refused_replacement_leaves_its_pack_s_record_at_the_ref_the_old_tree_came_from()
+    {
+        using var dir = new TempPaths();
+        var origin = await TaggedSource.CreateAsync(dir, Ct, "v1.2.3", "v1.2.4");
+        Assert.Equal(ExitCodes.Success, (await AtBuildAsync(dir, "1.2.3", ["skills", "install", "--source", origin, "--root", Harness(dir)])).Exit);
+        var researcher = Path.Combine(dir.Paths.RoleSkillsDirectory, "researcher", "SKILL.md");
+        var before = Assert.Single(Jason.Contracts.Skills.SkillsRecord.Read(dir.Paths.RoleSkillsDirectory)!.Packs);
+
+        // Where the role root's trees are put together, taken by a file: every replacement there is refused, on every
+        // platform, and the harness root, which puts its own together elsewhere, is not.
+        await File.WriteAllTextAsync(dir.Paths.SkillsStagingDirectory, "in the way", Ct);
+        var refused = await AtBuildAsync(dir, "1.2.4", ["skills", "update", "--root", Harness(dir)]);
+
+        Assert.True(refused.Exit == ExitCodes.ApiError, $"The update exited {refused.Exit} with a replacement refused: {refused.Error}");
+        Assert.Contains("'researcher' could not be written", refused.Error, StringComparison.Ordinal);
+        Assert.Contains(TaggedSource.Body("v1.2.3"), await File.ReadAllTextAsync(researcher, Ct), StringComparison.Ordinal);
+        var roles = Assert.Single(Jason.Contracts.Skills.SkillsRecord.Read(dir.Paths.RoleSkillsDirectory)!.Packs);
+        Assert.True(
+            roles.Ref == "v1.2.3",
+            $"The role root's record names {roles.Ref} at {roles.Commit} while its researcher is still the v1.2.3 tree.");
+        Assert.True(
+            roles.Commit == before.Commit && roles.Source == before.Source,
+            $"The role root's record names {roles.Source} at {roles.Commit}; the tree on disk came from {before.Source} at {before.Commit}.");
+        Assert.All(Jason.Contracts.Skills.SkillsRecord.Read(Harness(dir))!.Packs, pack => Assert.Equal("v1.2.4", pack.Ref));
+
+        // And the next update finds it behind and moves it, which a record already at the new ref would not have.
+        File.Delete(dir.Paths.SkillsStagingDirectory);
+        var retried = await AtBuildAsync(dir, "1.2.4", ["skills", "update", "--root", Harness(dir)]);
+
+        Assert.True(retried.Exit == ExitCodes.Success, retried.Error);
+        Assert.Contains(TaggedSource.Body("v1.2.4"), await File.ReadAllTextAsync(researcher, Ct), StringComparison.Ordinal);
+        Assert.All(Deployments(dir), deployment => Assert.Equal("v1.2.4", deployment.Ref));
+    }
+
+    /// <summary>
     /// A development build keeps the record's ref, and says why: the ref it carries names the release it is on its way
     /// to, which is not published yet, so moving to it would be a fetch that fails.
     /// </summary>

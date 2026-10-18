@@ -186,8 +186,9 @@ jason update status
 
 `check` downloads and installs nothing; it asks the feed and prints the answer. `apply` performs the update —
 download, drain, stop, swap, start, health check — driven by a ledger written before each step, so a machine
-that dies half-way is finished or put back by the next run. `status` says where one stands, and reads the
-ledger without needing a runtime.
+that dies half-way is finished or put back by the next run, and it ends by redeploying the skills this machine
+recorded at the new release's tag; an update applied by a build before 0.12.0 needs one `jason skills update` after
+it. `status` says where one stands, and reads the ledger without needing a runtime.
 
 ### Can this installation start work?
 

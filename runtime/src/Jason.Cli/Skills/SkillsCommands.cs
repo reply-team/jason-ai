@@ -62,15 +62,23 @@ public static class SkillsCommands
             update.Options.Add(option);
         }
 
-        update.SetAction((parse, cancellationToken) => UpdateAsync(
+        update.SetAction(async (parse, cancellationToken) => (await UpdateAsync(
             env,
             new InstallOptions(null, null, parse.GetValue(root), parse.GetValue(host), parse.GetValue(pack), parse.GetValue(dryRun), parse.GetValue(force), RolesOnly: false),
-            cancellationToken));
+            cancellationToken).ConfigureAwait(false)).Exit);
 
         return update;
     }
 
-    private static async Task<int> UpdateAsync(CliEnvironment env, InstallOptions options, CancellationToken cancellationToken)
+    /// <summary>
+    /// <c>jason skills update</c> as it is typed with no options: every recorded root, the detected harnesses' and the
+    /// runtime's own, from the source each record names. The verb's own body, not a second one: <c>jason update apply</c>
+    /// runs it as the build it has just installed, so the same deployment is repeated at that build's tag.
+    /// </summary>
+    internal static Task<SkillsUpdateOutcome> UpdateRecordedAsync(CliEnvironment env, CancellationToken cancellationToken) =>
+        UpdateAsync(env, new InstallOptions(null, null, null, null, null, DryRun: false, Force: false, RolesOnly: false), cancellationToken);
+
+    private static async Task<SkillsUpdateOutcome> UpdateAsync(CliEnvironment env, InstallOptions options, CancellationToken cancellationToken)
     {
         IReadOnlyList<HarnessRoot> harnesses;
         try
@@ -80,7 +88,7 @@ public static class SkillsCommands
         catch (SkillsRefused refused)
         {
             env.Error.WriteLine(refused.Message);
-            return ExitCodes.ApiError;
+            return new SkillsUpdateOutcome(ExitCodes.ApiError, [], NothingRecorded: false);
         }
 
         // The role root is Jason's own and is never detected, but it is a root a deployment wrote into and so
@@ -104,7 +112,7 @@ public static class SkillsCommands
             catch (SkillsRecordUnreadable unreadable)
             {
                 env.Error.WriteLine(unreadable.Message);
-                return ExitCodes.ApiError;
+                return new SkillsUpdateOutcome(ExitCodes.ApiError, [], NothingRecorded: false);
             }
 
             foreach (var pack in (record?.Packs ?? []).GroupBy(deployment => deployment.Pack, StringComparer.Ordinal))
@@ -128,19 +136,21 @@ public static class SkillsCommands
         if (groups.Count == 0)
         {
             env.Error.WriteLine("Nothing here was installed by Jason, so there is nothing to update. Run 'jason skills install' first.");
-            return ExitCodes.ApiError;
+            return new SkillsUpdateOutcome(ExitCodes.ApiError, [], NothingRecorded: true);
         }
 
         var exit = ExitCodes.Success;
+        var carried = new List<SkillsUpdateGroup>();
         foreach (var ((source, reference, overridden, pack), members) in groups)
         {
             var (pin, why) = UpdatePin(env, source, reference, overridden);
-            env.Out.WriteLine($"Updating {pack} in {string.Join(", ", members)} from {source}{why}");
+            var updating = $"{pack} in {string.Join(", ", members)} from {source}{why}";
+            env.Out.WriteLine($"Updating {updating}");
 
             // The line and staging are handed the same ref, decided once, above. Passing null where the record did
             // not override let staging re-derive this build's pin on its own, so on a runtime upgraded since the
             // install the line said "at v0.1.0, as the record names it" and the plan underneath it described v0.2.0.
-            var carried = await DeployAsync(
+            var (deployed, said, refused) = await DeployAsync(
                     env,
                     options with { Source = source, Ref = pin, RecordedOverride = overridden, Pack = pack },
                     [.. harnesses.Where(harness => members.Contains(harness.Directory, StringComparer.OrdinalIgnoreCase))],
@@ -148,10 +158,11 @@ public static class SkillsCommands
                     members.Contains(roleRoot, StringComparer.OrdinalIgnoreCase))
                 .ConfigureAwait(false);
 
-            exit = exit == ExitCodes.Success ? carried : exit;
+            carried.Add(new SkillsUpdateGroup(pack, members, deployed, $"{updating} {said}".TrimEnd(), refused));
+            exit = exit == ExitCodes.Success ? deployed : exit;
         }
 
-        return exit;
+        return new SkillsUpdateOutcome(exit, carried, NothingRecorded: false);
     }
 
     /// <summary>
@@ -258,7 +269,7 @@ public static class SkillsCommands
                 return ExitCodes.Usage;
             }
 
-            return await DeployAsync(env, options with { Pack = SkillPacks.Runtime }, [], cancellationToken).ConfigureAwait(false);
+            return (await DeployAsync(env, options with { Pack = SkillPacks.Runtime }, [], cancellationToken).ConfigureAwait(false)).Exit;
         }
 
         IReadOnlyList<HarnessRoot> harnesses;
@@ -272,7 +283,7 @@ public static class SkillsCommands
             return ExitCodes.ApiError;
         }
 
-        return await DeployAsync(env, options, harnesses, cancellationToken).ConfigureAwait(false);
+        return (await DeployAsync(env, options, harnesses, cancellationToken).ConfigureAwait(false)).Exit;
     }
 
     /// <summary>
@@ -283,8 +294,19 @@ public static class SkillsCommands
     /// Whether the runtime's own role root is deployed into. Always for an install; for an update, only where that
     /// root's record names the source being deployed from.
     /// </param>
-    private static async Task<int> DeployAsync(CliEnvironment env, InstallOptions options, IReadOnlyList<HarnessRoot> harnesses, CancellationToken cancellationToken, bool withRoles = true)
+    private static async Task<(int Exit, string Said, string Refused)> DeployAsync(CliEnvironment env, InstallOptions options, IReadOnlyList<HarnessRoot> harnesses, CancellationToken cancellationToken, bool withRoles = true)
     {
+        // Every line a refusal is said in goes to stderr as it always has, and is kept, so a caller reporting this one
+        // deployment among several can say which of them refused, and why.
+        var refused = new List<string>();
+        void Refuse(string line)
+        {
+            env.Error.WriteLine(line);
+            refused.Add(line);
+        }
+
+        string Refusal() => string.Join(' ', refused);
+
         StagedSource staged;
         try
         {
@@ -292,16 +314,16 @@ public static class SkillsCommands
         }
         catch (SkillsSourceUnavailable unavailable)
         {
-            env.Error.WriteLine(unavailable.Message);
-            return ExitCodes.ApiError;
+            Refuse(unavailable.Message);
+            return (ExitCodes.ApiError, string.Empty, Refusal());
         }
 
         if (options.Pack is { } only && !SkillPacks.All.Contains(only, StringComparer.OrdinalIgnoreCase))
         {
             // A misspelled pack installed nothing and exited 0, while a misspelled --host refused. Silence
             // and success is the worst answer to a typo: the operator believes the deployment happened.
-            env.Error.WriteLine($"'{only}' is not a pack this build ships. They are: {string.Join(", ", SkillPacks.All)}.");
-            return ExitCodes.ApiError;
+            Refuse($"'{only}' is not a pack this build ships. They are: {string.Join(", ", SkillPacks.All)}.");
+            return (ExitCodes.ApiError, string.Empty, Refusal());
         }
 
         var (cap, fromRuntime) = await CapAsync(env, cancellationToken).ConfigureAwait(false);
@@ -315,15 +337,15 @@ public static class SkillsCommands
         {
             foreach (var refusal in plan.Refusals)
             {
-                env.Error.WriteLine(refusal);
+                Refuse(refusal);
             }
 
-            return ExitCodes.ApiError;
+            return (ExitCodes.ApiError, string.Empty, Refusal());
         }
 
         if (options.DryRun)
         {
-            return ExitCodes.Success;
+            return (ExitCodes.Success, string.Empty, string.Empty);
         }
 
         var report = SkillsDeployer.Apply(plan, env.Paths, options.Force, TimeProvider.System);
@@ -341,14 +363,15 @@ public static class SkillsCommands
 
         foreach (var problem in report.Problems)
         {
-            env.Error.WriteLine(problem);
+            Refuse(problem);
         }
 
-        env.Out.WriteLine(report.Written == 0 && report.Problems.Count == 0
+        var said = report.Written == 0 && report.Problems.Count == 0
             ? string.Create(CultureInfo.InvariantCulture, $"Already current: nothing to write ({report.Unchanged} files already in place).")
-            : string.Create(CultureInfo.InvariantCulture, $"Written: {report.Written} files, {report.Unchanged} already in place."));
+            : string.Create(CultureInfo.InvariantCulture, $"Written: {report.Written} files, {report.Unchanged} already in place.");
+        env.Out.WriteLine(said);
 
-        return report.Succeeded ? ExitCodes.Success : ExitCodes.ApiError;
+        return (report.Succeeded ? ExitCodes.Success : ExitCodes.ApiError, said, Refusal());
     }
 
     /// <summary>Where the interactive packs go. <c>--root</c> replaces detection rather than narrowing it.</summary>
@@ -403,7 +426,9 @@ public static class SkillsCommands
             var info = JsonSerializer.Deserialize<SystemInfoResponse>(response.Body, JasonJson.Options);
             return info?.Skills is { } skills ? (skills.MaxSkillBytes, true) : (SkillsPlanner.DocumentedCap, false);
         }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException)
+        // And a descriptor no client can be made from — an address that is not one, none, or one in a scheme HTTP does not
+        // speak — is no runtime to ask either.
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException or FormatException or ArgumentException or NotSupportedException)
         {
             return (SkillsPlanner.DocumentedCap, false);
         }
@@ -412,3 +437,20 @@ public static class SkillsCommands
 
 /// <summary>A deployment this build will not perform, in words the operator can act on.</summary>
 public sealed class SkillsRefused(string message) : Exception(message);
+
+/// <summary>What one run of <c>jason skills update</c> did, for a caller that reports it rather than printing it.</summary>
+/// <param name="Exit">The verb's own exit code.</param>
+/// <param name="Carried">Each pack group it carried, in the order it carried them, with what became of each.</param>
+/// <param name="NothingRecorded">
+/// Whether no root here records a deployment at all — the verb's "nothing here was installed", which is a refusal
+/// for somebody who typed it and nothing to do for an update.
+/// </param>
+internal sealed record SkillsUpdateOutcome(int Exit, IReadOnlyList<SkillsUpdateGroup> Carried, bool NothingRecorded);
+
+/// <summary>One pack, from one source at one ref, in the roots whose records name it so: one deployment of the update.</summary>
+/// <param name="Exit">That deployment's own exit code: one group refused is not every group refused.</param>
+/// <param name="Line">
+/// The verb's own words for it: the pack, the roots, the source and ref and why, and what was written.
+/// </param>
+/// <param name="Refused">What it refused with, as stderr said it, or empty where it did not.</param>
+internal sealed record SkillsUpdateGroup(string Pack, IReadOnlyList<string> Roots, int Exit, string Line, string Refused);

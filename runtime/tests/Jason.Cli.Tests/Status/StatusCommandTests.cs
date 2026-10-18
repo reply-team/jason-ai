@@ -263,6 +263,28 @@ public class StatusCommandTests
     }
 
     /// <summary>
+    /// And one whose record is whole JSON but names a path holding a NUL. Reading it threw an argument error that the
+    /// check does not catch, so the verb whose job is to answer said nothing on stdout and exited 1.
+    /// </summary>
+    [Fact]
+    public async Task A_harness_root_whose_record_names_a_path_with_a_nul_is_unknown_and_status_still_answers()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var harness = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
+        await File.WriteAllTextAsync(
+            Path.Combine(harness, SkillsRecord.FileName),
+            "{\"version\":1,\"packs\":[{\"pack\":\"jason-business-skills\",\"source\":\"s\",\"ref\":\"v1.2.3\",\"ref_overridden\":false,\"installed_at\":\"2026-09-24T00:00:00Z\",\"files\":[{\"path\":\"x/SKILL\\u0000.md\",\"sha256\":\"aa\"}]}]}",
+            Ct);
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, harnesses: HarnessLocators.At(harness)), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "harness_skills");
+        Assert.True(check.State == CheckState.Unknown, $"The harness check answered {check.State}: {check.Fact}");
+    }
+
+    /// <summary>
     /// One check, one subject. With the packs deployed into the runtime's own role root and a detected
     /// harness holding nothing, the harness check is <c>absent</c> — because nothing is deployed into a
     /// harness.

@@ -125,6 +125,22 @@ public class SkillsRecordTests
         Assert.Contains("outside", unreadable.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A path holding a NUL names no file anywhere, and the record is unreadable like any other that names what is not a
+    /// file under its root. Resolving it threw an argument error instead, which no reader of a record catches: the
+    /// installer, the update's skills step and <c>jason status</c> each ended on it with no answer at all.
+    /// </summary>
+    [Fact]
+    public void A_record_naming_a_path_with_a_nul_is_unreadable()
+    {
+        using var tree = new TempPaths();
+        SkillsRecord.Write(tree.Paths.Root, new SkillsRecord(SkillsRecord.CurrentVersion, [Deployment() with { Files = [new DeployedFile("skill/SKILL\0.md", new string('a', 64))] }]));
+
+        var unreadable = Assert.Throws<SkillsRecordUnreadable>(() => SkillsRecord.Read(tree.Paths.Root));
+
+        Assert.Contains("not a file under that root", unreadable.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>And a path that only looks like it climbs — a directory whose name begins with two dots — is fine.</summary>
     [Fact]
     public void A_path_that_stays_inside_its_root_is_read()

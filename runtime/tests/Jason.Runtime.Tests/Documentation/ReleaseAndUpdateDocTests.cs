@@ -194,7 +194,7 @@ public class ReleaseAndUpdateDocTests
             Paragraphs(),
             paragraph => paragraph.Contains("It does not touch the rest of the data", StringComparison.Ordinal));
 
-        foreach (var kept in (string[])["database", "settings.json", "plugins", "skills", "logs", "work directories"])
+        foreach (var kept in (string[])["database", "settings.json", "plugins", "logs", "work directories"])
         {
             Assert.Contains(kept, untouched, StringComparison.Ordinal);
         }
@@ -202,6 +202,57 @@ public class ReleaseAndUpdateDocTests
         // And the registration an operator wrote themselves, which is the one a rename could have broken.
         Assert.Contains("systemd unit", untouched, StringComparison.Ordinal);
         Assert.Contains("scheduled task", untouched, StringComparison.Ordinal);
+
+        // The skills are no longer among them: the apply ends by redeploying the ones this installation recorded.
+        Assert.DoesNotContain("not the skills", Flat(untouched), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What the apply does to the skills, said where a person reads what it does to everything else: the step after
+    /// <c>complete</c>, what it carries and from where, that its failure leaves the update standing and what finishes it,
+    /// and the one thing an update applied by an older build still needs.
+    /// </summary>
+    [Fact]
+    public void The_page_says_the_apply_ends_by_redeploying_the_recorded_skills()
+    {
+        var skills = Flat(Assert.Single(
+            Paragraphs(),
+            paragraph => Flat(paragraph).Contains("Its last step, after `complete`, is the skills", StringComparison.Ordinal)));
+
+        Assert.Contains("exactly what `jason skills update` does, at the new release's tag", skills, StringComparison.Ordinal);
+        Assert.Contains("from the source its record names", skills, StringComparison.Ordinal);
+        Assert.Contains("nothing is written into an agent's harness that has no record", skills, StringComparison.Ordinal);
+        Assert.Contains("the update still stands", skills, StringComparison.Ordinal);
+        Assert.Contains("`run: jason skills update`", skills, StringComparison.Ordinal);
+        Assert.Contains(
+            "An update applied by a build before 0.12.0 has no such step, so it needs one `jason skills update` after it; from 0.12.0 on, `jason update apply` does it.",
+            skills,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("printed for you, not run for you", Read(), StringComparison.Ordinal);
+
+        // What it covers, said as what it is: the roots detection finds, and one line per pack group rather than per pack.
+        Assert.Contains("each agent harness this machine detects", skills, StringComparison.Ordinal);
+        Assert.Contains("a deployment made with `--root` into a directory detection does not find is not", skills, StringComparison.Ordinal);
+        Assert.Contains("one `skills:` line for each pack group", skills, StringComparison.Ordinal);
+
+        // And what does not run it at all: a package manager's upgrade never types `jason update apply`.
+        Assert.Contains("A package manager's upgrade does not run `jason update apply`", skills, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A rollback puts the executable back and leaves the skills where the update's last step put them, so the page that
+    /// says how to go back says what then answers <c>ready</c> again.
+    /// </summary>
+    [Fact]
+    public void The_page_says_a_rollback_leaves_the_skills_at_the_newer_tag()
+    {
+        var going = Flat(Assert.Single(
+            Paragraphs(),
+            paragraph => Flat(paragraph).Contains("A rollback leaves the skills", StringComparison.Ordinal)));
+
+        Assert.Contains("at the newer release's tag", going, StringComparison.Ordinal);
+        Assert.Contains("`jason skills update`", going, StringComparison.Ordinal);
+        Assert.Contains("`jason skills install --roles-only`", going, StringComparison.Ordinal);
     }
 
     /// <summary>

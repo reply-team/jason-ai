@@ -108,6 +108,7 @@ public static class SkillsDeployer
                 var recorded = deployments.FirstOrDefault(deployment => string.Equals(deployment.Pack, pack.Pack, StringComparison.Ordinal));
 
                 var mine = new List<DeployedFile>();
+                var kept = false;
                 foreach (var unit in pack.Units)
                 {
                     if (Current(unit))
@@ -129,6 +130,7 @@ public static class SkillsDeployer
                         // --force about a file Jason wrote. It also falsifies the message printed a moment
                         // ago, which says nothing was changed for this role.
                         mine.AddRange(Previously(recorded, Relative(root, unit.Unit)));
+                        kept = true;
                         continue;
                     }
 
@@ -136,14 +138,20 @@ public static class SkillsDeployer
                     mine.AddRange(Planned(root, unit));
                 }
 
-                var next = new SkillsDeployment(
-                    pack.Pack,
-                    plan.Source.Source,
-                    plan.Source.Ref,
-                    plan.Source.RefOverridden,
-                    plan.Source.Commit,
-                    clock.GetUtcNow(),
-                    mine);
+                // And so must the rest of what the record says about this pack. A skill still holding the old tree is
+                // the old deployment's, so its source, ref and commit stay where they were, beside the files as they
+                // now are on disk: recorded at the new ref, the pack read as current, `jason status` named no repair,
+                // and the next update found nothing to move.
+                var next = kept && recorded is not null
+                    ? recorded with { Files = mine }
+                    : new SkillsDeployment(
+                        pack.Pack,
+                        plan.Source.Source,
+                        plan.Source.Ref,
+                        plan.Source.RefOverridden,
+                        plan.Source.Commit,
+                        clock.GetUtcNow(),
+                        mine);
 
                 // A run that changed nothing rewrites nothing, not even the time it ran. "It wrote nothing"
                 // has to mean the bytes under this root are the bytes that were there, and a record whose

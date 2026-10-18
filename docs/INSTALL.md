@@ -269,7 +269,10 @@ from another. A deployment made at the tag of the build that installed it moves 
 made with `--ref` stays at its ref, a directory is read where it stands, and a development build keeps the ref the
 record names, because the tag its own version names is not published yet.
 
-After `jason update apply`, run `jason status`: role skills a default install took at another release's tag fail
+`jason update apply` ends by running `jason skills update` at the new release's tag; an update applied by a build
+before 0.12.0 needs one `jason skills update` after it. A package manager's upgrade does not run
+`jason update apply`, so `jason skills update` follows it. Either way, `jason status` is the check: role skills a
+default install took at another release's tag fail
 `role_skills`, and the repair it prints moves them to the runtime's own tag. That repair is
 `jason skills install --roles-only`, with the `--source` they came from when it was not this repository. A
 deployment made with `--ref` stays where it is and passes, in the runtime's own root and in an agent's, and so does

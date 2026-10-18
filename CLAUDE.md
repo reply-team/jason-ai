@@ -143,7 +143,8 @@ covered here.
   know, so no operation can stand behind it; `jason uninstall` takes this installation off the
   machine — a logon registration, an executable, a PATH entry, the files a deployment recorded — which
   the runtime neither performs nor is asked about; the `skills` and `update` nouns change this
-  installation's files — deploying skills, replacing the executable — rather than ask the runtime
+  installation's files — deploying skills, replacing the executable and redeploying the recorded
+  skills — rather than ask the runtime
   anything; `jason logs` reads the installation's log files, which the runtime writes and is never
   asked about; and `jason doctor` collects one installation into one file, half of which is not the
   runtime's to know — of the runtime it asks only what the runtime says about itself, its roles and

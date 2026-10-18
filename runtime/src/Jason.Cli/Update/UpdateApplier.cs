@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Cli.Commands;
 using Jason.Cli.Discovery;
 using Jason.Cli.Process;
+using Jason.Cli.Skills;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
@@ -23,7 +24,8 @@ public sealed record UpdateRequest(Uri Feed, SemanticVersion? Version, TimeSpan 
 /// </summary>
 /// <remarks>
 /// <para>
-/// The order is staged, drained, stopped, kept, swapped, started, healthy, complete. Between <c>kept</c> and
+/// The order is staged, drained, stopped, kept, swapped, started, healthy, complete — and then the skills, which
+/// are no step of the ledger (<see cref="RedeploySkillsAsync"/>). Between <c>kept</c> and
 /// <c>swapped</c> the install path is <b>empty</b> — the old executable has been moved aside, its notices after it,
 /// and the new one is not in place yet — and that window is a few renames wide. It is also the one window a person
 /// cannot get out of by typing <c>jason update</c>, because there is no <c>jason</c> on the PATH to type: the way
@@ -50,6 +52,9 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
     /// <summary>How long to wait for a new runtime to publish its descriptor and answer.</summary>
     private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(60);
+
+    /// <summary>The name the skills lines go under: a step of the apply, and not one of the ledger's.</summary>
+    private const string Skills = "skills";
 
     /// <summary>Everything the applier did, in order, for the caller to print.</summary>
     public List<string> Steps { get; } = [];
@@ -84,8 +89,93 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             Record(ledger, step);
         }
 
+        await RedeploySkillsAsync(ledger, cancellationToken).ConfigureAwait(false);
         return ledger;
     }
+
+    /// <summary>
+    /// The last thing an update does: the skills this installation recorded, redeployed at the tag of the build just
+    /// installed. Without it the role skills stayed at the tag the build before had installed, and <c>jason status</c>
+    /// said not ready until somebody typed the skills verbs by hand.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>jason skills update</c>'s own body, run as the new build would run it: its version is the one that names the
+    /// tag, and nothing else differs — the same source each record names, the same pin rule, planner, deployer and
+    /// record. The skills come from that source and never from this executable, so the build being replaced can
+    /// deploy what the new one carries.
+    /// </para>
+    /// <para>
+    /// After <c>complete</c>, and never a step of the ledger. By now the executable is replaced and the new runtime is
+    /// answering: whatever happens here, the update has happened. So nothing here fails it — a pack group that could not
+    /// be deployed says why in its line and names what finishes the job — and nothing here can be resumed or rolled back,
+    /// which is why it has no place in the ledger. A record written by a deployment that did not happen whole stays
+    /// where it was, so <c>jason status</c> names the same repair it would have named with no step at all.
+    /// </para>
+    /// <para>
+    /// What the verb prints is kept off this update's stdout, which carries one document. Its plan and its counts are
+    /// the step's lines; when it failed, everything it said goes to stderr beside the line, as the stop's does.
+    /// </para>
+    /// </remarks>
+    private async Task RedeploySkillsAsync(UpdateLedger ledger, CancellationToken cancellationToken)
+    {
+        using var said = new StringWriter(CultureInfo.InvariantCulture);
+        using var complained = new StringWriter(CultureInfo.InvariantCulture);
+        SkillsUpdateOutcome outcome;
+        string? cause = null;
+        try
+        {
+            outcome = await SkillsCommands
+                .UpdateRecordedAsync(env with { BuildVersion = ledger.ToVersion.ToString(), Out = said, Error = complained }, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The person stopped the apply while the skills were being fetched. That stops the skills and not the update,
+            // which was complete before this began: the answer still says so, rather than a cancellation saying it failed.
+            cause = "cancelled";
+            outcome = new SkillsUpdateOutcome(ExitCodes.ApiError, [], NothingRecorded: false);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            // Everything else, by construction rather than by name. Naming the ones that can happen here missed one twice,
+            // and each miss turned a completed update into one reported as refused.
+            complained.WriteLine(error.Message);
+            cause = error.Message;
+            outcome = new SkillsUpdateOutcome(ExitCodes.ApiError, [], NothingRecorded: false);
+        }
+
+        if (outcome.NothingRecorded)
+        {
+            Say(Skills, "nothing on this machine was deployed by jason skills, so nothing was redeployed");
+            return;
+        }
+
+        if (outcome.Exit != ExitCodes.Success)
+        {
+            env.Error.Write(said.ToString());
+            env.Error.Write(complained.ToString());
+        }
+
+        // One line for each pack group the verb carried, as it fared: one group refused is not every group refused, and
+        // the role half landing beside a refused business pack is what an agent reading this answer has to see.
+        foreach (var group in outcome.Carried)
+        {
+            Say(Skills, group.Exit == ExitCodes.Success
+                ? group.Line
+                : $"{group.Pack} in {string.Join(", ", group.Roots)} not updated — {OneLine(group.Refused)}; run: jason skills update");
+        }
+
+        // And where it never reached a group at all — a record it could not read, a cancel, anything thrown — one line.
+        if (outcome.Exit != ExitCodes.Success && outcome.Carried.Count == 0)
+        {
+            Say(Skills, $"not updated — {cause ?? OneLine(complained.ToString())}; run: jason skills update");
+        }
+    }
+
+    /// <summary>What a deployment said across lines, as one line: a step's line is one line.</summary>
+    private static string OneLine(string text) =>
+        string.Join(' ', text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
     /// <summary>
     /// The ledger write, which is a filesystem call like the renames around it and fails for the same reasons.
@@ -695,6 +785,8 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// it found: "drained" on an installation whose runtime was not running reads "no runtime is running, so
     /// there is nothing to drain", and a reader looking for the drain should still find it.
     /// </summary>
-    private void Say(UpdateStep step, string what) =>
-        Steps.Add(string.Create(CultureInfo.InvariantCulture, $"{step.ToString().ToLowerInvariant()}: {what}"));
+    private void Say(UpdateStep step, string what) => Say(step.ToString().ToLowerInvariant(), what);
+
+    private void Say(string step, string what) =>
+        Steps.Add(string.Create(CultureInfo.InvariantCulture, $"{step}: {what}"));
 }

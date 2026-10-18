@@ -340,6 +340,10 @@ reads, and the update after this one overwrites.
 | `healthy` | that runtime answers, says it is the version this update installed, and has its migrations applied |
 | `complete` | the update is over, and the ledger stays behind as the record of it |
 
+After `complete` the apply redeploys the skills this installation recorded, and that is no step of the ledger: by
+then the update has happened, so nothing about the skills is resumed, rolled back or allowed to fail it. "What an
+update does not touch", below, says what it does.
+
 Because each line is written before its step is taken, the last step a ledger names is the last step that was
 **begun** — never the last that finished. That is what makes a kill anywhere recoverable: every step is written
 so that beginning it twice is the same as beginning it once, so the next `jason update apply` reads the file,
@@ -376,18 +380,27 @@ than half-read.
 
 ### What an update does not touch
 
-An update replaces the executable and its two notice files, and writes under `~/.jason/update/`. It does not touch the rest of the data
-directory: not the database, not `~/.jason/config/settings.json`, not the plugins under `~/.jason/plugins/`, not
-the skills, not the logs, not the work directories. Nor does it touch anything you registered with the machine
-to start Jason — a systemd unit, a scheduled task, a login item — because the file at the install path is
-replaced in place rather than moved elsewhere, so whatever points at that path still points at Jason.
+An update replaces the executable and its two notice files, writes under `~/.jason/update/`, and redeploys the
+skills this installation recorded. It does not touch the rest of the data directory: not the database, not
+`~/.jason/config/settings.json`, not the plugins under `~/.jason/plugins/`, not the logs, not the
+work directories. Nor does it touch anything you registered with the machine to start Jason — a systemd unit,
+a scheduled task, a login item — because the file at the install path is replaced in place rather than moved
+elsewhere, so whatever points at that path still points at Jason.
 
-So the skills stay at the tag the build before installed them from, and `jason status` is what tells you. Once the
-new build is running, role skills a default install took at that tag fail `role_skills`, which is required,
-and its repair — `jason skills install --roles-only`, with the `--source` they came from when that was not the
-default source, `reply-team/jason-ai` — moves them to the new build's tag. An agent's own packs fail
-`harness_skills`, which is optional, and `jason skills update` moves them; it is printed for you, not run for you.
-A deployment made at a tag chosen with `--ref` passes both, and stays where it is until you move it.
+Its last step, after `complete`, is the skills: exactly what `jason skills update` does, at the new release's tag.
+The runtime's own role skills, and each agent harness this machine detects, are redeployed wherever a deployment
+there was recorded, from the source its record names; a deployment made with `--root` into a directory detection
+does not find is not, and `jason skills update --root <dir>` moves it. A deployment made at a tag
+chosen with `--ref` stays at its ref, and nothing is written into an agent's harness that has no record. The apply
+prints one `skills:` line for each pack group it carried — one pack from one source at one ref, in the roots that
+hold it — with what it wrote. If a group cannot be redeployed — no `git`, no network, a file you edited, a skill
+held open by a role that was launching, an interrupt while they are fetched — the update still stands: the new
+executable is in place and its runtime is running, that group's `skills:` line says why and ends
+`run: jason skills update`, and whatever could not move is still recorded at the tag before, so `jason status`
+fails it and prints the same repair it always has. An update applied by a build before 0.12.0 has no such step, so
+it needs one `jason skills update` after it; from 0.12.0 on, `jason update apply` does it. A package manager's
+upgrade does not run `jason update apply`, so after `brew upgrade jason` or `winget upgrade Reply.Jason` it is
+`jason skills update` that moves the skills.
 
 The one thing an update does change beyond the executable is the database, and not by itself: the new build's
 first start migrates it, exactly as any start does, after taking the backup that every migration takes. `healthy`
@@ -427,6 +440,11 @@ It puts the executable from `~/.jason/update/previous/` back and starts the runt
 Where the update's new build migrated the database, it also restores the backup that migration took and deletes
 the WAL sidecars beside it — a database file from before a migration, opened with the write-ahead log of after
 it, is corruption.
+
+A rollback leaves the skills where the update's last step put them, at the newer release's tag. The runtime you
+went back to then fails `role_skills`, because its role skills belong to a release it is not, and `ready` is false
+until `jason skills update` — or `jason skills install --roles-only`, for the role skills alone — brings them to the
+tag of the version you are on.
 
 **The database is restored only while it is certain that nothing has happened since.** That is decided from the
 chronicle: the line it stood at when the new version was declared healthy, against the line it stands at now. If
