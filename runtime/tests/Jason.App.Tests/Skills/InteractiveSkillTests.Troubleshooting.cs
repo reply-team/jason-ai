@@ -230,6 +230,33 @@ public partial class InteractiveSkillTests
         Assert.Contains($"tell the {word} states apart", SkillFrontMatter.Read(file).Top["description"], StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Restarting the runtime is a repair a session would run itself, and a restart is a stop: before the line is printed,
+    /// the repair points at the one rule for a stop a session runs — the operating skill's — rather than leaving the
+    /// session to run it on the person's complaint alone. And its account of what the stop does to work in flight says
+    /// what that rule's sentence says, in the same terms: claiming stops, handlers get up to ten seconds, nothing is
+    /// killed, so a session that read both skills is never told two different things.
+    /// </summary>
+    [Fact]
+    public void The_restart_repair_points_at_the_one_rule_for_a_stop()
+    {
+        var skill = Flattened("troubleshooting-jason");
+        const string Pointer = "A restart is a stop you run yourself: ask first, as \"Starting and stopping it\" in `operating-the-installation` says.";
+
+        var repair = skill.IndexOf("**Restarting the runtime**", StringComparison.Ordinal);
+        var pointer = skill.IndexOf(Pointer, StringComparison.Ordinal);
+        var line = skill.IndexOf("``` jason runtime restart ```", StringComparison.Ordinal);
+        Assert.True(
+            repair >= 0 && pointer > repair && line > pointer,
+            $"The restart repair opens at offset {repair}, points at the rule at {pointer} and prints its line at {line}; the pointer belongs between the two.");
+
+        Assert.Contains(
+            "a shutdown stops claiming, gives handlers up to ten seconds, and **does not kill children that are still running**",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("waits briefly for handlers", skill, StringComparison.Ordinal);
+    }
+
     private static readonly string[] Counted =
         ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
 

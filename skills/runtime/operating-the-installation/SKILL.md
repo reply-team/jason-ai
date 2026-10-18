@@ -68,7 +68,13 @@ jason runtime restart
 which may be one that was already running, because starting a second runtime on the same data directory is not
 something it will do. `jason runtime stop` asks that instance to shut down and returns only once it is gone, so
 when the command comes back the process is really finished rather than on its way out. `jason runtime restart`
-is the two in order.
+is the two in order, so it is a stop as well: the next paragraph holds for it.
+
+**Ask before any stop you run yourself.** Before you run `jason runtime stop` or `jason runtime restart`, whatever
+brought you to it, ask the person in words, say what a stop does, and run it only on their yes. That holds when the
+restart was their own request, and when the runtime looks idle: work can be claimed between the status you read and
+the stop. What a stop does: new work stops being claimed, what is in flight gets up to ten seconds to finish, nothing
+is cancelled, and a provider operation already under way may still act, ending at its own lease.
 
 `jason runtime run` keeps the runtime in the **foreground** instead, and it is **not** the normal way to run
 it — the normal way is `jason runtime start`. You would type `run` when something else owns the process: your
@@ -132,10 +138,8 @@ that runs anything else.
 Only when `jason status` says the runtime runs in session 0, or the person tells you 0.1.0 had autostart enabled,
 is the runtime that 0.1.0's task started likely to be holding the data directory. If `enable` or `disable` answers
 `ERROR: Access is denied.`, follow its message first, as below. After `enable` or `disable` once, `jason runtime stop`
-once ends it, but ask before you run `jason runtime stop`: it stops the runtime claiming new work and gives what is in
-flight up to ten seconds to finish; it cancels nothing, and a provider operation already under way may still act,
-ending at its own lease. Then `jason runtime start` starts the runtime this version runs, or the person signs in again
-with autostart enabled.
+once ends it; ask first, as "Starting and stopping it" says. Then `jason runtime start` starts the runtime this
+version runs, or the person signs in again with autostart enabled.
 
 **If `enable` or `disable` answers `ERROR: Access is denied.`**, read the rest of its message to the person. It
 names the task and the likely case: that task was registered from an elevated prompt — by an earlier version of
@@ -174,8 +178,8 @@ rather than guessing. Its states mean:
 - **`absent`, no desktop** — a machine with no session bus or no notification program shows no toast by design; a
   plugin still reaches them, if they want one.
 - **`failed`, session 0** — the runtime has no desktop: a service or an SSH session runs there, and so does the runtime
-  0.1.0's logon task started. For that one, the check names the acts that end it, in order; ask before you run
-  `jason runtime stop`.
+  0.1.0's logon task started. For that one, the check names the acts that end it, in order; for its
+  `jason runtime stop`, ask first, as "Starting and stopping it" says.
 - **`failed`, a channel or a plugin** — the fact names the code or the reason; a plugin that was not attempted is a
   settings or grant problem the plugin's README explains.
 
@@ -252,7 +256,10 @@ recorded; it needs no runtime either.
 
 After an update, `jason status` says whether the role skills still belong to this build: role skills a default
 install took at another release's tag fail its `role_skills` check, which names both tags, and its repair is the
-line it prints.
+line it prints. From 0.12.0 on, `jason update apply` redeploys the skills this installation recorded as its last
+step, once the update is complete; if that step's line says it could not, the update still stands and the fix is
+the line it names. An update applied by a build before 0.12.0 has no such step, so it needs one
+`jason skills update` after it.
 
 **Installed by a package manager.** Where Homebrew or winget installed Jason, `jason update check` names the
 manager's own upgrade, and `jason update apply` refuses the installation. The manager's upgrade is typed as three
@@ -265,10 +272,12 @@ winget upgrade Reply.Jason
 jason runtime start
 ```
 
-with `brew upgrade jason` in the middle under Homebrew. Ask before you run `jason runtime stop`: nothing new is claimed
-from then on, what is in flight finishes or ends at its own lease, and a stop does not take back a send already under
-way. On Windows winget cannot replace the executable while the runtime runs: it answers Access is denied and keeps the
-old version. Under Homebrew the upgrade removes the previous version's keg by default (unless
+with `brew upgrade jason` in the middle under Homebrew. If you run the stop, ask first, as "Starting and stopping it"
+says; if the person types the lines, tell them what it does all the same. What a stop does: new work stops being
+claimed, what is in flight gets up to ten seconds to finish, nothing is cancelled, and a provider operation already
+under way may still act, ending at its own lease. On Windows winget cannot replace the executable while the
+runtime runs: it answers Access is denied and keeps the old version. Under Homebrew the upgrade removes the
+previous version's keg by default (unless
 `HOMEBREW_NO_INSTALL_CLEANUP` is set), and a running runtime starts every plugin host from its own executable's
 path, which is then gone: work after the upgrade fails until the runtime restarts, which `jason status`'s
 `runtime_version` names.
@@ -316,6 +325,11 @@ walk, begins with an invitation to tell you about their first campaign in their 
 voice note, or one of a few examples you offer to start from. What they tell you becomes the campaign's context when
 the campaign is created (`managed-campaign-work`), and the work is planned with the `campaign-planning` skill and
 worked by Jason's roles.
+
+The provider's own web app is no step of any Jason flow. A person opens it by a link for four things only —
+connecting a LinkedIn account, connecting a mailbox by single sign-on, signing in, and creating the first API key —
+and each is theirs to do: say what it is for, and wait until they say it is done. Never send them there for the work
+itself.
 
 ## Taking it off again
 

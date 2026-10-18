@@ -39,7 +39,8 @@ public class SkillSequenceTests
     /// contacts file is written first because the CLI reads it while it parses — which is also what a person
     /// does, since a session has no file-writing tool under the shape this pack is measured in. The campaign is
     /// created with the person's brief as its context, as the skill prints it, and the brief is read back from the
-    /// campaign before anybody is added to it.
+    /// campaign before anybody is added to it; a change of direction is then written into it by the line the skill
+    /// prints for that.
     /// </summary>
     [Fact]
     public async Task The_managed_path_creates_a_campaign_and_its_work_by_the_lines_it_prints()
@@ -66,8 +67,10 @@ public class SkillSequenceTests
             + "{\\\"position\\\":\\\"first_step\\\"},\\\"first_touch\\\":\\\"authored_delay\\\"}\" --idempotency-key q3-latam-enrol-marta";
         const string Start = $"jason campaign start cmp_{Placeholder}";
         const string Follow = $"jason workitem list --campaign cmp_{Placeholder}";
+        const string Widened = "founders of seed-stage startups in Mexico, Colombia and Chile";
+        const string Change = $"jason campaign update-context cmp_{Placeholder} --set '{{\"audience\":\"{Widened}\"}}' --reason \"the person widened the audience\"";
 
-        foreach (var line in new[] { Create, Add, List, Work, Start, Follow })
+        foreach (var line in new[] { Create, Add, List, Work, Start, Follow, Change })
         {
             Assert.Contains(line, printed);
         }
@@ -106,6 +109,16 @@ public class SkillSequenceTests
             (string?)made["context"]!["their_words"]);
         var nobody = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "campaign", "list-contacts", campaign)));
         Assert.Empty(nobody["items"]!.AsArray());
+
+        // A change of direction goes into the context by the line the skill prints for it: the key it names is
+        // written, and every key it does not name — the person's own words among them — reads as it did.
+        GoldenPath.AssertSuccess(await GoldenPath.JasonAsync(it, [.. Substituted(Change, ids)]));
+        var changed = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "campaign", "get", campaign)))["context"]!;
+        var expected = JsonNode.Parse(Brief)!;
+        expected["audience"] = Widened;
+        Assert.True(
+            JsonNode.DeepEquals(expected, changed),
+            $"After the printed update-context line the campaign's context reads {changed.ToJsonString()}, and it should read {expected.ToJsonString()}.");
 
         var added = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
             it, [.. Substituted(Add, ids, ("contacts.json", contacts))])));

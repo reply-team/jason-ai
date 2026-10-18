@@ -151,8 +151,9 @@ public class SkillPackTests
     /// <summary>
     /// And what "verified" is worth. It is a claim that a real host read this text, which the next edit would
     /// quietly falsify — so the catalog records the digest of the text that was read, and this recomputes it.
-    /// An edit without a new reading is red, and the way out is <c>draft</c> again or a new digest after a new
-    /// reading, which a reviewer sees in the diff.
+    /// The text is the description as well as the body, because the description decides whether a host loads
+    /// the skill at all. An edit to either without a new reading is red, and the way out is <c>draft</c> again
+    /// or a new digest after a new reading, which a reviewer sees in the diff.
     /// </summary>
     [Fact]
     public void Every_verified_skill_is_the_text_a_host_actually_read()
@@ -184,12 +185,12 @@ public class SkillPackTests
                 reading.Count > 0,
                 $"'{skill.Name}' says it is verified and the catalog records no reading of it.");
 
-            var digest = SkillPack.BodyDigest(skill.File);
+            var digest = SkillPack.ReadingDigest(skill.File);
             foreach (var row in reading)
             {
                 Assert.True(
                     row.Contains(digest, StringComparison.Ordinal),
-                    $"'{skill.Name}' says it is verified, and the text that is here now digests to {digest}, "
+                    $"'{skill.Name}' says it is verified, and the text that is here now, its description and its body, digests to {digest}, "
                     + $"which is not what the catalog records: {row}. Either it was edited after the reading, "
                     + "in which case it is a draft again until a host has read it, or the row is wrong.");
                 Assert.Contains("Claude Code 2.1.", row, StringComparison.Ordinal);

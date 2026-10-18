@@ -91,7 +91,7 @@ public class BusinessPackTests
             Assert.True(
                 status == "draft",
                 $"'{skill.Name}' says metadata.status is '{status}'. No host has read this pack against this "
-                + "runtime, and 'verified' means a named host read this exact body and its digest is in the "
+                + "runtime, and 'verified' means a named host read this exact description and body and its digest is in the "
                 + "catalog.");
         }
     }
@@ -206,7 +206,7 @@ public class BusinessPackTests
     }
 
     /// <summary>
-    /// A digest in a catalog records that a named host read an exact body. Nothing here has been read, so a
+    /// A digest in a catalog records that a named host read an exact description and body. Nothing here has been read, so a
     /// row carrying one would be a claim about a reading that never happened.
     /// </summary>
     [Fact]

@@ -113,4 +113,47 @@ public partial class InteractiveSkillTests
             block >= 0 && brief > block && keys > brief,
             $"The paragraph on the brief is at offset {brief} of \"The work itself\"; it belongs after the create (offset {block}) and before the paragraph on keys (offset {keys}).");
     }
+
+    /// <summary>
+    /// A brief changes after the campaign exists, and the change belongs where the brief went: the campaign's context,
+    /// written with the verb that sets and unsets top-level keys and leaves the rest as it was. Without it a session that
+    /// agreed a new direction keeps it in the conversation, where no role reads it, or creates a second campaign. The
+    /// paragraph follows the one on the brief, and its line is printed beside it, where the sequence test runs it.
+    /// </summary>
+    [Fact]
+    public void A_change_of_direction_goes_into_the_campaign_s_context()
+    {
+        const string Opening = "**A change of direction goes into the context as well.**";
+        var text = File.ReadAllText(SkillPack.Find("managed-campaign-work").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        var start = text.IndexOf(Opening, StringComparison.Ordinal);
+        Assert.True(start >= 0, "managed-campaign-work has no paragraph on a change of direction.");
+        var end = text.IndexOf("\n\n", start, StringComparison.Ordinal);
+        Assert.Equal(
+            Opening + " On a campaign that already exists, what the person changes about it is written with `jason campaign update-context`: `--set` writes the top-level keys it names, `--unset` removes a key, once for each, and every key it does not name stays as it was.",
+            Whitespace().Replace(text[start..(end > start ? end : text.Length)], " ").Trim());
+
+        var brief = text.IndexOf("**The brief becomes the campaign.**", StringComparison.Ordinal);
+        var keys = text.IndexOf("**Give every create a key you could send again.**", StringComparison.Ordinal);
+        var printed = text.IndexOf("\njason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set ", StringComparison.Ordinal);
+        Assert.True(
+            brief >= 0 && start > brief && printed > start && keys > printed,
+            $"The paragraph on a change of direction is at offset {start} and its line at {printed}; they belong after the paragraph on the brief (offset {brief}) and before the one on keys (offset {keys}).");
+    }
+
+    /// <summary>
+    /// A host loads a skill by its description. A description that named only turning an objective into work left a
+    /// person's first question about the work — what do we do first — loading no skill of Jason's, and the session
+    /// answered from whatever it already had. The description names that question too, beside the one it always named.
+    /// </summary>
+    [Fact]
+    public void The_managed_path_s_description_names_the_first_question()
+    {
+        var description = SkillFrontMatter.Read(SkillPack.Find("managed-campaign-work").File).Top.GetValueOrDefault("description") ?? string.Empty;
+
+        Assert.StartsWith(
+            "Use when a person wants Jason to start outbound work for them, such as getting meetings or running a campaign, and asks what to do first, and when an interactive agent session should turn an outbound objective into durable campaign work that Jason performs",
+            description,
+            StringComparison.Ordinal);
+    }
 }

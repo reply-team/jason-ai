@@ -1,8 +1,8 @@
 ---
 name: managed-campaign-work
-description: Use when an interactive agent session should turn an outbound objective into durable campaign work that Jason performs - creating a campaign, adding the people it is about, submitting managed provider operations and AI role work, and following what the runtime does with them.
+description: Use when a person wants Jason to start outbound work for them, such as getting meetings or running a campaign, and asks what to do first, and when an interactive agent session should turn an outbound objective into durable campaign work that Jason performs - creating a campaign, adding the people it is about, submitting managed provider operations and AI role work, and following what the runtime does with them.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Managed campaign work
@@ -12,7 +12,8 @@ the Jason CLI has not happened: it will not survive the session, will not be dis
 anybody, and will leave no history. This skill is the managed path — how to put work where the runtime can
 perform it, and what to do while it waits.
 
-**Status: verified** against Claude Code 2.1.302. It covers the operations this build publishes and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. It covers the operations this build
+publishes and nothing else.
 
 ## What you are responsible for, and what the runtime is
 
@@ -73,6 +74,14 @@ keys are yours to name for what they hold, and none is reserved. Keep the person
 them, and put a link or a file in as what it says, briefly, with where it is, rather than pasted whole. This
 `jason campaign create` makes Jason's own campaign; it is not the provider operation `campaign.create`, which makes a
 campaign at a provider.
+
+**A change of direction goes into the context as well.** On a campaign that already exists, what the person
+changes about it is written with `jason campaign update-context`: `--set` writes the top-level keys it names,
+`--unset` removes a key, once for each, and every key it does not name stays as it was.
+
+```
+jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"audience":"founders of seed-stage startups in Mexico, Colombia and Chile"}' --reason "the person widened the audience"
+```
 
 **Give every create a key you could send again.** `--idempotency-key` names that one create, in words you
 choose. If its answer never comes back — a timeout, a session that ended mid-command — send the same command with

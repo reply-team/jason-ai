@@ -17,6 +17,10 @@ The provider here is [Reply](https://reply.io) through [`plugins/reply/`](../plu
 that is the plugin this repository ships. Nothing in the runtime knows about it: a different provider is a
 different package and a different route, and the steps are the same.
 
+Reply's own web app is no step of this page, or of any Jason flow. You open it by a link for four things only:
+connecting a LinkedIn account, connecting a mailbox by single sign-on, signing in, and creating your first API key.
+Jason never sends you there for the work itself.
+
 ## What you need
 
 - **The `jason` executable**, installed from a release as [`docs/INSTALL.md`](INSTALL.md) §2 describes, and on
@@ -29,8 +33,8 @@ different package and a different route, and the steps are the same.
 ### If an agent runs it
 
 Read this whole page first, word for word, and follow it in order. It assumes no repository and no particular
-folder: start in any folder of yours, and nothing in this run writes there — the two files step 3 downloads and the
-one file step 6 makes go in the system's temporary directory.
+folder: start in any folder of yours, and nothing in this run writes there — the two files step 3 downloads, the
+`.sha256` file its sh line writes beside them, and the one file step 6 makes go in the system's temporary directory.
 
 Before anything, ask the person one question in plain words: what you will install and from where — the Reply
 plugin from the release of Jason they run, the Reply CLI from npm's registry, and Node if it is missing; what this

@@ -21,11 +21,13 @@ public sealed partial class CatalogClaimsTests
         var catalog = Whitespace().Replace(File.ReadAllText(SkillPack.Catalog()), " ");
 
         Assert.Empty(Mentioning("jason skills install"));
-        Assert.Empty(Mentioning("jason skills update"));
-        Assert.Contains($"None of the {InteractiveCount()} mentions `jason skills install` or `jason skills update`", catalog, StringComparison.Ordinal);
-
+        Assert.Equal(["operating-the-installation"], Mentioning("jason skills update"));
         Assert.Equal(["operating-the-installation"], Mentioning("jason status"));
-        Assert.Contains("`jason status` is mentioned only by `operating-the-installation`", catalog, StringComparison.Ordinal);
+        Assert.Contains(
+            $"None of the {InteractiveCount()} mentions `jason skills install`; `jason skills update` and `jason status` are mentioned only by `operating-the-installation`",
+            catalog,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("mentions `jason skills install` or `jason skills update`", catalog, StringComparison.Ordinal);
         Assert.DoesNotContain("None of the five mentions `jason skills install`, `jason skills update` or `jason status`", catalog, StringComparison.Ordinal);
     }
 

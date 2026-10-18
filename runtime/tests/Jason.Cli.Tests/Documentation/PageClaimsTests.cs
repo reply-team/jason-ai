@@ -675,7 +675,8 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// The operating skill teaches a manager's upgrade in one paragraph: the runtime stopped, the manager's upgrade, the
-    /// runtime started, the stop asked first, and why on each platform. <c>jason update check</c>'s one command leaves
+    /// runtime started, the stop asked first by the skill's one rule for it and said what it does even where the person
+    /// types it, and why on each platform. <c>jason update check</c>'s one command leaves
     /// the sequence to the skill, so the skill is held to saying it.
     /// </summary>
     [Fact]
@@ -693,7 +694,8 @@ public partial class PageClaimsTests
         Assert.True(stop >= 0 && upgrade > stop && started > upgrade, "the paragraph does not give the stop, the manager's upgrade and the start in that order.");
         Assert.Contains("`brew upgrade jason`", paragraph, StringComparison.Ordinal);
         Assert.Contains(
-            "Ask before you run `jason runtime stop`: nothing new is claimed from then on, what is in flight finishes or ends at its own lease, and a stop does not take back a send already under way.",
+            "If you run the stop, ask first, as \"Starting and stopping it\" says; if the person types the lines, tell them what it does all the same. "
+            + "What a stop does: new work stops being claimed, what is in flight gets up to ten seconds to finish, nothing is cancelled, and a provider operation already under way may still act, ending at its own lease.",
             paragraph,
             StringComparison.Ordinal);
         Assert.Contains("On Windows winget cannot replace the executable while the runtime runs: it answers Access is denied and keeps the old version.", paragraph, StringComparison.Ordinal);
@@ -1154,6 +1156,28 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// Where the page names its provider, it says what the provider's own web app is for: four acts a person does there by
+    /// a link — connecting a LinkedIn account, a mailbox by single sign-on, signing in, the first API key — and never the
+    /// work, which no step of this page or of any Jason flow does there. The paragraph is held whole, right after the one
+    /// that names the provider, so a use added to it is as red as one taken away.
+    /// </summary>
+    [Fact]
+    public void The_wiring_check_names_the_four_things_the_provider_s_web_app_is_for()
+    {
+        var blocks = Page("docs", "golden-path.md").Split("\n\n");
+        Assert.True(blocks.Length > 4, "docs/golden-path.md has no paragraph after the one that names its provider.");
+
+        Assert.StartsWith("The provider here is [Reply](https://reply.io)", Flat(blocks[3]), StringComparison.Ordinal);
+        Assert.Equal(ProviderWebApp, Flat(blocks[4]));
+    }
+
+    /// <summary>The wiring check's paragraph on the provider's web app, flattened, as its fact holds it.</summary>
+    private const string ProviderWebApp =
+        "Reply's own web app is no step of this page, or of any Jason flow. "
+        + "You open it by a link for four things only: connecting a LinkedIn account, connecting a mailbox by single sign-on, signing in, and creating your first API key. "
+        + "Jason never sends you there for the work itself.";
+
+    /// <summary>
     /// The README names the page for what it proves, says where the real work begins, and says the page is optional: a
     /// synthetic walk offered once, which a person may skip for the real work at once.
     /// </summary>
@@ -1306,13 +1330,14 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// The section for an agent says where every file the run makes goes — the two step 3 downloads and the one step 6
-    /// writes — which is the system's temporary directory, never the folder the run was started in.
+    /// The section for an agent says where every file the run makes goes — the two step 3 downloads, the checksum line
+    /// its sh line writes beside them, and the one step 6 writes — which is the system's temporary directory, never the
+    /// folder the run was started in.
     /// </summary>
     [Fact]
     public void The_golden_path_s_agent_says_where_the_run_s_files_go() =>
         Assert.Contains(
-            "nothing in this run writes there — the two files step 3 downloads and the one file step 6 makes go in the system's temporary directory.",
+            "nothing in this run writes there — the two files step 3 downloads, the `.sha256` file its sh line writes beside them, and the one file step 6 makes go in the system's temporary directory.",
             Flat(GoldenAgent()),
             StringComparison.Ordinal);
 
@@ -1562,9 +1587,11 @@ public partial class PageClaimsTests
     /// none is attached would be false.
     /// </summary>
     /// <remarks>
-    /// The mailbox and sender words are refused on the whole page. The schedule words are refused from step 6 to the end
-    /// of step 8, where the provider's campaign is made, read and left, because step 1 says rightly that the runtime owns
-    /// "the schedule" of its own work.
+    /// The mailbox and sender words are refused on the whole page but one paragraph: the one that names what the
+    /// provider's web app is for, whose mailbox is a person connecting their own in that app rather than anything said
+    /// about the campaign, and which its own fact holds word for word, so nothing else can arrive in it. The schedule
+    /// words are refused from step 6 to the end of step 8, where the provider's campaign is made, read and left, because
+    /// step 1 says rightly that the runtime owns "the schedule" of its own work.
     /// </remarks>
     [Fact]
     public void The_wiring_check_claims_three_facts_about_the_provider_s_campaign_and_nothing_about_a_sender()
@@ -1576,8 +1603,9 @@ public partial class PageClaimsTests
             Flat(Section(page, "## 8. ")),
             StringComparison.Ordinal);
 
-        var sender = Regex.Match(page, @"\b(?:mailbox(?:es)?|senders?|sending accounts?|email accounts?)\b", RegexOptions.IgnoreCase);
-        Assert.False(sender.Success, $"docs/golden-path.md says something about the provider's sending side: '{sender.Value}' at offset {sender.Index}.");
+        var scanned = string.Join("\n\n", page.Split("\n\n").Where(block => Flat(block) != ProviderWebApp));
+        var sender = Regex.Match(scanned, @"\b(?:mailbox(?:es)?|senders?|sending accounts?|email accounts?)\b", RegexOptions.IgnoreCase);
+        Assert.False(sender.Success, $"docs/golden-path.md says something about the provider's sending side: '{sender.Value}' at offset {sender.Index} of the page without the paragraph on the provider's web app.");
 
         var from = page.IndexOf("\n## 6. ", StringComparison.Ordinal);
         var to = page.IndexOf("\n## What this guarantees", StringComparison.Ordinal);
@@ -1840,7 +1868,7 @@ public partial class PageClaimsTests
     private const string AgentSectionDigest = "sha256:e3773f1c7a43d649deda4a83daa62de5a4b36f5ecdd8c1ceb520e3f46a915f38";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
-    private const string GoldenAgentSectionDigest = "sha256:dbcc6a743e79b859ea37fdf66f21720c1853898871ca827e9b425fbe33f43d47";
+    private const string GoldenAgentSectionDigest = "sha256:c75395eeb75839aeeee9b296b13bae58a0f038c14646e18d28d5b967bc15d9e3";
 
     /// <summary>
     /// The text between the line that opens a fence and the next line that is exactly three backticks, each line

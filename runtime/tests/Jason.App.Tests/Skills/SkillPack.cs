@@ -118,16 +118,31 @@ internal static class SkillPack
     }
 
     /// <summary>
-    /// The text a host would read, digested. The front matter is deliberately not part of it: promoting a
-    /// skill from draft to verified edits the front matter, so a digest that covered it could never be
-    /// recorded — the act of recording it would invalidate it.
+    /// The text a host reads, digested: what a <c>verified</c> row records. A changed description is a changed
+    /// reading, because the description is what a host reads to decide whether to load the skill at all.
     /// </summary>
     /// <remarks>
     /// Line endings are normalised although this repository is <c>eol=lf</c> in every working tree: that is
     /// belt and braces against an editor that writes CRLF, not a platform difference.
     /// </remarks>
-    public static string BodyDigest(string file) =>
-        "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Body(file))));
+    public static string ReadingDigest(string file) =>
+        "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Reading(file))));
+
+    /// <summary>
+    /// The text a host reads: the front matter's description, which it chose the skill by, a line break, and the
+    /// body it then followed. The rest of the front matter is deliberately not part of it: promoting a skill from
+    /// draft to verified edits its status, so a text that held the status could never be recorded — the act of
+    /// recording it would change it.
+    /// </summary>
+    public static string Reading(string file)
+    {
+        var description = SkillFrontMatter.Read(file).Top.GetValueOrDefault("description");
+        Assert.False(
+            string.IsNullOrWhiteSpace(description),
+            $"'{file}' has no description, so no host could have chosen it and there is no reading to digest.");
+
+        return description + "\n" + Body(file);
+    }
 
     /// <summary>
     /// The text a host reads: everything below the front matter, line endings normalised and trailing space

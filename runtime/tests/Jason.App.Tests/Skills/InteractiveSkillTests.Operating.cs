@@ -1,7 +1,209 @@
+using System.Text.RegularExpressions;
+using Jason.Runtime.Configuration;
+
 namespace Jason.App.Tests.Skills;
 
 public partial class InteractiveSkillTests
 {
+    /// <summary>How every place that brings a session to a stop points at the one rule for it.</summary>
+    private const string StopPointer = "ask first, as \"Starting and stopping it\" says";
+
+    /// <summary>What a stop does, in the one sentence the operating skill says it in.</summary>
+    private const string WhatAStopDoes =
+        "What a stop does: new work stops being claimed, what is in flight gets up to ten seconds to finish, nothing is "
+        + "cancelled, and a provider operation already under way may still act, ending at its own lease.";
+
+    private const string StopRule = "**Ask before any stop you run yourself.**";
+
+    /// <summary>
+    /// A stop a session runs itself — <c>jason runtime stop</c>, or the restart that begins with one — is asked first, in
+    /// words, saying what a stop does, whatever brought the session to it. The rule is said once, where starting and
+    /// stopping are taught, and every place that brings a session to a stop points at it rather than saying it again.
+    /// Written into two of those places and nowhere else, it did not reach a restart the person asked for: a session took
+    /// the request for the yes, judged a runtime with nothing in flight safe to restart, and went to run it without a word.
+    /// </summary>
+    [Fact]
+    public void The_operating_skill_says_once_that_a_stop_it_runs_is_asked_first()
+    {
+        var text = File.ReadAllText(SkillPack.Find("operating-the-installation").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var skill = Flattened("operating-the-installation");
+
+        Assert.True(
+            Occurrences(skill, StopRule) == 1,
+            $"The operating skill opens the rule for a stop it runs itself {Occurrences(skill, StopRule)} time(s); it says it once.");
+        Assert.Equal(
+            StopRule + " Before you run `jason runtime stop` or `jason runtime restart`, whatever brought you to it, ask the person in words, say what a stop does, and run it only on their yes. "
+            + "That holds when the restart was their own request, and when the runtime looks idle: work can be claimed between the status you read and the stop. "
+            + WhatAStopDoes,
+            ParagraphAt(text, StopRule));
+
+        // Where starting and stopping are taught: the restart is named a stop and pointed at the rule, which follows it
+        // before the foreground form.
+        var section = Whitespace().Replace(SectionOf(text, "## Starting and stopping it"), " ");
+        var restart = section.IndexOf("`jason runtime restart` is the two in order, so it is a stop as well: the next paragraph holds for it.", StringComparison.Ordinal);
+        var rule = section.IndexOf(StopRule, StringComparison.Ordinal);
+        var run = section.IndexOf("`jason runtime run` keeps the runtime", StringComparison.Ordinal);
+        Assert.True(
+            restart >= 0 && rule > restart && run > rule,
+            $"In \"Starting and stopping it\" the restart sentence is at offset {restart}, the rule at {rule} and the foreground form at {run}; they belong in that order.");
+
+        // Every other place points at it, and none says it again in its own words.
+        Assert.DoesNotContain("ask before you run", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.True(
+            Occurrences(skill, StopPointer) == 3,
+            $"The operating skill points at the rule {Occurrences(skill, StopPointer)} time(s); the 0.1.0 task, session 0 and a package manager's upgrade each point at it once.");
+        foreach (var (context, place) in new[]
+        {
+            (ParagraphAt(text, "If `enable` or `disable` answers `ERROR: Access is denied.`, follow its message first"), "the 0.1.0 task"),
+            (BulletAt(text, "- **`failed`, session 0**"), "session 0"),
+            (BlockAt(text, "**Installed by a package manager.**"), "a package manager's upgrade"),
+        })
+        {
+            Assert.True(
+                context.Contains(StopPointer, StringComparison.Ordinal),
+                $"Where the operating skill brings a session to a stop for {place}, it does not point at the rule: {context}");
+        }
+    }
+
+    /// <summary>
+    /// What a stop does is one sentence, the same in both places the skill says it: in the rule, and where a person may type
+    /// the stop themselves around a package manager's upgrade. Two wordings are how one place came to tell a person less
+    /// than the other. Each clause is what the runtime does: the dispatcher stops claiming and drains its handlers for
+    /// <c>Dispatcher:DrainSeconds</c>, kills nothing it gives up on, and leaves a provider operation to end at its lease —
+    /// so the sentence's ten seconds is held to the setting's default.
+    /// </summary>
+    [Fact]
+    public void The_operating_skill_says_what_a_stop_does_in_one_sentence()
+    {
+        var text = File.ReadAllText(SkillPack.Find("operating-the-installation").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var skill = Flattened("operating-the-installation");
+
+        Assert.True(
+            Occurrences(skill, WhatAStopDoes) == 2,
+            $"The operating skill says what a stop does in its one sentence {Occurrences(skill, WhatAStopDoes)} time(s); it says it in the rule and around a package manager's upgrade.");
+        Assert.Contains(WhatAStopDoes, ParagraphAt(text, StopRule), StringComparison.Ordinal);
+        Assert.Contains(WhatAStopDoes, BlockAt(text, "**Installed by a package manager.**"), StringComparison.Ordinal);
+
+        foreach (var other in new[]
+        {
+            "nothing new is claimed from then on",
+            "finishes or ends at its own lease",
+            "does not take back a send already under way",
+            "it stops the runtime claiming new work",
+        })
+        {
+            Assert.DoesNotContain(other, skill, StringComparison.Ordinal);
+        }
+
+        var drain = new DispatcherOptions().DrainSeconds;
+        Assert.True(drain == 10, $"The skill says a stop gives what is in flight up to ten seconds, and Dispatcher:DrainSeconds defaults to {drain}.");
+    }
+
+    /// <summary>
+    /// The provider's own web app is no step of any Jason flow. A person opens it by a link for the four acts only they can
+    /// do on their own account — connecting a LinkedIn account, a mailbox by single sign-on, signing in, the first API
+    /// key — and a session never sends them there for the work. Said where the skill hands a ready installation on to the
+    /// real work, because that is where a session would otherwise walk the person through the provider's screens. The
+    /// paragraph is held whole, so a fifth use added to it is as red as one taken away.
+    /// </summary>
+    [Fact]
+    public void The_operating_skill_sends_a_person_to_the_provider_s_web_app_for_four_things_only()
+    {
+        var text = File.ReadAllText(SkillPack.Find("operating-the-installation").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        const string Opening = "The provider's own web app is no step of any Jason flow.";
+
+        Assert.Equal(
+            Opening + " A person opens it by a link for four things only — connecting a LinkedIn account, connecting a mailbox by single sign-on, signing in, and creating the first API key — and each is theirs to do: say what it is for, and wait until they say it is done. "
+            + "Never send them there for the work itself.",
+            ParagraphAt(text, Opening));
+
+        var skill = Flattened("operating-the-installation");
+        var ready = skill.IndexOf("When `jason status` says `ready`, ask the person once what comes next", StringComparison.Ordinal);
+        var app = skill.IndexOf(Opening, StringComparison.Ordinal);
+        var off = skill.IndexOf("## Taking it off again", StringComparison.Ordinal);
+        Assert.True(
+            ready >= 0 && app > ready && off > app,
+            $"The paragraph on the provider's web app is at offset {app}; it belongs after the one on a ready installation (offset {ready}) and before \"Taking it off again\" (offset {off}).");
+    }
+
+    /// <summary>
+    /// An update now redeploys the skills an installation recorded, as its last step, so the skill says what that step
+    /// does and what it leaves: a failed redeploy leaves the update standing and names its own repair, and an update a
+    /// build before 0.12.0 applied has no such step and needs one <c>jason skills update</c> after it. Said where the
+    /// skill tells what <c>jason status</c> reports after an update, so a session that meets skills from another release
+    /// knows which of the two cases it is in.
+    /// </summary>
+    [Fact]
+    public void The_operating_skill_says_what_an_update_does_for_the_skills()
+    {
+        var text = File.ReadAllText(SkillPack.Find("operating-the-installation").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var paragraph = ParagraphAt(text, "After an update, `jason status` says whether the role skills still belong to this build");
+
+        Assert.Contains(
+            "From 0.12.0 on, `jason update apply` redeploys the skills this installation recorded as its last step, once the update is complete; if that step's line says it could not, the update still stands and the fix is the line it names.",
+            paragraph,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "An update applied by a build before 0.12.0 has no such step, so it needs one `jason skills update` after it.",
+            paragraph,
+            StringComparison.Ordinal);
+    }
+
+    private static int Occurrences(string text, string value)
+    {
+        var count = 0;
+        for (var at = text.IndexOf(value, StringComparison.Ordinal); at >= 0; at = text.IndexOf(value, at + value.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
+    /// <summary>The paragraph that holds <paramref name="words"/>, from the blank line before it to the one after, flattened.</summary>
+    private static string ParagraphAt(string text, string words)
+    {
+        var at = Locate(text, words);
+        var start = text.LastIndexOf("\n\n", at, StringComparison.Ordinal) is var before and >= 0 ? before + 2 : 0;
+        var end = text.IndexOf("\n\n", at, StringComparison.Ordinal);
+        return Whitespace().Replace(text[start..(end > at ? end : text.Length)], " ").Trim();
+    }
+
+    /// <summary>One list entry, from its marker to the next entry or the end of the list, flattened.</summary>
+    private static string BulletAt(string text, string marker)
+    {
+        var at = Locate(text, "\n" + marker);
+        var next = text.IndexOf("\n- ", at + 1, StringComparison.Ordinal);
+        var blank = text.IndexOf("\n\n", at + 1, StringComparison.Ordinal);
+        var end = new[] { next, blank, text.Length }.Where(index => index > at).Min();
+        return Whitespace().Replace(text[at..end], " ").Trim();
+    }
+
+    /// <summary>From a bold opening to the next bold opening at the start of a line, flattened: one topic with its lines.</summary>
+    private static string BlockAt(string text, string opening)
+    {
+        var at = Locate(text, opening);
+        var end = text.IndexOf("\n**", at + 1, StringComparison.Ordinal);
+        return Whitespace().Replace(text[at..(end > at ? end : text.Length)], " ").Trim();
+    }
+
+    /// <summary>Where the text says <paramref name="words"/>, wherever its lines happen to break.</summary>
+    private static int Locate(string text, string words)
+    {
+        var found = Regex.Match(text, Regex.Escape(words).Replace("\\ ", "\\s+", StringComparison.Ordinal));
+        Assert.True(found.Success, $"The text no longer says: {words}");
+        return found.Index;
+    }
+
+    /// <summary>One section, from its heading to the next heading of the same level.</summary>
+    private static string SectionOf(string text, string heading)
+    {
+        var at = text.IndexOf("\n" + heading + "\n", StringComparison.Ordinal);
+        Assert.True(at >= 0, $"The text has no section \"{heading}\".");
+        var end = text.IndexOf("\n## ", at + 1, StringComparison.Ordinal);
+        return text[at..(end > at ? end : text.Length)];
+    }
+
     /// <summary>
     /// When the pointer is sent: a person waited for, and a protective action that failed. A skill that named the first
     /// alone would have a session tell a person that a notification about failed work cannot have come from Jason.
@@ -130,12 +332,12 @@ public partial class InteractiveSkillTests
             StringComparison.Ordinal);
 
         // After an upgrade from 0.1.0 the runtime that 0.1.0's task started may still hold the data directory. The
-        // sentence is keyed to evidence a session can have, and the stop waits for the person's word. What it says a stop
-        // does is what the work-execution contract says: a stop drains and cancels nothing, so a provider operation
-        // already under way may still act. "It stops work in flight" promised the opposite.
+        // sentence is keyed to evidence a session can have, and the stop waits for the person's word — by the one rule
+        // for a stop a session runs itself, pointed at rather than said again, so the two can never drift apart.
+        // "It stops work in flight" promised the opposite of what a stop does.
         Assert.Contains("Only when `jason status` says the runtime runs in session 0, or the person tells you 0.1.0 had autostart enabled", skill, StringComparison.Ordinal);
         Assert.Contains(
-            "ask before you run `jason runtime stop`: it stops the runtime claiming new work and gives what is in flight up to ten seconds to finish; it cancels nothing, and a provider operation already under way may still act, ending at its own lease.",
+            "After `enable` or `disable` once, `jason runtime stop` once ends it; " + StopPointer + ".",
             skill,
             StringComparison.Ordinal);
         Assert.DoesNotContain("it stops work in flight", skill, StringComparison.Ordinal);

@@ -7,22 +7,14 @@ public partial class InteractiveSkillTests
     /// matter, the body and the catalog's bullet say so, the catalog's row names that host, and the pack's own rule holds
     /// the row's digest to the text. The operating skill teaches them too, and is a draft until a host has read its new
     /// text — a ready installation asks once between the wiring check and the real work; it returns here with the row
-    /// that reading gives it. The two skills beside this one teach no notifications, and each is held to the same rule
-    /// in a theory of its own, through the same helper.
+    /// that reading gives it. The planner in a person's session teaches no notifications, and is held to the same rule in
+    /// a theory of its own, through the same helper. The managed path teaches none either, and is a draft until a host
+    /// has read its new text — a description that names a person's first question, and a change of direction written
+    /// into the campaign's context; it returns in a theory of its own beside this one, through the same helper.
     /// </summary>
     [Theory]
     [InlineData("approvals-and-questions", "Claude Code 2.1.293 (claude-opus-5) | 0.5.0")]
     public void The_skills_that_teach_notifications_are_verified_by_the_host_that_read_them(string name, string reading) =>
-        IsVerifiedByTheHostThatReadIt(name, reading);
-
-    /// <summary>
-    /// The managed path teaches no notifications, so it is held on its own to the same rule: verified by the host that
-    /// read it as it ships. It was read again after the person's brief became the campaign's context, given when the
-    /// campaign is created, so its row names that later reading.
-    /// </summary>
-    [Theory]
-    [InlineData("managed-campaign-work", "Claude Code 2.1.302 (Opus 5.5) | 0.11.0")]
-    public void The_managed_path_is_verified_by_the_host_that_read_it(string name, string reading) =>
         IsVerifiedByTheHostThatReadIt(name, reading);
 
     /// <summary>
@@ -42,7 +34,7 @@ public partial class InteractiveSkillTests
         Assert.Contains($"**Status: verified** against {host}.", Flattened(name), StringComparison.Ordinal);
 
         var catalog = File.ReadAllText(SkillPack.Catalog());
-        Assert.Contains($"| `{name}` | {reading} | `{SkillPack.BodyDigest(SkillPack.Find(name).File)}` |", catalog, StringComparison.Ordinal);
+        Assert.Contains($"| `{name}` | {reading} | `{SkillPack.ReadingDigest(SkillPack.Find(name).File)}` |", catalog, StringComparison.Ordinal);
         Assert.Contains($"[`{name}`]({name}/SKILL.md) — **verified.**", catalog, StringComparison.Ordinal);
     }
 

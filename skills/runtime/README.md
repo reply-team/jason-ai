@@ -8,21 +8,22 @@ this pack ships with Jason **0.12.0**.
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
 
-**What they do not teach yet.** None of the six mentions `jason skills install` or `jason skills update`,
-`jason status` is mentioned only by `operating-the-installation`, and `jason logs` and `jason doctor` are
+**What they do not teach yet.** None of the six mentions `jason skills install`; `jason skills update` and
+`jason status` are mentioned only by `operating-the-installation`, and `jason logs` and `jason doctor` are
 taught by `troubleshooting-jason` only, which is a draft until a host reads it. `verified` in
-this repository means a named agent host read *that exact body* while driving this runtime and the digest of what
-it read is recorded, so a verified text cannot gain the new verbs without being re-read by a host — which is why
-the ones verified before 0.2.0 still teach what this build did before those verbs existed, correctly and incompletely.
+this repository means a named agent host read *that exact text* — its description and its body — while driving
+this runtime and the digest of what it read is recorded, so a verified text cannot gain the new verbs without
+being re-read by a host — which is why the ones verified before 0.2.0 still teach what this build did before those
+verbs existed, correctly and incompletely.
 
 ## The skills a person's own session reads
 
 One per moment somebody asks for something, because a host chooses a skill by its description and a
 description that promises everything matches nothing.
 
-- [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **verified.** Turning an objective into durable
-  campaign work and following it: the provider check, the campaign, the people it is about, provider
-  operations and AI role work, and what the runtime does with them afterwards.
+- [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **draft** until a host reads its new text.
+  Turning an objective into durable campaign work and following it: the provider check, the campaign, the people
+  it is about, provider operations and AI role work, and what the runtime does with them afterwards.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
   person to decide: the approvals parked at a claim and the questions a running role raised — including when a
   notification brought the person — presented in their own words and recorded as their decision.
@@ -110,7 +111,7 @@ SHA-256 of the text it read.
 |---|---|---|---|---|
 | `manager` | draft (re-authored onto the contract since its last reading) | — | — | — |
 | `planner` | draft | — | — | — |
-| `researcher` | verified | Claude Code 2.1.278 | 0.1.0 | `sha256:f7415241899c4ab082f21e0a0bc03036c96fec94da388f9b1b492a6cb2dcc389` |
+| `researcher` | verified | Claude Code 2.1.278 | 0.1.0 | `sha256:f5039552b4c487d14d109a4cea714de3849c8e62e45ade53c894538ad6eff201` |
 | `copywriter` | draft | — | — | — |
 | `personalizer` | draft | — | — | — |
 | `critic` | draft | — | — | — |
@@ -156,12 +157,12 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 - **`draft`** — no real agent host has read this text in the state it ships in. Its commands still parse
   against this build, because every skill's do.
 - **`verified`** — a real agent host read *this* text and did the job it teaches. The row below records which
-  host, which Jason build, and the SHA-256 of the text that was read, so that an edit without a new reading is
-  a failing test rather than a claim nobody can check.
+  host, which Jason build, and the SHA-256 of the text that was read — the description a host chose it by and
+  the body it followed — so that an edit to either without a new reading is a failing test rather than a claim
+  nobody can check.
 
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
-| `managed-campaign-work` | Claude Code 2.1.302 (Opus 5.5) | 0.11.0 | `sha256:4d04a711515fedaf49de60a8f4811613b3e787153a484376b79b5c50ee5123b4` |
-| `approvals-and-questions` | Claude Code 2.1.293 (claude-opus-5) | 0.5.0 | `sha256:ffe1e5d291e7d8f475ee549e9a0887232949768734bfede855d6d93a06c6079c` |
-| `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:9fb55ca5364ec65c9b629df5538ff26d7ce380e8d09017989e0d222fca4eb037` |
-| `planner-in-session` | Claude Code 2.1.302 (Opus 5.5) | 0.11.0 | `sha256:34fc30c059d93f49b74735763ea6f766eb7db4b7ab0c259250922c3350c7bd1f` |
+| `approvals-and-questions` | Claude Code 2.1.293 (claude-opus-5) | 0.5.0 | `sha256:b0e638d1d1674a3429ce58cc52fd23b134780222a30de79a04bc011ec49c8342` |
+| `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:7b25a5f8ab091f38607e9b8a891d6fdfd56673e0935c4a47d972eec957ee4d45` |
+| `planner-in-session` | Claude Code 2.1.302 (Opus 5.5) | 0.11.0 | `sha256:8fd443fe5700f86e23aa7e1eeca567e8f7afd8e4f9dc10a49628272a1e499548` |
