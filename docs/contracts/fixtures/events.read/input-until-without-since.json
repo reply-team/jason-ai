@@ -1,0 +1,19 @@
+{
+  "operation": "events.read",
+  "version": 1,
+  "case": "an end beside a cursor: a range is read by date, and a cursor already says where it is",
+  "input": {
+    "cursor": "c-41",
+    "since": null,
+    "until": "2026-08-01T00:00:00Z",
+    "limit": 100
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "",
+        "reason": "any_of"
+      }
+    ]
+  }
+}

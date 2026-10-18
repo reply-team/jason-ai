@@ -30,6 +30,6 @@ public static class ManagerTriggerKinds
         "external_id_pinned", "external_id_diverged", "external_effect_reported",
         "decision_raised", "decision_answered", "decision_cancelled",
         "notification_sent",
-        "inbound_reply_observed",
+        "inbound_reply_observed", "provider_event_observed",
     }.ToFrozenSet(StringComparer.Ordinal);
 }

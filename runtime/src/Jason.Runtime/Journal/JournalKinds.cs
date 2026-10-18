@@ -122,6 +122,14 @@ public static partial class JournalKinds
     /// </summary>
     public const string InboundReplyObserved = "inbound_reply_observed";
 
+    /// <summary>
+    /// A provider's event that is not a thread moving — a reply the provider detected, an invitation accepted, a message
+    /// that bounced — stored and found to concern the campaign by an identifier its operations pinned: the event's kind,
+    /// identifiers, moment and the provider's own flags, and the person where one contact is pinned. Never anything
+    /// anybody wrote. A trigger kind, and only the runtime's own store may say one.
+    /// </summary>
+    public const string ProviderEventObserved = "provider_event_observed";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -171,6 +179,7 @@ public static partial class JournalKinds
         DecisionCancelled,
         NotificationSent,
         InboundReplyObserved,
+        ProviderEventObserved,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);

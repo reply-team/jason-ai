@@ -282,6 +282,10 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTime?>("EventsFrom")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("events_from");
+
                     b.Property<string>("ExecutionProfile")
                         .HasMaxLength(64)
                         .HasColumnType("TEXT")
@@ -704,6 +708,92 @@ namespace Jason.Runtime.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.EventAttribution", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<int>("CampaignId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("campaign_id");
+
+                    b.Property<int>("EventId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("event_id");
+
+                    b.Property<string>("Rule")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("rule");
+
+                    b.HasKey("Id")
+                        .HasName("pk_event_attributions");
+
+                    b.HasIndex("CampaignId", "EventId")
+                        .HasDatabaseName("ix_event_attributions_campaign_id_event_id");
+
+                    b.HasIndex("EventId", "CampaignId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_event_attributions_event_id_campaign_id");
+
+                    b.ToTable("event_attributions", (string)null);
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.EventSource", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BindingIdentity")
+                        .IsRequired()
+                        .HasMaxLength(71)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("binding_identity");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Cursor")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("cursor");
+
+                    b.Property<DateTime?>("CursorAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("cursor_at");
+
+                    b.Property<string>("PluginId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("plugin_id");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_event_sources");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_event_sources_public_id");
+
+                    b.HasIndex("PluginId", "BindingIdentity")
+                        .IsUnique()
+                        .HasDatabaseName("ix_event_sources_plugin_id_binding_identity");
+
+                    b.ToTable("event_sources", (string)null);
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.ExecutionProfile", b =>
                 {
                     b.Property<int>("Id")
@@ -1006,11 +1096,96 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasDatabaseName("ix_journal_campaign_kind_key")
                         .HasFilter("kind = 'inbound_reply_observed'");
 
+                    b.HasIndex(new[] { "CampaignId", "Kind", "Key" }, "ix_journal_campaign_kind_key_events")
+                        .IsUnique()
+                        .HasDatabaseName("ix_journal_campaign_kind_key_events")
+                        .HasFilter("kind = 'provider_event_observed'");
+
                     b.ToTable("journal", null, t =>
                         {
                             t.HasCheckConstraint("ck_journal_new_json", "new_json IS NULL OR json_valid(new_json)");
 
                             t.HasCheckConstraint("ck_journal_old_json", "old_json IS NULL OR json_valid(old_json)");
+                        });
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.ProviderEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<int?>("ContactId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("contact_id");
+
+                    b.Property<string>("Data")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("data_json");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(71)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<string>("PluginId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("plugin_id");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.Property<string>("ReadId")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("read_id");
+
+                    b.Property<int>("SourceId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("source_id");
+
+                    b.Property<DateTime>("StoredAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("stored_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_events");
+
+                    b.HasIndex("ContactId")
+                        .HasDatabaseName("ix_events_contact_id");
+
+                    b.HasIndex("Key")
+                        .IsUnique()
+                        .HasDatabaseName("ix_events_key");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_events_public_id");
+
+                    b.HasIndex("SourceId", "OccurredAt")
+                        .HasDatabaseName("ix_events_source_id_occurred_at");
+
+                    b.ToTable("events", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_events_data_json", "json_valid(data_json)");
                         });
                 });
 
@@ -1697,6 +1872,27 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Navigation("WorkItem");
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.EventAttribution", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.Campaign", "Campaign")
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_event_attributions_campaigns_campaign_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.ProviderEvent", "Event")
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_event_attributions_events_event_id");
+
+                    b.Navigation("Campaign");
+
+                    b.Navigation("Event");
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.ExecutionProfileRevision", b =>
                 {
                     b.HasOne("Jason.Runtime.Persistence.ExecutionProfile", "Profile")
@@ -1737,6 +1933,26 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasConstraintName("fk_journal_campaigns_campaign_id");
 
                     b.Navigation("Campaign");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.ProviderEvent", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.Contact", "Contact")
+                        .WithMany()
+                        .HasForeignKey("ContactId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_events_contacts_contact_id");
+
+                    b.HasOne("Jason.Runtime.Persistence.EventSource", "Source")
+                        .WithMany()
+                        .HasForeignKey("SourceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_events_event_sources_source_id");
+
+                    b.Navigation("Contact");
+
+                    b.Navigation("Source");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.Report", b =>

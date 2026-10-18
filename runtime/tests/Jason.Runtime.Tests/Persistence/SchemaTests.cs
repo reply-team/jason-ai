@@ -22,7 +22,7 @@ public class SchemaTests
         Assert.Equal(
             ["id", "archived_at", "context_json", "created_at", "name", "public_id", "status", "updated_at", "execution_profile",
              "manager_event_watermark", "manager_review_anchor", "manager_review_seconds", "idempotency_digest", "idempotency_key",
-             "inbound_failures", "inbound_offset", "inbound_sync_item_id", "inbound_synced_at", "inbound_watermark"],
+             "inbound_failures", "inbound_offset", "inbound_sync_item_id", "inbound_synced_at", "inbound_watermark", "events_from"],
             Names(connection, "SELECT name FROM pragma_table_info('campaigns')"));
         Assert.Equal(
             ["id", "public_id", "ts", "actor_type", "actor_id", "kind", "campaign_id", "key", "old_json", "new_json", "reason", "attempt_id", "work_item_id"],
@@ -37,7 +37,8 @@ public class SchemaTests
 
         Assert.Equal(
             [
-                "attempts_provenance_valid_insert", "attempts_provenance_valid_update", "execution_profile_revisions_no_delete",
+                "attempts_provenance_valid_insert", "attempts_provenance_valid_update", "event_attributions_no_delete",
+                "event_attributions_no_update", "events_no_delete", "events_no_update", "execution_profile_revisions_no_delete",
                 "execution_profile_revisions_no_update", "journal_no_delete", "journal_no_update", "reports_no_delete",
                 "reports_no_update", "work_items_result_frozen",
             ],

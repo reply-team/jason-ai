@@ -1,0 +1,12 @@
+{
+  "operation": "events.read",
+  "version": 1,
+  "case": "a range a person asked for: everything at or after one moment and before another",
+  "input": {
+    "cursor": null,
+    "since": "2026-07-01T00:00:00Z",
+    "until": "2026-08-01T00:00:00Z",
+    "limit": 100
+  },
+  "expect": "valid"
+}

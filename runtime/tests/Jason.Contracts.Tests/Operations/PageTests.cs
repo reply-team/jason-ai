@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Events;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 
@@ -84,6 +85,27 @@ public class PageTests
         Assert.True(worst <= PageBudget, $"{id}: a result with one item can take {worst} bytes, past the {PageBudget} a page is cut at.");
     }
 
+    /// <summary>
+    /// The events read pages by its own cursor rather than by an offset, and its page is held to the same two bounds: it
+    /// never holds more events than the caller may ask for, and the largest page the schema allows with one event on it
+    /// fits under the budget, whichever of the four kinds that event is.
+    /// </summary>
+    [Fact]
+    public void One_event_of_an_events_page_always_fits_under_the_budget_a_page_is_cut_at()
+    {
+        var contract = EventsCatalog.Find("events.read")!;
+        var output = (JsonObject)contract.OutputSchema.DeepClone();
+        var events = (JsonObject)output["properties"]!["events"]!;
+
+        Assert.Equal((int)contract.InputSchema["properties"]!["limit"]!["maximum"]!, (int)events["maxItems"]!);
+        Assert.Contains("has_more", Required(contract.OutputSchema));
+        events["maxItems"] = 1;
+
+        var worst = Worst(output, output, "");
+
+        Assert.True(worst <= PageBudget, $"events.read: a page with one event can take {worst} bytes, past the {PageBudget} a page is cut at.");
+    }
+
     /// <summary>The one array of a paged result: the page itself.</summary>
     private static (string Name, JsonObject Schema) Page(OperationContract contract)
     {
@@ -111,6 +133,11 @@ public class PageTests
         if (schema["const"] is { } constant)
         {
             return Measure(constant);
+        }
+
+        if (schema["anyOf"] is JsonArray branches)
+        {
+            return branches.Max(branch => Worst((JsonObject)branch!, root, pointer));
         }
 
         if (schema["enum"] is JsonArray values)

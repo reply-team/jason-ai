@@ -549,6 +549,89 @@ public class ManifestReaderTests : IDisposable
         Assert.Equal("contract_unsupported", Assert.Single(unknown.Problems).Code);
     }
 
+    /// <summary>
+    /// A provider says it reads its accounts' events by declaring the events contract it speaks, beside the operation
+    /// contract; one that declares nothing reads none. Saying nothing is the default every manifest written before the
+    /// key existed keeps.
+    /// </summary>
+    [Fact]
+    public void A_provider_may_declare_the_events_contract_it_speaks()
+    {
+        var reads = Read("""
+            manifest_version: 1
+            id: fake
+            version: 1.0.0
+            kind: provider
+            contracts:
+              protocol: [1]
+              operations: [1]
+              events: [1]
+            operations: [campaign.get]
+            """);
+
+        Assert.True(reads.IsValid, string.Join("; ", reads.Problems.Select(p => $"{p.Path}: {p.Code}: {p.Message}")));
+        Assert.Equal([1], reads.Manifest!.Contracts.Events);
+        Assert.True(reads.Manifest.ReadsEvents);
+
+        var silent = Read("""
+            manifest_version: 1
+            id: fake
+            version: 1.0.0
+            kind: provider
+            contracts:
+              protocol: [1]
+              operations: [1]
+            operations: [campaign.get]
+            """);
+
+        Assert.True(silent.IsValid, string.Join("; ", silent.Problems.Select(p => $"{p.Path}: {p.Code}: {p.Message}")));
+        Assert.Empty(silent.Manifest!.Contracts.Events);
+        Assert.False(silent.Manifest.ReadsEvents);
+    }
+
+    [Fact]
+    public void An_events_list_without_a_version_this_runtime_speaks_is_contract_unsupported()
+    {
+        var unknown = Read("""
+            manifest_version: 1
+            id: fake
+            version: 1.0.0
+            kind: provider
+            contracts:
+              protocol: [1]
+              operations: [1]
+              events: [2]
+            operations: [campaign.get]
+            """);
+
+        var problem = Assert.Single(unknown.Problems);
+        Assert.Equal("contract_unsupported", problem.Code);
+        Assert.Equal("contracts.events", problem.Path);
+    }
+
+    /// <summary>
+    /// A notification plugin delivers pointers and reads no account, so a declaration of the events contract on one is a
+    /// mistake in the package, said by a code of its own rather than taken as a reader nobody would ever invoke.
+    /// </summary>
+    [Fact]
+    public void A_notification_plugin_declaring_the_events_contract_is_refused_as_events_not_allowed()
+    {
+        var refused = Read("""
+            manifest_version: 1
+            id: fake
+            version: 1.0.0
+            kind: notification
+            contracts:
+              protocol: [1]
+              operations: [1]
+              events: [1]
+            """);
+
+        var problem = Assert.Single(refused.Problems);
+        Assert.Equal("events_not_allowed", problem.Code);
+        Assert.Equal("contracts.events", problem.Path);
+    }
+
     [Fact]
     public void A_document_that_is_not_a_mapping_of_fields_is_not_a_manifest()
     {

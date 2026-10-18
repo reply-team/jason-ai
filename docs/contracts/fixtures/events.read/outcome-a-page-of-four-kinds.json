@@ -1,0 +1,66 @@
+{
+  "operation": "events.read",
+  "version": 1,
+  "case": "one event of each kind, and more to read with the cursor",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "events": [
+        {
+          "kind": "thread_moved",
+          "id": null,
+          "occurred_at": "2026-10-01T09:00:00.000Z",
+          "thread": "t_501",
+          "contact": "c_1001",
+          "campaign": "p_1",
+          "moved_by": "other_side",
+          "channel": "email",
+          "unread": true,
+          "has_meeting_intent": null
+        },
+        {
+          "kind": "reply_detected",
+          "id": "e_77",
+          "occurred_at": "2026-10-01T09:01:00.000Z",
+          "contact": "c_1001",
+          "campaign": "p_1",
+          "thread": "t_501",
+          "channel": "email"
+        },
+        {
+          "kind": "invitation_accepted",
+          "id": null,
+          "occurred_at": "2026-10-01T10:00:00.000Z",
+          "contact": "c_1002",
+          "campaign": null,
+          "account": "li_9"
+        },
+        {
+          "kind": "bounce",
+          "id": null,
+          "occurred_at": "2026-10-01T11:00:00.000Z",
+          "contact": "c_1003",
+          "campaign": "p_1",
+          "message": "m_88",
+          "bounce": "hard"
+        }
+      ],
+      "cursor": "c-42",
+      "has_more": true
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 220,
+      "exec_calls": 1,
+      "http_calls": 0,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "succeeded",
+    "retriable": false
+  }
+}

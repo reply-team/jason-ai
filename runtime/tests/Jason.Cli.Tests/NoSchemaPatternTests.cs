@@ -15,7 +15,7 @@ public sealed class NoSchemaPatternTests
     /// <remarks>
     /// The count is the whole process's rather than this call's, and that is the stronger claim on purpose: nothing in
     /// this test project validates a schema, so any compiled pattern here came from the client, or from the contracts
-    /// assembly as it loaded — which a count taken before and after the call would not see. Both catalogs are touched
+    /// assembly as it loaded — which a count taken before and after the call would not see. Every catalog is touched
     /// first, so a warm-up hidden in either one's initialiser is caught whatever order the tests run in.
     /// </remarks>
     [Fact]
@@ -25,6 +25,7 @@ public sealed class NoSchemaPatternTests
 
         Assert.NotEmpty(OperationCatalog.All);
         Assert.NotEmpty(DeliveryCatalog.All);
+        Assert.NotEmpty(Jason.Contracts.Events.EventsCatalog.All);
         var help = await CliApp.RunAsync(["--help"], new CliEnvironment(new StringWriter(), new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
         var list = await CliApp.RunAsync(["campaign", "list"], new CliEnvironment(new StringWriter(), new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
 

@@ -391,6 +391,96 @@ public class PluginInvokerTests
         "ntf_01K0test",
         Purpose: InvocationPurpose.Delivery);
 
+    /// <summary>
+    /// A read of an account's events reaches a provider that declares the events contract, with the events contract's
+    /// version in its envelope and nothing about a campaign: the binding says which account, and that is all the read is
+    /// told.
+    /// </summary>
+    [Fact]
+    public async Task An_events_read_reaches_a_provider_that_declares_the_events_contract()
+    {
+        await using var api = await StartAsync(paths => TestPlugins.Write(
+            paths,
+            "reader",
+            TestPlugins.Manifest("reader", operations: "[campaign.get]").Replace("  operations: [1]\n", "  operations: [1]\n  events: [1]\n", StringComparison.Ordinal),
+            "export function invoke(operation, input, context) { return { result: { events: [], cursor: operation + ':' + input.cursor + ':' + context.binding.workspace + ':' + (context.campaign_id == null), has_more: false } }; }"));
+
+        var result = await InvokeAsync(api, EventsRead("reader", new JsonObject { ["workspace"] = "eu" }), Ct);
+
+        var succeeded = Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
+        Assert.Equal("events.read:c-41:eu:true", succeeded.Result!["cursor"]!.GetValue<string>());
+        Assert.Equal(Jason.Contracts.Events.EventsContract.CurrentVersion, result.Provenance.OperationContractVersion);
+        Assert.NotNull(result.Launch);
+    }
+
+    [Fact]
+    public async Task An_events_read_is_refused_for_a_provider_that_does_not_declare_the_events_contract()
+    {
+        await using var api = await StartAsync(paths => TestPlugins.Write(
+            paths,
+            "writer",
+            TestPlugins.Manifest("writer", operations: "[campaign.get]"),
+            "export function invoke() { return { result: {} }; }"));
+
+        var result = await InvokeAsync(api, EventsRead("writer"), Ct);
+
+        var refused = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginOperationUnsupported, refused.Code);
+        Assert.Contains("declares no version of the events contract", refused.Message, StringComparison.Ordinal);
+        Assert.Null(result.Launch);
+    }
+
+    [Fact]
+    public async Task An_events_read_is_refused_for_a_notification_plugin()
+    {
+        await using var api = await StartAsync(paths => TestPlugins.Write(
+            paths,
+            "notifier",
+            """
+            manifest_version: 1
+            id: notifier
+            version: 1.0.0
+            kind: notification
+            contracts:
+              protocol: [1]
+              operations: [1]
+            """,
+            "export function invoke() { return { result: {} }; }"));
+
+        var result = await InvokeAsync(api, EventsRead("notifier"), Ct);
+
+        var refused = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginKindNotInvocable, refused.Code);
+        Assert.Null(result.Launch);
+    }
+
+    /// <summary>A read is invoked only for a contract the events family publishes, whatever the plugin declares.</summary>
+    [Fact]
+    public async Task An_events_read_under_a_name_the_events_family_does_not_publish_is_refused()
+    {
+        await using var api = await StartAsync(paths => TestPlugins.Write(
+            paths,
+            "reader",
+            TestPlugins.Manifest("reader", operations: "[campaign.get]").Replace("  operations: [1]\n", "  operations: [1]\n  events: [1]\n", StringComparison.Ordinal),
+            "export function invoke() { return { result: {} }; }"));
+
+        var result = await InvokeAsync(api, EventsRead("reader") with { Operation = "campaign.get" }, Ct);
+
+        var refused = Assert.IsType<InvocationOutcome.ProtocolFailure>(result.Outcome);
+        Assert.Equal(ProtocolCodes.PluginOperationUnsupported, refused.Code);
+        Assert.Contains("is not an events contract this build publishes", refused.Message, StringComparison.Ordinal);
+        Assert.Null(result.Launch);
+    }
+
+    /// <summary>What the runtime's reader hands a provider, for the events contract.</summary>
+    private static PluginInvocationRequest EventsRead(string plugin, JsonObject? binding = null) => new(
+        plugin,
+        "events.read",
+        new JsonObject { ["cursor"] = "c-41", ["since"] = null, ["until"] = null, ["limit"] = 100 },
+        binding,
+        "evr_01K0test",
+        Purpose: InvocationPurpose.Events);
+
     [Fact]
     public async Task An_operation_the_plugin_does_not_implement_is_refused()
     {

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Events;
 using Jason.Contracts.Json;
 using Jason.Contracts.Notifications;
 using Jason.Contracts.Operations;
@@ -41,7 +42,10 @@ public class FixtureTests
 
         Assert.NotEmpty(OperationCatalog.All);
         Assert.NotEmpty(DeliveryCatalog.All);
-        foreach (var id in OperationCatalog.All.Select(contract => contract.Id).Concat(DeliveryCatalog.All.Select(contract => contract.Id)))
+        Assert.NotEmpty(EventsCatalog.All);
+        foreach (var id in OperationCatalog.All.Select(contract => contract.Id)
+            .Concat(DeliveryCatalog.All.Select(contract => contract.Id))
+            .Concat(EventsCatalog.All.Select(contract => contract.Id)))
         {
             Assert.Contains(inputs, fixture => (string?)fixture["operation"] == id);
             Assert.Contains(outcomes, fixture => (string?)fixture["operation"] == id);
@@ -149,6 +153,12 @@ public class FixtureTests
         if (Delivery(fixture, relative) is { } delivery)
         {
             ADeliveryOutcome(relative, delivery, outcome, expected, status);
+            return;
+        }
+
+        if (Events(fixture, relative) is { } events)
+        {
+            AnEventsOutcome(relative, events, outcome, expected, status);
             return;
         }
 
@@ -338,9 +348,66 @@ public class FixtureTests
         }
     }
 
+    /// <summary>
+    /// What a read's outcome means: a success is a page the output schema accepts and no identifiers, because a read
+    /// finds pins and writes none; a failure is one the contract declares under its class; and a read that failed is
+    /// read again at the doubled cadence where the failure may pass by itself — transient, or ambiguous, which an
+    /// answer outside the contract is — and after a day where it will not.
+    /// </summary>
+    private static void AnEventsOutcome(string relative, EventsContract contract, PluginOutcome outcome, JsonObject expected, string status)
+    {
+        var resultProblems = outcome.Status == OutcomeStatus.Succeeded
+            ? [.. contract.CheckResult(outcome.Result), .. EventsContract.CheckExternalIds(outcome.ExternalIds)]
+            : new List<SchemaProblem>();
+
+        switch (status)
+        {
+            case "succeeded":
+                Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+                Assert.True(resultProblems.Count == 0, $"{relative} succeeds with an answer refused at {Listed([.. resultProblems.Select(problem => problem.Pointer + " " + problem.Reason)])}.");
+                Assert.False((bool)expected["retriable"]!, "A page that was read is not read again.");
+                break;
+
+            case "failed":
+                Assert.Equal(OutcomeStatus.Failed, outcome.Status);
+                Assert.NotNull(outcome.Error);
+                Assert.Equal(Class(expected), outcome.Error.Class);
+                var declared = contract.FailureCodes.SingleOrDefault(code => string.Equals(code.Code, outcome.Error.Code, StringComparison.Ordinal));
+                Assert.True(declared is not null, $"{relative} reports `{outcome.Error.Code}`, which {contract.Id} does not declare.");
+                Assert.Equal(declared.Class, outcome.Error.Class);
+                Assert.Equal(EventsContract.Retriable(outcome.Error.Class), (bool)expected["retriable"]!);
+                break;
+
+            case "result_invalid":
+                Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
+                TheStatedProblemsAndNoOthers(relative, expected, resultProblems);
+                Assert.Equal(FailureClass.Ambiguous, Class(expected));
+                Assert.Equal(EventsContract.Retriable(FailureClass.Ambiguous), (bool)expected["retriable"]!);
+                break;
+
+            default:
+                Assert.Fail($"{relative} expects the unknown status `{status}`.");
+                break;
+        }
+    }
+
     /// <summary>The schema an input fixture is checked against, in whichever family publishes its contract.</summary>
     private static JsonObject InputSchema(JsonObject fixture, string relative) =>
-        Delivery(fixture, relative)?.InputSchema ?? Operation(fixture, relative).InputSchema;
+        Delivery(fixture, relative)?.InputSchema ?? Events(fixture, relative)?.InputSchema ?? Operation(fixture, relative).InputSchema;
+
+    /// <summary>The events contract a fixture names, or null where it names another family's.</summary>
+    private static EventsContract? Events(JsonObject fixture, string relative)
+    {
+        var id = (string?)fixture["operation"];
+        if (id is null || EventsCatalog.Find(id) is not { } contract)
+        {
+            return null;
+        }
+
+        Assert.Equal(contract.Version, (int)fixture["version"]!);
+        Assert.False(string.IsNullOrWhiteSpace((string?)fixture["case"]), $"{relative} does not say which case it is.");
+        return contract;
+    }
 
     /// <summary>The delivery contract a fixture names, or null where it names a canonical operation.</summary>
     private static DeliveryContract? Delivery(JsonObject fixture, string relative)

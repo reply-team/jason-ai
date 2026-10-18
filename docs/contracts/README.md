@@ -38,6 +38,8 @@ docs/contracts/
   fixtures/<name>/preview-*.json   what a person deciding reads, rendered from an input: the summary and its highlights
   notifications/<name>.json        the delivery contract, a family of its own, embedded the same way
   notifications/<name>.md          the same contract explained, with a generated block
+  events/<name>.json               the events contract, a third family, embedded the same way
+  events/<name>.md                 the same contract explained, with a generated block
 ```
 
 ## The delivery contract
@@ -52,6 +54,19 @@ could carry and a lease would be sized for. So it has none of an operation's lev
 no preflight, no repeat rule — because a delivery is not SDR work, and only its input, its result, three failure codes,
 its timeout and its conformance list. Its fixtures live beside the operations' under
 [`fixtures/notification.send/`](fixtures/notification.send) and are run by the same tests.
+
+## The events contract
+
+A third family is published here, and it is neither a canonical operation nor a delivery:
+[`events/events.read.json`](events/events.read.md), what a provider plugin that declares `contracts.events: [1]` is
+invoked for — read what happened in one account after the point the plugin's own cursor names: a thread that moved, a
+reply the provider detected, an invitation accepted, a message that bounced. A read of an account belongs to no
+campaign, so no work item names it and no route carries it; it is under `events/` and read by a catalog of its own, for
+the same reason the delivery contract is. It has the delivery contract's fields and nothing more: its input, its
+result, four failure codes, its timeout and its conformance list. What it returns is identifiers, moments and the
+provider's own flags — every kind a closed object, with nothing anybody wrote — and it pins nothing: a read finds the
+identifiers operations pinned and writes none. Its fixtures live beside the others' under
+[`fixtures/events.read/`](fixtures/events.read) and are run by the same tests.
 
 ## What a document states
 
@@ -177,8 +192,10 @@ at most a row per channel and is not paged.
 - One item always fits. Every output string of a paged read is bounded, and the largest result the schema allows
   with one item on the page — every string at its longest, twelve bytes a character — is held under 768 KiB by a
   test.
-- There are no cursors in this version: the providers mapped first page by offset, and
-  [`divergence-from-l1.md`](divergence-from-l1.md) records where the catalogue says otherwise.
+- No canonical operation pages by a cursor: the providers mapped first page by offset, and
+  [`divergence-from-l1.md`](divergence-from-l1.md) records where the catalogue says otherwise. The events contract is
+  the one read that does: it pages by a cursor its plugin returns and nothing else reads, with a page of at most 100
+  events held to the same 768 KiB, and one event always fits.
 
 ## The schema dialect
 

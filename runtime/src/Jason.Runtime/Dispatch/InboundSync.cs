@@ -392,7 +392,7 @@ public sealed class InboundSync(
             }
 
             var moment = Instant(moved);
-            var key = CanonicalJson.Hash(new JsonObject { ["plugin"] = pluginId, ["thread"] = id, ["moment"] = moment });
+            var key = ObservationKey(pluginId, id, moment);
             if (seen.Add(key))
             {
                 threads.Add(new Observation(key, id, thread.Channel, moment, thread.Unread, thread.HasMeetingIntent, thread.Contact?.ExternalId));
@@ -462,8 +462,15 @@ public sealed class InboundSync(
                 ? since.UtcDateTime
                 : null;
 
+    /// <summary>
+    /// The key a move of a thread is said under: the plugin, the thread and the moment it moved, hashed. A move the
+    /// events store finds the other side made is said under the same key, so a move both reads found is said once.
+    /// </summary>
+    internal static string ObservationKey(string pluginId, string thread, string moment) =>
+        CanonicalJson.Hash(new JsonObject { ["plugin"] = pluginId, ["thread"] = thread, ["moment"] = moment });
+
     /// <summary>A moment as every timestamp the runtime writes: ISO-8601 UTC to the millisecond.</summary>
-    private static string Instant(DateTimeOffset moment) =>
+    internal static string Instant(DateTimeOffset moment) =>
         JsonSerializer.SerializeToNode(moment, JasonJson.Options)!.GetValue<string>();
 
     /// <summary>The campaign's row, as long as the read this step is accounting for is still the one outstanding.</summary>

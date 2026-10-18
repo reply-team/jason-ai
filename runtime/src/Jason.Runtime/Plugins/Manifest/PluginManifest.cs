@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Jason.Contracts.Events;
 using Jason.Contracts.Plugins;
 
 namespace Jason.Runtime.Plugins.Manifest;
@@ -18,7 +19,15 @@ public sealed record EnvRequestSpec(IReadOnlyList<string> Variables);
 /// <summary>What the manifest asks for. Asking is not being given it: the grants decide that, at every reload.</summary>
 public sealed record CapabilityRequests(ExecRequestSpec? Exec, HttpRequestSpec? Http, EnvRequestSpec? Env);
 
-public sealed record ManifestContracts(IReadOnlyList<int> Protocol, IReadOnlyList<int> Operations);
+/// <summary>
+/// The contract versions a plugin speaks: the plugin-host protocol, the canonical operations (for a notification plugin,
+/// the delivery contract), and the events contract, which only a provider that reads its accounts' events declares —
+/// empty for every other.
+/// </summary>
+public sealed record ManifestContracts(IReadOnlyList<int> Protocol, IReadOnlyList<int> Operations)
+{
+    public IReadOnlyList<int> Events { get; init; } = [];
+}
 
 /// <summary>What the plugin asks its invocations to run under; null means "whatever the installation decides".</summary>
 public sealed record ManifestLimits(int? TimeoutMs, int? MemoryMb);
@@ -40,7 +49,11 @@ public sealed record PluginManifest(
     PluginEntry Entry,
     CapabilityRequests Capabilities,
     ManifestLimits Limits,
-    JsonObject? Binding);
+    JsonObject? Binding)
+{
+    /// <summary>Whether this is a provider that reads its accounts' events, in a version of the events contract this build speaks.</summary>
+    public bool ReadsEvents => Kind == PluginKind.Provider && Contracts.Events.Contains(EventsContract.CurrentVersion);
+}
 
 /// <summary>The ceilings of this installation, which a manifest may approach but never raise.</summary>
 public sealed record ManifestBounds(int MaxTimeoutMs, int MaxMemoryMb);

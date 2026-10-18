@@ -82,6 +82,13 @@ public sealed class Campaign
     /// <summary>How many reads in a row have ended without a result; the next one waits longer for each.</summary>
     public int InboundFailures { get; set; }
 
+    /// <summary>
+    /// From when a provider's events are said in this campaign's chronicle: the runtime's clock when the campaign first
+    /// went live, and never moved after. An event before it is history — stored, and found to concern the campaign, but
+    /// said by no line. Null while a campaign has never been live.
+    /// </summary>
+    public DateTime? EventsFrom { get; set; }
+
     public List<CampaignContact> Members { get; } = [];
 
     /// <summary>What plugins call this campaign. Loaded wherever the campaign is answered with, so an empty list means none.</summary>

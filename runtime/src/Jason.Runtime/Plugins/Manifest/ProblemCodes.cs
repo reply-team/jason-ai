@@ -22,6 +22,9 @@ public static class ProblemCodes
     public const string OperationInvalid = "operation_invalid";
     public const string OperationDuplicate = "operation_duplicate";
     public const string OperationsNotAllowed = "operations_not_allowed";
+
+    /// <summary>A notification plugin declares the events contract: it delivers pointers and reads no account.</summary>
+    public const string EventsNotAllowed = "events_not_allowed";
     public const string EntryModuleMissing = "entry_module_missing";
     public const string EntryModuleOutsidePackage = "entry_module_outside_package";
     public const string EntryFunctionInvalid = "entry_function_invalid";

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Jason.Contracts.Events;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 
@@ -320,13 +321,33 @@ internal sealed partial class ManifestRules(JsonObject root, string directoryNam
             return new ManifestContracts([], []);
         }
 
-        UnknownKeys(contracts, "contracts", ["protocol", "operations"]);
+        UnknownKeys(contracts, "contracts", ["protocol", "operations", "events"]);
         var protocol = ReadVersions(contracts, "contracts", "protocol", required: true, PluginProtocol.CurrentVersion);
 
         // A notification plugin implements no canonical operation, so it declares no contract for them either.
         var operationsRequired = kind != PluginKind.Notification;
         var operations = ReadVersions(contracts, "contracts", "operations", operationsRequired, PluginProtocol.OperationContractVersion);
-        return new ManifestContracts(protocol, operations);
+        return new ManifestContracts(protocol, operations) { Events = ReadEvents(contracts, kind) };
+    }
+
+    /// <summary>
+    /// The events contract, which only a provider declares: one that reads its accounts' events says so, and one that
+    /// does not says nothing. A notification plugin reads no account, so a declaration on one is refused by a code of
+    /// its own rather than read as a reader nothing would invoke.
+    /// </summary>
+    private IReadOnlyList<int> ReadEvents(JsonObject contracts, PluginKind? kind)
+    {
+        if (kind == PluginKind.Notification)
+        {
+            if (Has(contracts, "events"))
+            {
+                Add(ProblemCodes.EventsNotAllowed, "contracts.events", "a notification plugin reads no account's events.");
+            }
+
+            return [];
+        }
+
+        return ReadVersions(contracts, "contracts", "events", required: false, EventsContract.CurrentVersion);
     }
 
     private IReadOnlyList<int> ReadVersions(JsonObject parent, string parentPath, string name, bool required, int supported)

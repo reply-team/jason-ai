@@ -49,6 +49,11 @@ public sealed class ManagerOptions
         // is the manager's. An installation that narrowed this list before the kind existed is not woken by replies
         // until it adds it.
         JournalKinds.InboundReplyObserved,
+
+        // A provider said something happened that concerns the campaign: a reply it detected, an invitation accepted, a
+        // message that bounced. What it calls for is the manager's. An installation that narrowed this list before the
+        // kind existed is not woken by them until it adds it.
+        JournalKinds.ProviderEventObserved,
     ];
 
     /// <summary>

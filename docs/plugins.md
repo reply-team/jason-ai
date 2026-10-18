@@ -73,6 +73,7 @@ homepage: https://example.com    # optional; absolute https URL
 contracts:
   protocol: [1]                  # required; plugin-host protocol versions this plugin speaks
   operations: [1]                # required for a provider; canonical-operation contract versions
+  events: [1]                    # optional, a provider only: the events contract versions it reads accounts by
 operations: [echo.run, exec.run] # required non-empty for a provider; absent/empty for notification
 entry:                           # optional; defaults to main.js / invoke
   module: main.js
@@ -111,6 +112,7 @@ binding:                         # optional; a schema, in the published dialect,
 | `homepage` | optional; absolute `https` URL | `field_invalid` |
 | `contracts.protocol` | required non-empty list of whole numbers; must include `1` | `field_required`, `field_invalid`, `contract_unsupported` |
 | `contracts.operations` | required for a provider, optional for a notification; must include `1` | `field_required`, `field_invalid`, `contract_unsupported` |
+| `contracts.events` | optional, and only on a provider; when present, must include `1` | `field_invalid`, `contract_unsupported`, `events_not_allowed` |
 | `operations` | required non-empty for a provider; each `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$` — at least one dot — and unique | `field_required`, `field_invalid`, `operation_invalid`, `operation_duplicate` |
 | `operations` on a `notification` | must be absent or empty | `operations_not_allowed` |
 | `entry.module` | `.js` or `.mjs`, relative, no `..` segments, inside the package, must exist | `field_invalid`, `entry_module_outside_package`, `entry_module_missing` |
@@ -1162,3 +1164,47 @@ code and class, or `not_attempted` with `unavailable`, `not_declared` or `bindin
 **Testing it.** A loopback server stands in for the service: grant `127.0.0.1:<port>`, put that host in a copy of the
 manifest, and invoke the package through the plugin host the way §12 describes, with an input like the one above. The
 ntfy package's own tests are this, end to end.
+
+## 15. Writing an events plugin
+
+An events plugin is a provider plugin that also reads what happened in its accounts: a thread that moved, a reply the
+provider detected, an invitation accepted, a message that bounced. It is invoked for the events contract
+[`events.read`](contracts/events/events.read.md) by the runtime itself, once for each page of a read, with the binding
+of the account it reads; no work item names it and no route carries it. A read belongs to no campaign, and the
+runtime finds the campaigns an event concerns by the identifiers your operations pinned.
+
+**The manifest.** `kind: provider`, its `operations` as ever, and the events contract version it speaks:
+
+```yaml
+contracts:
+  protocol: [1]
+  operations: [1]
+  events: [1]              # the events contract events.read, version 1
+```
+
+**What it is handed.** `operation` is `events.read`; `input` is `{ cursor, since, until, limit }`, every field present:
+a cursor your plugin returned with an earlier page, or a moment to read from by date, with `until` the end of a range
+or `null`; `limit` is at most 100. `context.binding` is the route's binding, and the context names no campaign, work
+item or attempt.
+
+**What it answers.** `{ result: { events, cursor, has_more } }`: the events of the page in the provider's order, a
+cursor to read on from — always, even when the page is empty — and whether more follow now. Every event is one of four
+closed kinds of identifiers, moments and the provider's own flags; a subject, a preview or a name is refused with the
+whole page. The cursor is yours: 1 to 2048 printable ASCII characters with no space, which the runtime stores and hands
+back unchanged and never reads. Say who moved a thread with `moved_by` — `other_side`, `account`, `provider`, or
+`null` only where the provider cannot say — because only a move by the other side reads as a reply, and Jason's own
+replies, categories and read flags move threads too. Name a thread that moved as `conversation.list` names it — its
+`thread` the thread's `external_id` there, its `occurred_at` the moment the thread last moved, which `conversation.list`
+reports as `last_activity_at`, to the millisecond — so that a move both reads find is said once. Return no
+`external_ids`: a read pins nothing.
+
+**Reading by date.** With `since`, return across the pages your cursors chain every event at or after it (and before
+`until`); page a provider that pages only by offset newest first until the last item's moment passes `since`, and
+answer what a provider holds when it holds less.
+
+**Failures,** thrown with `host.fail`: `events_unreachable` (transient), `events_unauthorized`, `events_unsupported`
+and `events_cursor_unknown` (permanent) — the last for a cursor your plugin can no longer read, after which the runtime
+reads by date.
+
+**In this version** no step of the runtime invokes it: a provider may declare the contract and is loaded as ever, and
+its fixtures under [`contracts/fixtures/events.read/`](contracts/fixtures/events.read/) are what to check it against.

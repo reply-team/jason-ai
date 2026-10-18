@@ -10,6 +10,9 @@
     <!-- The delivery contracts are a family of their own: a document dropped among the operations would become a
          provider operation a work item could name, so they are read under a prefix of their own by DeliveryCatalog. -->
     <EmbeddedResource Include="..\..\..\docs\contracts\notifications\*.json" Link="Notifications\%(Filename)%(Extension)" />
+    <!-- The events contracts are a third family: a read of an account belongs to no campaign, so it is neither an
+         operation nor a delivery, and is read under a prefix of its own by EventsCatalog. -->
+    <EmbeddedResource Include="..\..\..\docs\contracts\events\*.json" Link="Events\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- Friend assemblies so the tests that use the shared pattern timing read the form a schema pattern is compiled in

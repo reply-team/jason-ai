@@ -563,7 +563,9 @@ universal term.
 
 ```text
 Jason Runtime / SQLite
-  authoritative for Jason campaigns, work, lifecycle, approvals and orchestration
+  authoritative for Jason campaigns, work, lifecycle, approvals and orchestration;
+  keeps, append-only, what providers said happened in their accounts (the events store),
+  a record of their words and never an authority over their state
 
 Provider systems
   authoritative for remote contacts, messages, conversations and provider effects
@@ -1688,6 +1690,7 @@ original chat session.
 | DEC-WORK-001 | Runtime manages heterogeneous work through a common conceptual envelope without forcing identical payloads/results. |
 | DEC-WORK-002 | Predetermined continuations proceed deterministically; semantic continuations become AI-role work. |
 | DEC-SYNC-001 | Inbound sync is a deterministic scan step: for each active campaign routed to a plugin that reads conversations, and linked, it creates one read per cadence through the ordinary work-item routine and turns a completed read into `inbound_reply_observed` lines carrying identifiers, moments and the provider's own flags — never a subject, a preview or a name; it interprets nothing, and what a reply means is the manager's. |
+| DEC-EVENTS-001 | A provider's events are read through a contract family of their own, `events.read` (`docs/contracts/events/`), by a cursor the plugin returns and the runtime stores per plugin and binding identity and never parses; never as work items. What is read is kept whole in an append-only store — each event once under a key per plugin, an event no pin matches kept concerning nobody — and reaches a campaign only by the provider identifiers that campaign's operations pinned, decided once when it is stored, as a reserved line in the campaign's chronicle: a thread the other side moved as `inbound_reply_observed` under the inbound read's own key, every other kind as `provider_event_observed`. A read pins nothing (`docs/events.md`). |
 | DEC-IDEM-001 | A caller's idempotency key is a property of the entity it created — stored on that row under a unique index, installation-wide for a campaign and campaign-wide for a work item — never a replay cache with a lifetime: the same key with the same request answers the same entity, with a different request a non-retryable conflict; neither the runtime nor the CLI ever derives a key — a caller gives one or there is none. |
 | DEC-AI-001 | Jason ships no AI client, model account, model-provider credentials, or mandatory interactive agent. |
 | DEC-AI-002 | Interactive AI agents are user-owned external clients that use skills and Jason CLI. |
@@ -1859,6 +1862,10 @@ are visible — none of them should be read as settled or implemented.
 | DEF-OPS-002 | Contract compatibility windows, deprecation, plugin migration. | Runtime checks compatibility and fails before execution. |
 | DEF-ROUTE-001 | Routing/binding configuration schema, operation-family patterns, binding reuse, validation handshake. | Routing and binding remain distinct; accepted precedence and fail-closed behavior remain. |
 | DEF-ROUTE-002 | Behavior of queued work and retries after route, binding, or plugin reload. | Running attempts retain pinned immutable provenance. |
+| DEF-EVENTS-001 | The transport of a listener's signal to read an account earlier — a tunnel, a polled listener — and whether a signal may stretch the cadence. | A signal carries no data and only brings a read forward; a webhook is never the carrier of an event, because a machine that is off loses it. |
+| DEF-EVENTS-002 | Which campaigns an event concerns when it names no provider campaign: the sequence-free line, where an event names a person. | Decided in principle: every campaign that is not archived and holds, as a local member, the contact pinned with that identifier at the event's plugin, one keyed line per campaign; attribution stays a list decided once when the event is stored; built once contact pins arrive at every operation that names a contact. |
+| DEF-EVENTS-003 | A pointer for an account whose events keep failing to be read. | A notification is a pointer; until one exists a failing source shows in its own record and the log, and the inbound read reads a campaign whose plugin's source is not healthy. |
+| DEF-EVENTS-004 | A Reply mode of the events contract over its inbox's offset paging, before Reply has an account-level feed by cursor. | Reply's plugin declares the events contract only once that feed exists; until then the inbound read reads Reply. |
 | DEF-ADP-001 | Final manifest schema, standard-stream envelope, Host SDK types, error model, content identity. | JavaScript/Jint, stateless child execution, structured streams, Runtime revalidation. |
 | DEF-ADP-002 | Direct HTTP capability and its destination, credential, retry, redaction policy. | `host.exec` is the selected minimum; unrestricted network access is not assumed. |
 | DEF-ADP-003 | Plugin installation, update, removal, signing, publisher identity, warnings, marketplace/discovery. | Plugin packages are executable local code; official/community mechanism remains shared. |

@@ -1,0 +1,19 @@
+{
+  "operation": "events.read",
+  "version": 1,
+  "case": "neither a cursor nor a moment: a read has to start from somewhere",
+  "input": {
+    "cursor": null,
+    "since": null,
+    "until": null,
+    "limit": 100
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "",
+        "reason": "any_of"
+      }
+    ]
+  }
+}

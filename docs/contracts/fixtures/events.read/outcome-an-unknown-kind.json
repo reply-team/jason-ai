@@ -1,0 +1,41 @@
+{
+  "operation": "events.read",
+  "version": 1,
+  "case": "a kind the contract does not publish",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "events": [
+        {
+          "kind": "opened",
+          "id": null,
+          "occurred_at": "2026-10-01T09:00:00.000Z",
+          "contact": "c_1001"
+        }
+      ],
+      "cursor": "c-42",
+      "has_more": false
+    },
+    "external_ids": null,
+    "error": null,
+    "diagnostics": {
+      "duration_ms": 220,
+      "exec_calls": 1,
+      "http_calls": 0,
+      "log_lines": 0
+    }
+  },
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": true,
+    "invalid": [
+      {
+        "pointer": "/events/0",
+        "reason": "any_of"
+      }
+    ]
+  }
+}

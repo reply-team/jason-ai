@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Events;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
 using Jason.Contracts.Notifications;
@@ -187,12 +188,29 @@ public sealed partial class PluginInvoker(
 
     /// <summary>
     /// Why this plugin may not answer this request, or null where it may. A provider performs canonical operations it
-    /// implements, and nothing else; a notification plugin performs the delivery contract, in a version it declares,
-    /// and nothing else.
+    /// implements and, where it declares the events contract, reads its accounts' events; a notification plugin performs
+    /// the delivery contract, in a version it declares, and nothing else.
     /// </summary>
     private static (string Code, string Message)? Unsuited(PluginInvocationRequest request, LoadedPlugin plugin)
     {
         var kind = plugin.Manifest.Kind.ToString().ToLowerInvariant();
+        if (request.Purpose == InvocationPurpose.Events)
+        {
+            if (!EventsCatalog.Knows(request.Operation))
+            {
+                return (ProtocolCodes.PluginOperationUnsupported, $"'{request.Operation}' is not an events contract this build publishes.");
+            }
+
+            if (plugin.Manifest.Kind != PluginKind.Provider)
+            {
+                return (ProtocolCodes.PluginKindNotInvocable, $"A plugin of kind '{kind}' is not invoked for a read of events.");
+            }
+
+            return plugin.Manifest.ReadsEvents
+                ? null
+                : (ProtocolCodes.PluginOperationUnsupported, $"The plugin '{request.PluginId}' declares no version of the events contract this build speaks.");
+        }
+
         if (request.Purpose == InvocationPurpose.Delivery)
         {
             if (!DeliveryCatalog.Knows(request.Operation))
@@ -220,9 +238,13 @@ public sealed partial class PluginInvoker(
             : (ProtocolCodes.PluginOperationUnsupported, $"The plugin '{request.PluginId}' does not implement '{request.Operation}'.");
     }
 
-    /// <summary>The contract version an envelope and its provenance carry: the operation contract's, or the delivery contract's.</summary>
-    private static int ContractVersion(InvocationPurpose purpose) =>
-        purpose == InvocationPurpose.Delivery ? DeliveryContract.CurrentVersion : PluginProtocol.OperationContractVersion;
+    /// <summary>The contract version an envelope and its provenance carry: the operation contract's, the delivery contract's or the events contract's.</summary>
+    private static int ContractVersion(InvocationPurpose purpose) => purpose switch
+    {
+        InvocationPurpose.Delivery => DeliveryContract.CurrentVersion,
+        InvocationPurpose.Events => EventsContract.CurrentVersion,
+        _ => PluginProtocol.OperationContractVersion,
+    };
 
     private async Task<PluginInvocationResult> RunAsync(
         PluginInvocationRequest request,

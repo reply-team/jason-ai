@@ -44,6 +44,12 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<UiToken> UiTokens => Set<UiToken>();
 
+    public DbSet<EventSource> EventSources => Set<EventSource>();
+
+    public DbSet<ProviderEvent> Events => Set<ProviderEvent>();
+
+    public DbSet<EventAttribution> EventAttributions => Set<EventAttribution>();
+
     /// <summary>
     /// The one connection string for a database file. Spelled once because the provider pools connections per
     /// connection string: anything that wants to release a file's pooled connections must name it exactly.
@@ -521,6 +527,12 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
                 .IsUnique()
                 .HasFilter("kind = 'inbound_reply_observed'")
                 .HasDatabaseName("ix_journal_campaign_kind_key");
+
+            // A provider event is said once per campaign in the same way, in an index of its own beside the inbound
+            // read's: one key may be said in two campaigns, never twice in one.
+            entry.HasIndex(e => new { e.CampaignId, e.Kind, e.Key }, "ix_journal_campaign_kind_key_events")
+                .IsUnique()
+                .HasFilter("kind = 'provider_event_observed'");
             entry.Property(e => e.New).HasColumnName("new_json");
             entry.Property(e => e.Reason).HasMaxLength(2000);
 
@@ -532,6 +544,54 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             entry.HasIndex(e => new { e.WorkItemId, e.PublicId });
             entry.HasIndex(e => e.Kind);
             entry.HasOne(e => e.Campaign).WithMany().HasForeignKey(e => e.CampaignId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<EventSource>(source =>
+        {
+            source.ToTable("event_sources");
+            source.HasKey(s => s.Id);
+            source.Property(s => s.PublicId).HasMaxLength(40);
+            source.HasIndex(s => s.PublicId).IsUnique();
+            source.Property(s => s.PluginId).HasMaxLength(64);
+            source.Property(s => s.BindingIdentity).HasMaxLength(71);
+            source.Property(s => s.Cursor).HasMaxLength(2048);
+
+            // One account is one source: a plugin and the identity of the binding a route names for it.
+            source.HasIndex(s => new { s.PluginId, s.BindingIdentity }).IsUnique();
+        });
+
+        modelBuilder.Entity<ProviderEvent>(stored =>
+        {
+            stored.ToTable("events", t => t.HasCheckConstraint("ck_events_data_json", "json_valid(data_json)"));
+            stored.HasKey(e => e.Id);
+            stored.Property(e => e.PublicId).HasMaxLength(40);
+            stored.HasIndex(e => e.PublicId).IsUnique();
+            stored.Property(e => e.PluginId).HasMaxLength(64);
+            stored.Property(e => e.Kind).HasMaxLength(64);
+            stored.Property(e => e.Key).HasMaxLength(71);
+            stored.Property(e => e.Data).HasColumnName("data_json");
+            stored.Property(e => e.ReadId).HasMaxLength(40);
+
+            // An event read twice is stored once, and the database is what says so.
+            stored.HasIndex(e => e.Key).IsUnique();
+            stored.HasIndex(e => new { e.SourceId, e.OccurredAt });
+
+            // Nothing a stored event refers to goes away under it.
+            stored.HasOne(e => e.Source).WithMany().HasForeignKey(e => e.SourceId).OnDelete(DeleteBehavior.Restrict);
+            stored.HasOne(e => e.Contact).WithMany().HasForeignKey(e => e.ContactId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<EventAttribution>(attribution =>
+        {
+            attribution.ToTable("event_attributions");
+            attribution.HasKey(a => a.Id);
+            attribution.Property(a => a.Rule).HasMaxLength(32);
+
+            // A campaign is told of an event once, and a campaign's events are read by the campaign.
+            attribution.HasIndex(a => new { a.EventId, a.CampaignId }).IsUnique();
+            attribution.HasIndex(a => new { a.CampaignId, a.EventId });
+            attribution.HasOne(a => a.Event).WithMany().HasForeignKey(a => a.EventId).OnDelete(DeleteBehavior.Restrict);
+            attribution.HasOne(a => a.Campaign).WithMany().HasForeignKey(a => a.CampaignId).OnDelete(DeleteBehavior.Restrict);
         });
 
         foreach (var entity in modelBuilder.Model.GetEntityTypes())

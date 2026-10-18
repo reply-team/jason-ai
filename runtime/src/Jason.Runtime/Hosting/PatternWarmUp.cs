@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Events;
 using Jason.Contracts.Notifications;
 using Jason.Contracts.Operations;
 using Microsoft.Extensions.Hosting;
@@ -9,7 +10,7 @@ namespace Jason.Runtime.Hosting;
 
 /// <summary>
 /// The runtime's own act at start: every pattern this build publishes — in each canonical operation's input and output
-/// schema, and in the delivery contract's — compiled and matched once, before the plugin load and before the
+/// schema, in the delivery contract's and in the events contract's — compiled and matched once, before the plugin load and before the
 /// dispatcher's first scan, outside any request. A cold engine pays for its automaton and its compiled code inside
 /// its first match's timeout, and on a loaded machine that alone could run past the timeout; paid here, it is paid
 /// where nobody is waiting, and a request meets a warm engine.
@@ -44,7 +45,8 @@ public sealed class PatternWarmUp(PatternTiming timing, ILogger<PatternWarmUp> l
     /// <summary>Every schema this build publishes and the runtime applies: the operations' first, then the delivery family's.</summary>
     public static IEnumerable<JsonObject> PublishedSchemas() =>
         OperationCatalog.All.SelectMany(contract => new[] { contract.InputSchema, contract.OutputSchema })
-            .Concat(DeliveryCatalog.All.SelectMany(contract => new[] { contract.InputSchema, contract.OutputSchema }));
+            .Concat(DeliveryCatalog.All.SelectMany(contract => new[] { contract.InputSchema, contract.OutputSchema }))
+            .Concat(EventsCatalog.All.SelectMany(contract => new[] { contract.InputSchema, contract.OutputSchema }));
 
     public Task StartAsync(CancellationToken cancellationToken)
     {

@@ -366,6 +366,9 @@ public sealed class CampaignService(JasonDbContext db, JournalWriter journal, Ti
             // The inbound read starts from the first time only: what a person's conversations held before the campaign
             // went live is history, while a reply that came in during a pause is still one the manager has not seen.
             campaign.InboundWatermark ??= campaign.UpdatedAt;
+
+            // A provider's events are said from the same first time, for the same reason.
+            campaign.EventsFrom ??= campaign.UpdatedAt;
         }
 
         journal.Append(

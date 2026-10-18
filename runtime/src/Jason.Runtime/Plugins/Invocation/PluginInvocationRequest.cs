@@ -44,10 +44,12 @@ public sealed record PluginInvocationRequest(
 
 /// <summary>
 /// What a plugin is invoked for, which decides the kind of plugin that may answer: a provider performs a canonical
-/// operation, and a notification plugin performs the delivery contract. Neither is ever invoked for the other.
+/// operation, a notification plugin performs the delivery contract, and a provider that declares the events contract
+/// reads an account's events. None is ever invoked for another.
 /// </summary>
 public enum InvocationPurpose
 {
     CanonicalOperation,
     Delivery,
+    Events,
 }

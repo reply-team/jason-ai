@@ -66,7 +66,7 @@ public class ManagerOptionsTests
     }
 
     [Fact]
-    public void The_defaults_are_the_five_kinds_this_version_reacts_to()
+    public void The_defaults_are_the_six_kinds_this_version_reacts_to()
     {
         var options = new ManagerOptions();
 
@@ -77,6 +77,7 @@ public class ManagerOptionsTests
                 JournalKinds.ExternalEffectReported,
                 JournalKinds.DecisionAnswered,
                 "inbound_reply_observed",
+                "provider_event_observed",
             ],
             options.Triggers);
         Assert.Equal(18_000, options.ReviewSeconds);

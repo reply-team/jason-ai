@@ -132,6 +132,14 @@ covered here.
   writes one reserved `inbound_reply_observed` line per thread that moved — identifiers, moments and the provider's
   flags, never a subject, a preview or a name — said once per campaign by a key. It interprets nothing; the line is a
   default manager trigger. `docs/inbound-sync.md` is the contract.
+- Events: a third contract family, `events.read` under `docs/contracts/events/`, embedded like the delivery contract
+  and never in the operation catalog. A provider that declares `contracts.events` reads an account by its own cursor,
+  which the runtime stores per plugin and binding identity and never parses; a read pins nothing. What is read lands
+  in an append-only store — `event_sources`, `events`, `event_attributions`, under the journal's three guards — each
+  event once by a key per plugin, and an event no pin matches is kept. An event reaches a campaign only by the campaign
+  identifier its operations pinned, decided once when it is stored, as a reserved line: a thread the other side moved as
+  `inbound_reply_observed` under inbound sync's key, every other kind as `provider_event_observed`.
+  `docs/events.md` is the contract.
 - Notifications: a parked approval, a raised question and failed protective work are notified as a pointer —
   counts and where to look — by a scan step after the dispatch, delivered off the scan and recorded in a reserved `notification_sent` line.
   `docs/notifications.md` is the contract.

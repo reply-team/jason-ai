@@ -153,6 +153,27 @@ public class GeneratedBlockTests
         Assert.True(found == expected, $"{ContractFiles.Relative(path)} is out of step with its document. The block should read:\n\n{expected}\n");
     }
 
+    /// <summary>The events contract's page carries a block rendered from its own document, as the delivery contract's does.</summary>
+    [Fact]
+    public void The_events_page_s_generated_block_is_what_its_document_says()
+    {
+        var contract = Jason.Contracts.Events.EventsCatalog.Find("events.read")!;
+        var path = Path.Combine(ContractFiles.Package, "events", "events.read.md");
+
+        Assert.True(File.Exists(path), $"{ContractFiles.Relative(path)} explains the events contract for a plugin author, and is missing.");
+
+        var page = File.ReadAllText(path).ReplaceLineEndings("\n");
+        var start = page.IndexOf(Begin, StringComparison.Ordinal);
+        var finish = page.IndexOf(End, StringComparison.Ordinal);
+
+        Assert.True(start >= 0 && finish > start, $"{ContractFiles.Relative(path)} carries no generated block.");
+
+        var found = page[start..(finish + End.Length)];
+        var expected = Render(contract);
+
+        Assert.True(found == expected, $"{ContractFiles.Relative(path)} is out of step with its document. The block should read:\n\n{expected}\n");
+    }
+
     [Fact]
     public void The_readme_publishes_the_keywords_the_validator_holds_and_no_others()
     {
@@ -284,6 +305,30 @@ public class GeneratedBlockTests
         Row(block, "version", contract.Version.ToString(System.Globalization.CultureInfo.InvariantCulture));
         Row(block, "input", string.Join(", ", Names(contract.InputSchema)));
         Row(block, "output", string.Join(", ", Names(contract.OutputSchema)) + ", or nothing");
+        Row(block, "timeout", contract.TimeoutMs.ToString(System.Globalization.CultureInfo.InvariantCulture) + " ms");
+        block.Append('\n');
+
+        block.Append("| Failure code | Class | When |\n|---|---|---|\n");
+        foreach (var code in contract.FailureCodes)
+        {
+            block.Append("| `").Append(code.Code).Append("` | `").Append(Name(code.Class)).Append("` | ").Append(code.When).Append(" |\n");
+        }
+
+        block.Append('\n').Append(End);
+        return block.ToString();
+    }
+
+    private static string Render(Jason.Contracts.Events.EventsContract contract)
+    {
+        var block = new StringBuilder();
+        block.Append(Begin).Append('\n');
+        block.Append("<!-- Rendered from ").Append(contract.Id).Append(".json. Edit the document; this block follows it. -->\n\n");
+        block.Append("| What it is | Value |\n|---|---|\n");
+        Row(block, "version", contract.Version.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Row(block, "input", string.Join(", ", Names(contract.InputSchema)));
+        Row(block, "output", string.Join(", ", Names(contract.OutputSchema)));
+        Row(block, "kinds", string.Join(", ", contract.Kinds.Select(kind => "`" + kind + "`")));
+        Row(block, "page", "at most " + ((int)contract.InputSchema["properties"]!["limit"]!["maximum"]!).ToString(System.Globalization.CultureInfo.InvariantCulture) + " events");
         Row(block, "timeout", contract.TimeoutMs.ToString(System.Globalization.CultureInfo.InvariantCulture) + " ms");
         block.Append('\n');
 
