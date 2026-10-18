@@ -219,34 +219,45 @@ public sealed class PluginHostModeTests : IDisposable
 
     /// <summary>
     /// The deadline is the invocation's own, counted from the host's start and not from the moment its outcome was written:
-    /// a runner that takes three times the invocation's timeout writes its outcome long after that deadline, and the line
-    /// names the deadline the plugin was given.
+    /// on a clock that moves only when the test moves it, a runner that takes three times the invocation's timeout writes
+    /// its outcome long after that deadline, and the line names the deadline the plugin was given. A host that counted from
+    /// its outcome would wait for a deadline still ahead; the clock is moved to it, so that the line says which it counted.
     /// </summary>
     [Fact]
     public async Task The_deadline_is_counted_from_the_host_s_start_and_not_from_its_outcome()
     {
         const int TimeoutMs = 500;
         const int RunMs = 1500;
+        var start = new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
+        var clock = new ManualClock(start);
         var kill = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var invocation = InvocationFactory.Create(_root, "echo.run", configure: builder => builder.Limits = builder.Limits with { TimeoutMs = TimeoutMs });
         var slow = new StubRunner(
             given =>
             {
-                Thread.Sleep(RunMs);
+                clock.Advance(TimeSpan.FromMilliseconds(RunMs));
                 return Succeeded(given);
             },
             kills => kills.Add(KilledPid, kill.Task));
 
-        var before = DateTimeOffset.UtcNow;
-        var (run, _, stderr) = Start(invocation, slow);
+        var (run, stdout, stderr) = Start(invocation, slow, clock);
         try
         {
-            await stderr.SeenAsync(UnfinishedKills.Message, run, Ct);
+            await stdout.SeenAsync("\"status\":\"succeeded\"", run, Ct);
+            Assert.True(
+                await WithinAsync(() => Unfinished(stderr).Count > 0 || clock.Waiting > 0, TimeSpan.FromSeconds(30)),
+                $"The host neither said the kill unfinished nor began to wait for a deadline. It said: {stderr.Text}");
+            if (clock.NextDue is { } due)
+            {
+                clock.Advance(due - clock.GetUtcNow());
+            }
+
+            await WithinAsync(() => Unfinished(stderr).Count > 0, TimeSpan.FromSeconds(5));
             var line = Assert.Single(Unfinished(stderr));
             var deadline = DateTimeOffset.Parse(line["data"]!["deadline"]!.GetValue<string>(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
             Assert.True(
-                deadline >= before.AddMilliseconds(TimeoutMs - 1) && deadline < before.AddMilliseconds(RunMs),
-                $"The line names {deadline:O} as the deadline; the host started after {before:O} with a {TimeoutMs} ms timeout, and its runner took {RunMs} ms.");
+                deadline == start.AddMilliseconds(TimeoutMs),
+                $"The line names {deadline:O} as the deadline. Counted from the host's start, {start:O}, it is {start.AddMilliseconds(TimeoutMs):O}; counted from the outcome, written at {start.AddMilliseconds(RunMs):O}, it would be {start.AddMilliseconds(RunMs + TimeoutMs):O}.");
         }
         finally
         {
