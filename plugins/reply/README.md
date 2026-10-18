@@ -62,10 +62,17 @@ of a call is the command line, which carries only Reply's identifiers and flags,
 In this order, and none of it implied by anything else. Steps 4 and 6 are the two kinds of route there
 are; one of them is what makes work reach this plugin at all.
 
-**1. Copy the package.** The directory name is the plugin id, so it has to be `reply`:
+**1. Install the package.** Every release of Jason from 0.11.0 on publishes it as `jason-plugin-reply.zip`,
+listed in that release's `checksums.txt`. Download both from the release you run, check the package against
+its line, and unpack it into `~/.jason/plugins/reply` only once it matches — the directory name is the plugin
+id, so it has to be `reply`, and it must not be there yet; the runtime's first start makes `~/.jason/plugins`.
+The lines, for macOS and Linux and for PowerShell, are step 3 of [the wiring check](../../docs/golden-path.md).
+Where the release cannot be reached, or is older than 0.11.0 and does not carry the package, the tree
+`jason skills install` fetched holds the same package, at the tag of the runtime you run, and copying it is the
+same install:
 
 ```sh
-cp -r plugins/reply ~/.jason/plugins/reply
+cp -r ~/.jason/skills/staged/v<version>/plugins/reply ~/.jason/plugins/reply
 ```
 
 **2. Sign in**, in your own shell:

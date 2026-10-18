@@ -3,12 +3,12 @@
 Skills that teach an AI agent how to operate Jason itself: turning an objective into durable campaign work,
 presenting what is waiting on a person, running the installation, reading why something stopped, and telling
 Jason about effects produced outside it. They move in lockstep with the runtime's API and **ship with it**:
-this pack ships with Jason **0.10.0**.
+this pack ships with Jason **0.11.0**.
 
 Every command any of these skills prints is handed to this build's own argument router by a test on every run,
 so a skill cannot drift from the program it ships beside.
 
-**What they do not teach yet.** None of the five mentions `jason skills install` or `jason skills update`,
+**What they do not teach yet.** None of the six mentions `jason skills install` or `jason skills update`,
 `jason status` is mentioned only by `operating-the-installation`, and `jason logs` and `jason doctor` are
 taught by `troubleshooting-jason` only, which is a draft until a host reads it. `verified` in
 this repository means a named agent host read *that exact body* while driving this runtime and the digest of what
@@ -28,13 +28,16 @@ description that promises everything matches nothing.
   notification brought the person — presented in their own words and recorded as their decision.
 - [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft** until a host reads its new text.
   The installation itself: whether the runtime is up, starting and stopping it, having it start at logon, the
-  plugins and routes it has, the hosts it can launch, whether notifications reach the person and turning them
-  off, whether a newer version exists, and installing it or taking it off again.
+  plugins and routes it has, the hosts it can launch, whether notifications reach the person and turning them off,
+  whether a newer version exists, and installing it or taking it off again.
 - [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **draft** until a host reads its new text. Why
   work stopped: the runtime, the work item's error code and the chronicle; the states a person needs told
   apart, the repairs that are safe, and the diagnostic file `jason doctor` writes.
 - [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
+- [`planner-in-session`](planner-in-session/SKILL.md) — **draft.** The planner's judgement in a person's own
+  conversation about a campaign: taking a brief as it comes, what stays a quick look, what is agreed with the
+  person before anything is created, and when it becomes campaign work. The session file of the planner, below.
 
 ### Installing them
 
@@ -44,7 +47,7 @@ jason skills install --pack jason-runtime-skills
 jason skills update --pack jason-runtime-skills
 ```
 
-That deploys the five interactive skills into the agent harnesses it finds, and the nine role skills below
+That deploys the six interactive skills into the agent harnesses it finds, and the nine role skills below
 into the runtime's own data directory, where the runtime reads them at every launch. The second destination is
 not optional: a runtime with no role skills launches every role untaught — which is why it can be deployed on
 its own, into nothing but the runtime's directory:
@@ -65,7 +68,8 @@ anything else is loaded by nobody and reported by nobody.
 `roles/<role>/` holds one skill per role, named after its directory because that is how a host looks one up.
 All **nine roles this runtime seeds** are taught here, and every one of them carries the same launch contract
 — what it may type, what its note is worth, what shape its answer takes — held identical by a test. What
-differs between them is one paragraph of purpose and one of what this build can and cannot give that role.
+differs between them is one paragraph of purpose and one of what this build can and cannot give that role — and,
+for a role that sits with a person, the judgement it shares with its session file (below).
 
 - [`roles/researcher`](roles/researcher/SKILL.md) — **verified.** The brief a role is given when the runtime
   launches it: how to call home in the one command form that is permitted, how to read and keep its campaign
@@ -122,6 +126,27 @@ answerable: what exactly was this role taught on this attempt.
 contract and the role's purpose. The business pack will contribute `METHOD.md` beside it, the profession's
 method for that role. They are separate files so that installing one never overwrites the other, and a role
 with no `METHOD.md` is taught the contract and nothing else, which is complete on its own.
+
+## A role that sits with a person
+
+Some of a role's work happens in a person's own conversation rather than on a work item: somebody who brings a
+campaign objective wants the planner's judgement while they talk, not after a launch. A role that sits with a
+person has two files. **The launched role's file**, `roles/<role>/SKILL.md`, is the one the runtime hands to the
+role it launches: it answers in the shape a work item asks for and carries the launch contract. **The session
+file**, `<role>-in-session/SKILL.md`, is one of the skills a person's own session reads: it talks with the person,
+carries no launch contract, and hands the commit to `managed-campaign-work`. Today that is the planner,
+[`roles/planner`](roles/planner/SKILL.md) and [`planner-in-session`](planner-in-session/SKILL.md).
+
+The two share one block, the role's judgement, between `<!-- craft:begin -->` and `<!-- craft:end -->`, and a test
+holds it to the same bytes in both; everything outside it belongs to one file. The block prints no command, because
+how the work reaches the role and how its answer leaves are exactly what differ between the two, and each file says
+its own status outside it. An edit to the block changes the text of both files, so both are drafts again until a
+host has read each of them.
+
+**The block is judgement, never a record of results.** What happened on a campaign is in Jason, where every role
+can read it. What worked on one campaign, carried to the next, would be learned practice, which this version does
+not keep, in a skill or anywhere else: a block that began to collect it would teach every campaign what one
+campaign happened to find.
 
 ## What `verified` means
 
