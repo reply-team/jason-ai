@@ -127,9 +127,9 @@ anywhere until somebody writes a route: work with no route fails at the claim wi
 needs a person's approval is parked until a person decides, and nothing runs but what they approved. **The first
 such plugin is in this repository**: [`plugins/reply/`](plugins/reply/README.md) performs all twelve published
 operations against a Reply account through the Reply CLI, which owns the credential — so an operator installs that
-CLI, signs in with it, copies the package into `~/.jason/plugins/`, grants it that one program, and writes the
-route. **The wiring check** — an empty installation brought to a routed plugin, one enrolment of your own address
-approved by you and performed against the provider, and the history it leaves — is
+CLI, signs in with it, unpacks the package from the release into `~/.jason/plugins/`, grants it that one program,
+and writes the route. **The wiring check** — an empty installation brought to a routed plugin, one enrolment of
+your own address approved by you and performed against the provider, and the history it leaves — is
 [docs/golden-path.md](docs/golden-path.md), and every command on that page is executed by a test. It proves the
 wiring and is not the real work, which begins with a campaign planned with the business skills
 ([`campaign-planning`](skills/business/campaign-planning/SKILL.md) first) and worked by Jason's roles. It is optional:

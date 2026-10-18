@@ -18,15 +18,17 @@ from the runtime's source at `v{{version}}` — which is not published — by th
 | `jason-linux-x64.tar.gz` | Linux on x64 |
 | `jason-osx-arm64.tar.gz` | macOS on Apple silicon |
 | `manifest.json` | what a running Jason reads to learn that this release exists |
-| `checksums.txt` | the SHA-256 of each archive, in `sha256sum` format |
+| `checksums.txt` | the SHA-256 of each archive and of the plugin's package, in `sha256sum` format |
 | `install.sh` | macOS and Linux: the install script this release was published with |
 | `install.ps1` | Windows: the install script this release was published with |
+| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at `v{{version}}`, to unpack into `~/.jason/plugins/reply` |
 
 Each archive holds the executable, `LICENSE` (the runtime's licence; the repository's MIT does not cover the
-runtime) and `THIRD-PARTY-NOTICES`, nothing else. Plugins are installed from the repository as before: a package
-is copied into `~/.jason/plugins/`. On Linux the executable needs the ICU library (`libicu`), which desktop
-distributions carry and minimal images may not; the install script stops, with the runtime's own message, rather
-than install a program that does not start.
+runtime) and `THIRD-PARTY-NOTICES`, nothing else. The Reply plugin's package is installed by unpacking it into
+`~/.jason/plugins/reply` once it matches its line in `checksums.txt`; step 3 of `docs/golden-path.md` prints the
+lines. On Linux the executable needs the ICU library (`libicu`), which desktop distributions carry and minimal
+images may not; the install script stops, with the runtime's own message, rather than install a program that does
+not start.
 
 ## Installing
 

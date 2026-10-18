@@ -22,10 +22,10 @@ namespace Jason.Runtime.Tests.Documentation;
 public sealed partial class ProductAddressTests : IDisposable
 {
     /// <summary>
-    /// A release's version as the texts write it: a version, the notes template's placeholder, or the release
-    /// workflow's variable.
+    /// A release's version as the texts write it: a version, the notes template's placeholder, the release workflow's
+    /// variable, or the wiring check's <c>&lt;version&gt;</c>, which its step 3 says how to read.
     /// </summary>
-    private const string Version = @"(?:[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?|\{\{version\}\}|\$env:VERSION)";
+    private const string Version = @"(?:[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?|\{\{version\}\}|\$env:VERSION|<version>)";
 
     /// <summary>
     /// What the address answers, one row per shape. Each answers 302 with the same path under
@@ -143,6 +143,10 @@ public sealed partial class ProductAddressTests : IDisposable
     [InlineData("curl -fsSL https://jasonharness.ai/releases/download/v0.7.0/install.sh | sh -s -- --version 0.7.0", "a release's asset")]
     [InlineData("https://jasonharness.ai/releases/download/v1.0.0-rc.1/jason-win-x64.zip", "a release's asset")]
     [InlineData("irm https://jasonharness.ai/releases/download/v{{version}}/install.ps1", "a release's asset")]
+    [InlineData("curl -fsSL -o <temporary directory>/jason-plugin-reply.zip https://jasonharness.ai/releases/download/v<version>/jason-plugin-reply.zip", "a release's asset")]
+    [InlineData("irm https://jasonharness.ai/releases/download/v<version>/checksums.txt -OutFile <temporary directory>/checksums.txt", "a release's asset")]
+    [InlineData("https://jasonharness.ai/releases/download/v<version>/jason-plugin-other.zip", null)]
+    [InlineData("https://jasonharness.ai/releases/download/v<other>/jason-plugin-reply.zip", null)]
     [InlineData("-ReleaseNotesUrl \"https://jasonharness.ai/releases/tag/v$env:VERSION\"", "a release's page")]
     [InlineData("\"release_notes_url\": \"https://jasonharness.ai/releases/tag/v0.2.0\",", "a release's page")]
     [InlineData("<https://jasonharness.ai/releases/>, which redirect to", "the releases index")]
@@ -384,8 +388,11 @@ public sealed partial class ProductAddressTests : IDisposable
         File.WriteAllText(path, text);
     }
 
-    /// <summary>Anything on the product's address or a host under it, up to where a URL ends in text.</summary>
-    [GeneratedRegex(@"https?://(?:[\w-]+\.)*jasonharness\.ai(?![\w-])[^\s""'`<>()\[\]|*\\]*", RegexOptions.IgnoreCase)]
+    /// <summary>
+    /// Anything on the product's address or a host under it, up to where a URL ends in text. A <c>&lt;</c> ends one, except
+    /// in the wiring check's placeholder <c>&lt;version&gt;</c>, which is part of the address a person completes.
+    /// </summary>
+    [GeneratedRegex(@"https?://(?:[\w-]+\.)*jasonharness\.ai(?![\w-])(?:<version>|[^\s""'`<>()\[\]|*\\])*", RegexOptions.IgnoreCase)]
     private static partial Regex Address();
 
     /// <summary>A fetch of a release from the public repository on GitHub: an asset, latest or pinned, or a release's page.</summary>

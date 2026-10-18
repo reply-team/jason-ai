@@ -34,10 +34,11 @@ whose only releases are flagged has no "latest" for anything to resolve to.
 | `jason-win-x64.zip` | the Windows executable, `LICENSE` (the runtime's licence) and `THIRD-PARTY-NOTICES` |
 | `jason-linux-x64.tar.gz` | the Linux executable, `LICENSE` (the runtime's licence) and `THIRD-PARTY-NOTICES` |
 | `jason-osx-arm64.tar.gz` | the macOS (Apple silicon) executable, `LICENSE` (the runtime's licence) and `THIRD-PARTY-NOTICES` |
-| `checksums.txt` | one `sha256sum` line per archive |
+| `checksums.txt` | one `sha256sum` line per archive, and one for the plugin's package |
 | `manifest.json` | what the updater reads |
 | `install.sh` | the macOS and Linux install script, as this release was published with it |
 | `install.ps1` | the Windows install script, as this release was published with it |
+| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at the tag, at the archive's root |
 
 **The install scripts are a release's own files.** The one-liners fetch them from a release rather than from the
 default branch: a script on the branch can be ahead of every release, and a pinned install runs the script the
@@ -57,8 +58,12 @@ behind it can change without any of them changing.
 the runtime's own; the repository's MIT licence covers the skills, contracts, plugins, documentation and install
 scripts, not the runtime. `THIRD-PARTY-NOTICES` names the .NET runtime and the packages the executable carries,
 each with its licence. A plugin is installed by copying a directory into the data directory and nothing reads the
-install directory, so a bundled plugin would be a file nothing loads. Plugins are installed from the repository,
-exactly as `docs/plugins.md` §4 says.
+install directory, so a plugin bundled with the executable would be a file nothing loads. The Reply plugin is
+published beside the archives instead, from 0.11.0 on, as a package of its own: `jason-plugin-reply.zip`, the
+files of `plugins/reply` at the tag at its root, built once per release and listed in `checksums.txt` but not in
+the manifest, whose artifacts are platforms. Installing it is unpacking it into `~/.jason/plugins/reply` once it
+matches its line — `docs/golden-path.md` step 3 prints the lines — and what is unpacked has the content digest of
+the package at the tag (DEC-INSTALL-002). Any other plugin is installed as `docs/plugins.md` §4 says.
 
 ## 3. The manifest
 
@@ -101,7 +106,9 @@ its own hash.
 A manifest that breaks any rule above is refused whole (`update_feed_invalid`); nothing is half-read.
 
 The schema changes only with a change of layout — the asset names, `checksums.txt`, the manifest's fields — and
-an install script keeps reading every schema published under a tag it can be pointed at.
+an install script keeps reading every schema published under a tag it can be pointed at. A file published beside
+the archives that the manifest does not list, as the plugin's package is, changes no schema: the manifest stays the
+same document, and each install script reads `checksums.txt` by its own archive's line.
 
 ## 4. What the runtime sends, and when
 

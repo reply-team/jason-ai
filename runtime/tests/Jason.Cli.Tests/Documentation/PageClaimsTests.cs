@@ -438,6 +438,31 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// The pages that list what a release publishes, or say how a plugin is installed, name the Reply plugin's package by
+    /// what it holds and how it is installed: the files of <c>plugins/reply</c> at the tag, checked against
+    /// <c>checksums.txt</c> and unpacked. None of them says plugins are installed from the repository any more; the package
+    /// is never called an archive, which on those pages is a platform's.
+    /// </summary>
+    [Theory]
+    [InlineData("docs/release-and-update.md", "| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at the tag, at the archive's root |")]
+    [InlineData("docs/release-and-update.md", "| `checksums.txt` | one `sha256sum` line per archive, and one for the plugin's package |")]
+    [InlineData("docs/release-and-update.md", "Installing it is unpacking it into `~/.jason/plugins/reply` once it matches its line — `docs/golden-path.md` step 3 prints the lines — and what is unpacked has the content digest of the package at the tag (DEC-INSTALL-002).")]
+    [InlineData("docs/release-and-update.md", "A file published beside the archives that the manifest does not list, as the plugin's package is, changes no schema:")]
+    [InlineData(".github/release-notes-template.md", "| `jason-plugin-reply.zip` | the Reply plugin's package: the files of `plugins/reply` at `v{{version}}`, to unpack into `~/.jason/plugins/reply` |")]
+    [InlineData(".github/release-notes-template.md", "| `checksums.txt` | the SHA-256 of each archive and of the plugin's package, in `sha256sum` format |")]
+    [InlineData(".github/release-notes-template.md", "The Reply plugin's package is installed by unpacking it into `~/.jason/plugins/reply` once it matches its line in `checksums.txt`; step 3 of `docs/golden-path.md` prints the lines.")]
+    [InlineData("docs/plugins.md", "The package this repository ships, the Reply plugin, is also published with every release from 0.11.0 on as `jason-plugin-reply.zip`, its files at the archive's root: checked against that release's `checksums.txt` and unpacked into `~/.jason/plugins/reply`, it is installed.")]
+    [InlineData("docs/release-and-update.md", "The Reply plugin is published beside the archives instead, from 0.11.0 on, as a package of its own:")]
+    [InlineData("README.md", "signs in with it, unpacks the package from the release into `~/.jason/plugins/`, grants it that one program")]
+    public void The_pages_say_how_the_plugin_s_package_is_published_and_installed(string page, string said)
+    {
+        var text = Flat(Page(page.Split('/')));
+
+        Assert.Contains(said, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("installed from the repository", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A build from source leaves debugging symbols beside the executable, and §3 says to copy the executable alone.
     /// A directory that holds the <c>.pdb</c> files as well is not one the uninstall takes for Jason's own, so a
     /// reader who copied the whole publish folder would keep both its PATH entry and the directory. The golden path
@@ -1234,21 +1259,62 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// A stranger has no checkout, so the package is copied from the tree <c>jason skills install</c> already fetched: this
-    /// repository at the runtime's own tag, kept in the data directory. Where that tree is not there, the release's tree is
-    /// fetched into a temporary directory first. Neither is a copy out of a checkout.
+    /// A stranger has no checkout, so the package comes from the release they run: <c>jason-plugin-reply.zip</c> and
+    /// <c>checksums.txt</c>, downloaded from the product's address at <c>v&lt;version&gt;</c>, and the package unpacked in
+    /// the same line that checks it against the other, so that nothing can unpack it after a failed check — in sh for
+    /// macOS and Linux and in PowerShell for Windows. The tree <c>jason skills install</c> fetched is the fallback; nothing
+    /// is cloned, and nothing is copied out of a checkout. That the lines install the tree's package, and unpack nothing
+    /// that fails its check however they are run, is executed elsewhere, against a stand-in for the release.
     /// </summary>
     [Fact]
-    public void The_golden_path_copies_the_package_from_the_staged_tree()
+    public void The_golden_path_installs_the_package_from_the_release()
     {
         var page = Page("docs", "golden-path.md");
         var step = Section(page, "## 3. ");
+        const string Release = "https://jasonharness.ai/releases/download/v<version>";
 
+        var sh = FencedLines(Regex.Match(step, "```sh\n.*?\n```", RegexOptions.Singleline).Value);
+        Assert.Equal(
+            [
+                $"curl -fsSL -o <temporary directory>/checksums.txt {Release}/checksums.txt",
+                $"curl -fsSL -o <temporary directory>/jason-plugin-reply.zip {Release}/jason-plugin-reply.zip",
+                "(cd <temporary directory> && grep '  jason-plugin-reply.zip$' checksums.txt > jason-plugin-reply.zip.sha256 && sha256sum -c jason-plugin-reply.zip.sha256) && unzip -q <temporary directory>/jason-plugin-reply.zip -d ~/.jason/plugins/reply",
+            ],
+            sh);
+
+        var powershell = FencedLines(Regex.Match(step, "```powershell\n.*?\n```", RegexOptions.Singleline).Value);
+        Assert.Equal(
+            [
+                $"irm {Release}/checksums.txt -OutFile <temporary directory>/checksums.txt",
+                $"irm {Release}/jason-plugin-reply.zip -OutFile <temporary directory>/jason-plugin-reply.zip",
+                "if ((Get-FileHash <temporary directory>/jason-plugin-reply.zip).Hash -eq ((Select-String '  jason-plugin-reply.zip$' <temporary directory>/checksums.txt).Line -split ' ')[0]) { Expand-Archive <temporary directory>/jason-plugin-reply.zip ~/.jason/plugins/reply } else { throw 'jason-plugin-reply.zip does not match checksums.txt' }",
+            ],
+            powershell);
+
+        var said = Flat(step);
+        Assert.Contains("Installing a plugin is copying its directory into `~/.jason/plugins/<id>/`. There is no install verb.", said, StringComparison.Ordinal);
+        Assert.Contains("Every release of Jason from 0.11.0 on publishes the Reply plugin's directory as `jason-plugin-reply.zip`", said, StringComparison.Ordinal);
+        Assert.Contains("written `<temporary directory>` below and quoted if it holds a space.", said, StringComparison.Ordinal);
+        Assert.Contains("into a `~/.jason/plugins/reply` that is not there yet; step 1's start made `~/.jason/plugins`.", said, StringComparison.Ordinal);
+        Assert.Contains("The unpack is part of the check's own line, so it follows only a check that passed: a package that does not match its line, or has none, is never unpacked, however the lines are run, and you stop and say why.", said, StringComparison.Ordinal);
+        Assert.Contains("The sh line checks the package's line from a file of its own, `jason-plugin-reply.zip.sha256` beside the download, because the `sha256sum` macOS carries reads a file and not a pipe.", said, StringComparison.Ordinal);
+        Assert.Contains("A macOS older than 14 has no `sha256sum`; `shasum -a 256 -c` in its place reads the same file.", said, StringComparison.Ordinal);
+        Assert.Contains("Where the release cannot be reached, or is older than 0.11.0 and does not carry the package,", said, StringComparison.Ordinal);
         Assert.Contains("cp -r ~/.jason/skills/staged/v<version>/plugins/reply ~/.jason/plugins/reply", step, StringComparison.Ordinal);
-        Assert.Contains("git clone --depth 1 --branch v<version> https://github.com/reply-team/jason-ai <temporary directory>", step, StringComparison.Ordinal);
-        Assert.Contains("cp -r <temporary directory>/plugins/reply ~/.jason/plugins/reply", step, StringComparison.Ordinal);
+        Assert.DoesNotContain("git clone", step, StringComparison.Ordinal);
         Assert.DoesNotContain("cp -r plugins/reply ~/.jason/plugins/reply", page, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The section for an agent says where every file the run makes goes — the two step 3 downloads and the one step 6
+    /// writes — which is the system's temporary directory, never the folder the run was started in.
+    /// </summary>
+    [Fact]
+    public void The_golden_path_s_agent_says_where_the_run_s_files_go() =>
+        Assert.Contains(
+            "nothing in this run writes there — the two files step 3 downloads and the one file step 6 makes go in the system's temporary directory.",
+            Flat(GoldenAgent()),
+            StringComparison.Ordinal);
 
     /// <summary>
     /// The first run is started from wherever the person happens to be, which is often no repository at all, so the page
@@ -1647,12 +1713,13 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// Before anything runs, an agent asks the person one question that names what the first run installs and from where —
-    /// the Reply CLI from npm's registry, and Node where it is missing — so the person's yes names its sources.
+    /// the Reply plugin from the release they run, the Reply CLI from npm's registry, and Node where it is missing — so the
+    /// person's yes names every download.
     /// </summary>
     [Fact]
     public void The_golden_path_asks_one_question_naming_its_sources_first() =>
         Assert.Contains(
-            "Before anything, ask the person one question in plain words: what you will install and from where — the Reply CLI from npm's registry, and Node if it is missing;",
+            "Before anything, ask the person one question in plain words: what you will install and from where — the Reply plugin from the release of Jason they run, the Reply CLI from npm's registry, and Node if it is missing;",
             Flat(GoldenAgent()),
             StringComparison.Ordinal);
 
@@ -1773,7 +1840,7 @@ public partial class PageClaimsTests
     private const string AgentSectionDigest = "sha256:e3773f1c7a43d649deda4a83daa62de5a4b36f5ecdd8c1ceb520e3f46a915f38";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
-    private const string GoldenAgentSectionDigest = "sha256:5a6ef884d8162978623f044253c5e5b8ac9da5bf198b6707b2720ef04440f95c";
+    private const string GoldenAgentSectionDigest = "sha256:dbcc6a743e79b859ea37fdf66f21720c1853898871ca827e9b425fbe33f43d47";
 
     /// <summary>
     /// The text between the line that opens a fence and the next line that is exactly three backticks, each line

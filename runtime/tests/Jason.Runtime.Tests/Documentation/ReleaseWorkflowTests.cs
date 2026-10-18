@@ -762,13 +762,16 @@ public class ReleaseWorkflowTests
     private static YamlMappingNode PublishingStep(string name) => Assert.Single(PublishingSteps(), step => Scalar(step, "name") == name);
 
     /// <summary>The steps of the job that holds the publication token, in order.</summary>
-    private static IReadOnlyList<YamlMappingNode> PublishingSteps()
+    private static IReadOnlyList<YamlMappingNode> PublishingSteps() =>
+        [.. Assert.IsType<YamlSequenceNode>(Node(PublishingJob(), "steps")).Children.Cast<YamlMappingNode>()];
+
+    /// <summary>The job that holds the publication token.</summary>
+    private static YamlMappingNode PublishingJob()
     {
         var jobs = Mapping(Parse(Read(Release)), "jobs");
-        var publishing = (YamlMappingNode)jobs.Children
+        return (YamlMappingNode)jobs.Children
             .Single(job => Node((YamlMappingNode)job.Value, "env") is YamlMappingNode env && Scalar(env, "GH_TOKEN")?.Contains("secrets.PUBLISH_TOKEN", StringComparison.Ordinal) == true)
             .Value;
-        return [.. Assert.IsType<YamlSequenceNode>(Node(publishing, "steps")).Children.Cast<YamlMappingNode>()];
     }
 
     /// <summary>
@@ -994,11 +997,53 @@ public class ReleaseWorkflowTests
         foreach (var rid in ReleaseAssets.Rids)
         {
             Assert.Contains(rid, release, StringComparison.Ordinal);
-            Assert.Contains(ReleaseAssets.For(rid), release, StringComparison.Ordinal);
         }
 
-        Assert.Contains(ReleaseAssets.Manifest, release, StringComparison.Ordinal);
-        Assert.Contains(ReleaseAssets.Checksums, release, StringComparison.Ordinal);
+        foreach (var name in ReleaseAssets.Published)
+        {
+            Assert.Contains(name, release, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The Reply plugin's package is written once per release, not once per platform: by a job of its own, from the tag's
+    /// checkout, after the version was decided and holding no token. It is uploaded under a name the publishing job's
+    /// download takes, into the directory the checksums are written in, and the publishing job waits for that job, so
+    /// nothing is published without it. What the script writes is <see cref="PluginAssetTests"/>' subject.
+    /// </summary>
+    [Fact]
+    public void The_plugin_s_package_is_written_once_by_a_job_of_its_own_and_reaches_the_release()
+    {
+        var jobs = Mapping(Parse(Read(Release)), "jobs");
+        var writing = jobs.Children
+            .Select(job => (Name: job.Key.ToString(), Job: (YamlMappingNode)job.Value))
+            .SelectMany(found => (Node(found.Job, "steps") as YamlSequenceNode)?.Children.Cast<YamlMappingNode>().Select(step => (found.Name, found.Job, Step: step)) ?? [])
+            .Where(found => Scalar(found.Step, "run")?.Contains("Write-PluginArchive.ps1", StringComparison.Ordinal) == true)
+            .ToList();
+        var (name, job, step) = Assert.Single(writing);
+
+        Assert.Null(Node(job, "strategy"));
+        Assert.Equal("version", Scalar(job, "needs"));
+        Assert.Equal(
+            $"./.github/scripts/Write-PluginArchive.ps1 -Package plugins/reply -Archive artifacts/release/{ReleaseAssets.ReplyPlugin}",
+            Scalar(step, "run")!.Trim());
+        Assert.Null(Node(step, "continue-on-error"));
+
+        var steps = Assert.IsType<YamlSequenceNode>(Node(job, "steps")).Children.Cast<YamlMappingNode>().ToList();
+        Assert.StartsWith("actions/checkout@", Scalar(steps[0], "uses"), StringComparison.Ordinal);
+        var upload = Mapping(Assert.Single(steps, one => Scalar(one, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true), "with");
+        Assert.Equal($"artifacts/release/{ReleaseAssets.ReplyPlugin}", Scalar(upload, "path"));
+        Assert.Equal("error", Scalar(upload, "if-no-files-found"));
+
+        var publishing = PublishingJob();
+        var download = Mapping(Assert.Single(PublishingSteps(), one => Scalar(one, "uses")?.StartsWith("actions/download-artifact@", StringComparison.Ordinal) == true), "with");
+        var pattern = Scalar(download, "pattern")!;
+        var artifact = Scalar(upload, "name")!;
+        Assert.True(
+            Regex.IsMatch(artifact, "^" + Regex.Escape(pattern).Replace(@"\*", ".*", StringComparison.Ordinal) + "$"),
+            $"The plugin's package is uploaded as '{artifact}', which the publishing job's download of '{pattern}' does not take.");
+        Assert.Equal("artifacts/release", Scalar(download, "path"));
+        Assert.Contains(name, Assert.IsType<YamlSequenceNode>(Node(publishing, "needs")).Children.Select(need => need.ToString()));
     }
 
     /// <summary>
@@ -1183,13 +1228,11 @@ public class ReleaseWorkflowTests
     public void The_notes_name_every_asset_the_release_carries()
     {
         var notes = Read(Notes);
-        foreach (var rid in ReleaseAssets.Rids)
+        foreach (var name in ReleaseAssets.Published)
         {
-            Assert.Contains(ReleaseAssets.For(rid), notes, StringComparison.Ordinal);
+            Assert.Contains(name, notes, StringComparison.Ordinal);
         }
 
-        Assert.Contains(ReleaseAssets.Manifest, notes, StringComparison.Ordinal);
-        Assert.Contains(ReleaseAssets.Checksums, notes, StringComparison.Ordinal);
         Assert.Contains("{{version}}", notes, StringComparison.Ordinal);
     }
 
@@ -1212,6 +1255,7 @@ public class ReleaseWorkflowTests
             "-Version", "0.2.0",
             "-Directory", directory,
             "-Require", string.Join(',', ReleaseAssets.Rids),
+            "-Plugins", ReleaseAssets.ReplyPlugin,
             "-ReleaseNotesUrl", "https://example.invalid/releases/tag/v0.2.0");
         Assert.True(exit == 0, stderr);
 
@@ -1228,16 +1272,46 @@ public class ReleaseWorkflowTests
             Assert.Equal(new FileInfo(Path.Combine(directory, ReleaseAssets.For(rid))).Length, manifest.Artifacts[rid].Size);
         }
 
+        // The plugin's package is not a platform, and the manifest's artifacts are platforms: a running Jason reads the
+        // manifest to learn which executable to take, and the package is not one.
+        Assert.DoesNotContain(manifest.Artifacts.Values, artifact => artifact.Asset == ReleaseAssets.ReplyPlugin);
+
         // sha256sum's own format — the digest, two spaces, the name — one per line, Unix newlines, so that
-        // `sha256sum -c checksums.txt` works wherever the archives were downloaded to.
+        // `sha256sum -c checksums.txt` works wherever the archives were downloaded to. The plugin's package has its
+        // line after the archives', which is where a person checks it from.
         var checksums = File.ReadAllText(Path.Combine(directory, ReleaseAssets.Checksums));
         Assert.DoesNotContain('\r', checksums);
         var lines = checksums.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        Assert.Equal(ReleaseAssets.Rids.Count, lines.Length);
+        Assert.Equal(ReleaseAssets.Rids.Count + 1, lines.Length);
         foreach (var rid in ReleaseAssets.Rids)
         {
             Assert.Contains($"{manifest.Artifacts[rid].Sha256}  {ReleaseAssets.For(rid)}", lines);
         }
+
+        var package = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(directory, ReleaseAssets.ReplyPlugin))));
+        Assert.Equal($"{package}  {ReleaseAssets.ReplyPlugin}", lines[^1]);
+    }
+
+    /// <summary>
+    /// A plugin's package the release promises and the download did not bring would be a line naming a file that is not
+    /// there, so nothing is written: neither the checksums nor the manifest.
+    /// </summary>
+    [Fact]
+    public void A_release_missing_the_plugin_s_package_is_not_assembled()
+    {
+        using var tree = new TempTree();
+        var directory = Staged(tree);
+        File.Delete(Path.Combine(directory, ReleaseAssets.ReplyPlugin));
+
+        // Run so that the refusal reaches stderr whole, as the exception's message, rather than wrapped by PowerShell's view.
+        var (exit, _, stderr) = Workflows.Script(NoEnvironment, Path.Combine(RepositoryRoot(), Path.Combine(Script)), "-Version", "0.2.0", "-Directory", directory, "-Require", string.Join(',', ReleaseAssets.Rids), "-Plugins", ReleaseAssets.ReplyPlugin);
+
+        // The script's own refusal, which says what the release promised, rather than whatever a later line would say
+        // about a file it cannot find.
+        Assert.NotEqual(0, exit);
+        Assert.Contains($"The release carries the plugin package {ReleaseAssets.ReplyPlugin}, and it is not in", stderr, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(directory, ReleaseAssets.Manifest)));
+        Assert.False(File.Exists(Path.Combine(directory, ReleaseAssets.Checksums)));
     }
 
     /// <summary>A manifest that named a platform the release does not carry would send that platform's users a 404.</summary>
@@ -1276,7 +1350,7 @@ public class ReleaseWorkflowTests
 
     /// <summary>
     /// A directory the way the assembling job sees it after the download: one stand-in archive per platform and
-    /// the fragment the packaging action wrote for it, hashed the way the action hashes.
+    /// the fragment the packaging action wrote for it, hashed the way the action hashes, and the plugin's package.
     /// </summary>
     private static string Staged(TempTree tree)
     {
@@ -1292,6 +1366,7 @@ public class ReleaseWorkflowTests
             File.WriteAllText(Path.Combine(directory, $"jason-{rid}.fragment.json"), JsonSerializer.Serialize(fragment) + "\n");
         }
 
+        File.WriteAllText(Path.Combine(directory, ReleaseAssets.ReplyPlugin), $"not really {ReleaseAssets.ReplyPlugin}");
         return directory;
     }
 
@@ -1445,10 +1520,16 @@ public class ReleaseWorkflowTests
         }
 
         // The release's notes are read at the product's own address, which redirects to where the release is
-        // published, the public repository.
+        // published, the public repository. And its checksums carry the plugin's package, which the manifest does not.
         if (workflow == Release[^1])
         {
             Assert.Equal("https://jasonharness.ai/releases/tag/v0.2.0", manifest.ReleaseNotesUrl);
+
+            var package = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(directory, ReleaseAssets.ReplyPlugin))));
+            var checksums = File.ReadAllText(Path.Combine(directory, ReleaseAssets.Checksums));
+            Assert.True(
+                checksums.Split('\n').Contains($"{package}  {ReleaseAssets.ReplyPlugin}"),
+                $"{workflow} runs `{invocation}`, and the checksums it wrote carry no line for {ReleaseAssets.ReplyPlugin}:\n{checksums}");
         }
     }
 

@@ -50,13 +50,10 @@ public class ReleaseAndUpdateDocTests
     {
         var page = Read();
 
-        foreach (var rid in ReleaseAssets.Rids)
+        foreach (var name in ReleaseAssets.Published)
         {
-            Assert.Contains(ReleaseAssets.For(rid), page, StringComparison.Ordinal);
+            Assert.Contains(name, page, StringComparison.Ordinal);
         }
-
-        Assert.Contains(ReleaseAssets.Manifest, page, StringComparison.Ordinal);
-        Assert.Contains(ReleaseAssets.Checksums, page, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+using Jason.Contracts.Update;
 using static Jason.Runtime.Tests.Documentation.Workflows;
 
 namespace Jason.Runtime.Tests.Documentation;
@@ -92,11 +94,32 @@ public sealed class PublishBodyTests
 
             ## The draft release
 
-            `v0.6.0` is a draft until this merges. It holds `jason-win-x64.zip`, `jason-linux-x64.tar.gz`, `jason-osx-arm64.tar.gz`, `manifest.json`, `checksums.txt`, `install.sh` and `install.ps1`.
+            `v0.6.0` is a draft until this merges. It holds `jason-win-x64.zip`, `jason-linux-x64.tar.gz`, `jason-osx-arm64.tar.gz`, `manifest.json`, `checksums.txt`, `install.sh`, `install.ps1` and `jason-plugin-reply.zip`.
 
             """.Replace("{TAB}", "\t", StringComparison.Ordinal).ReplaceLineEndings("\n"),
             body);
         Assert.Equal("contracts", label);
+    }
+
+    /// <summary>
+    /// The draft release's sentence names every file the release publishes, in the order the workflow attaches them. It is
+    /// one more list of those files, held to <see cref="ReleaseAssets.Published"/> as the workflow's own list and the two
+    /// pages' tables are, so a file added to a release and forgotten here turns this red, and not only the body above.
+    /// </summary>
+    [Fact]
+    public void The_draft_release_sentence_names_exactly_what_a_release_publishes()
+    {
+        using var tree = new Checkout();
+        Change(tree.Root, "VERSION", "0.6.0\n");
+
+        var (body, _) = Write(tree);
+
+        var section = body.IndexOf("## The draft release\n", StringComparison.Ordinal);
+        Assert.True(section >= 0, $"The body has no section on the draft release:\n{body}");
+        var holds = body.IndexOf("It holds ", section, StringComparison.Ordinal);
+        Assert.True(holds >= 0, $"The draft release's section does not say what it holds:\n{body[section..]}");
+        var sentence = body[holds..body.IndexOf('\n', holds)];
+        Assert.Equal(ReleaseAssets.Published, Regex.Matches(sentence, "`([^`]+)`").Select(match => match.Groups[1].Value));
     }
 
     [Fact]

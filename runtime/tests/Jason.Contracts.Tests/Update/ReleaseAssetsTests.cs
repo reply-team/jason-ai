@@ -36,6 +36,24 @@ public class ReleaseAssetsTests
     }
 
     /// <summary>
+    /// The Reply plugin's package is a release's own file too, under a name with no version in it: the version is inside
+    /// its <c>plugin.yaml</c>, and a stable name lets a pinned address and the latest one both resolve.
+    /// </summary>
+    [Fact]
+    public void The_reply_plugin_s_package_has_one_stable_asset_name() =>
+        Assert.Equal("jason-plugin-reply.zip", ReleaseAssets.ReplyPlugin);
+
+    /// <summary>
+    /// Every file a release carries, in the order the workflow attaches them: the three archives, the feed and its
+    /// checksums, the two install scripts and the plugin's package. Eight, and a ninth is a decision rather than a drift.
+    /// </summary>
+    [Fact]
+    public void A_release_publishes_exactly_these_eight_files() =>
+        Assert.Equal(
+            ["jason-win-x64.zip", "jason-linux-x64.tar.gz", "jason-osx-arm64.tar.gz", "manifest.json", "checksums.txt", "install.sh", "install.ps1", "jason-plugin-reply.zip"],
+            ReleaseAssets.Published);
+
+    /// <summary>
     /// An asset name arrives from a feed this runtime did not write and becomes part of a URL and part of a
     /// path. Anything that could leave the directory it is meant to land in, or that is not a file name at all,
     /// is refused before either is built — the test writes its own hostile names.

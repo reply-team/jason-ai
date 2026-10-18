@@ -35,9 +35,19 @@ public static class ReleaseAssets
     /// </remarks>
     public static IReadOnlyList<string> InstallScripts { get; } = ["install.sh", "install.ps1"];
 
+    /// <summary>
+    /// The Reply plugin's package: the files of <c>plugins/reply</c> at the release's tag, at the archive's root, so that
+    /// unpacked into the plugins directory it has the content digest the tag's package has.
+    /// </summary>
+    /// <remarks>
+    /// Listed in <see cref="Checksums"/> and never in the <see cref="Manifest"/>, whose artifacts are platforms. The name
+    /// carries no version, as the archives' do not; the plugin's version is inside its <c>plugin.yaml</c>.
+    /// </remarks>
+    public const string ReplyPlugin = "jason-plugin-reply.zip";
+
     /// <summary>Every file a release carries, in the order the release workflow attaches them.</summary>
     public static IReadOnlyList<string> Published { get; } =
-        [.. Rids.Select(For), Manifest, Checksums, .. InstallScripts];
+        [.. Rids.Select(For), Manifest, Checksums, .. InstallScripts, ReplyPlugin];
 
     /// <summary>The archive a platform's release is published as.</summary>
     /// <exception cref="ArgumentOutOfRangeException">The platform is not one this build publishes for.</exception>
