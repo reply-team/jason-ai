@@ -37,7 +37,9 @@ public class SkillSequenceTests
     /// <summary>
     /// A campaign, the people it is about, and a unit of work, by the lines the managed path prints. The
     /// contacts file is written first because the CLI reads it while it parses — which is also what a person
-    /// does, since a session has no file-writing tool under the shape this pack is measured in.
+    /// does, since a session has no file-writing tool under the shape this pack is measured in. The campaign is
+    /// created with the person's brief as its context, as the skill prints it, and the brief is read back from the
+    /// campaign before anybody is added to it.
     /// </summary>
     [Fact]
     public async Task The_managed_path_creates_a_campaign_and_its_work_by_the_lines_it_prints()
@@ -52,7 +54,10 @@ public class SkillSequenceTests
         await GoldenPath.ReloadAsync(it, "installed the reply plugin", routed: true);
 
         var printed = Prints("managed-campaign-work");
-        const string Create = "jason campaign create --name \"Q3 LatAm founders\" --idempotency-key q3-latam";
+        const string Brief = "{\"offer\":\"payroll for startups hiring in Latin America\","
+            + "\"audience\":\"founders of seed-stage startups in Mexico and Colombia\","
+            + "\"their_words\":\"Our best customers came through their accountants. We sell to founders, never to HR.\"}";
+        const string Create = "jason campaign create --name \"Q3 LatAm founders\" --context '" + Brief + "' --idempotency-key q3-latam";
         const string Add = $"jason campaign add-contacts cmp_{Placeholder} --file contacts.json --match-by email";
         const string List = $"jason campaign list-contacts cmp_{Placeholder}";
         const string Work = $"jason workitem create cmp_{Placeholder} --kind provider_op --operation "
@@ -88,6 +93,19 @@ public class SkillSequenceTests
         // What the skill teaches about a lost answer: the same line again, key and all, answers with what the first
         // one made rather than making it twice.
         Assert.Equal(campaign, (string?)GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, [.. Substituted(Create, nothing)])))["id"]);
+
+        // The brief becomes the campaign: read back from the runtime, the campaign's context is the object the printed
+        // line carried, key for key, the person's own words under the key the skill printed them under — and the
+        // campaign holds nobody yet, because the brief is given before any contact is added.
+        var made = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "campaign", "get", campaign)));
+        Assert.True(
+            JsonNode.DeepEquals(JsonNode.Parse(Brief), made["context"]),
+            $"The campaign's context reads {made["context"]?.ToJsonString()}, and the printed line carried {Brief}.");
+        Assert.Equal(
+            "Our best customers came through their accountants. We sell to founders, never to HR.",
+            (string?)made["context"]!["their_words"]);
+        var nobody = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "campaign", "list-contacts", campaign)));
+        Assert.Empty(nobody["items"]!.AsArray());
 
         var added = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
             it, [.. Substituted(Add, ids, ("contacts.json", contacts))])));

@@ -730,16 +730,32 @@ public partial class PageClaimsTests
             StringComparison.Ordinal);
 
     /// <summary>
-    /// A ready installation is not the end of what the person came for: the agent says it can work, that one word runs
-    /// the wiring check in the same session, and that the real work comes after it — a campaign planned and worked, not
-    /// the check.
+    /// A ready installation is not the end of what the person came for: the agent says it can work and asks once what
+    /// comes next — the wiring check, named for what it is, a synthetic walk that is not the real work, or the real work at
+    /// once. A skip is the person's answer and is not asked again, and the real work begins with an invitation to tell
+    /// about the first campaign in their own words. An agent that took the walk for the job, or offered it at every turn,
+    /// would keep the person from the work they came for.
     /// </summary>
     [Fact]
-    public void The_agent_section_points_at_the_wiring_check_and_the_real_work_after_ready() =>
+    public void The_agent_section_asks_once_after_ready_between_the_walk_and_the_real_work()
+    {
+        var agent = Flat(Agent());
+
         Assert.Contains(
-            "When `ready` is true, tell the person Jason is installed and can work, and that one word from them runs [the wiring check](golden-path.md) in this session: it connects their provider and proves it with their own address. The real work comes after it, and begins with a campaign planned with the `campaign-planning` skill and worked by Jason's roles.",
-            Flat(Agent()),
+            "When `ready` is true, tell the person Jason is installed and can work, and ask them once what comes next: [the wiring check](golden-path.md) first, in this session, or their real work at once.",
+            agent,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "Name the wiring check for what it is: a synthetic walk to meet the system, which connects their provider and proves it with their own address, and is not the real work.",
+            agent,
+            StringComparison.Ordinal);
+        Assert.Contains("A skip is honoured: do not offer the walk again.", agent, StringComparison.Ordinal);
+        Assert.Contains(
+            "The real work, at once or after the walk, begins with an invitation to tell you about their first campaign in their own words — typed, a link, a file or a voice note, or one of a few examples you offer to start from — and goes on as a campaign planned with the `campaign-planning` skill and worked by Jason's roles.",
+            agent,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("one word from them runs", agent, StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// A person's own agent that lands on the README sees, within its first screen, what Jason is, that installing it
@@ -811,12 +827,25 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// The agent's report at the end names the next step, so an install never ends on whether it worked alone: after a
-    /// ready installation the next step is the first run, and after one that is not ready it is the step that remains.
+    /// ready installation the next step is the question of what comes next, and after one that is not ready it is the
+    /// step that remains.
     /// </summary>
     [Fact]
     public void The_install_prompt_asks_for_the_next_step() =>
         Assert.Contains(
             "At the end, tell me whether Jason can start work, what the next step is, and exactly what you ran and what it changed.",
+            Flat(Prompt()),
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// And when Jason can start work, the person is asked once, in their own voice: a synthetic walk to meet it first, or
+    /// their real work at once. A prompt that said nothing of it would leave the choice to the install page alone, which
+    /// the person pasting the prompt never reads; one that asked at every turn would keep them from the work.
+    /// </summary>
+    [Fact]
+    public void The_install_prompt_asks_once_what_comes_next_when_Jason_can_start_work() =>
+        Assert.Contains(
+            "If it can, ask me once whether I want a synthetic walk to meet Jason first or my real work at once.",
             Flat(Prompt()),
             StringComparison.Ordinal);
 
@@ -1026,22 +1055,27 @@ public partial class PageClaimsTests
             StringComparison.Ordinal);
 
     /// <summary>
-    /// The install page ends where the wiring check begins: §6's last paragraph links the page that walks it, so a person
-    /// who followed the install to its end — or an agent that did it for them — knows what comes next, and says that the
-    /// real work comes after the check rather than being it.
+    /// The install page ends with the choice of what comes next: §6's last paragraph says an agent asks once, links the
+    /// wiring check as a synthetic walk that is not the real work, says a skipped walk is not offered again, and says the
+    /// real work begins with the person telling about their first campaign in their own words. A person who followed the
+    /// install to its end — or an agent that did it for them — knows both ways on, and that the walk is not the work.
     /// </summary>
     [Fact]
-    public void The_install_page_ends_with_the_wiring_check_and_the_real_work_after_it()
+    public void The_install_page_ends_with_a_choice_asked_once_and_the_real_work_after_it()
     {
         var start = Section(Page("docs", "INSTALL.md"), "## 6. ").TrimEnd().TrimEnd('-').TrimEnd();
         var last = Flat(start[(start.LastIndexOf("\n\n", StringComparison.Ordinal) + 2)..]);
 
-        Assert.Contains("[The wiring check](golden-path.md)", last, StringComparison.Ordinal);
-        Assert.Contains("one word from you", last, StringComparison.Ordinal);
         Assert.Contains(
-            "The real work comes after it, and begins with a campaign planned with the business skills, [`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first, and worked by Jason's roles.",
+            "What comes next is yours to choose, and an agent that installed Jason asks you once: [the wiring check](golden-path.md) — a page of its own, a synthetic walk to meet the system, your provider connected and proven with your own address, and not the real work — or the real work at once.",
             last,
             StringComparison.Ordinal);
+        Assert.Contains("Skip the walk and it is not offered again.", last, StringComparison.Ordinal);
+        Assert.Contains(
+            "The real work, at once or after the walk, begins with you telling your agent about your first campaign in your own words — typed, a link, a file or a voice note, or an example to start from — and becomes a campaign planned with the business skills, [`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first, and worked by Jason's roles.",
+            last,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("one word from you", last, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1066,12 +1100,37 @@ public partial class PageClaimsTests
         Assert.True(first > 0 && second > first, "\"Where to go next\" no longer opens with a list of at least two places.");
         var next = Flat(further[first..second]).Trim();
         Assert.Equal(
-            "- [`campaign-planning`](../skills/business/campaign-planning/SKILL.md) — the real work after this check: a campaign planned with the business skills and worked by [Jason's roles](../skills/runtime/roles).",
+            "- [`campaign-planning`](../skills/business/campaign-planning/SKILL.md) — the real work, after this check or instead of it: a campaign planned with the business skills and worked by [Jason's roles](../skills/runtime/roles).",
             next);
     }
 
     /// <summary>
-    /// The README names the page for what it proves, and says where the real work begins.
+    /// Right after its opening, the page says it is a synthetic familiarisation run a person may skip, offered once, and
+    /// what it makes at the provider: one real draft campaign, never started, holding nobody but them — so nobody walks it
+    /// believing nothing real lands. After it, or instead of it, the real work begins the same way, with the person
+    /// telling about their first campaign in their own words. And it says what a skip leaves undone: no provider is
+    /// connected until the work needs one, and where on this page one is connected then. A reader who met the walk as the
+    /// start of the work, or skipped it and met <c>no_route</c> with nothing said, would have been told less than the
+    /// page knows. The paragraph is held whole, so a sentence added to it — one that made the finished walk the person's
+    /// first campaign, say — is as red as one taken away.
+    /// </summary>
+    [Fact]
+    public void The_wiring_check_says_it_is_an_optional_synthetic_run_right_after_its_opening()
+    {
+        var blocks = Page("docs", "golden-path.md").Split("\n\n");
+        Assert.True(blocks.Length > 2, "docs/golden-path.md has no paragraph after its opening.");
+
+        Assert.Equal(
+            "It is an explicitly synthetic familiarisation run, and you may skip it: offered once when an installation is ready, it meets the system and proves its wiring with your own address as the only contact. "
+            + "What it makes at your provider is real, and small: one draft campaign in your account, which nobody starts and which holds nobody but you. "
+            + "Skipped or finished, the real work begins the same way: with you telling your agent about your first campaign in your own words — typed, a link, a file or a voice note, or an example to start from. "
+            + "Skipping it connects no provider: that waits until the work first needs one, and this page's Reply CLI section and steps 3 to 5 are how it is connected then.",
+            Flat(blocks[2]));
+    }
+
+    /// <summary>
+    /// The README names the page for what it proves, says where the real work begins, and says the page is optional: a
+    /// synthetic walk offered once, which a person may skip for the real work at once.
     /// </summary>
     [Fact]
     public void The_readme_names_the_wiring_check_and_where_the_real_work_begins()
@@ -1083,12 +1142,18 @@ public partial class PageClaimsTests
             "It proves the wiring and is not the real work, which begins with a campaign planned with the business skills ([`campaign-planning`](skills/business/campaign-planning/SKILL.md) first) and worked by Jason's roles.",
             readme,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "It is optional: a synthetic walk, offered once when an installation is ready, which you may skip for the real work at once — and that begins with you telling your agent about your first campaign in your own words.",
+            readme,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
     /// No page that hands a reader to the wiring check calls it by a name it had before — the first run, the golden path,
-    /// the first-use walkthrough: it is a check of the wiring, and the real work is a campaign. A file path is not prose,
-    /// and the executable's own "first runs" is another matter, so neither is read as one.
+    /// the first-use walkthrough: it is a check of the wiring, and the real work is a campaign. Nor a sandbox: it makes a
+    /// real draft campaign at the person's provider and enrols their own address, and the published pages keep that word
+    /// for an isolation boundary. A file path is not prose, and the executable's own "first runs" is another matter, so
+    /// neither is read as one.
     /// </summary>
     [Theory]
     [InlineData("README.md")]
@@ -1100,7 +1165,7 @@ public partial class PageClaimsTests
     {
         var said = Regex.Match(
             Flat(Page(page.Split('/'))),
-            @"\b(?:first run|golden path|first[- ]use walkthrough)\b",
+            @"\b(?:first run|golden path|first[- ]use walkthrough|sandbox)\b",
             RegexOptions.IgnoreCase);
         Assert.False(said.Success, $"{page} still says '{said.Value}' at offset {said.Index} of its flattened text.");
     }
@@ -1702,10 +1767,10 @@ public partial class PageClaimsTests
     }
 
     /// <summary>The digest of the README's prompt.</summary>
-    private const string PromptDigest = "sha256:a218dac2de2fb843c275be0aeff7586ee6c99a5ceed033f63857941d04a162e7";
+    private const string PromptDigest = "sha256:177e63a43f8718c03aa20301d3c8fb7ca3c515b902fe71cbf232080256012720";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:1b88e177af7b5769390446cc68c76e6715fc72aeb34c32ca9cdbf340e892e2e2";
+    private const string AgentSectionDigest = "sha256:e3773f1c7a43d649deda4a83daa62de5a4b36f5ecdd8c1ceb520e3f46a915f38";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:5a6ef884d8162978623f044253c5e5b8ac9da5bf198b6707b2720ef04440f95c";

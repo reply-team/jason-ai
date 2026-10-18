@@ -18,6 +18,46 @@ public partial class InteractiveSkillTests
         Assert.DoesNotContain("it tells them once, with a pointer: how many wait, and where to look.", skill, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A ready installation is followed by one question, asked once: the wiring check — named for what it is, a synthetic
+    /// walk that is not the real work — or the real work at once. A skip is the person's answer and the walk is not offered
+    /// again, and the real work begins with an invitation to tell about the first campaign in their own words, which
+    /// becomes the campaign's context. A session that took the walk for the job, or offered it at every turn, would keep
+    /// the person from the work they came for.
+    /// </summary>
+    [Fact]
+    public void The_operating_skill_asks_once_after_ready_and_honours_a_skip()
+    {
+        var skill = Flattened("operating-the-installation");
+
+        Assert.Contains(
+            "When `jason status` says `ready`, ask the person once what comes next: the wiring check, `docs/golden-path.md`, in the same session, or their real work at once.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Name the wiring check for what it is: a synthetic walk to meet the system, which connects their provider and proves it with their own address, and is not the real work.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("A skip is honoured: do not offer the walk again.", skill, StringComparison.Ordinal);
+
+        // A skip connects no provider, and `ready` needs none, so the session that skipped meets `no_route` later with
+        // nowhere to turn unless this paragraph says where a provider is connected: the wiring check's own steps, without
+        // its enrolment.
+        Assert.Contains(
+            "A skip leaves no provider connected: when the work first needs one, the Reply CLI section and steps 3 to 5 of `docs/golden-path.md` connect it, without the walk's enrolment.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "The real work, at once or after the walk, begins with an invitation to tell you about their first campaign in their own words — typed, a link, a file or a voice note, or one of a few examples you offer to start from.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "What they tell you becomes the campaign's context when the campaign is created (`managed-campaign-work`), and the work is planned with the `campaign-planning` skill and worked by Jason's roles.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("one word from the person starts it", skill, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_operating_skill_says_what_a_session_cannot_do_and_what_is_not_released_yet()
     {
@@ -152,13 +192,6 @@ public partial class InteractiveSkillTests
             StringComparison.Ordinal);
         Assert.Contains("Never pipe a download into a shell", skill, StringComparison.Ordinal);
         Assert.Contains("The two lines are the person's: where neither route is open to you, hand them the lines to type.", skill, StringComparison.Ordinal);
-
-        // And a ready installation is followed by the wiring check, started by one word in the same session — and the
-        // real work, a campaign planned and worked by the roles, comes after it rather than being it.
-        Assert.Contains(
-            "When `jason status` says `ready`, the next step is the wiring check, `docs/golden-path.md`: one word from the person starts it in the same session. It connects their provider and proves it with their own address; the real work comes after it, and begins with a campaign planned with the `campaign-planning` skill and worked by Jason's roles.",
-            skill,
-            StringComparison.Ordinal);
 
         // After an update the role skills can be another release's. The skill says what `jason status` says about it and
         // that the repair is the line it prints — no more, because the repair's own words are the check's to give. Only

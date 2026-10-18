@@ -27,6 +27,23 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
+    /// The campaign context is what a role reads when its skill has it read the campaign, and not every role does: the
+    /// launch envelope carries the work item's own context and nothing else. A manager told that every role reads it would
+    /// leave a standing instruction there for a role that never sees it, rather than in that role's own work item.
+    /// </summary>
+    [Fact]
+    public void The_manager_is_told_that_not_every_role_reads_the_campaign_context()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains(
+            "**The campaign context is the shared knowledge.** A role whose skill reads the campaign reads it whole; one that does not works from its own work item's context alone, so work you create for it carries what it needs. It is also where a person writes when they want the campaign to behave differently:",
+            skill,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("It is what every role reads", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A reply wakes the manager with a line that names a thread and says nothing of what was written. The manager is
     /// told to read every such line by its kind, to read the thread before deciding, and to leave the runtime's own read
     /// to the runtime.

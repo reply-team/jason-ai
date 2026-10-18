@@ -2,7 +2,7 @@
 name: operating-the-installation
 description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, and installing Jason or taking it off again.
 metadata:
-  status: verified
+  status: draft
 ---
 
 # Operating the installation
@@ -11,7 +11,8 @@ This skill is about the installation, not about the work it performs. A person r
 Jason is up, why nothing is happening, what is installed, where work would go, or whether they are on the
 current version. Campaign work itself is `managed-campaign-work`.
 
-**Status: verified** against Claude Code 2.1.301. It covers what this build does and nothing else.
+**Status: draft.** No agent host has read this text in the state it ships in. It covers what this build does and
+nothing else.
 
 Two things are true throughout and are easy to forget. **Nothing is registered until somebody asks**: Jason
 starts because you started it, or because somebody registered it to start at logon. And **no provider ships
@@ -284,9 +285,15 @@ Both lines install the latest release. If either answers 404, the release could 
 stands, and that there is nothing to build instead — the runtime's source is not published. Do not paste a line
 again in the hope of a different answer.
 
-When `jason status` says `ready`, the next step is the wiring check, `docs/golden-path.md`: one word from the person
-starts it in the same session. It connects their provider and proves it with their own address; the real work comes
-after it, and begins with a campaign planned with the `campaign-planning` skill and worked by Jason's roles.
+When `jason status` says `ready`, ask the person once what comes next: the wiring check, `docs/golden-path.md`, in the
+same session, or their real work at once. Name the wiring check for what it is: a synthetic walk to meet the system,
+which connects their provider and proves it with their own address, and is not the real work. A skip is honoured: do
+not offer the walk again. A skip leaves no provider connected: when the work first needs one, the Reply CLI section and
+steps 3 to 5 of `docs/golden-path.md` connect it, without the walk's enrolment. The real work, at once or after the
+walk, begins with an invitation to tell you about their first campaign in their own words — typed, a link, a file or a
+voice note, or one of a few examples you offer to start from. What they tell you becomes the campaign's context when
+the campaign is created (`managed-campaign-work`), and the work is planned with the `campaign-planning` skill and
+worked by Jason's roles.
 
 ## Taking it off again
 

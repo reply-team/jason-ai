@@ -80,8 +80,9 @@ jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --since 2026-09-18T
 jason report list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-**The campaign context is the shared knowledge.** It is what every role reads, and it is where a person writes
-when they want the campaign to behave differently:
+**The campaign context is the shared knowledge.** A role whose skill reads the campaign reads it whole; one that
+does not works from its own work item's context alone, so work you create for it carries what it needs. It is also
+where a person writes when they want the campaign to behave differently:
 
 ```
 jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
