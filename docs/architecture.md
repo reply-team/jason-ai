@@ -427,6 +427,12 @@ availability, with supported control actions through the same API. The UI is par
 complete product vision; this document does not assign it to a release. It must never become
 a second source of business logic or a privileged database client.
 
+As built: the runtime serves the UI itself under `/ui/` from a module directory beside its data (`custom` when it
+holds a build, else `default`, which a release installs), as static files under a `default-src 'self'` policy. A
+browser pairs once: `ui.open` mints a single-use one-minute ticket, the page trades it at `POST /ui/session` for a UI
+token the runtime keeps as a hash and accepts as a bearer until `ui.revoke`; a request carrying a foreign `Origin` is
+refused. The UI is one more consumer of the API and the runtime keeps nothing for it; see the `DEC-UI` decisions.
+
 ### 6.9 Dispatcher
 
 Dispatcher is deterministic Runtime code, not an AI role. It evaluates explicit state and
@@ -1718,6 +1724,11 @@ original chat session.
 | DEC-UPDATE-001 | Runtime may advertise updates; a short-lived CLI/installer performs controlled replacement. |
 | DEC-UPDATE-002 | The feed, the install lines and the release page name the product's own address, `jasonharness.ai`, which redirects `/releases/*` to the same path in the public repository's releases with a temporary redirect; the licence page, links into the tree and the skills source stay on GitHub, and the runtime's licence never names the address. |
 | DEC-UPDATE-003 | An installation is Jason's own unless a package manager's own record says otherwise; a managed installation is updated and taken off by its manager, and Jason's verbs act only on what is Jason's (autostart, skills by receipt, data); and a status check says when the running runtime is not the build installed. |
+| DEC-UI-001 | The Jason UI is served by the runtime itself under `/ui/`, from `<data>/ui/custom/` when that holds a build and else `<data>/ui/default/`, as static files under `Content-Security-Policy: default-src 'self'`; it is a client of the Runtime API and nothing else. |
+| DEC-UI-002 | A browser is paired once: `ui.open` mints a single-use ticket good for one minute, the page trades it at `POST /ui/session` — the one door outside the operation catalog, and the only POST without a bearer — for a UI token the runtime stores as a hash and accepts as a bearer until `ui.revoke`; UI tokens never expire on their own. A request carrying an `Origin` that is not the runtime's own is refused. |
+| DEC-UI-003 | The UI is an optional module, not a plugin: files the runtime serves, not code it invokes; installed by default with the executable and updated with it; never fetched by the runtime; the runtime starts without it and makes no directory for it. The runtime's port defaults to 52766 so a bookmark is stable, moving to the next free port above it when that one is taken. |
+| DEC-UI-004 | The UI is one more consumer, and Jason stays command-line first and agent first: everything the UI needs from the runtime is a CLI verb that makes sense typed, returns facts and never views, and leaves the runtime unaware a screen exists — no route named after a page, no state, preference or cache for it. |
+| DEC-UI-005 | The UI's screen tests render exchanges the runtime's own tests recorded under `docs/api/fixtures/`, held to the code; its browser suite proves only what a browser alone can — pairing, the policy, the shape of every request; the runtime's logic is proven once, in the runtime's own tests. |
 | DEC-INFRA-001 | Docker, server database, message broker, and vendor-specific background services are not required by the local architecture. |
 | DEC-DOC-001 | This document describes the complete target vision without releases, milestones, implementation order, or backlog decomposition. |
 

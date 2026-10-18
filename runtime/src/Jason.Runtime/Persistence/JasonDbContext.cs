@@ -42,6 +42,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<JournalEntry> Journal => Set<JournalEntry>();
 
+    public DbSet<UiToken> UiTokens => Set<UiToken>();
+
     /// <summary>
     /// The one connection string for a database file. Spelled once because the provider pools connections per
     /// connection string: anything that wants to release a file's pooled connections must name it exactly.
@@ -376,6 +378,16 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             report.HasOne(r => r.Campaign).WithMany().HasForeignKey(r => r.CampaignId).OnDelete(DeleteBehavior.Restrict);
             report.HasOne(r => r.Contact).WithMany().HasForeignKey(r => r.ContactId).OnDelete(DeleteBehavior.Restrict);
             report.HasOne(r => r.WorkItem).WithMany().HasForeignKey(r => r.WorkItemId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<UiToken>(token =>
+        {
+            token.HasKey(t => t.Id);
+            token.Property(t => t.PublicId).HasMaxLength(40);
+            token.HasIndex(t => t.PublicId).IsUnique();
+            token.Property(t => t.TokenHash).HasMaxLength(64);
+            token.HasIndex(t => t.TokenHash).IsUnique();
+            token.Property(t => t.IssuedTo).HasMaxLength(100);
         });
 
         modelBuilder.Entity<RoleNote>(note =>

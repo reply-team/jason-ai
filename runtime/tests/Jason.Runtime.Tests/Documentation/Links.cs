@@ -300,10 +300,8 @@ internal static partial class Links
             {
                 if (entry.EndsWith('/'))
                 {
-                    var directory = Path.Combine(root, entry.TrimEnd('/'));
-                    foreach (var file in Directory.EnumerateFiles(directory, "*.md", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+                    foreach (var relative in OpenSet.Files(root, entry).Where(file => file.EndsWith(".md", StringComparison.Ordinal)))
                     {
-                        var relative = Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/');
                         yield return (relative, relative);
                     }
                 }
@@ -340,7 +338,7 @@ internal static partial class Links
                 var full = Path.Combine(root, entry.TrimEnd('/'));
                 if (entry.EndsWith('/'))
                 {
-                    files.AddRange(Directory.EnumerateFiles(full, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal));
+                    files.AddRange(OpenSet.Files(root, entry).Select(relative => Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar))));
                 }
                 else if (File.Exists(full))
                 {

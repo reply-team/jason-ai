@@ -1,4 +1,5 @@
 using Jason.Contracts.Api;
+using Jason.Runtime.Contacts;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Domain;
@@ -27,8 +28,9 @@ public sealed class ApprovalService(JasonDbContext db, JournalWriter journal, Ti
         var limit = Paging.ResolveLimit(request.Limit);
         var after = Paging.DecodeCursor(request.Cursor);
 
-        var query = db.Approvals.AsNoTracking().Include(a => a.WorkItem).ThenInclude(w => w!.Campaign).AsQueryable();
-        query = query.Where(a => a.Status == (request.Status ?? ApprovalStatus.Pending));
+        var query = db.Approvals.AsNoTracking().Include(a => a.WorkItem).ThenInclude(w => w!.Campaign).Include(a => a.WorkItem).ThenInclude(w => w!.Contact).AsQueryable();
+        var wanted = request.Statuses is { Count: > 0 } several ? several : [request.Status ?? ApprovalStatus.Pending];
+        query = query.Where(a => wanted.Contains(a.Status));
 
         if (request.CampaignId is not null)
         {
@@ -212,7 +214,7 @@ public sealed class ApprovalService(JasonDbContext db, JournalWriter journal, Ti
             throw DomainErrors.Required("approval_id");
         }
 
-        var query = db.Approvals.Include(a => a.WorkItem).ThenInclude(w => w!.Campaign).AsQueryable();
+        var query = db.Approvals.Include(a => a.WorkItem).ThenInclude(w => w!.Campaign).Include(a => a.WorkItem).ThenInclude(w => w!.Contact).AsQueryable();
         if (!tracking)
         {
             query = query.AsNoTracking();
@@ -223,8 +225,8 @@ public sealed class ApprovalService(JasonDbContext db, JournalWriter journal, Ti
     }
 
     private static ApprovalDto Detail(Approval approval) =>
-        ApprovalMapper.ToDto(approval, approval.WorkItem!.PublicId, approval.WorkItem.Campaign!.PublicId);
+        ApprovalMapper.ToDto(approval, approval.WorkItem!.PublicId, approval.WorkItem.Campaign!.PublicId, approval.WorkItem.Campaign.Name, ContactNames.Display(approval.WorkItem.Contact));
 
     private static ApprovalSummaryDto Summary(Approval approval) =>
-        ApprovalMapper.ToSummary(approval, approval.WorkItem!.PublicId, approval.WorkItem.Campaign!.PublicId);
+        ApprovalMapper.ToSummary(approval, approval.WorkItem!.PublicId, approval.WorkItem.Campaign!.PublicId, approval.WorkItem.Campaign.Name, ContactNames.Display(approval.WorkItem.Contact));
 }

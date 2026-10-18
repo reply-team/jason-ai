@@ -45,6 +45,18 @@ public class DecisionCommandsTests
     }
 
     [Fact]
+    public async Task List_sends_one_status_as_status_and_several_as_statuses()
+    {
+        using var one = new CliRun();
+        await one.RunAsync("decision", "list", "--status", "answered");
+        one.AssertPosted(Operations.DecisionList, "{\"status\":\"answered\"}");
+
+        using var several = new CliRun();
+        await several.RunAsync("decision", "list", "--status", "answered", "--status", "cancelled");
+        several.AssertPosted(Operations.DecisionList, "{\"statuses\":[\"answered\",\"cancelled\"]}");
+    }
+
+    [Fact]
     public async Task List_without_options_sends_an_empty_body_and_lets_the_runtime_say_what_pending_means()
     {
         using var cli = new CliRun();

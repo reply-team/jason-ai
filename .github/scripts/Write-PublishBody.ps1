@@ -43,6 +43,7 @@ $areas = @(
     [pscustomobject]@{ Name = 'Contracts (`docs/contracts/`)'; Paths = @('docs/contracts/') }
     [pscustomobject]@{ Name = 'Documentation (`README.md`, `docs/`)'; Paths = @('README.md', 'docs/') }
     [pscustomobject]@{ Name = 'Install path (`install/`)'; Paths = @('install/') }
+    [pscustomobject]@{ Name = 'The UI (`ui/`)'; Paths = @('ui/') }
     # A row of its own, so that a change to the terms, to the notices or to the note on the marks reads as something
     # other than 0 0 0. The own-files row changes in every release, with VERSION, and would hide it.
     [pscustomobject]@{

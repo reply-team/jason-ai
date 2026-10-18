@@ -548,6 +548,13 @@ public class ReleaseWorkflowTests
             "install.ps1 on windows",
         ];
 
+        // Reported on every run and not required by the ruleset: the UI's own checks, which a pull request shows but
+        // does not wait for. Making one required is a ruleset change, made together with moving its name up.
+        string[] optional =
+        [
+            "The UI on ubuntu",
+        ];
+
         var jobs = Mapping(Parse(Read(Ci)), "jobs");
         var reported = new List<string>();
         foreach (var (key, value) in jobs.Children)
@@ -565,9 +572,10 @@ public class ReleaseWorkflowTests
         }
 
         Assert.True(
-            required.Order(StringComparer.Ordinal).SequenceEqual(reported.Order(StringComparer.Ordinal)),
+            required.Concat(optional).Order(StringComparer.Ordinal).SequenceEqual(reported.Order(StringComparer.Ordinal)),
             $"ci.yml reports {string.Join(", ", reported.Select(name => $"'{name}'"))}, and the ruleset requires "
-            + $"{string.Join(", ", required.Select(name => $"'{name}'"))}. A check renamed here is renamed in the ruleset in the same change.");
+            + $"{string.Join(", ", required.Select(name => $"'{name}'"))} beside the optional {string.Join(", ", optional.Select(name => $"'{name}'"))}. "
+            + "A check renamed here is renamed in the ruleset in the same change; a new one is listed here as required or optional.");
     }
 
     /// <summary>

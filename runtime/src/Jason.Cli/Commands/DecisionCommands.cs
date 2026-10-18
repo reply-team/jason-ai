@@ -28,7 +28,7 @@ public static class DecisionCommands
     private static Command List(CliEnvironment env, Option<string?> actor)
     {
         var command = new Command("list", "What is waiting on a person. Pending unless you ask for something else.");
-        var status = new Option<string?>("--status") { Description = "pending (the default), answered or cancelled." };
+        var status = VerbOptions.Repeatable("--status", "pending (the default), answered or cancelled; repeat it to list several at once.");
         var campaign = new Option<string?>("--campaign") { Description = "Only questions about one campaign's work." };
         var workItem = new Option<string?>("--work-item") { Description = "Only questions raised about one work item." };
         var limit = VerbOptions.Limit();
@@ -44,8 +44,10 @@ public static class DecisionCommands
         command.SetAction((parseResult, cancellationToken) =>
         {
             ActorOption.Parse(parseResult.GetValue(actor));
+            var statuses = parseResult.GetValue(status) ?? [];
             var body = RequestBody.Empty()
-                .Set("status", parseResult.GetValue(status))
+                .Set("status", statuses.Length == 1 ? statuses[0] : null)
+                .Set("statuses", statuses.Length > 1 ? new JsonArray([.. statuses.Select(s => JsonValue.Create(s))]) : null)
                 .Set("campaign_id", parseResult.GetValue(campaign))
                 .Set("work_item_id", parseResult.GetValue(workItem))
                 .Set("limit", parseResult.GetValue(limit))

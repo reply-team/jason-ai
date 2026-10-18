@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
@@ -111,6 +112,54 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
         var (status, text) = await PostAsync(operation, body, cancellationToken);
         Assert.True(status == expected, Unexpected(operation, status, expected, text));
         return JsonSerializer.Deserialize<ErrorResponse>(text, JasonJson.Options)!.Error;
+    }
+
+    private FixtureScrubber? _scrubber;
+
+    private FixtureScrubber Scrubber => _scrubber ??= new FixtureScrubber(Paths.Root);
+
+    /// <summary>A recorded call that must succeed: the exchange is held to its file under docs/api/fixtures, and the answer comes back for the test's own assertions.</summary>
+    public async Task<T> RecordAsync<T>(string operation, string @case, object? body, CancellationToken cancellationToken)
+    {
+        var requestJson = body is null ? "{}" : JsonSerializer.Serialize(body, JasonJson.Options);
+        var (status, text) = await PostRawAsync(operation, requestJson, cancellationToken);
+        Assert.True(status == HttpStatusCode.OK, Unexpected(operation, status, HttpStatusCode.OK, text));
+        Hold(operation, @case, requestJson, (int)status, text);
+        return JsonSerializer.Deserialize<T>(text, JasonJson.Options)!;
+    }
+
+    public async Task<ErrorBody> RecordErrorAsync(string operation, string @case, object? body, HttpStatusCode expected, CancellationToken cancellationToken)
+    {
+        var requestJson = body is null ? "{}" : JsonSerializer.Serialize(body, JasonJson.Options);
+        var (status, text) = await PostRawAsync(operation, requestJson, cancellationToken);
+        Assert.True(status == expected, Unexpected(operation, status, expected, text));
+        Hold(operation, @case, requestJson, (int)status, text);
+        return JsonSerializer.Deserialize<ErrorResponse>(text, JasonJson.Options)!.Error;
+    }
+
+    /// <summary>The 401 a page meets when its token is gone: recorded with a bearer nobody minted.</summary>
+    public async Task RecordUnauthorizedAsync(string operation, string @case, CancellationToken cancellationToken)
+    {
+        using var http = new HttpClient { BaseAddress = Runtime.BaseUrl };
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "revoked-" + new string('x', 36));
+        using var content = new StringContent("{}", Encoding.UTF8, "application/json");
+        using var response = await http.PostAsync(Operations.Route(operation), content, cancellationToken);
+        var text = await response.Content.ReadAsStringAsync(cancellationToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Hold(operation, @case, "{}", (int)response.StatusCode, text);
+    }
+
+    private void Hold(string operation, string @case, string requestJson, int status, string responseJson)
+    {
+        var exchange = new JsonObject
+        {
+            ["operation"] = operation,
+            ["case"] = @case,
+            ["request"] = Scrubber.Scrub(JsonNode.Parse(requestJson)),
+            ["status"] = status,
+            ["response"] = Scrubber.Scrub(JsonNode.Parse(responseJson)),
+        };
+        ApiFixtures.Hold(operation + "/" + @case, exchange);
     }
 
     private static string Unexpected(string operation, HttpStatusCode status, HttpStatusCode expected, string body) =>

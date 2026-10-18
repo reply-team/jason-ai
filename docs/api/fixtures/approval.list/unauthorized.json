@@ -1,0 +1,13 @@
+{
+  "operation": "approval.list",
+  "case": "unauthorized",
+  "request": {},
+  "status": 401,
+  "response": {
+    "error": {
+      "code": "unauthorized",
+      "message": "A valid capability token is required: Authorization: Bearer <token> from the runtime descriptor.",
+      "retryable": false
+    }
+  }
+}

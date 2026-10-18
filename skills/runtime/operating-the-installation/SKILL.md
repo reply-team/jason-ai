@@ -1,6 +1,6 @@
 ---
 name: operating-the-installation
-description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, and installing Jason or taking it off again.
+description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, opening the browser UI or unpairing a browser, and installing Jason or taking it off again.
 metadata:
   status: draft
 ---
@@ -33,6 +33,28 @@ If nothing answers, the command exits 3 and says the runtime is unreachable. Tha
 running, not a runtime that is broken; start it. If it answers but reports a data directory you did not expect,
 something is running under a different `JASON_DATA_DIR` than the one you are typing against, and the two will
 disagree about everything else you ask.
+
+## Showing the person the UI
+
+```
+jason ui open
+jason ui open --no-open
+jason ui tokens
+jason ui revoke <token-id>
+```
+
+`jason ui open` answers with a link into the browser UI and opens it in the person's default browser; `--no-open`
+prints the link alone, which is what you want from a session: hand the person the `url` and say it works once, within
+a minute. After that pairing, a bookmark of the page keeps working. `--approval <id>` and `--question <id>` open on one
+item.
+
+If it fails with `ui_not_installed`, no UI build is in place: the message names `ui/default` (what a release installs)
+and `ui/custom` (a build of the person's own). Say which is missing and that reinstalling from a release puts the
+default back; do not fetch anything yourself.
+
+`jason ui tokens` lists the paired browsers; `jason ui revoke <token-id>` unpairs one, `--all` every one. Revoke when
+the person says a browser should no longer have access. `jason status`'s `ui_module` check says which build is served
+and never decides readiness.
 
 ## Starting and stopping it
 

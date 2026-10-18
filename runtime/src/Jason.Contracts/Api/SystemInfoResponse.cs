@@ -19,7 +19,12 @@ public sealed record SystemInfoResponse(
     RoutesInfo Routes,
     UpdateInfo? Update = null,
     SkillsInfo? Skills = null,
-    NotificationsInfo? Notifications = null);
+    NotificationsInfo? Notifications = null,
+    ListeningInfo? Listening = null,
+    UiModuleInfo? Ui = null);
+
+/// <summary>The port Kestrel took, and the one the settings asked for (0 when the OS chose). They differ when the configured one was taken.</summary>
+public sealed record ListeningInfo(int Port, int ConfiguredPort);
 
 /// <summary>
 /// Whether this runtime tells a person when work starts waiting for them, and what each channel did with the last

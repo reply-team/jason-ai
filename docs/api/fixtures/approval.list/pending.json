@@ -1,0 +1,41 @@
+{
+  "operation": "approval.list",
+  "case": "pending",
+  "request": {},
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "apr_1",
+        "work_item_id": "wi_1",
+        "campaign_id": "cmp_1",
+        "operation": "campaign.enroll",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-1",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Autumn outreach",
+        "contact_name": "Ada Lovelace"
+      },
+      {
+        "id": "apr_2",
+        "work_item_id": "wi_2",
+        "campaign_id": "cmp_1",
+        "operation": "campaign.enroll",
+        "status": "pending",
+        "reason": "input_changed",
+        "subject_hash": "sha256:recorded-2",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Autumn outreach",
+        "contact_name": "Grace Hopper"
+      }
+    ],
+    "next_cursor": null
+  }
+}

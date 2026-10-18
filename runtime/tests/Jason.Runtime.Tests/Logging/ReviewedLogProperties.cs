@@ -32,6 +32,9 @@ internal static class ReviewedLogProperties
         // is a DurationMs, above.
         "Finished", "Unfinished",
 
+        // The port the settings asked for and the one the API listens on, both numbers (RuntimeHost).
+        "ConfiguredPort", "Port",
+
         // Codes and closed words, and the envelope's level. A code is the runtime's own constant or a plugin outcome's
         // code, which the outcome validator holds to a snake_case token of at most 64 characters before anything logs it
         // (Code: Claimer, PluginInvoker, NotificationSender, UpdateChecker). Verdict is "succeeded", "unknown", or

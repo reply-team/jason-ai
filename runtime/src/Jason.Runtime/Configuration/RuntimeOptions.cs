@@ -9,6 +9,12 @@ public sealed class RuntimeOptions
 {
     public const string Section = "Runtime";
 
-    /// <summary>Loopback port for the Runtime API. 0 lets the OS choose; the descriptor tells clients the result.</summary>
-    public int Port { get; set; }
+    /// <summary>"JASON" on a phone keypad: in the dynamic range, where nothing is registered.</summary>
+    public const int DefaultPort = 52766;
+
+    /// <summary>
+    /// Loopback port for the Runtime API. When it is taken the runtime listens on the next free port above it and
+    /// <c>system.info</c> says so; 0 lets the OS choose. The descriptor tells clients the result either way.
+    /// </summary>
+    public int Port { get; set; } = DefaultPort;
 }

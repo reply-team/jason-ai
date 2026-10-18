@@ -416,7 +416,7 @@ internal sealed class CliRun : IDisposable
     private readonly TempPaths _paths = new();
     private readonly CliEnvironment _environment;
 
-    public CliRun(string response = "{}", string? standardInput = null, HttpStatusCode status = HttpStatusCode.OK, bool descriptor = true)
+    public CliRun(string response = "{}", string? standardInput = null, HttpStatusCode status = HttpStatusCode.OK, bool descriptor = true, Jason.Cli.Process.IUrlOpener? opener = null)
     {
         if (descriptor)
         {
@@ -433,7 +433,8 @@ internal sealed class CliRun : IDisposable
                 Sent = request.Content!.ReadAsStringAsync(CancellationToken.None).GetAwaiter().GetResult();
                 return new HttpResponseMessage(status) { Content = new StringContent(response, Encoding.UTF8, "application/json") };
             }),
-            standardInput is null ? null : new StringReader(standardInput));
+            standardInput is null ? null : new StringReader(standardInput),
+            Opener: opener);
     }
 
     public StringWriter Output { get; } = new();

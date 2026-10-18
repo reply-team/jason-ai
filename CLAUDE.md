@@ -13,6 +13,8 @@ covered here.
   `tests/` (one xUnit project per source project).
 - `plugins/` — plugin marketplace. `skills/runtime/`, `skills/business/` — skill packs. `docs/` —
   maintained documentation only.
+- `ui/` — the browser UI: a Preact client of the Runtime API, built into the release asset `jason-ui.zip`;
+  `ui/README.md` says how it is built and tested.
 - `.github/publish/` — what a release publishes: `open-set.txt` and the public repository's own files.
 - `LICENSE` — MIT, for everything outside `runtime/`. `LICENSE-RUNTIME.md` — the runtime's own licence; every archive
   carries it as `LICENSE`, beside the executable and `THIRD-PARTY-NOTICES`.
@@ -27,10 +29,12 @@ covered here.
 - Run: `dotnet run --project runtime/src/Jason.App -- --version` · `-- runtime run` · `-- runtime status`
   · `-- runtime start` (background; nothing is registered until you ask) · `-- runtime stop`
   · `-- runtime autostart enable | disable | status` · `-- campaign list`
-  · `-- workitem list` · `-- role list` · `-- plugin list` · `-- plugin reload`
+  · `-- workitem list` · `-- role list` · `-- plugin list` · `-- plugin reload` · `-- ui open`
 - Add a migration: `dotnet tool restore` once, then
   `dotnet ef migrations add <Name> --project runtime/src/Jason.Runtime --startup-project runtime/src/Jason.Runtime --output-dir Persistence/Migrations`
 - Publish: `dotnet publish runtime/src/Jason.App -c Release -r <rid> --self-contained -p:PublishSingleFile=true`
+- UI: from `ui/`, `npm ci`, `npm run check`, `npm test`, `npm run build`, `npm run package`, `npm run e2e` (the last
+  needs a Release build of `Jason.App`).
 
 ## Boundaries that the build enforces
 
@@ -58,6 +62,16 @@ covered here.
   `Jason.App`'s closure and the runtime packs the executable carries; after a package or SDK change
   `ThirdPartyNoticesTests` is red until `pwsh .github/scripts/Write-ThirdPartyNotices.ps1` writes it again.
 - Warnings are errors. Every test runs offline and uses an isolated temporary data directory.
+- The UI is one more consumer of the Runtime API, and Jason stays command-line first and agent first. Three tests for
+  anything the UI needs from the runtime: it gets a CLI verb that makes sense typed by a person or an agent (the one door
+  outside the catalog is the pairing exchange `POST /ui/session`); it returns facts, never views; the runtime never
+  knows a screen exists — no route named after a page, no state, preference or cache kept for it, and with `<data>/ui/`
+  absent the runtime is unchanged (`UiGuardTests`). A UI token has the run token's rights: one level of trust, the
+  machine's user. The UI is tested in three layers (`ui/README.md`, "Testing"): unit tests of dense logic in Node, screen tests against the exchanges the runtime's own tests recorded under
+  `docs/api/fixtures/` (`ApiFixtures`, held one-to-one with the files and rewritten only under
+  `JASON_UPDATE_FIXTURES=1`), and a browser smoke of the seams alone. Six guards hold the layers: the unit project runs
+  without a DOM and may not import Preact; no `.json` under `ui/` but the configuration; a dependency allowlist; the
+  fixture catalog; only the smoke's harness starts processes; one CI job runs all of it.
 
 ## Conventions
 

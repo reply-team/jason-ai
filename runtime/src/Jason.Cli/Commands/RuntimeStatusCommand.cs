@@ -92,6 +92,7 @@ public static class RuntimeStatusCommand
         output.WriteLine($"Runtime:    running (pid {info.Pid})");
         output.WriteLine($"Version:    {info.RuntimeVersion}");
         output.WriteLine($"API:        {info.ApiVersion} at {descriptor.BaseUrl}");
+        output.WriteLine($"Port:       {Port(info.Listening)}");
         output.WriteLine($"Instance:   {info.InstanceId}");
         output.WriteLine($"Started:    {info.StartedAt.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture)}");
         output.WriteLine($"Data dir:   {info.DataDir}");
@@ -100,9 +101,25 @@ public static class RuntimeStatusCommand
         output.WriteLine($"Plugins:    {Plugins(info.Plugins)}");
         output.WriteLine($"Routes:     {Routes(info.Routes)}");
         output.WriteLine($"Skills:     {Skills(info.Skills)}");
+        output.WriteLine($"UI:         {Ui(info.Ui)}");
         output.WriteLine($"Update:     {Update(info.Update)}");
         output.WriteLine($"Notify:     {Notifications(info.Notifications, info.StartedAt)}");
     }
+
+    private static string Port(ListeningInfo? listening) => listening switch
+    {
+        null => "unknown",
+        { ConfiguredPort: 0 } => $"{listening.Port} (chosen by the OS; set Runtime:Port for a stable one)",
+        { Port: var port, ConfiguredPort: var configured } when port == configured => port.ToString(CultureInfo.InvariantCulture),
+        _ => $"{listening.Port} ({listening.ConfiguredPort} was taken)",
+    };
+
+    private static string Ui(UiModuleInfo? ui) => ui switch
+    {
+        null => "not installed (`jason ui open` says how)",
+        { Problem: { } problem } => $"{ui.Source} from {ui.Directory}, with a problem: {problem}",
+        _ => $"{ui.Source} {ui.Version} from {ui.Directory}, API {ui.ApiVersion} ({(ui.ApiVersionMatches ? "this runtime's" : "not this runtime's")}), {ui.Digest}",
+    };
 
     /// <summary>
     /// What each notification channel did last. Off is said as off; a channel that has sent nothing yet says so; and a

@@ -118,7 +118,7 @@ public static class OperationEndpoints
     /// </summary>
     private static readonly JsonDocumentOptions Bodies = new() { AllowDuplicateProperties = false };
 
-    private static async Task<TRequest> ReadRequestAsync<TRequest>(HttpContext context)
+    internal static async Task<TRequest> ReadRequestAsync<TRequest>(HttpContext context)
         where TRequest : class
     {
         using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
@@ -155,7 +155,7 @@ public static class OperationEndpoints
     /// converter of the dialect refuses that way without quoting a value. Anything else came from a parser the door
     /// does not know, whose message may quote the value it could not read, so the caller gets the sentence alone.
     /// </summary>
-    private static string Unreadable(Exception exception) =>
+    internal static string Unreadable(Exception exception) =>
         exception is JsonException json ? NotValid + " " + json.Message : NotValid;
 
     private static readonly Action<ILogger, string, Exception> OperationFailed =

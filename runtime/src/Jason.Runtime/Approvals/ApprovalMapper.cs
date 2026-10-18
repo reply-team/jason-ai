@@ -6,7 +6,7 @@ namespace Jason.Runtime.Approvals;
 /// <summary>One decision as a caller reads it. Nothing is assembled here: every field was written at the park.</summary>
 public static class ApprovalMapper
 {
-    public static ApprovalDto ToDto(Approval approval, string workItemId, string campaignId)
+    public static ApprovalDto ToDto(Approval approval, string workItemId, string campaignId, string campaignName, string? contactName)
     {
         ArgumentNullException.ThrowIfNull(approval);
         return new ApprovalDto(
@@ -28,10 +28,12 @@ public static class ApprovalMapper
             Utc(approval.RequestedAt),
             approval.DecidedAt is { } decided ? Utc(decided) : null,
             DecidedBy(approval),
-            approval.DecisionReason);
+            approval.DecisionReason,
+            campaignName,
+            contactName);
     }
 
-    public static ApprovalSummaryDto ToSummary(Approval approval, string workItemId, string campaignId)
+    public static ApprovalSummaryDto ToSummary(Approval approval, string workItemId, string campaignId, string campaignName, string? contactName)
     {
         ArgumentNullException.ThrowIfNull(approval);
         return new ApprovalSummaryDto(
@@ -45,7 +47,9 @@ public static class ApprovalMapper
             approval.PluginId,
             Utc(approval.RequestedAt),
             approval.DecidedAt is { } decided ? Utc(decided) : null,
-            DecidedBy(approval));
+            DecidedBy(approval),
+            campaignName,
+            contactName);
     }
 
     private static ActorRef? DecidedBy(Approval approval) =>

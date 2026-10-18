@@ -22,7 +22,7 @@ internal static class DecisionMapper
     public static IReadOnlyList<T>? FromJson<T>(JsonArray? stored) =>
         stored is null ? null : [.. stored.Select(node => node.Deserialize<T>(JasonJson.Options)!)];
 
-    public static DecisionDto ToDto(Decision decision, string campaignPublicId, string workItemPublicId, string attemptPublicId)
+    public static DecisionDto ToDto(Decision decision, string campaignPublicId, string workItemPublicId, string attemptPublicId, string campaignName, string? contactName)
     {
         ArgumentNullException.ThrowIfNull(decision);
         return new DecisionDto(
@@ -38,10 +38,12 @@ internal static class DecisionMapper
             decision.Answer,
             decision.ChosenOption,
             WorkItemMapper.Utc(decision.AnsweredAt),
-            Decider(decision));
+            Decider(decision),
+            campaignName,
+            contactName);
     }
 
-    public static DecisionSummaryDto ToSummary(Decision decision, string campaignPublicId, string workItemPublicId)
+    public static DecisionSummaryDto ToSummary(Decision decision, string campaignPublicId, string workItemPublicId, string campaignName, string? contactName)
     {
         ArgumentNullException.ThrowIfNull(decision);
         return new DecisionSummaryDto(
@@ -52,7 +54,9 @@ internal static class DecisionMapper
             decision.Question,
             WorkItemMapper.Utc(decision.RaisedAt),
             WorkItemMapper.Utc(decision.AnsweredAt),
-            Decider(decision));
+            Decider(decision),
+            campaignName,
+            contactName);
     }
 
     private static ActorRef? Decider(Decision decision) =>

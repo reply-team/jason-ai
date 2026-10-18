@@ -1,0 +1,44 @@
+{
+  "operation": "decision.answer",
+  "case": "answered",
+  "request": {
+    "decision_id": "dec_1",
+    "answer": "Pause until the news",
+    "option": "Pause until the news",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    },
+    "reason": "their CFO is leaving"
+  },
+  "status": 200,
+  "response": {
+    "id": "dec_1",
+    "campaign_id": "cmp_1",
+    "work_item_id": "wi_1",
+    "attempt_id": "att_1",
+    "status": "answered",
+    "question": "Pause outreach to Vireo Labs until their funding news?",
+    "options": [
+      {
+        "label": "Pause until the news",
+        "detail": "Their CFO is leaving; the funding round is in the press next week."
+      },
+      {
+        "label": "Keep going",
+        "detail": null
+      }
+    ],
+    "references": null,
+    "raised_at": "2026-10-15T12:00:00.000Z",
+    "answer": "Pause until the news",
+    "chosen_option": "Pause until the news",
+    "answered_at": "2026-10-16T09:00:00.000Z",
+    "answered_by": {
+      "type": "human",
+      "id": "ada"
+    },
+    "campaign_name": "Autumn outreach",
+    "contact_name": null
+  }
+}

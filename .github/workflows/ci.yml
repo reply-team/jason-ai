@@ -2,7 +2,8 @@ name: CI
 
 # A draft pull request's pushes run the Linux set: the version, linux-x64, install.sh on ubuntu and the update on
 # linux-x64. Marking it ready for review, every push after that, and every push to main run all ten checks the main
-# branch's ruleset requires. The version job decides which a run is, once, and every other job needs it.
+# branch's ruleset requires. The UI's job runs on every push and is required by none yet. The version job decides
+# which a run is, once, and every other job needs it.
 on:
   push:
     branches: [main]
@@ -891,3 +892,79 @@ jobs:
           & (Join-Path $dir 'jason.exe') runtime stop | Out-Null
           if ($LASTEXITCODE -ne 0) { throw "the jason installed from the schema-1 fixture could not stop its runtime ($LASTEXITCODE)" }
           Remove-Item Env:\JASON_DATA_DIR
+
+  # The UI's checks, tests, build and smoke, on the one runner with Node: typecheck, lint, the unit and screen tests
+  # against the exchanges the runtime's tests recorded, the build, the asset zip uploaded for a person to try, and the
+  # browser smoke against a runtime built here. Linux only, and on a draft's pushes too: the browser engine is the same
+  # everywhere, and what differs by OS is runtime code the platform jobs run.
+  ui:
+    name: The UI on ubuntu
+    needs: version
+    runs-on: ubuntu-latest
+    env:
+      JASON_Update__CheckEnabled: 'false'
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build the runtime the smoke drives
+        working-directory: .
+        run: dotnet build runtime/src/Jason.App --configuration Release -p:Version=${{ needs.version.outputs.version }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Check (types, lint, format)
+        run: npm run check
+
+      - name: Unit and screen tests
+        run: npm test
+
+      - name: Build and package
+        env:
+          JASON_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          npm run build
+          npm run package
+
+      # The zip a person unzips into ~/.jason/ui/custom/ to try this build with jason ui open. Kept fourteen days where
+      # CI's other uploads keep three: those exist for the jobs of the same run, this one for a person trying the build
+      # at their own pace.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: jason-ui
+          path: ui/artifacts/jason-ui.zip
+          retention-days: 14
+
+      # The browser the smoke drives, kept between runs under the Playwright version the lockfile pins. Its system
+      # libraries are the runner's, not the cache's: they are installed either way.
+      - uses: actions/cache@v6
+        id: browser
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
+
+      - name: Browser
+        if: steps.browser.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser's system libraries
+        if: steps.browser.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Browser smoke
+        env:
+          JASON_EXE: ${{ github.workspace }}/runtime/src/Jason.App/bin/Release/net10.0/jason
+        run: npm run e2e

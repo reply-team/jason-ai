@@ -124,10 +124,7 @@ public sealed partial class PublicationTests
         Assert.True(unread.Count == 0, $"Patterns this test cannot read: {string.Join(", ", unread)}");
 
         var ignored = OpenSet.Lines(root)
-            .SelectMany(entry => entry.EndsWith('/')
-                ? Directory.EnumerateFiles(Path.Combine(root, entry.TrimEnd('/')), "*", SearchOption.AllDirectories)
-                    .Select(file => Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/'))
-                : [entry])
+            .SelectMany(entry => entry.EndsWith('/') ? OpenSet.Files(root, entry) : [entry])
             .Where(path => patterns.Any(pattern => Ignores(pattern, path)))
             .ToList();
 

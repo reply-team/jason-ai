@@ -73,6 +73,7 @@ public sealed class PublishBodyTests
             | Contracts (`docs/contracts/`) | 2 | 1 | 1 |
             | Documentation (`README.md`, `docs/`) | 0 | 1 | 0 |
             | Install path (`install/`) | 0 | 1 | 0 |
+            | The UI (`ui/`) | 0 | 0 | 0 |
             | Licences (`LICENSE`, `LICENSE-RUNTIME.md`, `THIRD-PARTY-NOTICES`, `TRADEMARKS.md`) | 0 | 0 | 0 |
             | This repository's own files (`VERSION`, `CODEOWNERS`, `.gitattributes`, `.gitignore`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/`) | 0 | 1 | 0 |
 

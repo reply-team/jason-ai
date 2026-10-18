@@ -39,6 +39,10 @@ public static class DomainErrors
 
     public static NotFoundException WorkItemNotFound(string id) => new("work_item_not_found", $"No work item with id '{id}'.");
 
+    public static NotFoundException UiNotInstalled(string why) => new("ui_not_installed", why);
+
+    public static NotFoundException UiTokenNotFound(string id) => new("ui_token_not_found", $"No UI token '{id}' exists; `jason ui tokens` lists the live ones.");
+
     public static ConflictException WorkItemTerminal(string id, WorkItemStatus status) =>
         new("workitem_terminal", $"Work item '{id}' is {SnakeCaseEnumConverter<WorkItemStatus>.Format(status)}; finished items are not changed.");
 

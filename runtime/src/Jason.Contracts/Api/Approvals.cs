@@ -28,7 +28,9 @@ public sealed record ApprovalDto(
     DateTimeOffset RequestedAt,
     DateTimeOffset? DecidedAt,
     ActorRef? DecidedBy,
-    string? DecisionReason);
+    string? DecisionReason,
+    string CampaignName,
+    string? ContactName);
 
 /// <summary>A listing stays small: what it is about, and how far it has got. The subject is read one at a time.</summary>
 public sealed record ApprovalSummaryDto(
@@ -42,15 +44,21 @@ public sealed record ApprovalSummaryDto(
     string PluginId,
     DateTimeOffset RequestedAt,
     DateTimeOffset? DecidedAt,
-    ActorRef? DecidedBy);
+    ActorRef? DecidedBy,
+    string CampaignName,
+    string? ContactName);
 
-/// <summary>Pending by default: the question a person opens this with is "what am I holding up?".</summary>
+/// <summary>
+/// Pending by default: the question a person opens this with is "what am I holding up?". <c>statuses</c> names several
+/// at once — "what was decided" — and wins over <c>status</c> when both are given.
+/// </summary>
 public sealed record ApprovalListRequest(
     ApprovalStatus? Status,
     string? CampaignId,
     string? WorkItemId,
     int? Limit,
-    string? Cursor);
+    string? Cursor,
+    IReadOnlyList<ApprovalStatus>? Statuses = null);
 
 public sealed record ApprovalGetRequest(string? ApprovalId);
 

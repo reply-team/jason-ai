@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Runtime.Contacts;
 using Jason.Contracts.Ids;
 using Jason.Runtime.Campaigns;
 using Jason.Runtime.Domain;
@@ -40,6 +41,7 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
 
         var item = await db.WorkItems
             .Include(w => w.Campaign)
+            .Include(w => w.Contact)
             .FirstAsync(w => w.PublicId == workItemId, cancellationToken)
             .ConfigureAwait(false);
         var attempt = await db.Attempts
@@ -78,7 +80,7 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return DecisionMapper.ToDto(decision, item.Campaign!.PublicId, item.PublicId, attempt.PublicId);
+        return DecisionMapper.ToDto(decision, item.Campaign!.PublicId, item.PublicId, attempt.PublicId, item.Campaign.Name, ContactNames.Display(item.Contact));
     }
 
     /// <summary>
@@ -167,11 +169,12 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
         var limit = Paging.ResolveLimit(request.Limit);
         var after = Paging.DecodeCursor(request.Cursor);
 
+        var wanted = request.Statuses is { Count: > 0 } several ? several : [request.Status ?? DecisionStatus.Pending];
         var query = db.Decisions
             .AsNoTracking()
             .Include(d => d.Campaign)
-            .Include(d => d.WorkItem)
-            .Where(d => d.Status == (request.Status ?? DecisionStatus.Pending));
+            .Include(d => d.WorkItem).ThenInclude(w => w!.Contact)
+            .Where(d => wanted.Contains(d.Status));
 
         if (request.CampaignId is not null)
         {
@@ -198,7 +201,7 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
             fetched,
             limit,
             d => d.PublicId,
-            d => DecisionMapper.ToSummary(d, d.Campaign!.PublicId, d.WorkItem!.PublicId));
+            d => DecisionMapper.ToSummary(d, d.Campaign!.PublicId, d.WorkItem!.PublicId, d.Campaign.Name, ContactNames.Display(d.WorkItem.Contact)));
     }
 
     private static string Required(string? value, string field) =>
@@ -428,7 +431,7 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
 
         var query = db.Decisions
             .Include(d => d.Campaign)
-            .Include(d => d.WorkItem)
+            .Include(d => d.WorkItem).ThenInclude(w => w!.Contact)
             .Include(d => d.Attempt)
             .AsQueryable();
 
@@ -442,5 +445,5 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
     }
 
     private static DecisionDto Detail(Decision decision) =>
-        DecisionMapper.ToDto(decision, decision.Campaign!.PublicId, decision.WorkItem!.PublicId, decision.Attempt!.PublicId);
+        DecisionMapper.ToDto(decision, decision.Campaign!.PublicId, decision.WorkItem!.PublicId, decision.Attempt!.PublicId, decision.Campaign.Name, ContactNames.Display(decision.WorkItem.Contact));
 }

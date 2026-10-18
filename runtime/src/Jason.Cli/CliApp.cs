@@ -127,6 +127,7 @@ public static class CliApp
         root.Subcommands.Add(SuppressionCommands.Build(env, actor));
         root.Subcommands.Add(PluginCommands.Build(env, actor));
         root.Subcommands.Add(RouteCommands.Build(env, actor));
+        root.Subcommands.Add(UiCommands.Build(env, actor));
         root.Subcommands.Add(UpdateCommands.Build(env, actor));
         root.Subcommands.Add(SkillsCommands.Build(env));
         root.Subcommands.Add(StatusCommand.Build(env));

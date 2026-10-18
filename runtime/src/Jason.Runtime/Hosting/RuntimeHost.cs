@@ -150,6 +150,7 @@ public static class RuntimeHost
 
             var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()?.Addresses.FirstOrDefault()
                 ?? throw new InvalidOperationException("Kestrel started without reporting a listening address.");
+            app.Services.GetRequiredService<ListeningEndpoint>().Port = new Uri(address).Port;
             var publisher = new DescriptorPublisher(paths) { Publishing = options.DescriptorPublishing ?? DescriptorPublisher.PublishRule };
             RuntimeDescriptor descriptor;
             try
@@ -335,7 +336,15 @@ public static class RuntimeHost
         {
             [HostDefaults.ContentRootKey] = paths.Root,
         });
-        builder.WebHost.UseUrls($"http://127.0.0.1:{settings.Runtime.Port}");
+        var configuredPort = options.Port ?? settings.Runtime.Port;
+        var port = configuredPort == 0 ? 0 : PortProbe.FirstFree(configuredPort);
+        if (configuredPort != 0 && port != configuredPort)
+        {
+            logger.Information("Port {ConfiguredPort} is taken; listening on {Port} instead (0 means the OS chooses)", configuredPort, port);
+        }
+
+        builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
+        builder.Services.AddSingleton(new ListeningEndpoint(configuredPort));
 
         // The options bind against the standalone root, not builder.Configuration, which was cleared above.
         builder.Services.AddJasonOptions(configuration, paths);
@@ -364,7 +373,7 @@ public static class RuntimeHost
         builder.Services.AddScoped<AttemptOutcomes>();
         builder.Services.AddScoped<ProviderOutcomeRecorder>();
         builder.Services.AddSystemModule().AddCampaignModule().AddContactModule();
-        builder.Services.AddWorkItemModule().AddExecutorModule().AddRoleModule().AddPluginModule().AddRoutingModule().AddDispatcherModule().AddNotificationsModule().AddCommandModule();
+        builder.Services.AddWorkItemModule().AddExecutorModule().AddRoleModule().AddPluginModule().AddRoutingModule().AddDispatcherModule().AddNotificationsModule().AddCommandModule().AddUiModule();
         builder.Services.AddApprovalModule().AddDecisionModule().AddReportModule().AddProfileModule().AddRoleNoteModule();
         builder.Services.AddUpdateModule(options.FeedHandler);
 
@@ -389,6 +398,7 @@ public static class RuntimeHost
             requestLogging.GetMessageTemplateProperties = (context, _, elapsedMs, statusCode) => RequestLine.Properties(context, elapsedMs, statusCode);
         });
         app.Use(LoopbackHostFilter.Middleware);
+        app.Use(OriginRule.Middleware);
         app.Use(BearerTokenAuthentication.Middleware(token));
 
         app.MapSystemOperations();
@@ -404,6 +414,8 @@ public static class RuntimeHost
         app.MapRoleNoteOperations();
         app.MapPluginOperations();
         app.MapRouteOperations();
+        app.MapUiOperations();
+        app.MapUi();
 
         // An explicit catch-all pattern: the default fallback pattern is "{*path:nonfile}", and every operation
         // name contains a dot, so a mistyped operation would look like a file request and escape the fallback.

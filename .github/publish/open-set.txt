@@ -7,9 +7,12 @@ README.md
 THIRD-PARTY-NOTICES
 TRADEMARKS.md
 docs/INSTALL.md
+docs/api/
 docs/contracts/
 docs/golden-path.md
 docs/plugins.md
+docs/ui.md
 install/
 plugins/
 skills/
+ui/

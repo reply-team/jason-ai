@@ -143,6 +143,7 @@ internal static class GoldenPath
 
         var settings = new JsonObject
         {
+            ["Runtime"] = new JsonObject { ["Port"] = 0 },
             ["Dispatcher"] = new JsonObject
             {
                 ["TickSeconds"] = shape.TickSeconds,

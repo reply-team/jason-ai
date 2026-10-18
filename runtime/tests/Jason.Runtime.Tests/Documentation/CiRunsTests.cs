@@ -7,8 +7,9 @@ namespace Jason.Runtime.Tests.Documentation;
 
 /// <summary>
 /// Which of CI's checks run on which push. A draft pull request's pushes run the Linux set; marking it ready for review,
-/// every push after that, and every push to <c>main</c> run all ten checks the main branch's ruleset requires. Read out of
-/// ci.yml, and the step that decides is run rather than read, so what these facts hold is what a runner does.
+/// every push after that, and every push to <c>main</c> run all ten checks the main branch's ruleset requires. The UI's
+/// check runs on every push and is required by none yet. Read out of ci.yml, and the step that decides is run rather
+/// than read, so what these facts hold is what a runner does.
 /// </summary>
 public class CiRunsTests
 {
@@ -20,10 +21,13 @@ public class CiRunsTests
     private const string Full = "needs.version.outputs.full == 'true'";
 
     /// <summary>What a draft pull request's push runs.</summary>
-    private static readonly string[] TheLinuxSet = ["The version this tree carries", "linux-x64", "install.sh on ubuntu", "an update on linux-x64"];
+    private static readonly string[] TheLinuxSet =
+    [
+        "The version this tree carries", "linux-x64", "install.sh on ubuntu", "an update on linux-x64", "The UI on ubuntu",
+    ];
 
-    /// <summary>What every other run runs: the ten checks the main branch's ruleset requires before a merge.</summary>
-    private static readonly string[] AllTen =
+    /// <summary>What every other run runs: the ten checks the main branch's ruleset requires before a merge, and the UI's.</summary>
+    private static readonly string[] TheFullSet =
     [
         "The version this tree carries",
         "The suite under a release's version",
@@ -35,6 +39,7 @@ public class CiRunsTests
         "an update on linux-x64",
         "install.sh on ubuntu",
         "install.ps1 on windows",
+        "The UI on ubuntu",
     ];
 
     /// <summary>
@@ -90,7 +95,7 @@ public class CiRunsTests
     }
 
     /// <summary>
-    /// What each kind of run reports: all ten required checks on a full run, the Linux set on a draft. A job either runs on
+    /// What each kind of run reports: the full set on a full run, the Linux set on a draft, the UI's check in both. A job either runs on
     /// every run or carries the one condition of a full run; a matrix takes its legs from the version job. The ruleset
     /// requires the ten by name, so a renamed check is renamed there in the same change.
     /// </summary>
@@ -127,7 +132,7 @@ public class CiRunsTests
             }
         }
 
-        Assert.Equal((full ? AllTen : TheLinuxSet).Order(StringComparer.Ordinal), reported.Order(StringComparer.Ordinal));
+        Assert.Equal((full ? TheFullSet : TheLinuxSet).Order(StringComparer.Ordinal), reported.Order(StringComparer.Ordinal));
     }
 
     /// <summary>

@@ -46,6 +46,9 @@ public static class TestRuntimeOptions
         ConfigureServices: TurnTheOutsideOff)
     {
         FeedHandler = new NoNetworkInTests(),
+        // Every test runtime on a random port: a suite of hundreds would otherwise climb from 52766 and collide
+        // with a developer's own running Jason.
+        Port = 0,
     };
 
     /// <summary>

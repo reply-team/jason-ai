@@ -85,6 +85,10 @@ public static class Operations
     public const string PluginList = "plugin.list";
     public const string PluginReload = "plugin.reload";
 
+    public const string UiOpen = "ui.open";
+    public const string UiTokens = "ui.tokens";
+    public const string UiRevoke = "ui.revoke";
+
     public const string RouteResolve = "route.resolve";
     public const string RouteList = "route.list";
     public const string RouteSet = "route.set";

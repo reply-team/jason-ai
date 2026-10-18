@@ -29,6 +29,9 @@ public sealed class JasonPaths
     public string ConfigDirectory => Path.Combine(Root, "config");
     public string UserSettingsFile => Path.Combine(ConfigDirectory, "settings.json");
     public string PluginsDirectory => Path.Combine(Root, "plugins");
+    public string UiDirectory => Path.Combine(Root, "ui");
+    public string UiDefaultDirectory => Path.Combine(UiDirectory, "default");
+    public string UiCustomDirectory => Path.Combine(UiDirectory, "custom");
     public string RunDirectory => Path.Combine(Root, "run");
     public string DescriptorFile => Path.Combine(RunDirectory, "runtime.json");
     public string LockFile => Path.Combine(RunDirectory, "runtime.lock");
@@ -132,5 +135,5 @@ public sealed class JasonPaths
     /// that deleted the directory it names with everything in it would delete those as well. A test reads every
     /// path this product composes under the data directory and holds each to a name on this list.
     /// </remarks>
-    public static IReadOnlyList<string> OwnEntries { get; } = ["state", "config", "plugins", "run", "logs", "work", "skills", "update", "autostart"];
+    public static IReadOnlyList<string> OwnEntries { get; } = ["state", "config", "plugins", "run", "logs", "work", "skills", "update", "autostart", "ui"];
 }

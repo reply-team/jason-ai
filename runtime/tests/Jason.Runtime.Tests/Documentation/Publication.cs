@@ -41,10 +41,11 @@ internal enum PathKind
 internal static class OpenSet
 {
     /// <summary>
-    /// The only entries under <c>docs/</c>: with the root <c>README.md</c>, these are the five public documents. The
+    /// The only entries under <c>docs/</c>: with the root <c>README.md</c>, the public documents, and the Runtime API's
+    /// recorded exchanges under <c>docs/api/</c>. The
     /// rest of <c>docs/</c> describes the runtime's design and is not published.
     /// </summary>
-    public static readonly string[] Documents = ["docs/INSTALL.md", "docs/contracts/", "docs/golden-path.md", "docs/plugins.md"];
+    public static readonly string[] Documents = ["docs/INSTALL.md", "docs/api/", "docs/contracts/", "docs/golden-path.md", "docs/plugins.md", "docs/ui.md"];
 
     /// <summary>
     /// The licence texts at the root: the MIT licence of the published tree, the runtime's own licence, the third-party
@@ -55,6 +56,31 @@ internal static class OpenSet
     public static readonly string[] Licences = ["LICENSE", "LICENSE-RUNTIME.md", "THIRD-PARTY-NOTICES", "TRADEMARKS.md"];
 
     private static readonly string[] NeverPublished = ["CLAUDE.md", "global.json", "dotnet-tools.json", "TestResults"];
+
+    /// <summary>
+    /// The files under a directory entry as a release publishes them: what git holds and does not ignore, when the root
+    /// is a repository; every file on disk otherwise (the trees the tests build). A developer's <c>ui/node_modules</c>
+    /// is ignored here and never published, so no guard reads it.
+    /// </summary>
+    public static IReadOnlyList<string> Files(string root, string entry)
+    {
+        var relativeRoot = entry.TrimEnd('/');
+        var full = Path.Combine(root, relativeRoot);
+        if (!Directory.Exists(full))
+        {
+            return [];
+        }
+
+        if (Directory.Exists(Path.Combine(root, ".git")) || File.Exists(Path.Combine(root, ".git")))
+        {
+            var listed = Workflows.Git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", relativeRoot);
+            return [.. listed.Split('\0', StringSplitOptions.RemoveEmptyEntries).Order(StringComparer.Ordinal)];
+        }
+
+        return [.. Directory.EnumerateFiles(full, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/'))
+            .Order(StringComparer.Ordinal)];
+    }
 
     /// <summary>The file's lines as written, a final newline not counted as an empty last line.</summary>
     public static IReadOnlyList<string> Lines(string root)

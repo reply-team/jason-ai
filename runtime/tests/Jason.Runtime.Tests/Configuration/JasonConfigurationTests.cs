@@ -11,7 +11,7 @@ public class JasonConfigurationTests
         using var dir = new TempDataDir();
         using var configuration = JasonConfiguration.Build(dir.Paths, shippedSettingsDirectory: null);
         var options = JasonConfiguration.Load(configuration);
-        Assert.Equal(0, options.Runtime.Port);
+        Assert.Equal(52766, options.Runtime.Port);
         Assert.Equal("Information", options.Logging.MinimumLevel);
         Assert.Equal(14, options.Logging.RetainedFileCountLimit);
         Assert.Equal(200L * 1024 * 1024, options.Logging.FileSizeLimitBytes);

@@ -41,7 +41,7 @@ public class VerbMapTests
     private static readonly string[] Nouns =
     [
         "approval", "campaign", "contact", "decision", "journal", "plugin", "profile", "report",
-        "role", "rolenote", "route", "runtime", "skills", "suppression", "update", "workitem",
+        "role", "rolenote", "route", "runtime", "skills", "suppression", "ui", "update", "workitem",
     ];
 
     [Fact]

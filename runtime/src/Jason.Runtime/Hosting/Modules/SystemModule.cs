@@ -9,6 +9,7 @@ using Jason.Runtime.Execution;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
 using Jason.Runtime.Routing;
+using Jason.Runtime.Ui;
 using Jason.Runtime.Update;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Notifications.Desktop;
@@ -49,7 +50,9 @@ public static class SystemModule
              UpdateAdvertisement update,
              NotificationStatus notifications,
              LiveSettings<NotificationsOptions> notificationSettings,
-             Presence presence) =>
+             Presence presence,
+             ListeningEndpoint listening,
+             UiModule ui) =>
                 TypedResults.Ok(new SystemInfoResponse(
                     runtimeInfo.RuntimeVersion,
                     ApiVersion.Current,
@@ -81,7 +84,9 @@ public static class SystemModule
                     Skills(dataPaths, roleSettings.Current.MaxSkillBytes),
                     // Last, as every section that arrived later was. Whether there is a desktop is decided when the
                     // runtime starts, so it is said before anything has been sent.
-                    notifications.Info(notificationSettings.Current, presence))));
+                    notifications.Info(notificationSettings.Current, presence),
+                    Listening: new ListeningInfo(listening.Port, listening.ConfiguredPort),
+                    Ui: ui.Active())));
 
         app.MapOperation<ShutdownCoordinator, ShutdownRequest, ShutdownResponse>(
             Operations.SystemShutdown,

@@ -1,0 +1,15 @@
+{
+  "operation": "route.list",
+  "case": "empty",
+  "request": {},
+  "status": 200,
+  "response": {
+    "routing_snapshot_id": "rts_1",
+    "plugin_snapshot_id": "snp_1",
+    "global": {
+      "default": null,
+      "operations": {}
+    },
+    "campaigns": []
+  }
+}

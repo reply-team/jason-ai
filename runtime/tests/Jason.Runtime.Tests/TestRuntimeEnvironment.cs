@@ -5,9 +5,10 @@ using Jason.Runtime.Notifications;
 namespace Jason.Runtime.Tests;
 
 /// <summary>
-/// The environment a spawned test runtime is started with: its own data directory, and no update check. One
-/// helper for the eight places that spawn one, because a variable spelled by hand at each is one the ninth
-/// forgets — and the check is the one thing a runtime does that reaches past the machine without being asked.
+/// The environment a spawned test runtime is started with: its own data directory, no update check, no
+/// notifications, and a port the OS chooses. One helper for the eight places that spawn one, because a variable
+/// spelled by hand at each is one the ninth forgets — and the check is the one thing a runtime does that reaches
+/// past the machine without being asked.
 /// </summary>
 /// <remarks>
 /// The switch travels as <c>JASON_Update__CheckEnabled</c>: the runtime reads <c>JASON_</c>-prefixed variables
@@ -26,11 +27,19 @@ public static class TestRuntimeEnvironment
     public static readonly string NotificationsVariable =
         JasonConfiguration.EnvironmentPrefix + NotificationsOptions.Section + "__" + nameof(NotificationsOptions.Enabled);
 
+    /// <summary>
+    /// The port switch: the default, 52766, is the bookmark's, and a suite that took it would push the person's own
+    /// runtime off it, as <see cref="TestRuntimeOptions"/> says for the runtimes started in this process.
+    /// </summary>
+    public static readonly string PortVariable =
+        JasonConfiguration.EnvironmentPrefix + RuntimeOptions.Section + "__" + nameof(RuntimeOptions.Port);
+
     public static void Offline(IDictionary<string, string?> environment, string dataDirectory)
     {
         ArgumentNullException.ThrowIfNull(environment);
         environment[JasonPaths.DataDirectoryVariable] = dataDirectory;
         environment[CheckEnabledVariable] = "false";
         environment[NotificationsVariable] = "false";
+        environment[PortVariable] = "0";
     }
 }

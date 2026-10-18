@@ -1,0 +1,9 @@
+{
+  "operation": "ui.tokens",
+  "case": "none",
+  "request": {},
+  "status": 200,
+  "response": {
+    "items": []
+  }
+}

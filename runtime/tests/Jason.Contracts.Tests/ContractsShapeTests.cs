@@ -178,13 +178,13 @@ public class ContractsShapeTests
         Assert.EndsWith(
             "\"skills\":{\"role_skills_directory\":\"/data/skills/roles\",\"max_skill_bytes\":1048576,"
                 + "\"roles\":[{\"role\":\"researcher\",\"bytes\":4096,\"problem\":null,\"problem_code\":null,\"problem_exception\":null}],"
-                + "\"problem\":null,\"problem_code\":null,\"problem_exception\":null},\"notifications\":null}",
+                + "\"problem\":null,\"problem_code\":null,\"problem_exception\":null},\"notifications\":null,\"listening\":null,\"ui\":null}",
             JsonSerializer.Serialize(info, JasonJson.Options),
             StringComparison.Ordinal);
 
         // A runtime older than this section reports none at all, which every other section here also does and
         // which the CLI renders as "unknown" rather than as an empty deployment.
-        Assert.EndsWith("\"skills\":null,\"notifications\":null}", JsonSerializer.Serialize(info with { Skills = null }, JasonJson.Options), StringComparison.Ordinal);
+        Assert.EndsWith("\"skills\":null,\"notifications\":null,\"listening\":null,\"ui\":null}", JsonSerializer.Serialize(info with { Skills = null }, JasonJson.Options), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -209,12 +209,12 @@ public class ContractsShapeTests
             "\"notifications\":{\"enabled\":true,\"channels\":[{\"channel\":\"toast\",\"kind\":\"toast\",\"on\":true,"
                 + "\"outcome\":\"silenced\",\"reason\":\"disabled_for_application\",\"code\":null,\"class\":null,\"detail\":null,"
                 + "\"at\":\"2026-10-01T09:06:00.000Z\",\"presence\":\"available\",\"presence_detail\":null}],"
-                + "\"last_notification_id\":\"ntf_01K\",\"last_at\":\"2026-10-01T09:06:00.000Z\"}}",
+                + "\"last_notification_id\":\"ntf_01K\",\"last_at\":\"2026-10-01T09:06:00.000Z\"},\"listening\":null,\"ui\":null}",
             JsonSerializer.Serialize(info, JasonJson.Options),
             StringComparison.Ordinal);
 
         // A runtime older than this section reports none, which the CLI renders as "unknown".
-        Assert.EndsWith("\"notifications\":null}", JsonSerializer.Serialize(info with { Notifications = null }, JasonJson.Options), StringComparison.Ordinal);
+        Assert.EndsWith("\"notifications\":null,\"listening\":null,\"ui\":null}", JsonSerializer.Serialize(info with { Notifications = null }, JasonJson.Options), StringComparison.Ordinal);
     }
 
     /// <summary>A role the walk could not measure says so, rather than reporting a skill of no bytes.</summary>
@@ -472,4 +472,16 @@ public class ContractsShapeTests
         DateTimeOffset.UnixEpoch,
         DateTimeOffset.UnixEpoch,
         null);
+
+    [Fact]
+    public void The_ui_noun_has_exactly_three_operations_and_the_door_is_not_one()
+    {
+        var names = typeof(Operations).GetFields().Where(f => f.IsLiteral).Select(f => (string)f.GetRawConstantValue()!)
+            .Where(n => n.StartsWith("ui.", StringComparison.Ordinal)).Order(StringComparer.Ordinal).ToList();
+        Assert.Equal(["ui.open", "ui.revoke", "ui.tokens"], names);
+        Assert.Equal("/v1/ui.open", Operations.Route(Operations.UiOpen));
+
+        var session = new UiSessionResponse("tok", "uit_1", "ada", "v1", "rt_1");
+        Assert.Equal("{\"token\":\"tok\",\"token_id\":\"uit_1\",\"actor_id\":\"ada\",\"api_version\":\"v1\",\"instance_id\":\"rt_1\"}", JsonSerializer.Serialize(session, JasonJson.Options));
+    }
 }

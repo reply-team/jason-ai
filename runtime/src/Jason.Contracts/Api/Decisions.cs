@@ -32,7 +32,9 @@ public sealed record DecisionDto(
     string? Answer,
     string? ChosenOption,
     DateTimeOffset? AnsweredAt,
-    ActorRef? AnsweredBy);
+    ActorRef? AnsweredBy,
+    string CampaignName,
+    string? ContactName);
 
 /// <summary>
 /// A listing carries the question whole. "What am I being asked?" is the only reason to open one of these,
@@ -46,7 +48,9 @@ public sealed record DecisionSummaryDto(
     string Question,
     DateTimeOffset RaisedAt,
     DateTimeOffset? AnsweredAt,
-    ActorRef? AnsweredBy);
+    ActorRef? AnsweredBy,
+    string CampaignName,
+    string? ContactName);
 
 /// <summary>
 /// Raising is fenced by the attempt, exactly as recording a result is: the asker must be the run that owns
@@ -68,10 +72,14 @@ public sealed record DecisionAnswerRequest(string? DecisionId, string? Answer, s
 
 public sealed record DecisionGetRequest(string? DecisionId);
 
-/// <summary>Pending by default: the question somebody opens this with is "what is waiting on me?".</summary>
+/// <summary>
+/// Pending by default: the question somebody opens this with is "what is waiting on me?". <c>statuses</c> names several
+/// at once and wins over <c>status</c> when both are given.
+/// </summary>
 public sealed record DecisionListRequest(
     DecisionStatus? Status,
     string? CampaignId,
     string? WorkItemId,
     int? Limit,
-    string? Cursor);
+    string? Cursor,
+    IReadOnlyList<DecisionStatus>? Statuses = null);

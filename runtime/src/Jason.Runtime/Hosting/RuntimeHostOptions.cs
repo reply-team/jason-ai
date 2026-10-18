@@ -37,6 +37,9 @@ public sealed record RuntimeHostOptions(
     /// </summary>
     internal Jason.Contracts.Files.HeldFileRule? DescriptorPublishing { get; init; }
 
+    /// <summary>The port to listen on, overriding the settings when set. The test suite sets 0 so every test runtime is on a random port.</summary>
+    public int? Port { get; init; }
+
     /// <summary>
     /// Handed the configuration as soon as it is built, before anything can refuse the start. A refused start returns no
     /// runtime to ask, so this is how a test sees that it gave the configuration, and the settings file's watch, back.

@@ -143,7 +143,7 @@ One executable, three modes: the runtime service, which owns campaign and work s
 that writes it; the CLI, a pure client of the runtime's loopback API; and the plugin host, a short-lived process in
 which a plugin's JavaScript runs, so that it never runs inside the long-lived runtime. The runtime's design and its
 source are not published. What a person, an agent or a plugin author needs from them is here:
-[docs/INSTALL.md](docs/INSTALL.md), [docs/plugins.md](docs/plugins.md), the contracts under
+[docs/INSTALL.md](docs/INSTALL.md), [docs/plugins.md](docs/plugins.md), [docs/ui.md](docs/ui.md) for the browser UI, the contracts under
 [docs/contracts/](docs/contracts/README.md), and the skills under [`skills/`](skills).
 
 ## Repository layout
@@ -154,8 +154,9 @@ source are not published. What a person, an agent or a plugin author needs from 
 | `skills/runtime/` | Skills that teach an agent to operate Jason: the interactive ones, and one per launched role |
 | `skills/business/` | Skills that teach an agent the SDR profession, independently of any provider or runtime |
 | `.claude-plugin/` | The skills marketplace: offers both packs to an agent harness by relative path. Distinct from `plugins/`, which is the plugin marketplace |
-| `docs/` | The install manual, the wiring check, the plugin author's guide and the operation contracts |
+| `docs/` | The install manual, the wiring check, the plugin author's guide, the browser UI, the operation contracts, and the Runtime API's recorded exchanges under `docs/api/` |
 | `install/` | The install scripts every release attaches, and the update feed's schema |
+| `ui/` | The browser UI the runtime serves: a Preact client of the Runtime API, built into the release asset `jason-ui.zip` |
 | `VERSION` | The runtime version this tree describes |
 
 The runtime's source is not here. Each release attaches the runtime for every platform, built from that source at the

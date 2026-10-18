@@ -207,6 +207,7 @@ internal static class StatusChecks
             checks.Add(Harnesses(env));
             checks.Add(Autostart(env));
             checks.Add(Notifications(info));
+            checks.Add(UiModule(info));
         }
         finally
         {
@@ -291,6 +292,33 @@ internal static class StatusChecks
     /// reader of a bundle has where the sentence is withheld, and what a reader of this fact can search for. A runtime
     /// from before the codes gives none, and its sentence stands alone.
     /// </summary>
+    /// <summary>Which UI is served, or that none is. Optional: a runtime works without one, so this never decides readiness.</summary>
+    private static StatusCheck UiModule(SystemInfoResponse? info)
+    {
+        if (info is null)
+        {
+            return new StatusCheck("ui_module", false, CheckState.Unknown, "The runtime did not answer, so which UI it serves was not asked.", Repair.Start);
+        }
+
+        if (info.Ui is null)
+        {
+            return new StatusCheck("ui_module", false, CheckState.Absent, "No UI is installed; `jason ui open` says how to put one in place.", null);
+        }
+
+        var ui = info.Ui;
+        if (ui.Problem is not null)
+        {
+            return new StatusCheck("ui_module", false, CheckState.Failed, $"Serving {ui.Source} from {ui.Directory}, with a problem: {ui.Problem}", null);
+        }
+
+        if (!ui.ApiVersionMatches)
+        {
+            return new StatusCheck("ui_module", false, CheckState.Failed, $"Serving {ui.Source} {ui.Version} from {ui.Directory}, built for API {ui.ApiVersion}; this runtime speaks {info.ApiVersion}; reinstall from a release that matches.", null);
+        }
+
+        return new StatusCheck("ui_module", false, CheckState.Ok, $"Serving {ui.Source} {ui.Version} from {ui.Directory}; built for API {ui.ApiVersion}, this runtime's; {ui.Digest}.", null);
+    }
+
     private static string Coded(string problem, string? code) => code is null ? problem : $"{problem} [{code}]";
 
     /// <summary>
