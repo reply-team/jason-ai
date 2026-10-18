@@ -20,9 +20,9 @@ the ones verified before 0.2.0 still teach what this build did before those verb
 One per moment somebody asks for something, because a host chooses a skill by its description and a
 description that promises everything matches nothing.
 
-- [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **draft** until a host reads its new text.
-  Turning an objective into durable campaign work and following it: the provider check, the campaign, the people
-  it is about, provider operations and AI role work, and what the runtime does with them afterwards.
+- [`managed-campaign-work`](managed-campaign-work/SKILL.md) — **verified.** Turning an objective into durable
+  campaign work and following it: the provider check, the campaign, the people it is about, provider
+  operations and AI role work, and what the runtime does with them afterwards.
 - [`approvals-and-questions`](approvals-and-questions/SKILL.md) — **verified.** What Jason is waiting for a
   person to decide: the approvals parked at a claim and the questions a running role raised — including when a
   notification brought the person — presented in their own words and recorded as their decision.
@@ -36,7 +36,7 @@ description that promises everything matches nothing.
   apart, the repairs that are safe, and the diagnostic file `jason doctor` writes.
 - [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
-- [`planner-in-session`](planner-in-session/SKILL.md) — **draft.** The planner's judgement in a person's own
+- [`planner-in-session`](planner-in-session/SKILL.md) — **verified.** The planner's judgement in a person's own
   conversation about a campaign: taking a brief as it comes, what stays a quick look, what is agreed with the
   person before anything is created, and when it becomes campaign work. The session file of the planner, below.
 
@@ -161,5 +161,7 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
+| `managed-campaign-work` | Claude Code 2.1.302 (Opus 5.5) | 0.11.0 | `sha256:4d04a711515fedaf49de60a8f4811613b3e787153a484376b79b5c50ee5123b4` |
 | `approvals-and-questions` | Claude Code 2.1.293 (claude-opus-5) | 0.5.0 | `sha256:ffe1e5d291e7d8f475ee549e9a0887232949768734bfede855d6d93a06c6079c` |
 | `reporting-outside-effects` | Claude Code 2.1.278 | 0.1.0 | `sha256:9fb55ca5364ec65c9b629df5538ff26d7ce380e8d09017989e0d222fca4eb037` |
+| `planner-in-session` | Claude Code 2.1.302 (Opus 5.5) | 0.11.0 | `sha256:34fc30c059d93f49b74735763ea6f766eb7db4b7ab0c259250922c3350c7bd1f` |
