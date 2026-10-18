@@ -4,7 +4,7 @@ Two packs live here, and they teach different things to the same agent.
 
 | Pack | Teaches | Changes when |
 |---|---|---|
-| [`skills/runtime`](runtime/README.md) | How to operate **this runtime**: durable campaign work, what waits on a person, running the installation, why work stopped, reporting outside effects — and one skill per launched role | the Runtime API does |
+| [`skills/runtime`](runtime/README.md) | How to operate **this runtime**: durable campaign work, what waits on a person, running the installation, why work stopped, reporting outside effects — one skill per launched role, and a session file for a role that sits with a person | the Runtime API does |
 | [`skills/business`](business/README.md) | The **SDR profession**, independent of any provider or runtime: the operation catalogue, planning, audiences, launch, replies, analysis, and the guardrails | the profession's practice does |
 
 Keeping them apart is the point. Runtime skills move in lockstep with the API they print commands

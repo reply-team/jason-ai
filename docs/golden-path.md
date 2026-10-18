@@ -6,6 +6,13 @@ and reads it back. It is not the real work, which begins with a campaign planned
 [Jason's roles](../skills/runtime/roles). Every `jason` command below is a command the end-to-end tests execute,
 and the three guarantees at the end are the three tests that prove them.
 
+It is an explicitly synthetic familiarisation run, and you may skip it: offered once when an installation is ready, it
+meets the system and proves its wiring with your own address as the only contact. What it makes at your provider is
+real, and small: one draft campaign in your account, which nobody starts and which holds nobody but you. Skipped or
+finished, the real work begins the same way: with you telling your agent about your first campaign in your own words —
+typed, a link, a file or a voice note, or an example to start from. Skipping it connects no provider: that waits until
+the work first needs one, and this page's Reply CLI section and steps 3 to 5 are how it is connected then.
+
 The provider here is [Reply](https://reply.io) through [`plugins/reply/`](../plugins/reply/README.md), because
 that is the plugin this repository ships. Nothing in the runtime knows about it: a different provider is a
 different package and a different route, and the steps are the same.
@@ -22,13 +29,14 @@ different package and a different route, and the steps are the same.
 ### If an agent runs it
 
 Read this whole page first, word for word, and follow it in order. It assumes no repository and no particular
-folder: start in any folder of yours, and nothing in this run writes there — the one file step 6 makes goes in the
-system's temporary directory.
+folder: start in any folder of yours, and nothing in this run writes there — the two files step 3 downloads and the
+one file step 6 makes go in the system's temporary directory.
 
-Before anything, ask the person one question in plain words: what you will install and from where — the Reply CLI
-from npm's registry, and Node if it is missing; what this run writes — the package into Jason's data directory,
-the grant and the route into its `settings.json`, and one draft campaign in their account at the provider; which
-acts are theirs to do; and which need their yes. Then do the rest yourself, in order.
+Before anything, ask the person one question in plain words: what you will install and from where — the Reply
+plugin from the release of Jason they run, the Reply CLI from npm's registry, and Node if it is missing; what this
+run writes — the package into Jason's data directory, the grant and the route into its `settings.json`, and one
+draft campaign in their account at the provider; which acts are theirs to do; and which need their yes. Then do the
+rest yourself, in order.
 
 An act this page marks **Ask first.** needs the person's word, as on [the install page](INSTALL.md): ask, and do
 it only on their yes; with nobody to ask, leave it undone and say so. An act marked **Yours to do.** is the
@@ -93,22 +101,40 @@ you did not choose.
 
 ## 3. Install the package
 
-Installing a plugin is copying its directory into `~/.jason/plugins/<id>/`. There is no install verb. The package
-comes from the tree `jason skills install` fetched when the installation was taught — this repository at the tag
-of the release you run, kept in Jason's data directory — where `<version>` is what `jason --version` prints, up to
-any `+`:
+Installing a plugin is copying its directory into `~/.jason/plugins/<id>/`. There is no install verb. Every release
+of Jason from 0.11.0 on publishes the Reply plugin's directory as `jason-plugin-reply.zip`, its files at the
+archive's root, and lists it in that release's `checksums.txt`. Take both from the release you run — `<version>` is
+what `jason --version` prints, up to any `+` — into the system's temporary directory, written
+`<temporary directory>` below and quoted if it holds a space. Then unpack the package, only once it matches its line,
+into a `~/.jason/plugins/reply` that is not there yet; step 1's start made `~/.jason/plugins`. On macOS and Linux:
+
+```sh
+curl -fsSL -o <temporary directory>/checksums.txt https://jasonharness.ai/releases/download/v<version>/checksums.txt
+curl -fsSL -o <temporary directory>/jason-plugin-reply.zip https://jasonharness.ai/releases/download/v<version>/jason-plugin-reply.zip
+(cd <temporary directory> && grep '  jason-plugin-reply.zip$' checksums.txt > jason-plugin-reply.zip.sha256 && sha256sum -c jason-plugin-reply.zip.sha256) && unzip -q <temporary directory>/jason-plugin-reply.zip -d ~/.jason/plugins/reply
+```
+
+On Windows, in PowerShell:
+
+```powershell
+irm https://jasonharness.ai/releases/download/v<version>/checksums.txt -OutFile <temporary directory>/checksums.txt
+irm https://jasonharness.ai/releases/download/v<version>/jason-plugin-reply.zip -OutFile <temporary directory>/jason-plugin-reply.zip
+if ((Get-FileHash <temporary directory>/jason-plugin-reply.zip).Hash -eq ((Select-String '  jason-plugin-reply.zip$' <temporary directory>/checksums.txt).Line -split ' ')[0]) { Expand-Archive <temporary directory>/jason-plugin-reply.zip ~/.jason/plugins/reply } else { throw 'jason-plugin-reply.zip does not match checksums.txt' }
+```
+
+The unpack is part of the check's own line, so it follows only a check that passed: a package that does not match
+its line, or has none, is never unpacked, however the lines are run, and you stop and say why. The sh line checks
+the package's line from a file of its own, `jason-plugin-reply.zip.sha256` beside the download, because the
+`sha256sum` macOS carries reads a file and not a pipe. A macOS older than 14 has no `sha256sum`; `shasum -a 256 -c`
+in its place reads the same file.
+
+So the package is the one released with your runtime, file for file: what you unpacked has the content digest of
+the release's own tree. Where the release cannot be reached, or is older than 0.11.0 and does not carry the package,
+the tree `jason skills install` fetched when the installation was taught — this repository at the tag of the release
+you run, kept in Jason's data directory — holds the same package, and copying it is the same install:
 
 ```
 cp -r ~/.jason/skills/staged/v<version>/plugins/reply ~/.jason/plugins/reply
-```
-
-So the package is the one released with your runtime, and nothing is fetched a second time. Where that tree is not
-there — the skills came from a directory, or from another ref — fetch the release's tree into a temporary directory
-first, and copy the package from it:
-
-```
-git clone --depth 1 --branch v<version> https://github.com/reply-team/jason-ai <temporary directory>
-cp -r <temporary directory>/plugins/reply ~/.jason/plugins/reply
 ```
 
 Nothing is loaded yet. A package on disk is a candidate; what makes it active is the reload in step 5.
@@ -313,13 +339,14 @@ working keep working.
 
 ## Where to go next
 
-- [`campaign-planning`](../skills/business/campaign-planning/SKILL.md) — the real work after this check: a campaign
-  planned with the business skills and worked by [Jason's roles](../skills/runtime/roles).
+- [`campaign-planning`](../skills/business/campaign-planning/SKILL.md) — the real work, after this check or instead of
+  it: a campaign planned with the business skills and worked by [Jason's roles](../skills/runtime/roles).
 - [`docs/plugins.md`](plugins.md) — writing a package for another provider.
 - [`docs/contracts/`](contracts/README.md) — the operations themselves, one document each, and what a plugin has to
   demonstrate.
-- [`skills/runtime/`](../skills/runtime) — the same ground, written for an AI agent to drive. Five skills,
+- [`skills/runtime/`](../skills/runtime) — the same ground, written for an AI agent to drive. Six skills,
   one per moment somebody asks for something: `managed-campaign-work` turns an objective into durable work;
   `approvals-and-questions` presents what is waiting on a person; `operating-the-installation` covers the
-  runtime, its plugins, its routes and its updates; `troubleshooting-jason` says why work stopped; and
-  `reporting-outside-effects` tells Jason about an effect produced somewhere else.
+  runtime, its plugins, its routes and its updates; `troubleshooting-jason` says why work stopped;
+  `reporting-outside-effects` tells Jason about an effect produced somewhere else; and `planner-in-session`
+  brings the planner's judgement into the conversation where a campaign is planned.

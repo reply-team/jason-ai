@@ -36,7 +36,11 @@ without asking what was meant.
 ## Prerequisites
 
 - A goal the user actually cares about, and whatever context they already have — ICP,
-  preferences, past results.
+  preferences, past results. Take it as they give it: in their own words, typed, as a link, a file
+  or a voice note. With Jason, that brief becomes the context of Jason's own campaign when the
+  campaign is created (`jason campaign create`, not the provider operation `campaign.create`),
+  before any contact is added and before anything is sent, so the plan and the roles that read
+  the campaign start from the same brief.
 - The operation contract (`sdr-operations`), because a plan is expressed in operations.
 - A credential, if the plan is to be checked against a real installation. The constraint reads
   in step 2 need one; the plan can still be written without one, provided it states which
@@ -127,6 +131,17 @@ an invention from a name they simply have not met.
    that moves authority, autonomy, budget or the people named. **Validating is not approving:**
    it says the plan *can* run, never that the user wants it to.
 
+**One natural path: a pilot, then the rest.** It is one of the natural paths a plan can take, not a
+workflow, and not the only one: the conversation with the person may well find another. It often
+fits an audience nobody has tried yet: a quick look at whether there is anything there at all, and
+roughly how much; a researcher confirming the direction more deeply; the data pulled and stored —
+from the person's own list or export where no sourcing tool is at hand; deep work per contact on a
+pilot of about ten, not on all of them; outreach on the pilot; a hold; the first results read and
+the approach reworked; then the remainder. At each turn the planner decides — go on, change
+course, or take it back to the person — and the manager keeps the work alive, so that nothing
+hangs and no hypothesis is left abandoned. With Jason the turns after the quick look are work under
+the campaign, and the planner and the manager are its roles.
+
 **Where the contract stops, and this is a gap rather than a lookup you have not done yet.** The
 contract can *check* a plan (`plan.validate`), but it defines no operation that creates, stores,
 revises or supersedes one, and none that records a checkpoint against it. Say that plainly
@@ -214,6 +229,13 @@ in `approval-boundaries`.
 
 ## Changelog
 
+- 2.3.0 (2026-10-18): the brief is taken as the person gives it, in their own words, and with
+  Jason it becomes the context of Jason's own campaign when the campaign is created, before any
+  contact is added and before anything is sent. Adds a pilot, then the rest, as one natural path a
+  plan can take — a quick look, a deeper check by a researcher, the data pulled, deep work on a
+  pilot of about ten, outreach, a hold, the first results read, then the remainder — never a
+  workflow and never the only path: the planner decides each turn, the manager keeps the work
+  alive.
 - 2.2.0 (2026-08-10): planned against the 325-operation contract. The plan now resolves its
   constraints as reads before it is designed — `capability.list` for what this login may do,
   `adapter.describe` for the ceilings this installation works within, with `capacity.estimate`

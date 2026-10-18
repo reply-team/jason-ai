@@ -50,19 +50,30 @@ jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation campai
 Setting one up is `operating-the-installation`, which is where plugins, routes, profiles and updates live.
 
 The wiring check, `docs/golden-path.md`, connects a provider and proves it with the person's own address; it is
-not campaign work. The real work begins with a campaign planned with the business pack's `campaign-planning`
-skill, and this skill is how that plan becomes work the runtime and Jason's roles perform.
+not campaign work. It is a synthetic walk the person takes or skips when the installation becomes ready, and asking
+them once is `operating-the-installation`'s. The real work begins with the person's brief — what they tell you about
+their first campaign, in their own words — and a campaign planned with the business pack's `campaign-planning` skill,
+and this skill is how the brief and that plan become work the runtime and Jason's roles perform.
 
 ## The work itself
 
 A campaign, the people it is about, and then one work item per thing to be done.
 
 ```
-jason campaign create --name "Q3 LatAm founders" --idempotency-key q3-latam
+jason campaign create --name "Q3 LatAm founders" --context '{"offer":"payroll for startups hiring in Latin America","audience":"founders of seed-stage startups in Mexico and Colombia","their_words":"Our best customers came through their accountants. We sell to founders, never to HR."}' --idempotency-key q3-latam
 jason campaign add-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --file contacts.json --match-by email
 jason campaign list-contacts cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
+
+**The brief becomes the campaign.** What the person told you about the campaign — the product, the audience, how it
+sells, in their own words — is the campaign's context, given at `jason campaign create` with `--context`, before any
+contact is added and before anything is sent. It is the campaign's shared knowledge: a role that reads the campaign
+(`jason campaign get`) reads it whole, and a role that does not works from its own work item's context alone. So its
+keys are yours to name for what they hold, and none is reserved. Keep the person's own words beside what you made of
+them, and put a link or a file in as what it says, briefly, with where it is, rather than pasted whole. This
+`jason campaign create` makes Jason's own campaign; it is not the provider operation `campaign.create`, which makes a
+campaign at a provider.
 
 **Give every create a key you could send again.** `--idempotency-key` names that one create, in words you
 choose. If its answer never comes back — a timeout, a session that ended mid-command — send the same command with

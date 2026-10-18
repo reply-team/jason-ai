@@ -57,9 +57,12 @@ ask.
   `export` half yourself, or call `jason` by its full path.
 - Stop when `ready` is true, or when a required check still fails after its repair. Report which checks failed,
   exactly what you ran, and what it changed. When `ready` is true, tell the person Jason is installed and can work,
-  and that one word from them runs [the wiring check](golden-path.md) in this session: it connects their provider
-  and proves it with their own address. The real work comes after it, and begins with a campaign planned with the
-  `campaign-planning` skill and worked by Jason's roles.
+  and ask them once what comes next: [the wiring check](golden-path.md) first, in this session, or their real work at
+  once. Name the wiring check for what it is: a synthetic walk to meet the system, which connects their provider and
+  proves it with their own address, and is not the real work. A skip is honoured: do not offer the walk again. The
+  real work, at once or after the walk, begins with an invitation to tell you about their first campaign in their own
+  words — typed, a link, a file or a voice note, or one of a few examples you offer to start from — and goes on as a
+  campaign planned with the `campaign-planning` skill and worked by Jason's roles.
 
 ---
 
@@ -109,14 +112,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v0.10.0/install.sh | sh -s -- --version 0.10.0
+curl -fsSL https://jasonharness.ai/releases/download/v0.11.0/install.sh | sh -s -- --version 0.11.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.10.0/install.ps1))) -Version 0.10.0
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.11.0/install.ps1))) -Version 0.11.0
 ```
 
-These install 0.10.0 with 0.10.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.11.0 with 0.11.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
@@ -368,10 +371,13 @@ when you sign out. On Windows that is a logon task named for this account; on ma
 `ai.jason.runtime`; on Linux a `systemd --user` unit, `jason.service`. `jason runtime autostart status` says what
 is registered.
 
-That is the installation. [The wiring check](golden-path.md) is a page of its own — your provider connected and
-proven with your own address — and an agent that installed Jason runs it in the same session on one word from you.
-The real work comes after it, and begins with a campaign planned with the business skills,
-[`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first, and worked by Jason's roles.
+That is the installation. What comes next is yours to choose, and an agent that installed Jason asks you once:
+[the wiring check](golden-path.md) — a page of its own, a synthetic walk to meet the system, your provider connected
+and proven with your own address, and not the real work — or the real work at once. Skip the walk and it is not
+offered again. The real work, at once or after the walk, begins with you telling your agent about your first campaign
+in your own words — typed, a link, a file or a voice note, or an example to start from — and becomes a campaign
+planned with the business skills, [`campaign-planning`](../skills/business/campaign-planning/SKILL.md) first, and
+worked by Jason's roles.
 
 ---
 

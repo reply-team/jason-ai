@@ -161,7 +161,10 @@ manifest could name the arguments, a version check would be a way to run anythin
 ## 4. Installing, reloading and listing
 
 Installing a plugin is copying its directory into `~/.jason/plugins/` (override the data directory
-with `JASON_DATA_DIR`). There are no install verbs in this version.
+with `JASON_DATA_DIR`). There are no install verbs in this version. The package this repository ships,
+the Reply plugin, is also published with every release from 0.11.0 on as `jason-plugin-reply.zip`, its
+files at the archive's root: checked against that release's `checksums.txt` and unpacked into
+`~/.jason/plugins/reply`, it is installed. Step 3 of [the wiring check](golden-path.md) prints the lines.
 
 ```sh
 cp -r ./fake-provider ~/.jason/plugins/

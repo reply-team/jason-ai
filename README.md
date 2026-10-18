@@ -72,7 +72,8 @@ By installing Jason you accept the Jason Runtime Licence:
 not install Jason.
 
 At the end, tell me whether Jason can start work, what the next step is, and exactly what you ran
-and what it changed.
+and what it changed. If it can, ask me once whether I want a synthetic walk to meet Jason first or
+my real work at once.
 ```
 
 ## What this is
@@ -126,13 +127,15 @@ anywhere until somebody writes a route: work with no route fails at the claim wi
 needs a person's approval is parked until a person decides, and nothing runs but what they approved. **The first
 such plugin is in this repository**: [`plugins/reply/`](plugins/reply/README.md) performs all twelve published
 operations against a Reply account through the Reply CLI, which owns the credential — so an operator installs that
-CLI, signs in with it, copies the package into `~/.jason/plugins/`, grants it that one program, and writes the
-route. **The wiring check** — an empty installation brought to a routed plugin, one enrolment of your own address
-approved by you and performed against the provider, and the history it leaves — is
+CLI, signs in with it, unpacks the package from the release into `~/.jason/plugins/`, grants it that one program,
+and writes the route. **The wiring check** — an empty installation brought to a routed plugin, one enrolment of
+your own address approved by you and performed against the provider, and the history it leaves — is
 [docs/golden-path.md](docs/golden-path.md), and every command on that page is executed by a test. It proves the
 wiring and is not the real work, which begins with a campaign planned with the business skills
-([`campaign-planning`](skills/business/campaign-planning/SKILL.md) first) and worked by Jason's roles. Releases arrive
-one self-contained increment at a time; no dates, no roadmap promises.
+([`campaign-planning`](skills/business/campaign-planning/SKILL.md) first) and worked by Jason's roles. It is optional:
+a synthetic walk, offered once when an installation is ready, which you may skip for the real work at once — and that
+begins with you telling your agent about your first campaign in your own words. Releases arrive one self-contained
+increment at a time; no dates, no roadmap promises.
 
 ## Architecture
 
