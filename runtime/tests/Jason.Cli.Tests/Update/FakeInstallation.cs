@@ -123,8 +123,32 @@ public sealed class FakeInstallation : HttpMessageHandler
 
     public FakeProcessControl Processes { get; }
 
-    /// <summary>Whether a runtime is answering. A stopped installation is the ordinary case for an update.</summary>
-    public bool Running { get; private set; }
+    /// <summary>The process id the runtime here names in its descriptor and in its answers.</summary>
+    public const int Pid = 77;
+
+    private bool _running;
+
+    /// <summary>
+    /// Whether a runtime is answering. A stopped installation is the ordinary case for an update. For as long as one
+    /// answers, its process is in the process table under the id its descriptor names, started when the descriptor says.
+    /// </summary>
+    public bool Running
+    {
+        get => _running;
+        private set
+        {
+            _running = value;
+            if (value)
+            {
+                Processes.RunningPids.Add(Pid);
+                Processes.StartTimes.Remove(Pid);
+            }
+            else
+            {
+                Processes.RunningPids.Remove(Pid);
+            }
+        }
+    }
 
     /// <summary>How many attempts the runtime says are still running, until a drain takes them away.</summary>
     public int RunningAttempts { get; set; }
@@ -174,6 +198,9 @@ public sealed class FakeInstallation : HttpMessageHandler
     /// is what makes it the case where an update's own stop has something to print.
     /// </summary>
     public bool RefusesToStop { get; set; }
+
+    /// <summary>Whether the runtime answers a drain with an error envelope rather than draining.</summary>
+    public bool RefusesToDrain { get; set; }
 
     /// <summary>
     /// Whether the runtime stops and leaves its descriptor behind, as one does when another program holds the file:
@@ -255,6 +282,12 @@ public sealed class FakeInstallation : HttpMessageHandler
         Running = false;
         File.Delete(Paths.DescriptorFile);
     }
+
+    /// <summary>
+    /// The runtime's process ends without being stopped: it crashed, or the sign-out that ended its session ended it.
+    /// Its descriptor stays behind, naming a process that has gone, and nothing answers at the address it names.
+    /// </summary>
+    public void RuntimeDies() => Running = false;
 
     /// <summary>Starts with a runtime already up, which is what an update usually finds.</summary>
     public FakeInstallation WithRuntime(int runningAttempts = 0)
@@ -394,6 +427,17 @@ public sealed class FakeInstallation : HttpMessageHandler
         switch (operation)
         {
             case "system.drain":
+                if (RefusesToDrain)
+                {
+                    return new HttpResponseMessage(HttpStatusCode.InternalServerError)
+                    {
+                        Content = new StringContent(
+                            "{\"error\":{\"code\":\"internal\",\"message\":\"the dispatcher could not be paused\",\"retryable\":true}}",
+                            Encoding.UTF8,
+                            "application/json"),
+                    };
+                }
+
                 State = DispatcherState.Draining;
 
                 // A drain ends the work in flight the way the runtime's own enforcer would — unless the test is
@@ -430,7 +474,7 @@ public sealed class FakeInstallation : HttpMessageHandler
                 }
 
                 OnStop?.Invoke();
-                return Json(new ShutdownResponse(InstanceId, 77, Stopping: true));
+                return Json(new ShutdownResponse(InstanceId, Pid, Stopping: true));
 
             case "system.info":
                 return Json(Info());
@@ -449,7 +493,7 @@ public sealed class FakeInstallation : HttpMessageHandler
         ServesVersion ?? Installed(),
         "v1",
         InstanceId,
-        77,
+        Pid,
         DateTimeOffset.UnixEpoch,
         Paths.Root,
         new DatabaseInfo(["20260913225419_InitialCreate"], MigratedOnStart(), BackupOnStart()),
@@ -485,7 +529,7 @@ public sealed class FakeInstallation : HttpMessageHandler
         File.WriteAllText(
             Paths.DescriptorFile,
             JsonSerializer.Serialize(
-                new RuntimeDescriptor("v1", Installed(), InstanceId, 77, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch),
+                new RuntimeDescriptor("v1", Installed(), InstanceId, Pid, "http://127.0.0.1:5000", "the-token", DateTimeOffset.UnixEpoch),
                 JasonJson.Options));
     }
 

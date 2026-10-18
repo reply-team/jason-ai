@@ -357,6 +357,88 @@ public class UpdateApplierTests
         Assert.DoesNotContain("would not stop", installation.Error.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A runtime that ended without being stopped — at a sign-out, in a crash — leaves its descriptor behind, naming a
+    /// process that has gone or, since, another program that was given its id. No runtime is running there, so the
+    /// update drains and stops nothing, as on an installation with no descriptor at all, and goes on. It used to send the
+    /// drain to the dead address and refuse with nothing after "would not drain:".
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task An_update_over_a_descriptor_whose_runtime_has_gone_drains_and_stops_nothing_and_completes(bool idTakenSince)
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+        installation.RuntimeDies();
+        if (idTakenSince)
+        {
+            // Another program has the id now: it started an hour after the runtime the descriptor describes.
+            installation.Processes.RunningPids.Add(FakeInstallation.Pid);
+            installation.Processes.StartTimes[FakeInstallation.Pid] = DateTimeOffset.UnixEpoch.AddHours(1);
+        }
+
+        var applier = installation.Applier();
+        var ledger = await applier.ApplyAsync(Request(installation), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(installation.To.ToString(), installation.Installed());
+        Assert.Contains("drained: no runtime is running, so there is nothing to drain", applier.Steps);
+        Assert.Contains("stopped: no runtime is running, so there is nothing to stop", applier.Steps);
+        Assert.DoesNotContain("system.drain", installation.Operations);
+        Assert.DoesNotContain("system.shutdown", installation.Operations);
+        Assert.Equal(string.Empty, installation.Out.ToString());
+    }
+
+    /// <summary>
+    /// A runtime whose process is running and which does not answer is asked to drain and refused on, as the runtime it
+    /// may be — shown to have started when its descriptor says, or with a start this account may not read — and the refusal
+    /// says why: what the call that could not reach it said, and nothing of it on stdout beside the refusal.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_drain_the_runtime_does_not_answer_refuses_with_its_reason(bool startUnreadable)
+    {
+        using var installation = new FakeInstallation().WithRuntime();
+        installation.RuntimeDies();
+
+        // Its process is still there, under its own id: it has only stopped answering.
+        installation.Processes.RunningPids.Add(FakeInstallation.Pid);
+        if (startUnreadable)
+        {
+            installation.Processes.StartTimes[FakeInstallation.Pid] = null;
+        }
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Applier().ApplyAsync(Request(installation), Ct));
+
+        Assert.Contains("system.drain", installation.Operations);
+        Assert.Equal(UpdateCodes.RuntimeUnreachable, refused.Code);
+        Assert.Equal(
+            "The runtime would not drain: runtime_unreachable: The runtime at http://127.0.0.1:5000 did not answer (connection refused). The descriptor may be stale.",
+            refused.Message);
+        Assert.Equal(string.Empty, installation.Out.ToString());
+        Assert.DoesNotContain("system.shutdown", installation.Operations);
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+    }
+
+    /// <summary>
+    /// A runtime that answers the drain with an error has not drained, and the update is refused with the runtime's
+    /// own code and message rather than going on to stop it as though it had.
+    /// </summary>
+    [Fact]
+    public async Task An_error_answer_to_the_drain_refuses_the_update_with_its_code_and_message()
+    {
+        using var installation = new FakeInstallation { RefusesToDrain = true }.WithRuntime();
+
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => installation.Applier().ApplyAsync(Request(installation), Ct));
+
+        Assert.Equal(UpdateCodes.RuntimeUnreachable, refused.Code);
+        Assert.Equal("The runtime would not drain: internal: the dispatcher could not be paused", refused.Message);
+        Assert.Equal(string.Empty, installation.Out.ToString());
+        Assert.DoesNotContain("system.shutdown", installation.Operations);
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+    }
+
     private static UpdateRequest Request(FakeInstallation installation) =>
         new(installation.Feed, null, TimeSpan.FromSeconds(5));
 }

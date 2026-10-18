@@ -6,6 +6,7 @@ using Jason.Cli.Discovery;
 using Jason.Cli.Process;
 using Jason.Cli.Uninstall;
 using Jason.Contracts.Api;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Files;
 using Jason.Contracts.Json;
 using Jason.Contracts.Update;
@@ -199,7 +200,7 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
 
     private async Task<string?> NewestChronicleIdAsync(CancellationToken cancellationToken)
     {
-        if (new DescriptorReader(env.Paths).Read() is null)
+        if (Live() is null)
         {
             return null;
         }
@@ -219,7 +220,7 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
 
     private async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (new DescriptorReader(env.Paths).Read() is null)
+        if (Live() is null)
         {
             return;
         }
@@ -653,6 +654,9 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
 
         Say($"{ledger.FromVersion} is back in place but no runtime answered; start one with `jason runtime start`");
     }
+
+    /// <summary>The descriptor of a runtime that may still be running; <see cref="DescriptorProcess.Live"/> decides.</summary>
+    private RuntimeDescriptor? Live() => DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance);
 
     private void Say(string what) => Steps.Add(what);
 }

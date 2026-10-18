@@ -111,6 +111,24 @@ public class ApprovalCommandsTests
     }
 
     /// <summary>
+    /// A contact known only by an address has no name to set its id apart from, so the id stands alone where the name
+    /// would be, rather than in parentheses behind a space — whether the preview leaves the name out or leaves it empty.
+    /// </summary>
+    [Theory]
+    [InlineData("null")]
+    [InlineData("\"\"")]
+    public async Task Get_of_an_address_only_contact_names_it_by_its_id_without_a_leading_space(string name)
+    {
+        using var cli = new CliRun(OneApproval.Replace("\"name\": \"Ada\"", $"\"name\": {name}", StringComparison.Ordinal));
+
+        var exit = await cli.RunAsync("approval", "get", "apr_1", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var contact = Assert.Single(cli.Text.ReplaceLineEndings("\n").Split('\n'), line => line.StartsWith("Contact:", StringComparison.Ordinal));
+        Assert.Equal("Contact:       cnt_1 · email ada@example.test", contact);
+    }
+
+    /// <summary>
     /// Where the operation declares a summary, it is the first thing a person reads: one line saying what would be
     /// done, to whom and how, above the properties it is drawn from.
     /// </summary>

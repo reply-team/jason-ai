@@ -268,21 +268,26 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
     /// <summary>
     /// Tells the runtime to claim nothing new and waits for what it is holding, up to the bound. A runtime that
-    /// is not running is already drained: <c>jason update</c> is the same command whether one is up or not.
+    /// is not running is already drained: <c>jason update</c> is the same command whether one is up or not — and one
+    /// whose descriptor was left behind by a process that has gone is not running.
     /// </summary>
     private async Task<UpdateLedger> DrainAsync(UpdateLedger ledger, UpdateRequest request, CancellationToken cancellationToken)
     {
-        if (Descriptor() is null)
+        if (Live() is null)
         {
             Say(UpdateStep.Drained, "no runtime is running, so there is nothing to drain");
             return ledger;
         }
 
-        var (code, body) = await OperationRunner.SendAsync(env, Operations.SystemDrain, RequestBody.Empty(), cancellationToken)
+        // What the call says when it cannot reach the runtime is kept off the stdout this update's one document goes to,
+        // and said in the refusal instead, as is an error the runtime answered with: neither is a drain.
+        using var said = new StringWriter();
+        var (_, answer) = await OperationRunner.SendAsync(env with { Out = said }, Operations.SystemDrain, RequestBody.Empty(), cancellationToken)
             .ConfigureAwait(false);
-        if (code != ExitCodes.Success)
+        if (answer is not { IsSuccess: true })
         {
-            throw new UpdateException(UpdateCodes.RuntimeUnreachable, $"The runtime would not drain: {body}");
+            var envelope = answer is null ? said.ToString() : OperationRunner.ErrorText(answer);
+            throw new UpdateException(UpdateCodes.RuntimeUnreachable, $"The runtime would not drain: {Reason(envelope)}");
         }
 
         var deadline = clock.GetUtcNow() + request.Drain;
@@ -309,8 +314,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
     private async Task<UpdateLedger> StopAsync(UpdateLedger ledger, CancellationToken cancellationToken)
     {
-        var descriptor = Descriptor();
-        if (descriptor is null)
+        if (Live() is null)
         {
             Say(UpdateStep.Stopped, "no runtime is running, so there is nothing to stop");
             return ledger with { StoppedAt = ledger.StoppedAt ?? clock.GetUtcNow() };
@@ -642,6 +646,15 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
     private RuntimeDescriptor? Descriptor() => new DescriptorReader(env.Paths).Read();
 
+    /// <summary>The descriptor of a runtime that may still be running; <see cref="DescriptorProcess.Live"/> decides.</summary>
+    private RuntimeDescriptor? Live() => DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance);
+
+    /// <summary>An error envelope as a refusal says it: its code and its message.</summary>
+    private static string Reason(string envelope) =>
+        JsonSerializer.Deserialize<ErrorResponse>(envelope, JasonJson.Options)?.Error is { } error
+            ? $"{error.Code}: {error.Message}"
+            : envelope.Trim();
+
     private async Task<int?> RunningAttemptsAsync(CancellationToken cancellationToken) =>
         (await InfoAsync(cancellationToken).ConfigureAwait(false))?.Dispatcher.RunningAttempts;
 
@@ -663,7 +676,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
     private async Task<SystemInfoResponse?> InfoAsync(CancellationToken cancellationToken)
     {
-        if (Descriptor() is null)
+        if (Live() is null)
         {
             return null;
         }

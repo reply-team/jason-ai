@@ -59,6 +59,12 @@ public sealed partial class ExecService(HostServices services)
     /// </summary>
     internal Action<Process> Kill { get; init; } = TryKill;
 
+    /// <summary>
+    /// Told what a call was given to spend — its program's timeout and its kill grace — as the call begins. How long a
+    /// program was allowed is otherwise seen only as time passing, so a test reads it here.
+    /// </summary>
+    internal Action<TimeSpan, TimeSpan>? Spending { get; init; }
+
     public JsValue Invoke(Engine engine, JsValue[] args)
     {
         ArgumentNullException.ThrowIfNull(engine);
@@ -137,6 +143,7 @@ public sealed partial class ExecService(HostServices services)
         TimeSpan timeout,
         TimeSpan grace)
     {
+        Spending?.Invoke(timeout, grace);
         var watch = Stopwatch.StartNew();
         var startInfo = ChildProcess.StartInfo(executable.Path);
         startInfo.WorkingDirectory = services.WorkingDirectory;

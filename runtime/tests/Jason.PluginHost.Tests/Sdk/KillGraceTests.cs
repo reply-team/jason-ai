@@ -42,8 +42,8 @@ public sealed class KillGraceTests : IDisposable
         [.. harness.Lines.Where(line => line["message"]?.GetValue<string>() == "exec_kill_unconfirmed")];
 
     /// <summary>
-    /// The program started once before a timing: the first start of a freshly built program can be held while the
-    /// machine inspects it, and that is not the host's time to measure.
+    /// The program started once before a timing, or before a run that has only its budget to spend: the first start of a
+    /// freshly built program can be held while the machine inspects it, and that is not the host's time to measure.
     /// </summary>
     private void WarmUp()
     {
@@ -68,11 +68,38 @@ public sealed class KillGraceTests : IDisposable
     }
 
     /// <summary>
+    /// The arithmetic above is what a call is given: with four seconds left by the host's own count, a call without
+    /// <c>timeout_ms</c> hands its program two and keeps two back, and a call that asked for one and a half seconds hands
+    /// it that — never all that is left. The program exits at once, so no clock is read.
+    /// </summary>
+    [Theory]
+    [InlineData(-1, 2_000)]
+    [InlineData(1_500, 1_500)]
+    public void A_call_hands_its_program_the_budget_s_timeout_and_not_all_that_is_left(int asked, int timeout)
+    {
+        var given = new List<(TimeSpan Timeout, TimeSpan Grace)>();
+        using var harness = new SdkHarness(
+            _package.Root,
+            builder => builder.Grants = Granted,
+            remaining: FourSeconds,
+            spending: (program, grace) => given.Add((program, grace)));
+        var request = asked < 0
+            ? $"{{ executable: \"{Cli}\", args: [\"exit\", \"0\"] }}"
+            : $"{{ executable: \"{Cli}\", args: [\"exit\", \"0\"], timeout_ms: {asked} }}";
+
+        Exec(harness, request);
+
+        Assert.Equal([(TimeSpan.FromMilliseconds(timeout), TimeSpan.FromSeconds(2))], given);
+    }
+
+    /// <summary>
     /// The whole invocation, end to end: a plugin that runs a program without <c>timeout_ms</c> and answers a timeout
     /// itself. Given all of what was left, the program spends it, and the plugin is told at the very end of its budget —
     /// whether it still gets to answer then is a race between the kill and the engine's own clock, and a kill that is
-    /// slow to take loses it to <c>plugin_timeout</c>. With the grace kept back, the plugin is told with the grace to
-    /// spare, and its own answer comes back well inside the budget.
+    /// slow to take loses it to <c>plugin_timeout</c>. With the grace kept back, the plugin is told while it can still
+    /// answer, so the invocation ends with the plugin's own <c>exec_timed_out</c> — ambiguous, since the program may have
+    /// acted — and not with the host's timeout. How much grace is kept back is the budget's arithmetic, held by the rows
+    /// above and by the plugin page, not by this one.
     /// </summary>
     [Fact]
     public void A_plugin_that_runs_a_program_without_a_timeout_is_told_with_time_to_answer_itself()
@@ -103,11 +130,6 @@ public sealed class KillGraceTests : IDisposable
             outcome.Status == OutcomeStatus.Failed && outcome.Error?.Code == "exec_timed_out",
             $"Expected the plugin's own exec_timed_out; the invocation ended {outcome.Status} with {outcome.Error?.Code} after {outcome.Diagnostics.DurationMs} ms.");
         Assert.Equal(FailureClass.Ambiguous, outcome.Error!.Class);
-
-        // Four seconds of grace were kept back from eight; the plugin answered with most of them to spare.
-        Assert.True(
-            outcome.Diagnostics.DurationMs < (budget - TimeSpan.FromSeconds(2)).TotalMilliseconds,
-            $"The plugin answered after {outcome.Diagnostics.DurationMs} ms of an {budget.TotalMilliseconds} ms budget.");
     }
 
     /// <summary>

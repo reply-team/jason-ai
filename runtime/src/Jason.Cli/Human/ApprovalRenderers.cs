@@ -97,7 +97,12 @@ public static class ApprovalRenderers
 
         var where = (string?)contact["value"];
         var channel = (string?)contact["channel"];
-        return $"{(string?)contact["name"]} ({(string?)contact["id"]})" + (where is null ? string.Empty : $" · {channel} {where}");
+        var name = (string?)contact["name"];
+        var id = (string?)contact["id"];
+
+        // A contact known only by an address has no name to set its id apart from: the id stands where the name would.
+        var who = string.IsNullOrEmpty(name) ? id : $"{name} ({id})";
+        return who + (where is null ? string.Empty : $" · {channel} {where}");
     }
 
     private static string Line(string label, string? value) => label.PadRight(Label) + (string.IsNullOrEmpty(value) ? "-" : value);

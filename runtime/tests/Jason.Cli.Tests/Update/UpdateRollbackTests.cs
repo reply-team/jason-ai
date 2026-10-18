@@ -52,6 +52,29 @@ public class UpdateRollbackTests
     }
 
     /// <summary>
+    /// A runtime that ended without being stopped leaves its descriptor behind, naming a process that has gone. No runtime
+    /// is running there, so the rollback asks it nothing and stops nothing, puts the previous executable back and starts
+    /// it — and its stdout carries nothing of a call to the dead address.
+    /// </summary>
+    [Fact]
+    public async Task A_rollback_over_a_descriptor_whose_runtime_has_gone_stops_nothing_and_writes_nothing_on_stdout()
+    {
+        using var installation = await UpdatedAsync();
+        installation.RuntimeDies();
+        installation.Operations.Clear();
+
+        var rollback = installation.Rollback();
+        var back = await rollback.RollBackAsync(Ct);
+
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+        Assert.Equal(installation.From, back.ToVersion);
+        Assert.DoesNotContain("stopped the runtime", rollback.Steps);
+        Assert.Contains(rollback.Steps, step => step.StartsWith("started ", StringComparison.Ordinal));
+        Assert.Empty(installation.Operations);
+        Assert.Equal(string.Empty, installation.Out.ToString());
+    }
+
+    /// <summary>
     /// PB2's case, and the one that made the amendment: the verb is typed long after the update finished, and
     /// everything it needs comes from the record that update left behind.
     /// </summary>

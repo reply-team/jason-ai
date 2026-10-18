@@ -1,3 +1,6 @@
+using Jason.Cli.Discovery;
+using Jason.Contracts.Discovery;
+
 namespace Jason.Cli.Process;
 
 /// <summary>Who holds the process id an endpoint descriptor names, as far as this account can tell.</summary>
@@ -25,9 +28,10 @@ internal enum ProcessHolder
 /// machine started next under it, and "that pid is running" answers yes about a stranger. The descriptor carries
 /// the moment the runtime started, and a process that started after it is somebody else's. The verbs that must
 /// decide whether a descriptor found on disk still has a runtime behind it — <c>runtime start</c>, before it
-/// launches over one, and <c>uninstall</c>, before it takes the installation away — ask here, so they cannot
-/// disagree. <c>runtime stop</c> asks something else: whether the runtime that has just acknowledged its shutdown
-/// has exited, and a bare "is that pid running" answers that.
+/// launches over one, <c>uninstall</c>, before it takes the installation away, and <c>update apply</c> and
+/// <c>update rollback</c>, before they drain, stop or ask one — ask here, so they cannot disagree. <c>runtime stop</c>
+/// asks something else: whether the runtime that has just acknowledged its shutdown has exited, and a bare "is that
+/// pid running" answers that.
 /// </summary>
 internal static class DescriptorProcess
 {
@@ -64,4 +68,15 @@ internal static class DescriptorProcess
 
         return started <= recorded + StartAllowance ? ProcessHolder.TheRuntime : ProcessHolder.Stranger;
     }
+
+    /// <summary>
+    /// The descriptor on disk, where the runtime it describes may still be running: null where there is none, and where
+    /// the one there was left by a runtime whose process has gone or has since been given to another program. A process
+    /// that is running and not shown to be the runtime or not to be keeps its descriptor, as the runtime it may be.
+    /// </summary>
+    public static RuntimeDescriptor? Live(JasonPaths paths, IRuntimeProcessControl processes) =>
+        new DescriptorReader(paths).Read() is { } descriptor
+        && Of(processes, descriptor.Pid, descriptor.StartedAt) is ProcessHolder.TheRuntime or ProcessHolder.Unreadable
+            ? descriptor
+            : null;
 }

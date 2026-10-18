@@ -91,6 +91,7 @@ public static class RuntimeHost
         }
 
         WebApplication? app = null;
+        var started = false;
         try
         {
             logger = JasonLogging.Create(paths, settings.Logging, options.ConsoleLogging);
@@ -144,6 +145,7 @@ public static class RuntimeHost
                 throw settingsRefused;
             }
 
+            started = true;
             Volatile.Write(ref settingsRead, true);
 
             var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()?.Addresses.FirstOrDefault()
@@ -169,7 +171,25 @@ public static class RuntimeHost
         {
             if (app is not null)
             {
-                await app.DisposeAsync().ConfigureAwait(false);
+                try
+                {
+                    if (started)
+                    {
+                        // Stopped before it is disposed, as a running runtime is. Disposed while started, its background
+                        // services are cancelled with the host never told to stop, and the host logs each as a service that
+                        // failed and says it is stopping because of it — beside a refusal that has nothing to do with either.
+                        await app.StopAsync().ConfigureAwait(false);
+                    }
+                }
+                catch (Exception stopping) when (stopping is AggregateException or OperationCanceledException)
+                {
+                    // What the host throws when a service would not stop, or not in time. The start's own failure is what
+                    // is said; a stop that failed after it does not take its place.
+                }
+                finally
+                {
+                    await app.DisposeAsync().ConfigureAwait(false);
+                }
             }
 
             configuration.Dispose();

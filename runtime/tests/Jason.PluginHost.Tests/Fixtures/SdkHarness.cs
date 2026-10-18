@@ -21,7 +21,8 @@ public sealed class SdkHarness : IDisposable
         Action<InvocationBuilder>? configure = null,
         TimeSpan? remaining = null,
         Func<Process, TimeSpan, bool>? endedWithin = null,
-        Action<Process>? kill = null)
+        Action<Process>? kill = null,
+        Action<TimeSpan, TimeSpan>? spending = null)
     {
         Invocation = InvocationFactory.Create(packageRoot, "echo.run", configure: configure);
         Diagnostics = new HostDiagnostics(
@@ -40,7 +41,7 @@ public sealed class SdkHarness : IDisposable
         Engine = EngineFactory.Create(Invocation.Limits, new PackageModuleLoader(packageRoot), CancellationToken.None);
         Http = new HttpService(Services);
         var defaults = new ExecService(Services);
-        var exec = new ExecService(Services) { EndedWithin = endedWithin ?? defaults.EndedWithin, Kill = kill ?? defaults.Kill };
+        var exec = new ExecService(Services) { EndedWithin = endedWithin ?? defaults.EndedWithin, Kill = kill ?? defaults.Kill, Spending = spending };
         Engine.SetValue("host", HostObject.Build(Engine, Services, exec, Http, new EnvService(Services), new LogService(Services)));
     }
 

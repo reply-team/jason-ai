@@ -1,6 +1,10 @@
+using System.Collections.Concurrent;
+using System.Text.Json.Nodes;
 using Jason.Contracts.Files;
 using Jason.Runtime.Hosting;
 using Jason.Runtime.Tests.Integration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Jason.Runtime.Tests.Hosting;
 
@@ -66,6 +70,33 @@ public sealed class DescriptorRefusalAtStartTests
     }
 
     /// <summary>
+    /// A start refused after its host had started stops the host before it disposes it. Disposed without being stopped,
+    /// a background service has its stopping token cancelled while the host was never told to stop, and the host logs that
+    /// as a service that failed — an Error, and a Fatal saying the host is stopping because of it — beside a refusal that
+    /// has nothing to do with either. The service here waits on its stopping token and nothing else, as an idle one does.
+    /// </summary>
+    [Fact]
+    public async Task A_start_refused_after_its_host_started_stops_the_host_before_disposing_it()
+    {
+        using var data = new TempDataDir();
+        Directory.CreateDirectory(Path.Combine(data.Paths.DescriptorFile, "in-the-way"));
+        var idle = new IdleService();
+
+        var said = await RefusedAsync(data, services => services.AddHostedService(_ => idle));
+
+        Assert.StartsWith($"The runtime could not publish its endpoint descriptor at '{data.Paths.DescriptorFile}'", said, StringComparison.Ordinal);
+        Assert.Equal(["stopped", "disposed"], idle.Seen);
+
+        var misleading = Log(data)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => JsonNode.Parse(line)!.AsObject())
+            .Where(line => (string?)line["@mt"] == "BackgroundService failed" || (string?)line["@l"] == "Fatal")
+            .Select(line => line.ToJsonString())
+            .ToList();
+        Assert.True(misleading.Count == 0, $"The refused start's log says a background service failed:\n{string.Join('\n', misleading)}");
+    }
+
+    /// <summary>
     /// A start stopped while it waits for a reader stops waiting: the start's own cancellation reaches the wait, which
     /// would otherwise run its full ten seconds.
     /// </summary>
@@ -90,14 +121,23 @@ public sealed class DescriptorRefusalAtStartTests
     }
 
     /// <summary>What the start said where it was started from; it has to have refused with 1, and nothing may have escaped.</summary>
-    private static async Task<string> RefusedAsync(TempDataDir data)
+    private static async Task<string> RefusedAsync(TempDataDir data, Action<IServiceCollection>? services = null)
     {
         using var refusals = new StringWriter();
         var exit = 0;
 
         var escaped = await Record.ExceptionAsync(async () => exit = await RuntimeHost.RunAsync(
             data.Paths,
-            TestRuntimeOptions.Quiet with { Refusals = refusals, DescriptorPublishing = Short },
+            TestRuntimeOptions.Quiet with
+            {
+                Refusals = refusals,
+                DescriptorPublishing = Short,
+                ConfigureServices = collection =>
+                {
+                    TestRuntimeOptions.TurnTheOutsideOff(collection);
+                    services?.Invoke(collection);
+                },
+            },
             Ct));
 
         Assert.Null(escaped);
@@ -107,4 +147,26 @@ public sealed class DescriptorRefusalAtStartTests
 
     private static string Log(TempDataDir data) =>
         string.Concat(Directory.GetFiles(data.Paths.LogsDirectory).Select(FakeHostRuntime.ReadShared));
+
+    /// <summary>A background service with nothing to do until it is stopped, which says whether it was stopped before it was disposed.</summary>
+    private sealed class IdleService : BackgroundService
+    {
+        private readonly ConcurrentQueue<string> _seen = new();
+
+        public IReadOnlyList<string> Seen => [.. _seen];
+
+        public override async Task StopAsync(CancellationToken cancellationToken)
+        {
+            _seen.Enqueue("stopped");
+            await base.StopAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        public override void Dispose()
+        {
+            _seen.Enqueue("disposed");
+            base.Dispose();
+        }
+
+        protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
+    }
 }
