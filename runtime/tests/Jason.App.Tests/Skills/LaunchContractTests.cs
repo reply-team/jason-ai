@@ -94,24 +94,12 @@ public class LaunchContractTests
             var text = File.ReadAllText(role.File);
             foreach (var marker in new[] { LaunchContract.Begin, LaunchContract.End })
             {
-                var found = Occurrences(text, marker);
+                var found = MarkedBlock.Occurrences(text, marker);
                 Assert.True(
                     found == 1,
                     $"'{role.File}' carries {marker} {found} times. One block per file: a second one is read by "
                     + "no guard here, which is the quiet way a correction lands in a file and changes nothing.");
             }
         }
-    }
-
-    private static int Occurrences(string text, string marker)
-    {
-        var count = 0;
-        for (var at = text.IndexOf(marker, StringComparison.Ordinal); at >= 0;
-             at = text.IndexOf(marker, at + marker.Length, StringComparison.Ordinal))
-        {
-            count++;
-        }
-
-        return count;
     }
 }

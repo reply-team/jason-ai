@@ -325,8 +325,9 @@ working keep working.
 - [`docs/plugins.md`](plugins.md) — writing a package for another provider.
 - [`docs/contracts/`](contracts/README.md) — the operations themselves, one document each, and what a plugin has to
   demonstrate.
-- [`skills/runtime/`](../skills/runtime) — the same ground, written for an AI agent to drive. Five skills,
+- [`skills/runtime/`](../skills/runtime) — the same ground, written for an AI agent to drive. Six skills,
   one per moment somebody asks for something: `managed-campaign-work` turns an objective into durable work;
   `approvals-and-questions` presents what is waiting on a person; `operating-the-installation` covers the
-  runtime, its plugins, its routes and its updates; `troubleshooting-jason` says why work stopped; and
-  `reporting-outside-effects` tells Jason about an effect produced somewhere else.
+  runtime, its plugins, its routes and its updates; `troubleshooting-jason` says why work stopped;
+  `reporting-outside-effects` tells Jason about an effect produced somewhere else; and `planner-in-session`
+  brings the planner's judgement into the conversation where a campaign is planned.

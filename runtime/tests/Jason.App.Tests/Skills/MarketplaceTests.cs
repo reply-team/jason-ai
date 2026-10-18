@@ -150,7 +150,7 @@ public class MarketplaceTests
     {
         ["jason-runtime-skills"] = new(StringComparer.Ordinal)
         {
-            "approvals-and-questions", "managed-campaign-work", "operating-the-installation",
+            "approvals-and-questions", "managed-campaign-work", "operating-the-installation", "planner-in-session",
             "reporting-outside-effects", "troubleshooting-jason",
         },
         ["jason-business-skills"] = new(StringComparer.Ordinal)

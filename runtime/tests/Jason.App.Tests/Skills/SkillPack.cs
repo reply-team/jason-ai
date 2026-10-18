@@ -66,28 +66,55 @@ internal static class SkillPack
     /// <em>whole lines</em>: a guard that searched the text for a substring would let a printed command grow
     /// an option that nothing ever runs, which is the one thing these guards exist to prevent.
     /// </summary>
+    /// <remarks>
+    /// A fence is opened by three backticks or by three tildes and closed only by the marker that opened it, as
+    /// Markdown has it. A reader that knew only the backticks let a command printed between tildes go unread by every
+    /// guard that asks what a page prints.
+    /// </remarks>
     public static IReadOnlyList<string> PrintedCommands(IReadOnlyList<string> lines)
     {
         ArgumentNullException.ThrowIfNull(lines);
 
-        var commands = new List<string>();
-        var fenced = false;
+        return
+        [
+            .. Fenced(lines)
+                .Where(line => line.Fenced)
+                .Select(line => line.Text.Trim())
+                .Where(text => text.StartsWith("jason ", StringComparison.Ordinal)),
+        ];
+    }
+
+    /// <summary>The marker a line opens or closes a fenced block with — three backticks or three tildes — or null.</summary>
+    public static string? FenceMarker(string line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+
+        var start = line.TrimStart();
+        return start.StartsWith("```", StringComparison.Ordinal) ? "```"
+            : start.StartsWith("~~~", StringComparison.Ordinal) ? "~~~"
+            : null;
+    }
+
+    /// <summary>
+    /// Every line that is not a fence marker, with whether it sits inside a fenced block. The one place the fence rule is
+    /// written: a fence is opened by either marker and closed only by the one that opened it.
+    /// </summary>
+    public static IEnumerable<(string Text, bool Fenced)> Fenced(IEnumerable<string> lines)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+
+        string? fence = null;
         foreach (var line in lines)
         {
-            if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
+            var marker = FenceMarker(line);
+            if (marker is not null && (fence is null || fence == marker))
             {
-                fenced = !fenced;
+                fence = fence is null ? marker : null;
                 continue;
             }
 
-            var text = line.Trim();
-            if (fenced && text.StartsWith("jason ", StringComparison.Ordinal))
-            {
-                commands.Add(text);
-            }
+            yield return (line, fence is not null);
         }
-
-        return commands;
     }
 
     /// <summary>

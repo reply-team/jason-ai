@@ -29,4 +29,27 @@ public class PrintedCommandsTests
             ["jason campaign list", "jason contact list", "jason approval list"],
             SkillPack.PrintedCommands(page));
     }
+
+    /// <summary>
+    /// Three tildes open a fence as three backticks do, and each is closed only by its own marker: a tilde line inside
+    /// a backtick fence is part of what that fence prints, not the end of it.
+    /// </summary>
+    [Fact]
+    public void A_tilde_fence_prints_too_and_each_fence_closes_on_its_own_marker()
+    {
+        string[] page =
+        [
+            "~~~",
+            "jason rolenote list cmp_1",
+            "~~~",
+            "jason workitem list",
+            "```",
+            "~~~",
+            "jason campaign get cmp_1",
+            "```",
+            "jason decision list",
+        ];
+
+        Assert.Equal(["jason rolenote list cmp_1", "jason campaign get cmp_1"], SkillPack.PrintedCommands(page));
+    }
 }

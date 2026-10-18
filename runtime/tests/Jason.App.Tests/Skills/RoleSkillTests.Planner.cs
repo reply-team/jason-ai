@@ -35,4 +35,35 @@ public partial class RoleSkillTests
         Assert.Contains("with both numbers in the failed attempt's `trace`. Read the count again and create a new item for the new number", skill, StringComparison.Ordinal);
         Assert.Contains("a different population is a different decision, never an edit of the old one", skill, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The planner's judgement, which the session file shares byte for byte: who decides what, and who reads what the
+    /// planner leaves in campaign context. Pinned here once; the craft guard carries it to the other file.
+    /// </summary>
+    [Fact]
+    public void The_planners_judgement_says_who_decides_and_which_roles_read_the_campaign()
+    {
+        var skill = Flattened("planner");
+
+        // A launched role is handed its own work item's context and nothing of the campaign's; it reads the campaign
+        // only where its skill has it do so, and two of the nine never do. A planner told that every role reads the
+        // context would leave a direction there and send a role that never reads it off without what it needs.
+        Assert.Contains(
+            "A role that does not read the campaign works from its own work item's context alone, so the work you ask of it carries what it needs.",
+            skill,
+            StringComparison.Ordinal);
+
+        // The planner decides every turn, as campaign-planning says; going on from a pilot to the rest reaches more people,
+        // so unless the campaign's context already allows it, the turn it decides on is to take it back to the person.
+        // One rule in both texts: a block that called going on the planner's choice, or the person's, without the other
+        // half, would give a session two answers to "who decides to go on". And nothing says "your decision covers the
+        // rest" one sentence after "the rest" meant the remaining people, where it reads as the opposite.
+        Assert.Contains("Going on from a pilot to the rest reaches more people, so unless the context already allows it, the turn you decide on is to take it back to them.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("Your decision covers the rest", skill, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("is your decision, made on what came back", skill, StringComparison.OrdinalIgnoreCase);
+
+        // And the turns of a pilot are named as campaign-planning names them, so the two texts a planner may read
+        // agree: go on, change course, or take it back to the person.
+        Assert.Contains("the choice is to go on, change course, or take it back to the person", skill, StringComparison.Ordinal);
+    }
 }
