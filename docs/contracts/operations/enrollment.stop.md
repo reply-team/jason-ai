@@ -17,18 +17,16 @@ for. Its work waits with its Jason campaign when that campaign is paused.
 
 ## Finding the person
 
-A stop creates nobody at the provider.
+A stop creates nobody at the provider: `preflight.provider_contact` is `find_only`.
 
 1. If `contacts[0].external_ids.contact` is present, that is the provider's identifier for this person. Work by it.
-2. Otherwise look the person up by the value of the channel named by `args.channel`, compared exactly and without
-   regard to case. One contact found is the person, and its identifier comes back in `external_ids.contact`. Nobody
-   found means the provider has never held them, so they take part in nothing: answer `already_stopped`. More than
-   one found is `contact_not_unique` — picking one would be guessing — and nothing is done.
+2. Otherwise look the person up by the value of the channel named by `args.channel`. One contact found is the person,
+   and its identifier comes back in `external_ids.contact`. Nobody found means the provider has never held them, so
+   they take part in nothing: answer `already_stopped`. More than one found is `contact_not_unique` — picking one
+   would be guessing — and nothing is done.
 
-A provider's search may match by resemblance — an address that merely contains this one — so the comparison is
-yours, and it is exact. Read the lookup to its end: a lookup you cannot finish says nothing about a second match, so
-it is refused, and never taken for nobody (which would answer `already_stopped` over a person still being written
-to) or for one.
+A lookup that cannot be read to its end is refused, never taken for nobody, which would answer `already_stopped` over a
+person still being written to. [`docs/plugins.md`](../../plugins.md) §7, "The contact proxy rule", says how the lookup compares.
 
 A person enrolled at the provider under another address is not found this way, and answers `already_stopped`: they
 take part in nothing under this identity, which `enrollment.list` shows.
@@ -91,10 +89,10 @@ of the provider's campaigns the person leaves, on a first link as well as after 
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `required`, channel `from_args`, suppression `not_applicable` |
+| pre-flight | contact `required`, channel `from_args`, suppression `not_applicable`, provider contact `find_only` |
 | in a paused campaign | `waits` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
-| precondition | Find the provider's own contact without creating one: by `contacts[0].external_ids.contact` when that pin is present, otherwise by the value of the channel named by `args.channel`, compared exactly and without regard to case. A person the provider does not hold takes part in nothing, which is a completed stop. |
+| precondition | A person the provider does not hold takes part in nothing, which is a completed stop. |
 | preview a person reads | `Take {/contacts/0/channels/0/value} out of the provider's campaign for Jason's campaign {/campaign/name}, reason {/args/reason/code}. Their history stays; nothing further is sent to them from that campaign.`; highlighted: `/args/reason`, `/contacts/0/channels/0/value`, `/campaign/name`, `/campaign/external_ids/campaign`, `/args/campaign` |
 | pinned identifiers | `contact` names a contact; `campaign` names a campaign |
 | recovery read | Whether this person still takes part in the campaign. |

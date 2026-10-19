@@ -51,6 +51,29 @@ public class SuppressionServiceTests
         Assert.Single(await db.Journal.ToListAsync(TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// A LinkedIn profile link names a person by its slug whatever its case, so a stop written under one spelling and
+    /// asked about under another is the same stop, and the value a contact's channel is stored under — the same rule —
+    /// is refused whichever spelling it was written in.
+    /// </summary>
+    [Fact]
+    public async Task A_linkedin_stop_is_one_stop_whatever_the_case_of_its_slug()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var service = NewService(db, new FixedClock(Noon));
+
+        var first = await service.AddAsync(new SuppressionAddRequest("linkedin", "https://www.linkedin.com/in/Marta-Example", null, "said stop"), TestContext.Current.CancellationToken);
+        var again = await service.AddAsync(new SuppressionAddRequest("linkedin", "https://WWW.linkedin.com/in/MARTA-example/", null, "asked twice"), TestContext.Current.CancellationToken);
+
+        Assert.Equal("https://www.linkedin.com/in/marta-example", first.Value);
+        Assert.Equal(first.Id, again.Id);
+        Assert.Single(await db.Suppressions.ToListAsync(TestContext.Current.CancellationToken));
+
+        var stored = ChannelRules.NormalizeValue("linkedin", "https://www.linkedin.com/in/marta-EXAMPLE", "value", new ValidationErrors());
+        Assert.True(await service.IsSuppressedAsync(db, "linkedin", stored!, TestContext.Current.CancellationToken), $"'{stored}' is not refused.");
+    }
+
     [Fact]
     public async Task A_channel_and_a_value_are_both_required_and_both_are_checked_at_once()
     {

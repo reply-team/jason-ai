@@ -58,9 +58,6 @@ public class ChannelRulesTests
     [InlineData("email", "jane.doe+tag@sub.example.co.uk", "jane.doe+tag@sub.example.co.uk")]
     [InlineData("phone", "+1 (604) 555-0100", "+16045550100")]
     [InlineData("whatsapp", " +380.44.123.45.67 ", "+380441234567")]
-    [InlineData("linkedin", "HTTPS://WWW.LinkedIn.com/in/Jane/#x", "https://www.linkedin.com/in/Jane")]
-    [InlineData("linkedin", "http://x.example.com:8080/a?b=1#z", "http://x.example.com:8080/a?b=1")]
-    [InlineData("linkedin", "https://LinkedIn.com/", "https://linkedin.com")]
     [InlineData("telegram", "  @jane  ", "@jane")]
     public void A_value_is_normalized_by_the_rule_of_its_channel(string channel, string raw, string expected)
     {
@@ -68,6 +65,47 @@ public class ChannelRulesTests
 
         Assert.Equal(expected, ChannelRules.NormalizeValue(channel, raw, "channels[0].value", errors));
         Assert.False(errors.Any);
+    }
+
+    /// <summary>
+    /// How a LinkedIn value is keyed: as it is written in, what the rule before this one stored, and what it stores now.
+    /// The case of the scheme and the host, a default port, any user name, one trailing slash and a fragment never count.
+    /// On linkedin.com and its subdomains a profile link names a person by its slug whatever its case, so the path is
+    /// lowercased there and nowhere else; the query keeps its case everywhere. The middle column is what a stored value
+    /// looked like before, which the migration that lowercases the stored keys is tested against, and the plugin's own
+    /// comparison is held to the same pairs. A letter written as a percent-escape keeps its case: `É` and `é` are two
+    /// escapes, and lowercasing an escape is not lowercasing the letter.
+    /// </summary>
+    public static TheoryData<string, string, string> LinkedInKeys { get; } = new()
+    {
+        { "HTTPS://WWW.LinkedIn.com/in/Jane/#x", "https://www.linkedin.com/in/Jane", "https://www.linkedin.com/in/jane" },
+        { "https://www.linkedin.com/in/Marta-Example", "https://www.linkedin.com/in/Marta-Example", "https://www.linkedin.com/in/marta-example" },
+        { "https://uk.linkedin.com/in/Marta-Example/", "https://uk.linkedin.com/in/Marta-Example", "https://uk.linkedin.com/in/marta-example" },
+        { "https://linkedin.com/in/Marta-Example", "https://linkedin.com/in/Marta-Example", "https://linkedin.com/in/marta-example" },
+        { "https://www.linkedin.com/in/Marta-Example?Trk=Profile", "https://www.linkedin.com/in/Marta-Example?Trk=Profile", "https://www.linkedin.com/in/marta-example?Trk=Profile" },
+        { "https://www.linkedin.com:443/in/Marta-Example", "https://www.linkedin.com/in/Marta-Example", "https://www.linkedin.com/in/marta-example" },
+        { "https://www.linkedin.com:8443/in/Marta-Example", "https://www.linkedin.com:8443/in/Marta-Example", "https://www.linkedin.com:8443/in/marta-example" },
+        { "http://www.linkedin.com/in/Marta-Example", "http://www.linkedin.com/in/Marta-Example", "http://www.linkedin.com/in/marta-example" },
+        { "https://marta@www.linkedin.com/in/Marta-Example", "https://www.linkedin.com/in/Marta-Example", "https://www.linkedin.com/in/marta-example" },
+        { "https://www.linkedin.com/in/Marta-Example//", "https://www.linkedin.com/in/Marta-Example/", "https://www.linkedin.com/in/marta-example/" },
+        { "https://www.linkedin.com/in/JOSÉ-Example","https://www.linkedin.com/in/JOS%C3%89-Example", "https://www.linkedin.com/in/jos%c3%89-example" },
+        { "https://LinkedIn.com/", "https://linkedin.com", "https://linkedin.com" },
+        { "https://www.linkedin.com/?Ref=Feed", "https://www.linkedin.com?Ref=Feed", "https://www.linkedin.com?Ref=Feed" },
+        { "https://notlinkedin.com/in/Marta-Example", "https://notlinkedin.com/in/Marta-Example", "https://notlinkedin.com/in/Marta-Example" },
+        { "https://linkedin.com.example.org/in/Marta-Example", "https://linkedin.com.example.org/in/Marta-Example", "https://linkedin.com.example.org/in/Marta-Example" },
+        { "http://x.example.com:8080/A?b=1#z", "http://x.example.com:8080/A?b=1", "http://x.example.com:8080/A?b=1" },
+    };
+
+    [Theory]
+    [MemberData(nameof(LinkedInKeys))]
+    public void A_linkedin_value_is_keyed_by_its_lowercased_slug_on_linkedin_and_as_written_elsewhere(string raw, string before, string now)
+    {
+        var errors = new ValidationErrors();
+
+        var keyed = ChannelRules.NormalizeValue("linkedin", raw, "channels[0].value", errors);
+
+        Assert.False(errors.Any, $"'{raw}' was refused.");
+        Assert.True(keyed == now, $"'{raw}' is keyed '{keyed}', not '{now}' (the rule before stored '{before}').");
     }
 
     [Theory]

@@ -20,13 +20,13 @@
   "meter": null,
   "invariants": ["A2", "A3", "A4", "K2"],
 
-  "preflight": { "contact": "required", "channel": "from_args", "suppression": "not_applicable" },
+  "preflight": { "contact": "required", "channel": "from_args", "suppression": "not_applicable", "provider_contact": "find_or_create" },
   "dispatch": { "in_paused_campaign": "runs" },
   "contact_projection": {
     "fields": ["id", "first_name", "last_name", "company", "title", "time_zone"],
     "channels": "consumed"
   },
-  "precondition": "Find the provider's own contact before recording the opt-out: work by `contacts[0].external_ids.contact` when that pin is present, otherwise look the person up by the value of the channel named by `args.channel`, compared exactly and without regard to case, and create the contact from that value only when the provider holds nobody under it; return the provider's identifier under `external_ids.contact`.",
+  "precondition": "none",
   "preview": null,
 
   "input_schema": {

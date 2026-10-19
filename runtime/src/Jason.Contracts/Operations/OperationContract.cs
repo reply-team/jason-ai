@@ -118,6 +118,7 @@ public sealed record OperationContract(
         RefuseUncheckedReach(source, contract);
         RefuseUnpausableWork(source, contract);
         RefuseUnaddressablePreview(source, contract);
+        RefuseUndeclaredContactMode(source, contract);
         return contract;
     }
 
@@ -146,6 +147,40 @@ public sealed record OperationContract(
                 $"{source}: `approval` is `confirm_each`, one decision per person reached, so the document names one person — `preflight.contact` is `required` and `accepts_collection` is `false` — and its preview highlights `{ReachedValue}`, the value that person is reached at.");
         }
     }
+
+    /// <summary>
+    /// How the provider's own contact for the person is found is data, and each way declares what it implies. A document
+    /// finds a provider's contact exactly when it takes one. A way that finds the person — creating them where the
+    /// provider holds nobody, or never — has the plugin return the provider's identifier for whoever it found, so the
+    /// document declares that kind. A way that works by the pin alone has a word for a person nobody pinned.
+    /// </summary>
+    private static void RefuseUndeclaredContactMode(string source, OperationContract contract)
+    {
+        var mode = contract.Preflight.ProviderContact;
+        if ((mode == ProviderContact.NotUsed) != (contract.Preflight.Contact == ContactRequirement.NotUsed))
+        {
+            throw new InvalidOperationException(
+                $"{source}: `preflight.provider_contact` is `{Word(ProviderContactNames, mode)}`, but `preflight.contact` is `{Word(ContactRequirementNames, contract.Preflight.Contact)}`; a document finds the provider's contact for a person exactly when it takes one, and says how.");
+        }
+
+        if (mode is ProviderContact.FindOrCreate or ProviderContact.FindOnly
+            && !(contract.ExternalIds.TryGetValue("contact", out var kind) && kind.Entity == PinnedEntity.Contact))
+        {
+            throw new InvalidOperationException(
+                $"{source}: `preflight.provider_contact` is `{Word(ProviderContactNames, mode)}`, so the plugin returns the provider's identifier for the person it finds, and `external_ids.contact` does not declare it.");
+        }
+
+        if (mode == ProviderContact.PinnedOnly
+            && !contract.FailureCodes.Any(code => string.Equals(code.Code, "contact_not_linked", StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                $"{source}: `preflight.provider_contact` is `pinned_only`, so a person nobody pinned fails before the provider is asked anything, and `failure_codes` does not declare `contact_not_linked`.");
+        }
+    }
+
+    private static string Word<TValue>(IReadOnlyDictionary<string, TValue> vocabulary, TValue value)
+        where TValue : struct, Enum =>
+        vocabulary.First(entry => EqualityComparer<TValue>.Default.Equals(entry.Value, value)).Key;
 
     /// <summary>
     /// Every pointer a preview renders or highlights has to be one the input schema can hold, or a misspelling would
@@ -285,6 +320,15 @@ public sealed record OperationContract(
             ["not_applicable"] = SuppressionCheck.NotApplicable,
         };
 
+    private static readonly IReadOnlyDictionary<string, ProviderContact> ProviderContactNames =
+        new Dictionary<string, ProviderContact>(StringComparer.Ordinal)
+        {
+            ["find_or_create"] = ProviderContact.FindOrCreate,
+            ["find_only"] = ProviderContact.FindOnly,
+            ["pinned_only"] = ProviderContact.PinnedOnly,
+            ["not_used"] = ProviderContact.NotUsed,
+        };
+
     private static readonly IReadOnlyDictionary<string, InPausedCampaign> InPausedCampaignNames =
         new Dictionary<string, InPausedCampaign>(StringComparer.Ordinal)
         {
@@ -329,7 +373,8 @@ public sealed record OperationContract(
         var value = new Preflight(
             reader.Enumeration("contact", ContactRequirementNames),
             reader.Enumeration("channel", ChannelRequirementNames),
-            reader.Enumeration("suppression", SuppressionCheckNames));
+            reader.Enumeration("suppression", SuppressionCheckNames),
+            reader.Enumeration("provider_contact", ProviderContactNames));
         reader.RefuseAnythingElse();
         return value;
     }
@@ -584,10 +629,11 @@ public sealed record ContractProperty(string Value, bool Conditional, string? De
 public sealed record L1Origin(string Name, string ContractVersion, int Family, bool Core);
 
 /// <summary>
-/// What the runtime must have in hand before it may compose this operation's input, and whether the suppression
-/// register refuses it for a person whose consumed channel value the register holds.
+/// What the runtime must have in hand before it may compose this operation's input, whether the suppression register
+/// refuses it for a person whose consumed channel value the register holds, and how the plugin finds the provider's own
+/// contact for that person.
 /// </summary>
-public sealed record Preflight(ContactRequirement Contact, ChannelRequirement Channel, SuppressionCheck Suppression);
+public sealed record Preflight(ContactRequirement Contact, ChannelRequirement Channel, SuppressionCheck Suppression, ProviderContact ProviderContact);
 
 /// <summary>
 /// The contact fields an operation consumes. Declaring the projection is what makes widening it a visible change
@@ -661,6 +707,25 @@ public enum ChannelRequirement
 {
     FromArgs,
     None,
+}
+
+/// <summary>
+/// How the plugin finds the provider's own contact for the person an operation is about, when the person carries no pin
+/// of the plugin's: the contact proxy rule, `docs/plugins.md` section 7. With a pin, every way works by the pin.
+/// </summary>
+public enum ProviderContact
+{
+    /// <summary>Look the person up by the consumed channel's value, and create them from it only where the provider holds nobody.</summary>
+    FindOrCreate,
+
+    /// <summary>Find the person — by the consumed channel's value, or through what the operation names — and create nobody.</summary>
+    FindOnly,
+
+    /// <summary>Work by the pin alone: a person nobody pinned is `contact_not_linked`, decided before the provider is asked anything.</summary>
+    PinnedOnly,
+
+    /// <summary>The operation names no person, so there is no contact to find.</summary>
+    NotUsed,
 }
 
 /// <summary>How the dispatcher treats this operation's work beyond what every work item shares.</summary>

@@ -6,11 +6,9 @@ using System.Text.Json.Nodes;
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>One call the stand-in was asked to make, as it recorded it before answering.</summary>
-/// <param name="Command">The command's two words, such as <c>sequence add-contact</c>; <c>api</c> for the raw call.</param>
-/// <param name="Operands">The positional arguments after the command: the ids, or the raw call's path.</param>
-/// <param name="Method">The raw call's HTTP method; empty for a command.</param>
-/// <param name="Path">The raw call's path and query; empty for a command.</param>
-/// <param name="Body">What the call read from stdin: the person, or the raw call's body.</param>
+/// <param name="Command">The command's two words, such as <c>sequence add-contact</c>.</param>
+/// <param name="Operands">The positional arguments after the command: the ids.</param>
+/// <param name="Body">What the call read from stdin: the person, the name, or the message.</param>
 /// <param name="Args">The whole argument vector, which is what makes "this flag never appears" assertable.</param>
 /// <param name="Environment">
 /// Every vendor-named variable the stand-in was started with. No <c>REPLY_*</c> name enters the runtime, so what
@@ -20,16 +18,12 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 public sealed record ReplyCall(
     string Command,
     IReadOnlyList<string> Operands,
-    string Method,
-    string Path,
     string? Body,
     IReadOnlyList<string> Args,
     IReadOnlyDictionary<string, string> Environment)
 {
-    /// <summary>The call as one line: <c>sequence get 7</c>, or <c>POST /v3/contacts/filter?top=100&amp;skip=0</c> for the raw call.</summary>
-    public string Line => Command == "api"
-        ? Method + " " + Path
-        : Operands.Count == 0 ? Command : Command + " " + string.Join(' ', Operands);
+    /// <summary>The call as one line: <c>sequence get 7</c>, or <c>contact find</c> for a command that takes no id.</summary>
+    public string Line => Operands.Count == 0 ? Command : Command + " " + string.Join(' ', Operands);
 
     /// <summary>The value the call gave an option, or null when it gave none.</summary>
     public string? Option(string flag)
@@ -141,20 +135,25 @@ public sealed class ReplyAccount : IDisposable
     // What the provider holds
     // -------------------------------------------------------------------------------------------------------
 
-    /// <summary>A person this account already holds. Identifiers are integers, as Reply's are.</summary>
+    /// <summary>
+    /// A person this account already holds. Identifiers are integers, as Reply's are. A LinkedIn URL is held as written,
+    /// in whatever case somebody typed it at Reply.
+    /// </summary>
     public ReplyAccount WithContact(
         int id,
-        string email,
+        string? email,
         string? firstName = null,
         bool optedOut = false,
         string? lastName = null,
         string? company = null,
-        string? title = null)
+        string? title = null,
+        string? linkedIn = null)
     {
         Replace(ContactsFile, id, new JsonObject
         {
             ["id"] = id,
             ["email"] = email,
+            ["linkedInUrl"] = linkedIn,
             ["firstName"] = firstName,
             ["lastName"] = lastName,
             ["company"] = company,
@@ -187,7 +186,7 @@ public sealed class ReplyAccount : IDisposable
     {
         var original = Contacts.OfType<JsonObject>().SingleOrDefault(existing => existing["id"]!.GetValue<int>() == of)
             ?? throw new InvalidOperationException($"no contact {of} has been planted to duplicate.");
-        return WithContact(id, (string)original["email"]!, (string?)original["firstName"]);
+        return WithContact(id, (string?)original["email"], (string?)original["firstName"], linkedIn: (string?)original["linkedInUrl"]);
     }
 
     /// <summary>A contact list and the contacts it holds; not shared unless a test says so.</summary>
@@ -425,73 +424,6 @@ public sealed class ReplyAccount : IDisposable
     // What it can be told to do instead, through the directory and never through a flag
     // -------------------------------------------------------------------------------------------------------
 
-    /// <summary>
-    /// The next raw call to this method and path — the contact search is the one the plugin makes — answers with this
-    /// status and body, whatever the account holds. The body is written out as it is given, so a test can build an
-    /// answer no provider would send.
-    /// </summary>
-    public ReplyAccount Answers(string method, string path, int code, string bodyJson) =>
-        Script(new JsonObject
-        {
-            ["kind"] = "answer",
-            ["method"] = method,
-            ["path"] = path,
-            ["code"] = code,
-            ["body"] = bodyJson,
-        });
-
-    /// <summary>
-    /// The next raw call to this method and path writes exactly this on stdout and on stderr and ends with exactly
-    /// this code, whatever it would otherwise have answered. It is the one ending <see cref="Answers"/> cannot
-    /// express — that one always prints the CLI's own <c>{code, data}</c> around whatever it is given — and a
-    /// caller has to survive stdout that is not an envelope at all: a stack trace, half a line, or nothing.
-    /// </summary>
-    public ReplyAccount Prints(string method, string path, int exitCode, string stdout, string? stderr = null) =>
-        Script(new JsonObject
-        {
-            ["kind"] = "prints",
-            ["method"] = method,
-            ["path"] = path,
-            ["exit_code"] = exitCode,
-            ["stdout"] = stdout,
-            ["stderr"] = stderr ?? string.Empty,
-        });
-
-    /// <summary>
-    /// The next raw call to this method and path says it has started — by creating <paramref name="marker"/> — and
-    /// then waits for <paramref name="until"/> to appear before answering as it otherwise would. It is what
-    /// <see cref="Hangs"/> cannot do: a delay says how long to wait, never that the waiting has begun, and a
-    /// test that has to interrupt a call in flight can only be deterministic if it observes the call rather
-    /// than sleeping for it. The cap stops a test that never releases the call from holding a run open.
-    /// </summary>
-    public ReplyAccount HoldsOn(string method, string path, string marker, string until, int capMs = 120_000) =>
-        Script(new JsonObject
-        {
-            ["kind"] = "hold",
-            ["method"] = method,
-            ["path"] = path,
-            ["marker"] = marker,
-            ["until"] = until,
-            ["timeout_ms"] = capMs,
-        });
-
-    /// <summary>
-    /// The next raw call to this method and path does everything it would have done, and then answers as reply-cli
-    /// answers a write whose answer never came back: nothing on stdout, <c>outcome.unknown</c> on stderr, exit 3.
-    /// </summary>
-    public ReplyAccount LosesTheOutcomeOf(string method, string path) =>
-        Script(new JsonObject { ["kind"] = "lost", ["method"] = method, ["path"] = path });
-
-    /// <summary>The next raw call to this method and path takes this long before it answers.</summary>
-    public ReplyAccount Hangs(string method, string path, int milliseconds) =>
-        Script(new JsonObject
-        {
-            ["kind"] = "hang",
-            ["method"] = method,
-            ["path"] = path,
-            ["milliseconds"] = milliseconds,
-        });
-
     /// <summary>The next run of this command prints this result and exits 0, whatever the account holds.</summary>
     public ReplyAccount Returns(string command, JsonObject result, string? match = null)
     {
@@ -623,12 +555,8 @@ public sealed class ReplyAccount : IDisposable
                 }
 
                 calls.Add(new ReplyCall(
-                    call["command"]?.GetValue<string>() ?? "api",
-                    call["operands"] is JsonArray operands
-                        ? [.. operands.Select(operand => operand!.GetValue<string>())]
-                        : [call["path"]?.GetValue<string>() ?? string.Empty],
-                    call["method"]?.GetValue<string>() ?? string.Empty,
-                    call["path"]?.GetValue<string>() ?? string.Empty,
+                    call["command"]!.GetValue<string>(),
+                    [.. call["operands"]!.AsArray().Select(operand => operand!.GetValue<string>())],
                     call["body"] is JsonValue body ? body.GetValue<string>() : null,
                     [.. call["args"]!.AsArray().Select(argument => argument!.GetValue<string>())],
                     (call["env"] as JsonObject ?? []).ToDictionary(
@@ -691,7 +619,7 @@ public sealed class ReplyAccount : IDisposable
         CancellationToken cancellationToken) =>
         RunAsync(args, null, cancellationToken);
 
-    /// <summary>The same, with a request body on stdin — which is where every body travels.</summary>
+    /// <summary>The same, with a person, a name or a message on stdin — which is where every one of them travels.</summary>
     public async Task<(int ExitCode, string Stdout, string Stderr)> RunAsync(
         IReadOnlyList<string> args,
         string? stdin,

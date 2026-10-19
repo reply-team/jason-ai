@@ -20,13 +20,13 @@
   "meter": null,
   "invariants": ["D3"],
 
-  "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked" },
+  "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "find_or_create" },
   "dispatch": { "in_paused_campaign": "waits" },
   "contact_projection": {
     "fields": ["id", "first_name", "last_name", "company", "title", "time_zone"],
     "channels": "consumed"
   },
-  "precondition": "Ensure the provider's own contact exists before adding it: work by `contacts[0].external_ids.contact` when that pin is present, otherwise create the contact from the value of the channel named by `args.channel`, and return the provider's identifier under `external_ids.contact`.",
+  "precondition": "none",
   "preview": null,
 
   "input_schema": {
@@ -169,11 +169,12 @@
 
   "failure_codes": [
     { "code": "contact_not_found", "class": "permanent", "when": "The identifier pinned for this person no longer resolves at the provider, so the operation cannot act on the person it was told to act on. Working by the pinned identifier is the rule, so this is reported rather than re-matched by address." },
+    { "code": "contact_not_unique", "class": "permanent", "when": "More than one provider contact carries this address, so picking one would be guessing and nothing was done. A person resolves the duplicate at the provider, then proposes the work again." },
     { "code": "list_not_found", "class": "permanent", "when": "The provider holds no list under `args.list.external_id`." },
     { "code": "suppressed", "class": "permanent", "when": "The provider's own suppression register holds this address, so it must not be added to an outreach list." },
     { "code": "invalid_channel_value", "class": "validation", "when": "The provider will not accept the channel value for the channel named, so no later attempt can accept it either." },
     { "code": "limit_reached", "class": "permanent", "when": "The account will not hold another contact, or another member of this list." },
-    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, or the plugin could not finish a lookup it needs, so nothing the operation asks for was done. Repeating it runs the same call again." },
     { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it write lists for this account." },
     { "code": "rate_limited", "class": "transient", "when": "The provider refused the write for now and it may be attempted again." },
     { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was written." },
@@ -184,7 +185,7 @@
 
   "conformance": [
     "A contact pinned under `contacts[0].external_ids.contact` is worked by that identifier, and never matched again by the channel value.",
-    "A contact with no pin is created from the channel value, and the provider's identifier comes back under `external_ids.contact`.",
+    "A contact with no pin is looked up by the channel value first and created from it only when the provider holds nobody under it; the provider's identifier comes back under `external_ids.contact` either way.",
     "A second call under the same idempotency key performs no second effect. It answers `already_member` where the provider says the person was on the list already, and `added` where the provider's add is idempotent and it cannot tell.",
     "An attempt after a lost answer reads before it writes, or repeats an add the provider makes idempotent, worked by the contact pinned on the failure and, with no pin, by the contact a read finds first, so one crash leaves one effect rather than two.",
     "An address the provider suppresses fails `suppressed` as permanent, rather than being added.",

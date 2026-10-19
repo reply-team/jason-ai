@@ -1,11 +1,14 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 // Deliberately in the global namespace with the rest of this program.
 
 /// <summary>
-/// The two raw calls on <c>/v3/sequences</c>: the list and the create, which the official package makes because
-/// reply-cli has no command that creates a sequence. Both answer in the shape a live account answered them.
+/// The two commands on sequences by name, as reply-cli 0.13.0 documents them: <c>sequence list --name -</c>, every
+/// sequence whose whole name is this one ignoring case, oldest first, read to its end; and <c>sequence create --name
+/// -</c>, a draft of that name holding nobody, with the one task step a sequence needs to exist. The name is read from
+/// stdin only, and no message repeats it.
 /// </summary>
 internal static partial class Account
 {
@@ -20,53 +23,65 @@ internal static partial class Account
 
     private const int FirstCreatedStepId = 9001;
 
-    /// <summary>
-    /// Every sequence, newest first, paged with <c>top</c> (1 to 1000, 25 when absent) and <c>skip</c>. A <c>name</c>
-    /// matches part of a name whatever the case, as Reply's own filter does. An item carries what Reply's list answers
-    /// and nothing more: no steps, and nothing this stand-in keeps for its own refusals.
-    /// </summary>
-    private static (int, JsonNode?) SequenceList(string root, string query)
+    /// <summary>How many sequences whose names contain the name the list reads before it refuses to decide: 20 pages of 1000.</summary>
+    private const int ListCap = 20_000;
+
+    /// <summary>The one step reply-cli gives a sequence it creates: a task for its owner, which reaches nobody.</summary>
+    private static JsonObject Placeholder() => new()
     {
-        var top = Count(query, "top") ?? 25;
-        var skip = Count(query, "skip") ?? 0;
-        if (top is < 1 or > 1000 || skip < 0)
+        ["type"] = "task",
+        ["actionType"] = "toDo",
+        ["delayInMinutes"] = 0,
+        ["description"] = "Added because a sequence needs one step to exist; replace it before this sequence is ever started.",
+    };
+
+    private static Ending SequenceListByName(string root, Parsed line, string? stdin)
+    {
+        var (name, refusal) = NameOf(line, stdin, "list");
+        if (refusal is not null)
         {
-            return (400, Problem(400, "Bad Request", "sequence.invalidPagination", "Invalid requested page view."));
+            return refusal;
         }
 
-        IEnumerable<JsonObject> found = Records(root, SequencesFile);
-        if (Parameter(query, "name") is { Length: > 0 } name)
+        var sequences = Records(root, SequencesFile).ToList();
+        if (sequences.Count(sequence => Text(sequence, "name").Contains(name!, StringComparison.OrdinalIgnoreCase)) > ListCap)
         {
-            found = found.Where(sequence => Text(sequence, "name").Contains(name, StringComparison.OrdinalIgnoreCase));
+            return Refused(
+                "sequence.list_incomplete",
+                "Read 20000 sequences whose names contain this one and Reply said there were more, so it could not be decided which carry it.",
+                status: 200);
         }
 
-        var ordered = found
+        var wanted = name!.ToLowerInvariant();
+        var items = sequences
             .Select((sequence, position) => (Sequence: sequence, Position: position))
-            .OrderByDescending(row => Created(row.Sequence))
-            .ThenByDescending(row => row.Position)
-            .Select(row => row.Sequence)
+            .Where(row => Text(row.Sequence, "name").ToLowerInvariant() == wanted)
+            .OrderBy(row => Created(row.Sequence))
+            .ThenBy(row => row.Position)
+            .Select(row => (JsonNode)new JsonObject
+            {
+                ["id"] = row.Sequence["id"]!.DeepClone(),
+                ["name"] = row.Sequence["name"]!.DeepClone(),
+                ["status"] = row.Sequence["status"] is JsonValue status && status.TryGetValue<string>(out var word) ? word : null,
+                ["is_archived"] = row.Sequence["isArchived"] is JsonValue archived && archived.TryGetValue<bool>(out var flag) ? flag : null,
+                ["created_at"] = row.Sequence["created"]?.DeepClone() ?? JsonValue.Create(PlantedLongAgo),
+            })
             .ToList();
-        var page = ordered.Skip(skip).Take(top).Select(sequence => (JsonNode)ListItem(sequence)).ToList();
-        return (200, new JsonObject { ["items"] = new JsonArray([.. page]), ["hasMore"] = ordered.Count > skip + page.Count });
+
+        return Done(new JsonObject { ["items"] = new JsonArray([.. items]) });
     }
 
     /// <summary>
-    /// A new sequence, in Reply's <c>new</c> state and not archived, with the steps it was given chained in order. A
-    /// name and at least one step are required, as Reply requires them; a name the account holds already is accepted,
-    /// as Reply accepted it live. Reply attaches the default schedule and the default mailbox on its own, whether or not
-    /// the request named either, and writes <c>created</c> with two fractional digits and an offset.
+    /// A new sequence, in Reply's <c>new</c> state and not archived, with the one task step. A name the account holds
+    /// already is accepted, as Reply accepts it: the command does not look first. Reply attaches the default schedule and
+    /// the default mailbox on its own, and writes <c>created</c> with two fractional digits and an offset.
     /// </summary>
-    private static (int, JsonNode?) SequenceCreate(string root, string? body)
+    private static Ending SequenceCreateByName(string root, Parsed line, string? stdin)
     {
-        var request = Request(body);
-        if (request?["name"] is not JsonValue named || !named.TryGetValue<string>(out var name) || name.Trim().Length == 0)
+        var (name, refusal) = NameOf(line, stdin, "create");
+        if (refusal is not null)
         {
-            return (400, Invalid("/name", "Name is required."));
-        }
-
-        if (request["steps"] is not JsonArray steps || steps.Count == 0)
-        {
-            return (400, Invalid("/steps", "At least one step is required."));
+            return refusal;
         }
 
         var sequences = Read(root, SequencesFile);
@@ -74,20 +89,9 @@ internal static partial class Account
             FirstCreatedSequenceId - 1,
             sequences.OfType<JsonObject>().Select(sequence => sequence["id"]!.GetValue<int>()).DefaultIfEmpty(0).Max()) + 1;
 
-        var chain = new JsonArray();
-        var stepId = FirstCreatedStepId + (id - FirstCreatedSequenceId) * 100;
-        for (var position = 0; position < steps.Count; position++)
-        {
-            if (steps[position] is not JsonObject given || Text(given, "type").Length == 0 || given["delayInMinutes"] is not JsonValue)
-            {
-                return (400, Invalid($"/steps/{position}", "A step needs a type and a delay."));
-            }
-
-            var step = (JsonObject)given.DeepClone();
-            step["id"] = stepId + position;
-            step["parentId"] = position == 0 ? null : JsonValue.Create(stepId + position - 1);
-            chain.Add(step);
-        }
+        var step = Placeholder();
+        step["id"] = FirstCreatedStepId + (id - FirstCreatedSequenceId) * 100;
+        step["parentId"] = null;
 
         var sequence = new JsonObject
         {
@@ -100,25 +104,45 @@ internal static partial class Account
             ["created"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.ff'+00:00'", CultureInfo.InvariantCulture),
             ["scheduleId"] = DefaultSchedule,
             ["emailAccounts"] = new JsonArray(SendingAccount),
-            ["steps"] = chain,
+            ["steps"] = new JsonArray(step),
         };
 
         sequences.Add(sequence);
         Write(root, SequencesFile, sequences);
-        return (201, Shown(sequence));
+        return Done(new JsonObject { ["sequence_id"] = id, ["steps_added"] = 1, ["status"] = "new", ["is_archived"] = false });
     }
 
-    /// <summary>A sequence as the list answers one.</summary>
-    private static JsonObject ListItem(JsonObject sequence) => new()
+    /// <summary>
+    /// The name as reply-cli reads it: <c>--name -</c> and nothing else, then <c>{name}</c> as JSON on stdin, a string
+    /// that is not blank, with no other field. A refusal never repeats the text.
+    /// </summary>
+    private static (string? Name, Ending? Refusal) NameOf(Parsed line, string? stdin, string verb)
     {
-        ["id"] = sequence["id"]!.DeepClone(),
-        ["ownerUserId"] = sequence["ownerUserId"]?.DeepClone() ?? JsonValue.Create(42),
-        ["name"] = sequence["name"]!.DeepClone(),
-        ["status"] = sequence["status"]!.DeepClone(),
-        ["created"] = sequence["created"]?.DeepClone() ?? JsonValue.Create(PlantedLongAgo),
-        ["isArchived"] = sequence["isArchived"]!.DeepClone(),
-        ["health"] = sequence["health"]?.DeepClone(),
-    };
+        var hint = $"Pipe it in: echo '{{\"name\":\"…\"}}' | reply sequence {verb} --name -";
+        if (line.Option("--name") != "-")
+        {
+            return (null, Refused("usage.name", "--name takes only -: the name is read from stdin.", exit: 2, detail: hint));
+        }
+
+        JsonObject given;
+        try
+        {
+            given = JsonNode.Parse(stdin ?? string.Empty) as JsonObject ?? throw new JsonException("not an object");
+        }
+        catch (JsonException)
+        {
+            return (null, Refused("usage.name", "stdin must be one JSON object.", exit: 2, detail: hint));
+        }
+
+        if (given.Any(member => member.Key != "name"))
+        {
+            return (null, Refused("usage.name", "stdin carries a field other than name.", exit: 2, detail: hint));
+        }
+
+        return given["name"] is JsonValue value && value.TryGetValue<string>(out var name) && name.Trim().Length > 0
+            ? (name, null)
+            : (null, Refused("usage.name", "The name must be a string that is not blank.", exit: 2));
+    }
 
     private static DateTimeOffset Created(JsonObject sequence) =>
         DateTimeOffset.TryParse(
@@ -128,26 +152,4 @@ internal static partial class Account
             out var at)
             ? at
             : DateTimeOffset.MinValue;
-
-    /// <summary>Reply's validation refusal, as it answered a create with no steps live.</summary>
-    private static JsonObject Invalid(string pointer, string detail) => new()
-    {
-        ["errors"] = new JsonArray(new JsonObject { ["pointer"] = pointer, ["detail"] = detail }),
-        ["title"] = "Validation failed",
-    };
-
-    /// <summary>One query parameter, by name and unescaped, or nothing where the call did not carry it.</summary>
-    private static string? Parameter(string query, string name)
-    {
-        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var separator = pair.IndexOf('=', StringComparison.Ordinal);
-            if (separator > 0 && string.Equals(pair[..separator], name, StringComparison.Ordinal))
-            {
-                return Uri.UnescapeDataString(pair[(separator + 1)..].Replace('+', ' '));
-            }
-        }
-
-        return null;
-    }
 }

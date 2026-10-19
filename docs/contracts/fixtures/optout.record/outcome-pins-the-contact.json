@@ -1,0 +1,23 @@
+{
+  "operation": "optout.record",
+  "version": 1,
+  "case": "the provider already held the person: found by the consumed value first, flagged by its identifier with nobody created, and that identifier pinned",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "contact_id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+          "status": "recorded",
+          "external_ids": { "contact": "p_52317" }
+        }
+      ]
+    },
+    "external_ids": { "contact": "p_52317" },
+    "error": null,
+    "diagnostics": { "duration_ms": 640, "exec_calls": 2, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "succeeded", "retriable": false, "pinned": { "contact": "p_52317" } }
+}

@@ -73,7 +73,7 @@ gave one. The shared failures are spelled as every document spells them.
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `not_used`, channel `none`, suppression `checked` |
+| pre-flight | contact `not_used`, channel `none`, suppression `checked`, provider contact `not_used` |
 | in a paused campaign | `runs` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | none |

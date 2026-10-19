@@ -18,11 +18,11 @@ live **is a send**, and the result says which it was.
 None of `collision`, `start` or `first_touch` may be defaulted. A default here is a silent decision about what a
 real person receives and when, so an input that leaves one out is refused rather than filled in.
 
-## The provider-contact precondition
+## Finding the person
 
-The same as `list_membership.add`: work by `contacts[0].external_ids.contact` when that pin is present, otherwise
-create the provider's contact from the value of the channel named by `args.channel` and return its identifier in
-`external_ids.contact`. A person is never matched by address again once a pin exists.
+`preflight.provider_contact` is `find_or_create`, as for `list_membership.add`: a pin, once there is one, is worked by;
+without one the person is looked up first, created only when the provider holds nobody under the consumed value, and
+the provider's identifier comes back in `external_ids.contact`. [`docs/plugins.md`](../../plugins.md) §7, "The contact proxy rule", says how the lookup compares.
 
 ## The input you receive
 
@@ -107,10 +107,10 @@ summary differently never turns a pending decision into another one. The fixture
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `required`, channel `from_args`, suppression `checked` |
+| pre-flight | contact `required`, channel `from_args`, suppression `checked`, provider contact `find_or_create` |
 | in a paused campaign | `waits` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
-| precondition | Ensure the provider's own contact exists before enrolling it: work by `contacts[0].external_ids.contact` when that pin is present, otherwise create the contact from the value of the channel named by `args.channel`, and return the provider's identifier under `external_ids.contact`. |
+| precondition | none |
 | preview a person reads | `Enroll {/contacts/0/channels/0/value} in the provider's campaign for Jason's campaign {/campaign/name}: start at {/args/start/position}, first touch {/args/first_touch}, {/args/collision} if they already take part. If the provider's campaign is live, its messages start going to this person on that timing.`; highlighted: `/contacts/0/channels/0/value`, `/campaign/name`, `/args/start`, `/args/first_touch`, `/args/collision` |
 | pinned identifiers | `contact` names a contact; `campaign` names a campaign |
 | recovery read | The per-item outcome of the prior run under this idempotency key, and the campaign's live state. |

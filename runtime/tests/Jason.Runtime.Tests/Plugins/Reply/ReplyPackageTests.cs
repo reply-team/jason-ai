@@ -59,7 +59,7 @@ public class ReplyPackageTests
 
         // The manifest asks for a minimum version, so the reload ran the version command on whatever it resolved.
         // That it answered, and that the answer satisfied the minimum, is why the package is valid at all.
-        Assert.Equal("0.12.0", executable.MinVersion);
+        Assert.Equal("0.13.0", executable.MinVersion);
         Assert.NotNull(executable.Version);
         Assert.NotNull(executable.MinVersion);
         Assert.True(Version.Parse(executable.Version) >= Version.Parse(executable.MinVersion));
@@ -70,20 +70,18 @@ public class ReplyPackageTests
     }
 
     /// <summary>
-    /// Reply's endpoints are reply-cli's to know. The package names two, each where reply-cli has no command for the
-    /// request: the contact search it makes for a person Reply will not import, and the sequences it lists and creates
-    /// for <c>campaign.create</c>. No other: an endpoint named anywhere else in it would be a call that none of the CLI's
-    /// own guards — the read before a write, the retries, the one answer for an outcome it could not see — ever reach.
+    /// Reply's endpoints are reply-cli's to know, and every request this package makes has a command made for it, so the
+    /// package names no endpoint at all. One named anywhere in it would be a raw call that none of the CLI's own guards —
+    /// the read before a write, the retries, the one answer for an outcome it could not see — ever reach.
     /// </summary>
     [Fact]
-    public void The_package_names_no_reply_endpoint_but_the_contact_search_and_the_sequences()
+    public void The_package_names_no_reply_endpoint()
     {
         var named = Directory.GetFiles(ReplyPlugins.PackageSource, "*.js", SearchOption.AllDirectories)
-            .SelectMany(file => Regex.Matches(File.ReadAllText(file), @"/v3/[A-Za-z0-9_\-/{}.]*").Select(match => match.Value.TrimEnd('.')))
-            .Distinct(StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal);
+            .SelectMany(file => Regex.Matches(File.ReadAllText(file), @"/v3/[A-Za-z0-9_\-/{}.]*").Select(match => Path.GetFileName(file) + ": " + match.Value))
+            .ToList();
 
-        Assert.Equal(["/v3/contacts/filter", "/v3/sequences"], named);
+        Assert.True(named.Count == 0, $"The package names a Reply endpoint: {string.Join(", ", named)}.");
     }
 
     [Fact]
@@ -263,6 +261,29 @@ public class ReplyPackageTests
         Assert.Contains("The switch does not apply to an opt-out", section, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// How a person is found at Reply is the contact proxy rule as this provider performs it, and an operator reads it in
+    /// one place: the exact lookup, what a person Reply holds is named by, which operations import, and that a LinkedIn
+    /// URL identifies a person by its lowercased slug.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_how_a_contact_is_found_at_reply()
+    {
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        var start = readme.IndexOf("## Contacts at Reply", StringComparison.Ordinal);
+        Assert.True(start >= 0, "The README has no section on contacts at Reply.");
+        var section = Flat(readme[start..readme.IndexOf("\n## ", start + 1, StringComparison.Ordinal)]);
+
+        Assert.All(
+            new[]
+            {
+                "the contact proxy rule", "`reply contact find`", "LinkedIn URL identifies a person by its lowercased slug",
+                "A person Reply holds is named by its identifier", "Only `find_or_create` imports.", "`contact_not_unique`",
+                "Fields and lists travel with the operation that needs them.",
+            },
+            words => Assert.Contains(words, section, StringComparison.Ordinal));
+    }
+
     [Fact]
     public void The_changelog_opens_with_0_4_0_and_the_four_inbox_operations_it_adds()
     {
@@ -270,7 +291,7 @@ public class ReplyPackageTests
 
         Assert.StartsWith(" ## 0.4.0 ", section, StringComparison.Ordinal);
         Assert.All(
-            new[] { "`conversation.reply`", "`conversation.classify`", "`conversation.close`", "`conversation.reopen`", "`never`", "0.12.0" },
+            new[] { "`conversation.reply`", "`conversation.classify`", "`conversation.close`", "`conversation.reopen`", "`never`", "0.13.0" },
             word => Assert.Contains(word, section, StringComparison.Ordinal));
         Assert.Contains("three requests to Reply before its send", section, StringComparison.Ordinal);
 

@@ -20,8 +20,8 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 [Collection(ProcessEnvironmentCollection.Name)]
 public class ReplyHostileAnswerTests
 {
-    /// <summary>The first page of the contact search, the one raw call the package still makes.</summary>
-    private const string LookupPage = "/v3/contacts/filter?top=100&skip=0";
+    /// <summary>The exact lookup every write about a person with no pin makes before anything is written.</summary>
+    private const string Find = "contact find";
 
     /// <summary>A profile nobody has signed into, which is how an account with no credential is asked for.</summary>
     private const string SignedOut = "signed-out";
@@ -102,34 +102,42 @@ public class ReplyHostileAnswerTests
     }
 
     /// <summary>
-    /// The contact search finds the person under an identifier this package cannot work by: that is reported by the
-    /// identifier alone, because the rest of a search answer is a person's record and none of it belongs in a failure.
+    /// The exact lookup answers with an identifier this package cannot work by, or with nothing it can read as one: that
+    /// is no answer to a read, so the read is asked again and nothing is added. The failure names what came back by the
+    /// identifier alone, because anything else an answer held could be part of a person's record.
     /// </summary>
-    [Fact]
-    public async Task A_contact_made_under_an_identifier_nobody_can_work_by_is_reported_by_that_identifier_alone()
+    [Theory]
+    [InlineData("\"c-88\"")]
+    [InlineData("0")]
+    [InlineData("1001.5")]
+    [InlineData(null)]
+    public async Task A_lookup_that_answers_no_identifier_this_package_can_work_by_is_asked_again(string? id)
     {
-        var record = new JsonObject
+        var answer = new JsonObject
         {
-            ["id"] = "c-88",
             ["email"] = ReplyOperations.Address,
-            ["firstName"] = "Recorded-marker",
+            ["first_name"] = "Recorded-marker",
             ["phone"] = "+15550100",
         };
+        if (id is not null)
+        {
+            answer["contact_id"] = JsonNode.Parse(id);
+        }
 
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        var input = ReplyOperations.MembershipAddInput();
-        input["contacts"]![0]!["first_name"] = null;
-        account.Answers("POST", LookupPage, 200, new JsonObject { ["items"] = new JsonArray(record), ["hasMore"] = false }.ToJsonString());
+        account.Returns(Find, answer);
 
-        var error = await FailedAsync(account, ReplyOperations.MembershipAdd, input);
+        var error = await FailedAsync(account, ReplyOperations.MembershipAdd, ReplyOperations.MembershipAddInput());
 
-        Assert.Equal("provider_call_failed", error.Code);
+        Assert.Equal(("provider_unavailable", FailureClass.Transient), (error.Code, error.Class));
         var item = error.Details!["provider_item"]!.GetValue<string>();
-        Assert.Contains("c-88", item, StringComparison.Ordinal);
         foreach (var field in new[] { ReplyOperations.Address, "Recorded-marker", "+15550100" })
         {
             Assert.DoesNotContain(field, item, StringComparison.OrdinalIgnoreCase);
         }
+
+        Assert.Equal([Find], account.Calls.Select(call => call.Line));
+        Assert.Empty(account.MembersOf(ReplyOperations.List));
     }
 
     /// <summary>
@@ -183,19 +191,18 @@ public class ReplyHostileAnswerTests
     }
 
     /// <summary>
-    /// A read made inside a write keeps the ending it always had. The contact search a list add makes for a person
-    /// with no first name is a read, and the write declares no too-large code, so a cut there is reported as the read
-    /// going unanswered, which the next attempt simply asks again.
+    /// A read made inside a write keeps the ending it always had. The exact lookup a list add makes for a person with
+    /// no pin is a read, and the write declares no too-large code, so a cut there is reported as the read going
+    /// unanswered, which the next attempt simply asks again.
     /// </summary>
     [Fact]
     public async Task A_read_inside_a_write_whose_answer_outgrows_the_capture_keeps_the_ending_it_had()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount());
-        account.Answers("POST", LookupPage, 200, Enormous().ToJsonString());
+        account.Prints(Find, 0, Enormous().ToJsonString());
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct, paths => Capping(paths, Capture));
         var input = ReplyOperations.MembershipAddInput();
-        input["contacts"]![0]!["first_name"] = null;
 
         var error = ReplyOperations.Failed(
             ReplyOperations.MembershipAdd,

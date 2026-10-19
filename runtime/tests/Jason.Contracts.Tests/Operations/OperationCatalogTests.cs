@@ -108,8 +108,9 @@ public class OperationCatalogTests
     public void An_operation_may_take_the_contact_when_there_is_one_and_none_of_its_channels()
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
-        document["preflight"] = JsonNode.Parse("""{ "contact": "optional", "channel": "none", "suppression": "checked" }""");
+        document["preflight"] = JsonNode.Parse("""{ "contact": "optional", "channel": "none", "suppression": "checked", "provider_contact": "pinned_only" }""");
         document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "none" }""");
+        DeclaresContactNotLinked(document);
 
         var contract = OperationContract.Parse("conversation.list.json", document);
 
@@ -125,7 +126,7 @@ public class OperationCatalogTests
     public void An_optional_contact_with_a_channel_from_the_arguments_is_refused()
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
-        document["preflight"] = JsonNode.Parse("""{ "contact": "optional", "channel": "from_args", "suppression": "checked" }""");
+        document["preflight"] = JsonNode.Parse("""{ "contact": "optional", "channel": "from_args", "suppression": "checked", "provider_contact": "pinned_only" }""");
         document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "consumed" }""");
 
         var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("conversation.list.json", document));
@@ -143,7 +144,7 @@ public class OperationCatalogTests
     public void A_projection_that_consumes_a_channel_the_arguments_do_not_name_is_refused()
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
-        document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "none", "suppression": "checked" }""");
+        document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "none", "suppression": "checked", "provider_contact": "find_only" }""");
         document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "consumed" }""");
 
         var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("enrollment.list.json", document));
@@ -154,9 +155,9 @@ public class OperationCatalogTests
     }
 
     [Theory]
-    [InlineData("""{ "contact": "sometimes", "channel": "none", "suppression": "checked" }""", """{ "fields": ["id"], "channels": "none" }""", "preflight.contact")]
-    [InlineData("""{ "contact": "optional", "channel": "none", "suppression": "checked" }""", """{ "fields": ["id"], "channels": "all" }""", "contact_projection.channels")]
-    [InlineData("""{ "contact": "optional", "channel": "none", "suppression": "sometimes" }""", """{ "fields": ["id"], "channels": "none" }""", "preflight.suppression")]
+    [InlineData("""{ "contact": "sometimes", "channel": "none", "suppression": "checked", "provider_contact": "pinned_only" }""", """{ "fields": ["id"], "channels": "none" }""", "preflight.contact")]
+    [InlineData("""{ "contact": "optional", "channel": "none", "suppression": "checked", "provider_contact": "pinned_only" }""", """{ "fields": ["id"], "channels": "all" }""", "contact_projection.channels")]
+    [InlineData("""{ "contact": "optional", "channel": "none", "suppression": "sometimes", "provider_contact": "pinned_only" }""", """{ "fields": ["id"], "channels": "none" }""", "preflight.suppression")]
     public void A_word_outside_either_vocabulary_is_refused_by_name(string preflight, string projection, string field)
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
@@ -176,7 +177,7 @@ public class OperationCatalogTests
     public void A_preflight_that_does_not_say_whether_the_suppression_register_applies_is_refused_by_name()
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
-        document["preflight"] = JsonNode.Parse("""{ "contact": "not_used", "channel": "none" }""");
+        document["preflight"] = JsonNode.Parse("""{ "contact": "not_used", "channel": "none", "provider_contact": "not_used" }""");
 
         var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("campaign.get.json", document));
 
@@ -194,8 +195,9 @@ public class OperationCatalogTests
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
         document["reach"] = "control";
-        document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "from_args", "suppression": "not_applicable" }""");
+        document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "from_args", "suppression": "not_applicable", "provider_contact": "find_only" }""");
         document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "consumed" }""");
+        DeclaresAContactIdentifier(document);
 
         var contract = OperationContract.Parse("enrollment.stop.json", document);
 
@@ -214,7 +216,7 @@ public class OperationCatalogTests
     {
         var document = (JsonObject)JsonNode.Parse(Minimal())!;
         document["reach"] = JsonNode.Parse(reach);
-        document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "from_args", "suppression": "not_applicable" }""");
+        document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "from_args", "suppression": "not_applicable", "provider_contact": "find_or_create" }""");
         document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "consumed" }""");
 
         var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("campaign.enroll.json", document));
@@ -284,7 +286,7 @@ public class OperationCatalogTests
     [InlineData("approval", """{ "value": "confirm_once", "conditional": true, "detail": "auto for one person." }""")]
     [InlineData("approval_reason", "null")]
     [InlineData("approval_reason", "\"   \"")]
-    [InlineData("preflight", """{ "contact": "required", "channel": "from_args", "suppression": "checked" }""")]
+    [InlineData("preflight", """{ "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "find_or_create" }""")]
     [InlineData("dispatch", """{ "in_paused_campaign": "waits" }""")]
     public void The_protective_floor_is_refused_where_anything_it_implies_does_not_hold(string field, string value)
     {
@@ -374,6 +376,7 @@ public class OperationCatalogTests
         Assert.Equal(ContactRequirement.NotUsed, contract.Preflight.Contact);
         Assert.Equal(ChannelRequirement.None, contract.Preflight.Channel);
         Assert.Equal(SuppressionCheck.Checked, contract.Preflight.Suppression);
+        Assert.Equal(ProviderContact.NotUsed, contract.Preflight.ProviderContact);
         Assert.Equal(InPausedCampaign.Waits, contract.Dispatch.InPausedCampaign);
         Assert.Null(contract.ContactProjection);
         Assert.Null(contract.RecoveryRead);
@@ -386,6 +389,130 @@ public class OperationCatalogTests
         Assert.Equal("provider_answer_lost", Assert.Single(contract.FailureCodes).Code);
     }
 
+    /// <summary>
+    /// How the provider's own contact for the person is found is stated on every document, in one of four words: a word
+    /// left out is not the old behaviour, and a word this build does not know is refused rather than read as the nearest
+    /// one.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("find")]
+    [InlineData("FIND_ONLY")]
+    public void How_the_provider_s_contact_is_found_is_one_of_four_words_and_never_left_out(string? word)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        var preflight = document["preflight"]!.AsObject();
+        preflight.Remove("provider_contact");
+        if (word is not null)
+        {
+            preflight["provider_contact"] = word;
+        }
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("campaign.get.json", document));
+
+        Assert.Contains("campaign.get.json", error.Message, StringComparison.Ordinal);
+        Assert.Contains("`preflight.provider_contact`", error.Message, StringComparison.Ordinal);
+        Assert.Contains(word is null ? "is missing" : "find_or_create, find_only, pinned_only, not_used", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A document that works by the pin alone has to say what a person nobody pinned is: `contact_not_linked`, decided
+    /// before the provider is asked anything. Without the word a plugin would invent one, or find the person by address.
+    /// </summary>
+    [Fact]
+    public void A_document_that_works_by_the_pin_alone_and_declares_no_contact_not_linked_is_refused()
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["preflight"] = JsonNode.Parse("""{ "contact": "optional", "channel": "none", "suppression": "checked", "provider_contact": "pinned_only" }""");
+        document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "none" }""");
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("conversation.list.json", document));
+
+        Assert.Contains("conversation.list.json", error.Message, StringComparison.Ordinal);
+        Assert.Contains("`pinned_only`", error.Message, StringComparison.Ordinal);
+        Assert.Contains("`contact_not_linked`", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A document that finds the person — creating them where the provider holds nobody, or never — has the plugin return
+    /// the provider's identifier for whoever it found, so it declares that kind; otherwise the one trace of who the work
+    /// was about would be refused as an identifier the operation never declared.
+    /// </summary>
+    [Theory]
+    [InlineData("find_or_create", ProviderContact.FindOrCreate)]
+    [InlineData("find_only", ProviderContact.FindOnly)]
+    public void A_document_that_finds_the_person_and_declares_no_contact_identifier_is_refused(string mode, ProviderContact read)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["reach"] = "control";
+        document["preflight"] = JsonNode.Parse($$"""{ "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "{{mode}}" }""");
+        document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "consumed" }""");
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("list_membership.add.json", document));
+
+        Assert.Contains("list_membership.add.json", error.Message, StringComparison.Ordinal);
+        Assert.Contains($"`{mode}`", error.Message, StringComparison.Ordinal);
+        Assert.Contains("`external_ids.contact`", error.Message, StringComparison.Ordinal);
+
+        DeclaresAContactIdentifier(document);
+        Assert.Equal(read, OperationContract.Parse("list_membership.add.json", document).Preflight.ProviderContact);
+    }
+
+    /// <summary>
+    /// The identifier a finding document declares is the provider's contact for the person. A kind named
+    /// <c>contact</c> that declares another entity — a campaign's identifier — is no declaration of it, and is refused as
+    /// the document that declares none is.
+    /// </summary>
+    [Theory]
+    [InlineData("find_or_create")]
+    [InlineData("find_only")]
+    public void A_document_that_finds_the_person_and_declares_its_contact_identifier_for_another_entity_is_refused(string mode)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["reach"] = "control";
+        document["preflight"] = JsonNode.Parse($$"""{ "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "{{mode}}" }""");
+        document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "consumed" }""");
+        document["external_ids"]!["contact"] = JsonNode.Parse("""{ "entity": "campaign", "description": "The provider's campaign, under the person's kind." }""");
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("list_membership.add.json", document));
+
+        Assert.Contains("list_membership.add.json", error.Message, StringComparison.Ordinal);
+        Assert.Contains($"`{mode}`", error.Message, StringComparison.Ordinal);
+        Assert.Contains("`external_ids.contact`", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A document says it finds no provider's contact exactly when it takes no contact: one about nobody has nobody to
+    /// find, and one about a person has to say how the provider's record of that person is found.
+    /// </summary>
+    [Theory]
+    [InlineData("not_used", "find_only")]
+    [InlineData("not_used", "pinned_only")]
+    [InlineData("required", "not_used")]
+    [InlineData("optional", "not_used")]
+    public void Not_used_is_said_of_exactly_the_documents_that_take_no_contact(string contact, string mode)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["preflight"] = JsonNode.Parse($$"""{ "contact": "{{contact}}", "channel": "none", "suppression": "checked", "provider_contact": "{{mode}}" }""");
+        document["contact_projection"] = contact == "not_used" ? null : JsonNode.Parse("""{ "fields": ["id"], "channels": "none" }""");
+        DeclaresAContactIdentifier(document);
+        DeclaresContactNotLinked(document);
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("enrollment.list.json", document));
+
+        Assert.Contains("enrollment.list.json", error.Message, StringComparison.Ordinal);
+        Assert.Contains($"`preflight.provider_contact` is `{mode}`", error.Message, StringComparison.Ordinal);
+        Assert.Contains($"`preflight.contact` is `{contact}`", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The kind a document declares when its plugin returns the provider's identifier for the person.</summary>
+    private static void DeclaresAContactIdentifier(JsonObject document) =>
+        document["external_ids"]!["contact"] = JsonNode.Parse("""{ "entity": "contact", "description": "The provider's own contact id." }""");
+
+    /// <summary>The word a document declares for a person nobody pinned, where it works by the pin alone.</summary>
+    private static void DeclaresContactNotLinked(JsonObject document) =>
+        document["failure_codes"]!.AsArray().Add(JsonNode.Parse("""{ "code": "contact_not_linked", "class": "permanent", "when": "Nobody pinned the person, and a read creates nobody." }"""));
+
     /// <summary>The smallest document on the protective floor: everything the floor implies, and nothing else changed.</summary>
     private static JsonObject Floor()
     {
@@ -394,9 +521,10 @@ public class OperationCatalogTests
         document["approval_departs"] = true;
         document["protective_floor"] = true;
         document["approval_reason"] = "the protective floor: waiting for permission to stop is the destructive choice.";
-        document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "from_args", "suppression": "not_applicable" }""");
+        document["preflight"] = JsonNode.Parse("""{ "contact": "required", "channel": "from_args", "suppression": "not_applicable", "provider_contact": "find_or_create" }""");
         document["dispatch"] = JsonNode.Parse("""{ "in_paused_campaign": "runs" }""");
         document["contact_projection"] = JsonNode.Parse("""{ "fields": ["id"], "channels": "consumed" }""");
+        DeclaresAContactIdentifier(document);
         return document;
     }
 
@@ -479,7 +607,7 @@ public class OperationCatalogTests
           "cost_basis": null,
           "meter": null,
           "invariants": [],
-          "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked" },
+          "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
           "dispatch": { "in_paused_campaign": "waits" },
           "contact_projection": null,
           "precondition": "none",

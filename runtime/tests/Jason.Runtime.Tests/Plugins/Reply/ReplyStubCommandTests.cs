@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>
-/// The stand-in as the plugin meets it: the sixteen work commands, answered the way reply-cli 0.12.0 documents them —
+/// The stand-in as the plugin meets it: the work commands, answered the way reply-cli 0.13.0 documents them —
 /// a result on stdout and exit 0, or one <c>{"error":…}</c> line on stderr with exit 1, 2 or 3 — from a small record of
 /// what the account holds. It is a program run from outside, never a model of Reply's API.
 /// </summary>
@@ -21,7 +21,7 @@ public class ReplyStubCommandTests
         var (exit, stdout, _) = await account.RunAsync(["--version"], Ct);
 
         Assert.Equal(0, exit);
-        Assert.Equal("0.12.0", stdout.Trim());
+        Assert.Equal("0.13.0", stdout.Trim());
     }
 
     [Fact]
@@ -340,6 +340,104 @@ public class ReplyStubCommandTests
         Assert.Equal("""{"status":"opted_out","contact_id":1001,"contact_created":false}""", JsonNode.Parse(stdout)!.ToJsonString());
         Assert.Equal([1001], account.OptOuts.Select(entry => (int)entry!));
         Assert.Single(account.Contacts);
+    }
+
+    /// <summary>
+    /// The exact lookup of one address, which creates nobody: an email equal ignoring case, nobody as null, and two
+    /// contacts under one address refused rather than guessed between.
+    /// </summary>
+    [Fact]
+    public async Task Contact_find_answers_the_one_contact_under_an_email_and_null_for_nobody()
+    {
+        using var account = new ReplyAccount()
+            .WithContact(1001, "Marta@Example.com", "Marta")
+            .WithContact(1002, "ana.marta@example.com", "Ana")
+            .WithContact(1003, "twice@example.com", "Twice").WithDuplicate(1004, of: 1003);
+
+        var (exit, found, _) = await account.RunAsync(Line("contact", "find", "--contact", "-"), """{"email":"marta@EXAMPLE.com"}""", Ct);
+        var (_, nobody, _) = await account.RunAsync(Line("contact", "find", "--contact", "-"), """{"email":"nobody@example.com"}""", Ct);
+        var (two, _, said) = await account.RunAsync(Line("contact", "find", "--contact", "-"), """{"email":"twice@example.com"}""", Ct);
+
+        Assert.Equal(0, exit);
+        Assert.Equal("""{"contact_id":1001}""", JsonNode.Parse(found)!.ToJsonString());
+        Assert.Equal("""{"contact_id":null}""", JsonNode.Parse(nobody)!.ToJsonString());
+        Assert.Equal(1, two);
+        Assert.Equal("contact.not_unique", (string?)Error(said)["code"]);
+        Assert.Equal(4, account.Contacts.Count);
+    }
+
+    /// <summary>
+    /// A LinkedIn URL is matched by its lowercased slug, so a contact somebody typed at Reply in mixed case is found by
+    /// the slug in lower case and by the spelling as given alike; on another host the path keeps its case.
+    /// </summary>
+    [Theory]
+    [InlineData("https://www.linkedin.com/in/marta-example", 1001)]
+    [InlineData("https://www.linkedin.com/in/Marta-Example/", 1001)]
+    [InlineData("HTTPS://WWW.LINKEDIN.COM/in/MARTA-EXAMPLE#about", 1001)]
+    [InlineData("https://uk.linkedin.com/in/marta-example", null)]
+    [InlineData("https://example.com/in/marta", null)]
+    [InlineData("https://example.com/In/Marta", 1002)]
+    public async Task Contact_find_matches_a_linkedin_url_by_its_lowercased_slug(string asked, int? expected)
+    {
+        using var account = new ReplyAccount()
+            .WithContact(1001, null, "Marta", linkedIn: "https://www.linkedin.com/in/Marta-Example")
+            .WithContact(1002, null, "Ana", linkedIn: "https://example.com/In/Marta");
+
+        var (exit, stdout, _) = await account.RunAsync(
+            Line("contact", "find", "--contact", "-"), new JsonObject { ["linkedin_url"] = asked }.ToJsonString(), Ct);
+
+        Assert.Equal(0, exit);
+        Assert.True(
+            JsonNode.DeepEquals(JsonNode.Parse(stdout)!["contact_id"], expected is null ? null : JsonValue.Create(expected.Value)),
+            $"'{asked}' found {stdout.Trim()}, where {expected?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "nobody"} was expected.");
+    }
+
+    /// <summary>Exactly one of the two addresses, and nothing else; a refusal never repeats what it was given.</summary>
+    [Theory]
+    [InlineData("""{"email":"marta@example.com","linkedin_url":"https://www.linkedin.com/in/marta-example"}""")]
+    [InlineData("""{}""")]
+    [InlineData("""{"email":"marta@example.com","first_name":"Marta"}""")]
+    [InlineData("""{"email":"marta at example.com"}""")]
+    [InlineData("""{"linkedin_url":"www.linkedin.com/in/marta-example"}""")]
+    [InlineData("""{"email": marta@example.com}""")]
+    public async Task Contact_find_refuses_anything_but_one_address_without_repeating_it(string stdin)
+    {
+        using var account = new ReplyAccount();
+
+        var (exit, stdout, stderr) = await account.RunAsync(Line("contact", "find", "--contact", "-"), stdin, Ct);
+
+        Assert.Equal(2, exit);
+        Assert.Equal(string.Empty, stdout);
+        Assert.Equal("usage.contact", (string?)Error(stderr)["code"]);
+        Assert.DoesNotContain("marta", stderr, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A person given only by LinkedIn URL is looked up first and imported only when Reply holds nobody under it, keyed
+    /// by the URL and written as its lowercased slug; one Reply holds is worked by, and nothing is imported.
+    /// </summary>
+    [Fact]
+    public async Task Add_contact_imports_a_person_given_only_by_linkedin_url_only_when_reply_holds_nobody_there()
+    {
+        using var account = new ReplyAccount().WithSequence(7, "Q3", "active", false, 11)
+            .WithContact(1001, null, "Marta", linkedIn: "https://www.linkedin.com/in/Marta-Example");
+
+        var (_, held, _) = await account.RunAsync(
+            Line("sequence", "add-contact", "7", "--contact", "-"),
+            """{"linkedin_url":"https://www.linkedin.com/in/marta-example","first_name":"Marta"}""",
+            Ct);
+        var (exit, made, _) = await account.RunAsync(
+            Line("sequence", "add-contact", "7", "--contact", "-"),
+            """{"linkedin_url":"https://www.linkedin.com/in/Ana-Sample/","first_name":"Ana"}""",
+            Ct);
+
+        Assert.Equal("""{"status":"added","sequence_id":7,"contact_id":1001,"contact_created":false,"sequence_active":true}""", JsonNode.Parse(held)!.ToJsonString());
+        Assert.Equal(0, exit);
+        Assert.Equal(1002, (int)JsonNode.Parse(made)!["contact_id"]!);
+        Assert.True((bool)JsonNode.Parse(made)!["contact_created"]!);
+        var imported = account.Contacts.OfType<JsonObject>().Single(contact => (int)contact["id"]! == 1002);
+        Assert.Equal(("https://www.linkedin.com/in/ana-sample", null), ((string?)imported["linkedInUrl"], (string?)imported["email"]));
+        Assert.Equal([1001, 1002], account.EnrolledIn(7));
     }
 
     [Fact]

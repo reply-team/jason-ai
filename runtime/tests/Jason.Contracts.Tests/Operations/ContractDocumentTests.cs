@@ -135,6 +135,46 @@ public class ContractDocumentTests
     }
 
     /// <summary>
+    /// How each document finds the provider's own contact for its person, stated as data rather than in a sentence: the
+    /// writes that may make the person create them only where the provider holds nobody, the stop and the reply find them
+    /// and create nobody, the read of a person's threads works by the pin alone, and the rest name nobody. A document that
+    /// moved between these would change what a plugin does with a person it holds no pin for, so the map is held whole.
+    /// </summary>
+    [Fact]
+    public void Each_document_says_how_the_provider_s_contact_is_found()
+    {
+        var expected = new Dictionary<string, ProviderContact>(StringComparer.Ordinal)
+        {
+            ["campaign.enroll"] = ProviderContact.FindOrCreate,
+            ["list_membership.add"] = ProviderContact.FindOrCreate,
+            ["optout.record"] = ProviderContact.FindOrCreate,
+            ["enrollment.stop"] = ProviderContact.FindOnly,
+            ["conversation.reply"] = ProviderContact.FindOnly,
+            ["conversation.list"] = ProviderContact.PinnedOnly,
+        };
+
+        Assert.All(OperationCatalog.All, contract => Assert.True(
+            contract.Preflight.ProviderContact == (expected.TryGetValue(contract.Id, out var mode) ? mode : ProviderContact.NotUsed),
+            $"{contract.Id} says the provider's contact is found `{contract.Preflight.ProviderContact}`."));
+    }
+
+    /// <summary>
+    /// The way a document finds the provider's contact is its field, and `docs/plugins.md` states the rule once, so no
+    /// precondition says it a second time: none names the identifier it returns or the provider's contact it finds.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Published))]
+    public void A_precondition_says_only_what_the_way_the_contact_is_found_does_not(string id)
+    {
+        var precondition = Contract(id).Precondition;
+
+        Assert.True(
+            !precondition.Contains("external_ids.contact", StringComparison.Ordinal)
+                && !precondition.Contains("the provider's own contact", StringComparison.OrdinalIgnoreCase),
+            $"{id}'s precondition restates how the provider's contact is found: {precondition}");
+    }
+
+    /// <summary>
     /// Taking somebody out of a campaign cannot be undone at the provider, so a person decides it, and its work waits
     /// with a paused campaign like any other decision a person has to make.
     /// </summary>

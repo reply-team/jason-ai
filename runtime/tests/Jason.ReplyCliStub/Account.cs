@@ -9,9 +9,8 @@ using System.Text.Json.Nodes;
 
 /// <summary>
 /// One Reply account, held as a directory of JSON files: its contacts, lists, sequences, enrollments, opt-outs,
-/// statistics and threads. The work commands read and change those files (<c>Account.Commands.cs</c>), and the raw calls
-/// the official plugin still makes — the contact search here, the list and the create of sequences in
-/// <c>Account.Sequences.cs</c> — are answered in the shape a live account answered them.
+/// statistics and threads. The work commands read and change those files (<c>Account.Commands.cs</c>, the sequences by
+/// name in <c>Account.Sequences.cs</c>, the inbox in <c>Account.Inbox.cs</c>); no Reply endpoint is imitated.
 /// </summary>
 /// <remarks>
 /// Nothing here touches the network or a shell, and nothing is written outside the account directory, so a test says
@@ -43,104 +42,6 @@ internal static partial class Account
 
     /// <summary>Where this provider's identifiers start; the number is meaningless, its stability is not.</summary>
     private const int FirstContactId = 1001;
-
-    public static async Task<int> RunAsync(string profile, string method, string path, string? body, string[] argv)
-    {
-        var store = Locate();
-        if (!File.Exists(Path.Combine(store, MarkerFile)))
-        {
-            // Not a store this stand-in planted. Refused before the directory is even created, in the shape the
-            // real CLI refuses a call it will not make: a usage error, and its own code on stderr.
-            await Console.Error.WriteLineAsync(new JsonObject
-            {
-                ["error"] = new JsonObject
-                {
-                    ["code"] = "usage.store",
-                    ["title"] = "This is not a stand-in store.",
-                    ["hint"] = $"No '{MarkerFile}' under '{store}'. A test sets the configuration directory; this one did not.",
-                },
-            }.ToJsonString());
-
-            return 2;
-        }
-
-        var root = Path.Combine(store, profile);
-        Directory.CreateDirectory(root);
-
-        // Recorded before anything is answered. What a plugin did is then a fact a test can read rather than
-        // something inferred from the state left behind: an obligation to read before writing is invisible
-        // against a provider that would have answered the same either way.
-        Record(root, method, path, body, argv);
-
-        if (!File.Exists(Path.Combine(root, CredentialFile)))
-        {
-            // The CLI's own refusal, before there is any HTTP status to report and before any request is built.
-            // reply-cli 0.5.1 spells it exactly this way: a usage error, so exit 2, with nothing on stdout and
-            // one line of its `--json` error envelope on stderr, whose `auth.` code is what says the refusal was
-            // about who is calling rather than about what was asked.
-            var refusal = new JsonObject
-            {
-                ["error"] = new JsonObject
-                {
-                    ["code"] = "auth.required",
-                    ["title"] = "Not authenticated.",
-                    ["hint"] = $"Run `reply auth login` or set REPLY_API_KEY (profile '{profile}').",
-                },
-            };
-
-            await Console.Error.WriteLineAsync(refusal.ToJsonString());
-            return 2;
-        }
-
-        var instruction = Take(root, method, path);
-        switch (instruction is null ? string.Empty : Text(instruction, "kind"))
-        {
-            case "answer":
-                return await AnswerAsync(Number(instruction!, "code"), Scripted(Text(instruction!, "body")));
-
-            case "hang":
-                await Task.Delay(Number(instruction!, "milliseconds"));
-                break;
-
-            case "hold":
-                await HoldAsync(instruction!);
-                break;
-
-            case "prints":
-                // Whatever the test built, written out exactly as it is: no envelope, no status, nothing this
-                // program decides. It is the one answer `Answers` cannot express, because that one always
-                // prints the CLI's own {code, data} around whatever it is given — and a caller has to survive
-                // stdout that is not an envelope at all.
-                await Console.Out.WriteAsync(Text(instruction!, "stdout"));
-                await Console.Out.FlushAsync();
-
-                // And whatever it said beside it. The real CLI says why it refused on stderr and nowhere else,
-                // so an ending without that half is only half an ending.
-                if (Text(instruction!, "stderr") is { Length: > 0 } said)
-                {
-                    await Console.Error.WriteLineAsync(said);
-                }
-
-                return Number(instruction!, "exit_code");
-
-            case "lost":
-                // Everything the call would have done is done, and then the answer is gone: reply-cli says so of a
-                // write whose outcome it could not see, with nothing on stdout and exit 3.
-                Answer(root, method, path, body);
-                await Console.Error.WriteLineAsync(new JsonObject
-                {
-                    ["error"] = new JsonObject
-                    {
-                        ["code"] = "outcome.unknown",
-                        ["title"] = "The request may have reached Reply, but no answer came back.",
-                    },
-                }.ToJsonString());
-                return 3;
-        }
-
-        var (code, answer) = Answer(root, method, path, body);
-        return await AnswerAsync(code, answer);
-    }
 
     /// <summary>
     /// Where the real CLI keeps its store, and therefore where this one looks: the platform's own configuration
@@ -177,25 +78,6 @@ internal static partial class Account
         return configured.Length == 0
             ? Path.Combine(Path.GetTempPath(), "jason-reply-stand-in", "reply")
             : Path.Combine(configured, "reply");
-    }
-
-    // -------------------------------------------------------------------------------------------------------
-    // The raw calls the official package still makes
-    // -------------------------------------------------------------------------------------------------------
-
-    private static (int Code, JsonNode? Body) Answer(string root, string method, string path, string? body)
-    {
-        var mark = path.IndexOf('?', StringComparison.Ordinal);
-        var query = mark >= 0 ? path[(mark + 1)..] : string.Empty;
-        var bare = mark >= 0 ? path[..mark] : path;
-
-        return (bare, method) switch
-        {
-            ("/v3/contacts/filter", "POST") => Filter(root, query, body),
-            ("/v3/sequences", "GET") => SequenceList(root, query),
-            ("/v3/sequences", "POST") => SequenceCreate(root, body),
-            _ => (404, Problem(404, "Not Found", "route.notFound", $"This account answers no {method} {bare}.")),
-        };
     }
 
     /// <summary>A sequence as Reply would answer it: without the keys this stand-in keeps for its own refusals.</summary>
@@ -309,114 +191,6 @@ internal static partial class Account
     private const int SendingAccount = 77;
 
     /// <summary>
-    /// The contacts search, paged with <c>top</c> and <c>skip</c>, as a live account answered it: every contact whose
-    /// address contains the <c>searchTerm</c>, whatever the case of either. Reply's own search reaches further than the
-    /// address, which only adds near matches a caller has to tell apart anyway. A rule set is ignored, as the live
-    /// account ignored it, and so is anything else the body carries.
-    /// </summary>
-    private static (int, JsonNode?) Filter(string root, string query, string? body)
-    {
-        var request = Request(body);
-        var contacts = Read(root, ContactsFile);
-        IEnumerable<JsonObject> found = contacts.OfType<JsonObject>();
-
-        if (request?["searchTerm"] is JsonValue searched && searched.TryGetValue<string>(out var term) && term.Length > 0)
-        {
-            found = found.Where(contact =>
-                contact["email"] is JsonValue email && email.TryGetValue<string>(out var address)
-                && address.Contains(term, StringComparison.OrdinalIgnoreCase));
-        }
-
-        var matched = found.ToList();
-
-        var skip = Count(query, "skip") ?? 0;
-        var top = Count(query, "top") ?? 25;
-        var page = new JsonArray([.. matched.Skip(skip).Take(top).Select(contact => (JsonNode)contact.DeepClone())]);
-        return (200, new JsonObject { ["items"] = page, ["hasMore"] = matched.Count > skip + page.Count });
-    }
-
-    // -------------------------------------------------------------------------------------------------------
-    // Answering, and the instructions a test leaves in the directory
-    // -------------------------------------------------------------------------------------------------------
-
-    private static async Task<int> AnswerAsync(int code, JsonNode? body)
-    {
-        await Console.Out.WriteLineAsync(new JsonObject { ["code"] = code, ["data"] = body }.ToJsonString());
-        await Console.Out.FlushAsync();
-
-        // The exit code says only which side of 400 the status fell on; the status itself is on stdout.
-        return code >= 400 ? 1 : 0;
-    }
-
-    /// <summary>
-    /// The first instruction that names this call, spent as it is taken, so the attempt after it sees the
-    /// account again. A test scripts a failing attempt and a recovering one by scripting the first alone.
-    /// </summary>
-    private static JsonObject? Take(string root, string method, string path)
-    {
-        var file = Path.Combine(root, InstructionsFile);
-        if (!File.Exists(file)
-            || JsonNode.Parse(File.ReadAllText(file)) is not JsonObject instructions
-            || instructions["scripted"] is not JsonArray scripted)
-        {
-            return null;
-        }
-
-        for (var position = 0; position < scripted.Count; position++)
-        {
-            if (scripted[position] is not JsonObject instruction
-                || !string.Equals(Text(instruction, "method"), method, StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(Text(instruction, "path"), path, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            scripted.RemoveAt(position);
-            File.WriteAllText(file, instructions.ToJsonString(), new UTF8Encoding(false));
-            return instruction;
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// A body a test wrote out by hand. It is answered as it stands — as JSON when it is JSON, as the string it
-    /// is when it is not — because an answer no provider would send is exactly what some tests are about.
-    /// </summary>
-    private static JsonNode? Scripted(string body)
-    {
-        if (body.Trim().Length == 0)
-        {
-            return null;
-        }
-
-        try
-        {
-            return JsonNode.Parse(body);
-        }
-        catch (JsonException)
-        {
-            return JsonValue.Create(body);
-        }
-    }
-
-    private static void Record(string root, string method, string path, string? body, string[] argv)
-    {
-        var entry = new JsonObject
-        {
-            ["command"] = "api",
-            ["operands"] = new JsonArray(JsonValue.Create(path)),
-            ["method"] = method,
-            ["path"] = path,
-            ["body"] = body,
-            ["args"] = new JsonArray([.. argv.Select(argument => (JsonNode)JsonValue.Create(argument))]),
-            ["env"] = VendorVariables(),
-        };
-
-        Append(Path.Combine(root, CallsFile), entry.ToJsonString() + "\n");
-    }
-
-    /// <summary>
     /// Every vendor-named variable this process was given, by name and value. Only the ones named after this
     /// vendor, because that is the whole of the question: an operator's own <c>REPLY_API_KEY</c> or
     /// <c>REPLY_TEAM_ID</c> must not reach a child, and the one name that legitimately does is the one the
@@ -487,58 +261,6 @@ internal static partial class Account
     private static int NextId(JsonArray contacts) =>
         contacts.Count == 0 ? FirstContactId : contacts.OfType<JsonObject>().Max(contact => contact["id"]!.GetValue<int>()) + 1;
 
-    private static JsonObject? Request(string? body)
-    {
-        if (string.IsNullOrWhiteSpace(body))
-        {
-            return null;
-        }
-
-        try
-        {
-            return JsonNode.Parse(body) as JsonObject;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>One numeric query parameter, by name, or nothing where the call did not carry it.</summary>
-    private static int? Count(string query, string name)
-    {
-        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var separator = pair.IndexOf('=', StringComparison.Ordinal);
-            if (separator > 0
-                && string.Equals(pair[..separator], name, StringComparison.Ordinal)
-                && int.TryParse(pair[(separator + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
-            {
-                return value;
-            }
-        }
-
-        return null;
-    }
-
-    private static JsonObject Problem(int status, string title, string? code, string detail)
-    {
-        var problem = new JsonObject
-        {
-            ["type"] = "about:blank",
-            ["title"] = title,
-            ["status"] = status,
-            ["detail"] = detail,
-        };
-
-        if (code is not null)
-        {
-            problem["code"] = code;
-        }
-
-        return problem;
-    }
-
     private static string Text(JsonObject? parent, string name) =>
         parent?[name] is JsonValue value && value.TryGetValue<string>(out var text) ? text : string.Empty;
 
@@ -550,4 +272,29 @@ internal static partial class Account
 
     private static int? Number(string value) =>
         int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) ? number : null;
+
+    /// <summary>
+    /// A LinkedIn profile link the way reply-cli 0.13.0 matches and writes one: its lowercased slug — on linkedin.com and
+    /// its subdomains the path's case does not count, nor the scheme's or the host's, a default port, one trailing slash
+    /// or a fragment, while <c>www</c> and the query do. Null when the text is not an absolute http or https link.
+    /// </summary>
+    private static string? LinkedInKey(string text)
+    {
+        if (!Uri.TryCreate(text.Trim(), UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || uri.Host.Length == 0)
+        {
+            return null;
+        }
+
+        var host = uri.Host.ToLowerInvariant();
+        var path = uri.AbsolutePath.EndsWith('/') ? uri.AbsolutePath[..^1] : uri.AbsolutePath;
+        if (host == "linkedin.com" || host.EndsWith(".linkedin.com", StringComparison.Ordinal))
+        {
+            path = path.ToLowerInvariant();
+        }
+
+        var port = uri.IsDefaultPort ? string.Empty : ":" + uri.Port.ToString(CultureInfo.InvariantCulture);
+        return uri.Scheme + "://" + host + port + path + uri.Query;
+    }
 }

@@ -137,8 +137,8 @@ public class GeneratedBlockTests
     /// <summary>
     /// The contracts README, docs/contracts/README.md, lists every published operation in one table, rendered from the
     /// documents and compared whole: the level-one name each is seeded from, what it reaches, the approval it needs and
-    /// what may be done after an ambiguous end — the dangerous readings, as the runtime reads them — and the one line its
-    /// page's title gives it.
+    /// what may be done after an ambiguous end — the dangerous readings, as the runtime reads them — how the provider's
+    /// own contact for its person is found, and the one line its page's title gives it.
     /// Nothing in the table is written twice, so a document that changes and a table that does not fail here.
     /// </summary>
     [Fact]
@@ -300,7 +300,7 @@ public class GeneratedBlockTests
         Row(
             block,
             "pre-flight",
-            $"contact `{Name(contract.Preflight.Contact)}`, channel `{Name(contract.Preflight.Channel)}`, suppression `{Name(contract.Preflight.Suppression)}`");
+            $"contact `{Name(contract.Preflight.Contact)}`, channel `{Name(contract.Preflight.Channel)}`, suppression `{Name(contract.Preflight.Suppression)}`, provider contact `{Name(contract.Preflight.ProviderContact)}`");
         Row(block, "in a paused campaign", $"`{Name(contract.Dispatch.InPausedCampaign)}`");
         Row(block, "contact projection", Projection(contract));
         Row(block, "precondition", contract.Precondition);
@@ -326,14 +326,15 @@ public class GeneratedBlockTests
         var table = new StringBuilder();
         table.Append(TableBegin).Append('\n');
         table.Append("<!-- Rendered from each document and its page's title. Edit those; this table follows them. -->\n\n");
-        table.Append("| Operation | Level one | Reach | Approval | After an ambiguous end | What it is |\n|---|---|---|---|---|---|\n");
+        table.Append("| Operation | Level one | Reach | Approval | After an ambiguous end | Provider contact | What it is |\n|---|---|---|---|---|---|---|\n");
         foreach (var contract in OperationCatalog.All)
         {
             table.Append("| [`").Append(contract.Id).Append("`](operations/").Append(contract.Id).Append(".md) | `")
                 .Append(contract.L1.Name).Append("` | `")
                 .Append(contract.Reach.Value).Append("` | `")
                 .Append(contract.Approval.Value).Append("` | `")
-                .Append(Name(contract.RepeatAfterAmbiguous)).Append("` | ")
+                .Append(Name(contract.RepeatAfterAmbiguous)).Append("` | `")
+                .Append(Name(contract.Preflight.ProviderContact)).Append("` | ")
                 .Append(Title(contract.Id)).Append(" |\n");
         }
 

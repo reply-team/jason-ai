@@ -76,7 +76,7 @@ so `repeat_after_ambiguous` is `safe` and the item is simply handed out again. N
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `not_used`, channel `none`, suppression `checked` |
+| pre-flight | contact `not_used`, channel `none`, suppression `checked`, provider contact `not_used` |
 | in a paused campaign | `waits` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | none |

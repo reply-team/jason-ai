@@ -26,7 +26,8 @@
         "20261006011312_InboundSync",
         "20261016181342_UiTokens",
         "20261018190303_EventStore",
-        "20261018230454_EventReads"
+        "20261018230454_EventReads",
+        "20261019053859_LinkedInSlugKeys"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -43,7 +44,8 @@
         "20261006011312_InboundSync",
         "20261016181342_UiTokens",
         "20261018190303_EventStore",
-        "20261018230454_EventReads"
+        "20261018230454_EventReads",
+        "20261019053859_LinkedInSlugKeys"
       ],
       "backup_file": null
     },

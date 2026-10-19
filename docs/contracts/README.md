@@ -51,24 +51,24 @@ a condition beside it — and the last column is the line the operation's own pa
 <!-- BEGIN GENERATED operations -->
 <!-- Rendered from each document and its page's title. Edit those; this table follows them. -->
 
-| Operation | Level one | Reach | Approval | After an ambiguous end | What it is |
-|---|---|---|---|---|---|
-| [`campaign.activate`](operations/campaign.activate.md) | `campaign.activate` | `act` | `confirm_once` | `after_recovery_read` | start a provider campaign sending |
-| [`campaign.create`](operations/campaign.create.md) | `campaign.create` | `control` | `auto` | `after_recovery_read` | make the provider's campaign, as an empty draft |
-| [`campaign.enroll`](operations/campaign.enroll.md) | `campaign.enroll` | `act` | `confirm_once` | `after_recovery_read` | put one person into a provider campaign |
-| [`campaign.get`](operations/campaign.get.md) | `campaign.get` | `read` | `auto` | `safe` | read one campaign from the provider |
-| [`campaign.pause`](operations/campaign.pause.md) | `campaign.pause` | `control` | `auto` | `safe` | stop a provider campaign |
-| [`conversation.classify`](operations/conversation.classify.md) | `conversation.classify` | `control` | `auto` | `safe` | file a thread under one of the provider's categories, with the provider's own meaning on its reserved names |
-| [`conversation.close`](operations/conversation.close.md) | `conversation.close` | `control` | `auto` | `safe` | set a thread aside as worked |
-| [`conversation.get`](operations/conversation.get.md) | `conversation.get` | `read` | `auto` | `safe` | read one thread before answering it |
-| [`conversation.list`](operations/conversation.list.md) | `conversation.list` | `read` | `auto` | `safe` | the conversation threads of a person or a campaign |
-| [`conversation.reopen`](operations/conversation.reopen.md) | `conversation.reopen` | `control` | `auto` | `safe` | put a thread back among those that need attention |
-| [`conversation.reply`](operations/conversation.reply.md) | `message.send` | `act` | `confirm_each` | `never` | answer the person on a thread, in that thread |
-| [`engagement.summarize`](operations/engagement.summarize.md) | `engagement.summarize` | `read` | `auto` | `safe` | the provider's counts for a campaign |
-| [`enrollment.list`](operations/enrollment.list.md) | `enrollment.list` | `read` | `auto` | `safe` | who is in a campaign at the provider |
-| [`enrollment.stop`](operations/enrollment.stop.md) | `enrollment.stop` | `control` | `confirm_once` | `after_recovery_read` | take one person out of a provider campaign |
-| [`list_membership.add`](operations/list_membership.add.md) | `list_membership.add` | `control` | `auto` | `after_recovery_read` | put one person on a provider list |
-| [`optout.record`](operations/optout.record.md) | `optout.record` | `control` | `auto` | `after_recovery_read` | record that somebody said stop |
+| Operation | Level one | Reach | Approval | After an ambiguous end | Provider contact | What it is |
+|---|---|---|---|---|---|---|
+| [`campaign.activate`](operations/campaign.activate.md) | `campaign.activate` | `act` | `confirm_once` | `after_recovery_read` | `not_used` | start a provider campaign sending |
+| [`campaign.create`](operations/campaign.create.md) | `campaign.create` | `control` | `auto` | `after_recovery_read` | `not_used` | make the provider's campaign, as an empty draft |
+| [`campaign.enroll`](operations/campaign.enroll.md) | `campaign.enroll` | `act` | `confirm_once` | `after_recovery_read` | `find_or_create` | put one person into a provider campaign |
+| [`campaign.get`](operations/campaign.get.md) | `campaign.get` | `read` | `auto` | `safe` | `not_used` | read one campaign from the provider |
+| [`campaign.pause`](operations/campaign.pause.md) | `campaign.pause` | `control` | `auto` | `safe` | `not_used` | stop a provider campaign |
+| [`conversation.classify`](operations/conversation.classify.md) | `conversation.classify` | `control` | `auto` | `safe` | `not_used` | file a thread under one of the provider's categories, with the provider's own meaning on its reserved names |
+| [`conversation.close`](operations/conversation.close.md) | `conversation.close` | `control` | `auto` | `safe` | `not_used` | set a thread aside as worked |
+| [`conversation.get`](operations/conversation.get.md) | `conversation.get` | `read` | `auto` | `safe` | `not_used` | read one thread before answering it |
+| [`conversation.list`](operations/conversation.list.md) | `conversation.list` | `read` | `auto` | `safe` | `pinned_only` | the conversation threads of a person or a campaign |
+| [`conversation.reopen`](operations/conversation.reopen.md) | `conversation.reopen` | `control` | `auto` | `safe` | `not_used` | put a thread back among those that need attention |
+| [`conversation.reply`](operations/conversation.reply.md) | `message.send` | `act` | `confirm_each` | `never` | `find_only` | answer the person on a thread, in that thread |
+| [`engagement.summarize`](operations/engagement.summarize.md) | `engagement.summarize` | `read` | `auto` | `safe` | `not_used` | the provider's counts for a campaign |
+| [`enrollment.list`](operations/enrollment.list.md) | `enrollment.list` | `read` | `auto` | `safe` | `not_used` | who is in a campaign at the provider |
+| [`enrollment.stop`](operations/enrollment.stop.md) | `enrollment.stop` | `control` | `confirm_once` | `after_recovery_read` | `find_only` | take one person out of a provider campaign |
+| [`list_membership.add`](operations/list_membership.add.md) | `list_membership.add` | `control` | `auto` | `after_recovery_read` | `find_or_create` | put one person on a provider list |
+| [`optout.record`](operations/optout.record.md) | `optout.record` | `control` | `auto` | `after_recovery_read` | `find_or_create` | record that somebody said stop |
 
 <!-- END GENERATED operations -->
 
@@ -128,10 +128,10 @@ The second group is Jason's own, and it is about execution:
 
 | Field | What it says |
 |---|---|
-| `preflight` | whether the work item's contact is needed (`required` / `not_used`, or `optional`: taken when the work item names one) and where the channel comes from (`from_args` / `none`); an `optional` contact never takes its channel from the arguments; and whether the suppression register refuses the work for a person whose consumed value it holds (`suppression`: `checked`, or `not_applicable` — allowed only where `reach` is `control`, for an operation that takes a person out rather than reaching them) |
+| `preflight` | whether the work item's contact is needed (`required` / `not_used`, or `optional`: taken when the work item names one) and where the channel comes from (`from_args` / `none`); an `optional` contact never takes its channel from the arguments; and whether the suppression register refuses the work for a person whose consumed value it holds (`suppression`: `checked`, or `not_applicable` — allowed only where `reach` is `control`, for an operation that takes a person out rather than reaching them); and how the plugin finds the provider's own contact for that person (`provider_contact`: `find_or_create`, `find_only`, `pinned_only` or `not_used` — [`docs/plugins.md`](../plugins.md) §7, "The contact proxy rule", is the rule), which the loader holds to what each word implies: a way that finds the person declares `external_ids.contact`, `pinned_only` declares `contact_not_linked`, and `not_used` is said exactly where `contact` is `not_used` |
 | `dispatch` | how the dispatcher treats the operation's work beyond what all work shares: `in_paused_campaign` is `waits` — the work waits with its paused campaign, as all work does — or `runs`, allowed only where `reach` is `control` and `approval` is `auto`, for an operation whose not running is the harm |
 | `contact_projection` | exactly which contact fields, and which channels, the plugin receives — `consumed`, the one channel the arguments name, or `none` — declared so that widening it is a visible change |
-| `precondition` | what must be true at the provider before the operation can act, in one sentence |
+| `precondition` | what must be true at the provider before the operation can act, beyond how its contact is found, in one sentence |
 | `preview` | what a person deciding on the operation reads first — a one-line summary rendered from the composed input, and the values in that input it highlights — or `null` where nobody is asked to decide |
 | `input_schema` | the whole composed input the plugin receives, in the dialect below |
 | `output_schema` | what a succeeded result must look like |

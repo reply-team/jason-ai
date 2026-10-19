@@ -24,7 +24,7 @@
   "meter": "message",
   "invariants": ["E1", "E2", "E3"],
 
-  "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked" },
+  "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
   "dispatch": { "in_paused_campaign": "waits" },
   "contact_projection": null,
   "precondition": "The campaign exists at the provider and is not archived, and the provider's enrolled count equals `args.expected.enrolled`.",

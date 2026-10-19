@@ -59,10 +59,10 @@ public class ReplyOptoutRecordTests
 
         var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input()));
 
-        // The whole command ran — the CLI's lookup, the create and the write — and none of the four facts reached
+        // The whole of it ran — the exact lookup, then the create and the write — and none of the four facts reached
         // any of it: the provider holds a yes or a no.
         Assert.Equal("recorded", (string?)answer["items"]![0]!["status"]);
-        Assert.Equal(["contact opt-out"], Paths(account));
+        Assert.Equal(["contact find", "contact opt-out"], Paths(account));
         var everything = Everything(account);
         foreach (var fact in new[] { Statement, ArrivedVia, SaidAt, LearnedAt, "take me off" })
         {
@@ -93,10 +93,12 @@ public class ReplyOptoutRecordTests
 
         ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input()));
 
-        var call = Assert.Single(account.Calls);
-        Assert.Equal("-", call.Option("--contact"));
-        Assert.Contains(Address, call.Body, StringComparison.Ordinal);
-        Assert.DoesNotContain(call.Args, argument => argument.Contains(Address, StringComparison.Ordinal));
+        // The lookup carries the address, on stdin; the opt-out names the contact it found by Reply's identifier.
+        Assert.Equal(["contact find", "contact opt-out"], Paths(account));
+        Assert.Equal("-", account.Calls[0].Option("--contact"));
+        Assert.Contains(Address, account.Calls[0].Body, StringComparison.Ordinal);
+        Assert.Equal("1001", account.Calls[1].Option("--contact-id"));
+        Assert.All(account.Calls, call => Assert.DoesNotContain(call.Args, argument => argument.Contains(Address, StringComparison.Ordinal)));
     }
 
     /// <summary>The write has happened and its answer names nobody this package can work by: a lost write, reported by that value alone.</summary>
@@ -160,38 +162,35 @@ public class ReplyOptoutRecordTests
         Assert.Equal("contact_not_unique", error.Code);
         Assert.Equal(FailureClass.Permanent, error.Class);
         Assert.Null(error.ExternalIds);
-        Assert.Equal(["contact opt-out"], Paths(account));
+        Assert.Equal(["contact find"], Paths(account));
         Assert.Empty(account.OptOuts);
     }
 
     /// <summary>
-    /// The CLI's lookup reads at most five pages of a hundred; past that one match proves nothing about a second, and
-    /// the opt-out is refused — never a pin, never a create. The message, which is all that reaches the work item's
-    /// last error, says what a person does instead.
+    /// The CLI reads the exact lookup to its end and answers one it could not finish as Reply unavailable: one match
+    /// proves nothing about a second, so the opt-out is never pinned, created or recorded on it — the read is asked
+    /// again.
     /// </summary>
     [Fact]
-    public async Task A_lookup_that_cannot_be_read_to_its_end_is_refused_and_never_taken_for_nobody_or_for_one()
+    public async Task A_lookup_that_cannot_be_read_to_its_end_is_asked_again_and_never_taken_for_nobody_or_for_one()
     {
         using var account = new ReplyAccount();
         account.WithContact(1001, Address, "Marta");
-        account.Refuses("contact opt-out", "contact.lookup_incomplete", status: 200);
+        account.Refuses("contact find", "reply.unavailable", status: 200);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input()));
 
-        Assert.Equal("provider_call_failed", error.Code);
-        Assert.Equal(FailureClass.Permanent, error.Class);
+        Assert.Equal(("provider_unavailable", FailureClass.Transient), (error.Code, error.Class));
         Assert.Null(error.ExternalIds);
-        Assert.Contains("record the opt-out at Reply by hand", error.Message, StringComparison.Ordinal);
-        Assert.Contains("Jason's own register already stops Jason's own reach", error.Message, StringComparison.Ordinal);
-        Assert.Equal(["contact opt-out"], Paths(account));
+        Assert.Equal(["contact find"], Paths(account));
         Assert.Single(account.Contacts);
         Assert.Empty(account.OptOuts);
     }
 
     // -------------------------------------------------------------------------------------------------------
-    // The lookup, and what a search that matches by containment means for it
+    // The pin, and the lookup it replaces
     // -------------------------------------------------------------------------------------------------------
 
     [Fact]

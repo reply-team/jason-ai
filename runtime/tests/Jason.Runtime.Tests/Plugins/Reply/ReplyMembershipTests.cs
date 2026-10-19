@@ -89,10 +89,11 @@ public class ReplyMembershipTests
         Assert.Equal(Ensured, outcome.ExternalIds!["contact"]!.GetValue<string>());
         Assert.Equal([1001], account.MembersOf(List));
 
-        // One command, and the person on stdin for the CLI to import.
-        var call = Assert.Single(account.Calls);
-        Assert.Equal("-", call.Option("--contact"));
-        Assert.Contains(Address, call.Body!, StringComparison.Ordinal);
+        // The exact lookup first, which finds nobody, and then the add, with the person on stdin for the CLI to import.
+        Assert.Equal(["contact find", "contact-list add-contact 9"], Paths(account));
+        Assert.Equal($$"""{"email":"{{Address}}"}""", account.Calls[0].Body);
+        Assert.Equal("-", account.Calls[1].Option("--contact"));
+        Assert.Contains(Address, account.Calls[1].Body!, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -152,8 +153,12 @@ public class ReplyMembershipTests
         Assert.Equal([1001], account.MembersOf(List));
     }
 
+    /// <summary>
+    /// A person Reply holds is found by the exact lookup and added by Reply's identifier for them: nothing is imported,
+    /// nothing is written to their record, and no first name is needed — this one has none.
+    /// </summary>
     [Fact]
-    public async Task A_person_without_a_first_name_whom_reply_holds_is_found_by_address_and_added_by_id()
+    public async Task A_person_reply_holds_is_found_by_the_exact_lookup_and_added_by_id()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount()).WithContact(2001, Address.ToUpperInvariant(), FirstName);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
@@ -162,16 +167,15 @@ public class ReplyMembershipTests
         var answer = Succeeded(await InvokeAsync(api, Input(firstName: null), Ct));
 
         Assert.Equal("2001", (string?)answer["items"]![0]!["external_ids"]!["contact"]);
-        Assert.Equal(["POST /v3/contacts/filter?top=100&skip=0", "contact-list add-contact 9"], account.Calls.Select(call => call.Line));
+        Assert.Equal(["contact find", "contact-list add-contact 9"], account.Calls.Select(call => call.Line));
         Assert.Equal("2001", account.Calls[1].Option("--contact-id"));
         Assert.Null(account.Calls[1].Body);
         Assert.Equal([2001], account.MembersOf(List));
     }
 
     /// <summary>
-    /// Review focus 1: Reply's search matches by containment; only an exact address is the person. A contact whose
-    /// address merely holds this one is somebody else, so this person is imported as a new contact under a derived
-    /// first name, and the other contact is neither added nor touched.
+    /// The lookup is exact: a contact whose address merely holds this one is somebody else, so this person is imported
+    /// as a new contact under a derived first name, and the other contact is neither added nor touched.
     /// </summary>
     [Fact]
     public async Task A_person_without_a_first_name_is_never_added_as_somebody_whose_address_only_contains_theirs()
@@ -192,65 +196,56 @@ public class ReplyMembershipTests
 
     /// <summary>Two contacts under the address: picking one would be guessing whom the work is about, so nobody is added.</summary>
     [Fact]
-    public async Task A_person_without_a_first_name_held_twice_under_the_address_is_refused_and_nobody_is_added()
+    public async Task A_person_held_twice_under_the_address_is_refused_and_nobody_is_added()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount()).WithContact(2001, Address, FirstName).WithDuplicate(2002, of: 2001);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(firstName: null), Ct));
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(), Ct));
 
-        Assert.Equal("provider_call_failed", error.Code);
-        Assert.Equal(FailureClass.Permanent, error.Class);
+        Assert.Equal(("contact_not_unique", FailureClass.Permanent), (error.Code, error.Class));
         Assert.Contains("more than one contact under this address", error.Message, StringComparison.Ordinal);
-        Assert.Equal(["POST /v3/contacts/filter?top=100&skip=0"], account.Calls.Select(call => call.Line));
+        Assert.Equal(["contact find"], account.Calls.Select(call => call.Line));
         Assert.Empty(account.MembersOf(List));
     }
 
     /// <summary>
-    /// The search matches by containment and the lookup reads five pages of a hundred. Five hundred addresses that
-    /// hold this one fill them, so the end is never reached and one match could not be told from two: nobody is added.
+    /// The CLI reads the exact lookup to its end, and answers one it could not finish as Reply unavailable: nothing is
+    /// added, and the read is asked again rather than taken for nobody or for one.
     /// </summary>
     [Fact]
-    public async Task A_lookup_that_cannot_be_read_to_its_end_adds_nobody()
+    public async Task A_lookup_the_cli_could_not_read_to_its_end_adds_nobody_and_is_asked_again()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount()).WithContact(2001, Address, FirstName);
-        for (var at = 0; at < 500; at++)
-        {
-            account.WithContact(3000 + at, $"x{at}.{Address}", "Near" + at);
-        }
-
+        account.Refuses("contact find", "reply.unavailable", status: 200);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(firstName: null), Ct));
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(), Ct));
 
-        Assert.Equal("provider_call_failed", error.Code);
-        Assert.Equal(FailureClass.Permanent, error.Class);
-        Assert.Equal(
-            [.. Enumerable.Range(0, 5).Select(page => $"POST /v3/contacts/filter?top=100&skip={page * 100}")],
-            account.Calls.Select(call => call.Line));
+        Assert.Equal(("provider_unavailable", FailureClass.Transient), (error.Code, error.Class));
+        Assert.Equal(["contact find"], account.Calls.Select(call => call.Line));
         Assert.Empty(account.MembersOf(List));
     }
 
     /// <summary>
-    /// The CLI says `outcome.unknown` for any POST under `reply api` whose answer was lost, this search included. The
-    /// search changes nothing, so the package's own mark for it decides: asked again, never stopped for a person.
+    /// The lookup changes nothing, so an ending the CLI could not see is the package's own mark for it to decide:
+    /// asked again, never stopped for a person.
     /// </summary>
     [Fact]
     public async Task A_lookup_whose_outcome_the_cli_could_not_see_is_asked_again()
     {
         using var account = ReplyOperations.Plant(new ReplyAccount()).WithContact(2001, Address, FirstName);
         account.Prints(
-            "POST",
-            "/v3/contacts/filter?top=100&skip=0",
+            "contact find",
             3,
             string.Empty,
             """{"error":{"code":"outcome.unknown","title":"The request may have reached Reply, but no answer came back."}}""");
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(firstName: null), Ct));
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(), Ct));
 
         Assert.Equal("provider_unavailable", error.Code);
         Assert.Equal(FailureClass.Transient, error.Class);
@@ -266,9 +261,11 @@ public class ReplyMembershipTests
 
         Succeeded(await InvokeAsync(api, Input(), Ct));
 
+        Assert.Equal(["contact find", "contact-list add-contact 9"], Paths(account));
+        Assert.Equal("""{"email":"marta@example.com"}""", account.Calls[0].Body);
         Assert.Equal(
             """{"email":"marta@example.com","first_name":"Marta","last_name":"Alvarez","company":"Puerto Analytics","title":"Head of Growth"}""",
-            Assert.Single(account.Calls).Body);
+            account.Calls[1].Body);
     }
 
     [Theory]
@@ -365,7 +362,7 @@ public class ReplyMembershipTests
     // -------------------------------------------------------------------------------------------------------
 
     [Fact]
-    public async Task A_person_with_a_first_name_is_matched_or_created_by_email_in_one_call()
+    public async Task A_person_with_a_first_name_whom_reply_holds_is_added_by_id_and_their_record_is_untouched()
     {
         using var account = new ReplyAccount();
         account.WithContact(1001, Address).WithList(List, "Q3 LatAm founders");
@@ -374,12 +371,14 @@ public class ReplyMembershipTests
 
         var answer = Succeeded(await InvokeAsync(api, Input(), Ct));
 
-        // The CLI imports the person from stdin, and its import deduplicates by email: one command both matches the
-        // person this account already holds and would have created them.
-        Assert.Equal(["contact-list add-contact 9"], Paths(account));
-        Assert.Equal("-", account.Calls[0].Option("--contact"));
+        // The exact lookup finds the person, so they are added by Reply's identifier and nothing is imported: the
+        // names Jason holds are not written onto a record Reply already keeps.
+        Assert.Equal(["contact find", "contact-list add-contact 9"], Paths(account));
+        Assert.Equal(Ensured, account.Calls[1].Option("--contact-id"));
+        Assert.Null(account.Calls[1].Body);
         Assert.Equal(Ensured, answer["items"]![0]!["external_ids"]!["contact"]!.GetValue<string>());
-        Assert.Single(account.Contacts);
+        var held = Assert.Single(account.Contacts)!;
+        Assert.Null((string?)held["firstName"]);
     }
 
     // -------------------------------------------------------------------------------------------------------
@@ -525,8 +524,8 @@ public class ReplyMembershipTests
             }
         }
 
-        var added = Assert.Single(account.Calls);
-        Assert.Contains(Address, added.Body!, StringComparison.Ordinal);
+        Assert.Equal(["contact find", "contact-list add-contact 9"], Paths(account));
+        Assert.All(account.Calls, call => Assert.Contains(Address, call.Body!, StringComparison.Ordinal));
     }
 
     // -------------------------------------------------------------------------------------------------------

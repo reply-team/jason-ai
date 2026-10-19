@@ -5,15 +5,28 @@ absorbed by a release of this package alone.
 
 ## 0.4.0
 
-- Four inbox operations, each through the Reply CLI command made for it, which needs reply-cli 0.12.0 or newer.
+- Four inbox operations, each through the Reply CLI command made for it. The package needs reply-cli 0.13.0 or newer.
+- Every operation about a person finds Reply's contact for them before it writes anything, the way its document's
+  `preflight.provider_contact` says: by the pin, or else with `reply contact find`, Reply's exact lookup by email or by
+  LinkedIn URL, read to its end. A person Reply holds is named by that identifier — also one who has a first name, whom
+  `list_membership.add` and `campaign.enroll` imported before — so nothing Jason holds is written to their record. Only
+  the list add, the enrolment and the opt-out import a person Reply holds nobody for; the stop creates nobody. Two
+  contacts under one address are `contact_not_unique` for the list add and the enrolment too, which declare the code
+  now, and a lookup the CLI could not read to its end is asked again. The package's own contact search is gone.
+- `campaign.create` runs `reply sequence list` and `reply sequence create`, with the name on stdin, so the package
+  makes no raw call at all. More than twenty thousand sequences whose names contain the name is still
+  `provider_call_failed`, and nothing is made.
+- A person reached by LinkedIn URL is looked up, imported and compared by its lowercased slug: on linkedin.com the
+  path's case does not count. Reply is given the URL in that form, as Jason now keys it.
 - `conversation.reply` answers the person on a thread, in that thread, with `reply inbox reply`: the text goes on stdin,
   Reply sends on the thread's own channel from the identity that owns it, and nobody else can be put on it. The thread
   is read first with `reply inbox get`, one message long, and nothing is sent unless the thread is on the channel the
   work item names and its person is the work item's — the contact pinned for them where there is a pin, and in every
   case the one whose address, or LinkedIn profile, is the channel's value, compared as Jason keys the value for its
   suppression register: an address whatever its case, a profile link by its scheme and host whatever their case, with
-  a fragment and one trailing slash dropped and its path exactly. Nobody is created: the thread's person is pinned once
-  found. A reply costs three requests to Reply before its send: two for `reply inbox get`, and one more read of the
+  a default port, a user name, a fragment and one trailing slash dropped, its query exactly, and its path whatever its
+  case on linkedin.com and its subdomains and exactly on any other host. Nobody is created: the thread's person is
+  pinned once found. A reply costs three requests to Reply before its send: two for `reply inbox get`, and one more read of the
   thread inside `reply inbox reply`. A text carrying `{{` is refused,
   `message_invalid`, because Reply renders it as a placeholder of its own; Reply's own refusal of a text it could not
   render — `reply.refused` with its `inboxThread.invalidInput` and a sentence starting `RenderingFail` — is

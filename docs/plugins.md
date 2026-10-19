@@ -552,8 +552,8 @@ The second group is about executing it, and it is the half you implement:
 
 | Field | What it asks of you |
 |---|---|
-| `preflight`, `contact_projection` | what you are handed: whether a contact comes with the call, and exactly which of its fields and channels |
-| `precondition` | what must be true at the provider before you may act — for a write about a person, that the provider's own contact is found, and for some writes made where it is missing |
+| `preflight`, `contact_projection` | what you are handed: whether a contact comes with the call, and exactly which of its fields and channels; and, under `preflight.provider_contact`, how you find the provider's own contact for that person — the contact proxy rule below |
+| `precondition` | what must be true at the provider before you may act, beyond how its contact is found |
 | `input_schema` | the whole input you receive, already valid by the time it reaches you |
 | `output_schema` | what a succeeded `result` must look like |
 | `external_ids` | the kinds of provider identifier you may return, and what each one identifies |
@@ -616,29 +616,49 @@ The runtime composes it from the work item; a plugin never sees a work item's co
 - Every `external_ids` object is filtered to **your own** pins — identifiers your plugin returned
   before. Another plugin's identifier for the same person is never visible to you.
 
-### The provider-contact precondition
+### The contact proxy rule
 
-A provider's list or campaign holds the *provider's* contacts, not Jason's, so every write about a person
-states how the provider's contact is found. When `contacts[0].external_ids.contact` is present it is the
-provider's identifier for this person and you work by it, whatever the operation. When it is absent, each
-document's `precondition` says what to do, and they differ on purpose:
+A provider's list or campaign holds the *provider's* contacts, not Jason's, so an operation about a person has you find
+the provider's own contact for them. How is data, not prose: each document says it under `preflight.provider_contact`,
+in one of four words, and the rule below is the same for every one of them.
 
-- `list_membership.add` and `campaign.enroll` create the contact from the value of the channel named by
-  `args.channel` when the provider holds nobody under it, and return the identifier the provider gave you.
-- `optout.record` looks the person up by that value first, compared exactly, and creates the contact only
-  when the lookup, read to its end, finds nobody — an opt-out must land on the person the provider already
-  holds, never on a second contact made for them.
-- `enrollment.stop` never creates anybody: a person the provider does not hold takes part in nothing, which
-  is a completed stop.
-- `conversation.reply` never creates anybody either: it finds the person through the thread it replies in, and
-  sends nothing unless the thread's person is the work item's — the one pinned, where there is a pin, and in every
-  case the one whose address on the consumed channel is that channel's value.
-- A write about a campaign — `campaign.create`, `campaign.pause`, `campaign.activate` — names no person, and has no
-  contact to find; nor does a write about a thread — `conversation.classify`, `conversation.close`,
-  `conversation.reopen` — which names the thread alone.
+| `preflight.provider_contact` | What you do for a person carrying no pin of yours | Published today |
+|---|---|---|
+| `find_or_create` | Look the person up by the value of the channel `args.channel` names, and create the contact from that value only when the provider holds nobody under it. | `campaign.enroll`, `list_membership.add`, `optout.record` |
+| `find_only` | Find the person — by that value, or through what the operation names — and create nobody. | `enrollment.stop`; `conversation.reply`, through its thread |
+| `pinned_only` | Work by the pin alone: a person with none fails `contact_not_linked` before anything is called. | `conversation.list` |
+| `not_used` | The operation names nobody, so there is nobody to find. | every other operation |
 
-Once a pin exists nobody matches that person by address again, which is what stops two spellings of one
-address becoming two people.
+The loader holds each word to what it implies, so a document cannot say one thing and declare another: a way that
+finds the person declares `external_ids.contact`, `pinned_only` declares `contact_not_linked`, and `not_used` is said
+of exactly the documents whose `preflight.contact` is `not_used`. A document's `precondition` says only what its word
+does not.
+
+The rule has four parts.
+
+1. **The plugin owns the binding.** With no pin, find the provider's contact by the consumed channel's value, compared
+   the way the runtime keys that value — an email address without regard to case, a LinkedIn URL by its lowercased
+   slug — and read the lookup to its end. A provider's search may match by resemblance, so the comparison is yours; and
+   a lookup you cannot finish says nothing about a second match, so it is refused, never taken for nobody or for one.
+   More than one match is `contact_not_unique`, and nothing is done. Create only where the word is `find_or_create`,
+   and return the provider's identifier under `external_ids.contact` — on `error.external_ids` too, when the call
+   fails after you learned it. The runtime never guesses one.
+2. **A pin is worked by, and never overwritten.** Once `contacts[0].external_ids.contact` is present it is the
+   provider's identifier for this person, whatever the operation, and nobody matches the person by address again — which
+   is what stops two spellings of one address becoming two people. If the provider answers with another identifier,
+   return the one it answered: the runtime records it beside the pin as a divergence, keeps the pin, and the attempt
+   still succeeds.
+3. **Deleting a Jason contact never deletes the provider's.** A provider's contact is deleted only by an operation whose
+   whole purpose that is, never as a side effect of another, and never because the person went away in Jason.
+4. **Fields and lists travel with the operation that needs them.** You send what the operation's `contact_projection`
+   hands you, when the operation runs. Nothing is copied to the provider in the background, and the runtime keeps no
+   copy of the provider's contact.
+
+Values written before a LinkedIn URL was keyed by its lowercased slug are rewritten to that key when the runtime
+starts, before anything is claimed, so the value you are handed is already in that form. Two spellings of one person
+on the register become that person's one stop, the earliest, with its reason: a stop is never lost by the collapse.
+A contact's two channels that become one value are kept as one, the primary where one of them is. The journal keeps every line it had, and the rewrite
+adds none.
 
 ### Repeating after a lost answer
 
@@ -752,7 +772,8 @@ every operation's plugin is held to, and the runtime enforces each of them:
    happened.
 3. **Answer in the operation's own vocabulary**, so that a result satisfies its output schema. An
    answer that does not is `result_invalid`, is never repeated, and is kept on the attempt.
-4. **Work by a pin when you are given one**, and never match that person by address again.
+4. **Find the person as the contact proxy rule says**: work by a pin when you are given one, and otherwise find or
+   create exactly as the document's `preflight.provider_contact` says.
 5. **Carry the provider's own refusal back, in the runtime's vocabulary.** A provider may know something
    the runtime cannot: a person suppressed at the provider between the moment the work was claimed and
    the moment you act on it is the ordinary case. Your job is not to re-check anything the runtime

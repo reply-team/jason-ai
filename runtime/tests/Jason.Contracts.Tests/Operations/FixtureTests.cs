@@ -53,6 +53,32 @@ public class FixtureTests
     }
 
     /// <summary>
+    /// Every operation that finds the provider's contact for its person — <c>find_or_create</c> or <c>find_only</c> —
+    /// publishes the answer that pins it: <c>outcome-pins-the-contact.json</c>, a success whose <c>expect.pinned</c>
+    /// names the contact, so a plugin author reads what the runtime writes down from the identifier their lookup found.
+    /// </summary>
+    [Fact]
+    public void Every_operation_that_finds_the_person_publishes_the_answer_that_pins_them()
+    {
+        var finding = OperationCatalog.All
+            .Where(contract => contract.Preflight.ProviderContact is ProviderContact.FindOrCreate or ProviderContact.FindOnly)
+            .ToList();
+
+        Assert.NotEmpty(finding);
+        foreach (var contract in finding)
+        {
+            var path = Path.Combine(ContractFiles.Fixtures, contract.Id, "outcome-pins-the-contact.json");
+            Assert.True(File.Exists(path), $"{contract.Id} finds the provider's contact and publishes no {ContractFiles.Relative(path)}.");
+
+            var expected = (JsonObject)Read(ContractFiles.Relative(path))["expect"]!;
+            Assert.Equal("succeeded", (string?)expected["status"]);
+            Assert.True(
+                expected["pinned"]?["contact"] is JsonValue pinned && pinned.GetValueKind() == JsonValueKind.String,
+                $"{ContractFiles.Relative(path)} pins no contact: {expected.ToJsonString()}");
+        }
+    }
+
+    /// <summary>
     /// A preview is proven by rendering it, so an operation that declares one has fixtures that render it, and one
     /// that declares none has nothing to render. An operation nobody approves declares none (the document tests hold
     /// that), so it has no preview fixtures either.
@@ -174,6 +200,12 @@ public class FixtureTests
                 Assert.Equal(OutcomeStatus.Succeeded, outcome.Status);
                 Assert.Empty(resultProblems);
                 Assert.False((bool)expected["retriable"]!, "A succeeded outcome is never repeated.");
+                if (expected["pinned"] is JsonObject pins)
+                {
+                    // A success's identifiers are beside its result, every one of a declared kind, so all of them are written down.
+                    Assert.Equal(pins.ToJsonString(), (outcome.ExternalIds ?? []).ToJsonString());
+                }
+
                 break;
 
             case "failed":

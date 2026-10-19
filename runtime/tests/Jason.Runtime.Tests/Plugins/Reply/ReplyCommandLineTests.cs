@@ -140,8 +140,9 @@ public class ReplyCommandLineTests
             Assert.Contains(ReplyOperations.Address, call.Body, StringComparison.Ordinal);
         }
 
-        // The two writes about a person carry one; the campaign read does not.
-        Assert.Equal(2, withPerson);
+        // The two lookups and the list add's import carry one; the campaign read does not, and nor does the enrolment,
+        // which names the person by the identifier its lookup found.
+        Assert.Equal(3, withPerson);
     }
 
     /// <summary>
@@ -178,8 +179,9 @@ public class ReplyCommandLineTests
         expected.AddRange(call.Line switch
         {
             "sequence get 7" => new[] { "sequence", "get", "7" },
+            "contact find" => new[] { "contact", "find", "--contact", "-" },
             "contact-list add-contact 9" => new[] { "contact-list", "add-contact", "9", "--contact", "-", "--refuse-opted-out" },
-            "sequence add-contact 7" => new[] { "sequence", "add-contact", "7", "--contact", "-" },
+            "sequence add-contact 7" => new[] { "sequence", "add-contact", "7", "--contact-id", "1001" },
             _ => throw new InvalidOperationException($"No expected argument vector for '{call.Line}'."),
         });
 
@@ -226,14 +228,17 @@ internal static class ReplyOperations
     public static IReadOnlyList<string> All => [CampaignGet, MembershipAdd, Enroll];
 
     /// <summary>
-    /// Every call those operations make against a planted account, in order: the campaign read; the list add, which
-    /// imports the person from stdin; the enrolment, which imports them again — matched now — and adds them. A test that
-    /// asserts a rule over "every call" asserts this list first, so a rule that held because nothing ran fails instead.
+    /// Every call those operations make against a planted account, in order: the campaign read; the list add's exact
+    /// lookup, which finds nobody, and the add, which imports the person from stdin; the enrolment's lookup, which finds
+    /// them now, and the add by that identifier. A test that asserts a rule over "every call" asserts this list first, so
+    /// a rule that held because nothing ran fails instead.
     /// </summary>
     public static IReadOnlyList<string> EveryCall =>
     [
         $"sequence get {Sequence}",
+        "contact find",
         $"contact-list add-contact {List}",
+        "contact find",
         $"sequence add-contact {Sequence}",
     ];
 

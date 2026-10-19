@@ -50,7 +50,7 @@ public class ReplyEnrollmentStopTests
 
     /// <summary>
     /// A person Reply has never held takes part in nothing, which is a completed stop — and nobody is made to find
-    /// that out. The one command is the only call.
+    /// that out. The exact lookup is the only call, and nothing is removed.
     /// </summary>
     [Fact]
     public async Task A_stop_creates_nobody_and_a_person_the_provider_never_held_answers_already_stopped()
@@ -64,7 +64,7 @@ public class ReplyEnrollmentStopTests
         var answer = ReplyOperations.Succeeded(Operation, result);
         Assert.Equal($$"""{"items":[{"contact_id":"{{ContactId}}","status":"already_stopped"}]}""", answer.ToJsonString());
         Assert.Equal("""{"campaign":"7"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
-        Assert.Equal(["sequence remove-contact 7"], Paths(account));
+        Assert.Equal(["contact find"], Paths(account));
         Assert.Empty(account.Contacts);
     }
 
@@ -99,30 +99,27 @@ public class ReplyEnrollmentStopTests
 
         Assert.Equal("contact_not_unique", error.Code);
         Assert.Equal(FailureClass.Permanent, error.Class);
-        Assert.Equal(["sequence remove-contact 7"], Paths(account));
+        Assert.Equal(["contact find"], Paths(account));
         Assert.Equal([1001], account.EnrolledIn(Sequence));
     }
 
     /// <summary>
-    /// The CLI's lookup could not be read to its end. A stop that took that for nobody would answer `already_stopped`
-    /// over a person still being written to; it is refused instead, and nothing is removed. The message, which is all
-    /// that reaches the work item's last error, says what a person does instead.
+    /// The CLI's exact lookup could not be read to its end. A stop that took that for nobody would answer
+    /// `already_stopped` over a person still being written to; the read is asked again instead, and nothing is removed.
     /// </summary>
     [Fact]
-    public async Task A_lookup_that_cannot_be_read_to_its_end_is_refused_and_never_answers_already_stopped()
+    public async Task A_lookup_that_cannot_be_read_to_its_end_is_asked_again_and_never_answers_already_stopped()
     {
         using var account = Planted();
         account.WithContact(1001, Address, "Marta").WithEnrollment(Sequence, 1001);
-        account.Refuses("sequence remove-contact", "contact.lookup_incomplete", status: 200);
+        account.Refuses("contact find", "reply.unavailable", status: 200);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input()));
 
-        Assert.Equal("provider_call_failed", error.Code);
-        Assert.Equal(FailureClass.Permanent, error.Class);
-        Assert.Contains("take the person out at Reply by hand, then check with enrollment.list", error.Message, StringComparison.Ordinal);
-        Assert.Equal(["sequence remove-contact 7"], Paths(account));
+        Assert.Equal(("provider_unavailable", FailureClass.Transient), (error.Code, error.Class));
+        Assert.Equal(["contact find"], Paths(account));
         Assert.Equal([1001], account.EnrolledIn(Sequence));
     }
 
@@ -194,7 +191,7 @@ public class ReplyEnrollmentStopTests
         var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input()));
 
         Assert.Equal("stopped", (string?)answer["items"]![0]!["status"]);
-        Assert.Equal(["sequence remove-contact 7"], Paths(account));
+        Assert.Equal(["contact find", "sequence remove-contact 7"], Paths(account));
         var everything = Everything(account);
         foreach (var word in new[] { Note, "not_interested", "timing", "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRE" })
         {
@@ -206,7 +203,10 @@ public class ReplyEnrollmentStopTests
     // Finding the person, and what Reply answers
     // -------------------------------------------------------------------------------------------------------
 
-    /// <summary>The person Reply holds is found whatever the case of the address, and the pin travels out.</summary>
+    /// <summary>
+    /// The person Reply holds is found by the exact lookup whatever the case of the address — the address on stdin —
+    /// and taken out by Reply's identifier for them, and the pin travels out.
+    /// </summary>
     [Fact]
     public async Task A_person_found_by_the_address_whatever_its_case_is_taken_out_and_pinned()
     {
@@ -220,10 +220,12 @@ public class ReplyEnrollmentStopTests
         var answer = ReplyOperations.Succeeded(Operation, result);
         Assert.Equal("stopped", (string?)answer["items"]![0]!["status"]);
         Assert.Equal("""{"contact":"1001","campaign":"7"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
-        var call = Assert.Single(account.Calls);
-        Assert.Equal("-", call.Option("--contact"));
-        Assert.Equal(Address, (string?)JsonNode.Parse(call.Body!)!["email"]);
-        Assert.DoesNotContain(Address, string.Join(" ", call.Args), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(["contact find", "sequence remove-contact 7"], Paths(account));
+        Assert.Equal("-", account.Calls[0].Option("--contact"));
+        Assert.Equal($$"""{"email":"{{Address}}"}""", account.Calls[0].Body);
+        Assert.Equal("1001", account.Calls[1].Option("--contact-id"));
+        Assert.Null(account.Calls[1].Body);
+        Assert.All(account.Calls, call => Assert.DoesNotContain(Address, string.Join(" ", call.Args), StringComparison.OrdinalIgnoreCase));
         Assert.Empty(account.EnrolledIn(Sequence));
     }
 
@@ -281,11 +283,12 @@ public class ReplyEnrollmentStopTests
     }
 
     /// <summary>
-    /// The same first link, with nobody to find by the address: the campaign is read before the lookup, so a stop that
-    /// would have answered `already_stopped` against a campaign Reply does not hold is not found instead.
+    /// The same first link, with nobody to find by the address: a person Reply does not hold is answered without a
+    /// command, so the campaign is read first, and a stop that would have answered `already_stopped` against a
+    /// campaign Reply does not hold is not found instead — with nothing pinned.
     /// </summary>
     [Fact]
-    public async Task A_first_link_reply_does_not_hold_is_not_found_before_anybody_is_looked_up()
+    public async Task A_first_link_reply_does_not_hold_is_not_found_when_nobody_is_found_by_the_address()
     {
         using var account = Planted();
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
@@ -295,15 +298,16 @@ public class ReplyEnrollmentStopTests
 
         Assert.Equal("campaign_not_found", error.Code);
         Assert.Null(error.ExternalIds);
-        Assert.Equal(["sequence get 8"], Paths(account));
+        Assert.Equal(["contact find", "sequence get 8"], Paths(account));
     }
 
     /// <summary>
-    /// A person named by address may be somebody Reply does not hold, which the CLI answers without checking the
-    /// sequence, so a campaign named the first time is read once first, then worked and pinned.
+    /// A person the lookup finds is taken out by Reply's identifier, and the CLI reads their part in the sequence and
+    /// tells a sequence Reply does not hold apart itself, so a campaign named the first time needs no read of its own:
+    /// it is worked and pinned.
     /// </summary>
     [Fact]
-    public async Task A_campaign_named_the_first_time_is_read_once_then_worked_and_pinned()
+    public async Task A_campaign_named_the_first_time_is_worked_and_pinned_once_the_person_is_found()
     {
         using var account = Planted();
         account.WithContact(1001, Address, "Marta").WithEnrollment(Sequence, 1001);
@@ -314,7 +318,26 @@ public class ReplyEnrollmentStopTests
 
         Assert.Equal("stopped", (string?)ReplyOperations.Succeeded(Operation, result)["items"]![0]!["status"]);
         Assert.Equal("""{"contact":"1001","campaign":"7"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
-        Assert.Equal(["sequence get 7", "sequence remove-contact 7"], Paths(account));
+        Assert.Equal(["contact find", "sequence remove-contact 7"], Paths(account));
+    }
+
+    /// <summary>
+    /// A lookup that fails before the sequence is known to be Reply's pins no campaign: the identifier is the planner's
+    /// until Reply has said it holds it.
+    /// </summary>
+    [Fact]
+    public async Task A_lookup_that_fails_on_a_first_link_pins_no_campaign()
+    {
+        using var account = Planted();
+        account.WithContact(1001, Address, "Marta").WithDuplicate(1002, of: 1001);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(campaign: null, supplied: "8")));
+
+        Assert.Equal("contact_not_unique", error.Code);
+        Assert.Null(error.ExternalIds);
+        Assert.Equal(["contact find"], Paths(account));
     }
 
     /// <summary>
@@ -343,7 +366,7 @@ public class ReplyEnrollmentStopTests
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input()));
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(pinned: "1001")));
 
         Assert.Equal("provider_call_failed", error.Code);
         Assert.Equal("sequenceContact.somethingNew", (string?)error.Details!["provider_code"]);

@@ -36,8 +36,9 @@ It reads one of two scopes:
 ```
 
 - `contacts` is there only when the work item names a person, and then it carries the person's identifier and pins
-  and nothing else — no name, no address, no channel. A read about a person works by the pin, so a person with no
-  pin fails `contact_not_linked` before anything is called: a read creates nobody.
+  and nothing else — no name, no address, no channel. A read about a person works by the pin —
+  `preflight.provider_contact` is `pinned_only` — so a person with no pin fails `contact_not_linked` before anything is
+  called: a read creates nobody.
 - Without a person, the campaign is named as in `campaign.get`: by `args.campaign.external_id` the first time, or by
   `campaign.external_ids.campaign` once it is pinned. An input naming neither a person nor a campaign is refused
   before your code runs.
@@ -113,7 +114,7 @@ be asked again.
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `optional`, channel `none`, suppression `checked` |
+| pre-flight | contact `optional`, channel `none`, suppression `checked`, provider contact `pinned_only` |
 | in a paused campaign | `waits` |
 | contact projection | `id`; channels: `none` |
 | precondition | none |

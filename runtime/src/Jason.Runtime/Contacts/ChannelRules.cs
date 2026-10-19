@@ -110,7 +110,12 @@ public static partial class ChannelRules
         return E164().IsMatch(digits) ? digits : null;
     }
 
-    /// <summary>Two profile links that differ only in case, a trailing slash or a fragment are the same profile.</summary>
+    /// <summary>
+    /// Two profile links that differ only in the case of their scheme or host, a default port, a user name, one trailing
+    /// slash or a fragment are the same profile. On linkedin.com and its subdomains a profile link names a person by its
+    /// slug whatever its case, so the path is lowercased there; on any other host it keeps its case, and the query keeps
+    /// its case everywhere. The path is the escaped one, so a letter written as a percent-escape keeps its case.
+    /// </summary>
     private static string? NormalizeUrl(string value)
     {
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
@@ -120,15 +125,25 @@ public static partial class ChannelRules
             return null;
         }
 
+        var host = uri.Host.ToLowerInvariant();
         var path = uri.AbsolutePath;
         if (path.Length > 0 && path.EndsWith('/'))
         {
             path = path[..^1];
         }
 
+        if (IsLinkedInHost(host))
+        {
+            path = path.ToLowerInvariant();
+        }
+
         var port = uri.IsDefaultPort ? string.Empty : string.Create(CultureInfo.InvariantCulture, $":{uri.Port}");
-        return string.Concat(uri.Scheme, "://", uri.Host.ToLowerInvariant(), port, path, uri.Query);
+        return string.Concat(uri.Scheme, "://", host, port, path, uri.Query);
     }
+
+    /// <summary>linkedin.com itself, or a host under it; never a host that merely ends in the same letters.</summary>
+    private static bool IsLinkedInHost(string host) =>
+        string.Equals(host, "linkedin.com", StringComparison.Ordinal) || host.EndsWith(".linkedin.com", StringComparison.Ordinal);
 
     [GeneratedRegex(@"^[a-z][a-z0-9_]{0,31}\z")]
     private static partial Regex ChannelName();

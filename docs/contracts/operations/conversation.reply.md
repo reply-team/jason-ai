@@ -21,15 +21,18 @@ same person in the meantime, and guessing wrong is a second message in somebody'
 
 ## Finding the person through the thread
 
-The work item names a person, and the thread names one too; they have to be the same person, or nothing is sent. Read
-the thread first:
+The work item names a person, and the thread names one too; they have to be the same person, or nothing is sent.
+`preflight.provider_contact` is `find_only`: the person is found through the thread, and nobody is created. Read the
+thread first:
 
 - when `contacts[0].external_ids.contact` is present, the thread's person must be the one the provider holds under it;
 - and in every case the thread's address on the channel named by `args.channel` — the email address, the LinkedIn
   profile — must be that channel's value under the key the runtime gives a value for its suppression register: an
-  email address without regard to case; a profile link by its scheme and host without regard to case, with a fragment
-  and one trailing slash dropped, and its path and query exactly, so `/in/Jane` and `/in/jane` are two people. That is
-  what makes the register's check, made at the claim for that value, a check for exactly the person reached.
+  email address without regard to case; a profile link by its scheme and host without regard to case, with a default
+  port, a user name, a fragment and one trailing slash dropped, its query exactly, and its path without regard to case
+  on linkedin.com and its subdomains, where a profile link names a person by its slug, and exactly on any other host —
+  so `/in/Jane` and `/in/jane` are one person on linkedin.com and two anywhere else. That is what makes the register's
+  check, made at the claim for that value, a check for exactly the person reached.
 
 A thread on another channel fails `channel_mismatch`, a thread of somebody else `thread_contact_mismatch`, both
 before anything is sent. Nobody is created at the provider: the person is found through the thread, and their
@@ -125,10 +128,10 @@ show each case.
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `required`, channel `from_args`, suppression `checked` |
+| pre-flight | contact `required`, channel `from_args`, suppression `checked`, provider contact `find_only` |
 | in a paused campaign | `waits` |
 | contact projection | `id`; channels: `consumed` |
-| precondition | Find the provider's own contact through the thread, without creating one: the thread's person must carry `contacts[0].external_ids.contact` when that pin is present, and in every case the thread's address on the channel named by `args.channel` must be that channel's value as the runtime keys it for its suppression register — an email address without regard to case, a profile link by its scheme and host without regard to case, a fragment and one trailing slash dropped, and its path and query exactly — otherwise nothing is sent. Return the thread's person's identifier under `external_ids.contact`. |
+| precondition | The thread's person is this person: the one pinned, where there is a pin, and in every case the one whose address on the channel named by `args.channel` is that channel's value as the runtime keys it for its suppression register; otherwise nothing is sent. |
 | preview a person reads | `Reply in the provider's thread {/args/thread/external_id} to {/contacts/0/channels/0/value} by {/args/channel}, from the account that owns the thread and to nobody else: {/args/body}`; highlighted: `/contacts/0/channels/0/value`, `/args/channel`, `/args/thread`, `/args/reply_to_message`, `/args/body` |
 | pinned identifiers | `contact` names a contact |
 | recovery read | none |

@@ -161,7 +161,7 @@ public class ReplyEnrollTests
 
         Succeeded(await InvokeAsync(api, Input(firstTouch: firstTouch), Ct));
 
-        Assert.Equal(ignores, Assert.Single(account.Calls).Args.Contains("--ignore-step-delay"));
+        Assert.Equal(ignores, account.Calls.Single(call => call.Command == "sequence add-contact").Args.Contains("--ignore-step-delay"));
     }
 
     [Fact]
@@ -173,7 +173,7 @@ public class ReplyEnrollTests
 
         Succeeded(await InvokeAsync(api, Input(start: Step(2)), Ct));
 
-        Assert.Equal("2", Assert.Single(account.Calls).Option("--start-step"));
+        Assert.Equal("2", account.Calls.Single(call => call.Command == "sequence add-contact").Option("--start-step"));
         Assert.Equal(12, (int)account.Enrollments.Single()!["currentStep"]!["stepId"]!);
     }
 
@@ -227,8 +227,12 @@ public class ReplyEnrollTests
         Assert.Equal(FailureClass.Transient, error.Class);
     }
 
+    /// <summary>
+    /// A person Reply holds is found by the exact lookup and enrolled by Reply's identifier for them: nothing is
+    /// imported, nothing is written to their record, and no first name is needed — this one has none.
+    /// </summary>
     [Fact]
-    public async Task A_person_without_a_first_name_whom_reply_holds_is_found_by_address_and_enrolled_by_id()
+    public async Task A_person_reply_holds_is_found_by_the_exact_lookup_and_enrolled_by_id()
     {
         using var account = new ReplyAccount().WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
             .WithContact(2001, Address, FirstName);
@@ -238,9 +242,27 @@ public class ReplyEnrollTests
         var answer = Succeeded(await InvokeAsync(api, Input(firstName: null), Ct));
 
         Assert.Equal("enrolled", (string?)answer["items"]![0]!["status"]);
-        Assert.Equal(["POST /v3/contacts/filter?top=100&skip=0", "sequence add-contact 7"], account.Calls.Select(call => call.Line));
+        Assert.Equal(["contact find", "sequence add-contact 7"], account.Calls.Select(call => call.Line));
         Assert.Equal("2001", account.Calls[1].Option("--contact-id"));
+        Assert.Null(account.Calls[1].Body);
         Assert.Equal([2001], account.EnrolledIn(Sequence));
+    }
+
+    /// <summary>Two contacts under the address: picking one would be guessing whom the work is about, so nobody is enrolled.</summary>
+    [Fact]
+    public async Task A_person_held_twice_under_the_address_is_refused_and_nobody_is_enrolled()
+    {
+        using var account = new ReplyAccount().WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
+            .WithContact(2001, Address, FirstName).WithDuplicate(2002, of: 2001);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(), Ct));
+
+        Assert.Equal(("contact_not_unique", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Contains("more than one contact under this address", error.Message, StringComparison.Ordinal);
+        Assert.Equal(["contact find"], account.Calls.Select(call => call.Line));
+        Assert.Empty(account.EnrolledIn(Sequence));
     }
 
     [Fact]
@@ -633,8 +655,8 @@ public class ReplyEnrollTests
             }
         }
 
-        var added = Assert.Single(account.Calls);
-        Assert.Contains(Address, added.Body!, StringComparison.Ordinal);
+        Assert.Equal(["contact find", "sequence add-contact 7"], account.Calls.Select(call => call.Line));
+        Assert.All(account.Calls, call => Assert.Contains(Address, call.Body!, StringComparison.Ordinal));
     }
 
     // -------------------------------------------------------------------------------------------------------

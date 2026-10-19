@@ -237,12 +237,28 @@ public class ReplyErrorTableTests
             Assert.True(kind is "read" or "write", $"'{command}' is marked '{kind}', which decides nothing.");
         }
 
-        // The mark is per command: the contact search is a POST that only reads, and of the two calls on sequences the
-        // list reads and the create writes.
+        // The mark is per command: the exact lookup only reads, and of the two commands on sequences by name the list
+        // reads and the create writes.
         Assert.Equal("write", Text(commands["sequence add-contact"]!.AsObject(), "kind"));
-        Assert.Equal("read", Text(commands["api POST /v3/contacts/filter"]!.AsObject(), "kind"));
-        Assert.Equal("read", Text(commands["api GET /v3/sequences"]!.AsObject(), "kind"));
-        Assert.Equal("write", Text(commands["api POST /v3/sequences"]!.AsObject(), "kind"));
+        Assert.Equal("read", Text(commands["contact find"]!.AsObject(), "kind"));
+        Assert.Equal("read", Text(commands["sequence list"]!.AsObject(), "kind"));
+        Assert.Equal("write", Text(commands["sequence create"]!.AsObject(), "kind"));
+    }
+
+    /// <summary>
+    /// The package runs the command made for each request and never the CLI's raw call, which none of the CLI's own
+    /// guards — the read before a write, the retries, the one answer for an outcome it could not see — would reach. So
+    /// the table that marks every command it runs holds no raw call at all.
+    /// </summary>
+    [Fact]
+    public void No_command_the_package_runs_is_the_raw_call()
+    {
+        var raw = ReplyErrorTable.Commands
+            .Select(command => command.Key)
+            .Where(command => command == "api" || command.StartsWith("api ", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.True(raw.Count == 0, $"The package runs the raw call: {string.Join(", ", raw)}.");
     }
 
     /// <summary>

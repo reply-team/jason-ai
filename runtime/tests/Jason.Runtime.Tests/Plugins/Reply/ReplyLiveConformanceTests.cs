@@ -196,7 +196,7 @@ public class ReplyLiveConformanceTests
 
         // One create reached Reply, and the name reached no command line.
         var commands = ExecArguments(api.Paths);
-        Assert.Equal(1, commands.Count(command => command.Contains("POST") && command.Contains("/v3/sequences")));
+        Assert.Equal(1, commands.Count(command => command.Contains("sequence") && command.Contains("create")));
         foreach (var argument in commands.SelectMany(command => command))
         {
             AssertAbsent("The draft's name", name, argument, "a command-line argument");

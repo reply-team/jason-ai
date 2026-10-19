@@ -6,13 +6,13 @@ using System.Text.Json.Nodes;
 // Deliberately in the global namespace with the rest of this program.
 
 /// <summary>
-/// The sixteen work commands, answered as reply-cli 0.12.0 documents them, from the same files the account keeps. What
-/// each one answers is reply-cli's contract — its result, its error code, its exit code — and never how reply-cli gets
-/// there: no Reply endpoint is imitated here.
+/// The work commands, answered as reply-cli 0.13.0 documents them, from the same files the account keeps. What each one
+/// answers is reply-cli's contract — its result, its error code, its exit code — and never how reply-cli gets there: no
+/// Reply endpoint is imitated here.
 /// </summary>
 internal static partial class Account
 {
-    private static readonly string[] PersonFields = ["email", "first_name", "last_name", "company", "title"];
+    private static readonly string[] PersonFields = ["email", "linkedin_url", "first_name", "last_name", "company", "title"];
     private static readonly string[] Presets = ["last-week", "last-month", "last-year", "all-time"];
     private static readonly string[] Sources = ["inbox", "sent", "unread", "ai-draft"];
 
@@ -70,9 +70,12 @@ internal static partial class Account
 
             case "lost":
                 {
-                    // Everything the command would have done is done, and then the answer is gone.
+                    // Everything the command would have done is done, and then the answer is gone. What the CLI learned
+                    // goes with it — except a sequence it was making, whose identifier only the lost answer carried.
                     var effect = Handle(root, command, line, stdin);
-                    var learned = effect.Result is JsonObject done ? IdsOf(done) : effect.Error?["ids"]?.DeepClone() as JsonObject;
+                    var learned = command == "sequence create"
+                        ? null
+                        : effect.Result is JsonObject done ? IdsOf(done) : effect.Error?["ids"]?.DeepClone() as JsonObject;
                     return await PrintAsync(Refused(
                         "outcome.unknown", "The request may have reached Reply, but no answer came back.", exit: 3, ids: learned));
                 }
@@ -83,6 +86,8 @@ internal static partial class Account
 
     private static Ending Handle(string root, string command, Parsed line, string? stdin) => command switch
     {
+        "sequence list" => SequenceListByName(root, line, stdin),
+        "sequence create" => SequenceCreateByName(root, line, stdin),
         "sequence get" => SequenceGet(root, line),
         "sequence contacts" => SequencePeople(root, line),
         "sequence stats" => SequenceCounts(root, line),
@@ -91,6 +96,7 @@ internal static partial class Account
         "sequence pause" => SequencePause(root, line),
         "sequence start" => SequenceStart(root, line),
         "contact-list add-contact" => ListAddContact(root, line, stdin),
+        "contact find" => ContactFind(root, line, stdin),
         "contact opt-out" => ContactOptOut(root, line, stdin),
         "inbox list" => InboxList(root, line),
         "inbox get" => InboxGet(root, line),
@@ -561,7 +567,7 @@ internal static partial class Account
         }
         else
         {
-            var (made, isNew, notImported) = Ensure(root, contact!, ids);
+            var (made, isNew, notImported) = Import(root, contact!.Person!, ids);
             if (notImported is not null)
             {
                 return notImported;
@@ -585,6 +591,45 @@ internal static partial class Account
         }
 
         return Done(new JsonObject { ["status"] = "opted_out", ["contact_id"] = contactId, ["contact_created"] = created });
+    }
+
+    /// <summary>
+    /// The contact Reply holds under one address, never creating one: <c>--contact -</c> and nothing else, then exactly
+    /// one of <c>{email}</c> and <c>{linkedin_url}</c> on stdin. Null when Reply holds nobody there; two is
+    /// <c>contact.not_unique</c>. No message repeats the address.
+    /// </summary>
+    private static Ending ContactFind(string root, Parsed line, string? stdin)
+    {
+        if (line.Option("--contact") != "-")
+        {
+            return Refused("usage.contact", "--contact takes only -: the address is read from stdin.", exit: 2);
+        }
+
+        JsonObject given;
+        try
+        {
+            given = JsonNode.Parse(stdin ?? string.Empty) as JsonObject ?? throw new JsonException("not an object");
+        }
+        catch (JsonException)
+        {
+            return Refused("usage.contact", "stdin must be one JSON object.", exit: 2);
+        }
+
+        if (given.Count != 1 || given.First().Key is not ("email" or "linkedin_url")
+            || given.First().Value is not JsonValue raw || !raw.TryGetValue<string>(out var text) || EcmaTrim(text).Length == 0)
+        {
+            return Refused("usage.contact", "Give exactly one of email and linkedin_url, as a string.", exit: 2);
+        }
+
+        var field = given.First().Key;
+        var value = EcmaTrim(text);
+        if (field == "email" ? !IsAddress(value) : LinkedInKey(value) is null)
+        {
+            return Refused("usage.contact", field == "email" ? "The email is not an email address." : "The linkedin_url is not an absolute http or https URL.", exit: 2);
+        }
+
+        var (found, refused) = Lookup(root, new ContactRef(null, new JsonObject { [field] = value }), []);
+        return refused ?? Done(new JsonObject { ["contact_id"] = found });
     }
 
     private static Ending InboxList(string root, Parsed line)
@@ -798,9 +843,19 @@ internal static partial class Account
             }
         }
 
-        if (person["email"] is not JsonValue email || !IsAddress(email.GetValue<string>()))
+        if (person["email"] is null && person["linkedin_url"] is null)
         {
-            return (null, Refused("usage.contact", "The contact needs an email address.", exit: 2));
+            return (null, Refused("usage.contact", "The contact needs an email or a LinkedIn URL.", exit: 2));
+        }
+
+        if (person["email"] is JsonValue email && !IsAddress(email.GetValue<string>()))
+        {
+            return (null, Refused("usage.contact", "The contact's email is not an email address.", exit: 2));
+        }
+
+        if (person["linkedin_url"] is JsonValue link && LinkedInKey(link.GetValue<string>()) is null)
+        {
+            return (null, Refused("usage.contact", "The contact's linkedin_url is not an absolute http or https URL.", exit: 2));
         }
 
         return (new ContactRef(null, person), null);
@@ -833,8 +888,8 @@ internal static partial class Account
     }
 
     /// <summary>
-    /// reply-cli's ensure: an id as given, or the person imported — matched by email, filling only fields the match left
-    /// empty, or created — and refused without a first name, as Reply refuses it, even for somebody it holds.
+    /// reply-cli's ensure: an id as given; a person given by email imported straight away, matched by the email; and one
+    /// given only by LinkedIn URL looked up first, by its key, and imported only when Reply holds nobody under it.
     /// </summary>
     private static (int Id, bool Created, Ending? Refusal) Ensure(string root, ContactRef contact, JsonObject ids)
     {
@@ -843,16 +898,40 @@ internal static partial class Account
             return (id, false, null);
         }
 
-        var person = contact.Person!;
+        if (contact.Person!["email"] is null)
+        {
+            var (found, refused) = Lookup(root, contact, ids);
+            if (refused is not null)
+            {
+                return (0, false, refused);
+            }
+
+            if (found is { } held)
+            {
+                return (held, false, null);
+            }
+        }
+
+        return Import(root, contact.Person!, ids);
+    }
+
+    /// <summary>
+    /// reply-cli's import: keyed by the email, filling only fields the match left empty, or — with no email — keyed by the
+    /// LinkedIn URL and writing it as its key; refused without a first name, as Reply refuses it, even for somebody it holds.
+    /// </summary>
+    private static (int Id, bool Created, Ending? Refusal) Import(string root, JsonObject person, JsonObject ids)
+    {
         if (person["first_name"] is null)
         {
             return (0, false, Refused("reply.refused", "Reply did not import the contact.", status: 200, detail: "Invalid data", ids: ids));
         }
 
         var contacts = Read(root, ContactsFile);
-        var email = person["email"]!.GetValue<string>();
-        var held = contacts.OfType<JsonObject>().FirstOrDefault(entry =>
-            string.Equals(Text(entry, "email"), email, StringComparison.OrdinalIgnoreCase));
+        var email = person["email"]?.GetValue<string>();
+        var key = person["linkedin_url"] is JsonValue link ? LinkedInKey(link.GetValue<string>()) : null;
+        var held = email is null
+            ? null
+            : contacts.OfType<JsonObject>().FirstOrDefault(entry => string.Equals(Text(entry, "email"), email, StringComparison.OrdinalIgnoreCase));
         if (held is not null)
         {
             foreach (var (field, name) in new[] { ("first_name", "firstName"), ("last_name", "lastName"), ("company", "company"), ("title", "title") })
@@ -861,6 +940,11 @@ internal static partial class Account
                 {
                     held[name] = value.DeepClone();
                 }
+            }
+
+            if (Text(held, "linkedInUrl").Length == 0 && key is not null)
+            {
+                held["linkedInUrl"] = key;
             }
 
             Write(root, ContactsFile, contacts);
@@ -872,6 +956,7 @@ internal static partial class Account
         {
             ["id"] = created,
             ["email"] = email,
+            ["linkedInUrl"] = key,
             ["firstName"] = person["first_name"]!.DeepClone(),
             ["lastName"] = person["last_name"]?.DeepClone(),
             ["company"] = person["company"]?.DeepClone(),
@@ -883,7 +968,11 @@ internal static partial class Account
         return (created, true, null);
     }
 
-    /// <summary>reply-cli's find: an id as given, or the one contact whose email equals the address, ignoring case.</summary>
+    /// <summary>
+    /// reply-cli's find: an id as given, or the one contact under the address — by its email when there is one, equal
+    /// ignoring case; with only a LinkedIn URL, by its key, which is what asking Reply for the lowercased slug and then
+    /// for the spelling as given finds. Two is <c>contact.not_unique</c>.
+    /// </summary>
     private static (int? Id, Ending? Refusal) Lookup(string root, ContactRef contact, JsonObject ids)
     {
         if (contact.Id is { } id)
@@ -891,29 +980,19 @@ internal static partial class Account
             return (id, null);
         }
 
-        var email = contact.Person!["email"]!.GetValue<string>();
-        var holding = Records(root, ContactsFile)
-            .Where(entry => Text(entry, "email").Contains(email, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        var exact = holding
-            .Where(entry => string.Equals(Text(entry, "email"), email, StringComparison.OrdinalIgnoreCase))
-            .Select(entry => entry["id"]!.GetValue<int>())
-            .Distinct()
-            .ToList();
+        var person = contact.Person!;
+        var holding = person["email"] is JsonValue email
+            ? Records(root, ContactsFile).Where(entry => string.Equals(Text(entry, "email"), email.GetValue<string>(), StringComparison.OrdinalIgnoreCase))
+            : Records(root, ContactsFile).Where(entry =>
+                Text(entry, "linkedInUrl") is { Length: > 0 } held && LinkedInKey(held) == LinkedInKey(person["linkedin_url"]!.GetValue<string>()));
+        var found = holding.Select(entry => entry["id"]!.GetValue<int>()).Distinct().ToList();
 
-        if (exact.Count > 1)
+        if (found.Count > 1)
         {
-            return (null, Refused("contact.not_unique", "Reply holds more than one contact with this email address.", status: 200, ids: ids));
+            return (null, Refused("contact.not_unique", "Reply holds more than one contact under this address.", status: 200, ids: ids));
         }
 
-        if (holding.Count > 500)
-        {
-            return (null, Refused(
-                "contact.lookup_incomplete", "More than 500 contacts contain this address, so it could not be decided which one is meant.",
-                status: 200, ids: ids));
-        }
-
-        return (exact.Count == 1 ? exact[0] : null, null);
+        return (found.Count == 1 ? found[0] : null, null);
     }
 
     /// <summary>The Nth step of a chain of steps, walked from the one with no parent, or why there is none.</summary>

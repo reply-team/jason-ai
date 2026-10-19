@@ -19,6 +19,8 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("The next page starts at `offset` plus the number of items this page returned, never at `offset + limit`.")]
     [InlineData("768 KiB")]
     [InlineData("**Two namespaces, the same words.**")]
+    [InlineData("and how the plugin finds the provider's own contact for that person (`provider_contact`: `find_or_create`, `find_only`, `pinned_only` or `not_used`")]
+    [InlineData("what must be true at the provider before the operation can act, beyond how its contact is found, in one sentence")]
     public void The_contracts_readme_says_it(string sentence) =>
         Assert.Contains(sentence, Flat(Source("docs/contracts/README.md")), StringComparison.Ordinal);
 
@@ -27,8 +29,52 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("### Pages")]
     [InlineData("`provider_answer_too_large`")]
     [InlineData("a code every published contract declares")]
+    [InlineData("### The contact proxy rule")]
+    [InlineData("1. **The plugin owns the binding.**")]
+    [InlineData("2. **A pin is worked by, and never overwritten.**")]
+    [InlineData("3. **Deleting a Jason contact never deletes the provider's.**")]
+    [InlineData("4. **Fields and lists travel with the operation that needs them.**")]
+    [InlineData("If the provider answers with another identifier, return the one it answered: the runtime records it beside the pin as a divergence, keeps the pin, and the attempt still succeeds.")]
+    [InlineData("Two spellings of one person on the register become that person's one stop, the earliest, with its reason: a stop is never lost by the collapse.")]
+    [InlineData("The journal keeps every line it had, and the rewrite adds none.")]
     public void The_plugin_authors_page_says_it(string sentence) =>
         Assert.Contains(sentence, Flat(Source("docs/plugins.md")), StringComparison.Ordinal);
+
+    /// <summary>
+    /// The plugin authors' page names, beside each way of finding the provider's contact, the operations published with
+    /// it — read from the catalog, so a document added under a word fails here until the table names it, and the last
+    /// row says the rest name nobody.
+    /// </summary>
+    [Fact]
+    public void The_contact_proxy_rule_names_each_way_s_operations_as_the_documents_state_them()
+    {
+        var text = Source("docs/plugins.md").ReplaceLineEndings("\n");
+        var start = text.IndexOf("### The contact proxy rule", StringComparison.Ordinal);
+        var rows = text[start..text.IndexOf("\n### ", start + 1, StringComparison.Ordinal)]
+            .Split('\n')
+            .Where(line => line.StartsWith("| `", StringComparison.Ordinal) && !line.StartsWith("| `preflight.", StringComparison.Ordinal))
+            .ToDictionary(line => line.Split('|')[1].Trim().Trim('`'), line => line.Split('|')[3], StringComparer.Ordinal);
+
+        Assert.Equal(["find_only", "find_or_create", "not_used", "pinned_only"], rows.Keys.Order(StringComparer.Ordinal));
+        foreach (var (word, cell) in rows)
+        {
+            var named = Regex.Matches(cell, "`(?<id>[a-z_]+\\.[a-z_]+)`").Select(match => match.Groups["id"].Value).Order(StringComparer.Ordinal).ToList();
+            var stated = OperationCatalog.All
+                .Where(contract => System.Text.Json.JsonSerializer.Serialize(contract.Preflight.ProviderContact, Jason.Contracts.Json.JasonJson.Options).Trim('"') == word)
+                .Select(contract => contract.Id)
+                .Order(StringComparer.Ordinal)
+                .ToList();
+
+            if (word == "not_used")
+            {
+                Assert.True(named.Count == 0 && cell.Contains("every other operation", StringComparison.Ordinal), $"The `not_used` row reads: {cell}");
+                Assert.NotEmpty(stated);
+                continue;
+            }
+
+            Assert.True(named.SequenceEqual(stated), $"The `{word}` row names {string.Join(", ", named)}, and the documents state {string.Join(", ", stated)}.");
+        }
+    }
 
     [Fact]
     public void The_routing_page_says_an_optional_contact_runs_with_one_or_without() =>
@@ -73,6 +119,7 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("| Work in a paused Jason campaign |")]
     [InlineData("| Two records of a stop |")]
     [InlineData("| The suppression register and a stop |")]
+    [InlineData("| The contact proxy rule as a field |")]
     [InlineData("| Finding a person before creating one |")]
     [InlineData("| `contact_not_unique` |")]
     [InlineData("| A reason for a stop |")]
@@ -133,7 +180,7 @@ public sealed partial class CanonicalReadsDocTests
     /// </summary>
     [Theory]
     [InlineData("the stop never creates anybody")]
-    [InlineData("the opt-out looks the address up first and creates it only when nobody matches")]
+    [InlineData("the enrollment, the list add and the opt-out look the person up and create them only when nobody matches")]
     [InlineData("Four of the writes about a person declare `contact_not_found` for it")]
     [InlineData("The fifth, the reply in a thread, declares none")]
     [InlineData("for `enrollment.stop` a pin the provider no longer holds reads as the completed stop it cannot be told apart from")]

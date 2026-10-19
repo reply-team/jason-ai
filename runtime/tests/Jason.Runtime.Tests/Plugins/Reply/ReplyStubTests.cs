@@ -7,9 +7,8 @@ namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>
 /// The stand-in's own rules, beside what its commands answer (<see cref="ReplyStubCommandTests"/>): where it finds its
-/// account, what it refuses before anything happens, the call log it writes before it answers, the endings a test
-/// scripts for it, and the one raw call — the contact search — which prints <c>{code, data}</c> for any status and
-/// exits 1 from 400 up.
+/// account, what it refuses before anything happens — the raw call among it, which the official package never runs —
+/// the call log it writes before it answers, and the endings a test scripts for it.
 /// </summary>
 public class ReplyStubTests
 {
@@ -18,11 +17,8 @@ public class ReplyStubTests
     /// <summary>The global prefix the package always passes, so each test says only what it is about.</summary>
     private static string[] Prefix => ["--json", "-q"];
 
-    /// <summary>The contact search, the one raw call the plugin still makes, as it asks for its first page.</summary>
-    private const string Search = "/v3/contacts/filter?top=100&skip=0";
-
-    /// <summary>The search's whole argument vector after the prefix.</summary>
-    private static string[] SearchCall => [.. Prefix, "api", Search, "--method", "POST", "--body", "-"];
+    /// <summary>The exact lookup of one address, with the address on stdin.</summary>
+    private static string[] FindCall => [.. Prefix, "contact", "find", "--contact", "-"];
 
     // -------------------------------------------------------------------------------------------------------
     // Nothing a Reply test resolves may be a program the machine installed
@@ -65,72 +61,27 @@ public class ReplyStubTests
     }
 
     // -------------------------------------------------------------------------------------------------------
-    // How it answers
-    // -------------------------------------------------------------------------------------------------------
-
-    [Fact]
-    public async Task The_raw_call_prints_code_and_data_and_exits_one_when_the_status_is_four_hundred()
-    {
-        using var account = new ReplyAccount();
-        account.Answers("POST", Search, 503, Problem(503, "service.unavailable").ToJsonString());
-
-        var (exit, stdout, _) = await account.RunAsync(SearchCall, """{"searchTerm":"held@example.test"}""", Ct);
-
-        // `reply api` prints {code, data} for any status and exits 1 from 400 up; a stand-in that exited 0 would let a
-        // plugin pass a test it would fail against the real thing.
-        Assert.Equal(1, exit);
-        var (code, data) = Answer(stdout);
-        Assert.Equal(503, code);
-        Assert.Equal("service.unavailable", data!["code"]!.GetValue<string>());
-    }
-
-    [Fact]
-    public async Task A_status_below_four_hundred_is_a_success()
-    {
-        using var account = new ReplyAccount();
-        account.WithContact(1001, "held@example.test", "Held");
-
-        var (exit, stdout, stderr) = await account.RunAsync(SearchCall, """{"searchTerm":"held@example.test"}""", Ct);
-
-        Assert.Equal(0, exit);
-        Assert.Equal(string.Empty, stderr);
-        var (code, data) = Answer(stdout);
-        Assert.Equal(200, code);
-        Assert.Equal(1001, data!["items"]![0]!["id"]!.GetValue<int>());
-    }
-
-    [Fact]
-    public async Task An_empty_bodied_four_hundred_and_one_answers_with_no_data_at_all()
-    {
-        using var account = new ReplyAccount();
-        account.Answers("POST", Search, 401, string.Empty);
-
-        var (exit, stdout, _) = await account.RunAsync(SearchCall, """{"searchTerm":"held@example.test"}""", Ct);
-
-        // Reply's 401 has an empty body. A plugin that parsed one would fail on the one answer it is most likely
-        // to meet, so the stand-in reproduces it rather than inventing a problem document.
-        Assert.Equal(1, exit);
-        var (code, data) = Answer(stdout);
-        Assert.Equal(401, code);
-        Assert.Null(data);
-    }
-
-    // -------------------------------------------------------------------------------------------------------
     // Usage: the command surface, and nothing beyond it
     // -------------------------------------------------------------------------------------------------------
 
-    [Fact]
-    public async Task A_path_that_does_not_start_with_a_slash_is_a_usage_error_and_exits_two()
+    /// <summary>
+    /// The raw call is the real CLI's, and the official package never runs it: every request it makes has a command made
+    /// for it. So here it is a command this program does not know, refused before anything is recorded, and a package
+    /// that reached for it fails here.
+    /// </summary>
+    [Theory]
+    [InlineData("/v3/contacts/filter?top=100&skip=0", "--method", "POST", "--body", "-")]
+    [InlineData("/v3/sequences", null, null, null, null)]
+    public async Task The_raw_call_is_a_command_this_stand_in_does_not_know(string path, string? method, string? verb, string? body, string? from)
     {
         using var account = new ReplyAccount();
+        string[] arguments = [.. Prefix, "api", path, .. new[] { method, verb, body, from }.OfType<string>()];
 
-        var (exit, stdout, stderr) = await account.RunAsync([.. Prefix, "api", "v3/sequences/7"], Ct);
+        var (exit, stdout, stderr) = await account.RunAsync(arguments, "{}", Ct);
 
         Assert.Equal(2, exit);
         Assert.Equal(string.Empty, stdout);
-        Assert.Contains("error:", stderr, StringComparison.Ordinal);
-
-        // A usage error is decided before anything is called, so nothing was called.
+        Assert.Contains("unknown command 'api'", stderr, StringComparison.Ordinal);
         Assert.Empty(account.Calls);
     }
 
@@ -158,19 +109,18 @@ public class ReplyStubTests
     }
 
     [Fact]
-    public async Task A_body_that_is_not_read_from_stdin_is_a_usage_error()
+    public async Task An_address_that_is_not_read_from_stdin_is_a_usage_error()
     {
         using var account = new ReplyAccount();
-        var body = new JsonObject { ["searchTerm"] = "written@example.test" };
+        var person = new JsonObject { ["email"] = "written@example.test" };
 
-        var (exit, _, stderr) = await account.RunAsync(
-            [.. Prefix, "api", Search, "--method", "POST", "--body", body.ToJsonString()],
-            Ct);
+        var (exit, _, stderr) = await account.RunAsync([.. Prefix, "contact", "find", "--contact", person.ToJsonString()], Ct);
 
-        // A body on the command line would be a person's address in the runtime's log. The CLI takes '-' and
-        // nothing else, so the rule holds even against a plugin that tried.
+        // An address on the command line would be a person's address in the runtime's log. The CLI takes '-' and
+        // nothing else, so the rule holds even against a plugin that tried — and the refusal does not repeat it.
         Assert.Equal(2, exit);
-        Assert.Contains("--body", stderr, StringComparison.Ordinal);
+        Assert.Equal("usage.contact", (string?)JsonNode.Parse(stderr)!["error"]!["code"]);
+        Assert.DoesNotContain("written@example.test", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -300,19 +250,19 @@ public class ReplyStubTests
     }
 
     [Fact]
-    public async Task The_body_is_read_from_stdin_when_the_arguments_say_so()
+    public async Task The_address_is_read_from_stdin_when_the_arguments_say_so()
     {
         using var account = new ReplyAccount();
-        var body = new JsonObject { ["searchTerm"] = "sent@example.test" };
+        var body = new JsonObject { ["email"] = "sent@example.test" };
 
-        var (exit, stdout, _) = await account.RunAsync(SearchCall, body.ToJsonString(), Ct);
+        var (exit, stdout, _) = await account.RunAsync(FindCall, body.ToJsonString(), Ct);
 
         Assert.Equal(0, exit);
-        Assert.Equal(200, Answer(stdout).Code);
+        Assert.Equal("""{"contact_id":null}""", JsonNode.Parse(stdout)!.ToJsonString());
 
         var recorded = Assert.Single(account.Calls);
-        Assert.Equal("api", recorded.Command);
-        Assert.Equal("POST", recorded.Method);
+        Assert.Equal("contact find", recorded.Command);
+        Assert.Empty(recorded.Operands);
         Assert.Equal(body.ToJsonString(), recorded.Body);
 
         // The address travelled on stdin. Arguments are written to the runtime's log, and a contact's address may
@@ -338,108 +288,6 @@ public class ReplyStubTests
     }
 
     // -------------------------------------------------------------------------------------------------------
-    // The contact search, the one raw call the plugin still makes
-    // -------------------------------------------------------------------------------------------------------
-
-    /// <summary>
-    /// The free-text search as a live account answered it: every contact whose address contains the term, whatever
-    /// the case of either — so a term finds the person who carries it and anybody whose address merely holds it.
-    /// Telling the two apart is the caller's business.
-    /// </summary>
-    [Fact]
-    public async Task A_search_term_finds_every_contact_whose_address_contains_it_whatever_the_case()
-    {
-        using var account = new ReplyAccount();
-        account.WithContact(1001, "marta@example.com", "Marta");
-        account.WithContact(1002, "ana.marta@example.com", "Ana");
-        account.WithContact(1003, "someone@example.org", "Someone");
-
-        var (_, stdout, _) = await account.RunAsync(
-            [.. Prefix, "api", "/v3/contacts/filter?top=5&skip=0", "--method", "POST", "--body", "-"],
-            """{"searchTerm":"MARTA@EXAMPLE.COM"}""",
-            Ct);
-
-        var page = Answer(stdout).Data!.AsObject();
-        Assert.Equal([1001, 1002], page["items"]!.AsArray().Select(item => item!["id"]!.GetValue<int>()));
-        Assert.False(page["hasMore"]!.GetValue<bool>());
-        Assert.Equal(["hasMore", "items"], page.Select(member => member.Key).Order(StringComparer.Ordinal));
-    }
-
-    /// <summary>
-    /// The search pages the same way whatever it searches by, and says nothing of a total: the only word for the end
-    /// is <c>hasMore</c>, and a page past the end is empty.
-    /// </summary>
-    [Fact]
-    public async Task A_search_term_pages_with_top_and_skip_and_says_where_it_ends()
-    {
-        using var account = new ReplyAccount();
-        account.WithContact(1001, "first@example.com", "First");
-        account.WithContact(1002, "second@example.com", "Second");
-        account.WithContact(1003, "third@example.com", "Third");
-
-        async Task<JsonObject> PageAsync(int skip)
-        {
-            var (_, stdout, _) = await account.RunAsync(
-                [.. Prefix, "api", $"/v3/contacts/filter?top=2&skip={skip}", "--method", "POST", "--body", "-"],
-                """{"searchTerm":"example.com"}""",
-                Ct);
-            return Answer(stdout).Data!.AsObject();
-        }
-
-        var first = await PageAsync(0);
-        var second = await PageAsync(2);
-        var past = await PageAsync(1000000);
-
-        Assert.Equal([1001, 1002], first["items"]!.AsArray().Select(item => item!["id"]!.GetValue<int>()));
-        Assert.True(first["hasMore"]!.GetValue<bool>());
-        Assert.Equal([1003], second["items"]!.AsArray().Select(item => item!["id"]!.GetValue<int>()));
-        Assert.False(second["hasMore"]!.GetValue<bool>());
-        Assert.Empty(past["items"]!.AsArray());
-        Assert.False(past["hasMore"]!.GetValue<bool>());
-        Assert.Null(first["total"]);
-    }
-
-    /// <summary>
-    /// A live account ignored a rule set entirely and answered a page of everybody, which is why the package never
-    /// sends one. The stand-in answers the same way, so a package that did would find the wrong person here too.
-    /// </summary>
-    [Fact]
-    public async Task A_rule_set_is_ignored_and_the_search_answers_everybody()
-    {
-        using var account = new ReplyAccount();
-        account.WithContact(1001, "marta@example.com", "Marta");
-        account.WithContact(1002, "someone@example.org", "Someone");
-
-        var (_, stdout, _) = await account.RunAsync(
-            [.. Prefix, "api", "/v3/contacts/filter?top=5&skip=0", "--method", "POST", "--body", "-"],
-            """{"rules":[{"property":"email","condition":"equals","value":"marta@example.com"}]}""",
-            Ct);
-
-        var page = Answer(stdout).Data!.AsObject();
-        Assert.Equal([1001, 1002], page["items"]!.AsArray().Select(item => item!["id"]!.GetValue<int>()));
-    }
-
-    /// <summary>
-    /// Reply's create path publishes no word for an address it already holds, so an account can hold two contacts
-    /// under one address, and a search for it answers both.
-    /// </summary>
-    [Fact]
-    public async Task An_account_can_hold_two_contacts_under_one_address_and_the_search_answers_both()
-    {
-        using var account = new ReplyAccount();
-        account.WithContact(1001, "marta@example.com", "Marta").WithDuplicate(1002, of: 1001);
-
-        var (_, stdout, _) = await account.RunAsync(
-            [.. Prefix, "api", "/v3/contacts/filter?top=5&skip=0", "--method", "POST", "--body", "-"],
-            """{"searchTerm":"marta@example.com"}""",
-            Ct);
-
-        var items = Answer(stdout).Data!["items"]!.AsArray();
-        Assert.Equal([1001, 1002], items.Select(item => item!["id"]!.GetValue<int>()));
-        Assert.All(items, item => Assert.Equal("marta@example.com", (string?)item!["email"]));
-    }
-
-    // -------------------------------------------------------------------------------------------------------
     // Being told to misbehave
     // -------------------------------------------------------------------------------------------------------
 
@@ -448,15 +296,15 @@ public class ReplyStubTests
     {
         using var account = new ReplyAccount();
         account.WithContact(1001, "held@example.test", "Held");
-        account.Answers("POST", Search, 429, Problem(429, "rate.limited").ToJsonString());
+        account.Refuses("contact find", "rate_limited", status: 429);
 
-        var (first, refused, _) = await account.RunAsync(SearchCall, """{"searchTerm":"held@example.test"}""", Ct);
-        var (second, answered, _) = await account.RunAsync(SearchCall, """{"searchTerm":"held@example.test"}""", Ct);
+        var (first, _, refused) = await account.RunAsync(FindCall, """{"email":"held@example.test"}""", Ct);
+        var (second, answered, _) = await account.RunAsync(FindCall, """{"email":"held@example.test"}""", Ct);
 
         Assert.Equal(1, first);
-        Assert.Equal(429, Answer(refused).Code);
+        Assert.Equal("rate_limited", (string?)JsonNode.Parse(refused)!["error"]!["code"]);
         Assert.Equal(0, second);
-        Assert.Equal(200, Answer(answered).Code);
+        Assert.Equal("""{"contact_id":1001}""", JsonNode.Parse(answered)!.ToJsonString());
     }
 
     [Fact]
@@ -565,20 +413,6 @@ public class ReplyStubTests
     // -------------------------------------------------------------------------------------------------------
     // Reading what it printed
     // -------------------------------------------------------------------------------------------------------
-
-    private static JsonObject Problem(int status, string code) => new()
-    {
-        ["title"] = status == 404 ? "Not Found" : "Error",
-        ["status"] = status,
-        ["code"] = code,
-    };
-
-    private static (int Code, JsonNode? Data) Answer(string stdout)
-    {
-        var answer = Parsed(stdout);
-        Assert.NotNull(answer);
-        return (answer["code"]!.GetValue<int>(), answer["data"]);
-    }
 
     private static JsonNode? Parsed(string stdout)
     {

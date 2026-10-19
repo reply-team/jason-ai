@@ -30,7 +30,7 @@ public class ReplyFirstNameTests
     private const string Company = "Puerto Analytics";
     private const string Title = "Head of Growth";
 
-    private const string Lookup = "POST /v3/contacts/filter?top=100&skip=0";
+    private const string Lookup = "contact find";
     private const string CannotDerive = "a first name could not be derived";
     private const string Forbidden = "the route forbids deriving a first name";
 
@@ -41,14 +41,15 @@ public class ReplyFirstNameTests
     // The writes the route's switch governs. An opt-out is protective and derives whatever the binding says.
     public static TheoryData<string> Adding => [MembershipAdd, Enroll];
 
+    // A LinkedIn URL is no name, so a person reached by one, with no first and no last name, has nothing to derive from.
     public static TheoryData<string, string> CreatingWithNothingToDeriveFrom => new()
     {
-        { MembershipAdd, "@example.com" },
-        { MembershipAdd, "no address at all" },
-        { Enroll, "@example.com" },
-        { Enroll, "no address at all" },
-        { Optout, "@example.com" },
-        { Optout, "no address at all" },
+        { MembershipAdd, "https://www.linkedin.com/in/marta-example" },
+        { MembershipAdd, "https://example.com/profiles/m.alvarez@q3" },
+        { Enroll, "https://www.linkedin.com/in/marta-example" },
+        { Enroll, "https://example.com/profiles/m.alvarez@q3" },
+        { Optout, "https://www.linkedin.com/in/marta-example" },
+        { Optout, "https://example.com/profiles/m.alvarez@q3" },
     };
 
     public static TheoryData<string, bool> CreatingEitherWay => new()
@@ -191,7 +192,7 @@ public class ReplyFirstNameTests
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var result = await InvokeAsync(api, operation, Input(operation, lastName: null, address: value));
+        var result = await InvokeAsync(api, operation, Input(operation, lastName: null, address: value, channel: "linkedin"));
 
         var error = ReplyOperations.Failed(operation, result);
         Assert.Equal("provider_call_failed", error.Code);
@@ -260,7 +261,7 @@ public class ReplyFirstNameTests
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var result = await InvokeAsync(api, Optout, Input(Optout, lastName: null, address: "@example.com"), binding: Off());
+        var result = await InvokeAsync(api, Optout, Input(Optout, lastName: null, address: "https://www.linkedin.com/in/marta-example", channel: "linkedin"), binding: Off());
 
         var error = ReplyOperations.Failed(Optout, result);
         Assert.Equal(CannotDerive, (string?)error.Details!["reason"]);
@@ -393,22 +394,23 @@ public class ReplyFirstNameTests
         string? firstName = null,
         string? lastName = LastName,
         string address = Address,
-        string? pinned = null) => new()
+        string? pinned = null,
+        string channel = "email") => new()
     {
         ["args"] = operation switch
         {
-            MembershipAdd => new JsonObject { ["list"] = new JsonObject { ["external_id"] = "9" }, ["channel"] = "email" },
+            MembershipAdd => new JsonObject { ["list"] = new JsonObject { ["external_id"] = "9" }, ["channel"] = channel },
             Enroll => new JsonObject
             {
                 ["campaign"] = new JsonObject { ["external_id"] = "7" },
-                ["channel"] = "email",
+                ["channel"] = channel,
                 ["collision"] = "skip",
                 ["start"] = new JsonObject { ["position"] = "first_step" },
                 ["first_touch"] = "authored_delay",
             },
             Optout => new JsonObject
             {
-                ["channel"] = "email",
+                ["channel"] = channel,
                 ["statement"] = "please take me off your list",
                 ["arrived_via"] = "social",
                 ["said_at"] = "2026-10-03T08:14:00Z",
@@ -416,7 +418,7 @@ public class ReplyFirstNameTests
             },
             Stop => new JsonObject
             {
-                ["channel"] = "email",
+                ["channel"] = channel,
                 ["reason"] = new JsonObject
                 {
                     ["code"] = "not_interested",
@@ -434,7 +436,7 @@ public class ReplyFirstNameTests
             ["company"] = Company,
             ["title"] = Title,
             ["time_zone"] = null,
-            ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = address, ["primary"] = true }),
+            ["channels"] = new JsonArray(new JsonObject { ["channel"] = channel, ["value"] = address, ["primary"] = true }),
             ["external_ids"] = pinned is null ? new JsonObject() : new JsonObject { ["contact"] = pinned },
         }),
         ["campaign"] = new JsonObject

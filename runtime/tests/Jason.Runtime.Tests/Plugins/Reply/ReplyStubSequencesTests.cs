@@ -5,177 +5,144 @@ using System.Text.RegularExpressions;
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>
-/// The stand-in's two raw calls on <c>/v3/sequences</c>, which <c>campaign.create</c> makes because reply-cli has no
-/// command that creates a sequence: the list, and the create. Each answers in the shape a live account answered it —
-/// the list every sequence, newest first, paged with <c>top</c> and <c>skip</c>; the create a sequence in Reply's
-/// <c>new</c> state, with the account's default schedule and mailbox attached though none was asked for, and a
-/// <c>created</c> moment written with two fractional digits and an offset.
+/// The stand-in's two commands on sequences by name, which <c>campaign.create</c> runs, answered as reply-cli 0.13.0
+/// documents them: <c>sequence list --name -</c>, every sequence whose whole name is the one on stdin ignoring case,
+/// archived ones included, oldest first; and <c>sequence create --name -</c>, a draft of that name in Reply's <c>new</c>
+/// state with one task step, the account's default schedule and mailbox attached though none was asked for, and a
+/// <c>created</c> moment written with two fractional digits and an offset. The name travels on stdin and nowhere else.
 /// </summary>
 public class ReplyStubSequencesTests
 {
-    private const string Sequences = "/v3/sequences";
-
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static string[] Prefix => ["--json", "-q"];
+    private static string[] List => ["--json", "-q", "sequence", "list", "--name", "-"];
 
-    private static string[] List(string query) => [.. Prefix, "api", Sequences + query];
+    private static string[] Create => ["--json", "-q", "sequence", "create", "--name", "-"];
 
-    private static string[] Create => [.. Prefix, "api", Sequences, "--method", "POST", "--body", "-"];
-
-    private const string Placeholder =
-        """{"type":"task","actionType":"toDo","delayInMinutes":0,"description":"A step that reaches nobody."}""";
+    private static string Named(string name) => new JsonObject { ["name"] = name }.ToJsonString();
 
     [Fact]
-    public async Task The_list_answers_every_sequence_newest_first_and_pages_with_top_and_skip()
+    public async Task The_list_answers_every_sequence_of_the_whole_name_ignoring_case_oldest_first_archived_ones_included()
     {
         using var account = new ReplyAccount()
             .WithSequence(7, "Q3 LatAm founders", "active", false, 11)
-            .WithSequence(8, "Q4 Nordics", "new", false, 21)
-            .WithSequence(9, "Old one", "paused", true, 31)
-            .CreatedAt(7, new DateTimeOffset(2026, 10, 2, 9, 0, 0, TimeSpan.Zero))
-            .CreatedAt(8, new DateTimeOffset(2026, 10, 3, 9, 0, 0, TimeSpan.Zero))
-            .CreatedAt(9, new DateTimeOffset(2026, 9, 1, 9, 0, 0, TimeSpan.Zero));
+            .WithSequence(8, "q3 latam FOUNDERS", "paused", true, 21)
+            .WithSequence(9, "Q3 LatAm founders (copy)", "new", false, 31)
+            .WithSequence(10, "Q4 Nordics", "new", false, 41)
+            .CreatedAt(7, new DateTimeOffset(2026, 10, 3, 9, 0, 0, TimeSpan.Zero))
+            .CreatedAt(8, new DateTimeOffset(2026, 9, 1, 9, 0, 0, TimeSpan.Zero));
 
-        var (exit, stdout, _) = await account.RunAsync(List("?top=2&skip=0"), Ct);
+        var (exit, stdout, stderr) = await account.RunAsync(List, Named("Q3 LATAM founders"), Ct);
 
         Assert.Equal(0, exit);
-        var (code, data) = Answer(stdout);
-        Assert.Equal(200, code);
-        Assert.Equal([8, 7], data!["items"]!.AsArray().Select(item => item!["id"]!.GetValue<int>()));
-        Assert.True(data["hasMore"]!.GetValue<bool>());
-
-        // An item is what Reply's list answers: no steps, and nothing the stand-in keeps for itself.
-        var item = data["items"]![0]!.AsObject();
+        Assert.Equal(string.Empty, stderr);
+        var items = JsonNode.Parse(stdout)!["items"]!.AsArray();
+        Assert.Equal([8, 7], items.Select(item => item!["id"]!.GetValue<int>()));
+        var oldest = items[0]!.AsObject();
+        Assert.Equal(["created_at", "id", "is_archived", "name", "status"], oldest.Select(member => member.Key).Order(StringComparer.Ordinal));
         Assert.Equal(
-            ["created", "health", "id", "isArchived", "name", "ownerUserId", "status"],
-            item.Select(member => member.Key).Order(StringComparer.Ordinal));
-        Assert.Equal("2026-10-03T09:00:00.00+00:00", item["created"]!.GetValue<string>());
+            ("q3 latam FOUNDERS", "paused", true, "2026-09-01T09:00:00.00+00:00"),
+            ((string?)oldest["name"], (string?)oldest["status"], (bool)oldest["is_archived"]!, (string?)oldest["created_at"]));
 
-        var (_, rest, _) = await account.RunAsync(List("?top=2&skip=2"), Ct);
-        var (_, last) = Answer(rest);
-        Assert.Equal([9], last!["items"]!.AsArray().Select(entry => entry!["id"]!.GetValue<int>()));
-        Assert.True(last["items"]![0]!["isArchived"]!.GetValue<bool>());
-        Assert.False(last["hasMore"]!.GetValue<bool>());
+        var call = Assert.Single(account.Calls);
+        Assert.Equal("""{"name":"Q3 LATAM founders"}""", call.Body);
+        Assert.DoesNotContain("LATAM", string.Join(' ', call.Args), StringComparison.Ordinal);
     }
 
-    /// <summary>Reply's own name filter is partial and ignores case, which is why a caller compares names itself.</summary>
     [Fact]
-    public async Task A_name_filter_matches_part_of_a_name_whatever_the_case()
+    public async Task A_name_nobody_holds_is_an_empty_list()
     {
-        using var account = new ReplyAccount()
-            .WithSequence(7, "Q3 LatAm founders", "active", false, 11)
-            .WithSequence(8, "Q3 LatAm founders (copy)", "new", false, 21)
-            .WithSequence(9, "Q4 Nordics", "new", false, 31);
+        using var account = new ReplyAccount().WithSequence(7, "Q3 LatAm founders", "active", false, 11);
 
-        var (_, stdout, _) = await account.RunAsync(List("?name=latam&top=1000&skip=0"), Ct);
+        var (exit, stdout, _) = await account.RunAsync(List, Named("Q3 LatAm"), Ct);
 
-        var (_, data) = Answer(stdout);
-        Assert.Equal([7, 8], data!["items"]!.AsArray().Select(item => item!["id"]!.GetValue<int>()).Order());
+        Assert.Equal(0, exit);
+        Assert.Equal("""{"items":[]}""", JsonNode.Parse(stdout)!.ToJsonString());
     }
 
+    /// <summary>The name is read from stdin only; inline, blank, or beside another field, it is a usage error that never repeats it.</summary>
     [Theory]
-    [InlineData("?top=1001&skip=0")]
-    [InlineData("?top=0&skip=0")]
-    [InlineData("?top=10&skip=-1")]
-    public async Task A_page_outside_what_reply_takes_is_refused_as_reply_refuses_it(string query)
+    [InlineData("--name", """{"name":"Q4 Nordics"}""", null)]
+    [InlineData("--name", "-", """{"name":"   "}""")]
+    [InlineData("--name", "-", """{"name":"Q4 Nordics","steps":[]}""")]
+    [InlineData("--name", "-", """{"name": Q4 Nordics}""")]
+    public async Task A_name_not_given_on_stdin_as_its_one_field_is_refused_without_repeating_it(string flag, string value, string? stdin)
     {
         using var account = new ReplyAccount();
 
-        var (exit, stdout, _) = await account.RunAsync(List(query), Ct);
+        foreach (var verb in new[] { "list", "create" })
+        {
+            var (exit, stdout, stderr) = await account.RunAsync(["--json", "-q", "sequence", verb, flag, value], stdin, Ct);
 
-        Assert.Equal(1, exit);
-        var (code, data) = Answer(stdout);
-        Assert.Equal(400, code);
-        Assert.Equal("sequence.invalidPagination", data!["code"]!.GetValue<string>());
+            Assert.Equal(2, exit);
+            Assert.Equal(string.Empty, stdout);
+            Assert.Equal("usage.name", (string?)JsonNode.Parse(stderr)!["error"]!["code"]);
+            Assert.DoesNotContain("Nordics", stderr, StringComparison.Ordinal);
+        }
+
+        Assert.Empty(account.Sequences);
     }
 
     [Fact]
-    public async Task A_create_makes_a_new_sequence_with_the_default_schedule_and_mailbox_and_answers_201()
+    public async Task A_create_makes_a_draft_with_one_task_step_and_the_default_schedule_and_mailbox()
     {
         using var account = new ReplyAccount().WithSequence(7, "Q3 LatAm founders", "active", false, 11);
         var before = DateTimeOffset.UtcNow.AddSeconds(-1);
 
-        var (exit, stdout, stderr) = await account.RunAsync(Create, $$"""{"name":"Q4 Nordics","steps":[{{Placeholder}}]}""", Ct);
+        var (exit, stdout, stderr) = await account.RunAsync(Create, Named("Q4 Nordics"), Ct);
 
         Assert.Equal(0, exit);
         Assert.Equal(string.Empty, stderr);
-        var (code, data) = Answer(stdout);
-        Assert.Equal(201, code);
-        Assert.Equal("Q4 Nordics", data!["name"]!.GetValue<string>());
-        Assert.Equal("new", data["status"]!.GetValue<string>());
-        Assert.False(data["isArchived"]!.GetValue<bool>());
+        Assert.Equal("""{"sequence_id":2001,"steps_added":1,"status":"new","is_archived":false}""", JsonNode.Parse(stdout)!.ToJsonString());
 
-        // Seen live: Reply attaches the account's default schedule and its default mailbox on its own.
-        Assert.NotNull(data["scheduleId"]);
-        Assert.Single(data["emailAccounts"]!.AsArray());
-
-        var step = Assert.Single(data["steps"]!.AsArray())!;
-        Assert.Equal("task", step["type"]!.GetValue<string>());
-        Assert.Equal("A step that reaches nobody.", step["description"]!.GetValue<string>());
+        var made = account.Sequences.OfType<JsonObject>().Single(sequence => (int)sequence["id"]! == 2001);
+        Assert.Equal("Q4 Nordics", (string?)made["name"]);
+        Assert.NotNull(made["scheduleId"]);
+        Assert.Single(made["emailAccounts"]!.AsArray());
+        var step = Assert.Single(made["steps"]!.AsArray())!;
+        Assert.Equal(("task", "toDo"), ((string?)step["type"], (string?)step["actionType"]));
 
         // Two fractional digits and an offset, as a live account wrote it.
-        var created = data["created"]!.GetValue<string>();
+        var created = (string)made["created"]!;
         Assert.Matches(new Regex(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{2}\+00:00$"), created);
         Assert.InRange(DateTimeOffset.Parse(created, CultureInfo.InvariantCulture), before, DateTimeOffset.UtcNow.AddSeconds(1));
-
-        // And the account holds it: a second sequence, beside the planted one.
-        Assert.Equal(2, account.Sequences.Count);
-        Assert.Contains(account.Sequences, sequence => (string?)sequence!["name"] == "Q4 Nordics" && (int)sequence["id"]! == (int)data["id"]!);
     }
 
-    [Fact]
-    public async Task A_create_with_no_step_is_refused_at_the_steps_and_makes_nothing()
-    {
-        using var account = new ReplyAccount();
-
-        var (exit, stdout, _) = await account.RunAsync(Create, """{"name":"Q4 Nordics","steps":[]}""", Ct);
-
-        Assert.Equal(1, exit);
-        var (code, data) = Answer(stdout);
-        Assert.Equal(400, code);
-        Assert.Equal("/steps", data!["errors"]![0]!["pointer"]!.GetValue<string>());
-        Assert.Empty(account.Sequences);
-    }
-
-    /// <summary>Reply documents no name uniqueness, and accepted a second sequence of one name live.</summary>
+    /// <summary>Reply allows two sequences of one name, and the command does not look first: a list before it is the caller's.</summary>
     [Fact]
     public async Task A_create_of_a_name_the_account_holds_already_makes_a_second()
     {
         using var account = new ReplyAccount().WithSequence(7, "Q4 Nordics", "new", false, 11);
 
-        var (exit, stdout, _) = await account.RunAsync(Create, $$"""{"name":"Q4 Nordics","steps":[{{Placeholder}}]}""", Ct);
+        var (exit, _, _) = await account.RunAsync(Create, Named("Q4 Nordics"), Ct);
 
         Assert.Equal(0, exit);
-        Assert.Equal(201, Answer(stdout).Code);
         Assert.Equal(2, account.Sequences.Count(sequence => (string?)sequence!["name"] == "Q4 Nordics"));
     }
 
     /// <summary>
-    /// A raw call whose answer is lost does everything it would have done, and then ends as reply-cli ends a write whose
-    /// outcome it could not see: nothing on stdout, <c>outcome.unknown</c> on stderr, exit 3.
+    /// A create whose answer is lost does everything it would have done, and then ends as reply-cli ends a write whose
+    /// outcome it could not see: nothing on stdout, <c>outcome.unknown</c> on stderr, exit 3 — and no identifier, because
+    /// only the lost answer would have carried the new sequence's.
     /// </summary>
     [Fact]
-    public async Task A_raw_call_told_to_lose_its_outcome_does_its_work_and_exits_three()
+    public async Task A_create_told_to_lose_its_outcome_makes_the_sequence_and_exits_three()
     {
         using var account = new ReplyAccount();
-        account.LosesTheOutcomeOf("POST", Sequences);
+        account.LosesTheOutcome("sequence create");
 
-        var (exit, stdout, stderr) = await account.RunAsync(Create, $$"""{"name":"Q4 Nordics","steps":[{{Placeholder}}]}""", Ct);
+        var (exit, stdout, stderr) = await account.RunAsync(Create, Named("Q4 Nordics"), Ct);
 
         Assert.Equal(3, exit);
         Assert.Equal(string.Empty, stdout);
-        Assert.Equal("outcome.unknown", JsonNode.Parse(stderr)!["error"]!["code"]!.GetValue<string>());
+        var error = JsonNode.Parse(stderr)!["error"]!;
+        Assert.Equal("outcome.unknown", (string?)error["code"]);
+        Assert.Null(error["ids"]);
         Assert.Single(account.Sequences);
 
-        // Spent once: the call after it answers.
-        var (again, _, _) = await account.RunAsync(List("?top=1000&skip=0"), Ct);
+        // Spent once: the list after it finds what it made.
+        var (again, listed, _) = await account.RunAsync(List, Named("q4 nordics"), Ct);
         Assert.Equal(0, again);
-    }
-
-    private static (int Code, JsonNode? Data) Answer(string stdout)
-    {
-        var envelope = JsonNode.Parse(stdout)!.AsObject();
-        return (envelope["code"]!.GetValue<int>(), envelope["data"]);
+        Assert.Equal([2001], JsonNode.Parse(listed)!["items"]!.AsArray().Select(item => (int)item!["id"]!));
     }
 }

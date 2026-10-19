@@ -183,8 +183,9 @@ public class ReplyConversationReplyTests
 
     /// <summary>
     /// On LinkedIn the person is the profile, held under the key the runtime gives a profile link for its suppression
-    /// register: the scheme and the host whatever their case, a fragment and one trailing slash dropped, the path and the
-    /// query exactly as written. Reply gives no identifier for a LinkedIn message.
+    /// register: the scheme and the host whatever their case, a default port, a user name, a fragment and one trailing
+    /// slash dropped, the query exactly as written, and the path whatever its case on linkedin.com. Reply gives no
+    /// identifier for a LinkedIn message.
     /// </summary>
     [Fact]
     public async Task A_linkedin_thread_is_answered_for_the_profile_it_names()
@@ -201,24 +202,71 @@ public class ReplyConversationReplyTests
     }
 
     /// <summary>
-    /// Every profile the register keys apart is another profile here. A path that differs only in its case is one: the
-    /// register could hold a stop under the thread's spelling while the claim asked it about the work item's, so the reply
-    /// is refused rather than sent to a person the check was never about — and so is a profile one of whose links is the
-    /// start of the other's.
+    /// The thread's person and the work item's are compared as the register keys a profile link, pair by pair from the
+    /// runtime's own table of keys: Reply holds the link as somebody typed it, the work item carries the key the runtime
+    /// stored for it, and they are one profile, so the reply goes. A slug in another case is the same person on
+    /// linkedin.com. Two rows of the table are left out because they are refused rather than reached, which is the safe
+    /// way to be wrong: a link with two trailing slashes, whose stored key keeps one, and a letter written outside ASCII,
+    /// which the runtime keys by its escape.
     /// </summary>
     [Theory]
-    [InlineData("https://www.linkedin.com/in/Marta-Alvarez")]
-    [InlineData("https://www.linkedin.com/in/marta-alvarez-2")]
-    [InlineData("https://www.linkedin.com/in/marta")]
-    public async Task A_linkedin_profile_the_register_keys_apart_is_another_profile_and_nothing_is_sent(string value)
+    [MemberData(nameof(ProfilePairs))]
+    public async Task A_linkedin_profile_the_register_keys_alike_is_the_thread_s_person_and_the_reply_goes(string held, string consumed)
     {
-        using var account = new ReplyAccount().WithThread(ReplyConversationListTests.Thread(502, "2026-10-03T07:41:09Z", channel: "linkedIn"));
+        var thread = ReplyConversationListTests.Thread(502, "2026-10-03T07:41:09Z", channel: "linkedIn");
+        thread["contact"]!["linkedInProfileUrl"] = held;
+        using var account = new ReplyAccount().WithThread(thread);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await InvokeAsync(api, Input(thread: "502", channel: "linkedin", value: consumed));
+
+        Assert.True(result.Outcome is InvocationOutcome.Succeeded, $"Reply held '{held}', the work item carried '{consumed}', and the reply was refused.");
+        Assert.Single(account.OutboundIn(502));
+    }
+
+    public static TheoryData<string, string> ProfilePairs()
+    {
+        var pairs = new TheoryData<string, string>();
+        foreach (var (raw, _, now) in Jason.Runtime.Tests.Contacts.ChannelRulesTests.LinkedInKeys.Select(row => row.Data))
+        {
+            if (!raw.EndsWith("//", StringComparison.Ordinal) && raw.All(char.IsAscii))
+            {
+                pairs.Add(raw, now);
+            }
+        }
+
+        return pairs;
+    }
+
+    /// <summary>
+    /// Every profile the register keys apart is another profile here: a profile one of whose links is the start of the
+    /// other's, and — on any host but linkedin.com — a path that differs only in its case. The register could hold a stop
+    /// under the thread's spelling while the claim asked it about the work item's, so the reply is refused rather than
+    /// sent to a person the check was never about.
+    /// </summary>
+    [Theory]
+    [InlineData(null, "https://www.linkedin.com/in/marta-alvarez-2")]
+    [InlineData(null, "https://www.linkedin.com/in/marta")]
+    [InlineData("https://example.com/in/Marta-Alvarez", "https://example.com/in/marta-alvarez")]
+    [InlineData("https://www.linkedin.com/in/marta-alvarez", "https://uk.linkedin.com/in/marta-alvarez")]
+    public async Task A_linkedin_profile_the_register_keys_apart_is_another_profile_and_nothing_is_sent(string? held, string value)
+    {
+        var planted = ReplyConversationListTests.Thread(502, "2026-10-03T07:41:09Z", channel: "linkedIn");
+        if (held is not null)
+        {
+            planted["contact"]!["linkedInProfileUrl"] = held;
+        }
+
+        using var account = new ReplyAccount().WithThread(planted);
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
         var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(thread: "502", channel: "linkedin", value: value)));
 
-        Assert.Equal(("thread_contact_mismatch", FailureClass.Validation), (error.Code, error.Class));
+        Assert.True(
+            (error.Code, error.Class) == ("thread_contact_mismatch", FailureClass.Validation),
+            $"Reply held '{held ?? Profile}', the work item carried '{value}', and the reply ended {error.Code}.");
         Assert.Equal(["inbox get 502"], Paths(account));
         Assert.Empty(account.OutboundIn(502));
     }
@@ -261,6 +309,34 @@ public class ReplyConversationReplyTests
         Assert.Equal("""{"contact":"1001"}""", error.ExternalIds!.ToJsonString());
         Assert.False(OutcomeContract.Retriable(error.Class, OperationCatalog.Find(Operation)!));
         Assert.Single(account.OutboundIn(501));
+    }
+
+    /// <summary>
+    /// The CLI answers that the reply was sent, but on another channel than the one the thread is on and the work item
+    /// asked for. That is not this reply's answer — what went out, and to whom, is unknown — so it is a lost answer, never
+    /// repeated, and the thread's person travels with it.
+    /// </summary>
+    [Fact]
+    public async Task A_send_answered_on_another_channel_than_the_one_asked_is_a_lost_answer_and_never_a_success()
+    {
+        using var account = new ReplyAccount().WithThread(ReplyConversationListTests.Thread(502, "2026-10-03T07:41:09Z", channel: "linkedIn"));
+        account.Returns("inbox reply", new JsonObject
+        {
+            ["status"] = "sent",
+            ["thread_id"] = 502,
+            ["channel"] = "email",
+            ["message_id"] = null,
+            ["sent_at"] = "2026-10-03T09:00:00.000Z",
+        });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(thread: "502", channel: "linkedin")));
+
+        Assert.Equal(("provider_answer_lost", FailureClass.Ambiguous), (error.Code, error.Class));
+        Assert.False(OutcomeContract.Retriable(error.Class, OperationCatalog.Find(Operation)!));
+        Assert.Equal("""{"contact":"1001"}""", error.ExternalIds!.ToJsonString());
+        Assert.Equal(["inbox get 502", "inbox reply 502"], Paths(account));
     }
 
     [Fact]

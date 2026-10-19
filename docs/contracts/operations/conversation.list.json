@@ -20,7 +20,7 @@
   "meter": null,
   "invariants": ["H10"],
 
-  "preflight": { "contact": "optional", "channel": "none", "suppression": "checked" },
+  "preflight": { "contact": "optional", "channel": "none", "suppression": "checked", "provider_contact": "pinned_only" },
   "dispatch": { "in_paused_campaign": "waits" },
   "contact_projection": { "fields": ["id"], "channels": "none" },
   "precondition": "none",

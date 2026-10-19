@@ -108,16 +108,14 @@ public class ReplyPrivacyTests
         }
 
         // And the second half, which is what makes the first half mean something: the data really did reach
-        // Reply, and it reached it the only way it may. The list add and the enrolment both carry the person, all four
-        // fields, on stdin.
-        var ensures = account.Calls.Where(call => call.Body is not null).ToList();
-        Assert.Equal(2, ensures.Count);
-        foreach (var ensure in ensures)
+        // Reply, and it reached it the only way it may. Both lookups carry the address on stdin, and the import the
+        // list add makes carries the person, all four fields; the enrolment names the person the lookup found.
+        var carried = account.Calls.Where(call => call.Body is not null).ToList();
+        Assert.Equal(["contact find", "contact-list add-contact 9", "contact find"], carried.Select(call => call.Line));
+        Assert.All(carried, call => Assert.Contains(ReplyOperations.Address, call.Body!, StringComparison.Ordinal));
+        foreach (var field in personal)
         {
-            foreach (var field in personal)
-            {
-                Assert.Contains(field, ensure.Body!, StringComparison.Ordinal);
-            }
+            Assert.Contains(field, carried[1].Body!, StringComparison.Ordinal);
         }
 
         // Nor may they turn up on disk afterwards, which is the same rule seen from the other end.
@@ -350,8 +348,8 @@ public class ReplyPrivacyTests
             ReplyOperations.Succeeded(operation, await ReplyOperations.InvokeAsync(api, operation, input, Ct));
         }
 
-        // Both writes did their work, the CLI finding the person by the address each time.
-        Assert.Equal(["contact opt-out", "sequence remove-contact 7"], Paths(account));
+        // Both writes did their work, the exact lookup finding the person by the address each time.
+        Assert.Equal(["contact find", "contact opt-out", "contact find", "sequence remove-contact 7"], Paths(account));
         Assert.Equal([1001], account.OptOuts.Select(entry => entry!.GetValue<int>()));
         Assert.Empty(account.EnrolledIn(ReplyOperations.Sequence));
 
@@ -363,9 +361,17 @@ public class ReplyPrivacyTests
                 Assert.DoesNotContain(field, sent, StringComparison.OrdinalIgnoreCase);
             }
 
-            // The address goes to the CLI in the person on stdin, and to nothing else.
+            // The address goes to the CLI on stdin, in the lookups, and to nothing else; the two writes name the person
+            // the lookup found by Reply's identifier.
             Assert.DoesNotContain(Address, string.Join(' ', call.Args), StringComparison.OrdinalIgnoreCase);
-            Assert.Contains(Address, call.Body!, StringComparison.OrdinalIgnoreCase);
+            if (call.Command == "contact find")
+            {
+                Assert.Contains(Address, call.Body!, StringComparison.OrdinalIgnoreCase);
+            }
+            else
+            {
+                Assert.True(call.Body is null, $"'{call.Line}' carried '{call.Body}' on stdin.");
+            }
         }
 
         var diagnostics = ReadAll(api.Paths.PluginWorkDirectory);
