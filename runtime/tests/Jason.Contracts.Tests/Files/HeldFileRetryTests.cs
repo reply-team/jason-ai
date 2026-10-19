@@ -6,7 +6,8 @@ namespace Jason.Contracts.Tests.Files;
 /// <summary>
 /// A call on a file held open by another program, tried again on Windows until the rule's wait is over, and every other
 /// failure thrown at once. Nothing here waits in real time: the clock moves only when a pause is taken, by the pause's
-/// own length, so the tries a wait allows and the pauses between them can be counted exactly.
+/// own length, or when a call stands for a slow act, so the tries a wait allows and the pauses between them can be counted
+/// exactly.
 /// </summary>
 public class HeldFileRetryTests
 {
@@ -57,6 +58,30 @@ public class HeldFileRetryTests
         Assert.Equal([TimeSpan.FromMilliseconds(300), TimeSpan.FromMilliseconds(300), TimeSpan.FromMilliseconds(300), TimeSpan.FromMilliseconds(100)], clock.Pauses);
         Assert.Equal(5, call.Tries);
         Assert.Equal(rule.Wait, clock.Now);
+    }
+
+    [Fact]
+    public void A_first_try_slower_than_the_wait_is_still_paused_after_because_the_wait_counts_from_the_first_refusal()
+    {
+        var clock = new SteppedClock();
+        var slow = true;
+        var call = new Call(times: 1, () =>
+        {
+            // The first try alone takes longer than the whole wait, and is then refused.
+            if (slow)
+            {
+                clock.Advance(Rule.Wait + TimeSpan.FromMilliseconds(500));
+                slow = false;
+            }
+
+            return new IOException("held", SharingViolation);
+        });
+
+        var held = Run(call, Rule, clock, windows: true);
+
+        Assert.True(held is null, $"The call was given up after its first refusal: {held?.Message}");
+        Assert.Equal(2, call.Tries);
+        Assert.Equal([Rule.Interval], clock.Pauses);
     }
 
     [Fact]
@@ -203,7 +228,10 @@ public class HeldFileRetryTests
         }
     }
 
-    /// <summary>A clock that stands still until a pause is taken, and then moves by exactly the pause.</summary>
+    /// <summary>
+    /// A clock that stands still until a pause is taken, and then moves by exactly the pause, or until a call moves it as a
+    /// slow act would.
+    /// </summary>
     private sealed class SteppedClock : TimeProvider
     {
         public TimeSpan Now { get; private set; }
@@ -220,5 +248,7 @@ public class HeldFileRetryTests
             Pauses.Add(delay);
             Now += delay;
         }
+
+        public void Advance(TimeSpan by) => Now += by;
     }
 }

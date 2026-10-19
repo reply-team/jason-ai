@@ -5,7 +5,10 @@ namespace Jason.Contracts.Files;
 /// <summary>
 /// How long a file another program holds open is tried again before the act that needs it gives up, and how often.
 /// </summary>
-/// <param name="Wait">How long after the first try the file is still tried. The try that finds it held at that moment is the last.</param>
+/// <param name="Wait">
+/// How long after the first refusal the file is still tried, so a first try slow in itself does not spend the wait before
+/// the first pause. The try that finds it held at that moment is the last.
+/// </param>
 /// <param name="Interval">The pause between two tries.</param>
 /// <param name="AccessDeniedCounts">
 /// Whether an access-denied counts as the file being held. Windows refuses to replace a file a reader holds with an

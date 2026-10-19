@@ -423,7 +423,34 @@ public sealed class InstallScriptHeldTests : IDisposable
 
         var (exit, _, stderr) = await Start(shell, pauses, refusedUnpacks: 1);
 
-        var paused = Pauses(pauses);
+        AssertUnpackedAgainAfterOnePause(exit, Pauses(pauses), stderr);
+    }
+
+    /// <summary>
+    /// An unpacking that takes longer than the whole wait before it is refused is still waited out, by one pause: the ten
+    /// seconds count from the first refusal, not from the first try. On a loaded machine the first real unpacking alone took
+    /// longer than ten seconds, and the refusal that came after it was given up without a pause.
+    /// </summary>
+    /// <remarks>
+    /// The stand-in's refused unpacking takes ten and a half seconds more than its real work before it refuses. It runs under
+    /// Windows PowerShell 5.1 alone, where it was seen, as the cases that cost the whole wait do.
+    /// </remarks>
+    [Fact]
+    public async Task An_unpacking_refused_only_after_longer_than_the_wait_is_still_unpacked_again()
+    {
+        var pauses = Path.Combine(_tree.NewDirectory("pauses"), "pauses.txt");
+
+        var (exit, _, stderr) = await Start(WindowsPowerShell, pauses, refusedUnpacks: 1, slowRefusal: TimeSpan.FromSeconds(10.5));
+
+        AssertUnpackedAgainAfterOnePause(exit, Pauses(pauses), stderr);
+    }
+
+    /// <summary>
+    /// The install went through, with the stood-in refusal waited out by exactly one pause of a quarter second, and every
+    /// other pause a real hold waited out the same way.
+    /// </summary>
+    private void AssertUnpackedAgainAfterOnePause(int exit, List<Pause> paused, string stderr)
+    {
         Assert.True(exit == 0, $"The install exited {exit}. It paused: {Said(paused)}. It said: {stderr}");
         Assert.Equal(_standIn, File.ReadAllBytes(Target));
         var refused = paused.Where(pause => pause.Cause.Contains(StoodInRefusal, StringComparison.Ordinal)).ToList();
@@ -726,7 +753,11 @@ public sealed class InstallScriptHeldTests : IDisposable
     /// <paramref name="pauses"/>, and under an <c>Expand-Archive</c> of the test's own that unpacks for real and then, that
     /// many times, throws what the cmdlet throws when a file it unpacks is held.
     /// </param>
-    private Task<(int Exit, string Stdout, string Stderr)> Start(string shell, string? pauses = null, int? refusedUnpacks = null)
+    /// <param name="slowRefusal">
+    /// How much longer than its real work the first refused unpacking takes before it refuses, or null for no longer. It
+    /// sleeps by the cmdlet's full name, so the stand-in <c>Start-Sleep</c> never counts it as a pause of the script's.
+    /// </param>
+    private Task<(int Exit, string Stdout, string Stderr)> Start(string shell, string? pauses = null, int? refusedUnpacks = null, TimeSpan? slowRefusal = null)
     {
         var script = Path.Combine(RepositoryRoot(), "install", "install.ps1");
         var start = shell == Pwsh
@@ -749,9 +780,11 @@ public sealed class InstallScriptHeldTests : IDisposable
         var unpack = refusedUnpacks is not { } refused
             ? string.Empty
             : "Import-Module Microsoft.PowerShell.Archive; $global:refusedUnpacks = " + refused.ToString(System.Globalization.CultureInfo.InvariantCulture) + "; "
+                + "$global:slowRefusal = " + ((int)(slowRefusal ?? TimeSpan.Zero).TotalMilliseconds).ToString(System.Globalization.CultureInfo.InvariantCulture) + "; "
                 + "function global:Expand-Archive { [CmdletBinding()] param([string] $LiteralPath, [string] $DestinationPath) "
                 + "Microsoft.PowerShell.Archive\\Expand-Archive -LiteralPath $LiteralPath -DestinationPath $DestinationPath -ErrorAction Stop; "
                 + "if ($global:refusedUnpacks -le 0) { return }; $global:refusedUnpacks--; "
+                + "if ($global:slowRefusal -gt 0) { Microsoft.PowerShell.Utility\\Start-Sleep -Milliseconds $global:slowRefusal; $global:slowRefusal = 0 }; "
                 + "$held = New-Object System.IO.IOException(('This test holds {0} open.' -f (Join-Path $DestinationPath 'jason.exe')), -2147024864); "
                 + "throw (New-Object System.Management.Automation.MethodInvocationException(('" + StoodInRefusal + ": {0}' -f $held.Message), $held)) }; ";
         string[] run = pauses is null && refusedUnpacks is null

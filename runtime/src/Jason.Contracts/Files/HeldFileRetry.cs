@@ -52,7 +52,7 @@ public static class HeldFileRetry
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(pause);
 
-        var started = clock.GetTimestamp();
+        long? started = null;
         while (true)
         {
             try
@@ -62,7 +62,8 @@ public static class HeldFileRetry
             }
             catch (Exception refusal) when (windows && IsHold(refusal, rule))
             {
-                var left = rule.Wait - clock.GetElapsedTime(started);
+                started ??= clock.GetTimestamp();
+                var left = rule.Wait - clock.GetElapsedTime(started.Value);
                 if (left <= TimeSpan.Zero)
                 {
                     return refusal;
