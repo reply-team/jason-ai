@@ -37,10 +37,9 @@ description that promises everything matches nothing.
   apart, the repairs that are safe, and the diagnostic file `jason doctor` writes.
 - [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
-- [`planner-in-session`](planner-in-session/SKILL.md) — **draft**: a host asked to plan from a brief chose
-  `campaign-planning` over it. The planner's judgement in a person's own conversation about a campaign: taking a
-  brief as it comes, what stays a quick look, what is agreed with the person before anything is created, and when
-  it becomes campaign work. The session file of the planner, below.
+- [`planner-in-session`](planner-in-session/SKILL.md) — **verified.** The planner's judgement in a person's own
+  conversation about a campaign: taking a brief as it comes, what stays a quick look, what is agreed with the
+  person before anything is created, and when it becomes campaign work. The session file of the planner, below.
 
 ### Installing them
 
@@ -164,6 +163,7 @@ Every skill here carries `metadata.status`, and it has exactly two values.
 
 | skill | host that read it | Jason | the text it read |
 |---|---|---|---|
+| `planner-in-session` | Claude Code 2.1.303 (Opus 5.5) | 0.12.0 | `sha256:5983d790a5953f506fed5a08ba464d2691f6453decd9817087c281f2845f5d37` |
 | `operating-the-installation` | Claude Code 2.1.302 (Opus 5.5) | 0.12.0 | `sha256:ae4b7b684541e5306f0bc9c1757b6bb9e7c2371e934ded229c935dd741038d90` |
 | `managed-campaign-work` | Claude Code 2.1.302 (Opus 5.5) | 0.12.0 | `sha256:7de35c2c37e63b8829d25bf4e72dc2649d40377ca50ce4c84826aff4182a011f` |
 | `approvals-and-questions` | Claude Code 2.1.293 (claude-opus-5) | 0.5.0 | `sha256:b0e638d1d1674a3429ce58cc52fd23b134780222a30de79a04bc011ec49c8342` |
