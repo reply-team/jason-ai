@@ -86,6 +86,7 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("| `channel_mismatch`, `thread_contact_mismatch` and `delivery_refused` |")]
     [InlineData("| `message_invalid` |")]
     [InlineData("| `category_not_found` and `category_not_unique` |")]
+    [InlineData("| `category_opts_out` |")]
     public void The_divergence_file_has_a_row_for_it(string row) =>
         Assert.Contains(row, Source("docs/contracts/divergence-from-l1.md"), StringComparison.Ordinal);
 

@@ -58,7 +58,7 @@ a condition beside it — and the last column is the line the operation's own pa
 | [`campaign.enroll`](operations/campaign.enroll.md) | `campaign.enroll` | `act` | `confirm_once` | `after_recovery_read` | put one person into a provider campaign |
 | [`campaign.get`](operations/campaign.get.md) | `campaign.get` | `read` | `auto` | `safe` | read one campaign from the provider |
 | [`campaign.pause`](operations/campaign.pause.md) | `campaign.pause` | `control` | `auto` | `safe` | stop a provider campaign |
-| [`conversation.classify`](operations/conversation.classify.md) | `conversation.classify` | `control` | `auto` | `safe` | file a thread under one of the provider's categories |
+| [`conversation.classify`](operations/conversation.classify.md) | `conversation.classify` | `control` | `auto` | `safe` | file a thread under one of the provider's categories, with the provider's own meaning on its reserved names |
 | [`conversation.close`](operations/conversation.close.md) | `conversation.close` | `control` | `auto` | `safe` | set a thread aside as worked |
 | [`conversation.get`](operations/conversation.get.md) | `conversation.get` | `read` | `auto` | `safe` | read one thread before answering it |
 | [`conversation.list`](operations/conversation.list.md) | `conversation.list` | `read` | `auto` | `safe` | the conversation threads of a person or a campaign |

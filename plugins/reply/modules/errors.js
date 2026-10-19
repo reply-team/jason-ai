@@ -97,7 +97,9 @@ export const COMMANDS = {
 
 // Which row each of the Reply CLI's error codes is. An operation's own mapping wins over the shared one; a code in
 // neither is `auth.*` (who is calling), `usage.*` (refused before anything was sent), or a refusal this version has
-// no word for. `reply.invalid_request:email` is the row for an invalid request whose fields name the email.
+// no word for. `reply.invalid_request:email` is the row for an invalid request whose fields name the email, and
+// `reply.refused:inboxThread.invalidInput:RenderingFail` the row for a refusal Reply explained by its own code and by the
+// first word of its sentence, up to the first colon or white space.
 //
 // `outcome.unknown` is never looked up here for a work command: the CLI answers it with exit 3, and `cli.js` reads an
 // exit 3 by the command's own read/write mark in `COMMANDS` before any code is mapped. Its row says what that ending is;
@@ -188,6 +190,7 @@ export const CODES = {
       "inbox.channel_mismatch": "channel_mismatch",
       "contact.opted_out": "suppressed",
       "inbox.send_failed": "delivery_refused",
+      "reply.refused:inboxThread.invalidInput:RenderingFail": "text_reply_would_render",
       "access.feature_unavailable": "feature_not_included"
     },
     "conversation.classify": {
@@ -646,6 +649,12 @@ export const ROWS = {
         "class": "validation",
         "note": "The text carries a double opening brace, which Reply may read as a placeholder it fills in for each person, so what would go out might not be the text a person approved. Nothing was sent. Write the text without one and propose the reply again."
       },
+      "text_reply_would_render": {
+        "when": "The CLI answered `reply.refused` with Reply's code `inboxThread.invalidInput` and a sentence whose first word is `RenderingFail`: Reply read part of the text as a placeholder of its own, could not fill it in, and refused the send.",
+        "code": "message_invalid",
+        "class": "validation",
+        "note": "Reply read part of the text as a placeholder it fills in for each person and could not fill it in, so it refused the reply and nothing was sent: what would have gone out was not the text a person approved. Write the text without anything Reply reads as a placeholder and propose the reply again."
+      },
       "suppressed": {
         "when": "The CLI answered `contact.opted_out`: Reply's own opt-out register holds the thread's person.",
         "code": "suppressed",
@@ -683,6 +692,12 @@ export const ROWS = {
         "code": "category_not_unique",
         "class": "permanent",
         "note": "More than one of this account's inbox categories carries this name, so picking one would be guessing and nothing was filed. Name the category by its identifier instead."
+      },
+      "category_that_opts_the_person_out": {
+        "when": "The category the lookup found is Reply's reserved Do not contact — reserved unless Reply lists it as not reserved, and named so whatever its case — however the call named it, by identifier or by name. Decided after the lookup and before any filing.",
+        "code": "category_opts_out",
+        "class": "validation",
+        "note": "Filing a thread under Reply's Do not contact opts the person out at Reply in every sequence, ends their part in each and cancels the emails planned for them, and taking the thread out of the category again undoes none of it, so nothing was filed. Stopping a person is optout.record's path: record the stop with it, and with `jason suppression add` for Jason's own register."
       },
       "feature_not_included": {
         "when": "The CLI answered `access.feature_unavailable`: the inbox is not available to this user or team.",
@@ -807,6 +822,15 @@ export function rowOf(operation, error) {
 
   if (code === "reply.invalid_request" && fields.indexOf("email") >= 0 && has(own, code + ":email")) {
     return own[code + ":email"];
+  }
+
+  // A refusal Reply explained, by its own code and the first word of its sentence, where the operation has a row for
+  // exactly that one: Reply's code for invalid input covers more causes than any one row could name.
+  if (typeof error.reply_code === "string" && typeof error.detail === "string") {
+    const keyed = code + ":" + error.reply_code + ":" + error.detail.split(/[:\s]/)[0];
+    if (has(own, keyed)) {
+      return own[keyed];
+    }
   }
 
   if (has(own, code)) {

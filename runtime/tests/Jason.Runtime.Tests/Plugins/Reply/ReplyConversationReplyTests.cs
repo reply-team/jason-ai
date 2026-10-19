@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
@@ -43,10 +42,10 @@ public class ReplyConversationReplyTests
 
         var item = ReplyOperations.Succeeded(Operation, result)["items"]![0]!.AsObject();
         Assert.Equal((ContactId, "sent", "501", "email"), ((string?)item["contact_id"], (string?)item["status"], (string?)item["thread_external_id"], (string?)item["channel"]));
-        Assert.StartsWith("<r501-", (string?)item["message"]!["external_id"], StringComparison.Ordinal);
-        Assert.True(
-            DateTimeOffset.TryParse((string?)item["message"]!["sent_at"], CultureInfo.InvariantCulture, out _),
-            $"sent_at is '{item["message"]!["sent_at"]}'.");
+
+        // Reply answers an email reply with no message identifier, and its moment two hours ahead with a `Z`: neither is
+        // an identifier or a time to record, so the message is answered null on both.
+        Assert.Equal("""{"external_id":null,"sent_at":null}""", item["message"]!.ToJsonString());
         Assert.Equal("""{"contact":"1001"}""", item["external_ids"]!.ToJsonString());
         Assert.Equal("""{"contact":"1001"}""", Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds!.ToJsonString());
 
@@ -55,7 +54,37 @@ public class ReplyConversationReplyTests
         Assert.Equal(["--json", "-q", "inbox", "reply", "501", "--message", "-"], account.Calls[1].Args);
         Assert.Null(account.Calls[0].Body);
         Assert.Equal($$"""{"body":"{{Body}}"}""", JsonNode.Parse(account.Calls[1].Body!)!.ToJsonString());
-        Assert.Equal(Body, (string?)Assert.Single(account.OutboundIn(501))["body"]);
+
+        // What goes out is the text, then Reply's own quote of the thread's earlier messages.
+        var stored = (string?)Assert.Single(account.OutboundIn(501))["body"];
+        Assert.StartsWith(Body + "<div>", stored, StringComparison.Ordinal);
+        Assert.Contains("<blockquote>", stored, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An identifier the send's answer does carry is the provider's, and is passed on; the moment that answer gives is
+    /// not, whatever it says, because Reply stamps it in the account's own zone and writes it as UTC.
+    /// </summary>
+    [Fact]
+    public async Task An_identifier_the_answer_carries_is_passed_on_and_its_moment_never_is()
+    {
+        using var account = new ReplyAccount().WithThread(ReplyConversationListTests.Thread(501, "2026-10-03T07:41:09Z"));
+        account.Returns("inbox reply", new JsonObject
+        {
+            ["status"] = "sent",
+            ["thread_id"] = 501,
+            ["channel"] = "email",
+            ["message_id"] = "<r501-9@stand-in.example>",
+            ["sent_at"] = "2026-10-03T09:42:10.25Z",
+        });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var item = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input()))["items"]![0]!;
+
+        Assert.Equal(["external_id", "sent_at"], item["message"]!.AsObject().Select(member => member.Key));
+        Assert.Equal("<r501-9@stand-in.example>", (string?)item["message"]!["external_id"]);
+        Assert.Null(item["message"]!["sent_at"]);
     }
 
     [Fact]
@@ -330,6 +359,52 @@ public class ReplyConversationReplyTests
 
         Assert.Equal(("provider_unavailable", FailureClass.Transient), (error.Code, error.Class));
         Assert.Equal(["inbox get 501"], Paths(account));
+        Assert.Empty(account.OutboundIn(501));
+    }
+
+    /// <summary>
+    /// Reply renders a placeholder it finds in a reply's text, and refuses the send when it cannot fill one in: a 400 with
+    /// its code for invalid input and a sentence that starts <c>RenderingFail</c>. That is the text a person approved not
+    /// being what would go out, so it is the operation's own word for it, and nothing was sent.
+    /// </summary>
+    [Fact]
+    public async Task Reply_refusing_to_render_the_text_is_an_invalid_message_and_nothing_is_sent()
+    {
+        using var account = new ReplyAccount().WithThread(ReplyConversationListTests.Thread(501, "2026-10-03T07:41:09Z"));
+        account.Refuses(
+            "inbox reply", "reply.refused", status: 400, replyCode: "inboxThread.invalidInput",
+            detail: "RenderingFail: One or more values for variables are missing or incorrect.");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input()));
+
+        Assert.Equal(("message_invalid", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Equal(("reply.refused", "inboxThread.invalidInput"), ((string?)error.Details!["cli_code"], (string?)error.Details["provider_code"]));
+        Assert.Equal("""{"contact":"1001"}""", error.ExternalIds!.ToJsonString());
+        Assert.Equal(["inbox get 501", "inbox reply 501"], Paths(account));
+        Assert.Empty(account.OutboundIn(501));
+    }
+
+    /// <summary>
+    /// The word is kept for exactly that refusal: Reply's code for invalid input with a sentence whose first word is
+    /// <c>RenderingFail</c>. Any other invalid input, the same sentence under another code, and a first word that only
+    /// starts the same way are refusals this version has no word for.
+    /// </summary>
+    [Theory]
+    [InlineData("inboxThread.invalidInput", "The body is not valid.")]
+    [InlineData("inboxThread.notAllowed", "RenderingFail: One or more values for variables are missing or incorrect.")]
+    [InlineData("inboxThread.invalidInput", "RenderingFailure: the template could not be read.")]
+    public async Task Any_other_refusal_of_the_send_keeps_the_word_for_a_refusal_with_no_word(string replyCode, string detail)
+    {
+        using var account = new ReplyAccount().WithThread(ReplyConversationListTests.Thread(501, "2026-10-03T07:41:09Z"));
+        account.Refuses("inbox reply", "reply.refused", status: 400, replyCode: replyCode, detail: detail);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input()));
+
+        Assert.Equal(("provider_call_failed", FailureClass.Permanent), (error.Code, error.Class));
         Assert.Empty(account.OutboundIn(501));
     }
 

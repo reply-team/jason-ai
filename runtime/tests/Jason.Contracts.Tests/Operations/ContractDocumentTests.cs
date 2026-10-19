@@ -303,6 +303,27 @@ public class ContractDocumentTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A provider may give its reserved categories a meaning of its own, and one of them may be a stop. The classify
+    /// document says both in its conformance list: a filing the provider reads as a stop is refused by its own code and
+    /// sent to the operation that records a stop, and any other reserved category carries the provider's meaning with it.
+    /// </summary>
+    [Fact]
+    public void Classify_refuses_a_category_that_stops_the_person_and_says_reserved_names_carry_the_provider_s_meaning()
+    {
+        var conformance = Conformance("conversation.classify");
+
+        Assert.Contains(
+            conformance,
+            entry => entry.Contains("`category_opts_out`", StringComparison.Ordinal)
+                && entry.Contains("`optout.record`", StringComparison.Ordinal)
+                && entry.Contains("before anything is filed", StringComparison.Ordinal));
+        Assert.Contains(
+            conformance,
+            entry => entry.Contains("reserved categories a meaning of its own", StringComparison.Ordinal)
+                && entry.Contains("categories of its own", StringComparison.Ordinal));
+    }
+
     private static IReadOnlyList<string> Conformance(string id) =>
         [.. Document(id)["conformance"]!.AsArray().Select(entry => entry!.GetValue<string>())];
 

@@ -13,7 +13,7 @@
 // document says `never`.
 import { run } from "./cli.js";
 import { evidence, fail, lostAnswerRow } from "./errors.js";
-import { identifier, isReplyNumber, lookup, text, utc } from "./reading.js";
+import { identifier, isReplyNumber, lookup, text } from "./reading.js";
 
 const OPERATION = "conversation.reply";
 const READ = "inbox get";
@@ -25,8 +25,9 @@ const CHANNEL = { "email": "email", "linkedIn": "linkedin" };
 // Where the thread's person keeps the value each channel reaches them at.
 const ADDRESS = { "email": "email", "linkedin": "linkedInProfileUrl" };
 
-// How Reply writes a placeholder it fills in for each person. Until a live account shows that a reply carrying one is
-// sent as written, a text with one is refused: what would go out might not be what a person approved.
+// How Reply writes a placeholder it fills in for each person. It renders one in a reply in a thread too, and refuses the
+// send when it cannot fill it in, so a text with one is refused before anything is called: what would go out would not
+// be what a person approved.
 const PLACEHOLDER = "{{";
 
 export function conversationReply(input, context) {
@@ -100,6 +101,9 @@ export function conversationReply(input, context) {
     fail(OPERATION, { call: SEND, row: lostAnswerRow(SEND), provider_item: evidence(sent) }, learned);
   }
 
+  // The provider's send answer stamps a local time as UTC — the account's own zone, written with a `Z` — so it is not
+  // passed on: `sent_at` is null, and the message's own `date`, which a read of the thread gives in true UTC, is the
+  // moment. No offset is applied, because the zone keeps daylight saving.
   return {
     result: {
       items: [{
@@ -107,7 +111,7 @@ export function conversationReply(input, context) {
         status: "sent",
         thread_external_id: thread,
         channel: channel,
-        message: { external_id: text(sent.message_id, 998), sent_at: utc(sent.sent_at) },
+        message: { external_id: text(sent.message_id, 998), sent_at: null },
         external_ids: learned,
       }],
     },

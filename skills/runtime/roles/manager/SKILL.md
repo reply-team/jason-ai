@@ -134,10 +134,12 @@ jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role respo
 
 Neither wakes you when it ends: a read that succeeded is not a trigger. Say in your note that you are watching both,
 and decide at your next review, when what they found is there to read. A thread the line names can have moved for a
-follow-up sent into it rather than for a reply; the read is how you tell. A reply Jason sends moves its thread too, and
-the line says it like any other: when the thread's latest message is Jason's own — a `conversation.reply` item of this
-campaign succeeded for that thread, and the line's `last_activity_at` is not after the `sent_at` its result names —
-nothing happened, and there is nothing to read or answer. Without a `sent_at` in that result, the read tells.
+follow-up sent into it rather than for a reply; the read is how you tell. Whether the provider's list moves a thread
+for a reply Jason sends is the provider's matter, and its plugin's README says which. Where it does, the line says it
+like any other: when the thread's latest message is Jason's own — a `conversation.reply` item of this campaign
+succeeded for that thread, and the line's `last_activity_at` is not after the `sent_at` its result names — nothing
+happened, and there is nothing to read or answer. Without a `sent_at` in that result, the read tells. Where it does
+not, no line comes for Jason's own reply, and nothing wakes you for it.
 
 **The read itself is not yours to redo.** A `conversation.list` item made by `system:dispatcher` that failed is the
 runtime's own read: it is tried again on its own, later each time, from its first page. Do not create one in its

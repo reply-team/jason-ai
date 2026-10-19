@@ -404,10 +404,19 @@ public class ReplyStubCommandTests
         Assert.Equal(0, exit);
         var sent = JsonNode.Parse(stdout)!.AsObject();
         Assert.Equal(("sent", 501, "email"), ((string?)sent["status"], (int)sent["thread_id"]!, (string?)sent["channel"]));
-        Assert.StartsWith("<", (string?)sent["message_id"], StringComparison.Ordinal);
-        Assert.True(DateTimeOffset.TryParse((string?)sent["sent_at"], System.Globalization.CultureInfo.InvariantCulture, out _), $"sent_at is '{sent["sent_at"]}'.");
         var reply = account.OutboundIn(501)[^1];
-        Assert.Equal(("Thursday works.", "m2"), ((string?)reply["body"], (string?)reply["replyToMessageId"]));
+        Assert.Equal("m2", (string?)reply["replyToMessageId"]);
+
+        // As a live account answers it: no message identifier on an email reply, though the thread holds one.
+        Assert.Null(sent["message_id"]);
+        Assert.StartsWith("<r501-", (string?)reply["messageId"], StringComparison.Ordinal);
+
+        // The thread stores more than the text: the text, then Reply's quote of the message before it.
+        var body = (string?)reply["body"];
+        Assert.StartsWith("Thursday works.<div>", body, StringComparison.Ordinal);
+        Assert.Contains("<blockquote>Sounds good</blockquote>", body, StringComparison.Ordinal);
+        Assert.Null(reply["status"]);
+        Assert.True(reply.ContainsKey("status"), "the stored reply has no status key, where a live thread gives null.");
 
         // The text never rides on the argument list, and nothing but the two fields is taken.
         var (inline, _, inlineSaid) = await account.RunAsync(Line("inbox", "reply", "501", "--message", """{"body":"x"}"""), Ct);
@@ -415,6 +424,48 @@ public class ReplyStubCommandTests
         var (copied, _, copiedSaid) = await account.RunAsync(
             Line("inbox", "reply", "501", "--message", "-"), """{"body":"x","cc":"lena@example.com"}""", Ct);
         Assert.Equal((2, "usage.message"), (copied, (string?)Error(copiedSaid)["code"]));
+        Assert.Equal(2, account.OutboundIn(501).Count);
+    }
+
+    /// <summary>
+    /// Reply's answer to a send stamps the account's own local time and writes it with a <c>Z</c>, two hours ahead on the
+    /// account it was read on, while the message the thread stores is dated in true UTC. The stand-in answers the same way,
+    /// so a test can tell a plugin that passes the answer's moment on from one that does not.
+    /// </summary>
+    [Fact]
+    public async Task Inbox_reply_dates_the_stored_message_in_utc_and_answers_two_hours_ahead_as_reply_does()
+    {
+        using var account = new ReplyAccount().WithThread(Thread());
+
+        var before = DateTimeOffset.UtcNow;
+        var (exit, stdout, _) = await account.RunAsync(Line("inbox", "reply", "501", "--message", "-"), """{"body":"Thursday works."}""", Ct);
+        var after = DateTimeOffset.UtcNow;
+
+        Assert.Equal(0, exit);
+        var answered = (string?)JsonNode.Parse(stdout)!["sent_at"];
+        var stored = (string?)account.OutboundIn(501)[^1]["date"];
+        var date = DateTimeOffset.Parse(stored!, System.Globalization.CultureInfo.InvariantCulture);
+        Assert.InRange(date, before.AddMilliseconds(-10), after);
+        Assert.EndsWith("Z", answered, StringComparison.Ordinal);
+        Assert.Equal(date.AddHours(2), DateTimeOffset.Parse(answered!, System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// Reply's list keeps a thread's last activity where the person's latest message put it: a reply sent into the thread
+    /// does not move it, read minutes and again many minutes after the send. So the row the list gives after a reply is
+    /// the row it gave before.
+    /// </summary>
+    [Fact]
+    public async Task Inbox_reply_leaves_the_thread_s_last_activity_where_it_was()
+    {
+        using var account = new ReplyAccount().WithSequence(7, "Q3", "active").WithThread(Thread());
+
+        var (exit, _, _) = await account.RunAsync(Line("inbox", "reply", "501", "--message", "-"), """{"body":"Thursday works."}""", Ct);
+        var (_, listed, _) = await account.RunAsync(Line("inbox", "list", "--sequence-id", "7"), Ct);
+
+        Assert.Equal(0, exit);
+        var row = Assert.Single(JsonNode.Parse(listed)!["items"]!.AsArray())!;
+        Assert.Equal(("2026-10-01T09:00:00Z", "Sounds good"), ((string?)row["lastActivityDate"], (string?)row["bodyPreview"]));
         Assert.Equal(2, account.OutboundIn(501).Count);
     }
 

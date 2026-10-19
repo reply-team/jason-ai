@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -90,14 +91,22 @@ internal static partial class Account
         }
 
         var messages = thread["messages"] as JsonArray ?? [];
-        var sentAt = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
-        var messageId = channel == "email" ? $"<r{id}-{messages.Count + 1}@stand-in.example>" : null;
+
+        // The thread dates the message in true UTC, with two fractional digits as Reply writes them. The send's answer
+        // stamps the account's own local time and writes it with a `Z` — two hours ahead on the account it was read on —
+        // so the answer here does the same, and a test can see whether a plugin passes that moment on.
+        var now = DateTimeOffset.UtcNow;
+        now = now.AddTicks(-(now.Ticks % (TimeSpan.TicksPerMillisecond * 10)));
+        var date = now.ToString("yyyy-MM-dd'T'HH:mm:ss.ff'Z'", CultureInfo.InvariantCulture);
+        var sentAt = now.AddHours(2).ToString("yyyy-MM-dd'T'HH:mm:ss.ff'Z'", CultureInfo.InvariantCulture);
+
+        // The thread holds an identifier for an email message, and the send's answer gives none on any channel.
         var sent = new JsonObject
         {
             ["channel"] = spelled,
-            ["messageId"] = messageId,
-            ["date"] = sentAt,
-            ["body"] = message["body"]!.GetValue<string>(),
+            ["messageId"] = channel == "email" ? $"<r{id}-{messages.Count + 1}@stand-in.example>" : null,
+            ["date"] = date,
+            ["body"] = Quoted(message["body"]!.GetValue<string>(), messages),
             ["isOutbound"] = true,
             // A live thread read shows no status on its outbound messages, so the reply added here carries none either.
             ["status"] = null,
@@ -107,9 +116,10 @@ internal static partial class Account
             sent["replyToMessageId"] = replyTo;
         }
 
+        // The list's last activity is not moved: a live account keeps it where the person's latest message put it after
+        // a reply is sent into the thread.
         messages.Add(sent);
         thread["messages"] = messages;
-        thread["lastActivityDate"] = sentAt;
         Write(root, ThreadsFile, threads);
 
         return Done(new JsonObject
@@ -117,9 +127,24 @@ internal static partial class Account
             ["status"] = "sent",
             ["thread_id"] = id,
             ["channel"] = channel,
-            ["message_id"] = messageId,
+            ["message_id"] = null,
             ["sent_at"] = sentAt,
         });
+    }
+
+    /// <summary>
+    /// What Reply stores as a reply's body: the text as sent, then its own quote of the thread's latest earlier message —
+    /// which quotes the one before it, so the history rides along. A thread with no message has nothing to quote.
+    /// </summary>
+    private static string Quoted(string text, JsonArray messages)
+    {
+        if (messages.LastOrDefault() is not JsonObject previous)
+        {
+            return text;
+        }
+
+        var sender = Text(previous, "fromName") is { Length: > 0 } name ? name : Text(previous, "fromAddress");
+        return $"{text}<div><br><div>{Text(previous, "date")} {WebUtility.HtmlEncode(sender)}: <br></div><blockquote>{Text(previous, "body")}</blockquote></div>";
     }
 
     /// <summary>The message on stdin, held to <c>{body, reply_to_message_id?}</c> exactly as the CLI holds it.</summary>

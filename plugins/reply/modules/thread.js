@@ -4,7 +4,8 @@
 // a thread as worked by marking it read, so closing marks the thread read and reopening marks it unread again. Each
 // command sets the state whatever it was, so a second one leaves the thread as the first did, and none of them reads the
 // thread first. A category named by its name is matched here against Reply's own list of the account's categories, so
-// the name never reaches a command line: only Reply's identifier for it does.
+// the name never reaches a command line: only Reply's identifier for it does. Reply's reserved Do not contact is found
+// the same way and refused before anything is filed, because filing there is a stop.
 import { run } from "./cli.js";
 import { evidence, fail, lostAnswerRow } from "./errors.js";
 import { identifier, isReplyNumber, text } from "./reading.js";
@@ -12,6 +13,11 @@ import { identifier, isReplyNumber, text } from "./reading.js";
 const CLASSIFY = "conversation.classify";
 const CATEGORIES = "inbox categories";
 const CATEGORIZE = "inbox categorize";
+
+// Reply's reserved category that is a stop rather than a meaning: filing a thread there opts the person out in every
+// sequence, ends their part in each and cancels the emails planned for them, and clearing the category undoes none of
+// it. Stopping a person is `optout.record`'s path, so a filing there is refused.
+const STOP = "do not contact";
 
 export function conversationClassify(input, context) {
   const thread = threadOf(CLASSIFY, input);
@@ -49,7 +55,12 @@ export function conversationClassify(input, context) {
     fail(CLASSIFY, { call: CATEGORIES, row: "category_not_unique" }, undefined);
   }
 
+  // The category found, not the words the call used: one named by its identifier is refused as one named by its name.
   const chosen = matching[0];
+  if (chosen.reserved && chosen.compared === STOP) {
+    fail(CLASSIFY, { call: CATEGORIES, row: "category_that_opts_the_person_out" }, undefined);
+  }
+
   const done = run(context, {
     operation: CLASSIFY,
     command: CATEGORIZE,
@@ -98,11 +109,14 @@ function filed(thread, status, category) {
 }
 
 // One of Reply's categories, or null when the entry is not one this package could file a thread under by its number.
+// An entry is reserved unless Reply lists it as not reserved: the safe reading of an entry that does not say.
 function categoryOf(entry) {
   if (entry === null || typeof entry !== "object" || typeof entry.name !== "string" || entry.name.length === 0) {
     return null;
   }
 
   const id = identifier(entry.id);
-  return id === null || !isReplyNumber(id) ? null : { external_id: id, name: text(entry.name, 100), compared: entry.name.toLowerCase() };
+  return id === null || !isReplyNumber(id)
+    ? null
+    : { external_id: id, name: text(entry.name, 100), compared: entry.name.toLowerCase(), reserved: entry.isReserved !== false };
 }

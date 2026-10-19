@@ -150,6 +150,7 @@
     { "code": "conversation_not_found", "class": "permanent", "when": "The provider holds no thread under this identifier, or not one this account may see. Nothing was filed." },
     { "code": "category_not_found", "class": "permanent", "when": "The provider holds no category under the identifier or the name the call carried. Nothing was filed." },
     { "code": "category_not_unique", "class": "permanent", "when": "More than one of the provider's categories carries the name, so picking one would be guessing and nothing was filed. Name it by its identifier instead." },
+    { "code": "category_opts_out", "class": "validation", "when": "The category named is one whose filing stops the person at the provider — it opts them out, or ends their participation — and taking the thread out of it again does not undo that. Nothing was filed: stopping a person is `optout.record`'s path." },
     { "code": "feature_unavailable", "class": "permanent", "when": "The provider account's plan or role does not include this capability, so no call by this account can perform it." },
     { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
     { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it file this account's threads." },
@@ -163,7 +164,8 @@
   "conformance": [
     "The thread is set to exactly the category named, or to none, whatever it was under before: a second performance leaves it as the first did, which is what makes a repeat after a lost answer safe.",
     "A category named by its identifier is one the provider holds, and one named by its name is the one category whose name equals it, compared exactly and without regard to case; nothing is filed otherwise.",
-    "Filing a thread asks the provider for nothing else: this call changes no participation, no enrollment and no read state.",
+    "Filing a thread asks the provider to change no participation, no enrollment and no read state. A category whose filing would stop the person at the provider — opt them out, end their participation — fails `category_opts_out` before anything is filed: stopping a person is `optout.record`'s path.",
+    "A provider may give its reserved categories a meaning of its own — events it sends out, outreach it starts by its own hand — and filing a thread there asks for that meaning too; a campaign that must own every send files under categories of its own.",
     "The category is the provider's own, named in its vocabulary; no neutral meaning is assigned, and nothing is pinned."
   ]
 }

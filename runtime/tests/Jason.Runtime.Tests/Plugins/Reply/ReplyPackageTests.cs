@@ -273,6 +273,11 @@ public class ReplyPackageTests
             new[] { "`conversation.reply`", "`conversation.classify`", "`conversation.close`", "`conversation.reopen`", "`never`", "0.12.0" },
             word => Assert.Contains(word, section, StringComparison.Ordinal));
         Assert.Contains("three requests to Reply before its send", section, StringComparison.Ordinal);
+
+        // And what a live account showed the inbox does beyond the operations themselves.
+        Assert.All(
+            new[] { "`category_opts_out`", "Do not contact", "a connected CRM", "`sent_at` is null", "no identifier on email", "quote", "`RenderingFail`" },
+            word => Assert.Contains(word, section, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -308,6 +313,63 @@ public class ReplyPackageTests
         Assert.False(ReplyErrorTable.Own("optout.record").ContainsKey("first_name_derivation_forbidden"));
         Assert.True(ReplyErrorTable.Own("list_membership.add").ContainsKey("first_name_derivation_forbidden"));
         Assert.True(ReplyErrorTable.Own("campaign.enroll").ContainsKey("first_name_derivation_forbidden"));
+    }
+
+    /// <summary>
+    /// Reply gives its reserved categories a meaning of its own, and an operator choosing a category has to know it: the
+    /// events Reply fires, and the re-engagement it may start by its own hand. The classify section says so, says where
+    /// it was read from, and says what a campaign that must own every send does instead.
+    /// </summary>
+    [Fact]
+    public void The_classify_section_says_what_reply_does_on_its_reserved_names()
+    {
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        var start = readme.IndexOf("### `conversation.classify`", StringComparison.Ordinal);
+        var section = Flat(readme[start..readme.IndexOf("\n### ", start + 1, StringComparison.Ordinal)]);
+
+        Assert.All(
+            new[]
+            {
+                "read from the provider's own implementation", "a webhook", "a connected CRM", "a positive event for Interested",
+                "a negative one for Not interested and Not now", "re-engagement", "by Reply's hand", "categories of its own",
+            },
+            words => Assert.Contains(words, section, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// What a reply's result leaves out, and what goes out beside the text, are things an operator reading the result or
+    /// approving a reply has to be told: no moment, because Reply's answer stamps a local time as UTC; no identifier on
+    /// email; and Reply's own quote of the thread after the text, which the approval does not show.
+    /// </summary>
+    [Fact]
+    public void The_reply_section_says_what_the_answer_leaves_out_and_what_goes_out_beside_the_text()
+    {
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        var start = readme.IndexOf("### `conversation.reply`", StringComparison.Ordinal);
+        var section = Flat(readme[start..readme.IndexOf("\n### ", start + 1, StringComparison.Ordinal)]);
+
+        Assert.All(
+            new[]
+            {
+                "the provider's send answer stamps a local time as UTC, so it is not passed on", "`message.sent_at` is null",
+                "`message.external_id` is null on email", "its own quote of the thread's earlier messages", "the approval shows the text only",
+            },
+            words => Assert.Contains(words, section, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Reply's list keeps a thread's last activity where the person's latest message put it after a reply Jason sends, so
+    /// that reply raises no line and wakes nobody. The page says so outright, and no longer says the thread moves.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_a_reply_jason_sends_does_not_move_the_thread_or_wake_the_manager()
+    {
+        var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
+
+        Assert.Contains("A reply Jason sends does not wake the manager at all.", readme, StringComparison.Ordinal);
+        Assert.Contains("inbound sync says nothing for it", readme, StringComparison.Ordinal);
+        Assert.Contains("A line for that thread is the person, or somebody else, moving it.", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("moves the thread", readme, StringComparison.Ordinal);
     }
 
     /// <summary>The changelog's section at this position, newest first, from its heading up to the next one.</summary>

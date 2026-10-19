@@ -118,6 +118,84 @@ public class ReplyConversationClassifyTests
     }
 
     /// <summary>
+    /// Reply's reserved Do not contact is a stop, not a meaning: filing a thread there opts the person out in every
+    /// sequence, and clearing the category undoes none of it. It is refused after the lookup and before any filing,
+    /// however the call named it — by Reply's identifier, or by its name in any case — and the message says where a stop
+    /// belongs instead.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"external_id":"5"}""")]
+    [InlineData("""{"name":"Do not contact"}""")]
+    [InlineData("""{"name":"DO NOT CONTACT"}""")]
+    public async Task Reply_s_reserved_do_not_contact_is_refused_before_anything_is_filed(string category)
+    {
+        using var account = Planted().WithCategory(5, "Do not contact", reserved: true);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(JsonNode.Parse(category)!.AsObject())));
+
+        Assert.Equal(("category_opts_out", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Contains("optout.record", error.Message, StringComparison.Ordinal);
+        Assert.Equal(["inbox categories"], Paths(account));
+        Assert.Null(account.ThreadOf(501)["category"]);
+        Assert.False(OutcomeContract.Retriable(error.Class, OperationCatalog.Find(Operation)!));
+    }
+
+    /// <summary>
+    /// The name is Reply's, compared without regard to case on Reply's side too: a reserved stop Reply lists in another
+    /// case is the same stop, named here by its identifier.
+    /// </summary>
+    [Fact]
+    public async Task Reply_s_reserved_stop_listed_in_another_case_is_refused_too()
+    {
+        using var account = Planted().WithCategory(5, "DO NOT CONTACT", reserved: true);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(new JsonObject { ["external_id"] = "5" })));
+
+        Assert.Equal(("category_opts_out", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Equal(["inbox categories"], Paths(account));
+    }
+
+    /// <summary>
+    /// An entry that does not say whether it is reserved is read as reserved: only an entry Reply lists as not reserved is
+    /// one of the account's own, so a Do not contact whose flag went missing is still refused.
+    /// </summary>
+    [Fact]
+    public async Task A_do_not_contact_whose_reserved_flag_is_missing_is_refused_too()
+    {
+        using var account = Planted().WithCategoryEntry(new JsonObject { ["id"] = 5, ["name"] = "Do not contact" });
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, Input(new JsonObject { ["external_id"] = "5" })));
+
+        Assert.Equal(("category_opts_out", FailureClass.Validation), (error.Code, error.Class));
+        Assert.Equal(["inbox categories"], Paths(account));
+    }
+
+    /// <summary>
+    /// The refusal is Reply's reserved stop and nothing near it: a category of the account's own that happens to carry the
+    /// name is filed, and so is a reserved name that is not a stop.
+    /// </summary>
+    [Theory]
+    [InlineData(5, "Do not contact", false)]
+    [InlineData(4, "Not interested", true)]
+    public async Task A_category_that_is_not_reply_s_reserved_stop_is_filed(int id, string name, bool reserved)
+    {
+        using var account = Planted().WithCategory(id, name, reserved);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, Input(new JsonObject { ["name"] = name })));
+
+        Assert.Equal("classified", (string?)answer["items"]![0]!["status"]);
+        Assert.Equal(id, (int)account.ThreadOf(501)["category"]!["id"]!);
+    }
+
+    /// <summary>
     /// An entry of Reply's list that no thread can be filed under — no name, or an identifier that is not a Reply number —
     /// is passed over, and the rest of the list still works: it is not taken for an answer that could not be read.
     /// </summary>

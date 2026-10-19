@@ -83,11 +83,12 @@ sending or after — is a failed outcome with its class, never an item.
 
 ## What a reply leaves behind
 
-A reply Jason sends moves the thread; inbound sync says it as a reply observed once. A provider's list of threads need
-not say who wrote a thread's latest message, so the thread a reply went into is listed as one that moved, and the
-runtime's inbound sync writes its `inbound_reply_observed` line for it, once, as it would for an answer. What the thread
-holds is read before anything is decided about it, and a thread whose latest message is the reply this operation sent
-is nothing to answer.
+Whether a provider's list moves a thread for a reply Jason sends is the provider's matter, and its plugin's README says
+which. Where it does, inbound sync says it as a reply observed once: a provider's list of threads need not say who wrote
+a thread's latest message, so the thread a reply went into is listed as one that moved, and the runtime's inbound sync
+writes its `inbound_reply_observed` line for it, once, as it would for an answer. What the thread holds is read before
+anything is decided about it, and a thread whose latest message is the reply this operation sent is nothing to answer.
+Where it does not, no line comes for Jason's own reply, and nothing wakes the manager for it.
 
 ## When it fails
 

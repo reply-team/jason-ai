@@ -15,18 +15,28 @@ absorbed by a release of this package alone.
   a fragment and one trailing slash dropped and its path exactly. Nobody is created: the thread's person is pinned once
   found. A reply costs three requests to Reply before its send: two for `reply inbox get`, and one more read of the
   thread inside `reply inbox reply`. A text carrying `{{` is refused,
-  `message_invalid`, because Reply may fill it in as a placeholder of its own. A reply Reply took and could not deliver
-  is `delivery_refused`, with Reply's reason in the trace. A reply whose answer was lost is never repeated: the
-  operation's contract says `never`, and the work item stops for a person.
+  `message_invalid`, because Reply renders it as a placeholder of its own; Reply's own refusal of a text it could not
+  render — `reply.refused` with its `inboxThread.invalidInput` and a sentence starting `RenderingFail` — is
+  `message_invalid` too, and every other refusal of the send stays `provider_call_failed`. A reply Reply took and could
+  not deliver is `delivery_refused`, with Reply's reason in the trace. A reply whose answer was lost is never repeated:
+  the operation's contract says `never`, and the work item stops for a person.
+- What a reply answers: `sent_at` is null, because Reply's send answer stamps the account's local time as UTC; the
+  message's own date, which `conversation.get` returns, is the moment. Reply gives no identifier on email, so
+  `message.external_id` is null there. What goes out is the text followed by Reply's own quote of the thread's earlier
+  messages, and the approval shows the text only.
 - `conversation.classify` files a thread under one of the account's inbox categories, by Reply's identifier for it or
   by its name, matched in this package against `reply inbox categories` and never put on a command line, or takes it
-  out of its category; `reply inbox categorize` sets it outright.
+  out of its category; `reply inbox categorize` sets it outright. Reply's reserved Do not contact is refused,
+  `category_opts_out`, by identifier or by name, before anything is filed: filing there opts the person out in every
+  sequence, and clearing it undoes nothing. Stopping a person is `optout.record`'s path. The README says what Reply does
+  on its other reserved names — events, a connected CRM, its own re-engagement — and that a campaign that must own every
+  send files under categories of its own.
 - `conversation.close` and `conversation.reopen` mark the thread read and unread with `reply inbox mark-read` and
   `reply inbox mark-unread`: Reply has no closed state, and read is how its inbox shows a thread as worked.
 - `conversation.list` takes `thread_channel` and `category`, passed to every `reply inbox list` it makes as `--channel`
   and `--category-id`, so Reply filters before it pages. A category identifier that is not a Reply number asks nothing.
-- A reply Jason sends moves the thread, and inbound sync says it as a reply observed once: Reply's list does not say who
-  wrote a thread's latest message.
+- A reply Jason sends leaves the thread where it was in Reply's list, which keeps its last activity at the person's
+  latest message, so inbound sync says nothing for it: a reply Jason sends does not wake the manager at all.
 
 ## 0.3.2
 

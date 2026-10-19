@@ -22,7 +22,7 @@ Sixteen operations — the whole set this build publishes: eleven that write and
 | `optout.record` | Records that somebody said stop: sets Reply's opt-out flag on the contact it holds under the address, made only when it holds nobody. What they said stays Jason's record. |
 | `enrollment.stop` | Takes one person out of a sequence, once a person approves it. Nobody is created to do it, and the reason stays Jason's record. |
 | `conversation.reply` | Answers the person on an inbox thread, in that thread, once a person approves the text. Nothing is sent unless the thread is theirs and on the channel named; nobody else can be put on it. |
-| `conversation.classify` | Files a thread under one of the account's inbox categories, by its identifier or its name, or takes it out of its category. |
+| `conversation.classify` | Files a thread under one of the account's inbox categories, by its identifier or its name, or takes it out of its category. Reply's Do not contact is refused: filing there opts the person out. |
 | `conversation.close` | Marks a thread read: Reply has no closed state, and read is how its inbox shows a thread as worked. |
 | `conversation.reopen` | Marks a thread unread again, so it needs attention. |
 
@@ -438,7 +438,7 @@ before it runs, and its work waits while its Jason campaign is paused.
 | The identifier is not a Reply thread number, or Reply holds no thread under it that this account may see (`inbox.thread_not_found`). Nothing is sent. | `conversation_not_found` | permanent | Reply by an identifier `conversation.list` returned. |
 | The thread is on another channel than the one `args.channel` names, or on one Reply sends no reply on (`inbox.channel_mismatch` too). Nothing is sent. | `channel_mismatch` | validation | Name the channel the thread is on — `conversation.list` and `conversation.get` say which — and propose the reply again. |
 | The thread is not this person's: its person is not the contact pinned for them, its address or LinkedIn profile is not the channel's value, or it names nobody Reply still holds. Nothing is sent, and nobody is pinned. | `thread_contact_mismatch` | validation | Reply in a thread of this person's, or propose the reply for the person the thread is with. |
-| The text carries `{{`, which Reply may read as a placeholder of its own and fill in. Nothing is called. | `message_invalid` | validation | Write the text without it and propose the reply again. |
+| The text carries `{{`, which Reply reads as a placeholder of its own and fills in. Nothing is called. Or Reply refused the send because it read part of the text as a placeholder it could not fill in (`reply.refused`, with Reply's code `inboxThread.invalidInput` and a sentence that starts `RenderingFail`). Nothing is sent. | `message_invalid` | validation | Write the text without anything Reply reads as a placeholder and propose the reply again. |
 | Reply's own opt-out register holds the thread's person (`contact.opted_out`). Nothing is sent. | `suppressed` | permanent | Nothing, on purpose. |
 | Reply took the reply and could not deliver it (`inbox.send_failed`); Reply's reason for the failed message is in the trace as `provider_status_code`, null where it recorded none. | `delivery_refused` | permanent | A sending limit waits for its window; a disconnected account is connected again at Reply. Then propose the reply again. |
 | The inbox is not available to this user or team (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes the inbox. |
@@ -454,6 +454,13 @@ waits while its Jason campaign is paused. A reply whose answer was lost — the 
 off — may have gone, and it is never sent again: the item stops for a person, with the thread's person pinned so
 whoever looks knows who it was for.
 
+**What the answer leaves out, and what goes out beside the text.** `message.sent_at` is null: the provider's send
+answer stamps a local time as UTC, so it is not passed on. The message's own `date`, which `conversation.get` returns
+as that message's `sent_at`, is the moment, in true UTC. `message.external_id` is null on email, where Reply's answer
+gives no identifier; the thread holds Reply's identifier for the message afterwards, and `conversation.get` returns
+it. What Reply sends is the text followed by its own quote of the thread's earlier messages, and that is what the
+thread stores. A person approving the reply reads the text: the approval shows the text only, never the quote.
+
 ### `conversation.classify`
 
 | When | Code | Class | What to do about it |
@@ -461,6 +468,7 @@ whoever looks knows who it was for.
 | The identifier is not a Reply thread number, or Reply holds no thread under it that this account may see (`inbox.thread_not_found`) — which is also how Reply answers a category it listed and no longer holds when the filing reaches it. Nothing is filed. | `conversation_not_found` | permanent | File a thread by an identifier `conversation.list` returned; where the thread is there, file it again under a category Reply still lists. |
 | Reply lists no category under the identifier or the name the call carried. Nothing is filed. | `category_not_found` | permanent | Name one of the account's categories: `conversation.list` and `conversation.get` report the ones threads are under. |
 | More than one of the account's categories carries the name, whatever its case. Nothing is filed. | `category_not_unique` | permanent | Name the category by its identifier. |
+| The category is Reply's reserved Do not contact, named by its identifier or by its name whatever its case; an entry that does not say whether it is reserved is read as reserved. Nothing is filed. | `category_opts_out` | validation | Filing there would opt the person out at Reply in every sequence, end their part in each and cancel the emails planned for them, and clearing the category undoes none of it. Record the stop with `optout.record`, and with `jason suppression add` for Jason's own register. |
 | The inbox is not available to this user or team (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes the inbox. |
 
 A category named by its identifier or its name is looked up in `inbox categories` first, so only Reply's number for
@@ -470,6 +478,14 @@ can be told apart, and a category that disappears between the lookup and the fil
 `conversation_not_found`. An entry of the list no thread can be filed under — one with no name, or an identifier that
 is not a Reply number — is passed over. No category at all takes the thread out of the one it is in, with no lookup.
 Either is set outright, so a repeat after a lost answer runs the command again.
+
+**Reply gives its reserved names a meaning of its own.** What follows is read from the provider's own implementation,
+not seen on an account. Filing a thread under any category fires Reply's own event for it, which a webhook carries for
+every category, and a connected CRM is sent a positive event for Interested and a negative one for Not interested and
+Not now. Not interested and Not now also feed Reply's own sales-agent re-engagement, which may reach the person by
+Reply's hand rather than Jason's. Taking the thread out of the category again undoes none of it. So a campaign that must
+own every send files under categories of its own, made at Reply, and not under the reserved names. Do not contact is
+refused outright, as the table says.
 
 ### `conversation.close` and `conversation.reopen`
 
@@ -587,11 +603,11 @@ thread was. A repeat after a lost answer runs the command again. Neither records
   untranslated. `conversation.classify` files a thread under one of them, in Reply's own words. What it does filter by —
   the thread's channel, `thread_channel`, and one of the account's categories by Reply's identifier for it — Reply
   applies before it pages, so a page with either still says where the next one starts.
-- **A reply Jason sends moves the thread; inbound sync says it as a reply observed once.** Reply's list of threads
-  does not say who wrote a thread's latest message, so after `conversation.reply` the thread is listed as one that moved,
-  and Jason's inbound sync writes its `inbound_reply_observed` line for it, once, as it would for an answer. The manager
-  role reads the thread before it decides anything, and a thread whose latest message is Jason's own reply is nothing
-  to answer.
+- **A reply Jason sends leaves the thread where it was in Reply's list.** Reply keeps a thread's last activity at the
+  person's latest message after a reply Jason sends into it — read minutes after the send, and again many minutes after
+  — so inbound sync says nothing for it, and writes no `inbound_reply_observed` line for Jason's own reply. A reply
+  Jason sends does not wake the manager at all. A line for that thread is the person, or somebody else, moving it. The
+  manager role reads the thread before it decides anything.
 - **A reply costs three requests to Reply before its send.** The package reads the thread with `reply inbox get`,
   which asks for the thread and then for one page of its messages, one message long, to know its channel and its person
   before anything is sent; and `reply inbox reply` reads the thread once more itself, to send on the thread's own
@@ -602,9 +618,10 @@ thread was. A repeat after a lost answer runs the command again. Neither records
   anything else — the path's case, another scheme, a missing `www.` — is another profile there, so it is another profile
   here, and the reply fails `thread_contact_mismatch` with nothing sent: the register's check at the claim was about the
   value the work item consumes, and only that value is reached.
-- **A text carrying `{{` is refused.** Reply writes its placeholders that way, and a reply in a thread may be filled in
-  as one; until a live account shows that Reply sends such a text as written, the package refuses it rather than let
-  something nobody approved go out.
+- **A text carrying `{{` is refused.** Reply writes its placeholders that way, and it does render one in a reply in a
+  thread: a live account refused a reply carrying `{{firstName}}` because it could not fill it in. So the package
+  refuses such a text before anything is called rather than let something nobody approved go out, and a refusal of that
+  kind from Reply is `message_invalid` too.
 - **`conversation.classify` does not say what the thread was filed under before.** Saying it would mean reading the
   whole thread before every filing; the reads report a thread's category.
 - **Only a contact's first reply is read.** Reply marks a contact finished in its sequence at its first
