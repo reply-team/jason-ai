@@ -10,6 +10,22 @@ namespace Jason.App.Tests.Skills;
 public sealed partial class CampaignPlanningSkillTests
 {
     /// <summary>
+    /// With Jason installed a host is handed the same brief by two skills, and the one that works in the conversation and
+    /// hands the work to Jason's roles has to win it. So the description says so, and still says what it says for a
+    /// session with no Jason: a description that dropped either half would send the one session or the other to the wrong
+    /// skill.
+    /// </summary>
+    [Fact]
+    public void The_description_defers_to_the_planner_in_a_session_when_Jason_is_installed()
+    {
+        var description = SkillFrontMatter.Read(SkillPack.Business().Single(skill => skill.Name == "campaign-planning").File).Top.GetValueOrDefault("description") ?? string.Empty;
+
+        Assert.Equal(
+            "Turn a vague outbound goal into an executable plan: clarify the objective until success is observable, surface the constraints that shape it, compose the work from known operations and playbooks, and decide the checkpoints. Use when the user states a business goal — book meetings, launch a campaign, grow pipeline — rather than a single concrete action. With Jason installed, `planner-in-session` leads the planning and uses this skill as its method, so load that one first.",
+            description);
+    }
+
+    /// <summary>
     /// The brief is taken as the person gives it and becomes the context of Jason's own campaign when it is created,
     /// before any contact exists and before anything is sent, so the plan and the roles that read the campaign start from
     /// the same brief — those roles, not every role: two of them work from their own work item's context alone. The verb

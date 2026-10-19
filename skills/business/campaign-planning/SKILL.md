@@ -1,6 +1,6 @@
 ---
 name: campaign-planning
-description: Turn a vague outbound goal into an executable plan: clarify the objective until success is observable, surface the constraints that shape it, compose the work from known operations and playbooks, and decide the checkpoints. Use when the user states a business goal — book meetings, launch a campaign, grow pipeline — rather than a single concrete action.
+description: Turn a vague outbound goal into an executable plan: clarify the objective until success is observable, surface the constraints that shape it, compose the work from known operations and playbooks, and decide the checkpoints. Use when the user states a business goal — book meetings, launch a campaign, grow pipeline — rather than a single concrete action. With Jason installed, `planner-in-session` leads the planning and uses this skill as its method, so load that one first.
 metadata:
   status: draft
 ---

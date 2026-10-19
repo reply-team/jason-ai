@@ -38,9 +38,9 @@ description that promises everything matches nothing.
 - [`reporting-outside-effects`](reporting-outside-effects/SKILL.md) — **verified.** Telling Jason about an effect
   produced somewhere else, before it acts on a view of the world that is wrong.
 - [`planner-in-session`](planner-in-session/SKILL.md) — **draft**: a host asked to plan from a brief chose
-  `campaign-planning` over it. The planner's judgement in a person's own conversation
-  about a campaign: taking a brief as it comes, what stays a quick look, what is agreed with the person before
-  anything is created, and when it becomes campaign work. The session file of the planner, below.
+  `campaign-planning` over it. The planner's judgement in a person's own conversation about a campaign: taking a
+  brief as it comes, what stays a quick look, what is agreed with the person before anything is created, and when
+  it becomes campaign work. The session file of the planner, below.
 
 ### Installing them
 

@@ -1,6 +1,6 @@
 ---
 name: planner-in-session
-description: Use when a person brings a campaign objective or a brief and wants the planner's judgement in the conversation - what is decided with them, what stays a quick look, what becomes work items for which role, and when it is committed.
+description: Use when a person who has Jason installed brings a brief or a campaign objective and asks to plan it, in any words - help me plan this, or a pasted paragraph - and wants the planner's judgement in the conversation: what is decided with them, what stays a quick look, what becomes work items for which role, and when it is committed. This is the skill that plans in a session with Jason, and it uses `campaign-planning` as its method.
 metadata:
   status: draft
 ---
