@@ -25,7 +25,7 @@ public static class SettingsVocabulary
         "MinimumLevel", "RetainedFileCountLimit", "FileSizeLimitBytes",
 
         // Dispatcher, and the defaults of each kind of work it names.
-        "Enabled", "TickSeconds", "MaxParallel", "DrainSeconds", "RetryDelaySeconds", "ExitGraceSeconds", "AiRole", "ProviderOp",
+        "Enabled", "TickSeconds", "MaxParallel", "DrainSeconds", "RetryDelaySeconds", "ExitGraceSeconds", "EventsCadenceSeconds", "AiRole", "ProviderOp",
         "TimeoutSeconds", "HeartbeatSeconds", "MaxAttempts",
 
         // Manager.

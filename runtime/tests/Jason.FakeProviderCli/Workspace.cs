@@ -32,6 +32,7 @@ internal static class Workspace
     private const string SuppressionFile = "suppression.json";
     private const string InstructionsFile = "instructions.json";
     private const string CallsFile = "calls.json";
+    private const string EventsFile = "events.json";
 
     /// <summary>Where this provider's identifiers start; the number is meaningless, its stability is not.</summary>
     private const int FirstContactNumber = 1001;
@@ -77,6 +78,12 @@ internal static class Workspace
             case "campaign get":
                 return await AnswerAsync(GetCampaign(root, request));
 
+            case "events feed":
+                return await AnswerAsync(Feed(root, request));
+
+            case "events list":
+                return await AnswerAsync(ListEvents(root, request));
+
             case "campaign enroll":
                 return await EffectAsync(root, request, Refusing(root, request) ?? Enroll(root, request));
 
@@ -85,9 +92,10 @@ internal static class Workspace
         }
     }
 
-    /// <summary>The six subcommands this account answers; anything else is the caller's usage error.</summary>
+    /// <summary>The eight subcommands this account answers; anything else is the caller's usage error.</summary>
     private static bool Known(string verb) =>
-        verb is "contact ensure" or "list add" or "list membership" or "campaign get" or "campaign enroll" or "ledger get";
+        verb is "contact ensure" or "list add" or "list membership" or "campaign get" or "campaign enroll" or "ledger get"
+            or "events feed" or "events list";
 
     // -------------------------------------------------------------------------------------------------------
     // The subcommands
@@ -439,6 +447,79 @@ internal static class Workspace
     }
 
     private static bool IsLive(string providerStatus) => string.Equals(providerStatus, "Active", StringComparison.Ordinal);
+
+    /// <summary>
+    /// The account's events by position, as a provider with a feed answers: from the position a cursor names, or from the
+    /// first event at or after a moment, up to a moment where one is given, a page at a time. A cursor is the account's
+    /// prefix and a position; one without the prefix, or past the end, is a cursor this account does not know.
+    /// </summary>
+    private static JsonObject Feed(string root, JsonObject request)
+    {
+        var (prefix, events) = ReadEvents(root);
+        var limit = request["limit"] is JsonValue asked && asked.TryGetValue<int>(out var size) ? size : 100;
+        int start;
+        if (request["after"] is JsonValue after && after.TryGetValue<string>(out var cursor))
+        {
+            if (!cursor.StartsWith(prefix, StringComparison.Ordinal)
+                || !int.TryParse(cursor.AsSpan(prefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out start)
+                || start > events.Count)
+            {
+                return Error("events_cursor_unknown", "This account does not know that cursor.");
+            }
+        }
+        else
+        {
+            var since = Moment(Text(request, "since"));
+            start = events.FindIndex(entry => Moment(Text(entry, "occurred_at")) >= since);
+            start = start < 0 ? events.Count : start;
+        }
+
+        DateTimeOffset? until = request["until"] is JsonValue end && end.TryGetValue<string>(out var bound) ? Moment(bound) : null;
+        var page = new JsonArray();
+        var index = start;
+        while (index < events.Count && page.Count < limit && (until is null || Moment(Text(events[index], "occurred_at")) < until))
+        {
+            page.Add(events[index].DeepClone());
+            index++;
+        }
+
+        var more = index < events.Count && (until is null || Moment(Text(events[index], "occurred_at")) < until);
+        return new JsonObject
+        {
+            ["events"] = page,
+            ["cursor"] = prefix + index.ToString(CultureInfo.InvariantCulture),
+            ["has_more"] = more,
+        };
+    }
+
+    /// <summary>The account's events newest first, by offset only: what a provider with no feed answers.</summary>
+    private static JsonObject ListEvents(string root, JsonObject request)
+    {
+        var (_, events) = ReadEvents(root);
+        var top = request["top"] is JsonValue asked && asked.TryGetValue<int>(out var size) ? size : 100;
+        var skip = request["skip"] is JsonValue offset && offset.TryGetValue<int>(out var skipped) ? skipped : 0;
+        var newest = events
+            .Select((entry, index) => (Entry: entry, Index: index))
+            .OrderByDescending(item => Moment(Text(item.Entry, "occurred_at")))
+            .ThenByDescending(item => item.Index)
+            .Skip(skip)
+            .Take(top)
+            .Select(item => item.Entry.DeepClone())
+            .ToArray();
+        return new JsonObject { ["items"] = new JsonArray(newest), ["total"] = events.Count };
+    }
+
+    /// <summary>The account's events in the order they happened, and the prefix its cursors carry.</summary>
+    private static (string Prefix, List<JsonObject> Events) ReadEvents(string root)
+    {
+        var held = ReadObject(root, EventsFile);
+        var prefix = held["prefix"] is JsonValue value && value.TryGetValue<string>(out var text) ? text : "c-";
+        var events = held["events"] is JsonArray list ? list.OfType<JsonObject>().ToList() : [];
+        return (prefix, events);
+    }
+
+    private static DateTimeOffset Moment(string text) =>
+        DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
 
     private static JsonObject Error(string code, string message) =>
         new() { ["error"] = new JsonObject { ["code"] = code, ["message"] = message } };

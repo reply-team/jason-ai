@@ -74,7 +74,8 @@ public static class TestPlugins
         PluginKind kind = PluginKind.Provider,
         IReadOnlyList<int>? contractVersions = null,
         JsonObject? binding = null,
-        PluginStatus status = PluginStatus.Valid) =>
+        PluginStatus status = PluginStatus.Valid,
+        IReadOnlyList<int>? events = null) =>
         new(
             new PluginManifest(
                 id,
@@ -83,7 +84,7 @@ public static class TestPlugins
                 Name: null,
                 Description: null,
                 Homepage: null,
-                new ManifestContracts([PluginProtocol.CurrentVersion], contractVersions ?? [PluginProtocol.OperationContractVersion]),
+                new ManifestContracts([PluginProtocol.CurrentVersion], contractVersions ?? [PluginProtocol.OperationContractVersion]) { Events = events ?? [] },
                 kind == PluginKind.Notification ? [] : operations ?? [],
                 new PluginEntry("main.js", "invoke"),
                 new CapabilityRequests(null, null, null),

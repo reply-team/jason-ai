@@ -533,6 +533,12 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             entry.HasIndex(e => new { e.CampaignId, e.Kind, e.Key }, "ix_journal_campaign_kind_key_events")
                 .IsUnique()
                 .HasFilter("kind = 'provider_event_observed'");
+
+            // A gap in an account's events is said once. Its line names no campaign, and SQLite keeps every null apart from
+            // every other in a unique index, so the index is on the kind and the key alone.
+            entry.HasIndex(e => new { e.Kind, e.Key }, "ix_journal_kind_key_gaps")
+                .IsUnique()
+                .HasFilter("kind = 'events_gap_observed'");
             entry.Property(e => e.New).HasColumnName("new_json");
             entry.Property(e => e.Reason).HasMaxLength(2000);
 
@@ -555,6 +561,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             source.Property(s => s.PluginId).HasMaxLength(64);
             source.Property(s => s.BindingIdentity).HasMaxLength(71);
             source.Property(s => s.Cursor).HasMaxLength(2048);
+            source.Property(s => s.LastCode).HasMaxLength(64);
+            source.Property(s => s.LastClass).HasMaxLength(16);
 
             // One account is one source: a plugin and the identity of the binding a route names for it.
             source.HasIndex(s => new { s.PluginId, s.BindingIdentity }).IsUnique();

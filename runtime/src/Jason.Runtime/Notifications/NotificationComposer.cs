@@ -3,7 +3,7 @@ using System.Globalization;
 namespace Jason.Runtime.Notifications;
 
 /// <summary>
-/// What a notification says, made from three counts and, for failed protective work, at most three campaign public ids
+/// What a notification says, made from four counts and, for failed protective work, at most three campaign public ids
 /// — opaque ids that name nothing by themselves — and nothing else. That is half of why nothing about the work — a
 /// campaign's name, a contact, a subject, a question's words, an error — can reach a channel: this signature has
 /// nowhere to take it from.
@@ -25,19 +25,24 @@ public static class NotificationComposer
     public const string LookAtBoth =
         "Ask your agent what failed and what Jason is waiting for, or run jason workitem list --status failed --status expired, jason approval list and jason decision list.";
 
+    /// <summary>Where to look when an account's events were not read and nothing else is said.</summary>
+    public const string LookAtGaps = "Ask your agent what Jason did not read.";
+
+    /// <param name="eventGaps">How many accounts have a span of events nobody will read, said since the last pointer that reached anybody.</param>
     /// <exception cref="ArgumentOutOfRangeException">A count is negative, or every count is zero: nothing to say is never composed.</exception>
-    public static NotificationMessage Compose(int approvals, int decisions, FailedProtectiveWork? failed = null)
+    public static NotificationMessage Compose(int approvals, int decisions, FailedProtectiveWork? failed = null, int eventGaps = 0)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(approvals);
         ArgumentOutOfRangeException.ThrowIfNegative(decisions);
         var failures = failed?.Count ?? 0;
         ArgumentOutOfRangeException.ThrowIfNegative(failures);
-        if (approvals == 0 && decisions == 0 && failures == 0)
+        ArgumentOutOfRangeException.ThrowIfNegative(eventGaps);
+        if (approvals == 0 && decisions == 0 && failures == 0 && eventGaps == 0)
         {
             throw new ArgumentOutOfRangeException(nameof(approvals), "Nothing is waiting, so there is nothing to say.");
         }
 
-        var sentences = new List<string>(2);
+        var sentences = new List<string>(3);
         if (approvals > 0 || decisions > 0)
         {
             var parts = new List<string>(2);
@@ -60,8 +65,41 @@ public static class NotificationComposer
             sentences.Add(Failed(failed!));
         }
 
-        var look = failures == 0 ? Look : approvals + decisions == 0 ? LookAtFailures : LookAtBoth;
-        return new NotificationMessage(Title, string.Join(" ", sentences), look, approvals, decisions, failures);
+        if (eventGaps > 0)
+        {
+            sentences.Add($"{Count(eventGaps, "account has", "accounts have")} events Jason did not read.");
+        }
+
+        var waiting = approvals + decisions > 0;
+        var look = eventGaps > 0 ? Pointing(waiting, failures > 0)
+            : failures == 0 ? Look
+            : waiting ? LookAtBoth
+            : LookAtFailures;
+        return new NotificationMessage(Title, string.Join(" ", sentences), look, approvals, decisions, failures, eventGaps);
+    }
+
+    /// <summary>
+    /// Where to look when an account's events were not read: alone, the agent; beside other things, the agent and the
+    /// commands for those, without the questions each would ask — four things said in full would not fit the message the
+    /// delivery contract takes.
+    /// </summary>
+    private static string Pointing(bool waiting, bool failed)
+    {
+        var commands = new List<string>(3);
+        if (waiting)
+        {
+            commands.Add("jason approval list");
+            commands.Add("jason decision list");
+        }
+
+        if (failed)
+        {
+            commands.Add("jason workitem list --status failed --status expired");
+        }
+
+        return commands.Count == 0
+            ? LookAtGaps
+            : $"Ask your agent, or run {(commands.Count == 1 ? commands[0] : $"{string.Join(", ", commands.Take(commands.Count - 1))} and {commands[^1]}")}.";
     }
 
     /// <summary>"2 protective actions failed in Jason, in cmp_… and cmp_…." — the campaigns by public id, three at most.</summary>
@@ -84,7 +122,7 @@ public static class NotificationComposer
 /// One pointer: a title, a summary of the counts, and where to look. A toast shows the title, then the summary and
 /// where to look as two lines; a channel that carries one line sends <see cref="Text"/>.
 /// </summary>
-public sealed record NotificationMessage(string Title, string Summary, string Look, int Approvals, int Decisions, int ProtectiveFailures = 0)
+public sealed record NotificationMessage(string Title, string Summary, string Look, int Approvals, int Decisions, int ProtectiveFailures = 0, int EventGaps = 0)
 {
     public string Text => $"{Summary} {Look}";
 }

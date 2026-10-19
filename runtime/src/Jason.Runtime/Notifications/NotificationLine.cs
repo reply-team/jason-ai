@@ -22,7 +22,8 @@ public sealed record NotificationLine(
     IReadOnlyList<ChannelOutcome> Channels,
     DateTime? LastDeliveredAt,
     int ProtectiveFailures = 0,
-    string? DeliveredThrough = null)
+    string? DeliveredThrough = null,
+    int EventGaps = 0)
 {
     public const string CoveredThroughKey = "covered_through";
 
@@ -68,7 +69,7 @@ public sealed record NotificationLine(
         return new JsonObject
         {
             ["notification_id"] = NotificationId,
-            ["counts"] = new JsonObject { ["approvals"] = Approvals, ["decisions"] = Decisions, ["protective_failures"] = ProtectiveFailures },
+            ["counts"] = new JsonObject { ["approvals"] = Approvals, ["decisions"] = Decisions, ["protective_failures"] = ProtectiveFailures, ["event_gaps"] = EventGaps },
             [CoveredThroughKey] = CoveredThrough,
             ["channels"] = channels,
             [LastDeliveredAtKey] = LastDeliveredAt is { } at ? Format(at) : null,
@@ -119,7 +120,8 @@ public sealed record NotificationLine(
             outcomes,
             lastDeliveredAt,
             Number(counts["protective_failures"]),
-            ReadDeliveredThrough(line));
+            ReadDeliveredThrough(line),
+            Number(counts["event_gaps"]));
     }
 
     /// <summary>

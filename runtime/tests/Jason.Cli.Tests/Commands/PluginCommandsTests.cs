@@ -74,6 +74,18 @@ public class PluginCommandsTests
     }
 
     [Fact]
+    public async Task Human_mode_says_which_plugins_read_their_accounts_events()
+    {
+        var registry = TwoPlugins();
+        var reader = registry.Plugins[0] with { Contracts = new PluginContractsDto([1], [1], [1]), Operations = ["campaign.get"] };
+        using var cli = new CliRun(JsonSerializer.Serialize(registry with { Plugins = [reader] }, JasonJson.Options));
+
+        await cli.RunAsync("plugin", "list", "--human");
+
+        Assert.Contains("campaign.get + events", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Human_mode_names_the_problems_of_a_rejected_reload()
     {
         using var cli = new CliRun(JsonSerializer.Serialize(KeptAfterARejectedReload(), JasonJson.Options));
@@ -172,7 +184,7 @@ public class PluginCommandsTests
                 null,
                 "/home/u/.jason/plugins/fake-provider",
                 "sha256:3f2a9c1b4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8",
-                new PluginContractsDto([1], [1]),
+                new PluginContractsDto([1], [1], []),
                 ["echo.run", "exec.run", "http.get"],
                 new PluginEntry("main.js", "invoke"),
                 new PluginCapabilitiesDto(
@@ -192,7 +204,7 @@ public class PluginCommandsTests
                 null,
                 "/home/u/.jason/plugins/notifier",
                 "sha256:9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b",
-                new PluginContractsDto([1], []),
+                new PluginContractsDto([1], [], []),
                 [],
                 new PluginEntry("main.js", "invoke"),
                 new PluginCapabilitiesDto(new ExecCapabilityDto([new ExecutableDto("notify", null, null, "0.4.0")], ["notify"]), null, null),
@@ -218,7 +230,7 @@ public class PluginCommandsTests
                 null,
                 "/home/u/.jason/plugins/fake-provider",
                 "sha256:3f2a9c1b4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8",
-                new PluginContractsDto([1], [1]),
+                new PluginContractsDto([1], [1], []),
                 ["echo.run"],
                 new PluginEntry("main.js", "invoke"),
                 new PluginCapabilitiesDto(null, null, null),

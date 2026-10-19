@@ -113,6 +113,7 @@ public sealed class DispatcherOptionsValidator : IValidateOptions<DispatcherOpti
         OptionRules.Range(failures, "Dispatcher:DrainSeconds", options.DrainSeconds, 0, 20);
         OptionRules.Range(failures, "Dispatcher:RetryDelaySeconds", options.RetryDelaySeconds, 0, 86400);
         OptionRules.Range(failures, "Dispatcher:ExitGraceSeconds", options.ExitGraceSeconds, 0, 600);
+        OptionRules.Range(failures, "Dispatcher:EventsCadenceSeconds", options.EventsCadenceSeconds, DispatcherOptions.MinimumEventsCadenceSeconds, DispatcherOptions.MaximumEventsCadenceSeconds);
         ValidateKind(failures, "Dispatcher:AiRole", options.AiRole);
         ValidateKind(failures, "Dispatcher:ProviderOp", options.ProviderOp);
 

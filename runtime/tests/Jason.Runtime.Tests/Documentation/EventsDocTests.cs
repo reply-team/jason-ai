@@ -1,6 +1,8 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Jason.Contracts.Events;
+using Jason.Runtime.Configuration;
+using Jason.Runtime.Events;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 
@@ -36,6 +38,34 @@ public partial class EventsDocTests
         Assert.Contains($"`{EventSource.NoBinding}`", page, StringComparison.Ordinal);
         Assert.Contains($"`{EventAttributionRules.CampaignPin}`", page, StringComparison.Ordinal);
         Assert.Contains("`events_no_update`, `events_no_delete`, `event_attributions_no_update` and `event_attributions_no_delete`", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The reading section, held to the constants and the setting that decide it: how far back a read reaches, how many
+    /// pages one takes, the cadence's default and range, the lines a read writes, and the inbound read's fourth skip.
+    /// </summary>
+    [Fact]
+    public void The_reading_section_states_what_the_reader_does_by_its_own_numbers()
+    {
+        var page = Flattened(Read("events.md"));
+        var defaults = new DispatcherOptions();
+
+        Assert.Contains($"| no cursor yet | {EventSchedule.DepthDays} days back |", page, StringComparison.Ordinal);
+        Assert.Contains($"At most {EventSchedule.PagesPerRead} pages", page, StringComparison.Ordinal);
+        Assert.Contains($"each one child given the contract's {EventsCatalog.Find("events.read")!.TimeoutMs / 1000} seconds", page, StringComparison.Ordinal);
+        Assert.Contains(
+            $"| `Dispatcher:EventsCadenceSeconds` | `{defaults.EventsCadenceSeconds}` | {DispatcherOptions.MinimumEventsCadenceSeconds}..{DispatcherOptions.MaximumEventsCadenceSeconds} |",
+            page,
+            StringComparison.Ordinal);
+        Assert.Contains($"`{JournalKinds.EventsGapObserved}`", page, StringComparison.Ordinal);
+        Assert.Contains($"`{JournalKinds.EventsRead}`", page, StringComparison.Ordinal);
+        Assert.Contains($"`{EventReader.ResultInvalid}`", page, StringComparison.Ordinal);
+        Assert.Contains("within the shorter of two cadences and `Inbound:LookbackSeconds`, and never before that first success", page, StringComparison.Ordinal);
+        Assert.Contains($"| `{Jason.Runtime.Dispatch.InboundSkipCodes.PluginReadsEvents}` |", Flattened(Read("inbound-sync.md")), StringComparison.Ordinal);
+        var inbound = Flattened(Read("inbound-sync.md"));
+        Assert.Contains("started within the shorter of two `Dispatcher:EventsCadenceSeconds` and `Inbound:LookbackSeconds`", inbound, StringComparison.Ordinal);
+        Assert.Contains("a look-back of 0 never leaves one at all", inbound, StringComparison.Ordinal);
+        Assert.DoesNotContain("two cadences are well inside the look-back", inbound, StringComparison.Ordinal);
     }
 
     /// <summary>The contracts' package says there is a third family, and that the events read is the one read that pages by a cursor.</summary>

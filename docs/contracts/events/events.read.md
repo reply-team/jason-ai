@@ -77,7 +77,9 @@ it holds; that is not a failure.
 ## The four kinds
 
 Every event has a `kind`, an `occurred_at` — when it happened, as the provider stamps it — and an `id`, the provider's
-own identifier for the event or `null`. Every identifier is 1 to 256 printable ASCII characters with no space.
+own identifier for the event or `null`. Every identifier is 1 to 256 printable ASCII characters with no space. A moment
+is written in UTC with `Z`, to the second or to a fraction of it of at most seven digits — `2026-10-01T09:00:00.120Z` —
+never with an offset, and never at a leap second's `60`: convert the provider's stamp before you answer.
 
 | `kind` | Identifiers | The provider's flags |
 |---|---|---|
@@ -160,6 +162,10 @@ A plugin that performs this contract:
 - names a thread that moved by the identifier `conversation.list` returns as the thread's `external_id`, with
   `occurred_at` the moment the thread last moved — the moment `conversation.list` reports as its `last_activity_at`, to the
   millisecond — so that a move both reads find is said once;
+- names, under `campaign`, the provider campaign a moved thread belongs to wherever the provider keeps one, by the
+  identifier `campaign.get` pins; `null` is for a thread outside every provider campaign, which reaches no campaign until
+  a contact pin can say whose it is. The runtime leaves a campaign's inbound read to the events on the strength of this
+  line, so a plugin that reads events and names no campaign on a move silences the campaigns it serves;
 - reports `moved_by: null` only where the provider cannot say, knowing that such a move wakes a manager as a reply;
 - answers `events_cursor_unknown` for a cursor it can no longer read, and `events_unreachable` for a provider that did
   not answer or is unavailable for now;

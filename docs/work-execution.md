@@ -172,9 +172,11 @@ scan would consider.
 
 ## The claim rule
 
-Each tick, the dispatcher runs one scan in six short steps: **expire**, **enforce**, **sync**,
-**summon**, **claim**, **notify**. Sync reads each live campaign's conversations and says, in the
-chronicle, each thread that moved ([docs/inbound-sync.md](inbound-sync.md) is the contract). Summon is
+Each tick, the dispatcher runs one scan in seven short steps: **expire**, **enforce**, **events**,
+**sync**, **summon**, **claim**, **notify**. Events hands one read of an account's events to a reader
+that runs off the scan, never as a work item ([docs/events.md](events.md) is the contract). Sync reads
+each live campaign's conversations and says, in the chronicle, each thread that moved
+([docs/inbound-sync.md](inbound-sync.md) is the contract). Summon is
 the campaign-manager loop — where a campaign that something happened to, or that has not been looked at
 for long enough, gets a check-in put on the queue ([docs/campaign-manager.md](campaign-manager.md) is the
 contract). Both run before the claim, so a read or a check-in created this tick can be claimed this tick,
@@ -605,6 +607,7 @@ mistyped one.
 | `Dispatcher:DrainSeconds` | `10` | 0..20 | how long a shutdown waits for running handlers |
 | `Dispatcher:RetryDelaySeconds` | `60` | 0..86400 | multiplied by the failure count to set `retry_after`; 0 retries at the next scan |
 | `Dispatcher:ExitGraceSeconds` | `30` | 0..600 | how long a process may linger after its attempt was completed through the API before the dispatcher stops it |
+| `Dispatcher:EventsCadenceSeconds` | `600` | 60..86400 | how long after one read of an account's events starts the next is due ([docs/events.md](events.md)) |
 | `Dispatcher:AiRole:TimeoutSeconds` | `3600` | 30..86400 | the budget of one `ai_role` attempt |
 | `Dispatcher:AiRole:HeartbeatSeconds` | `120` | 0, or 10..3600 | how often an `ai_role` executor must prove it is alive |
 | `Dispatcher:AiRole:MaxAttempts` | `3` | 1..10 | how many failures an `ai_role` item is worth |

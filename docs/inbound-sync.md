@@ -11,9 +11,10 @@ reply means, and what to do about it, is the manager's.
 
 ## 1. Where it runs
 
-Each scan runs in six short steps: **expire**, **enforce**, **sync**, **summon**, **claim**, **notify**
+Each scan runs in seven short steps: **expire**, **enforce**, **events**, **sync**, **summon**, **claim**, **notify**
 ([work execution](work-execution.md)). Sync comes before the summon, so a reply it says wakes the manager in the same
-scan, and before the claim, so a read it starts can be claimed in the same scan.
+scan, and before the claim, so a read it starts can be claimed in the same scan. Events, before it, hands a read of an
+account's events to a reader that runs off the scan ([events](events.md) §5).
 
 It runs whenever the dispatcher scans, draining included — a drain stops claims, not bookkeeping: reads are accounted
 for, and a read started during a drain waits until claims resume — and does nothing when `Inbound:Enabled` is false.
@@ -30,13 +31,29 @@ read with the rest of its open work, and nothing it was reading is said.
 
 A campaign is read when the operation `conversation.list` is routed for it to a plugin that reads conversations, and
 the campaign is linked there — that plugin has pinned the campaign's own identifier at the provider
-([routing](routing.md)). Otherwise it is skipped, by the first of three reasons, in this order:
+([routing](routing.md)). Otherwise it is skipped, by the first of four reasons, in this order:
 
 | Code | Why |
 |---|---|
 | `no_route` | Nothing routes `conversation.list` for this campaign. |
 | `plugin_operation_unsupported` | The plugin it is routed to is loaded and does not perform `conversation.list`. |
 | `campaign_not_linked` | The campaign has no identifier pinned at that plugin, so a read would have nothing to name it by. |
+| `plugin_reads_events` | That plugin reads its accounts' events, an event naming the campaign's provider campaign would reach it, and the source of the account the route binds is healthy. |
+
+**When the plugin reads its accounts' events.** A plugin that declares the events contract has its accounts read on a
+cadence of their own, and says a reply in a campaign from there ([events](events.md)). The inbound read leaves such a
+campaign to it only where an event would reach the campaign — it is the one campaign, of those not archived, holding its
+provider campaign's identifier pinned at that plugin, the rule an event is attributed by ([events](events.md) §3); two
+campaigns linked to one provider campaign are both read here — and only while the source of the account its
+`conversation.list` route binds is **healthy**: that source's last read ended in success and started within the shorter
+of two `Dispatcher:EventsCadenceSeconds` and `Inbound:LookbackSeconds` — twenty minutes at the defaults. It never
+leaves a campaign to a source before that source's first read that succeeded, and a look-back of 0 never leaves one at
+all. A source that fails, or that is not read for that long, hands its campaigns back at the next due read, which starts
+at the watermark — the moment of the last skip less the look-back, so never later than the start of the source's last
+read that succeeded, and nothing is missed in the hand-back — and the inbound read is the fallback for as long as it
+lasts. A move both reads find is said once: they say it under the same key. The step aside rests on a promise every
+plugin that reads events makes, to name under `campaign` the provider campaign a moved thread belongs to: a plugin that
+reads events and names no campaign on a move silences the campaigns it serves.
 
 A skip is logged once for its campaign and reason in the life of the process, not once a cadence.
 
@@ -176,3 +193,5 @@ kind existed keeps its own list, and is not woken by replies until it adds the k
 - **Meaning.** Nothing classifies a reply, and nothing but the manager decides what it calls for.
 - **Telling a person.** A reply is not notified; the manager's check-in is what it wakes.
 - **A cadence per campaign,** and a read of any plugin but the one the campaign's route names.
+- **Telling a person that a source of events keeps failing.** Nothing notifies it; while it fails, its campaigns are
+  read here.

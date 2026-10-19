@@ -20,6 +20,12 @@ public sealed class DispatcherOptions
 {
     public const string Section = "Dispatcher";
 
+    /// <summary>The shortest events cadence: a minute, as the inbound read's.</summary>
+    public const int MinimumEventsCadenceSeconds = 60;
+
+    /// <summary>The longest events cadence: a day.</summary>
+    public const int MaximumEventsCadenceSeconds = 86_400;
+
     public bool Enabled { get; set; } = true;
 
     /// <summary>1..3600.</summary>
@@ -36,6 +42,12 @@ public sealed class DispatcherOptions
 
     /// <summary>0..600; how long a process may linger after its attempt was completed through the API before the dispatcher stops it.</summary>
     public int ExitGraceSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// 60..86400; how long after one read of an account's events starts the next is due. Read at every scan, so an edit
+    /// applies at the next one.
+    /// </summary>
+    public int EventsCadenceSeconds { get; set; } = 600;
 
     public KindDefaults AiRole { get; set; } = new() { TimeoutSeconds = 3600, HeartbeatSeconds = 120, MaxAttempts = 3 };
 

@@ -81,6 +81,8 @@ public sealed class JournalKindInventoryTests
         JournalKinds.PluginsReloaded,
         JournalKinds.DecisionRaised,
         JournalKinds.DecisionCancelled,
+        JournalKinds.EventsRead,
+        JournalKinds.EventsGapObserved,
     };
 
     /// <summary>

@@ -2584,7 +2584,7 @@ internal sealed class StubRuntime(string dataDir) : HttpMessageHandler
         null,
         $"/plugins/{id}",
         digest,
-        new PluginContractsDto([1], [1]),
+        new PluginContractsDto([1], [1], []),
         [],
         new PluginEntry("main.js", "invoke"),
         new PluginCapabilitiesDto(null, null, null),

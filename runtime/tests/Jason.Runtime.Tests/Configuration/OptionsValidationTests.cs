@@ -153,6 +153,7 @@ public class OptionsValidationTests
         Assert.Equal(10, options.DrainSeconds);
         Assert.Equal(60, options.RetryDelaySeconds);
         Assert.Equal(30, options.ExitGraceSeconds);
+        Assert.Equal(600, options.EventsCadenceSeconds);
         Assert.Equal(3600, options.AiRole.TimeoutSeconds);
         Assert.Equal(120, options.AiRole.HeartbeatSeconds);
         Assert.Equal(3, options.AiRole.MaxAttempts);
@@ -171,6 +172,19 @@ public class OptionsValidationTests
         Assert.Contains("Dispatcher:DrainSeconds must be between 0 and 20; got 21.", result.Failures!);
         Assert.Contains("Dispatcher:ExitGraceSeconds must be between 0 and 600; got 601.", result.Failures!);
         Assert.Contains("Dispatcher:MaxParallel must be between 1 and 64; got 65.", result.Failures!);
+    }
+
+    [Theory]
+    [InlineData(59)]
+    [InlineData(86_401)]
+    public void The_events_cadence_is_a_minute_to_a_day(int seconds)
+    {
+        var result = new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { EventsCadenceSeconds = seconds });
+
+        Assert.True(result.Failed, $"An events cadence of {seconds} s was accepted.");
+        Assert.Contains($"Dispatcher:EventsCadenceSeconds must be between 60 and 86400; got {seconds}.", result.Failures!);
+        Assert.True(new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { EventsCadenceSeconds = 60 }).Succeeded);
+        Assert.True(new DispatcherOptionsValidator().Validate(null, new DispatcherOptions { EventsCadenceSeconds = 86_400 }).Succeeded);
     }
 
     [Fact]

@@ -1,0 +1,34 @@
+manifest_version: 1
+id: fake-events
+version: 1.0.0
+kind: provider
+name: Fake events
+description: A provider that reads its accounts' events, from a feed by position or by offset alone; the end-to-end tests' stand-in.
+contracts:
+  protocol: [1]
+  operations: [1]
+  events: [1]
+operations: [campaign.get]
+entry:
+  module: main.js
+  function: invoke
+capabilities:
+  exec:
+    executables:
+      - name: Jason.FakeProviderCli
+limits:
+  timeout_ms: 20000
+  memory_mb: 64
+binding:
+  type: object
+  additionalProperties: false
+  required: [workspace]
+  properties:
+    workspace:
+      type: string
+      minLength: 1
+      description: The directory holding the provider account this route reads.
+    paging:
+      type: string
+      enum: [feed, offset]
+      description: How the account is read - by its feed's position (the default), or by offset alone, newest first.

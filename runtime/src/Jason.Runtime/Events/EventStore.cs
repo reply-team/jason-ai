@@ -31,9 +31,6 @@ public sealed record EventStoreResult(int Stored, int Duplicates, int Said, bool
 /// </remarks>
 public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEventAttribution attribution)
 {
-    /// <summary>The kind of pin that names a campaign at a plugin.</summary>
-    private const string CampaignPinKind = "campaign";
-
     /// <summary>The kind of pin that names a person at a plugin.</summary>
     private const string ContactPinKind = "contact";
 
@@ -58,12 +55,26 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
     /// <param name="page">The page, as the events contract's output schema accepted it.</param>
     /// <param name="readId">The public id of the read, kept with each event it stores.</param>
     /// <param name="ct">Stops the store before it commits.</param>
+    public Task<EventStoreResult> StoreAsync(
+        JasonDbContext db,
+        EventSource source,
+        string? heldCursor,
+        EventPage page,
+        string readId,
+        CancellationToken ct) => StoreAsync(db, source, heldCursor, page, readId, gap: null, ct);
+
+    /// <summary>
+    /// The same, for the page of a read that skips a span of the account's events nobody will read: the gap is said in
+    /// this page's transaction, once under its key, so a page that does not land says nothing and a read tried again says
+    /// nothing twice. An empty page that lands says it too: the cursor it returns starts every read after it.
+    /// </summary>
     public async Task<EventStoreResult> StoreAsync(
         JasonDbContext db,
         EventSource source,
         string? heldCursor,
         EventPage page,
         string readId,
+        EventGap? gap,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
@@ -147,6 +158,22 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
             }
         }
 
+        if (gap is not null)
+        {
+            var key = gap.Key(source.PublicId);
+            var gapSaid = await db.Journal.AsNoTracking().AnyAsync(entry => entry.Kind == JournalKinds.EventsGapObserved && entry.Key == key, ct).ConfigureAwait(false);
+            if (!gapSaid)
+            {
+                journal.Append(db, Actors.Dispatcher, JournalKinds.EventsGapObserved, campaign: null, key, updated: new JsonObject
+                {
+                    ["source"] = source.PublicId,
+                    ["plugin"] = source.PluginId,
+                    ["from"] = Instant(gap.From),
+                    ["to"] = Instant(gap.To),
+                });
+            }
+        }
+
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
         // The cursor moves with the page it ends, and only from where the read found it.
@@ -211,6 +238,8 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
         return (JournalKinds.ProviderEventObserved, EventKeys.Line(pluginId, read), updated);
     }
 
+    private static string Instant(DateTime moment) => Dispatch.InboundSync.Instant(new DateTimeOffset(DateTime.SpecifyKind(moment, DateTimeKind.Utc)));
+
     /// <summary>Each campaign once, in the order the rules found them: the first rule that found a campaign is the one recorded.</summary>
     private static List<Attributed> Distinct(IReadOnlyList<Attributed> attributed) =>
         [.. attributed.DistinctBy(campaign => campaign.CampaignId)];
@@ -241,18 +270,7 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
         var campaignValues = reads.Select(read => read.Campaign).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
         var contactValues = reads.Select(read => read.Contact).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
 
-        List<CampaignPin> campaigns = campaignValues.Count == 0
-            ? []
-            : await db.ExternalIds
-                .AsNoTracking()
-                .Where(pin => pin.PluginId == pluginId
-                    && pin.Kind == CampaignPinKind
-                    && pin.CampaignId != null
-                    && campaignValues.Contains(pin.Value)
-                    && pin.Campaign!.Status != CampaignStatus.Archived)
-                .Select(pin => new CampaignPin(pin.CampaignId!.Value, pin.Value))
-                .ToListAsync(ct)
-                .ConfigureAwait(false);
+        var campaigns = await CampaignPinRule.HoldersAsync(db, pluginId, campaignValues, ct).ConfigureAwait(false);
         List<ContactPin> contacts = contactValues.Count == 0
             ? []
             : await db.ExternalIds

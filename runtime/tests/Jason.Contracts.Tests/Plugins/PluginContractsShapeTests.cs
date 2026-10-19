@@ -156,7 +156,7 @@ public class PluginContractsShapeTests
             "rts_01J",
             [
                 new PluginDto("fake-provider", "1.0.0", PluginKind.Provider, "Fake provider", null, null, "/packages/fake-provider", "sha256:ab",
-                    new PluginContractsDto([1], [1]), ["echo.run"], new PluginEntry("main.js", "invoke"),
+                    new PluginContractsDto([1], [1], []), ["echo.run"], new PluginEntry("main.js", "invoke"),
                     new PluginCapabilitiesDto(
                         new ExecCapabilityDto([new ExecutableDto("provider-cli", null, null, "0.4.0")], []),
                         new ListCapabilityDto(["api.example.test"], []),

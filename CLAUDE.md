@@ -138,9 +138,15 @@ covered here.
   in an append-only store — `event_sources`, `events`, `event_attributions`, under the journal's three guards — each
   event once by a key per plugin, and an event no pin matches is kept. An event reaches a campaign only by the campaign
   identifier its operations pinned, decided once when it is stored, as a reserved line: a thread the other side moved as
-  `inbound_reply_observed` under inbound sync's key, every other kind as `provider_event_observed`.
-  `docs/events.md` is the contract.
-- Notifications: a parked approval, a raised question and failed protective work are notified as a pointer —
+  `inbound_reply_observed` under inbound sync's key, every other kind as `provider_event_observed`. A scan step
+  between the lease enforcer and inbound sync hands one read at a time to a reader off the scan — never a work item or a
+  handler slot — for every account a route binds, on `Dispatcher:EventsCadenceSeconds`, thirty days deep, a span older
+  than that said once as `events_gap_observed`; inbound sync skips a campaign routed to such a plugin only where an
+  event would reach it by the campaign-pin rule — one function, which the store attributes by — and only while that
+  account's last read that succeeded started within the shorter of two cadences and the look-back. `docs/events.md` is
+  the contract.
+- Notifications: a parked approval, a raised question, failed protective work and an account whose events were not
+  read are notified as a pointer —
   counts and where to look — by a scan step after the dispatch, delivered off the scan and recorded in a reserved `notification_sent` line.
   `docs/notifications.md` is the contract.
 - CLI: prints the exact API response as compact JSON on stdout by default, `--human` renders for

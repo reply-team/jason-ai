@@ -112,6 +112,26 @@ public sealed class EventsContractTests
         Assert.Contains("the moment `conversation.list` reports as its `last_activity_at`, to the millisecond", page, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The inbound read steps aside for a campaign on the strength of one promise: a moved thread names the provider
+    /// campaign it belongs to, by the identifier the campaign's own operation pinned. The document makes it, and the
+    /// plugin author's page says it and what breaking it costs.
+    /// </summary>
+    [Fact]
+    public void The_conformance_says_a_moved_thread_names_its_provider_campaign()
+    {
+        const string Promise = "Names, under campaign, the provider campaign a moved thread belongs to wherever the provider keeps one, by the identifier campaign.get pins, so that the runtime can leave that campaign's inbound read to the events; null is for a thread outside every provider campaign, which reaches no campaign until a contact pin can say whose it is.";
+        var contract = EventsCatalog.Find("events.read")!;
+
+        Assert.Contains(Promise, contract.Conformance);
+        Assert.Equal(1, contract.Version);
+
+        var page = string.Join(' ', File.ReadAllText(Path.Combine(OperationContracts.ContractFiles.Package, "events", "events.read.md"))
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        Assert.Contains("names, under `campaign`, the provider campaign a moved thread belongs to wherever the provider keeps one, by the identifier `campaign.get` pins", page, StringComparison.Ordinal);
+        Assert.Contains("a plugin that reads events and names no campaign on a move silences the campaigns it serves", page, StringComparison.Ordinal);
+    }
+
     /// <summary>A read finds pins and never writes one: any identifier beside its result is refused, whatever its kind.</summary>
     [Fact]
     public void An_answer_carrying_identifiers_is_refused_whatever_their_kind()

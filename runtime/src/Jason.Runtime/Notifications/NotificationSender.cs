@@ -147,13 +147,14 @@ public sealed class NotificationSender(
 
         var (approvals, decisions) = await PendingAsync(ct).ConfigureAwait(false);
         var failedWork = await FailedAsync(request, ct).ConfigureAwait(false);
-        if (approvals == 0 && decisions == 0 && failedWork.Count == 0)
+        var gaps = await GapsAsync(request, ct).ConfigureAwait(false);
+        if (approvals == 0 && decisions == 0 && failedWork.Count == 0 && gaps == 0)
         {
             status.NothingWaited(clock.GetUtcNow());
             return null;
         }
 
-        var message = NotificationComposer.Compose(approvals, decisions, failedWork.Count > 0 ? failedWork : null);
+        var message = NotificationComposer.Compose(approvals, decisions, failedWork.Count > 0 ? failedWork : null, gaps);
         var outcomes = await Task.WhenAll(channels.Resolve(settings.Current).Select(channel => DeliverAsync(channel, message, request.NotificationId, ct))).ConfigureAwait(false);
         var now = clock.GetUtcNow();
 
@@ -176,7 +177,8 @@ public sealed class NotificationSender(
             outcomes,
             reached ? now.UtcDateTime : request.LastDeliveredAt,
             failedWork.Count,
-            reached ? request.CoveredThrough : request.DeliveredThrough);
+            reached ? request.CoveredThrough : request.DeliveredThrough,
+            gaps);
 
         await using (var scope = scopes.CreateAsyncScope())
         {
@@ -234,6 +236,30 @@ public sealed class NotificationSender(
             failed.Select(f => f.WorkItemId).Distinct(StringComparer.Ordinal).Count(),
             [.. campaigns.Take(NotificationComposer.MaxCampaignsNamed)],
             Math.Max(0, campaigns.Count - NotificationComposer.MaxCampaignsNamed));
+    }
+
+    /// <summary>
+    /// The accounts with a span of events nobody will read, said in the same window as failed protective work: after the
+    /// line the last notification that reached anybody covered, through the line this one covers. Counted by account.
+    /// </summary>
+    private async Task<int> GapsAsync(NotificationRequest request, CancellationToken ct)
+    {
+        if (request.CoveredThrough is null)
+        {
+            return 0;
+        }
+
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var upTo = await IdOfAsync(db, request.CoveredThrough, ct).ConfigureAwait(false);
+        int? after = request.DeliveredThrough is null ? 0 : await IdOfAsync(db, request.DeliveredThrough, ct).ConfigureAwait(false);
+        if (upTo is null || after is null)
+        {
+            return 0;
+        }
+
+        var gaps = await EventGapLines.Of(db).Where(e => e.Id > after && e.Id <= upTo).Select(e => e.New).ToListAsync(ct).ConfigureAwait(false);
+        return gaps.Select(EventGapLines.Source).Distinct(StringComparer.Ordinal).Count();
     }
 
     private static Task<int?> IdOfAsync(JasonDbContext db, string publicId, CancellationToken ct) =>

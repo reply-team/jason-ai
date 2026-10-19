@@ -1,4 +1,5 @@
 using Jason.Contracts.Api;
+using Jason.Runtime.Events;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Logging;
 using Jason.Runtime.Notifications;
@@ -10,15 +11,18 @@ namespace Jason.Runtime.Dispatch;
 
 /// <summary>
 /// What one scan did. Zeros are the normal answer: most ticks find nothing to do. <paramref name="Synced"/> counts the
-/// conversation reads the scan started and <paramref name="Observed"/> the threads it said had moved.
+/// conversation reads the scan started, <paramref name="Observed"/> the threads it said had moved, and
+/// <paramref name="EventReads"/> the read of an account's events it handed to the reader, one at most.
 /// </summary>
-public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0, int Synced = 0, int Observed = 0);
+public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0, int Synced = 0, int Observed = 0, int EventReads = 0);
 
 /// <summary>
-/// One pass of the dispatcher: give up what is overdue, take back what is lost, read the live campaigns'
-/// conversations, summon a manager where a campaign wants one, hand out what is ready, and, last, say once that
-/// something waits for a person: after the dispatch, so nothing the notifier does can strand work already claimed.
-/// In that order and in short transactions, so no step holds the writer while another thinks. The read comes before
+/// One pass of the dispatcher: give up what is overdue, take back what is lost, hand the reader the next read of an
+/// account's events, read the live campaigns' conversations, summon a manager where a campaign wants one, hand out what
+/// is ready, and, last, say once that something waits for a person: after the dispatch, so nothing the notifier does can
+/// strand work already claimed. In that order and in short transactions, so no step holds the writer while another
+/// thinks. The events step only hands a read over — the reader reads off the scan — and comes before the inbound read,
+/// which leaves a campaign to the events only while their source is healthy. The read comes before
 /// the summon so that a reply it says wakes the manager in the same scan, and before the claim so that a read it
 /// starts is claimed in the same scan. The summon comes before the claim because a check-in created now should be
 /// claimable now, and after the lease enforcer because a review of a lost attempt is summoned by the line that lost it. The scan hands
@@ -96,6 +100,7 @@ public sealed class ScanRunner(
         // would wait its whole bound for an attempt nothing was ever going to finish.
         var expired = await InScopeAsync<Expirer, int>((step, db) => step.ExpireAsync(db, ct)).ConfigureAwait(false);
         var lost = await InScopeAsync<LeaseEnforcer, int>((step, db) => step.EnforceAsync(db, ct)).ConfigureAwait(false);
+        var events = await InScopeAsync<EventScan, int>((step, db) => step.ScanAsync(db, ct)).ConfigureAwait(false);
         var inbound = await InScopeAsync<InboundSync, InboundReport>((step, db) => step.SyncAsync(db, ct)).ConfigureAwait(false);
         var summoned = await InScopeAsync<Summoner, int>((step, db) => step.SummonAsync(db, ct)).ConfigureAwait(false);
         var claimed = status.State == DispatcherState.Running
@@ -143,7 +148,7 @@ public sealed class ScanRunner(
         }
 
         Scanned(logger, status.Scans, expired, lost, summoned, claimed.Count, null);
-        return new ScanReport(expired, lost, summoned, claimed.Count, notified, inbound.Synced, inbound.Observed);
+        return new ScanReport(expired, lost, summoned, claimed.Count, notified, inbound.Synced, inbound.Observed, events);
     }
 
     private async Task<TResult> InScopeAsync<TStep, TResult>(Func<TStep, JasonDbContext, Task<TResult>> step)

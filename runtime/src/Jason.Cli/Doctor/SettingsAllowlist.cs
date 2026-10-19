@@ -99,6 +99,7 @@ public sealed class SettingsAllowlist
         new("Dispatcher:DrainSeconds", Kind.Integer32),
         new("Dispatcher:RetryDelaySeconds", Kind.Integer32),
         new("Dispatcher:ExitGraceSeconds", Kind.Integer32),
+        new("Dispatcher:EventsCadenceSeconds", Kind.Integer32),
         new("Dispatcher:AiRole:TimeoutSeconds", Kind.Integer32),
         new("Dispatcher:AiRole:HeartbeatSeconds", Kind.Integer32),
         new("Dispatcher:AiRole:MaxAttempts", Kind.Integer32),

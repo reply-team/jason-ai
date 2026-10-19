@@ -7,6 +7,8 @@ using Jason.Runtime.Dispatch;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Hosting.Modules;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Events;
+using Jason.Runtime.Tests.Events;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Persistence;
@@ -103,6 +105,8 @@ internal sealed class DispatchHarness : IDisposable
         services.AddScoped<ExternalIdStore>();
         services.AddScoped<SuppressionService>();
         services.AddScoped<ISuppressionCheck>(provider => provider.GetRequiredService<SuppressionService>());
+        // The accounts' events are read through pages the test hands over rather than through a child.
+        services.AddSingleton<IEventsInvoker>(Events);
         services.AddDispatcherModule();
         foreach (var command in commands)
         {
@@ -113,6 +117,20 @@ internal sealed class DispatchHarness : IDisposable
     }
 
     public FixedClock Clock { get; }
+
+    /// <summary>What a read of an account's events is answered with, page by page, and what each page was asked for.</summary>
+    public FakeEventsInvoker Events { get; } = new();
+
+    /// <summary>The reader the scan hands reads of accounts' events to, as the runtime's singleton holds it.</summary>
+    public EventReader Reader => _provider.GetRequiredService<EventReader>();
+
+    /// <summary>Runs one events step, in a scope of its own, the way the scan runs it.</summary>
+    public async Task<int> EventScanAsync(CancellationToken ct)
+    {
+        using var scope = _provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        return await scope.ServiceProvider.GetRequiredService<EventScan>().ScanAsync(db, ct);
+    }
 
     /// <summary>
     /// The inbound read's settings, which a test may change between scans. The look-back is an hour here rather than
@@ -347,6 +365,7 @@ internal sealed class DispatchHarness : IDisposable
         private readonly ConcurrentQueue<string> _texts = new();
         private int _failNextJournalRead;
         private int _failNextWorkItemRead;
+        private Action? _beforeJournalRead;
 
         public IReadOnlyList<string> Texts => [.. _texts];
 
@@ -354,6 +373,12 @@ internal sealed class DispatchHarness : IDisposable
 
         /// <summary>The next query that reads the journal throws, as a database that went away would.</summary>
         public void FailNextJournalRead() => Interlocked.Exchange(ref _failNextJournalRead, 1);
+
+        /// <summary>
+        /// Runs <paramref name="action"/> once, just before the next query that reads the journal is sent: another writer
+        /// arriving between a step's look at what it has said and its write, by construction rather than by timing.
+        /// </summary>
+        public void BeforeNextJournalRead(Action action) => Interlocked.Exchange(ref _beforeJournalRead, action);
 
         /// <summary>The next query that reads work items throws, and the one after it does not.</summary>
         public void FailNextWorkItemRead() => Interlocked.Exchange(ref _failNextWorkItemRead, 1);
@@ -380,6 +405,12 @@ internal sealed class DispatchHarness : IDisposable
         private void Record(System.Data.Common.DbCommand command)
         {
             _texts.Enqueue(command.CommandText);
+            if (command.CommandText.Contains("FROM \"journal\"", StringComparison.Ordinal)
+                && Interlocked.Exchange(ref _beforeJournalRead, null) is { } before)
+            {
+                before();
+            }
+
             if (command.CommandText.Contains("FROM \"journal\"", StringComparison.Ordinal)
                 && Interlocked.Exchange(ref _failNextJournalRead, 0) == 1)
             {

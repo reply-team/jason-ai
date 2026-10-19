@@ -1,6 +1,8 @@
 using Jason.Contracts.Operations;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Dispatch;
+using Jason.Runtime.Events;
+using Jason.Runtime.Journal;
 using Jason.Runtime.Execution;
 using Jason.Runtime.WorkItems;
 using Jason.Runtime.Execution.Hosts;
@@ -28,6 +30,8 @@ public static class DispatcherModule
             .AddScoped<EntryCommandResolver>()
             .AddScoped<AgentPreflight>()
             .AddScoped<AgentLaunchPlanner>()
+            .AddScoped<EventScan>()
+            .AddScoped<EventStore>()
             .AddScoped<InboundSync>()
             .AddScoped<Summoner>()
             .AddScoped<Claimer>()
@@ -72,6 +76,18 @@ public static class DispatcherModule
 
         // The pool is sized once and the counters are one per process, so both outlive any request scope.
         services.AddSingleton<HandlerPool>();
+
+        // The accounts' events: the store writes through the journal, finds campaigns by the rule of this version, and the
+        // reader invokes plugins through the invoker the plugin module registers — a test registers its own first. One
+        // reader, which is both what the scan hands a read to and the service that reads off the scan.
+        services.TryAddScoped<JournalWriter>();
+        services.TryAddSingleton<IEventAttribution, CampaignPinAttribution>();
+        services.TryAddScoped<IEventsInvoker, PluginEventsInvoker>();
+        services.AddSingleton(provider => new EventReader(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<ILogger<EventReader>>()));
+        services.AddHostedService(provider => provider.GetRequiredService<EventReader>());
 
         // Which skipped campaigns have been said, once per campaign and reason in the life of the process.
         services.AddSingleton<InboundSkips>();

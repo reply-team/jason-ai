@@ -25,7 +25,8 @@
         "20261005204228_IdempotencyKeys",
         "20261006011312_InboundSync",
         "20261016181342_UiTokens",
-        "20261018190303_EventStore"
+        "20261018190303_EventStore",
+        "20261018230454_EventReads"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -41,7 +42,8 @@
         "20261005204228_IdempotencyKeys",
         "20261006011312_InboundSync",
         "20261016181342_UiTokens",
-        "20261018190303_EventStore"
+        "20261018190303_EventStore",
+        "20261018230454_EventReads"
       ],
       "backup_file": null
     },

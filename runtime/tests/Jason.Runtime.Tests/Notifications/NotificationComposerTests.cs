@@ -23,6 +23,44 @@ public sealed class NotificationComposerTests
         Assert.Equal((approvals, decisions), (message.Approvals, message.Decisions));
     }
 
+    [Theory]
+    [InlineData(1, "1 account has events Jason did not read.")]
+    [InlineData(2, "2 accounts have events Jason did not read.")]
+    public void A_gap_alone_says_how_many_accounts_were_not_read(int gaps, string summary)
+    {
+        var message = NotificationComposer.Compose(0, 0, eventGaps: gaps);
+
+        Assert.Equal(summary, message.Summary);
+        Assert.Equal("Ask your agent what Jason did not read.", message.Look);
+        Assert.Equal(gaps, message.EventGaps);
+    }
+
+    [Theory]
+    [InlineData(1, 0, false, "Ask your agent, or run jason approval list and jason decision list.")]
+    [InlineData(0, 0, true, "Ask your agent, or run jason workitem list --status failed --status expired.")]
+    [InlineData(0, 1, true, "Ask your agent, or run jason approval list, jason decision list and jason workitem list --status failed --status expired.")]
+    public void A_gap_beside_other_things_points_at_each_of_them(int approvals, int decisions, bool failed, string look)
+    {
+        var failures = failed ? new FailedProtectiveWork(1, ["cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD"], 0) : null;
+
+        Assert.Equal(look, NotificationComposer.Compose(approvals, decisions, failures, eventGaps: 1).Look);
+    }
+
+    /// <summary>
+    /// The longest pointer the composer can make — every count at four digits, three campaigns named and more counted, and
+    /// a gap — still fits the message the delivery contract takes, read from the contract itself: a longer one would be
+    /// refused before any plugin channel ran.
+    /// </summary>
+    [Fact]
+    public void The_longest_message_fits_the_delivery_contract()
+    {
+        var id = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
+        var longest = NotificationComposer.Compose(9_999, 9_999, new FailedProtectiveWork(9_999, [id, id, id], 9_999), eventGaps: 9_999);
+        var bound = Jason.Contracts.Notifications.DeliveryCatalog.Find("notification.send")!.InputSchema["properties"]!["message"]!["maxLength"]!.GetValue<int>();
+
+        Assert.True(longest.Text.Length <= bound, $"The longest pointer is {longest.Text.Length} characters; the delivery contract takes {bound}: {longest.Text}");
+    }
+
     /// <summary>Nothing waiting is never composed: the sender sends nothing then.</summary>
     [Fact]
     public void Nothing_waiting_is_not_a_pointer() => Assert.Throws<ArgumentOutOfRangeException>(() => NotificationComposer.Compose(0, 0));

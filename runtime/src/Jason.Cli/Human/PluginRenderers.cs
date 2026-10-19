@@ -35,7 +35,7 @@ public static class PluginRenderers
                 plugin.Version,
                 RenderText.Snake(plugin.Kind),
                 RenderText.Snake(plugin.Status),
-                Operations(plugin.Operations),
+                Operations(plugin.Operations, plugin.Contracts?.Events),
                 Grants(plugin.Capabilities),
                 RenderText.Digest(plugin.Digest));
         }
@@ -89,17 +89,18 @@ public static class PluginRenderers
         return RenderText.Lines(lines);
     }
 
-    /// <summary>The operations the plugin implements, two of them at most: the full list is in the JSON.</summary>
-    private static string? Operations(IReadOnlyList<string>? operations)
+    /// <summary>
+    /// The operations the plugin implements, two of them at most — the full list is in the JSON — and whether it reads
+    /// its accounts' events, which is no operation a route carries.
+    /// </summary>
+    private static string? Operations(IReadOnlyList<string>? operations, IReadOnlyList<int>? events)
     {
-        if (operations is not { Count: > 0 })
-        {
-            return null;
-        }
-
-        return operations.Count <= OperationsShown
-            ? string.Join(", ", operations)
+        var listed = operations is not { Count: > 0 } ? null
+            : operations.Count <= OperationsShown ? string.Join(", ", operations)
             : string.Join(", ", operations.Take(OperationsShown)) + " …";
+        return events is not { Count: > 0 } ? listed
+            : listed is null ? "events"
+            : listed + " + events";
     }
 
     /// <summary>Granted against requested for each capability: declaration is not permission, and it shows.</summary>

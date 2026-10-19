@@ -117,6 +117,13 @@ internal sealed class EventStoreFixture : IDisposable
         return await Store.StoreAsync(db, source, heldCursor, page, readId, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>Stores a page that skips a gap, through a context of its own, as the reader will.</summary>
+    public async Task<EventStoreResult> StoreAsync(EventSource source, string? heldCursor, EventPage page, EventGap gap, string readId = "evr_01JB6K8TQ2W9V4MZ0C3Y7H5NRD")
+    {
+        await using var db = Open();
+        return await Store.StoreAsync(db, source, heldCursor, page, readId, gap, TestContext.Current.CancellationToken);
+    }
+
     public static EventPage Page(string cursor, params JsonObject[] events) =>
         EventPage.Read(new JsonObject { ["events"] = new JsonArray([.. events]), ["cursor"] = cursor, ["has_more"] = false })
             ?? throw new InvalidOperationException("The test built something that is not a page.");

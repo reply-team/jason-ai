@@ -4,8 +4,10 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Events;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Json;
 using Jason.Runtime.Logging;
@@ -43,6 +45,7 @@ public sealed class InboundSync(
     WorkItemService items,
     TimeProvider clock,
     LiveSettings<InboundOptions> settings,
+    LiveSettings<DispatcherOptions> dispatcher,
     PluginRegistry plugins,
     RouteRegistry routes,
     InboundSkips skips,
@@ -232,11 +235,14 @@ public sealed class InboundSync(
         }
 
         var threads = Observed(page!, since, pluginId);
+
+        // What the campaign has said is read inside the transaction that writes: it takes the writer as it begins, as the
+        // events store's does, so a move the store says meanwhile is either seen here or waits for this to commit, and the
+        // index on the key never has to refuse one of the two.
+        await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var said = await SaidAsync(db, campaign.Id, threads.Select(thread => thread.Key).ToList(), ct).ConfigureAwait(false);
         var fresh = threads.Where(thread => !said.Contains(thread.Key)).ToList();
         var people = await PeopleAsync(db, pluginId, fresh, ct).ConfigureAwait(false);
-
-        await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         foreach (var thread in fresh)
         {
             journal.Append(
@@ -491,7 +497,8 @@ public sealed class InboundSync(
 
     /// <summary>
     /// Starts a read, or skips the campaign by the first reason it cannot be read, in a fixed order: nothing routes the
-    /// operation; the plugin it is routed to is loaded and does not perform it; the campaign was never linked there. A
+    /// operation; the plugin it is routed to is loaded and does not perform it; the campaign was never linked there; the
+    /// plugin reads the account's events and their source is healthy, so the campaign's replies are said from there. A
     /// plugin routed but not loaded, unavailable, speaking another contract version or refusing its binding is not a
     /// reason to skip: the read is made and fails at its claim, where the reason is recorded on the item.
     /// </summary>
@@ -529,6 +536,16 @@ public sealed class InboundSync(
             return false;
         }
 
+        // A plugin that reads its accounts' events says the campaign's replies itself: the campaign is left to it, but only
+        // while the account's source is healthy, so a source that fails, or is not read, hands the campaign back here.
+        if (RouteChecks.Loaded(plugins.Snapshot, pluginId) is { Status: PluginStatus.Valid, Manifest.ReadsEvents: true }
+            && await CampaignPinRule.ReachesAsync(db, pluginId, campaign.Id, ct).ConfigureAwait(false)
+            && await HealthyAsync(db, pluginId, resolution.Route.BindingIdentity ?? EventSource.NoBinding, options, now, ct).ConfigureAwait(false))
+        {
+            await SkipAsync(db, campaign, InboundSkipCodes.PluginReadsEvents, options, now, ct).ConfigureAwait(false);
+            return false;
+        }
+
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         // A read always starts from the first page: a page offset means something only while its read is outstanding.
         var item = await items.CreateCoreAsync(
@@ -555,6 +572,16 @@ public sealed class InboundSync(
 
         await transaction.CommitAsync(ct).ConfigureAwait(false);
         return true;
+    }
+
+    /// <summary>Whether the source of this plugin's account is healthy now: its last read succeeded and started within the shorter of two cadences and the look-back.</summary>
+    private async Task<bool> HealthyAsync(JasonDbContext db, string pluginId, string bindingIdentity, InboundOptions options, DateTime now, CancellationToken ct)
+    {
+        var source = await db.EventSources
+            .AsNoTracking()
+            .FirstOrDefaultAsync(row => row.PluginId == pluginId && row.BindingIdentity == bindingIdentity, ct)
+            .ConfigureAwait(false);
+        return EventSchedule.IsHealthy(source, dispatcher.Current.EventsCadenceSeconds, options.LookbackSeconds, now);
     }
 
     /// <summary>
@@ -674,6 +701,9 @@ public static class InboundSkipCodes
     public const string PluginOperationUnsupported = "plugin_operation_unsupported";
 
     public const string CampaignNotLinked = "campaign_not_linked";
+
+    /// <summary>The plugin reads the account's events and their source is healthy: the campaign's replies are said from there.</summary>
+    public const string PluginReadsEvents = "plugin_reads_events";
 }
 
 /// <summary>

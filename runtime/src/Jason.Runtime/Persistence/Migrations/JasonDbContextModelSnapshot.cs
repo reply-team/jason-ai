@@ -768,6 +768,24 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("cursor_at");
 
+                    b.Property<int>("Failures")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("failures");
+
+                    b.Property<string>("LastClass")
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_class");
+
+                    b.Property<string>("LastCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_code");
+
+                    b.Property<bool>("More")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("more");
+
                     b.Property<string>("PluginId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -779,6 +797,18 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("TEXT")
                         .HasColumnName("public_id");
+
+                    b.Property<DateTime?>("ReadEndedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("read_ended_at");
+
+                    b.Property<DateTime?>("ReadStartedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("read_started_at");
+
+                    b.Property<DateTime?>("SucceededAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("succeeded_at");
 
                     b.HasKey("Id")
                         .HasName("pk_event_sources");
@@ -1100,6 +1130,11 @@ namespace Jason.Runtime.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_journal_campaign_kind_key_events")
                         .HasFilter("kind = 'provider_event_observed'");
+
+                    b.HasIndex(new[] { "Kind", "Key" }, "ix_journal_kind_key_gaps")
+                        .IsUnique()
+                        .HasDatabaseName("ix_journal_kind_key_gaps")
+                        .HasFilter("kind = 'events_gap_observed'");
 
                     b.ToTable("journal", null, t =>
                         {

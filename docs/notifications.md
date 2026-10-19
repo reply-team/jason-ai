@@ -7,7 +7,7 @@ the contract for the `Notifications` section of the settings, the toast, notific
 
 ## 1. What notifies, and what does not
 
-Three things, and only these:
+Four things, and only these:
 
 - **an approval parked at a claim** — a provider operation that needs a person's yes before it runs
   ([work-execution.md](work-execution.md));
@@ -15,15 +15,19 @@ Three things, and only these:
   ([campaign-manager.md](campaign-manager.md));
 - **a protective action that failed** — work the catalogue runs even in a paused campaign, recording an opt-out or
   pausing a campaign, that ended failed or expired, in a campaign of any status. A paused campaign's manager is not
-  summoned ([campaign-manager.md](campaign-manager.md)), so a pointer is how such a failure reaches a person.
+  summoned ([campaign-manager.md](campaign-manager.md)), so a pointer is how such a failure reaches a person;
+- **an account whose events were not read** — a span older than the 30 days a read of an account's events reaches back,
+  said once as an `events_gap_observed` line ([events.md](events.md) §5). It concerns no campaign, so no manager is
+  woken by it.
 
 Nothing else notifies: not an answer, not an approval given or refused, not a review, not finished work, not other work
 that failed, and not a protective action somebody cancelled — a cancellation is a decision. A person who answers a
 question is not told that they answered it.
 
-A notification is a pointer: how many approvals and questions are waiting, how many protective actions failed, and
-where to look. It decides nothing, and nothing is approved by reacting to it. An approval is a person's decision, recorded as theirs, made where they read
-what they are approving — through their agent, or `jason approval list` and `jason approval approve`.
+A notification is a pointer: how many approvals and questions are waiting, how many protective actions failed, how many
+accounts have events Jason did not read, and where to look. It decides nothing, and nothing is approved by reacting to
+it. An approval is a person's decision, recorded as theirs, made where they read what they are approving — through
+their agent, or `jason approval list` and `jason approval approve`.
 
 ## 2. When
 
@@ -64,17 +68,29 @@ Jason
 Ask your agent what failed, or run jason workitem list --status failed --status expired.
 ```
 
+And where an account's events were not read:
+
+```text
+Jason
+1 account has events Jason did not read.
+Ask your agent what Jason did not read.
+```
+
 The title; how many approvals and questions are waiting **at the moment it is sent** — counted then, so a burst
-answered before it was said says nothing at all; how many protective actions failed **since the last notification that
-reached anybody** — counted from that one's line, so a notification that reached nobody leaves its failures for the
-next; and where to look. Past three campaigns, the rest are counted: "… in cmp_…, cmp_…, cmp_… and 2 more." That is
-every field.
+answered before it was said says nothing at all; how many protective actions failed, and how many accounts have events
+Jason did not read, **since the last notification that reached anybody** — counted from that one's line, so a
+notification that reached nobody leaves them for the next; and where to look. Said beside anything else, an account
+whose events were not read makes where to look the commands of each thing alone — "Ask your agent, or run jason approval
+list, jason decision list and jason workitem list --status failed --status expired." — so that four things said at once
+still fit the message the delivery contract takes. Past three campaigns, the rest are counted: "… in cmp_…, cmp_…,
+cmp_… and 2 more." That is every field.
 
 **What never travels:** the campaign's name, a contact's name or address, what an approval is about or its preview, a
 question's words or its options, the error a failed action ended with, the operation and its arguments, and any id of a
 work item or attempt. A campaign's public id travels only in the sentence about failed protective actions, at most three
-of them, to say where to look: an opaque `cmp_…` that names nothing by itself. The pointer is made from three counts,
-those ids, and nothing else. A campaign's name is the plainest example of why: it is often a customer's name or a deal, written
+of them, to say where to look: an opaque `cmp_…` that names nothing by itself. Of an account whose events were not
+read, nothing travels but how many such accounts there are. The pointer is made from four counts, those ids, and nothing
+else. A campaign's name is the plainest example of why: it is often a customer's name or a deal, written
 by the person for themselves, and a notification is read by whoever can see the screen, the phone or, on a public
 ntfy server, the topic.
 
@@ -117,7 +133,7 @@ wakes a manager:
 ```json
 {
   "notification_id": "ntf_01K…",
-  "counts": { "approvals": 3, "decisions": 1, "protective_failures": 0 },
+  "counts": { "approvals": 3, "decisions": 1, "protective_failures": 0, "event_gaps": 0 },
   "covered_through": "jrn_01K…",
   "channels": [
     { "channel": "toast", "kind": "toast", "outcome": "delivered", "attempts": 1 },
@@ -135,6 +151,10 @@ line `delivered_through` names — the line the last notification that reached a
 `delivered_through` is a position in the journal, and the count reaches a channel only as words in the message. A
 first start walks no history: a protective failure journaled before the first
 start that ever wrote a line is not counted by a pointer — the work-item list is where it shows.
+
+`counts.event_gaps` is how many accounts had events Jason did not read in the same window, counted by account however
+many gap lines one has, carried forward by a notification that reached nobody the same way, and sent to a channel only
+as words.
 
 A notification is a pointer. Each channel's outcome is one of `delivered`; `failed`, with its code and class — a
 server still unreachable after its one retry is failed, and so is a delivery whose input the runtime's own half of the

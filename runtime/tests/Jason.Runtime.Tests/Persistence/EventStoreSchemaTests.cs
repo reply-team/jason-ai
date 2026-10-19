@@ -22,7 +22,8 @@ public class EventStoreSchemaTests
         using var database = new TestDatabase();
 
         Assert.Equal(
-            ["id", "public_id", "plugin_id", "binding_identity", "cursor", "cursor_at", "created_at"],
+            ["id", "public_id", "plugin_id", "binding_identity", "cursor", "cursor_at", "created_at",
+             "failures", "last_class", "last_code", "more", "read_ended_at", "read_started_at", "succeeded_at"],
             Rows(database.File, "SELECT name FROM pragma_table_info('event_sources')"));
         Assert.Equal(
             ["id", "public_id", "source_id", "plugin_id", "kind", "occurred_at", "stored_at", "key", "contact_id", "data_json", "read_id"],

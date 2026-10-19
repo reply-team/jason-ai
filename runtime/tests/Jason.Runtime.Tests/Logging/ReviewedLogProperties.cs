@@ -21,9 +21,15 @@ internal static class ReviewedLogProperties
         "CampaignId", "WorkItemId", "AttemptId", "AttemptIds", "InstanceId", "InvocationId", "CorrelationId",
         "NotificationId", "SnapshotId", "PluginId", "Id", "RequestId", "ConnectionId", "@tr", "@sp", "@i",
 
+        // An events source's public id: the account a read hangs on, never its binding or its cursor (EventReader).
+        "SourceId",
+
         // Counts and numbers, and the envelope's renderings of a formatted number.
         "Count", "Plugins", "Candidates", "Problems", "Expired", "Lost", "Summoned", "Claimed", "Applied", "New",
         "Scan", "Exec", "Http", "Env", "Pid", "ExitCode", "DurationMs", "StatusCode", "Elapsed", "@r",
+
+        // How many pages a read of an account took, how many events it stored and how many the store already held (EventReader).
+        "Pages", "Stored", "Duplicates",
 
         // Where a settings file stopped parsing: a line and a byte within it (RuntimeHost).
         "LineNumber", "BytePositionInLine",

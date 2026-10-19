@@ -130,6 +130,21 @@ public static partial class JournalKinds
     /// </summary>
     public const string ProviderEventObserved = "provider_event_observed";
 
+    /// <summary>
+    /// A read of an account's events that stored something, failed, or read by date: the source, the plugin, how it read,
+    /// how many pages and events, how it ended, and which package and snapshots it ran under. Never a cursor, a binding or
+    /// anything an event holds. It names no campaign, so it never wakes a manager; a read of a cursor that found nothing
+    /// writes none.
+    /// </summary>
+    public const string EventsRead = "events_read";
+
+    /// <summary>
+    /// An account whose events were not read for longer than the store reaches back: the source, the plugin, and the span
+    /// from where reading stopped to where it began again. Said once, under a key of the source and where the span starts,
+    /// and counted by the next notification that reaches anybody. It names no campaign.
+    /// </summary>
+    public const string EventsGapObserved = "events_gap_observed";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -180,6 +195,8 @@ public static partial class JournalKinds
         NotificationSent,
         InboundReplyObserved,
         ProviderEventObserved,
+        EventsRead,
+        EventsGapObserved,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);

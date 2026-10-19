@@ -8,8 +8,8 @@ which wakes its manager like a failed item or an answered question does ([campai
 Nothing here reads meaning. An event is identifiers, moments and the provider's own flags; which campaigns it concerns
 is decided by the identifiers the campaigns' own operations pinned, and what it calls for is the manager's.
 
-This page is the contract for the events store and the lines it writes. What a plugin author implements is
-[`events.read`](contracts/events/events.read.md).
+This page is the contract for reading an account, the events store and the lines it writes. What a plugin author
+implements is [`events.read`](contracts/events/events.read.md).
 
 ## 1. The contract
 
@@ -118,10 +118,81 @@ and an installation upgrading into the events store gives every active and pause
 **Never a person's words.** No line, no log line and no answer of the runtime carries a subject, a preview, a name or a
 cursor: the contract admits none into an event, and the runtime writes none of its own.
 
-## 5. Not here yet
+## 5. Reading an account
 
-- **Reading.** Nothing reads an account yet: no step of the dispatcher's scan invokes `events.read`, no cadence applies,
-  and inbound sync reads every campaign as before ([inbound sync](inbound-sync.md)). A plugin may declare the events
-  contract; nothing invokes it.
+**Which accounts.** Every account a route binds at a plugin that is loaded, usable here and declares the events
+contract: a distinct plugin and binding identity named by the global routes or by any campaign's, read whether or not a
+campaign is linked there yet, so an account's events are held before a campaign needs them. Each is given its source
+the first time it is bound. An account no route binds any more keeps its source and its cursor and is not read; it is
+read from that cursor again once a route binds it.
+
+**Where it runs.** The dispatcher's scan has a step for it, **events**, after the lease enforcer and before the inbound
+read ([work execution](work-execution.md)). The step reads nothing itself: it hands the reader one read, the most
+overdue, and only when the reader is idle, so at most one child of the plugin host reads events at a time, beside the
+handler pool's and the notifier's. A read is never a work item and never takes a handler slot. A draining or stopped
+dispatcher hands out no new read; a read under way goes on until the stop ends its child, and the page in flight is not
+kept.
+
+**A read.** At most 20 pages, each one child given the contract's 60 seconds, lowered by the plugin's own ceiling; the
+next page is asked for from the cursor the last one returned, while the provider says more follow. Each page is held to
+the contract and stored in a transaction of its own (section 2), so what earlier pages stored stays when a later one
+fails. A read that stops at 20 pages with more to read is due again from when it ended: at once, but behind an account
+that has been due for longer, so one account's backlog takes turns with the others.
+
+**When.** A source this runtime has not read since it started is read at once — a start catches every account up from
+its cursor — and so is one never read. After that, `Dispatcher:EventsCadenceSeconds` after the last read started,
+doubled for each read in a row that failed, at most a day.
+
+**From where.**
+
+| The source | The read starts | |
+|---|---|---|
+| no cursor yet | 30 days back | a first start owes nothing before that |
+| a cursor stored within 30 days | from the cursor | the cadence, and the catch-up at a start |
+| a cursor stored longer ago | 30 days back | the gap: one `events_gap_observed` line |
+| a cursor the plugin forgot | a day before it was stored, or 30 days back when that is later | the gap rule, when older |
+
+**The gap.** What lies between a cursor older than 30 days and the 30 days a read reaches back is not read. It is said
+once, with the first page of the read that skips it, as an `events_gap_observed` line naming no campaign — the source,
+the plugin and the span — keyed by the source and where the span starts, so a read tried again says it once. The next
+notification that reaches anybody counts it ([notifications](notifications.md)).
+
+**When a read fails.**
+
+| How it ended | The next read |
+|---|---|
+| `transient`, or `ambiguous` — a timeout, a crash, an answer outside the contract | at the doubled cadence, with the same input |
+| `permanent` or `validation` | a day after the failed read started |
+| `events_cursor_unknown` | at once, by date: the cursor is cleared and when it was stored is kept |
+
+An answer outside the contract is `result_invalid`: a page the output schema refuses, or one it accepts that the
+runtime cannot read, identifiers beside a result, or a failure whose code the contract does not declare with the class
+it came with. Such a page stores nothing, and the cursor stays where it was.
+
+**What is recorded.** The source keeps when its last read started and ended, when the last read that succeeded started,
+and how many reads in a row failed, with the last one's code and class. Each read that stored something, failed, or read
+by date writes one `events_read` line naming no campaign: the source, the plugin, the binding identity, how it read, the
+pages, how many events it stored and found already held, how many lines it said, how it ended, and the package and the
+snapshots it ran under — never a cursor, a binding or an event. A read from a cursor that found nothing writes none. The
+log carries the source's id, codes, classes and counts.
+
+**Beside the inbound read.** While a plugin's account is read here, the inbound read leaves the campaigns routed to it —
+but only a campaign an event would reach by section 3's rule, only while that account's last read that succeeded started
+within the shorter of two cadences and `Inbound:LookbackSeconds`, and never before that first success
+([inbound sync](inbound-sync.md) §2). A move both find is said once (section 4).
+
+**The setting.**
+
+| Setting | Default | Range | What it does |
+|---|---|---|---|
+| `Dispatcher:EventsCadenceSeconds` | `600` | 60..86400 | how long after one read of an account starts the next is due |
+
+It applies at the next scan, without a restart. **What it costs:** one read per bound account per cadence, 144 a day at
+the default, most of them one child that finds nothing and writes no line.
+
+## 6. Not here yet
+
+- **Reading a range again, a record of the sources, a signal.** No operation of the Runtime API asks for a range of an
+  account to be read again, lists the sources and their reads, or brings a read forward.
 - **A campaign without a provider campaign.** An event that names a person and no provider campaign concerns nobody.
 - **Reading the store.** No operation of the Runtime API lists stored events; a manager reads the lines they say.

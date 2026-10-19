@@ -208,16 +208,24 @@ public sealed class Notifier(
             .Select(g => new { Lines = g.Count(), Oldest = g.Min(e => e.Ts), Newest = g.Max(e => e.Ts) })
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
+        var gaps = await EventGapLines.Of(db)
+            .Where(e => e.Id > after && e.Id <= upTo)
+            .GroupBy(e => 1)
+            .Select(g => new { Lines = g.Count(), Oldest = g.Min(e => e.Ts), Newest = g.Max(e => e.Ts) })
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
 
         var asked = folded is null || folded.Lines == 0 ? null : new Burst(folded.Lines, folded.Oldest, folded.Newest);
         var protective = failed is null || failed.Lines == 0 ? null : new Burst(failed.Lines, failed.Oldest, failed.Newest);
-        return asked is null ? protective
-            : protective is null ? asked
-            : new Burst(
-                asked.Lines + protective.Lines,
-                protective.Oldest < asked.Oldest ? protective.Oldest : asked.Oldest,
-                protective.Newest > asked.Newest ? protective.Newest : asked.Newest);
+        var unread = gaps is null || gaps.Lines == 0 ? null : new Burst(gaps.Lines, gaps.Oldest, gaps.Newest);
+        return Joined(Joined(asked, protective), unread);
     }
+
+    /// <summary>Two bursts as one: every line of both, from the oldest of either to the newest.</summary>
+    private static Burst? Joined(Burst? one, Burst? other) =>
+        one is null ? other
+        : other is null ? one
+        : new Burst(one.Lines + other.Lines, other.Oldest < one.Oldest ? other.Oldest : one.Oldest, other.Newest > one.Newest ? other.Newest : one.Newest);
 
     private async Task ReadAsync(JasonDbContext db, CancellationToken ct)
     {
@@ -243,7 +251,10 @@ public sealed class Notifier(
         var protective = lines.Any(line => ProtectiveFailureLines.Kinds.Contains(line.Kind))
             ? (await ProtectiveFailureLines.Of(db).Where(e => e.Id >= oldest && e.Id <= newest.Id).Select(e => e.Id).ToListAsync(ct).ConfigureAwait(false)).ToHashSet()
             : new HashSet<int>();
-        state.Advance(newest.Id, newest.PublicId, lines.Where(line => Triggers.Contains(line.Kind) || protective.Contains(line.Id)).Select(line => line.Ts));
+        state.Advance(
+            newest.Id,
+            newest.PublicId,
+            lines.Where(line => Triggers.Contains(line.Kind) || protective.Contains(line.Id) || line.Kind == EventGapLines.Kind).Select(line => line.Ts));
         if (lines.Count < ReadBatch)
         {
             return;

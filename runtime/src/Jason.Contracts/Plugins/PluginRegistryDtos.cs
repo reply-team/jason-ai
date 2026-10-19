@@ -27,7 +27,11 @@ public sealed record ListCapabilityDto(IReadOnlyList<string> Requested, IReadOnl
 /// <summary>Requested against granted, for every capability: declaration is not permission, and it shows.</summary>
 public sealed record PluginCapabilitiesDto(ExecCapabilityDto? Exec, ListCapabilityDto? Http, ListCapabilityDto? Env);
 
-public sealed record PluginContractsDto(IReadOnlyList<int> Protocol, IReadOnlyList<int> Operations);
+/// <summary>
+/// The contract versions a plugin declares: the plugin-host protocol, the canonical operations (for a notification
+/// plugin, the delivery contract), and the events contract, empty for a plugin that does not read its accounts' events.
+/// </summary>
+public sealed record PluginContractsDto(IReadOnlyList<int> Protocol, IReadOnlyList<int> Operations, IReadOnlyList<int> Events);
 
 public sealed record PluginLimitsDto(int TimeoutMs, int MemoryMb);
 

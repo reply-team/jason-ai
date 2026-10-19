@@ -1200,8 +1200,11 @@ back unchanged and never reads. Say who moved a thread with `moved_by` — `othe
 `null` only where the provider cannot say — because only a move by the other side reads as a reply, and Jason's own
 replies, categories and read flags move threads too. Name a thread that moved as `conversation.list` names it — its
 `thread` the thread's `external_id` there, its `occurred_at` the moment the thread last moved, which `conversation.list`
-reports as `last_activity_at`, to the millisecond — so that a move both reads find is said once. Return no
-`external_ids`: a read pins nothing.
+reports as `last_activity_at`, to the millisecond — so that a move both reads find is said once. Name under `campaign`
+the provider campaign a moved thread belongs to wherever the provider keeps one, by the identifier `campaign.get` pins,
+and `null` only for a thread outside every provider campaign: the runtime leaves a campaign's inbound read to your
+plugin on the strength of that, so a plugin that names no campaign on a move silences the campaigns it serves. Return
+no `external_ids`: a read pins nothing.
 
 **Reading by date.** With `since`, return across the pages your cursors chain every event at or after it (and before
 `until`); page a provider that pages only by offset newest first until the last item's moment passes `since`, and
@@ -1211,5 +1214,7 @@ answer what a provider holds when it holds less.
 and `events_cursor_unknown` (permanent) — the last for a cursor your plugin can no longer read, after which the runtime
 reads by date.
 
-**In this version** no step of the runtime invokes it: a provider may declare the contract and is loaded as ever, and
-its fixtures under [`contracts/fixtures/events.read/`](contracts/fixtures/events.read/) are what to check it against.
+**How the runtime reads.** Every account a route binds at a provider that declares the contract is read on the
+installation's cadence, `Dispatcher:EventsCadenceSeconds` — ten minutes unless set otherwise — and at once when the
+runtime starts: up to twenty pages a read, one child each, the first read of an account reaching thirty days back. The
+fixtures under [`contracts/fixtures/events.read/`](contracts/fixtures/events.read/) are what to check a plugin against.

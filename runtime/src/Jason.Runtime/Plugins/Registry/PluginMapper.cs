@@ -37,7 +37,7 @@ public static class PluginMapper
             manifest.Homepage,
             plugin.Root,
             plugin.Digest,
-            new PluginContractsDto(manifest.Contracts.Protocol, manifest.Contracts.Operations),
+            new PluginContractsDto(manifest.Contracts.Protocol, manifest.Contracts.Operations, manifest.Contracts.Events),
             manifest.Operations,
             manifest.Entry,
             new PluginCapabilitiesDto(

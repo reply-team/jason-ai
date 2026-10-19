@@ -28,8 +28,35 @@ public sealed class EventSource
     /// <summary>Where the next read starts, exactly as the plugin returned it with the last page stored; null before any.</summary>
     public string? Cursor { get; set; }
 
-    /// <summary>The runtime's clock when the page that returned <see cref="Cursor"/> was stored.</summary>
+    /// <summary>
+    /// The runtime's clock when the page that returned <see cref="Cursor"/> was stored. A cursor the plugin no longer
+    /// knows is cleared and this is kept: the next read starts by date from a day before it.
+    /// </summary>
     public DateTime? CursorAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>When the last read of this source started, on the runtime's clock; null before any.</summary>
+    public DateTime? ReadStartedAt { get; set; }
+
+    /// <summary>When the last read of this source ended; earlier than <see cref="ReadStartedAt"/> while one is under way.</summary>
+    public DateTime? ReadEndedAt { get; set; }
+
+    /// <summary>
+    /// When the last read that ended in success started: what the inbound read measures a source's health by. Null until
+    /// a read of this source has succeeded.
+    /// </summary>
+    public DateTime? SucceededAt { get; set; }
+
+    /// <summary>How many reads in a row ended in failure; a read that succeeds clears it.</summary>
+    public int Failures { get; set; }
+
+    /// <summary>The code the last read failed with; null after a read that succeeded.</summary>
+    public string? LastCode { get; set; }
+
+    /// <summary>The class of that failure, as the contract's word: <c>transient</c>, <c>permanent</c>, <c>validation</c> or <c>ambiguous</c>.</summary>
+    public string? LastClass { get; set; }
+
+    /// <summary>Whether the last read stopped with more to read now — at the most pages a read takes — so the next is due at once.</summary>
+    public bool More { get; set; }
 }

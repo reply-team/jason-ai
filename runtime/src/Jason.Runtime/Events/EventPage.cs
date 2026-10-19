@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Jason.Contracts.Events;
+using Jason.Contracts.Operations;
 
 namespace Jason.Runtime.Events;
 
@@ -11,11 +13,24 @@ namespace Jason.Runtime.Events;
 public sealed record EventPage(IReadOnlyList<ReadEvent> Events, string Cursor, bool HasMore)
 {
     /// <summary>
+    /// The page a read's result is, held to the events contract's output schema first: null with the schema's problems
+    /// when the schema refuses it, and null with none when the schema accepted something this reader cannot read — which
+    /// the moments' one vocabulary is there to make impossible, and which the reader treats as a result outside the
+    /// contract all the same. The one way a read's result becomes a page, so nothing unchecked reaches the store.
+    /// </summary>
+    public static EventPage? Read(EventsContract contract, JsonNode? result, out IReadOnlyList<SchemaProblem> problems)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+        problems = contract.CheckResult(result);
+        return problems.Count == 0 ? Read(result) : null;
+    }
+
+    /// <summary>
     /// The page a result is, or null when it is not one. The schema has already accepted it, so this only reads what
     /// the schema promised; a value that is not where the schema puts it means the result was never checked, and is
     /// not read as a page at all.
     /// </summary>
-    public static EventPage? Read(JsonNode? result)
+    internal static EventPage? Read(JsonNode? result)
     {
         if (result is not JsonObject page
             || page["events"] is not JsonArray events
@@ -85,13 +100,30 @@ public sealed record ReadEvent(string Kind, DateTimeOffset OccurredAt, JsonObjec
     /// </summary>
     public bool MovedByTheOtherSide => Kind == ThreadMoved && Text("moved_by") is null or MovedByOtherSide;
 
+    /// <summary>
+    /// The moments an event can happen at, as the contract's schema writes them: UTC with <c>Z</c>, to the second or to a
+    /// fraction of it of at most seven digits. Read exactly so, the reader and the schema refuse the same moments, and a
+    /// page the schema accepted is always a page here.
+    /// </summary>
+    private static readonly string[] Moments =
+    [
+        "yyyy'-'MM'-'dd'T'HH':'mm':'ss'Z'",
+        "yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'f'Z'",
+        "yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'ff'Z'",
+        "yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'",
+        "yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'ffff'Z'",
+        "yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fffff'Z'",
+        "yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'ffffff'Z'",
+        "yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fffffff'Z'",
+    ];
+
     internal static ReadEvent? Read(JsonNode? node)
     {
         if (node is not JsonObject data
             || data["kind"] is not JsonValue kind || kind.GetValueKind() != JsonValueKind.String
             || !Identifiers.ContainsKey(kind.GetValue<string>())
             || data["occurred_at"] is not JsonValue occurred || occurred.GetValueKind() != JsonValueKind.String
-            || !DateTimeOffset.TryParse(occurred.GetValue<string>(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var moment))
+            || !DateTimeOffset.TryParseExact(occurred.GetValue<string>(), Moments, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var moment))
         {
             return null;
         }
