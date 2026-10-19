@@ -625,8 +625,8 @@ in one of four words, and the rule below is the same for every one of them.
 | `preflight.provider_contact` | What you do for a person carrying no pin of yours | Published today |
 |---|---|---|
 | `find_or_create` | Look the person up by the value of the channel `args.channel` names, and create the contact from that value only when the provider holds nobody under it. | `campaign.enroll`, `list_membership.add`, `optout.record` |
-| `find_only` | Find the person — by that value, or through what the operation names — and create nobody. | `enrollment.stop`; `conversation.reply`, through its thread |
-| `pinned_only` | Work by the pin alone: a person with none fails `contact_not_linked` before anything is called. | `conversation.list` |
+| `find_only` | Find the person — by that value, or through what the operation names — and create nobody. | `enrollment.stop`, `contact.update`; `conversation.reply`, through its thread |
+| `pinned_only` | Work by the pin alone: a person with none fails `contact_not_linked` before anything is called. | `conversation.list`, `contact.delete` |
 | `not_used` | The operation names nobody, so there is nobody to find. | every other operation |
 
 The loader holds each word to what it implies, so a document cannot say one thing and declare another: a way that
@@ -649,9 +649,11 @@ The rule has four parts.
    return the one it answered: the runtime records it beside the pin as a divergence, keeps the pin, and the attempt
    still succeeds.
 3. **Deleting a Jason contact never deletes the provider's.** A provider's contact is deleted only by an operation whose
-   whole purpose that is, never as a side effect of another, and never because the person went away in Jason.
+   whole purpose that is — `contact.delete`, approved by a person, by the pin — never as a side effect of another, and
+   never because the person went away in Jason. Nor does deleting the provider's contact change Jason's: the person,
+   their pins and the do-not-contact register stay as they were.
 4. **Fields and lists travel with the operation that needs them.** You send what the operation's `contact_projection`
-   hands you, when the operation runs. Nothing is copied to the provider in the background, and the runtime keeps no
+   and its arguments hand you — the fields `contact.update` sets, for one — when the operation runs. Nothing is copied to the provider in the background, and the runtime keeps no
    copy of the provider's contact.
 
 Values written before a LinkedIn URL was keyed by its lowercased slug are rewritten to that key when the runtime
@@ -791,7 +793,7 @@ recorded rather than the one it disputes.
 
 ### The worked example
 
-`plugins/reply/` is the one to read: a marketplace package that implements all sixteen published
+`plugins/reply/` is the one to read: a marketplace package that implements all eighteen published
 operations against a real provider by driving that provider's own command-line program. Its README
 says what each operation maps onto, what the provider will not answer, and which of its claims were
 checked against a live account; its `modules/errors.js` is the whole error table written as data, so

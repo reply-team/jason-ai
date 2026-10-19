@@ -41,8 +41,9 @@ public class ContractDocumentTests
     {
         Assert.Equal(
             [
-                "campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "conversation.classify",
-                "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply",
+                "campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete",
+                "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list",
+                "conversation.reopen", "conversation.reply",
                 "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record",
             ],
             OperationCatalog.All.Select(c => c.Id));
@@ -76,20 +77,46 @@ public class ContractDocumentTests
 
     /// <summary>
     /// The catalogue lets an operation lower its approval only as a protective floor and raise it only by a stated
-    /// departure, and either one needs a reason. In this version one operation does: recording that somebody said
-    /// stop, whose not running is itself the harm. Every other document says it does neither, in the two fields,
-    /// rather than leaving the reading of their absence to whoever reads it next.
+    /// departure, and either one needs a reason. In this version two operations carry the catalogue's marks: recording
+    /// that somebody said stop, whose not running is itself the harm, on the floor; and deleting a provider's contact,
+    /// raised because it destroys working history other operations key on. Every other document says it does neither, in
+    /// the two fields, rather than leaving the reading of their absence to whoever reads it next.
     /// </summary>
     [Theory]
     [MemberData(nameof(Published))]
-    public void Only_the_record_that_somebody_said_stop_lowers_its_approval_and_it_says_why(string id)
+    public void Only_the_record_of_a_stop_lowers_its_approval_only_it_and_a_delete_depart_and_each_says_why(string id)
     {
         var contract = Contract(id);
         var floor = id == "optout.record";
+        var departs = floor || id == "contact.delete";
 
         Assert.Equal(floor, contract.ProtectiveFloor);
-        Assert.Equal(floor, contract.ApprovalDeparts);
-        Assert.Equal(floor, contract.ApprovalReason is not null);
+        Assert.Equal(departs, contract.ApprovalDeparts);
+        Assert.Equal(departs, contract.ApprovalReason is not null);
+    }
+
+    /// <summary>
+    /// Changing a person's fields at the provider is one record per work item, which the catalogue itself approves
+    /// automatically, so it runs without a person; deleting the provider's contact cannot be taken back, so a person
+    /// decides it once, and its work waits with a paused campaign like any other decision a person has to make.
+    /// </summary>
+    [Fact]
+    public void An_update_of_one_record_runs_on_its_own_and_a_delete_is_a_person_s_decision_that_waits()
+    {
+        var update = Contract("contact.update");
+        var delete = Contract("contact.delete");
+
+        Assert.Equal(("auto", false), (update.Approval.Value, update.Approval.Conditional));
+        Assert.Equal(("confirm_once", "irreversible"), (delete.Approval.Value, delete.Reversibility.Value));
+        Assert.Equal(InPausedCampaign.Waits, update.Dispatch.InPausedCampaign);
+        Assert.Equal(InPausedCampaign.Waits, delete.Dispatch.InPausedCampaign);
+        Assert.Equal(RepeatAfterAmbiguous.AfterRecoveryRead, update.RepeatAfterAmbiguous);
+        Assert.Equal(RepeatAfterAmbiguous.AfterRecoveryRead, delete.RepeatAfterAmbiguous);
+        Assert.Empty(delete.ExternalIds);
+
+        // Each reads the person's identifier and the one channel it consumes, and nothing else of them.
+        Assert.Equal(["id"], update.ContactProjection!.Fields);
+        Assert.Equal(["id"], delete.ContactProjection!.Fields);
     }
 
     /// <summary>
@@ -136,8 +163,9 @@ public class ContractDocumentTests
 
     /// <summary>
     /// How each document finds the provider's own contact for its person, stated as data rather than in a sentence: the
-    /// writes that may make the person create them only where the provider holds nobody, the stop and the reply find them
-    /// and create nobody, the read of a person's threads works by the pin alone, and the rest name nobody. A document that
+    /// writes that may make the person create them only where the provider holds nobody, the stop, the reply and the
+    /// update find them and create nobody, the read of a person's threads and the delete work by the pin alone, and the
+    /// rest name nobody. A document that
     /// moved between these would change what a plugin does with a person it holds no pin for, so the map is held whole.
     /// </summary>
     [Fact]
@@ -149,8 +177,10 @@ public class ContractDocumentTests
             ["list_membership.add"] = ProviderContact.FindOrCreate,
             ["optout.record"] = ProviderContact.FindOrCreate,
             ["enrollment.stop"] = ProviderContact.FindOnly,
+            ["contact.update"] = ProviderContact.FindOnly,
             ["conversation.reply"] = ProviderContact.FindOnly,
             ["conversation.list"] = ProviderContact.PinnedOnly,
+            ["contact.delete"] = ProviderContact.PinnedOnly,
         };
 
         Assert.All(OperationCatalog.All, contract => Assert.True(

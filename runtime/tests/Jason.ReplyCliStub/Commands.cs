@@ -1,7 +1,7 @@
 // Deliberately in the global namespace with the rest of this program.
 
 /// <summary>
-/// The grammar reply-cli 0.13.0 documents for the nineteen work commands the official package runs: how many ids each
+/// The grammar reply-cli 0.13.0 documents for the twenty-two work commands the official package runs: how many ids each
 /// takes, which options take a value, and which are switches. An option outside a command's own list is commander's
 /// usage error, exit 2.
 /// </summary>
@@ -24,6 +24,9 @@ internal static class Commands
             ["sequence start"] = (1, ["--expect-contacts"], []),
             ["contact-list add-contact"] = (1, ContactOptions, ["--refuse-opted-out"]),
             ["contact find"] = (0, ["--contact"], []),
+            ["contact get"] = (1, [], []),
+            ["contact update"] = (1, ["--fields"], []),
+            ["contact delete"] = (1, [], []),
             ["contact opt-out"] = (0, ContactOptions, []),
             ["inbox list"] = (0, ["--contact-id", "--sequence-id", "--source", "--channel", "--category-id", "--since", "--limit", "--offset"], []),
             ["inbox get"] = (1, ["--limit", "--offset"], []),
@@ -35,11 +38,11 @@ internal static class Commands
         };
 
     /// <summary>The options that name stdin as their value, which are the only things a command ever reads from there.</summary>
-    private static readonly string[] StdinOptions = ["--contact", "--message", "--name"];
+    private static readonly string[] StdinOptions = ["--contact", "--message", "--name", "--fields"];
 
     public static bool IsKnown(string command) => Grammar.ContainsKey(command);
 
-    /// <summary>Whether the command line names stdin as the contact, the message or the name, the three things ever read from there.</summary>
+    /// <summary>Whether the command line names stdin as the contact, the message, the name or the fields, the four things ever read from there.</summary>
     public static bool ReadsStdin(IReadOnlyList<string> rest)
     {
         for (var at = 0; at < rest.Count - 1; at++)

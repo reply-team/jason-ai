@@ -35,7 +35,7 @@ public class ReplyPackageTests
         Assert.Equal("0.4.0", plugin.Version);
         Assert.StartsWith("sha256:", plugin.Digest, StringComparison.Ordinal);
         Assert.Equal(
-            ["campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "conversation.classify", "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record"],
+            ["campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "contact.delete", "contact.update", "conversation.classify", "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply", "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record"],
             plugin.Operations.Order());
 
         // Declaration is not permission, and this package declares nothing it does not use: one program, no

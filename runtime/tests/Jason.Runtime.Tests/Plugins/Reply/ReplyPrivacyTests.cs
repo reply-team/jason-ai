@@ -477,6 +477,124 @@ public class ReplyPrivacyTests
         }
     }
 
+    /// <summary>
+    /// An update carries what the planner wants Reply to hold — field values, custom values — and a delete reads back
+    /// Reply's whole record of the person before it acts. The values travel once, on the update's stdin; the address
+    /// travels on the lookup's; what the read brings back reaches nothing at all: no argument, no answer, no diagnostic
+    /// and no log. Each corpus is shown to hold what did travel, so a value that had gone there would be found.
+    /// </summary>
+    [Fact]
+    public async Task What_an_update_writes_and_what_a_delete_reads_reach_no_argument_answer_diagnostic_or_log()
+    {
+        const string Address = "ottilie.marker@example.com";
+        const string Deleted = "rosalind.marker@example.com";
+        const string FirstName = "Firstname-marker-3e1a";
+        const string Company = "Company-marker-9b4f";
+        const string CustomValue = "Custom-marker-2d7c";
+        const string HeldName = "Heldname-marker-61aa";
+        const string HeldValue = "Heldvalue-marker-0f3c";
+        string[] written = [FirstName, Company, CustomValue];
+        string[] held = [HeldName, HeldValue, Deleted];
+
+        using var account = new ReplyAccount()
+            .WithContact(1001, Address, "Ottilie")
+            .WithContact(1002, Deleted, HeldName, company: "Puerto Analytics")
+            .WithCustomValue(1002, "lead_source", HeldValue)
+            .WithCustomField(1, "lead_source");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var campaign = new JsonObject
+        {
+            ["id"] = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+            ["name"] = "Q3 LatAm founders",
+            ["status"] = "active",
+            ["external_ids"] = new JsonObject(),
+        };
+        var update = new JsonObject
+        {
+            ["args"] = new JsonObject
+            {
+                ["channel"] = "email",
+                ["fields"] = new JsonObject { ["first_name"] = FirstName, ["company"] = Company },
+                ["custom_fields"] = new JsonArray(new JsonObject { ["name"] = "lead_source", ["value"] = CustomValue }),
+            },
+            ["contacts"] = new JsonArray(new JsonObject
+            {
+                ["id"] = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+                ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = Address, ["primary"] = true }),
+                ["external_ids"] = new JsonObject(),
+            }),
+            ["campaign"] = campaign.DeepClone(),
+            ["idempotency_key"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRW",
+        };
+        var delete = new JsonObject
+        {
+            ["args"] = new JsonObject { ["channel"] = "email" },
+            ["contacts"] = new JsonArray(new JsonObject
+            {
+                ["id"] = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+                ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = Deleted, ["primary"] = true }),
+                ["external_ids"] = new JsonObject { ["contact"] = "1002" },
+            }),
+            ["campaign"] = campaign.DeepClone(),
+            ["idempotency_key"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRX",
+        };
+
+        var answers = new List<string>();
+        foreach (var (operation, input) in new[] { ("contact.update", update), ("contact.delete", delete) })
+        {
+            var result = await ReplyOperations.InvokeAsync(api, operation, input, Ct);
+            ReplyOperations.Succeeded(operation, result);
+            answers.Add(Answered(result));
+        }
+
+        // Both did their work: the update found the person by the address and changed them, and the delete read the
+        // pinned contact and deleted it.
+        Assert.Equal(["contact find", "contact update 1001", "contact get 1002", "contact delete 1002"], Paths(account));
+        Assert.Equal(CustomValue, (string?)account.ContactOf(1001)!["customFields"]![0]!["value"]);
+        Assert.Null(account.ContactOf(1002));
+
+        foreach (var call in account.Calls)
+        {
+            var arguments = string.Join(' ', call.Args);
+            Assert.DoesNotContain('{', arguments);
+            foreach (var value in written.Concat(held).Append(Address))
+            {
+                Assert.DoesNotContain(value, arguments, StringComparison.OrdinalIgnoreCase);
+            }
+
+            // The values go to the CLI on the update's stdin, the address on the lookup's, and nothing at all on the
+            // delete's two commands.
+            switch (call.Command)
+            {
+                case "contact find":
+                    Assert.Equal($$"""{"email":"{{Address}}"}""", call.Body);
+                    break;
+                case "contact update":
+                    Assert.All(written, value => Assert.Contains(value, call.Body!, StringComparison.Ordinal));
+                    Assert.DoesNotContain(Address, call.Body!, StringComparison.OrdinalIgnoreCase);
+                    break;
+                default:
+                    Assert.True(call.Body is null, $"'{call.Line}' carried '{call.Body}' on stdin.");
+                    break;
+            }
+        }
+
+        var diagnostics = ReadAll(api.Paths.PluginWorkDirectory);
+        Assert.Contains("\"exec\"", diagnostics, StringComparison.Ordinal);
+        await api.Runtime.StopAsync();
+        var logs = ReadAll(api.Paths.LogsDirectory);
+        Assert.Contains("contact.update", logs, StringComparison.Ordinal);
+        Assert.Contains("contact.delete", logs, StringComparison.Ordinal);
+        foreach (var value in written.Concat(held).Append(Address))
+        {
+            Assert.DoesNotContain(value, string.Concat(answers), StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(value, diagnostics, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(value, logs, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     /// <summary>Everything one invocation answered, whichever way it ended, as one string to look through.</summary>
     private static string Answered(PluginInvocationResult result) => result.Outcome switch
     {

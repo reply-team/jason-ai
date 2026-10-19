@@ -40,6 +40,18 @@ export const COMMANDS = {
     "kind": "read",
     "note": "The account's inbox categories, Reply's reserved ones included: what conversation.classify matches the category it was given against, by identifier or by name, before it files anything."
   },
+  "contact get": {
+    "kind": "read",
+    "note": "One contact by its id, as Reply holds it: the read contact.delete makes before it deletes anything, of whether Reply still holds the contact and whether it holds them as opted out. Two keys are read and nothing is kept."
+  },
+  "contact update": {
+    "kind": "write",
+    "note": "Changes the fields and custom fields stdin names on the contact, by its id; a null clears one and the rest stay. Set outright, so a repeat by the same contact lands on the same values."
+  },
+  "contact delete": {
+    "kind": "write",
+    "note": "Deletes the contact by its id, with its history at Reply: it leaves every sequence and list. Run again after a lost answer, it answers that Reply holds the contact no longer."
+  },
   "contact find": {
     "kind": "read",
     "note": "Reply's exact lookup of one address, an email or a LinkedIn URL, read to its end and creating nobody: how every operation about a person with no pin finds the contact Reply holds for them before anything is written. The address is on stdin."
@@ -209,6 +221,17 @@ export const CODES = {
     },
     "conversation.reopen": {
       "inbox.thread_not_found": "conversation_not_found",
+      "access.feature_unavailable": "feature_not_included"
+    },
+    "contact.delete": {
+      "contact.not_found": "contact_not_found",
+      "access.feature_unavailable": "feature_not_included"
+    },
+    "contact.update": {
+      "contact.not_found": "contact_not_found",
+      "contact.not_unique": "contact_not_unique",
+      "contact.field_not_found": "field_not_found",
+      "reply.invalid_request": "value_refused",
       "access.feature_unavailable": "feature_not_included"
     }
   }
@@ -751,6 +774,82 @@ export const ROWS = {
         "code": "limit_reached",
         "class": "permanent",
         "note": "The account will hold no further contact, so the person who said stop could not be made there. Reply never held them under this address, so it cannot reach them there either."
+      }
+    },
+    "contact.delete": {
+      "contact_not_linked": {
+        "when": "The work item names a person and no Reply contact identifier is pinned for them. Decided before any call: a delete works by the pin alone.",
+        "code": "contact_not_linked",
+        "class": "permanent",
+        "note": "Reply has never been told about this person through this installation, so there is no contact this package could be sure is theirs, and a delete is never aimed by an address. Nothing was deleted. Look the person up at Reply, and delete the contact there if that is what is meant."
+      },
+      "contact_not_found": {
+        "when": "A first attempt, and `reply contact get` answered `contact.not_found` for the pin; or the pin is not a Reply contact number, refused without a call. On an attempt after the first, Reply holding nothing under the pin is the delete already done, and answers `already_deleted`.",
+        "code": "contact_not_found",
+        "class": "permanent",
+        "note": "The identifier pinned for this person names no contact this account holds, so nothing was deleted. It may have been deleted at Reply already, or the pin may belong to another account; look at Reply before anything else is done with this person."
+      },
+      "contact_opted_out": {
+        "when": "`reply contact get` answered the contact with `isOptedOut: true`. Nothing is deleted.",
+        "code": "contact_opted_out",
+        "class": "permanent",
+        "note": "Reply holds this person as opted out and keeps that stop on the contact itself, so deleting the contact would erase it, and the address imported again later would be reachable. Nothing was deleted. Leave the contact at Reply; Jason's own register keeps its stop either way."
+      },
+      "feature_not_included": {
+        "when": "The CLI answered `access.feature_unavailable`: Reply says this account's plan or role may not read or delete a contact.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role may not read or delete a contact. Signing in again would not change it; a role or a plan that includes it would."
+      }
+    },
+    "contact.update": {
+      "contact_not_found": {
+        "when": "The CLI answered `contact.not_found` for the pinned contact, or the pin is not a Reply contact number, refused without a call.",
+        "code": "contact_not_found",
+        "class": "permanent",
+        "note": "The identifier pinned for this person no longer resolves at Reply — the contact was deleted, or it belongs to another account — so nothing was changed. The pin has to be cleared before this person can be worked again."
+      },
+      "nobody_under_the_address": {
+        "when": "The person has no pin, and the CLI's exact lookup of the address found nobody Reply holds under it. Nothing is made: an update changes a contact Reply holds.",
+        "code": "contact_not_found",
+        "class": "permanent",
+        "note": "Reply holds nobody under this address, so there is no contact to change, and an update makes none. Enroll the person or put them on a list first — either makes the contact — then propose the update again."
+      },
+      "contact_not_unique": {
+        "when": "The person has no pin, and the CLI's exact lookup of the address answered `contact.not_unique`: more than one contact is held under it.",
+        "code": "contact_not_unique",
+        "class": "permanent",
+        "note": "Reply holds more than one contact under this address, so picking one would be guessing and nothing was changed. A person resolves the duplicate at Reply, then proposes the work again."
+      },
+      "invalid_channel_value": {
+        "when": "The person carries no value on the channel the call named, or names a channel Reply looks nobody up by. Decided before any call.",
+        "code": "invalid_channel_value",
+        "class": "validation",
+        "note": "The person has no value on the channel the call named that Reply could find them by, so nothing was asked. Name a channel they have: an email or a LinkedIn profile."
+      },
+      "field_not_found": {
+        "when": "The CLI answered `contact.field_not_found`: a custom field the arguments name is one the account has none of, whatever its case. Nothing is changed.",
+        "code": "field_not_found",
+        "class": "validation",
+        "note": "This account has no contact custom field under a name the work item gives, so nothing was changed. Name each custom field as the account names it, and propose the update again."
+      },
+      "value_refused": {
+        "when": "The CLI answered `reply.invalid_request`: Reply did not accept a value the arguments give a field, and Reply's names for the fields it refused travel in the trace.",
+        "code": "invalid_field_value",
+        "class": "validation",
+        "note": "Reply did not accept a value this work item gives a field, so nothing was changed; the attempt's trace names the fields. Correct the value and propose the update again."
+      },
+      "custom_field_named_twice": {
+        "when": "The arguments name one custom field twice: the same name, once trimmed, whatever its case. Decided before any call.",
+        "code": "invalid_field_value",
+        "class": "validation",
+        "note": "The work item names one custom field twice, so which value is meant cannot be told and nothing was asked. Name each custom field once and propose the update again."
+      },
+      "feature_not_included": {
+        "when": "The CLI answered `access.feature_unavailable`: Reply says this account's plan or role may not change a contact.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role may not change a contact. Signing in again would not change it; a role or a plan that includes it would."
       }
     }
   }

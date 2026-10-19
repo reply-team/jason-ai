@@ -664,6 +664,149 @@ public class ReplyStubCommandTests
         Assert.Equal((1, "inbox.thread_not_found"), (missing, (string?)Error(said)["code"]));
     }
 
+    /// <summary>
+    /// One contact by its id, as Reply holds it: its fields, whether it is opted out, and its custom fields under the
+    /// keys Reply answers them by. A contact the account does not hold is not found.
+    /// </summary>
+    [Fact]
+    public async Task Contact_get_answers_the_contact_as_reply_holds_it_and_one_it_does_not_hold_is_not_found()
+    {
+        using var account = new ReplyAccount()
+            .WithContact(1001, "marta@example.com", "Marta", optedOut: true, lastName: "Alvarez", company: "Puerto Analytics")
+            .WithCustomValue(1001, "lead_source", "Webinar");
+
+        var (exit, stdout, _) = await account.RunAsync(Line("contact", "get", "1001"), Ct);
+        var (missing, _, said) = await account.RunAsync(Line("contact", "get", "999"), Ct);
+
+        Assert.Equal(0, exit);
+        var contact = JsonNode.Parse(stdout)!.AsObject();
+        Assert.Equal((1001, "marta@example.com", "Alvarez", true), ((int)contact["id"]!, (string?)contact["email"], (string?)contact["lastName"], (bool)contact["isOptedOut"]!));
+        Assert.Equal("""[{"key":"lead_source","value":"Webinar"}]""", contact["customFields"]!.ToJsonString());
+        Assert.Equal((1, "contact.not_found"), (missing, (string?)Error(said)["code"]));
+        Assert.Null(Error(said)["ids"]);
+    }
+
+    /// <summary>
+    /// An update changes what stdin names and nothing else: a null clears a field, a custom field is matched against the
+    /// account's own whatever its case and written as the account spells it, and a field left out stays.
+    /// </summary>
+    [Fact]
+    public async Task Contact_update_changes_what_stdin_names_clears_a_null_and_leaves_the_rest()
+    {
+        using var account = new ReplyAccount()
+            .WithContact(1001, "marta@example.com", "Marta", lastName: "Alvarez", company: "Puerto Analytics", title: "Head of Growth")
+            .WithCustomValue(1001, "Region", "LatAm")
+            .WithCustomField(1, "lead_source")
+            .WithCustomField(2, "Region");
+
+        var (exit, stdout, _) = await account.RunAsync(
+            Line("contact", "update", "1001", "--fields", "-"),
+            """{"title":" CTO ","last_name":null,"custom_fields":[{"name":"LEAD_SOURCE","value":"Webinar"},{"name":"region","value":null}]}""",
+            Ct);
+
+        Assert.Equal(0, exit);
+        Assert.Equal("""{"status":"updated","contact_id":1001}""", JsonNode.Parse(stdout)!.ToJsonString());
+        var contact = account.ContactOf(1001)!;
+        Assert.Equal(("CTO", null, "Puerto Analytics", "Marta"), ((string?)contact["title"], (string?)contact["lastName"], (string?)contact["company"], (string?)contact["firstName"]));
+        Assert.Equal("""[{"key":"lead_source","value":"Webinar"}]""", contact["customFields"]!.ToJsonString());
+    }
+
+    /// <summary>A custom field the account defines none of is refused before anything is written, naming the field and the contact.</summary>
+    [Fact]
+    public async Task Contact_update_refuses_a_custom_field_the_account_does_not_define_before_anything_is_written()
+    {
+        using var account = new ReplyAccount().WithContact(1001, "marta@example.com", "Marta", title: "Head of Growth").WithCustomField(1, "lead_source");
+        var before = account.Contacts.ToJsonString();
+
+        var (exit, _, said) = await account.RunAsync(
+            Line("contact", "update", "1001", "--fields", "-"), """{"title":"CTO","custom_fields":[{"name":"budget","value":"100k"}]}""", Ct);
+
+        Assert.Equal(1, exit);
+        Assert.Equal("contact.field_not_found", (string?)Error(said)["code"]);
+        Assert.Equal("""{"fields":["budget"]}""", Error(said)["details"]!.ToJsonString());
+        Assert.Equal("""{"contact_id":1001}""", Error(said)["ids"]!.ToJsonString());
+        Assert.Equal(before, account.Contacts.ToJsonString());
+    }
+
+    /// <summary>Fields the CLI would never send are refused before anything is asked, and no refusal repeats a value it was given.</summary>
+    [Theory]
+    [InlineData("""{"title":"   "}""")]
+    [InlineData("""{}""")]
+    [InlineData("""{"email":"Hidden-7c@example.com"}""")]
+    [InlineData("""{"title":42}""")]
+    [InlineData("""{"custom_fields":[]}""")]
+    [InlineData("""{"custom_fields":[{"name":"lead_source","value":"Hidden-7c"},{"name":"LEAD_SOURCE","value":"Hidden-7c"}]}""")]
+    [InlineData("""{"custom_fields":[{"name":"lead_source"}]}""")]
+    [InlineData("""{"title": Hidden-7c}""")]
+    public async Task Contact_update_refuses_fields_it_would_never_send_without_repeating_them(string stdin)
+    {
+        using var account = new ReplyAccount().WithContact(1001, "marta@example.com", "Marta").WithCustomField(1, "lead_source");
+        var before = account.Contacts.ToJsonString();
+
+        var (exit, stdout, stderr) = await account.RunAsync(Line("contact", "update", "1001", "--fields", "-"), stdin, Ct);
+
+        Assert.Equal(2, exit);
+        Assert.Equal(string.Empty, stdout);
+        Assert.Equal("usage.fields", (string?)Error(stderr)["code"]);
+        Assert.DoesNotContain("Hidden-7c", stderr, StringComparison.Ordinal);
+        Assert.Equal(before, account.Contacts.ToJsonString());
+    }
+
+    [Fact]
+    public async Task Contact_update_takes_its_fields_from_stdin_only_and_a_contact_the_account_does_not_hold_is_not_found()
+    {
+        using var account = new ReplyAccount();
+
+        var (inline, _, refused) = await account.RunAsync(Line("contact", "update", "1001", "--fields", """{"title":"CTO"}"""), Ct);
+        var (missing, _, said) = await account.RunAsync(Line("contact", "update", "999", "--fields", "-"), """{"title":"CTO"}""", Ct);
+
+        Assert.Equal((2, "usage.fields"), (inline, (string?)Error(refused)["code"]));
+        Assert.Equal((1, "contact.not_found"), (missing, (string?)Error(said)["code"]));
+        Assert.Equal("""{"contact_id":999}""", Error(said)["ids"]!.ToJsonString());
+    }
+
+    /// <summary>
+    /// A delete takes the contact with its history at Reply — its opt-out, its participations, its memberships — and a
+    /// second delete of the same contact is not found, which is what a repeat after a lost answer meets.
+    /// </summary>
+    [Fact]
+    public async Task Contact_delete_takes_the_contact_with_its_history_and_a_second_delete_is_not_found()
+    {
+        using var account = new ReplyAccount()
+            .WithContact(1001, "marta@example.com", "Marta", optedOut: true)
+            .WithContact(1002, "ana@example.com", "Ana")
+            .WithSequence(7, "Q3", "active", false, 11)
+            .WithEnrollment(7, 1001)
+            .WithEnrollment(7, 1002)
+            .WithList(9, "Founders", 1001, 1002);
+
+        var (exit, stdout, _) = await account.RunAsync(Line("contact", "delete", "1001"), Ct);
+        var (again, _, said) = await account.RunAsync(Line("contact", "delete", "1001"), Ct);
+
+        Assert.Equal(0, exit);
+        Assert.Equal("""{"status":"deleted","contact_id":1001}""", JsonNode.Parse(stdout)!.ToJsonString());
+        Assert.Null(account.ContactOf(1001));
+        Assert.NotNull(account.ContactOf(1002));
+        Assert.Empty(account.OptOuts);
+        Assert.Equal([1002], account.EnrolledIn(7));
+        Assert.Equal([1002], account.MembersOf(9));
+        Assert.Equal((1, "contact.not_found"), (again, (string?)Error(said)["code"]));
+        Assert.Equal("""{"contact_id":1001}""", Error(said)["ids"]!.ToJsonString());
+    }
+
+    [Fact]
+    public async Task A_lost_delete_has_deleted_and_says_which_contact_it_was_about()
+    {
+        using var account = new ReplyAccount().WithContact(1001, "marta@example.com", "Marta");
+        account.LosesTheOutcome("contact delete");
+
+        var (exit, _, stderr) = await account.RunAsync(Line("contact", "delete", "1001"), Ct);
+
+        Assert.Equal((3, "outcome.unknown"), (exit, (string?)Error(stderr)["code"]));
+        Assert.Equal("""{"contact_id":1001}""", Error(stderr)["ids"]!.ToJsonString());
+        Assert.Null(account.ContactOf(1001));
+    }
+
     [Fact]
     public async Task A_scripted_ending_is_printed_as_given_spent_once_and_narrowed_to_one_argument()
     {

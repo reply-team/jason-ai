@@ -8,9 +8,10 @@ using System.Text.Json.Nodes;
 // assembly would be found ahead of the test helper classes of the same name in the project that references it.
 
 /// <summary>
-/// One Reply account, held as a directory of JSON files: its contacts, lists, sequences, enrollments, opt-outs,
-/// statistics and threads. The work commands read and change those files (<c>Account.Commands.cs</c>, the sequences by
-/// name in <c>Account.Sequences.cs</c>, the inbox in <c>Account.Inbox.cs</c>); no Reply endpoint is imitated.
+/// One Reply account, held as a directory of JSON files: its contacts and their custom fields, lists, sequences,
+/// enrollments, opt-outs, statistics and threads. The work commands read and change those files (<c>Account.Commands.cs</c>,
+/// the sequences by name in <c>Account.Sequences.cs</c>, the inbox in <c>Account.Inbox.cs</c>, one contact by its id in
+/// <c>Account.Contacts.cs</c>); no Reply endpoint is imitated.
 /// </summary>
 /// <remarks>
 /// Nothing here touches the network or a shell, and nothing is written outside the account directory, so a test says
@@ -25,6 +26,7 @@ internal static partial class Account
     private const string OptOutsFile = "optouts.json";
     private const string StatsFile = "stats.json";
     private const string ThreadsFile = "threads.json";
+    private const string CustomFieldsFile = "customfields.json";
     private const string InstructionsFile = "instructions.json";
     private const string CredentialFile = "credential.json";
 

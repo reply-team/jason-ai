@@ -6,6 +6,14 @@ absorbed by a release of this package alone.
 ## 0.4.0
 
 - Four inbox operations, each through the Reply CLI command made for it. The package needs reply-cli 0.13.0 or newer.
+- `contact.update` changes a person's fields and custom fields on Reply's contact for them with `reply contact update`,
+  the values on stdin: a null clears a field, one left out stays, and a custom field is named as the account names it,
+  an unknown name refused with nothing changed. The person is found by the pin or by `reply contact find`, and nobody is
+  made: a person Reply holds nobody for is `contact_not_found`, and is enrolled or put on a list first.
+- `contact.delete` deletes Reply's contact for a person, by the pin alone and once a person approves it: `reply contact
+  get` first, then `reply contact delete`. A contact Reply holds as opted out is refused — Reply keeps that stop on the
+  contact — and one it no longer holds is `contact_not_found` on a first attempt and `already_deleted` on any later attempt, since an earlier one may have deleted it.
+  Nothing is pinned, and Jason's own record of the person and its register are not touched.
 - Every operation about a person finds Reply's contact for them before it writes anything, the way its document's
   `preflight.provider_contact` says: by the pin, or else with `reply contact find`, Reply's exact lookup by email or by
   LinkedIn URL, read to its end. A person Reply holds is named by that identifier — also one who has a first name, whom

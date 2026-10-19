@@ -534,10 +534,10 @@ reconciliation — matching a person again, against two providers' answers — a
   standing approvals, no bulk decisions over a population, no expiry windows and no anomaly stop rules
   (DEF-APPROVAL-001). Nothing notifies anybody either, so a person finds out what is waiting by asking
   — `jason approval list` is the floor this version ships.
-- **Sixteen operations, not a catalog.** The documents under `docs/contracts/operations/` — eleven that write,
+- **Eighteen operations, not a catalog.** The documents under `docs/contracts/operations/` — thirteen that write,
   `campaign.create`, `list_membership.add`, `campaign.enroll`, `campaign.pause`, `campaign.activate`, `optout.record`,
-  `enrollment.stop`, `conversation.reply`, `conversation.classify`, `conversation.close` and `conversation.reopen`,
-  and five reads — are the whole published set; an operation outside it cannot be routed,
+  `enrollment.stop`, `conversation.reply`, `conversation.classify`, `conversation.close`, `conversation.reopen`,
+  `contact.update` and `contact.delete`, and five reads — are the whole published set; an operation outside it cannot be routed,
   created or named, and adding one is a deliberate act with its own document, fixtures and version (DEF-OPS-001).
 - **No compatibility window and no deprecation policy.** Every published operation is at version 1, and a
   plugin declares which contract family versions it implements. What happens when version 2 arrives — how

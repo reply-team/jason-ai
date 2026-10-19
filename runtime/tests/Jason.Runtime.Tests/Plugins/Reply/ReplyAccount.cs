@@ -64,6 +64,7 @@ public sealed class ReplyAccount : IDisposable
     public const string StatsFile = "stats.json";
     public const string ThreadsFile = "threads.json";
     public const string CategoriesFile = "categories.json";
+    public const string CustomFieldsFile = "customfields.json";
     public const string InstructionsFile = "instructions.json";
     public const string CredentialFile = "credential.json";
 
@@ -187,6 +188,23 @@ public sealed class ReplyAccount : IDisposable
         var original = Contacts.OfType<JsonObject>().SingleOrDefault(existing => existing["id"]!.GetValue<int>() == of)
             ?? throw new InvalidOperationException($"no contact {of} has been planted to duplicate.");
         return WithContact(id, (string?)original["email"], (string?)original["firstName"], linkedIn: (string?)original["linkedInUrl"]);
+    }
+
+    /// <summary>One of the contact custom fields the account defines, by the title Reply names it with.</summary>
+    public ReplyAccount WithCustomField(int id, string title) =>
+        Replace(CustomFieldsFile, id, new JsonObject { ["id"] = id, ["title"] = title, ["fieldType"] = "text" });
+
+    /// <summary>A value a planted contact holds for a custom field, under the key Reply answers it by.</summary>
+    public ReplyAccount WithCustomValue(int contact, string key, string value)
+    {
+        var contacts = ReadArray(ContactsFile);
+        var planted = contacts.OfType<JsonObject>().SingleOrDefault(existing => existing["id"]!.GetValue<int>() == contact)
+            ?? throw new InvalidOperationException($"no contact {contact} has been planted to give a custom value to.");
+        var values = planted["customFields"] as JsonArray ?? [];
+        values.Add(new JsonObject { ["key"] = key, ["value"] = value });
+        planted["customFields"] = values.DeepClone();
+        Write(ContactsFile, contacts);
+        return this;
     }
 
     /// <summary>A contact list and the contacts it holds; not shared unless a test says so.</summary>
@@ -575,6 +593,10 @@ public sealed class ReplyAccount : IDisposable
     public IReadOnlyList<ReplyCall> CallsSince(int mark) => [.. Calls.Skip(mark)];
 
     public JsonArray Contacts => ReadArray(ContactsFile);
+
+    /// <summary>One contact as the account holds it now, or null once it holds them no longer.</summary>
+    public JsonObject? ContactOf(int id) =>
+        Contacts.OfType<JsonObject>().SingleOrDefault(contact => contact["id"]!.GetValue<int>() == id);
 
     public JsonArray Lists => ReadArray(ListsFile);
 

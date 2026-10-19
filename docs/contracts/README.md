@@ -58,6 +58,8 @@ a condition beside it — and the last column is the line the operation's own pa
 | [`campaign.enroll`](operations/campaign.enroll.md) | `campaign.enroll` | `act` | `confirm_once` | `after_recovery_read` | `find_or_create` | put one person into a provider campaign |
 | [`campaign.get`](operations/campaign.get.md) | `campaign.get` | `read` | `auto` | `safe` | `not_used` | read one campaign from the provider |
 | [`campaign.pause`](operations/campaign.pause.md) | `campaign.pause` | `control` | `auto` | `safe` | `not_used` | stop a provider campaign |
+| [`contact.delete`](operations/contact.delete.md) | `contact.delete` | `control` | `confirm_once` | `after_recovery_read` | `pinned_only` | delete the provider's contact for one person |
+| [`contact.update`](operations/contact.update.md) | `contact.update` | `control` | `auto` | `after_recovery_read` | `find_only` | change a person's fields on the provider's contact for them |
 | [`conversation.classify`](operations/conversation.classify.md) | `conversation.classify` | `control` | `auto` | `safe` | `not_used` | file a thread under one of the provider's categories, with the provider's own meaning on its reserved names |
 | [`conversation.close`](operations/conversation.close.md) | `conversation.close` | `control` | `auto` | `safe` | `not_used` | set a thread aside as worked |
 | [`conversation.get`](operations/conversation.get.md) | `conversation.get` | `read` | `auto` | `safe` | `not_used` | read one thread before answering it |
@@ -109,8 +111,9 @@ and `protective_floor` are the catalogue's own marks, copied from the fragment a
 value RAISES above the derivation table", the second "true for the one legitimate LOWERING: an operation whose
 non-performance is itself the harm", and `approval_reason` says why. The catalogue sets both on `optout.record`, whose
 `auto` raises nothing — the table derives `confirm_once` for an irreversible control — so that document says `true`,
-`true` because its fragment does, not because one approval is both a raise and a lowering. An operation that does
-neither states `false`, `false` and `null`. The floor is checked when the document loads: it is refused unless
+`true` because its fragment does, not because one approval is both a raise and a lowering. The catalogue raises
+`contact.delete`, which states `approval_departs: true`, `protective_floor: false` and the fragment's reason. An
+operation that does neither states `false`, `false` and `null`. The floor is checked when the document loads: it is refused unless
 `approval` is `auto`, `approval_reason` says why, `preflight.suppression` is `not_applicable` and
 `dispatch.in_paused_campaign` is `runs`, so neither the suppression register nor a paused campaign holds back an
 operation whose not running is the harm: its work starts once nothing else in its campaign is scheduled or processing,
@@ -130,7 +133,7 @@ The second group is Jason's own, and it is about execution:
 |---|---|
 | `preflight` | whether the work item's contact is needed (`required` / `not_used`, or `optional`: taken when the work item names one) and where the channel comes from (`from_args` / `none`); an `optional` contact never takes its channel from the arguments; and whether the suppression register refuses the work for a person whose consumed value it holds (`suppression`: `checked`, or `not_applicable` — allowed only where `reach` is `control`, for an operation that takes a person out rather than reaching them); and how the plugin finds the provider's own contact for that person (`provider_contact`: `find_or_create`, `find_only`, `pinned_only` or `not_used` — [`docs/plugins.md`](../plugins.md) §7, "The contact proxy rule", is the rule), which the loader holds to what each word implies: a way that finds the person declares `external_ids.contact`, `pinned_only` declares `contact_not_linked`, and `not_used` is said exactly where `contact` is `not_used` |
 | `dispatch` | how the dispatcher treats the operation's work beyond what all work shares: `in_paused_campaign` is `waits` — the work waits with its paused campaign, as all work does — or `runs`, allowed only where `reach` is `control` and `approval` is `auto`, for an operation whose not running is the harm |
-| `contact_projection` | exactly which contact fields, and which channels, the plugin receives — `consumed`, the one channel the arguments name, or `none` — declared so that widening it is a visible change |
+| `contact_projection` | exactly which contact fields, and which channels, the plugin receives — `consumed`, the one channel the arguments name, or `none` — declared so that widening it is a visible change. It names exactly what the operation's implementation reads, the least of a person that reaches a plugin's process, for the fields as for the channels |
 | `precondition` | what must be true at the provider before the operation can act, beyond how its contact is found, in one sentence |
 | `preview` | what a person deciding on the operation reads first — a one-line summary rendered from the composed input, and the values in that input it highlights — or `null` where nobody is asked to decide |
 | `input_schema` | the whole composed input the plugin receives, in the dialect below |

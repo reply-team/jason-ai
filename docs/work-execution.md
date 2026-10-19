@@ -201,11 +201,11 @@ A silent skip would leave the item looking claimable forever.
 ## Approvals
 
 An operation's contract says what approval it needs. Most published operations publish `auto`, which is
-the one approval a runtime may give itself. `campaign.enroll`, `campaign.activate` and `enrollment.stop` publish
-`confirm_once` and `conversation.reply` publishes `confirm_each`, and work naming any of them is **parked** at the
-claim rather than run: the item moves to `awaiting_approval` and an `apr_` row records what is being approved. The two
-words ask the same of a person in this version: one work item is one person, so each reply is already its own
-decision.
+the one approval a runtime may give itself. `campaign.enroll`, `campaign.activate`, `enrollment.stop` and
+`contact.delete` publish `confirm_once` and `conversation.reply` publishes `confirm_each`, and work naming any of them
+is **parked** at the claim rather than run: the item moves to `awaiting_approval` and an `apr_` row records what is
+being approved. The two words ask the same of a person in this version: one work item is one person, so each reply is
+already its own decision.
 
 **What the gate reads is the published value, and never the condition beside it.** A conditional
 property always states the dangerous reading in `value` — `campaign.enroll` is `confirm_once` with a

@@ -238,9 +238,12 @@ public class ReplyErrorTableTests
         }
 
         // The mark is per command: the exact lookup only reads, and of the two commands on sequences by name the list
-        // reads and the create writes.
+        // reads and the create writes. The read of one contact by its id reads, and its delete writes: a lost delete
+        // may have happened.
         Assert.Equal("write", Text(commands["sequence add-contact"]!.AsObject(), "kind"));
         Assert.Equal("read", Text(commands["contact find"]!.AsObject(), "kind"));
+        Assert.Equal("read", Text(commands["contact get"]!.AsObject(), "kind"));
+        Assert.Equal("write", Text(commands["contact delete"]!.AsObject(), "kind"));
         Assert.Equal("read", Text(commands["sequence list"]!.AsObject(), "kind"));
         Assert.Equal("write", Text(commands["sequence create"]!.AsObject(), "kind"));
     }

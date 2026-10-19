@@ -41,8 +41,18 @@ public class ReplyContactProxyRuleTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    /// <summary>What drives one operation against the stand-in: the command it runs once the person is named, the world it needs, and how Reply answers it by another identifier.</summary>
-    private sealed record Driver(string Command, Func<ReplyAccount, ReplyAccount> Plant, Func<int, JsonObject>? AnsweredAs, bool ThroughTheThread = false);
+    /// <summary>
+    /// What drives one operation against the stand-in: the command it runs once the person is named, the world it needs,
+    /// how Reply answers it by another identifier, whether it finds the person through a thread, and whether the command
+    /// names the person as its operand — with what it changes on stdin — rather than by <c>--contact-id</c>.
+    /// </summary>
+    private sealed record Driver(
+        string Command,
+        Func<ReplyAccount, ReplyAccount> Plant,
+        Func<int, JsonObject>? AnsweredAs,
+        bool ThroughTheThread = false,
+        bool ByOperand = false,
+        string? NobodyIs = null);
 
     private static readonly IReadOnlyDictionary<string, Driver> Drivers = new Dictionary<string, Driver>(StringComparer.Ordinal)
     {
@@ -67,6 +77,12 @@ public class ReplyContactProxyRuleTests
             account => account.WithThread(ReplyConversationListTests.Thread(Thread, "2026-10-03T07:41:09Z")),
             AnsweredAs: null,
             ThroughTheThread: true),
+        ["contact.update"] = new(
+            "contact update 1001",
+            account => account,
+            id => new JsonObject { ["status"] = "updated", ["contact_id"] = id },
+            ByOperand: true,
+            NobodyIs: "contact_not_found"),
     };
 
     public static TheoryData<string> Finding => Of(ProviderContact.FindOrCreate, ProviderContact.FindOnly);
@@ -86,13 +102,14 @@ public class ReplyContactProxyRuleTests
         Assert.Equal(
             Ids(ProviderContact.FindOrCreate, ProviderContact.FindOnly).Order(StringComparer.Ordinal).ToList(),
             Drivers.Keys.Order(StringComparer.Ordinal).ToList());
-        Assert.Equal(["conversation.list"], Ids(ProviderContact.PinnedOnly));
+        Assert.Equal(["contact.delete", "conversation.list"], Ids(ProviderContact.PinnedOnly).Order(StringComparer.Ordinal));
     }
 
     /// <summary>
     /// Reply holds the person: the exact lookup finds them, the command names them by that identifier, nothing is
-    /// imported and their record is left as it was — this one has no first name at Reply, and still has none — and the
-    /// identifier is pinned. The reply finds them through its thread instead, and looks nobody up.
+    /// imported and nothing Jason holds of them is written to their record — this one has no first name at Reply, and
+    /// still has none; an update changes the one field its arguments name — and the identifier is pinned. The reply finds
+    /// them through its thread instead, and looks nobody up.
     /// </summary>
     [Theory]
     [MemberData(nameof(Finding))]
@@ -100,7 +117,12 @@ public class ReplyContactProxyRuleTests
     {
         var driver = Drivers[operation];
         using var account = driver.Plant(new ReplyAccount()).WithContact(1001, Address);
-        var before = account.Contacts.ToJsonString();
+        var expected = account.Contacts;
+        if (operation == "contact.update")
+        {
+            expected[0]!["title"] = "Chief Revenue Officer";
+        }
+
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
@@ -108,7 +130,7 @@ public class ReplyContactProxyRuleTests
 
         ReplyOperations.Succeeded(operation, result);
         Assert.Equal("1001", PinnedContact(result));
-        Assert.Equal(before, account.Contacts.ToJsonString());
+        Assert.Equal(expected.ToJsonString(), account.Contacts.ToJsonString());
         if (driver.ThroughTheThread)
         {
             Assert.Equal([$"inbox get {Thread}", driver.Command], Lines(account));
@@ -117,8 +139,7 @@ public class ReplyContactProxyRuleTests
 
         Assert.Equal(["contact find", driver.Command], Lines(account));
         Assert.Equal($$"""{"email":"{{Address}}"}""", account.Calls[0].Body);
-        Assert.Equal("1001", account.Calls[1].Option("--contact-id"));
-        Assert.Null(account.Calls[1].Body);
+        AssertNamedByTheIdentifier(driver, account.Calls[1], "1001");
     }
 
     /// <summary>
@@ -147,7 +168,8 @@ public class ReplyContactProxyRuleTests
 
     /// <summary>
     /// The way is <c>find_only</c>: Reply holding nobody creates nobody. The stop answers that the person takes part in
-    /// nothing, and the reply, whose thread names nobody Reply still holds, sends nothing — and neither pins anybody.
+    /// nothing, the update refuses with <c>contact_not_found</c> — there is no record to change — and the reply, whose
+    /// thread names nobody Reply still holds, sends nothing; none of them pins anybody.
     /// </summary>
     [Theory]
     [MemberData(nameof(FindingOnly))]
@@ -173,10 +195,16 @@ public class ReplyContactProxyRuleTests
             return;
         }
 
-        var answer = ReplyOperations.Succeeded(operation, result);
-        Assert.Equal("already_stopped", (string?)answer["items"]![0]!["status"]);
         Assert.Null(PinnedContact(result));
         Assert.Equal(["contact find"], Lines(account));
+        if (driver.NobodyIs is { } code)
+        {
+            Assert.Equal((code, FailureClass.Permanent), (ReplyOperations.Failed(operation, result).Code, ReplyOperations.Failed(operation, result).Class));
+            return;
+        }
+
+        var answer = ReplyOperations.Succeeded(operation, result);
+        Assert.Equal("already_stopped", (string?)answer["items"]![0]!["status"]);
     }
 
     /// <summary>
@@ -205,8 +233,7 @@ public class ReplyContactProxyRuleTests
 
         var command = Assert.Single(account.Calls);
         Assert.Equal(driver.Command, command.Line);
-        Assert.Equal("1001", command.Option("--contact-id"));
-        Assert.Null(command.Body);
+        AssertNamedByTheIdentifier(driver, command, "1001");
     }
 
     /// <summary>
@@ -314,7 +341,7 @@ public class ReplyContactProxyRuleTests
 
         Assert.Equal(["contact find", driver.Command], Lines(account));
         Assert.Equal($$"""{"linkedin_url":"{{Profile}}"}""", account.Calls[0].Body);
-        Assert.Equal("1001", account.Calls[1].Option("--contact-id"));
+        AssertNamedByTheIdentifier(driver, account.Calls[1], "1001");
         Assert.Single(account.Contacts);
     }
 
@@ -344,8 +371,8 @@ public class ReplyContactProxyRuleTests
     }
 
     /// <summary>
-    /// The way is <c>pinned_only</c>: a read about a person works by the pin alone, so a person nobody pinned fails
-    /// <c>contact_not_linked</c> before anything is called — nobody is looked up and nobody is created.
+    /// The way is <c>pinned_only</c>: a read of a person's threads and a delete work by the pin alone, so a person nobody
+    /// pinned fails <c>contact_not_linked</c> before anything is called — nobody is looked up, created or deleted.
     /// </summary>
     [Theory]
     [MemberData(nameof(PinnedOnly))]
@@ -355,16 +382,33 @@ public class ReplyContactProxyRuleTests
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var input = new JsonObject
+        var input = operation switch
         {
-            ["args"] = new JsonObject { ["limit"] = 20, ["offset"] = 0, ["source"] = "all" },
-            ["contacts"] = new JsonArray(new JsonObject { ["id"] = ContactId, ["external_ids"] = new JsonObject() }),
-            ["campaign"] = Campaign(),
+            "conversation.list" => new JsonObject
+            {
+                ["args"] = new JsonObject { ["limit"] = 20, ["offset"] = 0, ["source"] = "all" },
+                ["contacts"] = new JsonArray(new JsonObject { ["id"] = ContactId, ["external_ids"] = new JsonObject() }),
+                ["campaign"] = Campaign(),
+            },
+            "contact.delete" => new JsonObject
+            {
+                ["args"] = new JsonObject { ["channel"] = "email" },
+                ["contacts"] = new JsonArray(new JsonObject
+                {
+                    ["id"] = ContactId,
+                    ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = Address, ["primary"] = true }),
+                    ["external_ids"] = new JsonObject(),
+                }),
+                ["campaign"] = Campaign(),
+                ["idempotency_key"] = WorkItemId,
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "No input for this operation."),
         };
         var error = ReplyOperations.Failed(operation, await ReplyOperations.InvokeAsync(api, operation, input, Ct));
 
         Assert.Equal(("contact_not_linked", FailureClass.Permanent), (error.Code, error.Class));
         Assert.Empty(account.Calls);
+        Assert.Single(account.Contacts);
     }
 
     // -------------------------------------------------------------------------------------------------------
@@ -372,14 +416,11 @@ public class ReplyContactProxyRuleTests
     /// <summary>The composed input each operation's document accepts, about one person on one channel.</summary>
     private static JsonObject Input(string operation, string channel, string value, string? pin = null, string contactId = ContactId)
     {
+        // The fields the operation's own projection names, and only those.
         var person = new JsonObject { ["id"] = contactId };
-        if (operation != "conversation.reply")
+        foreach (var field in OperationCatalog.Find(operation)!.ContactProjection!.Fields.Where(field => field != "id"))
         {
-            person["first_name"] = "Marta";
-            person["last_name"] = "Alvarez";
-            person["company"] = "Puerto Analytics";
-            person["title"] = "Head of Growth";
-            person["time_zone"] = null;
+            person[field] = Fields[field]?.DeepClone();
         }
 
         person["channels"] = new JsonArray(new JsonObject { ["channel"] = channel, ["value"] = value, ["primary"] = true });
@@ -413,6 +454,7 @@ public class ReplyContactProxyRuleTests
                     ["thread"] = new JsonObject { ["external_id"] = Thread.ToString(CultureInfo.InvariantCulture) },
                     ["body"] = "Thursday at 10 works.",
                 },
+                "contact.update" => new JsonObject { ["channel"] = channel, ["fields"] = new JsonObject { ["title"] = "Chief Revenue Officer" } },
                 _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "No input for this operation."),
             },
             ["contacts"] = new JsonArray(person),
@@ -425,6 +467,34 @@ public class ReplyContactProxyRuleTests
         }
 
         return input;
+    }
+
+    /// <summary>The person's own fields, as every input that projects one carries it.</summary>
+    private static readonly IReadOnlyDictionary<string, JsonNode?> Fields = new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
+    {
+        ["first_name"] = "Marta",
+        ["last_name"] = "Alvarez",
+        ["company"] = "Puerto Analytics",
+        ["title"] = "Head of Growth",
+        ["time_zone"] = null,
+    };
+
+    /// <summary>
+    /// The command names the person by the identifier and carries no address: by <c>--contact-id</c> with nothing on stdin,
+    /// or — for a command about one contact — as its operand, with only what it changes on stdin.
+    /// </summary>
+    private static void AssertNamedByTheIdentifier(Driver driver, ReplyCall call, string id)
+    {
+        if (driver.ByOperand)
+        {
+            Assert.Equal(id, call.Operands[0]);
+            Assert.DoesNotContain(Address, call.Body ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(Profile, call.Body ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            return;
+        }
+
+        Assert.Equal(id, call.Option("--contact-id"));
+        Assert.Null(call.Body);
     }
 
     private static JsonObject Campaign() => new()

@@ -16,6 +16,8 @@ import { optoutRecord } from "./modules/optout.js";
 import { conversationReply } from "./modules/reply.js";
 import { enrollmentStop } from "./modules/stop.js";
 import { conversationClassify, conversationClose, conversationReopen } from "./modules/thread.js";
+import { contactDelete } from "./modules/delete.js";
+import { contactUpdate } from "./modules/update.js";
 
 export function invoke(operation, input, context) {
   switch (operation) {
@@ -66,6 +68,12 @@ export function invoke(operation, input, context) {
 
     case "conversation.reopen":
       return conversationReopen(input, context);
+
+    case "contact.update":
+      return contactUpdate(input, context);
+
+    case "contact.delete":
+      return contactDelete(input, context);
 
     default:
       // A work item can only name an operation the manifest lists, so this is a call that should not exist. It

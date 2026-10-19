@@ -113,11 +113,12 @@ function exec(context, args, stdin) {
 
 /**
  * One reply-cli work command: its result object when it exits 0, and `host.fail` with the row the table decides for
- * every other ending. `request` is `{ operation, command, operands, flags, stdin, learned, pins }`: the canonical
- * operation the command serves, the command's two words, its ids, its flags, the person for stdin, and what this
- * package already knows Reply calls our entities — which travels out with a failure, joined by whatever the CLI says it
- * had learned before it failed. `pins: false` keeps what the CLI learned out of the failure, for a command that names
- * something which is not ours yet.
+ * every other ending. `request` is `{ operation, command, operands, flags, stdin, learned, pins, missing }`: the
+ * canonical operation the command serves, the command's two words, its ids, its flags, the person for stdin, and what
+ * this package already knows Reply calls our entities — which travels out with a failure, joined by whatever the CLI
+ * says it had learned before it failed. `pins: false` keeps what the CLI learned out of the failure, for a command that
+ * names something which is not ours yet, or for an operation that pins nothing. `missing` is the CLI's code for an id
+ * Reply holds nothing under, where the caller answers that itself: the command then answers null instead of failing.
  */
 export function run(context, request) {
   const stdin = request.stdin === undefined || request.stdin === null ? undefined : JSON.stringify(request.stdin);
@@ -171,6 +172,10 @@ function ended(answer, request) {
   }
 
   const said = verdict(answer.stderr);
+  if (answer.exit_code === FAILED && said !== null && typeof request.missing === "string" && said.code === request.missing) {
+    return null;
+  }
+
   if (said !== null) {
     observed.cli_code = said.code;
     observed.status = said.status;

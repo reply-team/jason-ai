@@ -10,7 +10,7 @@ homepage: https://reply.io
 contracts:
   protocol: [1]
   operations: [1]
-operations: [campaign.get, campaign.create, list_membership.add, campaign.enroll, enrollment.list, engagement.summarize, conversation.list, conversation.get, campaign.pause, campaign.activate, optout.record, enrollment.stop, conversation.reply, conversation.classify, conversation.close, conversation.reopen]
+operations: [campaign.get, campaign.create, list_membership.add, campaign.enroll, enrollment.list, engagement.summarize, conversation.list, conversation.get, campaign.pause, campaign.activate, optout.record, enrollment.stop, conversation.reply, conversation.classify, conversation.close, conversation.reopen, contact.update, contact.delete]
 entry:
   module: main.js
   function: invoke

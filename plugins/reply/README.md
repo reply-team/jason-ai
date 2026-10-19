@@ -5,7 +5,7 @@ Reply CLI.
 
 ## What it does
 
-Sixteen operations — the whole set this build publishes: eleven that write and five that only read.
+Eighteen operations — the whole set this build publishes: thirteen that write and five that only read.
 
 | Operation | What it is at Reply |
 |---|---|
@@ -25,6 +25,8 @@ Sixteen operations — the whole set this build publishes: eleven that write and
 | `conversation.classify` | Files a thread under one of the account's inbox categories, by its identifier or its name, or takes it out of its category. Reply's Do not contact is refused: filing there opts the person out. |
 | `conversation.close` | Marks a thread read: Reply has no closed state, and read is how its inbox shows a thread as worked. |
 | `conversation.reopen` | Marks a thread unread again, so it needs attention. |
+| `contact.update` | Changes a person's fields — first name, last name, company, title — and custom fields on the contact Reply holds for them, each custom field named as the account names it. A null clears a field; one left out stays. A person Reply holds nobody for is not found: nobody is made to be changed. |
+| `contact.delete` | Deletes the contact Reply holds for a person, by the identifier Jason pinned, once a person approves it: they leave every sequence and list there. A person Reply holds as opted out is refused, and Jason's own record of the person and its register stay as they are. |
 
 A campaign is a **sequence** at Reply and a person is a **contact**. Each operation runs the Reply CLI command made
 for it — `reply contact find`, `reply sequence add-contact`, `reply inbox list` and the rest, listed under
@@ -213,7 +215,11 @@ of [docs/plugins.md](../../docs/plugins.md) §7, and each operation's document s
   last name, a company, a title, never a time zone — keyed by the email or, with none, by the LinkedIn URL, which the
   CLI writes as its lowercased slug. A person given only by LinkedIn URL is looked up once more by the CLI before its
   import. `enrollment.stop` creates nobody: a person Reply does not hold takes part in nothing. `conversation.reply`
-  finds the person through its thread, and creates nobody either.
+  finds the person through its thread, and creates nobody either; nor does `contact.update`, which changes a contact
+  Reply holds: a person Reply holds nobody for is `contact_not_found`, and is enrolled or put on a list first.
+- **A delete works by the pin alone.** `contact.delete` names the contact by the identifier Jason pinned and by nothing
+  else, reads it with `reply contact get` before anything is deleted, and refuses one Reply holds as opted out, because
+  Reply keeps that stop on the contact itself. It pins nothing.
 - **The first name an import needs** is derived where the person has none, as *A person without a first name* under
   [The account a route names](#the-account-a-route-names) says, and the route's binding decides whether it may be.
 - **Fields and lists travel with the operation that needs them.** Nothing is copied to Reply in the background, and
@@ -248,6 +254,7 @@ route's binding names them.
 | `inbox list --contact-id` or `--sequence-id`, `--source --since --channel --category-id --limit --offset` | read | One page of one of Reply's thread buckets, by person or by sequence: what `conversation.list` answers from — the inbox alone for `inbound`, the inbox and the sent threads merged for `all`. |
 | `inbox get <thread> --limit --offset` | read | One thread, its subject, and one page of its messages: what `conversation.get` answers from, and the read `conversation.reply` makes of the thread's channel and person, one message long, before it sends anything. |
 | `inbox categories` | read | The account's inbox categories, Reply's reserved ones included: what `conversation.classify` matches the category it was given against, by identifier or by name, before it files anything. |
+| `contact get <contact>` | read | One contact by its id, as Reply holds it: the read `contact.delete` makes before it deletes anything, of whether Reply still holds the contact and whether it holds them as opted out. Two keys are read and nothing is kept. |
 | `contact find --contact -` | read | Reply's exact lookup of one address — an email, or a LinkedIn URL by its lowercased slug — read to its end and creating nobody: how every operation about a person with no pin finds Reply's contact for them before anything is written. The address is on stdin. |
 | `sequence list --name -` | read | Every sequence whose whole name is this one, ignoring case, read to its end: what `campaign.create` compares with the name it is to give, before it makes anything. The name is on stdin. |
 | `sequence add-contact <sequence>` with `--contact-id` or `--contact -`, `[--start-step] [--ignore-step-delay]` | write | Puts the person into the sequence, importing them first when Reply holds nobody under the address and they are given by their details. Into a live sequence, a send. |
@@ -260,6 +267,8 @@ route's binding names them.
 | `inbox reply <thread> --message -` | write | Replies to the thread's person on the thread's own channel, from the account that owns the thread, with the text on stdin. A send that Reply keeps no key on, so a lost answer is never repeated. |
 | `inbox categorize <thread>` with `--category-id` or `--clear` | write | Files the thread under one category, or clears its category: set outright, so a repeat lands on the same state. |
 | `inbox mark-read <thread>`, `inbox mark-unread <thread>` | write | Marks the thread read or unread: what `conversation.close` and `conversation.reopen` are at Reply, set outright. |
+| `contact update <contact> --fields -` | write | Changes the fields and custom fields on stdin, by the contact's id; a null clears one and the rest stay. Set outright, so a repeat by the same contact lands on the same values. |
+| `contact delete <contact>` | write | Deletes the contact by its id, with its history at Reply: it leaves every sequence and list. Run again after a lost answer, it answers that Reply holds the contact no longer. |
 
 ### Endings every operation can meet
 
@@ -267,7 +276,7 @@ route's binding names them.
 |---|---|---|---|
 | The CLI could not be started at all, so nothing was sent. | `provider_call_failed` | permanent | Install the CLI where the runtime can find it, check that the grant names it, reload. |
 | The CLI refused the call before making it: its own usage error. | `provider_call_failed` | permanent | Nothing reached the account and a repeat builds the same call. Report it: either this package or the CLI's surface has moved. |
-| Reply could not be reached, or a read failed after the CLI's own retries (`reply.unavailable`); or a **read** timed out, exited without an error the CLI explained, or printed something that is not a result; or a read made as part of a write — the exact lookup before a list add, an enrolment, an opt-out or a stop, the sequence read before a stop, the list of sequences before a create — was cut off at `Plugins:Exec:OutputBytes`. | `provider_unavailable` | transient | Nothing. Nothing changed at Reply — the CLI never resends a write — so the attempt is repeated. |
+| Reply could not be reached, or a read failed after the CLI's own retries (`reply.unavailable`); or a **read** timed out, exited without an error the CLI explained, or printed something that is not a result; or a read made as part of a write — the exact lookup before a list add, an enrolment, an opt-out, a stop or an update, the read of the contact before a delete, the sequence read before a stop, the list of sequences before a create — was cut off at `Plugins:Exec:OutputBytes`. | `provider_unavailable` | transient | Nothing. Nothing changed at Reply — the CLI never resends a write — so the attempt is repeated. |
 | Reply is still activating the sequence (`sequence.busy`). | `provider_unavailable` | transient | Nothing. The attempt is repeated once Reply has had time to finish. |
 | A **write**'s outcome is unknown: the CLI answered `outcome.unknown`, or the write timed out, exited without an error the CLI explained, printed something that is not a result, or had its answer cut off at `Plugins:Exec:OutputBytes`. | `provider_answer_lost` | ambiguous | Where the operation's contract says a repeat is safe, the runtime repeats it; otherwise the item stops for a person. Look at the account — the contact, the list, the sequence — and decide; a blind repeat can create somebody twice or send to them twice. Whatever the attempt had learned, the CLI's own identifiers included, travels with the failure, so there are identifiers to look by. |
 | The profile is not signed in, Reply refused the credential (`access.denied`), or Reply says the account lacks a feature where the operation has no code of its own for that (`access.feature_unavailable`). | `unauthorized` | permanent | Sign that profile in again, or issue a key carrying the scope the call needs. |
@@ -524,8 +533,47 @@ Reply holds no closed state; read is how its inbox shows a thread as worked. So 
 reopening marks it unread, outright and with nothing read first, and the answer is `closed` or `reopened` whatever the
 thread was. A repeat after a lost answer runs the command again. Neither records an outcome or stops outreach.
 
+### `contact.update`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The pinned contact identifier is not a Reply contact number, or no longer resolves there (`contact.not_found`). | `contact_not_found` | permanent | The pin has to be cleared before this person can be worked again. |
+| The person has no pin and Reply holds nobody under the address. Nothing is made and nothing is changed. | `contact_not_found` | permanent | Enroll the person or put them on a list first — either makes the contact — then propose the update again. |
+| More than one contact is held under the address (`contact.not_unique`). Nothing is changed. | `contact_not_unique` | permanent | Resolve the duplicate at Reply, then propose the update again. |
+| The person carries no value on the channel the call named, or the channel is one Reply looks nobody up by. Nothing is called. | `invalid_channel_value` | validation | Name a channel they have: an email or a LinkedIn profile. |
+| A custom field the work item names is one the account has none of, whatever its case (`contact.field_not_found`). Nothing is changed. | `field_not_found` | validation | Name each custom field as the account names it. |
+| Reply did not accept a value the work item gives a field (`reply.invalid_request`; Reply's names for the fields are in the trace), or the work item names one custom field twice, whatever its case. Nothing is changed. | `invalid_field_value` | validation | Correct the value, or name the field once, and propose the update again. |
+| Reply says the account's plan or role may not change a contact (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes it. |
+
+The person is found before anything is written: by the pin, or by the exact lookup of the address, as `enrollment.stop`
+does, and nobody is made — a contact made only so that its fields had somewhere to go would copy the person to Reply
+ahead of any operation that needs them there. Then one command changes what the work item names — the values on stdin, a null clearing a field, a field left
+out staying as Reply holds it — and nothing Jason holds of the person is copied there besides. A custom field is
+named as the account names it; the CLI reads the account's custom fields once and refuses an unknown name before
+anything is written. The update runs without anybody approving it: one work item changes one record. A repeat after a
+lost answer works by the contact the failure pinned and sets the same values again.
+
+### `contact.delete`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| No Reply contact identifier is pinned for the person. Nothing is called. | `contact_not_linked` | permanent | A delete is never aimed by an address. Look the person up at Reply and delete the contact there if that is what is meant. |
+| The pinned contact identifier is not a Reply contact number, or, on a first attempt, Reply holds no contact under it (`contact.not_found`). Nothing is deleted. | `contact_not_found` | permanent | It may be deleted at Reply already, or the pin may belong to another account; look at Reply first. On any attempt after the first, the same answer is `already_deleted`: an earlier attempt may have deleted it. |
+| Reply holds the person as opted out. Nothing is deleted. | `contact_opted_out` | permanent | Leave the contact at Reply: it carries the stop, and the address imported again later would be reachable. Jason's own register keeps its stop either way. |
+| Reply says the account's plan or role may not read or delete a contact (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes it. |
+
+The contact is read by the pin with `reply contact get` before anything is deleted, then deleted with `reply contact
+delete`; Reply answering the delete as missing right after the read found the contact is the delete done too. A person
+approves every delete before it runs, and its work waits while its Jason campaign is paused. The answer pins nothing,
+and Jason's contact, its pins and its do-not-contact register stay as they were: a later operation about the person
+fails `contact_not_found` rather than finding them by address again.
+
 ## What it cannot do
 
+- **A delete reads the stop and then deletes, in two calls.** `contact.delete` reads the contact's opt-out with `reply
+  contact get` and deletes it with `reply contact delete` about a second later, so a person who opts out at Reply in
+  between has that stop erased with the contact. Reply publishes no delete held to a condition, and reply-cli has none.
+  Jason's own register keeps whatever stop Jason recorded.
 - **An enrolment never moves or re-adds a person already in the sequence, and that guard is the CLI's.** Reply's own
   add, given a contact who already takes part, moves them forward to a later start step or refuses a re-add with a
   generic error. So the CLI reads the person's part in the sequence before it adds anybody, and answers that they
