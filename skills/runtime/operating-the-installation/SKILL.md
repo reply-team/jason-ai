@@ -48,9 +48,9 @@ prints the link alone, which is what you want from a session: hand the person th
 a minute. After that pairing, a bookmark of the page keeps working. `--approval <id>` and `--question <id>` open on one
 item.
 
-If it fails with `ui_not_installed`, no UI build is in place: the message names `ui/default` (what a release installs)
-and `ui/custom` (a build of the person's own). Say which is missing and that reinstalling from a release puts the
-default back; do not fetch anything yourself.
+If it fails with `ui_not_installed`, no UI build is in place: the message names `ui/default` and
+`ui/custom`. No release installs a build, so say that none is in place, and that one is made from `ui/` as its README
+says and unzipped into `ui/custom`; do not fetch or build anything yourself.
 
 `jason ui tokens` lists the paired browsers; `jason ui revoke <token-id>` unpairs one, `--all` every one. Revoke when
 the person says a browser should no longer have access. `jason status`'s `ui_module` check says which build is served

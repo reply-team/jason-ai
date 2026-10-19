@@ -5,14 +5,14 @@ The browser UI the Jason runtime serves at `http://127.0.0.1:<port>/ui/`. One mo
 
 ## Build
 
-Node 24. `npm ci`, then `npm run build` writes `dist/`. `npm run package` wraps it as `artifacts/jason-ui.zip`, the
-asset a release carries: `index.html`, `manifest.json`, `favicon.svg`, `assets/*`, `THIRD-PARTY-NOTICES` at the root.
+Node 24. `npm ci`, then `npm run build` writes `dist/`. `npm run package` wraps it as `artifacts/jason-ui.zip`: `index.html`,
+`manifest.json`, `favicon.svg`, `assets/*`, `THIRD-PARTY-NOTICES` at the root.
 
 ## Where it lands
 
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
-`<data>/ui/default/`, which a release installs. To try a build against a real Jason: unzip `jason-ui.zip` into
-`~/.jason/ui/custom/` and run `jason ui open`; `jason status` says which build is served. Delete `custom/` to go back.
+`<data>/ui/default/` when that holds a build; no release installs one. To try a build against a real Jason: unzip
+`jason-ui.zip` into `~/.jason/ui/custom/` and run `jason ui open`; `jason status` says which build is served. Delete `custom/` to go back.
 
 ## Dev loop
 

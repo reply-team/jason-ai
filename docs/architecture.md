@@ -428,7 +428,7 @@ complete product vision; this document does not assign it to a release. It must 
 a second source of business logic or a privileged database client.
 
 As built: the runtime serves the UI itself under `/ui/` from a module directory beside its data (`custom` when it
-holds a build, else `default`, which a release installs), as static files under a `default-src 'self'` policy. A
+holds a build, else `default`, which no release installs), as static files under a `default-src 'self'` policy. A
 browser pairs once: `ui.open` mints a single-use one-minute ticket, the page trades it at `POST /ui/session` for a UI
 token the runtime keeps as a hash and accepts as a bearer until `ui.revoke`; a request carrying a foreign `Origin` is
 refused. The UI is one more consumer of the API and the runtime keeps nothing for it; see the `DEC-UI` decisions.

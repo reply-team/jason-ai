@@ -20,7 +20,7 @@ If nothing is installed, `jason ui open` says so with the code `ui_not_installed
 ## Where the page comes from
 
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
-`<data>/ui/default/`, the one a release installs beside the executable. It serves those files and nothing else, under
+`<data>/ui/default/` when that holds a build; no release installs one. It serves those files and nothing else, under
 `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri 'none'`.
 
 To try a build that is not the installed one — a CI run's `jason-ui.zip`, or your own — unzip it into `~/.jason/ui/custom/`
