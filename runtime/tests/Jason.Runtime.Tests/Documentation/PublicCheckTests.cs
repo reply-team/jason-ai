@@ -7,11 +7,13 @@ namespace Jason.Runtime.Tests.Documentation;
 /// The public repository's check, "The published tree", which every pull request there must pass: nothing in the
 /// change that points into the work that produced it, every plugin's JavaScript parsed, and every link kept inside
 /// the tree. GitHub never runs it in this repository, so its steps are run here over git repositories these tests
-/// build, and its link rules are held to the verdicts this repository's own guard gives.
+/// build, and its link rules are held to the verdicts this repository's own guard gives. Beside it, "The published UI"
+/// builds the UI from the published tree alone, held here to this repository's own UI job.
 /// </summary>
 public sealed class PublicCheckTests
 {
     private static readonly string[] Check = [".github", "publish", "public", ".github", "workflows", "check.yml"];
+    private static readonly string[] Ci = [".github", "workflows", "ci.yml"];
 
     /// <summary>
     /// Each kind of pointer the check refuses, spelled here in pieces so that this file is not one: a tracker key, an
@@ -31,7 +33,7 @@ public sealed class PublicCheckTests
     };
 
     [Fact]
-    public void The_check_runs_on_every_pull_request_by_its_one_name_and_reads_nothing_it_may_not()
+    public void The_check_runs_on_every_pull_request_by_its_two_names_and_reads_nothing_it_may_not()
     {
         var text = Read(Check);
         var workflow = Parse(text);
@@ -42,12 +44,46 @@ public sealed class PublicCheckTests
         Assert.Equal("read", Scalar(permissions, "contents"));
         Assert.DoesNotContain("secrets.", text, StringComparison.Ordinal);
 
-        // The name a ruleset requires: renamed, every pull request there would wait for a check that never comes.
-        var job = (YamlMappingNode)Assert.Single(Mapping(workflow, "jobs").Children).Value;
-        Assert.Equal("The published tree", Scalar(job, "name"));
+        // The names a ruleset requires, the UI's once a release has carried it there: renamed, every pull request there
+        // would wait for a check that never comes.
+        Assert.Equal(["The published tree", "The published UI"], Jobs(workflow).Select(job => Scalar(job, "name")));
 
         // Pinned by its text: node may be absent where these tests run.
         Assert.Equal("find plugins -name '*.js' -print0 | xargs -0 -r -n1 node --check", Step("Every plugin's JavaScript parses").Trim());
+    }
+
+    /// <summary>
+    /// "The published UI" builds the UI from the published tree alone, with this repository's own UI job's steps short of
+    /// what needs the runtime, which that tree does not hold: the same checkout and the same Node, then the same npm
+    /// commands in the same order, without the package, its upload and the browser smoke. The two jobs are twins, and
+    /// this repository's workflow names the other; either moved alone turns this red.
+    /// </summary>
+    [Fact]
+    public void The_published_UI_is_built_with_this_repository_s_UI_steps_short_of_the_runtime()
+    {
+        var ci = Read(Ci);
+        var published = NamedJob(Parse(Read(Check)), "The published UI");
+        var own = NamedJob(Parse(ci), "The UI on ubuntu");
+
+        Assert.Equal("ubuntu-latest", Scalar(published, "runs-on"));
+        Assert.Equal("ui", Scalar(Mapping(Mapping(published, "defaults"), "run"), "working-directory"));
+        Assert.Equal(Scalar(Mapping(Mapping(own, "defaults"), "run"), "working-directory"), Scalar(Mapping(Mapping(published, "defaults"), "run"), "working-directory"));
+
+        // No job before it to hand it a version, and nothing it builds needs one.
+        Assert.Null(Node(published, "needs"));
+
+        // The actions: this repository's checkout and Node, at the same versions and with the same settings.
+        string[] mirrored = ["actions/checkout@", "actions/setup-node@"];
+        Assert.Equal(
+            Steps(own).Where(step => mirrored.Any(action => Scalar(step, "uses")?.StartsWith(action, StringComparison.Ordinal) == true)).Select(Action),
+            Steps(published).Where(step => Scalar(step, "uses") is not null).Select(Action));
+
+        // The commands: this repository's npm commands in its order, short of the package and the browser smoke.
+        var commands = Commands(published);
+        Assert.Equal(["npm ci", "npm run check", "npm test", "npm run build"], commands);
+        Assert.Equal(Commands(own).Where(command => command.StartsWith("npm ", StringComparison.Ordinal) && command is not ("npm run package" or "npm run e2e")), commands);
+
+        Assert.Contains("\"The published UI\"", ci, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -309,10 +345,31 @@ public sealed class PublicCheckTests
 
     private static string Step(string name)
     {
-        var job = (YamlMappingNode)Assert.Single(Mapping(Parse(Read(Check)), "jobs").Children).Value;
-        var step = Assert.IsType<YamlSequenceNode>(Node(job, "steps")).Children.Cast<YamlMappingNode>().Single(step => Scalar(step, "name") == name);
+        var step = Steps(NamedJob(Parse(Read(Check)), "The published tree")).Single(step => Scalar(step, "name") == name);
         return Scalar(step, "run")!;
     }
+
+    private static IEnumerable<YamlMappingNode> Jobs(YamlMappingNode workflow) => Mapping(workflow, "jobs").Children.Values.Cast<YamlMappingNode>();
+
+    private static YamlMappingNode NamedJob(YamlMappingNode workflow, string name)
+    {
+        var names = Jobs(workflow).Select(job => Scalar(job, "name")).ToList();
+        Assert.True(names.Count(found => found == name) == 1, $"The workflow's jobs are named {string.Join(", ", names.Select(found => $"'{found}'"))}: not one named '{name}'.");
+        return Jobs(workflow).Single(job => Scalar(job, "name") == name);
+    }
+
+    private static IEnumerable<YamlMappingNode> Steps(YamlMappingNode job) => Assert.IsType<YamlSequenceNode>(Node(job, "steps")).Children.Cast<YamlMappingNode>();
+
+    /// <summary>An action step as the action it uses and the settings it gives it, in their order.</summary>
+    private static string Action(YamlMappingNode step) =>
+        Scalar(step, "uses") + (Node(step, "with") is YamlMappingNode settings ? " " + string.Join(", ", settings.Children.Select(setting => $"{setting.Key}={setting.Value}")) : string.Empty);
+
+    /// <summary>Every command a job's steps run, one per line, in order.</summary>
+    private static List<string> Commands(YamlMappingNode job) =>
+        [.. Steps(job).Select(step => Scalar(step, "run")).OfType<string>()
+            .SelectMany(run => run.Split('\n'))
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0 && !line.StartsWith('#'))];
 
     private static (int Exit, string Stdout, string Stderr) Hygiene(Repository repository, string basis, string title, string body) =>
         repository.Run(Step("Nothing internal in the change"), new Dictionary<string, string> { ["BASE"] = basis, ["TITLE"] = title, ["BODY"] = body });

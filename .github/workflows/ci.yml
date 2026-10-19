@@ -897,6 +897,7 @@ jobs:
   # against the exchanges the runtime's tests recorded, the build, the asset zip uploaded for a person to try, and the
   # browser smoke against a runtime built here. Linux only, and on a draft's pushes too: the browser engine is the same
   # everywhere, and what differs by OS is runtime code the platform jobs run.
+  # Its npm steps' twin is "The published UI" in .github/publish/public/.github/workflows/check.yml; change both.
   ui:
     name: The UI on ubuntu
     needs: version

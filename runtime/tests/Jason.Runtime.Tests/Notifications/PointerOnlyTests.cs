@@ -37,7 +37,9 @@ namespace Jason.Runtime.Tests.Notifications;
 /// </remarks>
 public sealed class PointerOnlyTests
 {
-    private const string Marker = "7f3c";
+    // Not hex, and not a letter of a public id's base 32: a temporary directory's name in a log line is 32 hex digits, and
+    // no name a run makes up can hold the marker by chance.
+    private const string Marker = "7f3u";
 
     private static readonly DateTime Noon = new(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
 

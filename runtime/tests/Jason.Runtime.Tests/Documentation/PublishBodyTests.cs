@@ -75,7 +75,7 @@ public sealed class PublishBodyTests
             | Install path (`install/`) | 0 | 1 | 0 |
             | The UI (`ui/`) | 0 | 0 | 0 |
             | Licences (`LICENSE`, `LICENSE-RUNTIME.md`, `THIRD-PARTY-NOTICES`, `TRADEMARKS.md`) | 0 | 0 | 0 |
-            | This repository's own files (`VERSION`, `CODEOWNERS`, `.gitattributes`, `.gitignore`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/`) | 0 | 1 | 0 |
+            | This repository's own files (`VERSION`, `CODEOWNERS`, `.editorconfig`, `.gitattributes`, `.gitignore`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/`) | 0 | 1 | 0 |
 
             <details><summary>Every file</summary>
 
@@ -217,7 +217,7 @@ public sealed class PublishBodyTests
         var (body, label) = Write(tree);
 
         Assert.Contains("| Licences (`LICENSE`, `LICENSE-RUNTIME.md`, `THIRD-PARTY-NOTICES`, `TRADEMARKS.md`) | 0 | 1 | 0 |\n", body, StringComparison.Ordinal);
-        Assert.Contains("| This repository's own files (`VERSION`, `CODEOWNERS`, `.gitattributes`, `.gitignore`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/`) | 0 | 1 | 0 |\n", body, StringComparison.Ordinal);
+        Assert.Contains("| This repository's own files (`VERSION`, `CODEOWNERS`, `.editorconfig`, `.gitattributes`, `.gitignore`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/`) | 0 | 1 | 0 |\n", body, StringComparison.Ordinal);
         Assert.Equal(string.Empty, label);
     }
 

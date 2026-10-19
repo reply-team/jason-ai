@@ -89,6 +89,19 @@ public sealed partial class PublicationTests
     }
 
     /// <summary>
+    /// The published UI's format check takes its indentation from the root <c>.editorconfig</c>, so a list that publishes
+    /// <c>ui/</c> publishes that file too: without it the check in the public repository reads every file as formatted
+    /// wrongly.
+    /// </summary>
+    [Fact]
+    public void An_open_set_that_publishes_the_UI_publishes_the_editorconfig_its_format_check_reads()
+    {
+        var lines = OpenSet.Lines(Publication.RepositoryRoot());
+
+        Assert.True(!lines.Contains("ui/") || lines.Contains(".editorconfig"), $"The open set publishes ui/ without .editorconfig: {string.Join(", ", lines)}.");
+    }
+
+    /// <summary>
     /// The public repository's own files are written here and copied to its root by every release, so they are a
     /// fixed list: a file added to the directory is a file published, and that is a decision, not a side effect.
     /// </summary>

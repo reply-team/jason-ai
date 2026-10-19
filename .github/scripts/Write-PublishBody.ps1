@@ -51,8 +51,8 @@ $areas = @(
         Paths = @('LICENSE', 'LICENSE-RUNTIME.md', 'THIRD-PARTY-NOTICES', 'TRADEMARKS.md')
     }
     [pscustomobject]@{
-        Name  = 'This repository''s own files (`VERSION`, `CODEOWNERS`, `.gitattributes`, `.gitignore`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/`)'
-        Paths = @('VERSION', 'CODEOWNERS', '.gitattributes', '.gitignore', 'CONTRIBUTING.md', 'SECURITY.md', '.github/')
+        Name  = 'This repository''s own files (`VERSION`, `CODEOWNERS`, `.editorconfig`, `.gitattributes`, `.gitignore`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/`)'
+        Paths = @('VERSION', 'CODEOWNERS', '.editorconfig', '.gitattributes', '.gitignore', 'CONTRIBUTING.md', 'SECURITY.md', '.github/')
     }
 )
 
