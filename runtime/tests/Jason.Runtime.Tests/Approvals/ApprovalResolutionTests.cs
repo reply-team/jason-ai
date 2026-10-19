@@ -134,15 +134,17 @@ public class ApprovalResolutionTests
     }
 
     /// <summary>
-    /// The gate knows two words: <c>auto</c> runs, and anything else asks a person. A contract that one day
-    /// published a third — an approval to be given for every attempt, say — would be read as "ask once" and
-    /// under-enforced, so the catalog itself is held to what this build understands.
+    /// The gate knows three words: <c>auto</c> runs, and <c>confirm_once</c> and <c>confirm_each</c> ask a person.
+    /// One work item addresses one person, so the decision the claim parks for is always one per item and bound to the
+    /// composed input it would run with — which is what both words ask for at that size. A contract that one day
+    /// published a fourth — an approval to be given for every attempt, say — would be read as one of these and
+    /// under-enforced, so the catalog itself is held to what this build understands, and the loader refuses the rest.
     /// </summary>
     [Fact]
     public void Every_published_contract_asks_for_an_approval_this_build_understands() =>
         Assert.All(
             OperationCatalog.All,
-            contract => Assert.Contains(contract.Approval.Value, (string[])["auto", "confirm_once"], StringComparer.Ordinal));
+            contract => Assert.Contains(contract.Approval.Value, OperationContract.ApprovalWords, StringComparer.Ordinal));
 
     /// <summary>One parked item and the decision it is waiting for, written the way the claim writes them.</summary>
     private static async Task<(WorkItem Item, Approval Approval)> ParkedAsync(JasonDbContext db, DateTime? dueAt)

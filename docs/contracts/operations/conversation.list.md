@@ -43,6 +43,10 @@ It reads one of two scopes:
   before your code runs.
 - `source` is `inbound` (threads the other side wrote into) or `all`, and it is required.
 - `since`, when present, keeps only threads that moved at or after it.
+- `thread_channel`, `email` or `linkedin`, keeps only threads on that channel; `category`, by the identifier the reads
+  report under `vendor.category.id`, keeps only threads filed under it. Both are filters on the threads, never a channel
+  the call consumes, and both are applied by the provider before it pages, so `offset` counts the threads that pass
+  them. A filter this read applied after reading could not say where the next page starts, and none is.
 
 ## What to return
 

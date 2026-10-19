@@ -59,8 +59,21 @@ export function conversationList(input, context) {
     learned = pinned ? undefined : { campaign: sequence };
   }
 
-  // The contract keeps the threads that moved at or after `since`, and so does the CLI's `--since`.
-  const since = typeof input.args.since === "string" ? ["--since", input.args.since] : [];
+  // The contract keeps the threads that moved at or after `since`, and so does the CLI's `--since`. The channel and the
+  // category are filters Reply applies before it pages, so they travel on every page read and `offset` counts the
+  // threads that pass them; a filter applied here, after reading, could not say where the next page starts.
+  const filters = typeof input.args.since === "string" ? ["--since", input.args.since] : [];
+  if (typeof input.args.thread_channel === "string") {
+    filters.push("--channel", input.args.thread_channel);
+  }
+
+  if (input.args.category) {
+    if (!isReplyNumber(input.args.category.external_id)) {
+      fail(LIST, { call: null, row: "identifier_names_nothing", reason: "The category's identifier is not a Reply category number." }, undefined);
+    }
+
+    filters.push("--category-id", input.args.category.external_id);
+  }
 
   const result = { items: [], has_more: false, vendor: { ordering: "last_activity_desc" } };
   let threads;
@@ -68,7 +81,7 @@ export function conversationList(input, context) {
 
   if (input.args.source === "inbound") {
     // One of Reply's own buckets, paged at Reply.
-    const page = readPage(context, target, since, "inbox", input.args.limit, input.args.offset, learned);
+    const page = readPage(context, target, filters, "inbox", input.args.limit, input.args.offset, learned);
     threads = page.threads;
     more = page.more;
   } else {
@@ -86,8 +99,8 @@ export function conversationList(input, context) {
       }, learned);
     }
 
-    const inbox = readBucket(context, target, since, "inbox", reach, learned);
-    const sent = readBucket(context, target, since, "sent", reach, learned);
+    const inbox = readBucket(context, target, filters, "inbox", reach, learned);
+    const sent = readBucket(context, target, filters, "sent", reach, learned);
     const merged = merge(inbox.threads, sent.threads);
     threads = merged.slice(input.args.offset, reach);
     more = inbox.more || sent.more || merged.length > reach;
@@ -102,10 +115,10 @@ export function conversationList(input, context) {
 
 // One bucket, read from its first thread as far as `reach`: a hundred at a time, the CLI's largest page, stopping
 // where the bucket ends.
-function readBucket(context, target, since, source, reach, learned) {
+function readBucket(context, target, filters, source, reach, learned) {
   let threads = [];
   for (let skip = 0; skip < reach; skip += STEP) {
-    const page = readPage(context, target, since, source, Math.min(STEP, reach - skip), skip, learned);
+    const page = readPage(context, target, filters, source, Math.min(STEP, reach - skip), skip, learned);
     threads = threads.concat(page.threads);
     if (!page.more) {
       return { threads: threads, more: false };
@@ -116,12 +129,12 @@ function readBucket(context, target, since, source, reach, learned) {
 }
 
 // One page of a bucket, read and mapped; any refusal ends the operation in its own words.
-function readPage(context, target, since, source, limit, offset, learned) {
+function readPage(context, target, filters, source, limit, offset, learned) {
   const page = run(context, {
     operation: LIST,
     command: LIST_COMMAND,
     operands: [],
-    flags: target.concat(["--source", source], since, ["--limit", String(limit), "--offset", String(offset)]),
+    flags: target.concat(["--source", source], filters, ["--limit", String(limit), "--offset", String(offset)]),
     learned: learned,
   });
 

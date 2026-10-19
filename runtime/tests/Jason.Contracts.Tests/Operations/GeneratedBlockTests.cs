@@ -22,6 +22,8 @@ public class GeneratedBlockTests
 {
     private const string Begin = "<!-- BEGIN GENERATED properties -->";
     private const string End = "<!-- END GENERATED properties -->";
+    private const string TableBegin = "<!-- BEGIN GENERATED operations -->";
+    private const string TableEnd = "<!-- END GENERATED operations -->";
     private const string Unknown = "schema_keyword_unknown";
 
     /// <summary>
@@ -130,6 +132,28 @@ public class GeneratedBlockTests
         var expected = Render(contract);
 
         Assert.True(found == expected, $"{ContractFiles.Relative(path)} is out of step with its document. The block should read:\n\n{expected}\n");
+    }
+
+    /// <summary>
+    /// The contracts README, docs/contracts/README.md, lists every published operation in one table, rendered from the
+    /// documents and compared whole: the level-one name each is seeded from, what it reaches, the approval it needs and
+    /// what may be done after an ambiguous end — the dangerous readings, as the runtime reads them — and the one line its
+    /// page's title gives it.
+    /// Nothing in the table is written twice, so a document that changes and a table that does not fail here.
+    /// </summary>
+    [Fact]
+    public void The_readme_s_table_of_operations_is_rendered_from_the_documents()
+    {
+        var readme = File.ReadAllText(Path.Combine(ContractFiles.Package, "README.md")).ReplaceLineEndings("\n");
+        var start = readme.IndexOf(TableBegin, StringComparison.Ordinal);
+        var finish = readme.IndexOf(TableEnd, StringComparison.Ordinal);
+
+        Assert.True(start >= 0 && finish > start, "docs/contracts/README.md carries no generated table of the operations.");
+
+        var found = readme[start..(finish + TableEnd.Length)];
+        var expected = OperationsTable();
+
+        Assert.True(found == expected, $"docs/contracts/README.md's table of operations is out of step with the documents. It should read:\n\n{expected}\n");
     }
 
     /// <summary>The delivery contract's page carries a block rendered from its own document, as an operation's does.</summary>
@@ -294,6 +318,40 @@ public class GeneratedBlockTests
         block.Append('\n').Append(End);
 
         return block.ToString();
+    }
+
+    /// <summary>The table of the published operations, in the catalog's own order.</summary>
+    private static string OperationsTable()
+    {
+        var table = new StringBuilder();
+        table.Append(TableBegin).Append('\n');
+        table.Append("<!-- Rendered from each document and its page's title. Edit those; this table follows them. -->\n\n");
+        table.Append("| Operation | Level one | Reach | Approval | After an ambiguous end | What it is |\n|---|---|---|---|---|---|\n");
+        foreach (var contract in OperationCatalog.All)
+        {
+            table.Append("| [`").Append(contract.Id).Append("`](operations/").Append(contract.Id).Append(".md) | `")
+                .Append(contract.L1.Name).Append("` | `")
+                .Append(contract.Reach.Value).Append("` | `")
+                .Append(contract.Approval.Value).Append("` | `")
+                .Append(Name(contract.RepeatAfterAmbiguous)).Append("` | ")
+                .Append(Title(contract.Id)).Append(" |\n");
+        }
+
+        table.Append('\n').Append(TableEnd);
+        return table.ToString();
+    }
+
+    /// <summary>The one line a page's title gives its operation: what follows the name and the dash.</summary>
+    private static string Title(string id)
+    {
+        var path = Path.Combine(ContractFiles.Operations, id + ".md");
+        var first = File.ReadAllText(path).ReplaceLineEndings("\n").Split('\n')[0];
+        var heading = $"# `{id}` — ";
+
+        Assert.True(
+            first.StartsWith(heading, StringComparison.Ordinal) && first.Length > heading.Length,
+            $"{ContractFiles.Relative(path)} opens with '{first}', where its title names the operation and says in one line what it is.");
+        return first[heading.Length..];
     }
 
     private static string Render(Jason.Contracts.Notifications.DeliveryContract contract)

@@ -1,7 +1,7 @@
 // Deliberately in the global namespace with the rest of this program.
 
 /// <summary>
-/// The grammar reply-cli 0.11.0 documents for its eleven work commands: how many ids each takes, which options take a
+/// The grammar reply-cli 0.12.0 documents for its sixteen work commands: how many ids each takes, which options take a
 /// value, and which are switches. An option outside a command's own list is commander's usage error, exit 2.
 /// </summary>
 internal static class Commands
@@ -21,18 +21,26 @@ internal static class Commands
             ["sequence start"] = (1, ["--expect-contacts"], []),
             ["contact-list add-contact"] = (1, ContactOptions, ["--refuse-opted-out"]),
             ["contact opt-out"] = (0, ContactOptions, []),
-            ["inbox list"] = (0, ["--contact-id", "--sequence-id", "--source", "--since", "--limit", "--offset"], []),
+            ["inbox list"] = (0, ["--contact-id", "--sequence-id", "--source", "--channel", "--category-id", "--since", "--limit", "--offset"], []),
             ["inbox get"] = (1, ["--limit", "--offset"], []),
+            ["inbox reply"] = (1, ["--message"], []),
+            ["inbox categories"] = (0, [], []),
+            ["inbox categorize"] = (1, ["--category-id"], ["--clear"]),
+            ["inbox mark-read"] = (1, [], []),
+            ["inbox mark-unread"] = (1, [], []),
         };
+
+    /// <summary>The options that name stdin as their value, which are the only things a command ever reads from there.</summary>
+    private static readonly string[] StdinOptions = ["--contact", "--message"];
 
     public static bool IsKnown(string command) => Grammar.ContainsKey(command);
 
-    /// <summary>Whether the command line names stdin as the contact, which is the only thing it ever reads from there.</summary>
+    /// <summary>Whether the command line names stdin as the contact or as the message, the two things ever read from there.</summary>
     public static bool ReadsStdin(IReadOnlyList<string> rest)
     {
         for (var at = 0; at < rest.Count - 1; at++)
         {
-            if (rest[at] == "--contact" && rest[at + 1] == "-")
+            if (StdinOptions.Contains(rest[at]) && rest[at + 1] == "-")
             {
                 return true;
             }

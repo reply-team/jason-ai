@@ -630,8 +630,12 @@ document's `precondition` says what to do, and they differ on purpose:
   holds, never on a second contact made for them.
 - `enrollment.stop` never creates anybody: a person the provider does not hold takes part in nothing, which
   is a completed stop.
+- `conversation.reply` never creates anybody either: it finds the person through the thread it replies in, and
+  sends nothing unless the thread's person is the work item's — the one pinned, where there is a pin, and in every
+  case the one whose address on the consumed channel is that channel's value.
 - A write about a campaign — `campaign.create`, `campaign.pause`, `campaign.activate` — names no person, and has no
-  contact to find.
+  contact to find; nor does a write about a thread — `conversation.classify`, `conversation.close`,
+  `conversation.reopen` — which names the thread alone.
 
 Once a pin exists nobody matches that person by address again, which is what stops two spellings of one
 address becoming two people.
@@ -766,7 +770,7 @@ recorded rather than the one it disputes.
 
 ### The worked example
 
-`plugins/reply/` is the one to read: a marketplace package that implements all twelve published
+`plugins/reply/` is the one to read: a marketplace package that implements all sixteen published
 operations against a real provider by driving that provider's own command-line program. Its README
 says what each operation maps onto, what the provider will not answer, and which of its claims were
 checked against a live account; its `modules/errors.js` is the whole error table written as data, so
@@ -793,9 +797,10 @@ the user's reputation rather than a retry budget.
 
 What may be done about an ambiguous end is a property of the operation, and every published contract
 states it as `repeat_after_ambiguous`: `safe` for a read, which may simply be asked again, and for a
-reversible control that costs nothing, whose second performance changes nothing — pausing a paused campaign;
-`after_recovery_read` for a write that declares the reading which settles the question; `never` where
-nothing can settle it — and an item that ends that way waits for a human or a manager role. The
+reversible control that costs nothing, whose second performance changes nothing — pausing a paused campaign,
+closing a closed thread; `after_recovery_read` for a write that declares the reading which settles the question;
+`never` where nothing can settle it — `conversation.reply`, a send no read tells apart from another — and an item
+that ends that way waits for a human or a manager role. The
 runtime reads that field and nothing else when it decides; your half is to make the permission true:
 when you are handed an attempt number above 1, perform the declared recovery read before you write
 anything (§7). One exception belongs to neither of you: an answer that arrived and does not satisfy

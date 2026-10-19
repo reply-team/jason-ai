@@ -214,7 +214,10 @@ public static class ProviderOpPreflight
         //
         // The published value is read and the condition beside it is not. A conditional block always states the
         // dangerous reading in `value`; campaign.enroll's condition only decides whether a preview is mandatory,
-        // and a preview is built every time, so there is nothing here for a condition to soften.
+        // and a preview is built every time, so there is nothing here for a condition to soften. Both words a person
+        // gives park the work — `confirm_once` and `confirm_each` — and the loader refuses any other: a work item is
+        // one person, so the decision this parks for is one per item, bound to the composed input, which is what
+        // `confirm_each` asks of every send.
         if (!string.Equals(contract.Approval.Value, Automatic, StringComparison.Ordinal))
         {
             return new PreflightVerdict(

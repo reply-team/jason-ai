@@ -3,7 +3,7 @@
 //     reply [--json] [-q] [--profile <name>] [--team-id <id>] <noun> <verb> [<id>] [options]
 //     reply [--json] [-q] [--profile <name>] [--team-id <id>] api <path> [--method <verb>] [--body -]
 //
-// It stands in for the program from the outside: each work command prints what reply-cli 0.11.0 documents — its
+// It stands in for the program from the outside: each work command prints what reply-cli 0.12.0 documents — its
 // result as JSON on stdout, or one `{"error":…}` line on stderr with exit 1, 2 or 3 — from a small record of what the
 // account holds, so a test can plant a world and read back what happened. It never imitates Reply's API beyond the raw
 // calls the plugin still makes: the contact search, and the list and the create of sequences. A flag this program does not know is a
@@ -16,7 +16,7 @@
 // resolved, long before any account is involved. reply-cli prints the bare version.
 if (args.Length == 1 && (args[0] == "--version" || args[0] == "-v"))
 {
-    await Console.Out.WriteLineAsync("0.11.0");
+    await Console.Out.WriteLineAsync("0.12.0");
     return 0;
 }
 

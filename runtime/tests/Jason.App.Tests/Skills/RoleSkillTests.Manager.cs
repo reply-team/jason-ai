@@ -69,4 +69,21 @@ public partial class RoleSkillTests
         Assert.Contains("**The read itself is not yours to redo.**", skill, StringComparison.Ordinal);
         Assert.Contains("made by `system:dispatcher`", skill, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A reply Jason sends moves its thread, and inbound sync says that move as it says an answer. The manager is told
+    /// how to recognise its own reply — the reply item's result, and the moment the line names — and that nothing
+    /// happened then, so it queues neither a read nor a responder for a message it sent itself.
+    /// </summary>
+    [Fact]
+    public void The_manager_woken_by_its_own_reply_is_told_nothing_happened()
+    {
+        var skill = Flattened("manager");
+
+        Assert.Contains("A reply Jason sends moves its thread too, and the line says it like any other:", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "when the thread's latest message is Jason's own — a `conversation.reply` item of this campaign succeeded for that thread, and the line's `last_activity_at` is not after the `sent_at` its result names — nothing happened, and there is nothing to read or answer. Without a `sent_at` in that result, the read tells.",
+            skill,
+            StringComparison.Ordinal);
+    }
 }

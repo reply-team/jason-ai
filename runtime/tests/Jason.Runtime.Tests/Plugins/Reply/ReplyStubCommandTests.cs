@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 namespace Jason.Runtime.Tests.Plugins.Reply;
 
 /// <summary>
-/// The stand-in as the plugin meets it: the eleven work commands, answered the way reply-cli 0.11.0 documents them —
+/// The stand-in as the plugin meets it: the sixteen work commands, answered the way reply-cli 0.12.0 documents them —
 /// a result on stdout and exit 0, or one <c>{"error":…}</c> line on stderr with exit 1, 2 or 3 — from a small record of
 /// what the account holds. It is a program run from outside, never a model of Reply's API.
 /// </summary>
@@ -21,7 +21,7 @@ public class ReplyStubCommandTests
         var (exit, stdout, _) = await account.RunAsync(["--version"], Ct);
 
         Assert.Equal(0, exit);
-        Assert.Equal("0.11.0", stdout.Trim());
+        Assert.Equal("0.12.0", stdout.Trim());
     }
 
     [Fact]
@@ -368,6 +368,151 @@ public class ReplyStubCommandTests
         Assert.False(read["thread"]!.AsObject().ContainsKey("messages"));
         Assert.Single(read["messages"]!["items"]!.AsArray());
         Assert.True((bool)read["messages"]!["has_more"]!);
+    }
+
+    [Fact]
+    public async Task Inbox_list_filters_by_channel_in_reply_s_spelling_and_by_category()
+    {
+        var linkedIn = Thread();
+        linkedIn["id"] = 502;
+        linkedIn["channel"] = "linkedIn";
+        linkedIn["category"] = new JsonObject { ["id"] = 3, ["name"] = "Interested" };
+        using var account = new ReplyAccount().WithSequence(7, "Q3", "active").WithThread(Thread()).WithThread(linkedIn);
+
+        var (_, onLinkedIn, _) = await account.RunAsync(Line("inbox", "list", "--sequence-id", "7", "--channel", "linkedin"), Ct);
+        Assert.Equal([502], JsonNode.Parse(onLinkedIn)!["items"]!.AsArray().Select(thread => (int)thread!["id"]!));
+
+        var (_, byEmail, _) = await account.RunAsync(Line("inbox", "list", "--sequence-id", "7", "--channel", "email"), Ct);
+        Assert.Equal([501], JsonNode.Parse(byEmail)!["items"]!.AsArray().Select(thread => (int)thread!["id"]!));
+
+        var (_, filed, _) = await account.RunAsync(Line("inbox", "list", "--sequence-id", "7", "--category-id", "3"), Ct);
+        Assert.Equal([502], JsonNode.Parse(filed)!["items"]!.AsArray().Select(thread => (int)thread!["id"]!));
+
+        var (refused, _, said) = await account.RunAsync(Line("inbox", "list", "--sequence-id", "7", "--channel", "sms"), Ct);
+        Assert.Equal(2, refused);
+        Assert.Equal("usage.choice", (string?)Error(said)["code"]);
+    }
+
+    [Fact]
+    public async Task Inbox_reply_takes_its_message_from_stdin_only_and_answers_on_the_thread_s_own_channel()
+    {
+        using var account = new ReplyAccount().WithThread(Thread());
+
+        var (exit, stdout, _) = await account.RunAsync(
+            Line("inbox", "reply", "501", "--message", "-"), """{"body":"Thursday works.","reply_to_message_id":"m2"}""", Ct);
+
+        Assert.Equal(0, exit);
+        var sent = JsonNode.Parse(stdout)!.AsObject();
+        Assert.Equal(("sent", 501, "email"), ((string?)sent["status"], (int)sent["thread_id"]!, (string?)sent["channel"]));
+        Assert.StartsWith("<", (string?)sent["message_id"], StringComparison.Ordinal);
+        Assert.True(DateTimeOffset.TryParse((string?)sent["sent_at"], System.Globalization.CultureInfo.InvariantCulture, out _), $"sent_at is '{sent["sent_at"]}'.");
+        var reply = account.OutboundIn(501)[^1];
+        Assert.Equal(("Thursday works.", "m2"), ((string?)reply["body"], (string?)reply["replyToMessageId"]));
+
+        // The text never rides on the argument list, and nothing but the two fields is taken.
+        var (inline, _, inlineSaid) = await account.RunAsync(Line("inbox", "reply", "501", "--message", """{"body":"x"}"""), Ct);
+        Assert.Equal((2, "usage.message"), (inline, (string?)Error(inlineSaid)["code"]));
+        var (copied, _, copiedSaid) = await account.RunAsync(
+            Line("inbox", "reply", "501", "--message", "-"), """{"body":"x","cc":"lena@example.com"}""", Ct);
+        Assert.Equal((2, "usage.message"), (copied, (string?)Error(copiedSaid)["code"]));
+        Assert.Equal(2, account.OutboundIn(501).Count);
+    }
+
+    [Fact]
+    public async Task Inbox_reply_refuses_before_sending_what_the_thread_cannot_take()
+    {
+        var linkedIn = Thread();
+        linkedIn["id"] = 502;
+        linkedIn["channel"] = "linkedIn";
+        var other = Thread();
+        other["id"] = 503;
+        other["channel"] = "sms";
+        using var account = new ReplyAccount().WithThread(linkedIn).WithThread(other);
+
+        var (toOne, _, toOneSaid) = await account.RunAsync(
+            Line("inbox", "reply", "502", "--message", "-"), """{"body":"Yes.","reply_to_message_id":"m2"}""", Ct);
+        Assert.Equal((1, "inbox.channel_mismatch", "linkedin"), (toOne, (string?)Error(toOneSaid)["code"], (string?)Error(toOneSaid)["details"]!["thread_channel"]));
+
+        var (neither, _, neitherSaid) = await account.RunAsync(Line("inbox", "reply", "503", "--message", "-"), """{"body":"Yes."}""", Ct);
+        Assert.Equal((1, "inbox.channel_mismatch"), (neither, (string?)Error(neitherSaid)["code"]));
+
+        var (missing, _, missingSaid) = await account.RunAsync(Line("inbox", "reply", "999", "--message", "-"), """{"body":"Yes."}""", Ct);
+        Assert.Equal((1, "inbox.thread_not_found", 999), (missing, (string?)Error(missingSaid)["code"], (int)Error(missingSaid)["ids"]!["thread_id"]!));
+
+        Assert.Single(account.OutboundIn(502));
+        Assert.Single(account.OutboundIn(503));
+    }
+
+    [Fact]
+    public async Task Inbox_reply_refuses_an_opted_out_person_and_says_why_a_reply_it_took_could_not_be_delivered()
+    {
+        var limited = Thread();
+        limited["id"] = 502;
+        limited["contact"] = new JsonObject { ["id"] = 1002, ["fullName"] = "Lena Okafor", ["isDeleted"] = false };
+        using var account = new ReplyAccount()
+            .WithContact(1001, "marta@example.com", "Marta", optedOut: true)
+            .WithThread(Thread())
+            .WithThread(limited)
+            .FailsToDeliverIn(502, "linkedInSendingLimitExceeded");
+
+        var (stopped, _, stoppedSaid) = await account.RunAsync(Line("inbox", "reply", "501", "--message", "-"), """{"body":"Yes."}""", Ct);
+        Assert.Equal((1, "contact.opted_out"), (stopped, (string?)Error(stoppedSaid)["code"]));
+
+        var (failed, _, failedSaid) = await account.RunAsync(Line("inbox", "reply", "502", "--message", "-"), """{"body":"Yes."}""", Ct);
+        var error = Error(failedSaid);
+        Assert.Equal(
+            (1, "inbox.send_failed", "inboxThread.threadSendFailed", "linkedInSendingLimitExceeded"),
+            (failed, (string?)error["code"], (string?)error["reply_code"], (string?)error["details"]!["status_code"]));
+        Assert.Single(account.OutboundIn(501));
+        Assert.Single(account.OutboundIn(502));
+    }
+
+    [Fact]
+    public async Task Inbox_categories_lists_the_categories_and_categorize_files_a_thread_or_clears_it()
+    {
+        using var account = new ReplyAccount().WithCategory(3, "Interested").WithCategory(4, "Not interested", reserved: true).WithThread(Thread());
+
+        var (_, listed, _) = await account.RunAsync(Line("inbox", "categories"), Ct);
+        Assert.Equal(["Interested", "Not interested"], JsonNode.Parse(listed)!["items"]!.AsArray().Select(category => (string)category!["name"]!));
+
+        var (filed, filedOut, _) = await account.RunAsync(Line("inbox", "categorize", "501", "--category-id", "3"), Ct);
+        Assert.Equal(0, filed);
+        Assert.Equal("""{"status":"categorized","thread_id":501,"category_id":3}""", JsonNode.Parse(filedOut)!.ToJsonString());
+        Assert.Equal(3, (int)account.ThreadOf(501)["category"]!["id"]!);
+
+        var (cleared, clearedOut, _) = await account.RunAsync(Line("inbox", "categorize", "501", "--clear"), Ct);
+        Assert.Equal(0, cleared);
+        Assert.Equal("""{"status":"cleared","thread_id":501,"category_id":null}""", JsonNode.Parse(clearedOut)!.ToJsonString());
+        Assert.Null(account.ThreadOf(501)["category"]);
+
+        // A live account answers a category it does not hold, on a thread it does, as a missing thread: one 404, and the
+        // thread's code. The thread is left as it was.
+        var (noCategory, _, noCategorySaid) = await account.RunAsync(Line("inbox", "categorize", "501", "--category-id", "9"), Ct);
+        Assert.Equal(
+            (1, "inbox.thread_not_found", 404, "inboxThread.notFound"),
+            (noCategory, (string?)Error(noCategorySaid)["code"], (int)Error(noCategorySaid)["status"]!, (string?)Error(noCategorySaid)["reply_code"]));
+        var (noThread, _, noThreadSaid) = await account.RunAsync(Line("inbox", "categorize", "999", "--category-id", "3"), Ct);
+        Assert.Equal((1, "inbox.thread_not_found"), (noThread, (string?)Error(noThreadSaid)["code"]));
+        var (both, _, bothSaid) = await account.RunAsync(Line("inbox", "categorize", "501", "--category-id", "3", "--clear"), Ct);
+        Assert.Equal((2, "usage.inbox"), (both, (string?)Error(bothSaid)["code"]));
+        Assert.Null(account.ThreadOf(501)["category"]);
+    }
+
+    [Fact]
+    public async Task Mark_read_and_mark_unread_set_the_read_state_outright()
+    {
+        using var account = new ReplyAccount().WithThread(Thread());
+
+        foreach (var (verb, word, read) in new[] { ("mark-read", "read", true), ("mark-read", "read", true), ("mark-unread", "unread", false), ("mark-unread", "unread", false) })
+        {
+            var (exit, stdout, _) = await account.RunAsync(Line("inbox", verb, "501"), Ct);
+            Assert.Equal(0, exit);
+            Assert.Equal($$"""{"status":"{{word}}","thread_id":501}""", JsonNode.Parse(stdout)!.ToJsonString());
+            Assert.Equal(read, (bool)account.ThreadOf(501)["isRead"]!);
+        }
+
+        var (missing, _, said) = await account.RunAsync(Line("inbox", "mark-read", "999"), Ct);
+        Assert.Equal((1, "inbox.thread_not_found"), (missing, (string?)Error(said)["code"]));
     }
 
     [Fact]

@@ -41,7 +41,8 @@ public class ContractDocumentTests
     {
         Assert.Equal(
             [
-                "campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "conversation.get", "conversation.list",
+                "campaign.activate", "campaign.create", "campaign.enroll", "campaign.get", "campaign.pause", "conversation.classify",
+                "conversation.close", "conversation.get", "conversation.list", "conversation.reopen", "conversation.reply",
                 "engagement.summarize", "enrollment.list", "enrollment.stop", "list_membership.add", "optout.record",
             ],
             OperationCatalog.All.Select(c => c.Id));
@@ -201,18 +202,61 @@ public class ContractDocumentTests
 
     /// <summary>
     /// The rule above admits a reversible control, which an add to a list also is; so the writes that repeat blind are
-    /// held to an exact set as well. Pausing a paused campaign is the one write whose second performance is the
-    /// provider's own documented no-op; any other write that repeated blind would be a choice made here and nowhere
-    /// else.
+    /// held to an exact set as well. Each one sets a state outright rather than adding to one: pausing a paused campaign
+    /// is the provider's own documented no-op, and filing a thread under a category, or marking it closed or open again,
+    /// leaves the thread exactly as the first performance left it. Any other write that repeated blind would be a choice
+    /// made here and nowhere else.
     /// </summary>
     [Fact]
-    public void The_one_write_that_repeats_blind_is_the_pause()
+    public void The_writes_that_repeat_blind_are_the_ones_that_set_a_state_outright()
     {
         Assert.Equal(
-            ["campaign.pause"],
+            ["campaign.pause", "conversation.classify", "conversation.close", "conversation.reopen"],
             OperationCatalog.All
                 .Where(contract => contract.Reach.Value != "read" && contract.RepeatAfterAmbiguous == RepeatAfterAmbiguous.Safe)
                 .Select(contract => contract.Id));
+    }
+
+    /// <summary>
+    /// The catalogue's one send verb reaches a person with a message, and no read can tell this work item's lost send
+    /// from another one to the same person — so a document seeded from it never repeats an ambiguous end, and declares no
+    /// recovery read that would pretend to settle it. And <c>never</c> is kept for what reaches somebody: an operation
+    /// that only reads or controls has a repeat rule that settles it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Published))]
+    public void A_send_is_never_repeated_after_an_ambiguous_end_and_only_a_send_says_never(string id)
+    {
+        var contract = Contract(id);
+
+        if (contract.L1.Name == "message.send")
+        {
+            Assert.True(
+                contract.RepeatAfterAmbiguous == RepeatAfterAmbiguous.Never,
+                $"{id} is the catalogue's send, and its repeat rule is `{contract.RepeatAfterAmbiguous}`.");
+            Assert.Null(contract.RecoveryRead);
+        }
+
+        if (contract.RepeatAfterAmbiguous == RepeatAfterAmbiguous.Never)
+        {
+            Assert.True(contract.Reach.Value == "act", $"{id} says `never`, but its reach is `{contract.Reach.Value}`.");
+        }
+    }
+
+    /// <summary>
+    /// A reply goes to the thread's own person and to nobody else: an added recipient would be somebody the suppression
+    /// register was never asked about. So the arguments are exactly these four, closed, and no copy or blind copy can be
+    /// named in this version.
+    /// </summary>
+    [Fact]
+    public void A_reply_names_no_recipient_of_its_own()
+    {
+        var arguments = (JsonObject)Contract("conversation.reply").InputSchema["properties"]!["args"]!;
+
+        Assert.Equal(
+            ["body", "channel", "reply_to_message", "thread"],
+            ((JsonObject)arguments["properties"]!).Select(property => property.Key).Order(StringComparer.Ordinal));
+        Assert.False((bool)arguments["additionalProperties"]!);
     }
 
     /// <summary>

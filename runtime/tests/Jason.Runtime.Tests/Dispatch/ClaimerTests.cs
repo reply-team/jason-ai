@@ -864,6 +864,100 @@ public class ClaimerTests
     }
 
     /// <summary>
+    /// `confirm_each`: one decision per item, each its own act against a named person. A reply in a thread is parked
+    /// before anything exists that could send it, with the line a person reads naming who it reaches and carrying the
+    /// whole text; the decision is bound to the composed input that text is part of, and it releases that reply once.
+    /// </summary>
+    [Fact]
+    public async Task A_reply_is_parked_for_its_own_decision_and_runs_under_it_once_a_person_approves()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["conversation.reply"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = Reply(db, campaign, "Thursday at 10 works.");
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using (var parked = database.Open())
+        {
+            Assert.Equal(WorkItemStatus.AwaitingApproval, (await parked.WorkItems.AsNoTracking().SingleAsync(Ct)).Status);
+            Assert.Empty(await parked.Attempts.AsNoTracking().ToListAsync(Ct));
+            var waiting = await parked.Approvals.AsNoTracking().SingleAsync(Ct);
+            Assert.Equal(("conversation.reply", "approval_required"), (waiting.Operation, waiting.Reason));
+            Assert.Equal(
+                "Reply in the provider's thread 501 to ada@example.test by email, from the account that owns the thread and to nobody else: Thursday at 10 works.",
+                (string?)waiting.Preview["summary"]);
+            Assert.Equal("Thursday at 10 works.", (string?)waiting.Subject["input"]!["args"]!["body"]);
+        }
+
+        var approval = await Decide(db, ApprovalStatus.Approved);
+
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        Assert.Equal((item.PublicId, "conversation.reply"), (work.WorkItemPublicId, work.Plan!.Contract.Id));
+        await using var fresh = database.Open();
+        Assert.Equal(approval.PublicId, Assert.Single(await fresh.Attempts.AsNoTracking().ToListAsync(Ct)).Provenance!.ApprovalId);
+    }
+
+    /// <summary>
+    /// The text is what a person approved. A reply whose text is edited after the decision is another reply, so it
+    /// is parked again for a decision of its own and nothing runs under the first one.
+    /// </summary>
+    [Fact]
+    public async Task A_reply_whose_text_changed_after_the_decision_is_parked_for_a_new_one()
+    {
+        using var harness = new Harness(
+            plugin: TestPlugins.Loaded("stand-in-provider", ["conversation.reply"]),
+            route: new Route("stand-in-provider", null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = Reply(db, campaign, "Thursday at 10 works.");
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        await Decide(db, ApprovalStatus.Approved);
+
+        item.Status = WorkItemStatus.Created;
+        item.Context = new JsonObject { [WorkItemService.InputKey] = Replying("Thursday at 11 works.") };
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        Assert.Empty(await fresh.Attempts.AsNoTracking().ToListAsync(Ct));
+        var approvals = await fresh.Approvals.AsNoTracking().OrderBy(a => a.Id).ToListAsync(Ct);
+        Assert.Equal([ApprovalStatus.Superseded, ApprovalStatus.Pending], approvals.Select(a => a.Status));
+        Assert.Equal("input_changed", approvals[1].Reason);
+        Assert.Equal("Thursday at 11 works.", (string?)approvals[1].Subject["input"]!["args"]!["body"]);
+    }
+
+    /// <summary>A reply in a thread with nothing wrong with it, so the only thing that can stop it is a person.</summary>
+    private static WorkItem Reply(JasonDbContext db, Campaign campaign, string body)
+    {
+        var contact = new Contact { PublicId = PublicId.New("cnt"), FirstName = "Ada", CreatedAt = Noon, UpdatedAt = Noon };
+        contact.Channels.Add(new ContactChannel { Channel = "email", Value = "ada@example.test", IsPrimary = true });
+        db.Contacts.Add(contact);
+
+        var item = WorkItemFactory.NewProviderOp(campaign, "conversation.reply", Noon);
+        item.Contact = contact;
+        item.Context = new JsonObject { [WorkItemService.InputKey] = Replying(body) };
+        db.WorkItems.Add(item);
+        return item;
+    }
+
+    private static JsonObject Replying(string body) => new()
+    {
+        ["channel"] = "email",
+        ["thread"] = new JsonObject { ["external_id"] = "501" },
+        ["body"] = body,
+    };
+
+    /// <summary>
     /// A person's decision, exactly as the API verb will make it: the row is decided and the work it was holding
     /// is let back into the queue. These tests are about what the claim does with that, not about the verb.
     /// </summary>

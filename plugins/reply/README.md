@@ -5,7 +5,7 @@ Reply CLI.
 
 ## What it does
 
-Twelve operations — the whole set this build publishes: seven that write and five that only read.
+Sixteen operations — the whole set this build publishes: eleven that write and five that only read.
 
 | Operation | What it is at Reply |
 |---|---|
@@ -15,12 +15,16 @@ Twelve operations — the whole set this build publishes: seven that write and f
 | `campaign.enroll` | Puts one person into a sequence. Into a live sequence, that is a send. A person already taking part is never moved or added again. |
 | `enrollment.list` | Reads one page of the people a sequence holds, and Reply's count of them. No address is returned. |
 | `engagement.summarize` | Reads a sequence's counts over one window, a row per channel. Counts only: no rate is returned. |
-| `conversation.list` | Reads one page of inbox threads: one person's across the account, or one sequence's. A person is their identifier and the name Reply shows, never an address. |
+| `conversation.list` | Reads one page of inbox threads: one person's across the account, or one sequence's, on one channel or under one of the account's categories where the work item asks. A person is their identifier and the name Reply shows, never an address. |
 | `conversation.get` | Reads one page of one thread's messages, the first sent first: who wrote each, to whom, and the body as Reply holds it. |
 | `campaign.pause` | Pauses one sequence: the incident response. A paused sequence stops sending; pausing one already paused changes nothing. |
 | `campaign.activate` | Starts one sequence sending, or resumes a paused one, for the population a person approved. A different count starts nothing. |
 | `optout.record` | Records that somebody said stop: sets Reply's opt-out flag on the contact it holds under the address, made only when it holds nobody. What they said stays Jason's record. |
 | `enrollment.stop` | Takes one person out of a sequence, once a person approves it. Nobody is created to do it, and the reason stays Jason's record. |
+| `conversation.reply` | Answers the person on an inbox thread, in that thread, once a person approves the text. Nothing is sent unless the thread is theirs and on the channel named; nobody else can be put on it. |
+| `conversation.classify` | Files a thread under one of the account's inbox categories, by its identifier or its name, or takes it out of its category. |
+| `conversation.close` | Marks a thread read: Reply has no closed state, and read is how its inbox shows a thread as worked. |
+| `conversation.reopen` | Marks a thread unread again, so it needs attention. |
 
 A campaign is a **sequence** at Reply and a person is a **contact**. Each operation runs the Reply CLI command made
 for it — `reply sequence add-contact`, `reply inbox list` and the rest, listed under
@@ -33,7 +37,8 @@ the package makes the CLI's raw call, `reply api`, itself.
 **The CLI owns the credential, and Jason never sees it.** Signing in is something you do in your own
 shell, and what it leaves behind stays in the CLI's own profile store: this package declares no
 environment variable, is granted no key, passes none on a command line and reads none. Nothing about a
-person reaches an argument either — a person's details travel on stdin, and so does the name a sequence is given —
+person reaches an argument either — a person's details travel on stdin, and so do the name a sequence is given and
+the text of a reply —
 so what `~/.jason/logs/` records
 of a call is the command line, which carries only Reply's identifiers and flags, the exit code and how long it took.
 
@@ -42,7 +47,7 @@ of a call is the command line, which carries only Reply's identifiers and flags,
 - **The Reply CLI, installed and signed in.** It is a Node program installed with npm, on Node 20 or
   newer; [`reply-team/reply-cli`](https://github.com/reply-team/reply-cli) is where it comes from and
   what documents it. Running `reply auth login` is yours to do, as the person whose account it is.
-- **Version 0.11.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
+- **Version 0.12.0 or newer.** The manifest asks for that, and a reload runs `reply --version` and reads
   the answer. An older CLI makes this plugin `unavailable` with `executable_incompatible`, and work
   routed to it fails at the claim with `plugin_unavailable` rather than running commands an older CLI
   does not have, or answers differently.
@@ -213,8 +218,9 @@ route's binding names them.
 | `sequence get <sequence>` | read | The sequence as Reply holds it: what `campaign.get` answers from, and the read `enrollment.stop` makes of a campaign it names for the first time. |
 | `sequence contacts <sequence> --limit --offset` | read | One page of the people a sequence holds, and Reply's count of them: what `enrollment.list` answers from, and the read `campaign.create` makes of a sequence an earlier attempt may have made, to see that it holds nobody. |
 | `sequence stats <sequence> --preset`, or `--from --to` | read | A sequence's counts over one window: what `engagement.summarize` answers from. |
-| `inbox list --contact-id` or `--sequence-id`, `--source --since --limit --offset` | read | One page of one of Reply's thread buckets, by person or by sequence: what `conversation.list` answers from — the inbox alone for `inbound`, the inbox and the sent threads merged for `all`. |
-| `inbox get <thread> --limit --offset` | read | One thread, its subject, and one page of its messages: what `conversation.get` answers from. |
+| `inbox list --contact-id` or `--sequence-id`, `--source --since --channel --category-id --limit --offset` | read | One page of one of Reply's thread buckets, by person or by sequence: what `conversation.list` answers from — the inbox alone for `inbound`, the inbox and the sent threads merged for `all`. |
+| `inbox get <thread> --limit --offset` | read | One thread, its subject, and one page of its messages: what `conversation.get` answers from, and the read `conversation.reply` makes of the thread's channel and person, one message long, before it sends anything. |
+| `inbox categories` | read | The account's inbox categories, Reply's reserved ones included: what `conversation.classify` matches the category it was given against, by identifier or by name, before it files anything. |
 | `api /v3/contacts/filter --method POST --body -` | read | Reply's contact search by address: the lookup `list_membership.add`, `campaign.enroll` and `optout.record` make for a person with no pin and no first name. A `POST`, and a read all the same. |
 | `api /v3/sequences?top=1000&skip=<n>` | read | Reply's list of sequences, a thousand at a time and read to its end: the names `campaign.create` compares with the one it is to give, before it makes anything. The name is compared by the package and never put on the command line. |
 | `sequence add-contact <sequence>` with `--contact-id` or `--contact -`, `[--start-step] [--ignore-step-delay]` | write | Puts the person into the sequence, importing them first when they are given by their details. Into a live sequence, a send. |
@@ -224,6 +230,9 @@ route's binding names them.
 | `contact-list add-contact <list>` with `--contact-id` or `--contact -`, `--refuse-opted-out` | write | Puts the person on the list, importing them first when they are given by their details, and refuses a person Reply holds as opted out. |
 | `contact opt-out` with `--contact-id` or `--contact -` | write | Sets Reply's opt-out flag for the person, creating them only when Reply holds nobody under the address. This package never clears it. |
 | `api /v3/sequences --method POST --body -` | write | Makes the sequence `campaign.create` answers with: the name and one task step, in the body on stdin. |
+| `inbox reply <thread> --message -` | write | Replies to the thread's person on the thread's own channel, from the account that owns the thread, with the text on stdin. A send that Reply keeps no key on, so a lost answer is never repeated. |
+| `inbox categorize <thread>` with `--category-id` or `--clear` | write | Files the thread under one category, or clears its category: set outright, so a repeat lands on the same state. |
+| `inbox mark-read <thread>`, `inbox mark-unread <thread>` | write | Marks the thread read or unread: what `conversation.close` and `conversation.reopen` are at Reply, set outright. |
 
 ### Endings every operation can meet
 
@@ -303,7 +312,7 @@ When Reply would not count the sequence's people, the page is still answered and
 | When | Code | Class | What to do about it |
 |---|---|---|---|
 | The work item names a person and no Reply contact identifier is pinned for them. Nothing is called. | `contact_not_linked` | permanent | A write that ensures the contact — `list_membership.add` or `campaign.enroll` — is what links them. A read creates nobody. |
-| The pinned contact identifier, or the campaign's, is not a Reply number at all. Nothing is called. | `provider_call_failed` | permanent | The pin is wrong; the trace says which. |
+| The pinned contact identifier, the campaign's, or the category's the read filters by, is not a Reply number at all. Nothing is called. | `provider_call_failed` | permanent | The pin or the category is wrong; the trace says which. |
 | `source: all` asks for a page past the first 1000 threads: `offset` plus `limit` over 1000. Nothing is called. | `provider_call_failed` | permanent | Ask for `source: inbound`, which has no such bound, or for a page within the first 1000. |
 | The inbox is not available to this user or team (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes the inbox. |
 | Reply's answer was longer than `Plugins:Exec:OutputBytes` lets a plugin read from a program. | `provider_answer_too_large` | permanent | Ask for a smaller `limit`, or raise `Plugins:Exec:OutputBytes`. |
@@ -422,6 +431,57 @@ rather than a completed stop. A pinned person needs no such read: the CLI tells 
 Reply's own opt-out is never read: a stop is for exactly the people it would refuse. A person approves every stop
 before it runs, and its work waits while its Jason campaign is paused.
 
+### `conversation.reply`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The identifier is not a Reply thread number, or Reply holds no thread under it that this account may see (`inbox.thread_not_found`). Nothing is sent. | `conversation_not_found` | permanent | Reply by an identifier `conversation.list` returned. |
+| The thread is on another channel than the one `args.channel` names, or on one Reply sends no reply on (`inbox.channel_mismatch` too). Nothing is sent. | `channel_mismatch` | validation | Name the channel the thread is on — `conversation.list` and `conversation.get` say which — and propose the reply again. |
+| The thread is not this person's: its person is not the contact pinned for them, its address or LinkedIn profile is not the channel's value, or it names nobody Reply still holds. Nothing is sent, and nobody is pinned. | `thread_contact_mismatch` | validation | Reply in a thread of this person's, or propose the reply for the person the thread is with. |
+| The text carries `{{`, which Reply may read as a placeholder of its own and fill in. Nothing is called. | `message_invalid` | validation | Write the text without it and propose the reply again. |
+| Reply's own opt-out register holds the thread's person (`contact.opted_out`). Nothing is sent. | `suppressed` | permanent | Nothing, on purpose. |
+| Reply took the reply and could not deliver it (`inbox.send_failed`); Reply's reason for the failed message is in the trace as `provider_status_code`, null where it recorded none. | `delivery_refused` | permanent | A sending limit waits for its window; a disconnected account is connected again at Reply. Then propose the reply again. |
+| The inbox is not available to this user or team (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes the inbox. |
+
+The thread is read first, one message long, for its channel and its person, and nothing is sent unless both agree
+with the work item: the thread is on the channel named, and its person is the one pinned — where there is a pin — and
+in every case the one whose address, or LinkedIn profile, is the channel's value. Jason checked its own suppression
+register for that value before the work was claimed, and the two are compared the way the register keys a value, so
+that check is about exactly the person the reply reaches: an address whatever its case, and a profile link by its
+scheme and host whatever their case, with a fragment and one trailing slash dropped and its path and query exactly.
+Reply answers from the identity that owns the thread, so no sender is named, and no copy or blind copy can be. A person approves every reply before it is sent, and its work
+waits while its Jason campaign is paused. A reply whose answer was lost — the CLI's `outcome.unknown`, or the call cut
+off — may have gone, and it is never sent again: the item stops for a person, with the thread's person pinned so
+whoever looks knows who it was for.
+
+### `conversation.classify`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The identifier is not a Reply thread number, or Reply holds no thread under it that this account may see (`inbox.thread_not_found`) — which is also how Reply answers a category it listed and no longer holds when the filing reaches it. Nothing is filed. | `conversation_not_found` | permanent | File a thread by an identifier `conversation.list` returned; where the thread is there, file it again under a category Reply still lists. |
+| Reply lists no category under the identifier or the name the call carried. Nothing is filed. | `category_not_found` | permanent | Name one of the account's categories: `conversation.list` and `conversation.get` report the ones threads are under. |
+| More than one of the account's categories carries the name, whatever its case. Nothing is filed. | `category_not_unique` | permanent | Name the category by its identifier. |
+| The inbox is not available to this user or team (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes the inbox. |
+
+A category named by its identifier or its name is looked up in `inbox categories` first, so only Reply's number for
+it reaches the command line, and a category Reply does not hold is told apart from a thread it does not hold: Reply
+itself answers a filing under a missing category as if the thread were missing, so the lookup is the only place the two
+can be told apart, and a category that disappears between the lookup and the filing is reported as
+`conversation_not_found`. An entry of the list no thread can be filed under — one with no name, or an identifier that
+is not a Reply number — is passed over. No category at all takes the thread out of the one it is in, with no lookup.
+Either is set outright, so a repeat after a lost answer runs the command again.
+
+### `conversation.close` and `conversation.reopen`
+
+| When | Code | Class | What to do about it |
+|---|---|---|---|
+| The identifier is not a Reply thread number, or Reply holds no thread under it that this account may see (`inbox.thread_not_found`). | `conversation_not_found` | permanent | Close or reopen a thread by an identifier `conversation.list` returned. |
+| The inbox is not available to this user or team (`access.feature_unavailable`). | `feature_unavailable` | permanent | A plan or a role that includes the inbox. |
+
+Reply holds no closed state; read is how its inbox shows a thread as worked. So closing marks the thread read and
+reopening marks it unread, outright and with nothing read first, and the answer is `closed` or `reopened` whatever the
+thread was. A repeat after a lost answer runs the command again. Neither records an outcome or stops outreach.
+
 ## What it cannot do
 
 - **An enrolment never moves or re-adds a person already in the sequence, and that guard is the CLI's.** Reply's own
@@ -524,7 +584,29 @@ before it runs, and its work waits while its Jason campaign is paused.
 - **`conversation.list` takes no unread-only filter and reads no classification.** Every thread says
   whether it is unread, and the order is the provider's, the one that moved last first; what needs
   answering first is a judgement this read does not make, and Reply's categories travel under `vendor`
-  untranslated.
+  untranslated. `conversation.classify` files a thread under one of them, in Reply's own words. What it does filter by —
+  the thread's channel, `thread_channel`, and one of the account's categories by Reply's identifier for it — Reply
+  applies before it pages, so a page with either still says where the next one starts.
+- **A reply Jason sends moves the thread; inbound sync says it as a reply observed once.** Reply's list of threads
+  does not say who wrote a thread's latest message, so after `conversation.reply` the thread is listed as one that moved,
+  and Jason's inbound sync writes its `inbound_reply_observed` line for it, once, as it would for an answer. The manager
+  role reads the thread before it decides anything, and a thread whose latest message is Jason's own reply is nothing
+  to answer.
+- **A reply costs three requests to Reply before its send.** The package reads the thread with `reply inbox get`,
+  which asks for the thread and then for one page of its messages, one message long, to know its channel and its person
+  before anything is sent; and `reply inbox reply` reads the thread once more itself, to send on the thread's own
+  channel. Reply has no call that does both, and against a rate limit the three count.
+- **A LinkedIn profile Reply spells another way refuses the reply.** The thread's person is held to the profile the
+  work item consumes, under the key Jason gives a profile link for its suppression register: its scheme and host
+  whatever their case, a fragment and one trailing slash dropped, its path and query exactly. A link that differs in
+  anything else — the path's case, another scheme, a missing `www.` — is another profile there, so it is another profile
+  here, and the reply fails `thread_contact_mismatch` with nothing sent: the register's check at the claim was about the
+  value the work item consumes, and only that value is reached.
+- **A text carrying `{{` is refused.** Reply writes its placeholders that way, and a reply in a thread may be filled in
+  as one; until a live account shows that Reply sends such a text as written, the package refuses it rather than let
+  something nobody approved go out.
+- **`conversation.classify` does not say what the thread was filed under before.** Saying it would mean reading the
+  whole thread before every filing; the reads report a thread's category.
 - **Only a contact's first reply is read.** Reply marks a contact finished in its sequence at its first
   reply and stops detecting that contact's later replies, so `conversation.list` never lists them and
   Jason's inbound sync says a contact's first reply only.

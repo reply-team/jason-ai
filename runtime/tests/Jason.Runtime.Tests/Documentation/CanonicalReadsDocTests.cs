@@ -79,6 +79,13 @@ public sealed partial class CanonicalReadsDocTests
     [InlineData("| Taken out, never finished |")]
     [InlineData("| A pin the provider no longer holds |")]
     [InlineData("| What a metered write consumed |")]
+    [InlineData("| A send bound to a thread |")]
+    [InlineData("| Nobody else on a reply |")]
+    [InlineData("| A lost send is never repeated |")]
+    [InlineData("| Closing a thread is reading it |")]
+    [InlineData("| `channel_mismatch`, `thread_contact_mismatch` and `delivery_refused` |")]
+    [InlineData("| `message_invalid` |")]
+    [InlineData("| `category_not_found` and `category_not_unique` |")]
     public void The_divergence_file_has_a_row_for_it(string row) =>
         Assert.Contains(row, Source("docs/contracts/divergence-from-l1.md"), StringComparison.Ordinal);
 
@@ -126,7 +133,8 @@ public sealed partial class CanonicalReadsDocTests
     [Theory]
     [InlineData("the stop never creates anybody")]
     [InlineData("the opt-out looks the address up first and creates it only when nobody matches")]
-    [InlineData("The four writes about a person declare `contact_not_found` for it")]
+    [InlineData("Four of the writes about a person declare `contact_not_found` for it")]
+    [InlineData("The fifth, the reply in a thread, declares none")]
     [InlineData("for `enrollment.stop` a pin the provider no longer holds reads as the completed stop it cannot be told apart from")]
     [InlineData("except the stop, which reads it as a person who takes no part")]
     [InlineData("it also covers a lookup by address the plugin could not finish")]
@@ -189,20 +197,26 @@ public sealed partial class CanonicalReadsDocTests
 
     /// <summary>
     /// The approvals section names the operations a person confirms, and exactly those: every operation the catalog
-    /// publishes as `confirm_once`, and none that runs `auto`.
+    /// publishes with an approval other than `auto`, under the word it publishes, and none that runs `auto`.
     /// </summary>
     [Fact]
     public void Work_execution_names_every_operation_a_person_confirms_and_no_other()
     {
         var text = Flat(Source("docs/work-execution.md"));
         var start = text.IndexOf("the one approval a runtime may give itself.", StringComparison.Ordinal);
-        var end = text.IndexOf("`confirm_once`, and work naming", start, StringComparison.Ordinal);
+        var end = text.IndexOf("and work naming any of them is **parked**", start, StringComparison.Ordinal);
         var sentence = text[start..end];
 
         foreach (var contract in OperationCatalog.All)
         {
-            Assert.Equal(contract.Approval.Value == "confirm_once", sentence.Contains($"`{contract.Id}`", StringComparison.Ordinal));
+            Assert.True(
+                (contract.Approval.Value != "auto") == sentence.Contains($"`{contract.Id}`", StringComparison.Ordinal),
+                $"`{contract.Id}` is approved `{contract.Approval.Value}`, and the approvals sentence reads: {sentence}");
         }
+
+        Assert.All(
+            OperationCatalog.All.Where(contract => contract.Approval.Value != "auto").Select(contract => contract.Approval.Value).Distinct(),
+            word => Assert.Contains($"`{word}`", sentence, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -218,6 +232,23 @@ public sealed partial class CanonicalReadsDocTests
         Assert.Contains("`preflight.suppression: not_applicable`", row, StringComparison.Ordinal);
         Assert.NotEmpty(exempt);
         Assert.All(exempt, contract => Assert.Contains($"`{contract.Id}`", row, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// What "ambiguous" costs is told per repeat rule, and the operations that say `never` are named there — read from
+    /// the catalog, so a send published later fails here until the page says so too.
+    /// </summary>
+    [Fact]
+    public void The_routing_page_names_every_operation_that_is_never_repeated()
+    {
+        var text = Flat(Source("docs/routing.md"));
+        var start = text.IndexOf("## 8. What \"ambiguous\" costs, in operator terms", StringComparison.Ordinal);
+        var end = text.IndexOf("## 9.", start, StringComparison.Ordinal);
+        var section = text[start..end];
+        var never = OperationCatalog.All.Where(contract => contract.RepeatAfterAmbiguous == RepeatAfterAmbiguous.Never).ToList();
+
+        Assert.NotEmpty(never);
+        Assert.All(never, contract => Assert.Contains($"`{contract.Id}` says `never`", section, StringComparison.Ordinal));
     }
 
     [Fact]

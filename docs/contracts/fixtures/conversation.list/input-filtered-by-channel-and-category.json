@@ -1,0 +1,21 @@
+{
+  "operation": "conversation.list",
+  "version": 1,
+  "case": "a campaign's LinkedIn threads filed under one of the provider's categories",
+  "input": {
+    "args": {
+      "limit": 20,
+      "offset": 0,
+      "source": "inbound",
+      "thread_channel": "linkedin",
+      "category": { "external_id": "3" }
+    },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    }
+  },
+  "expect": "valid"
+}

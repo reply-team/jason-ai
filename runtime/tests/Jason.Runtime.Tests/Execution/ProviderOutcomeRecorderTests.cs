@@ -27,7 +27,10 @@ public class ProviderOutcomeRecorderTests
 
     private static OperationContract Add => OperationCatalog.Find("list_membership.add")!;
 
-    /// <summary>A published operation read under a rule none of them uses, so <c>never</c> has something to prove it.</summary>
+    /// <summary>
+    /// The add read under <c>never</c>, so the recorder is shown reading the rule rather than the operation: everything
+    /// else about the scene stays the add's, and only the repeat rule differs.
+    /// </summary>
     private static OperationContract Never => Add with { RepeatAfterAmbiguous = RepeatAfterAmbiguous.Never };
 
     private static JsonNode Added(string contact) => new JsonObject

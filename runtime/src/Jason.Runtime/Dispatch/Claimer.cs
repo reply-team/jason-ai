@@ -356,7 +356,10 @@ public sealed class Claimer(
     /// The comparison is between two hashes and nothing else. An approval authorizes its subject until something
     /// supersedes it, so a retriable failure runs again under the same decision — the operator approved an
     /// effect, and a provider timing out did not change what that effect is. What they did not approve is a
-    /// different document, and that is what the hash is for.
+    /// different document, and that is what the hash is for. That holds for <c>confirm_each</c> as for
+    /// <c>confirm_once</c>: the decision is this item's alone and the item is one person, so a retry after a failure
+    /// that sent nothing performs the one act the person approved, and an end that may have sent is never repeated
+    /// by an operation that says so.
     /// </remarks>
     private async Task<Approval?> DecideAsync(JasonDbContext db, WorkItem item, PreflightVerdict verdict, DateTime now, CancellationToken ct)
     {

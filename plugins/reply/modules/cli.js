@@ -210,6 +210,7 @@ function ended(answer, request) {
     if (said.details !== null && typeof said.details === "object") {
       observed.expected = said.details.expected;
       observed.actual = said.details.actual;
+      observed.provider_status_code = typeof said.details.status_code === "string" ? said.details.status_code : undefined;
     }
   }
 

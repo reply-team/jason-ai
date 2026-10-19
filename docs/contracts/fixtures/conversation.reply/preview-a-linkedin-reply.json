@@ -1,0 +1,36 @@
+{
+  "operation": "conversation.reply",
+  "version": 1,
+  "case": "a LinkedIn reply for a person with no pin: the person is named by the profile the reply consumes",
+  "input": {
+    "args": {
+      "channel": "linkedin",
+      "thread": { "external_id": "t_99813" },
+      "body": "Thanks for connecting. Happy to share the pilot results."
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "channels": [{ "channel": "linkedin", "value": "https://www.linkedin.com/in/marta-alvarez", "primary": true }],
+        "external_ids": {}
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "summary": "Reply in the provider's thread t_99813 to https://www.linkedin.com/in/marta-alvarez by linkedin, from the account that owns the thread and to nobody else: Thanks for connecting. Happy to share the pilot results.",
+    "highlights": {
+      "/contacts/0/channels/0/value": "https://www.linkedin.com/in/marta-alvarez",
+      "/args/channel": "linkedin",
+      "/args/thread": { "external_id": "t_99813" },
+      "/args/reply_to_message": null,
+      "/args/body": "Thanks for connecting. Happy to share the pilot results."
+    }
+  }
+}

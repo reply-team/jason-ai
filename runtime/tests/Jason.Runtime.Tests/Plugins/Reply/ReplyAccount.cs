@@ -69,6 +69,7 @@ public sealed class ReplyAccount : IDisposable
     public const string OptOutsFile = "optouts.json";
     public const string StatsFile = "stats.json";
     public const string ThreadsFile = "threads.json";
+    public const string CategoriesFile = "categories.json";
     public const string InstructionsFile = "instructions.json";
     public const string CredentialFile = "credential.json";
 
@@ -386,6 +387,40 @@ public sealed class ReplyAccount : IDisposable
         return Replace(ThreadsFile, thread["id"]!.GetValue<int>(), thread);
     }
 
+    /// <summary>One of the inbox categories a thread can be filed under, as Reply lists them.</summary>
+    public ReplyAccount WithCategory(int id, string name, bool reserved = false) =>
+        Replace(CategoriesFile, id, new JsonObject
+        {
+            ["id"] = id,
+            ["name"] = name,
+            ["color"] = "green",
+            ["isReserved"] = reserved,
+            ["unreadThreadsCount"] = 0,
+        });
+
+    /// <summary>A category entry written exactly as given — one this package could not file a thread under, say.</summary>
+    public ReplyAccount WithCategoryEntry(JsonObject entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        var categories = ReadArray(CategoriesFile);
+        categories.Add(entry);
+        Write(CategoriesFile, categories);
+        return this;
+    }
+
+    /// <summary>
+    /// The thread's next reply is one Reply takes and cannot deliver, for this reason of its own — or for none it gives,
+    /// when the reason is null. The mark is the stand-in's and never shown in an answer.
+    /// </summary>
+    public ReplyAccount FailsToDeliverIn(int thread, string? reason)
+    {
+        var threads = ReadArray(ThreadsFile);
+        var planted = threads.OfType<JsonObject>().Single(existing => existing["id"]!.GetValue<int>() == thread);
+        planted["_sendFails"] = new JsonObject { ["reason"] = reason };
+        Write(ThreadsFile, threads);
+        return this;
+    }
+
     // -------------------------------------------------------------------------------------------------------
     // What it can be told to do instead, through the directory and never through a flag
     // -------------------------------------------------------------------------------------------------------
@@ -621,6 +656,18 @@ public sealed class ReplyAccount : IDisposable
 
     /// <summary>The account's opt-out register: the contact identifiers Reply holds as opted out.</summary>
     public JsonArray OptOuts => ReadArray(OptOutsFile);
+
+    /// <summary>The inbox threads as the account holds them now: what a reply, a category or a read mark changed.</summary>
+    public JsonArray Threads => ReadArray(ThreadsFile);
+
+    /// <summary>One thread as the account holds it now.</summary>
+    public JsonObject ThreadOf(int id) =>
+        Threads.OfType<JsonObject>().Single(thread => thread["id"]!.GetValue<int>() == id);
+
+    /// <summary>A thread's messages this side wrote, in the order the account holds them.</summary>
+    public IReadOnlyList<JsonObject> OutboundIn(int thread) =>
+        [.. (ThreadOf(thread)["messages"] as JsonArray ?? []).OfType<JsonObject>()
+            .Where(message => message["isOutbound"] is JsonValue outbound && outbound.GetValue<bool>())];
 
     /// <summary>Who is on a list right now, which is the only honest answer to "did the add happen at all".</summary>
     public IReadOnlyList<int> MembersOf(int listId) =>

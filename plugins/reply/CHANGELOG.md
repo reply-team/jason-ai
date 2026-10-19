@@ -3,6 +3,31 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.4.0
+
+- Four inbox operations, each through the Reply CLI command made for it, which needs reply-cli 0.12.0 or newer.
+- `conversation.reply` answers the person on a thread, in that thread, with `reply inbox reply`: the text goes on stdin,
+  Reply sends on the thread's own channel from the identity that owns it, and nobody else can be put on it. The thread
+  is read first with `reply inbox get`, one message long, and nothing is sent unless the thread is on the channel the
+  work item names and its person is the work item's — the contact pinned for them where there is a pin, and in every
+  case the one whose address, or LinkedIn profile, is the channel's value, compared as Jason keys the value for its
+  suppression register: an address whatever its case, a profile link by its scheme and host whatever their case, with
+  a fragment and one trailing slash dropped and its path exactly. Nobody is created: the thread's person is pinned once
+  found. A reply costs three requests to Reply before its send: two for `reply inbox get`, and one more read of the
+  thread inside `reply inbox reply`. A text carrying `{{` is refused,
+  `message_invalid`, because Reply may fill it in as a placeholder of its own. A reply Reply took and could not deliver
+  is `delivery_refused`, with Reply's reason in the trace. A reply whose answer was lost is never repeated: the
+  operation's contract says `never`, and the work item stops for a person.
+- `conversation.classify` files a thread under one of the account's inbox categories, by Reply's identifier for it or
+  by its name, matched in this package against `reply inbox categories` and never put on a command line, or takes it
+  out of its category; `reply inbox categorize` sets it outright.
+- `conversation.close` and `conversation.reopen` mark the thread read and unread with `reply inbox mark-read` and
+  `reply inbox mark-unread`: Reply has no closed state, and read is how its inbox shows a thread as worked.
+- `conversation.list` takes `thread_channel` and `category`, passed to every `reply inbox list` it makes as `--channel`
+  and `--category-id`, so Reply filters before it pages. A category identifier that is not a Reply number asks nothing.
+- A reply Jason sends moves the thread, and inbound sync says it as a reply observed once: Reply's list does not say who
+  wrote a thread's latest message.
+
 ## 0.3.2
 
 - `campaign.create` makes the sequence a Jason campaign works with, so nobody has to make it at Reply by hand first. It

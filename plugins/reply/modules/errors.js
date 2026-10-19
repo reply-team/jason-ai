@@ -35,7 +35,11 @@ export const COMMANDS = {
   },
   "inbox get": {
     "kind": "read",
-    "note": "One thread, its subject, and one page of its messages: what conversation.get answers from."
+    "note": "One thread, its subject, and one page of its messages: what conversation.get answers from, and the read conversation.reply makes of the thread's channel and person, one message long, before it sends anything."
+  },
+  "inbox categories": {
+    "kind": "read",
+    "note": "The account's inbox categories, Reply's reserved ones included: what conversation.classify matches the category it was given against, by identifier or by name, before it files anything."
   },
   "api POST /v3/contacts/filter": {
     "kind": "read",
@@ -72,12 +76,37 @@ export const COMMANDS = {
   "api POST /v3/sequences": {
     "kind": "write",
     "note": "Makes the sequence campaign.create answers with: a draft that holds nobody, with one task step for its owner. The name travels in the body, on stdin."
+  },
+  "inbox reply": {
+    "kind": "write",
+    "note": "Replies to the thread's person on the thread's own channel, from the account that owns the thread, with the text on stdin. A send that Reply keeps no key on, so a lost answer is never repeated."
+  },
+  "inbox categorize": {
+    "kind": "write",
+    "note": "Files the thread under one category, or clears its category: set outright, so a repeat lands on the same state."
+  },
+  "inbox mark-read": {
+    "kind": "write",
+    "note": "Marks the thread read, which is what conversation.close is at Reply: set outright, so a repeat changes nothing."
+  },
+  "inbox mark-unread": {
+    "kind": "write",
+    "note": "Marks the thread unread, which is what conversation.reopen is at Reply: set outright, so a repeat changes nothing."
   }
 };
 
 // Which row each of the Reply CLI's error codes is. An operation's own mapping wins over the shared one; a code in
 // neither is `auth.*` (who is calling), `usage.*` (refused before anything was sent), or a refusal this version has
 // no word for. `reply.invalid_request:email` is the row for an invalid request whose fields name the email.
+//
+// `outcome.unknown` is never looked up here for a work command: the CLI answers it with exit 3, and `cli.js` reads an
+// exit 3 by the command's own read/write mark in `COMMANDS` before any code is mapped. Its row says what that ending is;
+// the mark decides it — which is why `inbox reply` being marked a write is what keeps a lost reply from being sent again.
+//
+// `inbox.category_not_found` under `conversation.classify` is kept as a defence and is not reached against a live
+// account: Reply answers a filing under a category it does not hold, on a thread it does, as a missing thread. The
+// package resolves the category from Reply's list first, so that answer comes back only for a category that disappeared
+// between the list and the filing, and it is reported as `conversation_not_found`.
 export const CODES = {
   "shared": {
     "access.denied": "unauthorized",
@@ -153,6 +182,26 @@ export const CODES = {
     },
     "campaign.get": {
       "sequence.not_found": "campaign_not_found"
+    },
+    "conversation.reply": {
+      "inbox.thread_not_found": "conversation_not_found",
+      "inbox.channel_mismatch": "channel_mismatch",
+      "contact.opted_out": "suppressed",
+      "inbox.send_failed": "delivery_refused",
+      "access.feature_unavailable": "feature_not_included"
+    },
+    "conversation.classify": {
+      "inbox.thread_not_found": "conversation_not_found",
+      "inbox.category_not_found": "category_not_found",
+      "access.feature_unavailable": "feature_not_included"
+    },
+    "conversation.close": {
+      "inbox.thread_not_found": "conversation_not_found",
+      "access.feature_unavailable": "feature_not_included"
+    },
+    "conversation.reopen": {
+      "inbox.thread_not_found": "conversation_not_found",
+      "access.feature_unavailable": "feature_not_included"
     }
   }
 };
@@ -366,10 +415,10 @@ export const ROWS = {
         "note": "Reply has never been told about this person through this installation, so there is no thread to read by. A write that ensures the contact — list_membership.add or campaign.enroll — is what links them."
       },
       "identifier_names_nothing": {
-        "when": "The pinned contact identifier, or the campaign's, is not a Reply number at all. Decided before any call.",
+        "when": "The pinned contact identifier, the campaign's, or the category's the call filters by, is not a Reply number at all. Decided before any call.",
         "code": "provider_call_failed",
         "class": "permanent",
-        "note": "The identifier this read would filter by names nothing a Reply account could hold, so nothing was asked. The pin is wrong; the attempt's trace says which one."
+        "note": "The identifier this read would filter by names nothing a Reply account could hold, so nothing was asked. The pin, or the category the work item names, is wrong; the attempt's trace says which one."
       },
       "call_could_not_be_built": {
         "when": "`source` is `all` and `offset` plus `limit` passes 1000. Every thread is Reply's inbox and its sent threads, each read from its first thread a hundred at a time and merged, as far as 1000. Decided before any call.",
@@ -572,6 +621,104 @@ export const ROWS = {
         "note": "The person has no value on the channel the call named, so there is no address to find them by. Name a channel they have."
       }
     },
+    "conversation.reply": {
+      "conversation_not_found": {
+        "when": "The CLI answered `inbox.thread_not_found` to the read of the thread or to the reply, or the identifier is not a Reply thread number, refused without a call.",
+        "code": "conversation_not_found",
+        "class": "permanent",
+        "note": "This account holds no thread under the identifier the work item carries, or none this account may see, so nothing was sent. Reply by an identifier conversation.list returned."
+      },
+      "channel_mismatch": {
+        "when": "The thread, read before anything is sent, is on another channel than the one `args.channel` names, or on one Reply sends no reply on; or the CLI answered `inbox.channel_mismatch`.",
+        "code": "channel_mismatch",
+        "class": "validation",
+        "note": "The thread is not on the channel this work item names, so nothing was sent. Name the channel the thread is on — conversation.list and conversation.get say which — and propose the reply again."
+      },
+      "thread_contact_mismatch": {
+        "when": "The thread, read before anything is sent, is not this person's: its person is not the contact pinned for them, its address on the channel `args.channel` names is not that channel's value, or it names nobody Reply still holds.",
+        "code": "thread_contact_mismatch",
+        "class": "validation",
+        "note": "The thread's person is not the person this work item is about, so nothing was sent and nobody was pinned. Reply in a thread of this person's, or propose the reply for the person the thread is with."
+      },
+      "placeholder_in_the_text": {
+        "when": "The text carries a double opening brace, which Reply may read as a placeholder of its own and fill in. Decided before any call.",
+        "code": "message_invalid",
+        "class": "validation",
+        "note": "The text carries a double opening brace, which Reply may read as a placeholder it fills in for each person, so what would go out might not be the text a person approved. Nothing was sent. Write the text without one and propose the reply again."
+      },
+      "suppressed": {
+        "when": "The CLI answered `contact.opted_out`: Reply's own opt-out register holds the thread's person.",
+        "code": "suppressed",
+        "class": "permanent",
+        "note": "Reply's own opt-out register holds this person, so nothing was sent. This is a refusal on purpose, and the only way past it is the person asking to be reinstated."
+      },
+      "delivery_refused": {
+        "when": "The CLI answered `inbox.send_failed`: Reply took the reply and could not deliver it, and its own reason for the failed message travels in the trace as `provider_status_code`, null where Reply recorded none.",
+        "code": "delivery_refused",
+        "class": "permanent",
+        "note": "Reply took the reply and could not deliver it, so it did not go out. Reply's own reason is in the attempt's trace: a sending limit waits for its window, a disconnected account has to be connected again at Reply. Then propose the reply again."
+      },
+      "feature_not_included": {
+        "when": "The CLI answered `access.feature_unavailable`: the inbox is not available to this user or team.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role does not include the inbox. Signing in again would not change it; a plan or a role that includes it would."
+      }
+    },
+    "conversation.classify": {
+      "conversation_not_found": {
+        "when": "The CLI answered `inbox.thread_not_found` — which Reply also answers for a category it listed and no longer holds when the filing reaches it — or the identifier is not a Reply thread number, refused without a call.",
+        "code": "conversation_not_found",
+        "class": "permanent",
+        "note": "This account holds no thread under the identifier the work item carries, or none this account may see, so nothing was filed."
+      },
+      "category_not_found": {
+        "when": "Reply's list of the account's categories holds none under the identifier or the name the call carried. Nothing is filed. The CLI's `inbox.category_not_found` is mapped here as well, though a live account never answers a filing with it: a category missing at the filing comes back as a missing thread.",
+        "code": "category_not_found",
+        "class": "permanent",
+        "note": "This account holds no inbox category under the identifier or the name the work item carries, so nothing was filed. Name one of the account's categories — conversation.list and conversation.get report the ones threads are under."
+      },
+      "category_not_unique": {
+        "when": "More than one of the account's categories carries the name the call carried, compared exactly and without regard to case. Nothing is filed.",
+        "code": "category_not_unique",
+        "class": "permanent",
+        "note": "More than one of this account's inbox categories carries this name, so picking one would be guessing and nothing was filed. Name the category by its identifier instead."
+      },
+      "feature_not_included": {
+        "when": "The CLI answered `access.feature_unavailable`: the inbox is not available to this user or team.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role does not include the inbox. Signing in again would not change it; a plan or a role that includes it would."
+      }
+    },
+    "conversation.close": {
+      "conversation_not_found": {
+        "when": "The CLI answered `inbox.thread_not_found`, or the identifier is not a Reply thread number, refused without a call.",
+        "code": "conversation_not_found",
+        "class": "permanent",
+        "note": "This account holds no thread under the identifier the work item carries, or none this account may see, so nothing was changed."
+      },
+      "feature_not_included": {
+        "when": "The CLI answered `access.feature_unavailable`: the inbox is not available to this user or team.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role does not include the inbox. Signing in again would not change it; a plan or a role that includes it would."
+      }
+    },
+    "conversation.reopen": {
+      "conversation_not_found": {
+        "when": "The CLI answered `inbox.thread_not_found`, or the identifier is not a Reply thread number, refused without a call.",
+        "code": "conversation_not_found",
+        "class": "permanent",
+        "note": "This account holds no thread under the identifier the work item carries, or none this account may see, so nothing was changed."
+      },
+      "feature_not_included": {
+        "when": "The CLI answered `access.feature_unavailable`: the inbox is not available to this user or team.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role does not include the inbox. Signing in again would not change it; a plan or a role that includes it would."
+      }
+    },
     "optout.record": {
       "contact_not_found": {
         "when": "The CLI answered `contact.not_found` for the pinned contact, or the pin is not a Reply contact number, refused without a call.",
@@ -718,7 +865,7 @@ export function describe(value) {
 
 // What a result of an unexpected shape may say in a failure: the identifiers and words reply-cli's results are
 // documented to carry, and nothing else, because anything else a result held could be part of a person's record.
-const EVIDENCE = ["status", "previous_status", "sequence_id", "list_id", "contact_id", "contacts", "contact_created", "sequence_active"];
+const EVIDENCE = ["status", "previous_status", "sequence_id", "list_id", "contact_id", "contacts", "contact_created", "sequence_active", "thread_id", "channel", "category_id"];
 
 export function evidence(result) {
   const kept = {};
@@ -764,6 +911,8 @@ export function fail(operation, observed, learned) {
     provider_detail: observed.provider_detail === undefined ? undefined : describe(observed.provider_detail),
     // What an answer said about this one person where it could not be read as a result. Reported, never read.
     provider_item: observed.provider_item,
+    // Reply's own reason for a message it took and could not deliver, where it recorded one.
+    provider_status_code: observed.provider_status_code,
     // What this package itself could not do, for the endings that are its own refusal.
     reason: observed.reason,
     retry_after: observed.retry_after,

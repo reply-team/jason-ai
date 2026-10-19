@@ -49,6 +49,18 @@ public sealed record OperationContract(
     int TimeoutMs,
     IReadOnlyList<string> Conformance)
 {
+    /// <summary>The value a person is reached at, in the composed input of an operation about one person.</summary>
+    private const string ReachedValue = "/contacts/0/channels/0/value";
+
+    /// <summary>
+    /// The approvals this build understands, and the only ones a document may state. <c>auto</c> is the one approval a
+    /// runtime may give itself. <c>confirm_once</c> and <c>confirm_each</c> are a person's, and the claim parks work for
+    /// either: one decision per work item, bound to the composed input it would run with. A work item addresses one
+    /// person in this version, so that is what <c>confirm_each</c> asks for — one decision per item, each its own act
+    /// against a named person — and a document stating it is held to naming that person.
+    /// </summary>
+    public static IReadOnlyList<string> ApprovalWords { get; } = ["auto", "confirm_once", "confirm_each"];
+
     /// <summary>
     /// Reads one published document. Absence is never a default: a field the document does not state is an error
     /// naming the file and the field, because the dangerous reading of a missing property is exactly the reading
@@ -100,12 +112,39 @@ public sealed record OperationContract(
             reader.TextList("conformance"));
 
         reader.RefuseAnythingElse();
+        RefuseUnknownApproval(source, contract);
         RefuseUnsupportedFloor(source, contract);
         RefuseUnpairedChannels(source, contract);
         RefuseUncheckedReach(source, contract);
         RefuseUnpausableWork(source, contract);
         RefuseUnaddressablePreview(source, contract);
         return contract;
+    }
+
+    /// <summary>
+    /// The approval is read as one of the words this build knows, or not at all: a word read as whichever of them it
+    /// happened not to equal could ask a person for less than the document means. And <c>confirm_each</c> is a decision
+    /// per person reached, shown the artefact that reaches them, so its document names one person — a required contact,
+    /// no collection — and its preview highlights the value that person is reached at.
+    /// </summary>
+    private static void RefuseUnknownApproval(string source, OperationContract contract)
+    {
+        var approval = contract.Approval.Value;
+        if (!ApprovalWords.Contains(approval, StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"{source}: `approval` is `{approval}`, which this build does not know: an approval is {string.Join(", ", ApprovalWords.Select(word => $"`{word}`"))}, and a word read as one of them could ask a person for less than the document means.");
+        }
+
+        if (string.Equals(approval, "confirm_each", StringComparison.Ordinal)
+            && (contract.Preflight.Contact != ContactRequirement.Required
+                || contract.AcceptsCollection
+                || contract.Preview is null
+                || !contract.Preview.Highlights.Contains(ReachedValue, StringComparer.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                $"{source}: `approval` is `confirm_each`, one decision per person reached, so the document names one person — `preflight.contact` is `required` and `accepts_collection` is `false` — and its preview highlights `{ReachedValue}`, the value that person is reached at.");
+        }
     }
 
     /// <summary>

@@ -1,0 +1,37 @@
+{
+  "operation": "conversation.reply",
+  "version": 1,
+  "case": "a reply that answers one message of the thread: the message it answers is highlighted beside the text",
+  "input": {
+    "args": {
+      "channel": "email",
+      "thread": { "external_id": "t_99812" },
+      "body": "On your first question: yes, the pilot covers both teams.",
+      "reply_to_message": { "external_id": "<m99812@mail.example.com>" }
+    },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "channels": [{ "channel": "email", "value": "marta@example.com", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "summary": "Reply in the provider's thread t_99812 to marta@example.com by email, from the account that owns the thread and to nobody else: On your first question: yes, the pilot covers both teams.",
+    "highlights": {
+      "/contacts/0/channels/0/value": "marta@example.com",
+      "/args/channel": "email",
+      "/args/thread": { "external_id": "t_99812" },
+      "/args/reply_to_message": { "external_id": "<m99812@mail.example.com>" },
+      "/args/body": "On your first question: yes, the pilot covers both teams."
+    }
+  }
+}

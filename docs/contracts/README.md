@@ -42,6 +42,36 @@ docs/contracts/
   events/<name>.md                 the same contract explained, with a generated block
 ```
 
+## The published operations
+
+Every operation this build publishes, rendered from the documents by a test and compared whole, so the table cannot
+say what a document does not. Each value is the one the runtime reads — the dangerous reading, where a document states
+a condition beside it — and the last column is the line the operation's own page opens with.
+
+<!-- BEGIN GENERATED operations -->
+<!-- Rendered from each document and its page's title. Edit those; this table follows them. -->
+
+| Operation | Level one | Reach | Approval | After an ambiguous end | What it is |
+|---|---|---|---|---|---|
+| [`campaign.activate`](operations/campaign.activate.md) | `campaign.activate` | `act` | `confirm_once` | `after_recovery_read` | start a provider campaign sending |
+| [`campaign.create`](operations/campaign.create.md) | `campaign.create` | `control` | `auto` | `after_recovery_read` | make the provider's campaign, as an empty draft |
+| [`campaign.enroll`](operations/campaign.enroll.md) | `campaign.enroll` | `act` | `confirm_once` | `after_recovery_read` | put one person into a provider campaign |
+| [`campaign.get`](operations/campaign.get.md) | `campaign.get` | `read` | `auto` | `safe` | read one campaign from the provider |
+| [`campaign.pause`](operations/campaign.pause.md) | `campaign.pause` | `control` | `auto` | `safe` | stop a provider campaign |
+| [`conversation.classify`](operations/conversation.classify.md) | `conversation.classify` | `control` | `auto` | `safe` | file a thread under one of the provider's categories |
+| [`conversation.close`](operations/conversation.close.md) | `conversation.close` | `control` | `auto` | `safe` | set a thread aside as worked |
+| [`conversation.get`](operations/conversation.get.md) | `conversation.get` | `read` | `auto` | `safe` | read one thread before answering it |
+| [`conversation.list`](operations/conversation.list.md) | `conversation.list` | `read` | `auto` | `safe` | the conversation threads of a person or a campaign |
+| [`conversation.reopen`](operations/conversation.reopen.md) | `conversation.reopen` | `control` | `auto` | `safe` | put a thread back among those that need attention |
+| [`conversation.reply`](operations/conversation.reply.md) | `message.send` | `act` | `confirm_each` | `never` | answer the person on a thread, in that thread |
+| [`engagement.summarize`](operations/engagement.summarize.md) | `engagement.summarize` | `read` | `auto` | `safe` | the provider's counts for a campaign |
+| [`enrollment.list`](operations/enrollment.list.md) | `enrollment.list` | `read` | `auto` | `safe` | who is in a campaign at the provider |
+| [`enrollment.stop`](operations/enrollment.stop.md) | `enrollment.stop` | `control` | `confirm_once` | `after_recovery_read` | take one person out of a provider campaign |
+| [`list_membership.add`](operations/list_membership.add.md) | `list_membership.add` | `control` | `auto` | `after_recovery_read` | put one person on a provider list |
+| [`optout.record`](operations/optout.record.md) | `optout.record` | `control` | `auto` | `after_recovery_read` | record that somebody said stop |
+
+<!-- END GENERATED operations -->
+
 ## The delivery contract
 
 One more document is published here, and it is not a canonical operation:
@@ -84,7 +114,12 @@ neither states `false`, `false` and `null`. The floor is checked when the docume
 `approval` is `auto`, `approval_reason` says why, `preflight.suppression` is `not_applicable` and
 `dispatch.in_paused_campaign` is `runs`, so neither the suppression register nor a paused campaign holds back an
 operation whose not running is the harm: its work starts once nothing else in its campaign is scheduled or processing,
-in its priority order. Seven of these fields — `reach`, `reversibility`, `approval`, `before_repeating`,
+in its priority order. `approval` is one of three words — `auto`, `confirm_once` or `confirm_each` — and a document
+stating any other fails to load. The two a person gives both park the work for one decision per work item, bound to the
+input it would run with; one item is one person, so `confirm_each`, a decision per person reached, asks for no more
+than that, and a document stating it names one person — `preflight.contact` is `required` and `accepts_collection` is
+`false` — and highlights `/contacts/0/channels/0/value`, where that person is reached, in its preview. Seven of these
+fields — `reach`, `reversibility`, `approval`, `before_repeating`,
 `idempotency_key`, `per_item_results` and `cost` — may be a plain value or a **conditional block** of
 `{value, conditional, detail}`, where `value` is always the *dangerous* reading. Every gate reads `value`, so a
 condition can never soften one, and `detail` is what an agent reads to decide.

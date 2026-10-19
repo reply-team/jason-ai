@@ -20,8 +20,8 @@ public class ProviderInterruptionTests
 {
     private const string Safe = "campaign.get";
 
-    /// <summary>An operation whose contract forbids a repeat. Nothing published uses the rule, so this build does.</summary>
-    private const string NeverRepeated = "never.repeated";
+    /// <summary>The published operation whose contract forbids a repeat: a reply that may have gone is never sent again.</summary>
+    private const string NeverRepeated = "conversation.reply";
 
     private static readonly DateTime Start = new(2026, 9, 15, 12, 0, 0, DateTimeKind.Utc);
 
@@ -260,15 +260,10 @@ public class ProviderInterruptionTests
     }
 
     /// <summary>
-    /// The catalog this build publishes, plus one operation it does not: <c>never</c> is part of the contract
-    /// vocabulary and no published operation uses it, so without a contract built here the branch that refuses a
-    /// repeat would have nothing exercising it.
+    /// The catalog this build publishes, and nothing else: the operation that says <c>never</c> is the published reply,
+    /// so the branch that refuses a repeat is exercised by the very document the runtime enforces.
     /// </summary>
-    private static OperationContract? ContractFor(string operation) => operation switch
-    {
-        NeverRepeated => OperationCatalog.Find(Safe)! with { Id = NeverRepeated, RepeatAfterAmbiguous = RepeatAfterAmbiguous.Never },
-        _ => OperationCatalog.Find(operation),
-    };
+    private static OperationContract? ContractFor(string operation) => OperationCatalog.Find(operation);
 
     private sealed class Harness
     {

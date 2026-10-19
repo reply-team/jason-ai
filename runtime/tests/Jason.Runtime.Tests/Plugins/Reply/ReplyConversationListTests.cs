@@ -471,6 +471,69 @@ public class ReplyConversationListTests
     // Planting, composing and invoking
     // -------------------------------------------------------------------------------------------------------
 
+    // -------------------------------------------------------------------------------------------------------
+    // The thread's channel and the provider's category
+    // -------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Both filters are Reply's to apply, before it pages: they travel on every page this read asks for — each of the
+    /// two buckets of every thread included — so the page holds only threads that pass them and `offset` counts those.
+    /// </summary>
+    [Fact]
+    public async Task The_thread_s_channel_and_its_category_travel_on_every_page_read_and_only_their_threads_come_back()
+    {
+        using var account = Planted();
+        account.WithThread(Thread(501, "2026-10-03T07:41:09Z"));
+        account.WithThread(Thread(502, "2026-10-02T07:41:09Z", channel: "linkedIn", category: (3, "Interested")));
+        account.WithThread(Thread(503, "2026-10-01T07:41:09Z", channel: "linkedIn"));
+        account.WithThread(Thread(504, "2026-09-30T07:41:09Z", category: (3, "Interested")));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input(limit: 20, offset: 0, pinned: "7");
+        input["args"]!["thread_channel"] = "linkedin";
+        input["args"]!["category"] = new JsonObject { ["external_id"] = "3" };
+        var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, input));
+
+        Assert.Equal(["502"], answer["items"]!.AsArray().Select(thread => (string)thread!["external_id"]!));
+        Assert.Equal(["inbox", "sent"], account.Calls.Select(call => call.Option("--source")));
+        Assert.All(account.Calls, call => Assert.Equal(("linkedin", "3"), (call.Option("--channel"), call.Option("--category-id"))));
+    }
+
+    [Fact]
+    public async Task An_inbound_page_on_one_channel_is_one_call_with_the_channel_in_its_place()
+    {
+        using var account = Planted();
+        account.WithThread(Thread(501, "2026-10-03T07:41:09Z"));
+        account.WithThread(Thread(502, "2026-10-02T07:41:09Z", channel: "linkedIn"));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input(limit: 20, offset: 0, pinned: "7", source: "inbound");
+        input["args"]!["thread_channel"] = "email";
+        var answer = ReplyOperations.Succeeded(Operation, await InvokeAsync(api, input));
+
+        Assert.Equal(["501"], answer["items"]!.AsArray().Select(thread => (string)thread!["external_id"]!));
+        Assert.Equal(
+            ["--json", "-q", "inbox", "list", "--sequence-id", "7", "--source", "inbox", "--channel", "email", "--limit", "20", "--offset", "0"],
+            Assert.Single(account.Calls).Args);
+    }
+
+    [Fact]
+    public async Task A_category_that_is_not_a_reply_number_names_nothing_and_nothing_is_asked()
+    {
+        using var account = Planted();
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var input = Input(limit: 20, offset: 0, pinned: "7");
+        input["args"]!["category"] = new JsonObject { ["external_id"] = "interested" };
+        var error = ReplyOperations.Failed(Operation, await InvokeAsync(api, input));
+
+        Assert.Equal(("provider_call_failed", FailureClass.Permanent), (error.Code, error.Class));
+        Assert.Empty(account.Calls);
+    }
+
     private static ReplyAccount Planted() =>
         ReplyOperations.Plant(new ReplyAccount())
             .WithContact(1001, ReplyOperations.Address, ReplyOperations.FirstName, lastName: ReplyOperations.LastName)

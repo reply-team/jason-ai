@@ -56,8 +56,24 @@ public class RetriabilityTests
             OutcomeContract.Retriable(FailureClass.Ambiguous, contract)));
 
     /// <summary>
-    /// The contract under test is built here rather than published: the three shipped operations keep the rules
-    /// their documents state, and <c>never</c> — which none of them uses — still has something exercising it.
+    /// A reply in a thread is the published operation that says <c>never</c>: no read tells this work item's lost send
+    /// from another one to the same person, so an ambiguous end stops it for a person, while a failure that says
+    /// nothing was sent is still worth another attempt.
+    /// </summary>
+    [Fact]
+    public void The_published_reply_ends_for_a_person_after_an_ambiguous_end()
+    {
+        var reply = OperationCatalog.Find("conversation.reply");
+
+        Assert.NotNull(reply);
+        Assert.Equal(RepeatAfterAmbiguous.Never, reply.RepeatAfterAmbiguous);
+        Assert.False(OutcomeContract.Retriable(FailureClass.Ambiguous, reply));
+        Assert.True(OutcomeContract.Retriable(FailureClass.Transient, reply));
+    }
+
+    /// <summary>
+    /// The contract under test is built here rather than published, so every rule has its row whichever documents use
+    /// it, read from one operation that differs only in the rule.
     /// </summary>
     private static OperationContract ContractWith(RepeatAfterAmbiguous rule) =>
         OperationCatalog.Find("campaign.get")! with { RepeatAfterAmbiguous = rule };

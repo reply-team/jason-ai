@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 // Deliberately in the global namespace with the rest of this program.
 
 /// <summary>
-/// The eleven work commands, answered as reply-cli 0.11.0 documents them, from the same files the account keeps. What
+/// The sixteen work commands, answered as reply-cli 0.12.0 documents them, from the same files the account keeps. What
 /// each one answers is reply-cli's contract — its result, its error code, its exit code — and never how reply-cli gets
 /// there: no Reply endpoint is imitated here.
 /// </summary>
@@ -94,6 +94,11 @@ internal static partial class Account
         "contact opt-out" => ContactOptOut(root, line, stdin),
         "inbox list" => InboxList(root, line),
         "inbox get" => InboxGet(root, line),
+        "inbox reply" => InboxReply(root, line, stdin),
+        "inbox categories" => InboxCategories(root),
+        "inbox categorize" => InboxCategorize(root, line),
+        "inbox mark-read" => InboxMark(root, line, read: true),
+        "inbox mark-unread" => InboxMark(root, line, read: false),
         _ => throw new InvalidOperationException($"No handler for '{command}'."),
     };
 
@@ -618,6 +623,27 @@ internal static partial class Account
             return Refused("usage.choice", $"--source must be one of: {string.Join(", ", Sources)}.", exit: 2);
         }
 
+        // The CLI's channel words, and Reply's spelling of each, which is what a thread carries.
+        string? channel = null;
+        if (line.Option("--channel") is { } named)
+        {
+            if (!InboxChannels.TryGetValue(named, out channel))
+            {
+                return Refused("usage.choice", $"--channel must be one of: {string.Join(", ", InboxChannels.Keys)}.", exit: 2);
+            }
+        }
+
+        int? category = null;
+        if (line.Option("--category-id") is { } filed)
+        {
+            if (IdOf(filed) is not { } categoryId)
+            {
+                return BadId("--category-id");
+            }
+
+            category = categoryId;
+        }
+
         DateTimeOffset? since = null;
         if (line.Option("--since") is { } raw)
         {
@@ -654,6 +680,8 @@ internal static partial class Account
             .Where(thread => person is null || (thread["contact"]?["id"] is JsonValue id && id.GetValue<int>() == person))
             .Where(thread => sequence is null || (thread["sequence"]?["id"] is JsonValue id && id.GetValue<int>() == sequence))
             .Where(thread => source switch { "inbox" => Inbound(thread), "sent" => LatestOutbound(thread), _ => false })
+            .Where(thread => channel is null || Text(thread, "channel") == channel)
+            .Where(thread => category is null || (thread["category"]?["id"] is JsonValue id && id.GetValue<int>() == category))
             .Where(thread => since is null || LastActivity(thread) >= since)
             .OrderByDescending(LastActivity)
             .Select(thread => (JsonNode)Listed(thread))
@@ -1029,7 +1057,7 @@ internal static partial class Account
     private static JsonObject? IdsOf(JsonObject result)
     {
         var ids = new JsonObject();
-        foreach (var name in new[] { "sequence_id", "contact_id", "list_id" })
+        foreach (var name in new[] { "sequence_id", "contact_id", "list_id", "thread_id" })
         {
             if (result[name] is JsonValue value && value.TryGetValue<int>(out var id))
             {

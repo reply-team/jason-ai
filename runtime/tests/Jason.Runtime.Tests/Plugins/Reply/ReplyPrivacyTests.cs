@@ -380,6 +380,97 @@ public class ReplyPrivacyTests
         }
     }
 
+    /// <summary>
+    /// The inbox's writes carry what a person wrote and chose: the text of a reply, and the name of a category. The text
+    /// travels once, on the reply's stdin, the name never leaves the package — it is matched against Reply's list, and
+    /// only Reply's number for the category reaches a command line — and the person's address, which the thread's own
+    /// read brings back, is compared and dropped. None of them reaches an argument, a diagnostic or a log.
+    /// Each corpus is shown to hold what did travel, so a value that had gone there would be found.
+    /// </summary>
+    [Fact]
+    public async Task What_a_reply_says_and_the_category_it_names_reach_no_argument_diagnostic_or_log()
+    {
+        const string Address = "ottoline.marker@example.com";
+        const string Text = "Text-marker-7d2e Thursday at 10 works.";
+        const string CategoryName = "Category-marker-91fa";
+
+        var thread = ReplyConversationListTests.Thread(501, "2026-10-03T07:41:09Z");
+        thread["contact"]!["email"] = Address;
+        using var account = new ReplyAccount().WithCategory(3, CategoryName).WithThread(thread);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var campaign = new JsonObject
+        {
+            ["id"] = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+            ["name"] = "Q3 LatAm founders",
+            ["status"] = "active",
+            ["external_ids"] = new JsonObject { ["campaign"] = "7" },
+        };
+        var writes = new (string Operation, JsonObject Input)[]
+        {
+            ("conversation.reply", new JsonObject
+            {
+                ["args"] = new JsonObject
+                {
+                    ["channel"] = "email",
+                    ["thread"] = new JsonObject { ["external_id"] = "501" },
+                    ["body"] = Text,
+                },
+                ["contacts"] = new JsonArray(new JsonObject
+                {
+                    ["id"] = "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+                    ["channels"] = new JsonArray(new JsonObject { ["channel"] = "email", ["value"] = Address, ["primary"] = true }),
+                    ["external_ids"] = new JsonObject(),
+                }),
+                ["campaign"] = campaign.DeepClone(),
+                ["idempotency_key"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRS",
+            }),
+            ("conversation.classify", new JsonObject
+            {
+                ["args"] = new JsonObject
+                {
+                    ["thread"] = new JsonObject { ["external_id"] = "501" },
+                    ["category"] = new JsonObject { ["name"] = CategoryName },
+                },
+                ["campaign"] = campaign.DeepClone(),
+                ["idempotency_key"] = "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRT",
+            }),
+        };
+
+        foreach (var (operation, input) in writes)
+        {
+            ReplyOperations.Succeeded(operation, await ReplyOperations.InvokeAsync(api, operation, input, Ct));
+        }
+
+        Assert.Equal(["inbox get 501", "inbox reply 501", "inbox categories", "inbox categorize 501"], Paths(account));
+        Assert.Equal(Text, (string?)JsonNode.Parse(account.Calls[1].Body!)!["body"]);
+        foreach (var call in account.Calls)
+        {
+            var arguments = string.Join(' ', call.Args);
+            foreach (var value in new[] { Text, CategoryName, Address })
+            {
+                Assert.DoesNotContain(value, arguments, StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (call.Command != "inbox reply")
+            {
+                Assert.Null(call.Body);
+            }
+        }
+
+        var diagnostics = ReadAll(api.Paths.PluginWorkDirectory);
+        Assert.Contains("\"exec\"", diagnostics, StringComparison.Ordinal);
+        await api.Runtime.StopAsync();
+        var logs = ReadAll(api.Paths.LogsDirectory);
+        Assert.Contains("conversation.reply", logs, StringComparison.Ordinal);
+        foreach (var value in new[] { Text, CategoryName, Address })
+        {
+            Assert.DoesNotContain(value, diagnostics, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(value, logs, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     /// <summary>Everything one invocation answered, whichever way it ended, as one string to look through.</summary>
     private static string Answered(PluginInvocationResult result) => result.Outcome switch
     {

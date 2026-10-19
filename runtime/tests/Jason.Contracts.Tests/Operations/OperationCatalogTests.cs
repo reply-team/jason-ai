@@ -400,6 +400,62 @@ public class OperationCatalogTests
         return document;
     }
 
+    /// <summary>
+    /// The approval is a closed vocabulary: `auto`, which a runtime may give itself, and the two a person gives. A word
+    /// outside it is refused by name rather than read as whichever of them it happens not to equal, because reading a
+    /// stricter word as a looser one would ask a person for less than the document means.
+    /// </summary>
+    [Theory]
+    [InlineData("\"confirm_twice\"")]
+    [InlineData("\"none\"")]
+    [InlineData("""{ "value": "confirm_every_attempt", "conditional": true, "detail": "a word this build has never read." }""")]
+    public void An_approval_outside_the_three_words_this_build_knows_is_refused_by_name(string approval)
+    {
+        var document = (JsonObject)JsonNode.Parse(Minimal())!;
+        document["approval"] = JsonNode.Parse(approval);
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("campaign.get.json", document));
+
+        Assert.Contains("`approval`", error.Message, StringComparison.Ordinal);
+        Assert.Contains("`confirm_each`", error.Message, StringComparison.Ordinal);
+        Assert.Equal(["auto", "confirm_once", "confirm_each"], OperationContract.ApprovalWords);
+    }
+
+    /// <summary>
+    /// `confirm_each` is one decision per item, each its own act against a named person, shown the artefact that reaches
+    /// them. So a document that says it names one person — a required contact, no collection — and its preview highlights
+    /// the value that person is reached at. The published reply does; take either away and the document is refused.
+    /// </summary>
+    [Theory]
+    [InlineData("contact")]
+    [InlineData("accepts_collection")]
+    [InlineData("preview")]
+    public void A_decision_per_person_names_the_one_person_it_reaches(string taken)
+    {
+        var document = (JsonObject)JsonNode.Parse(File.ReadAllText(Path.Combine(ContractFiles.Operations, "conversation.reply.json")))!;
+        Assert.Equal("confirm_each", (string?)document["approval"]);
+        Assert.NotNull(OperationContract.Parse("conversation.reply.json", document.DeepClone()));
+
+        if (taken == "contact")
+        {
+            document["preflight"]!["contact"] = "optional";
+        }
+        else if (taken == "accepts_collection")
+        {
+            document["accepts_collection"] = true;
+        }
+        else
+        {
+            var highlights = document["preview"]!["highlights"]!.AsArray();
+            highlights.Remove(highlights.Single(pointer => (string?)pointer == "/contacts/0/channels/0/value"));
+        }
+
+        var error = Assert.Throws<InvalidOperationException>(() => OperationContract.Parse("conversation.reply.json", document));
+
+        Assert.Contains("`confirm_each`", error.Message, StringComparison.Ordinal);
+        Assert.Contains("/contacts/0/channels/0/value", error.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>The smallest document that satisfies every field, used to prove what happens when one is taken away.</summary>
     private static string Minimal() =>
         """

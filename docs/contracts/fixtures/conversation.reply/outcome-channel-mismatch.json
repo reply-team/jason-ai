@@ -1,0 +1,21 @@
+{
+  "operation": "conversation.reply",
+  "version": 1,
+  "case": "a reply by email to a thread on LinkedIn: nothing is sent",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "validation",
+      "code": "channel_mismatch",
+      "message": "The thread is on LinkedIn and the call names email, so nothing was sent.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": { "duration_ms": 400, "exec_calls": 1, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "validation", "retriable": false }
+}
