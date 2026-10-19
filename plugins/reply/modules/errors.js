@@ -13,9 +13,8 @@
 // names it, and every mapped code to a row that exists. There is no second copy of it anywhere. Keep editing them as
 // JSON.
 
-// Every command this package runs, and whether it is a read or a write. The raw calls are the contact search a list
-// add, an enrolment or an opt-out makes for a person who has no pin and no first name — a POST, and a read all the
-// same — and the list and the create of sequences, for which reply-cli has no command.
+// Every command this package runs, and whether it is a read or a write. Every one is a work command: the package makes
+// no raw call, so nothing here starts `api`, and a test holds the table to that.
 export const COMMANDS = {
   "sequence get": {
     "kind": "read",
@@ -35,15 +34,31 @@ export const COMMANDS = {
   },
   "inbox get": {
     "kind": "read",
-    "note": "One thread, its subject, and one page of its messages: what conversation.get answers from."
+    "note": "One thread, its subject, and one page of its messages: what conversation.get answers from, and the read conversation.reply makes of the thread's channel and person, one message long, before it sends anything."
   },
-  "api POST /v3/contacts/filter": {
+  "inbox categories": {
     "kind": "read",
-    "note": "Reply's contact search by address: the lookup list_membership.add, campaign.enroll and optout.record make for a person with no pin and no first name. A POST, and a read all the same."
+    "note": "The account's inbox categories, Reply's reserved ones included: what conversation.classify matches the category it was given against, by identifier or by name, before it files anything."
   },
-  "api GET /v3/sequences": {
+  "contact get": {
     "kind": "read",
-    "note": "Reply's list of sequences, a thousand at a time and read to its end: the names campaign.create compares with the one it is to give, before it makes anything. The name is compared here and never put on a command line."
+    "note": "One contact by its id, as Reply holds it: the read contact.delete makes before it deletes anything, of whether Reply still holds the contact and whether it holds them as opted out. Two keys are read and nothing is kept."
+  },
+  "contact update": {
+    "kind": "write",
+    "note": "Changes the fields and custom fields stdin names on the contact, by its id; a null clears one and the rest stay. Set outright, so a repeat by the same contact lands on the same values."
+  },
+  "contact delete": {
+    "kind": "write",
+    "note": "Deletes the contact by its id, with its history at Reply: it leaves every sequence and list. Run again after a lost answer, it answers that Reply holds the contact no longer."
+  },
+  "contact find": {
+    "kind": "read",
+    "note": "Reply's exact lookup of one address, an email or a LinkedIn URL, read to its end and creating nobody: how every operation about a person with no pin finds the contact Reply holds for them before anything is written. The address is on stdin."
+  },
+  "sequence list": {
+    "kind": "read",
+    "note": "Every sequence whose whole name is the one on stdin, ignoring case, read to its end: what campaign.create compares with the name it is to give, before it makes anything."
   },
   "sequence add-contact": {
     "kind": "write",
@@ -69,15 +84,42 @@ export const COMMANDS = {
     "kind": "write",
     "note": "Sets Reply's opt-out flag for the person, creating them only when Reply holds nobody under the address."
   },
-  "api POST /v3/sequences": {
+  "sequence create": {
     "kind": "write",
-    "note": "Makes the sequence campaign.create answers with: a draft that holds nobody, with one task step for its owner. The name travels in the body, on stdin."
+    "note": "Makes the sequence campaign.create answers with: a draft that holds nobody, with one task step for its owner. The name travels on stdin."
+  },
+  "inbox reply": {
+    "kind": "write",
+    "note": "Replies to the thread's person on the thread's own channel, from the account that owns the thread, with the text on stdin. A send that Reply keeps no key on, so a lost answer is never repeated."
+  },
+  "inbox categorize": {
+    "kind": "write",
+    "note": "Files the thread under one category, or clears its category: set outright, so a repeat lands on the same state."
+  },
+  "inbox mark-read": {
+    "kind": "write",
+    "note": "Marks the thread read, which is what conversation.close is at Reply: set outright, so a repeat changes nothing."
+  },
+  "inbox mark-unread": {
+    "kind": "write",
+    "note": "Marks the thread unread, which is what conversation.reopen is at Reply: set outright, so a repeat changes nothing."
   }
 };
 
 // Which row each of the Reply CLI's error codes is. An operation's own mapping wins over the shared one; a code in
 // neither is `auth.*` (who is calling), `usage.*` (refused before anything was sent), or a refusal this version has
-// no word for. `reply.invalid_request:email` is the row for an invalid request whose fields name the email.
+// no word for. `reply.invalid_request:email` is the row for an invalid request whose fields name the email, and
+// `reply.refused:inboxThread.invalidInput:RenderingFail` the row for a refusal Reply explained by its own code and by the
+// first word of its sentence, up to the first colon or white space.
+//
+// `outcome.unknown` is never looked up here for a work command: the CLI answers it with exit 3, and `cli.js` reads an
+// exit 3 by the command's own read/write mark in `COMMANDS` before any code is mapped. Its row says what that ending is;
+// the mark decides it — which is why `inbox reply` being marked a write is what keeps a lost reply from being sent again.
+//
+// `inbox.category_not_found` under `conversation.classify` is kept as a defence and is not reached against a live
+// account: Reply answers a filing under a category it does not hold, on a thread it does, as a missing thread. The
+// package resolves the category from Reply's list first, so that answer comes back only for a category that disappeared
+// between the list and the filing, and it is reported as `conversation_not_found`.
 export const CODES = {
   "shared": {
     "access.denied": "unauthorized",
@@ -90,18 +132,20 @@ export const CODES = {
     "reply.invalid_request": "refusal_this_version_has_no_word_for"
   },
   "per_operation": {
+    "campaign.create": {
+      "sequence.list_incomplete": "list_not_finished"
+    },
     "optout.record": {
       "contact.not_found": "contact_not_found",
       "contact.not_unique": "contact_not_unique",
-      "contact.lookup_incomplete": "lookup_not_finished",
       "contact.invalid_email": "invalid_channel_value",
+      "contact.invalid_linkedin_url": "invalid_channel_value",
       "account.contact_limit_reached": "limit_reached",
       "reply.invalid_request:email": "invalid_channel_value"
     },
     "enrollment.stop": {
       "sequence.not_found": "campaign_not_found",
-      "contact.not_unique": "contact_not_unique",
-      "contact.lookup_incomplete": "lookup_not_finished"
+      "contact.not_unique": "contact_not_unique"
     },
     "campaign.enroll": {
       "sequence.not_found": "campaign_not_found",
@@ -110,16 +154,20 @@ export const CODES = {
       "sequence.step_not_found": "call_could_not_be_built",
       "usage.range": "call_could_not_be_built",
       "contact.not_found": "contact_not_found",
+      "contact.not_unique": "contact_not_unique",
       "contact.opted_out": "suppressed",
       "contact.invalid_email": "invalid_channel_value",
+      "contact.invalid_linkedin_url": "invalid_channel_value",
       "account.contact_limit_reached": "limit_reached",
       "reply.invalid_request:email": "invalid_channel_value"
     },
     "list_membership.add": {
       "contact-list.not_found": "list_not_found",
       "contact.not_found": "contact_not_found",
+      "contact.not_unique": "contact_not_unique",
       "contact.opted_out": "suppressed",
       "contact.invalid_email": "invalid_channel_value",
+      "contact.invalid_linkedin_url": "invalid_channel_value",
       "account.contact_limit_reached": "limit_reached",
       "reply.invalid_request:email": "invalid_channel_value"
     },
@@ -153,6 +201,38 @@ export const CODES = {
     },
     "campaign.get": {
       "sequence.not_found": "campaign_not_found"
+    },
+    "conversation.reply": {
+      "inbox.thread_not_found": "conversation_not_found",
+      "inbox.channel_mismatch": "channel_mismatch",
+      "contact.opted_out": "suppressed",
+      "inbox.send_failed": "delivery_refused",
+      "reply.refused:inboxThread.invalidInput:RenderingFail": "text_reply_would_render",
+      "access.feature_unavailable": "feature_not_included"
+    },
+    "conversation.classify": {
+      "inbox.thread_not_found": "conversation_not_found",
+      "inbox.category_not_found": "category_not_found",
+      "access.feature_unavailable": "feature_not_included"
+    },
+    "conversation.close": {
+      "inbox.thread_not_found": "conversation_not_found",
+      "access.feature_unavailable": "feature_not_included"
+    },
+    "conversation.reopen": {
+      "inbox.thread_not_found": "conversation_not_found",
+      "access.feature_unavailable": "feature_not_included"
+    },
+    "contact.delete": {
+      "contact.not_found": "contact_not_found",
+      "access.feature_unavailable": "feature_not_included"
+    },
+    "contact.update": {
+      "contact.not_found": "contact_not_found",
+      "contact.not_unique": "contact_not_unique",
+      "contact.field_not_found": "field_not_found",
+      "reply.invalid_request": "value_refused",
+      "access.feature_unavailable": "feature_not_included"
     }
   }
 };
@@ -189,7 +269,7 @@ export const ROWS = {
       "note": "A write may already have happened at Reply, and no answer says whether it did. Repeating a write can add a person twice or send to them twice, so the attempt is repeated only where the operation's own contract says a repeat is safe, and otherwise the work item stops for a person."
     },
     "reply_not_reached": {
-      "when": "The CLI answered `reply.unavailable`: Reply could not be reached, or a read failed after the CLI's own retries. The CLI never resends a write, so a write that ends this way was never sent.",
+      "when": "The CLI answered `reply.unavailable`: Reply could not be reached, or a read failed after the CLI's own retries — an exact lookup that ran ten pages without an end among them. The CLI never resends a write, so a write that ends this way was never sent.",
       "code": "provider_unavailable",
       "class": "transient",
       "note": "Reply could not be reached, or did not answer a call that changes nothing, so nothing happened there. The runtime repeats the attempt."
@@ -246,10 +326,10 @@ export const ROWS = {
         "note": "Reply made the sequence but answered it as started or archived rather than as a draft. It is linked, so it can be found: look at it at Reply before anything else is done with it."
       },
       "list_not_finished": {
-        "when": "Reply's list of sequences was read to its cap, twenty pages of a thousand, and said there were more. Nothing is made.",
+        "when": "The CLI answered `sequence.list_incomplete`: it read twenty thousand sequences whose names contain this one and Reply said there were more. Nothing is made.",
         "code": "provider_call_failed",
         "class": "permanent",
-        "note": "Reply's list of sequences was read to twenty thousand, twenty pages of a thousand, and Reply said there were more, so whether the name is taken could not be decided, and nothing was made. Make the sequence at Reply and link it with campaign.get."
+        "note": "Reply holds more than twenty thousand sequences whose names contain this one, so whether the name is taken could not be decided, and nothing was made. Make the sequence at Reply and link it with campaign.get."
       }
     },
     "campaign.activate": {
@@ -366,10 +446,10 @@ export const ROWS = {
         "note": "Reply has never been told about this person through this installation, so there is no thread to read by. A write that ensures the contact — list_membership.add or campaign.enroll — is what links them."
       },
       "identifier_names_nothing": {
-        "when": "The pinned contact identifier, or the campaign's, is not a Reply number at all. Decided before any call.",
+        "when": "The pinned contact identifier, the campaign's, or the category's the call filters by, is not a Reply number at all. Decided before any call.",
         "code": "provider_call_failed",
         "class": "permanent",
-        "note": "The identifier this read would filter by names nothing a Reply account could hold, so nothing was asked. The pin is wrong; the attempt's trace says which one."
+        "note": "The identifier this read would filter by names nothing a Reply account could hold, so nothing was asked. The pin, or the category the work item names, is wrong; the attempt's trace says which one."
       },
       "call_could_not_be_built": {
         "when": "`source` is `all` and `offset` plus `limit` passes 1000. Every thread is Reply's inbox and its sent threads, each read from its first thread a hundred at a time and merged, as far as 1000. Decided before any call.",
@@ -430,7 +510,7 @@ export const ROWS = {
         "note": "Reply's own opt-out register holds this person, so they are not added to an outreach list. This is a refusal on purpose, and the only way past it is the person asking to be reinstated."
       },
       "invalid_channel_value": {
-        "when": "The CLI answered `contact.invalid_email`, or `reply.invalid_request` naming the email field; or the person carries no value on the channel the call named, decided before any call.",
+        "when": "The CLI answered `contact.invalid_email` or `contact.invalid_linkedin_url`, or `reply.invalid_request` naming the email field; or the person carries no value on the channel the call named, or names a channel Reply looks nobody up by, decided before any call.",
         "code": "invalid_channel_value",
         "class": "validation",
         "note": "Reply will not accept the address this person carries on the channel the call named. The contact's data has to be corrected; no later attempt would be accepted either."
@@ -442,28 +522,22 @@ export const ROWS = {
         "note": "The account will hold no further contact. A list's own capacity, unlike the account's, publishes no code of its own — a refusal there arrives as an ordinary refusal and is reported as a refusal this version has no word for, rather than guessed into this row."
       },
       "first_name_not_derivable": {
-        "when": "The person has no pin, no first name and no last name, the value on the channel the call named has no text before an `@`, and the lookup by address found nobody Reply holds under it.",
+        "when": "The person has no pin, no first name and no last name, the value on the channel the call named has no text before an `@`, and the exact lookup by address found nobody Reply holds under it.",
         "code": "provider_call_failed",
         "class": "permanent",
         "note": "A first name could not be derived: the person has no first name, no last name and no address to take one from, Reply holds nobody under the value, and Reply creates nobody without a first name, so nothing was added. Give the person a first name in Jason and propose the work again."
       },
       "first_name_derivation_forbidden": {
-        "when": "The person has no pin and no first name, the lookup by address found nobody Reply holds under it, and the route's binding says `derive_first_name: false`.",
+        "when": "The person has no pin and no first name, the exact lookup by address found nobody Reply holds under it, and the route's binding says `derive_first_name: false`.",
         "code": "provider_call_failed",
         "class": "permanent",
         "note": "The route forbids deriving a first name, the person has none, and Reply holds nobody under the address and creates nobody without a first name, so nothing was added. Give the person a first name in Jason, or set `derive_first_name` to true in the route's binding (absent means true), and propose the work again."
       },
       "contact_not_unique": {
-        "when": "The person has no pin and no first name, and the lookup by address, read to its end, found more than one contact whose email equals it, ignoring case.",
-        "code": "provider_call_failed",
+        "when": "The person has no pin, and the CLI's exact lookup of the address answered `contact.not_unique`: more than one contact is held under it.",
+        "code": "contact_not_unique",
         "class": "permanent",
         "note": "Reply holds more than one contact under this address, so picking one would be guessing and nothing was added. A person resolves the duplicate at Reply, then proposes the work again."
-      },
-      "lookup_not_finished": {
-        "when": "The person has no pin and no first name, and the lookup by address read five pages of a hundred and Reply said there were more.",
-        "code": "provider_call_failed",
-        "class": "permanent",
-        "note": "Reply holds more contacts whose address holds this one than one lookup reads, so whether exactly one of them is this person could not be decided, and nothing was added. Give the person a first name in Jason, or a pin, and propose the work again."
       }
     },
     "campaign.enroll": {
@@ -498,7 +572,7 @@ export const ROWS = {
         "note": "Reply's own opt-out register holds this person, so they are not enrolled. This is a refusal on purpose, and the only way past it is the person asking to be reinstated."
       },
       "invalid_channel_value": {
-        "when": "The CLI answered `contact.invalid_email`, or `reply.invalid_request` naming the email field; or the person carries no value on the channel the call named, decided before any call.",
+        "when": "The CLI answered `contact.invalid_email` or `contact.invalid_linkedin_url`, or `reply.invalid_request` naming the email field; or the person carries no value on the channel the call named, or names a channel Reply looks nobody up by, decided before any call.",
         "code": "invalid_channel_value",
         "class": "validation",
         "note": "Reply will not accept the address this person carries on the channel the call named. The contact's data has to be corrected; no later attempt would be accepted either."
@@ -516,28 +590,22 @@ export const ROWS = {
         "note": "The enrollment could not be built from the arguments it was given, so nothing was sent. A Reply step carries no ordering field at all — the steps are a graph of parents with branch labels — so a numbered start position has a sound meaning only while they form a single chain, and the attempt's trace says which reading failed. Ask for the first step, or name a position the sequence really has."
       },
       "first_name_not_derivable": {
-        "when": "The person has no pin, no first name and no last name, the value on the channel the call named has no text before an `@`, and the lookup by address found nobody Reply holds under it.",
+        "when": "The person has no pin, no first name and no last name, the value on the channel the call named has no text before an `@`, and the exact lookup by address found nobody Reply holds under it.",
         "code": "provider_call_failed",
         "class": "permanent",
         "note": "A first name could not be derived: the person has no first name, no last name and no address to take one from, Reply holds nobody under the value, and Reply creates nobody without a first name, so nobody was enrolled. Give the person a first name in Jason and propose the work again."
       },
       "first_name_derivation_forbidden": {
-        "when": "The person has no pin and no first name, the lookup by address found nobody Reply holds under it, and the route's binding says `derive_first_name: false`.",
+        "when": "The person has no pin and no first name, the exact lookup by address found nobody Reply holds under it, and the route's binding says `derive_first_name: false`.",
         "code": "provider_call_failed",
         "class": "permanent",
         "note": "The route forbids deriving a first name, the person has none, and Reply holds nobody under the address and creates nobody without a first name, so nobody was enrolled. Give the person a first name in Jason, or set `derive_first_name` to true in the route's binding (absent means true), and propose the work again."
       },
       "contact_not_unique": {
-        "when": "The person has no pin and no first name, and the lookup by address, read to its end, found more than one contact whose email equals it, ignoring case.",
-        "code": "provider_call_failed",
+        "when": "The person has no pin, and the CLI's exact lookup of the address answered `contact.not_unique`: more than one contact is held under it.",
+        "code": "contact_not_unique",
         "class": "permanent",
         "note": "Reply holds more than one contact under this address, so picking one would be guessing and nobody was enrolled. A person resolves the duplicate at Reply, then proposes the work again."
-      },
-      "lookup_not_finished": {
-        "when": "The person has no pin and no first name, and the lookup by address read five pages of a hundred and Reply said there were more.",
-        "code": "provider_call_failed",
-        "class": "permanent",
-        "note": "Reply holds more contacts whose address holds this one than one lookup reads, so whether exactly one of them is this person could not be decided, and nobody was enrolled. Give the person a first name in Jason, or a pin, and propose the work again."
       }
     },
     "enrollment.stop": {
@@ -554,22 +622,126 @@ export const ROWS = {
         "note": "The identifier pinned for this person names nobody a Reply account could hold, so there is nobody to take out by it. The pin is wrong and has to be cleared."
       },
       "contact_not_unique": {
-        "when": "The CLI answered `contact.not_unique`: more than one contact's email equals the address, ignoring case.",
+        "when": "The CLI answered `contact.not_unique` to the exact lookup this package makes for a person with no pin: more than one contact is held under the address.",
         "code": "contact_not_unique",
         "class": "permanent",
         "note": "Reply holds more than one contact under this address, so picking one would be guessing and nobody was taken out. A person resolves the duplicate at Reply, then proposes the work again."
       },
-      "lookup_not_finished": {
-        "when": "The CLI answered `contact.lookup_incomplete`: more than five hundred contacts hold the address, so its lookup could not be read to its end.",
-        "code": "provider_call_failed",
-        "class": "permanent",
-        "note": "Reply holds more contacts whose address holds this one than one lookup reads, so whether exactly one of them is this person could not be decided, and nobody was taken out — it is never read as a person Reply does not hold. A repeat would read the same pages, so it is not repeated: take the person out at Reply by hand, then check with enrollment.list."
-      },
       "invalid_channel_value": {
-        "when": "The person carries no value on the channel the call named. Decided before any call.",
+        "when": "The person carries no value on the channel the call named, or names a channel Reply looks nobody up by. Decided before any call.",
         "code": "invalid_channel_value",
         "class": "validation",
         "note": "The person has no value on the channel the call named, so there is no address to find them by. Name a channel they have."
+      }
+    },
+    "conversation.reply": {
+      "conversation_not_found": {
+        "when": "The CLI answered `inbox.thread_not_found` to the read of the thread or to the reply, or the identifier is not a Reply thread number, refused without a call.",
+        "code": "conversation_not_found",
+        "class": "permanent",
+        "note": "This account holds no thread under the identifier the work item carries, or none this account may see, so nothing was sent. Reply by an identifier conversation.list returned."
+      },
+      "channel_mismatch": {
+        "when": "The thread, read before anything is sent, is on another channel than the one `args.channel` names, or on one Reply sends no reply on; or the CLI answered `inbox.channel_mismatch`.",
+        "code": "channel_mismatch",
+        "class": "validation",
+        "note": "The thread is not on the channel this work item names, so nothing was sent. Name the channel the thread is on — conversation.list and conversation.get say which — and propose the reply again."
+      },
+      "thread_contact_mismatch": {
+        "when": "The thread, read before anything is sent, is not this person's: its person is not the contact pinned for them, its address on the channel `args.channel` names is not that channel's value, or it names nobody Reply still holds.",
+        "code": "thread_contact_mismatch",
+        "class": "validation",
+        "note": "The thread's person is not the person this work item is about, so nothing was sent and nobody was pinned. Reply in a thread of this person's, or propose the reply for the person the thread is with."
+      },
+      "placeholder_in_the_text": {
+        "when": "The text carries a double opening brace, which Reply may read as a placeholder of its own and fill in. Decided before any call.",
+        "code": "message_invalid",
+        "class": "validation",
+        "note": "The text carries a double opening brace, which Reply may read as a placeholder it fills in for each person, so what would go out might not be the text a person approved. Nothing was sent. Write the text without one and propose the reply again."
+      },
+      "text_reply_would_render": {
+        "when": "The CLI answered `reply.refused` with Reply's code `inboxThread.invalidInput` and a sentence whose first word is `RenderingFail`: Reply read part of the text as a placeholder of its own, could not fill it in, and refused the send.",
+        "code": "message_invalid",
+        "class": "validation",
+        "note": "Reply read part of the text as a placeholder it fills in for each person and could not fill it in, so it refused the reply and nothing was sent: what would have gone out was not the text a person approved. Write the text without anything Reply reads as a placeholder and propose the reply again."
+      },
+      "suppressed": {
+        "when": "The CLI answered `contact.opted_out`: Reply's own opt-out register holds the thread's person.",
+        "code": "suppressed",
+        "class": "permanent",
+        "note": "Reply's own opt-out register holds this person, so nothing was sent. This is a refusal on purpose, and the only way past it is the person asking to be reinstated."
+      },
+      "delivery_refused": {
+        "when": "The CLI answered `inbox.send_failed`: Reply took the reply and could not deliver it, and its own reason for the failed message travels in the trace as `provider_status_code`, null where Reply recorded none.",
+        "code": "delivery_refused",
+        "class": "permanent",
+        "note": "Reply took the reply and could not deliver it, so it did not go out. Reply's own reason is in the attempt's trace: a sending limit waits for its window, a disconnected account has to be connected again at Reply. Then propose the reply again."
+      },
+      "feature_not_included": {
+        "when": "The CLI answered `access.feature_unavailable`: the inbox is not available to this user or team.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role does not include the inbox. Signing in again would not change it; a plan or a role that includes it would."
+      }
+    },
+    "conversation.classify": {
+      "conversation_not_found": {
+        "when": "The CLI answered `inbox.thread_not_found` — which Reply also answers for a category it listed and no longer holds when the filing reaches it — or the identifier is not a Reply thread number, refused without a call.",
+        "code": "conversation_not_found",
+        "class": "permanent",
+        "note": "This account holds no thread under the identifier the work item carries, or none this account may see, so nothing was filed."
+      },
+      "category_not_found": {
+        "when": "Reply's list of the account's categories holds none under the identifier or the name the call carried. Nothing is filed. The CLI's `inbox.category_not_found` is mapped here as well, though a live account never answers a filing with it: a category missing at the filing comes back as a missing thread.",
+        "code": "category_not_found",
+        "class": "permanent",
+        "note": "This account holds no inbox category under the identifier or the name the work item carries, so nothing was filed. Name one of the account's categories — conversation.list and conversation.get report the ones threads are under."
+      },
+      "category_not_unique": {
+        "when": "More than one of the account's categories carries the name the call carried, compared exactly and without regard to case. Nothing is filed.",
+        "code": "category_not_unique",
+        "class": "permanent",
+        "note": "More than one of this account's inbox categories carries this name, so picking one would be guessing and nothing was filed. Name the category by its identifier instead."
+      },
+      "category_that_opts_the_person_out": {
+        "when": "The category the lookup found is Reply's reserved Do not contact — reserved unless Reply lists it as not reserved, and named so whatever its case — however the call named it, by identifier or by name. Decided after the lookup and before any filing.",
+        "code": "category_opts_out",
+        "class": "validation",
+        "note": "Filing a thread under Reply's Do not contact opts the person out at Reply in every sequence, ends their part in each and cancels the emails planned for them, and taking the thread out of the category again undoes none of it, so nothing was filed. Stopping a person is optout.record's path: record the stop with it, and with `jason suppression add` for Jason's own register."
+      },
+      "feature_not_included": {
+        "when": "The CLI answered `access.feature_unavailable`: the inbox is not available to this user or team.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role does not include the inbox. Signing in again would not change it; a plan or a role that includes it would."
+      }
+    },
+    "conversation.close": {
+      "conversation_not_found": {
+        "when": "The CLI answered `inbox.thread_not_found`, or the identifier is not a Reply thread number, refused without a call.",
+        "code": "conversation_not_found",
+        "class": "permanent",
+        "note": "This account holds no thread under the identifier the work item carries, or none this account may see, so nothing was changed."
+      },
+      "feature_not_included": {
+        "when": "The CLI answered `access.feature_unavailable`: the inbox is not available to this user or team.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role does not include the inbox. Signing in again would not change it; a plan or a role that includes it would."
+      }
+    },
+    "conversation.reopen": {
+      "conversation_not_found": {
+        "when": "The CLI answered `inbox.thread_not_found`, or the identifier is not a Reply thread number, refused without a call.",
+        "code": "conversation_not_found",
+        "class": "permanent",
+        "note": "This account holds no thread under the identifier the work item carries, or none this account may see, so nothing was changed."
+      },
+      "feature_not_included": {
+        "when": "The CLI answered `access.feature_unavailable`: the inbox is not available to this user or team.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role does not include the inbox. Signing in again would not change it; a plan or a role that includes it would."
       }
     },
     "optout.record": {
@@ -580,25 +752,19 @@ export const ROWS = {
         "note": "The identifier pinned for this person no longer resolves at Reply — the contact was deleted, or it belongs to another account. The pin has to be cleared before the opt-out can be recorded there."
       },
       "first_name_not_derivable": {
-        "when": "The person has no pin, no first name and no last name, the value on the channel the call named has no text before an `@`, and the lookup by address found nobody Reply holds under it.",
+        "when": "The person has no pin, no first name and no last name, the value on the channel the call named has no text before an `@`, and the exact lookup by address found nobody Reply holds under it.",
         "code": "provider_call_failed",
         "class": "permanent",
         "note": "A first name could not be derived: the person has no first name, no last name and no address to take one from, Reply holds nobody under the value, and Reply creates nobody without a first name, so no contact was made and no flag set. Reply holds nobody under this address, so it cannot reach them there either. Where `jason suppression add` recorded the address, Jason's own register already stops Jason's own reach."
       },
       "contact_not_unique": {
-        "when": "The CLI answered `contact.not_unique`, or this package's own lookup, made for a person with no pin and no first name, read to its end and found more than one contact: more than one contact's email equals the address, ignoring case.",
+        "when": "The CLI answered `contact.not_unique`, to the exact lookup this package makes for a person with no pin or to the opt-out itself: more than one contact is held under the address.",
         "code": "contact_not_unique",
         "class": "permanent",
         "note": "Reply holds more than one contact under this address, so picking one would be guessing and nothing was done. A person resolves the duplicate at Reply, then proposes the work again."
       },
-      "lookup_not_finished": {
-        "when": "The CLI answered `contact.lookup_incomplete`, or this package's own lookup, made for a person with no pin and no first name, read five pages of a hundred and Reply said there were more: more than five hundred contacts hold the address, so the lookup could not be read to its end.",
-        "code": "provider_call_failed",
-        "class": "permanent",
-        "note": "Reply holds more contacts whose address holds this one than one lookup reads, so whether exactly one of them is this person could not be decided, and nothing was done: no contact made, no flag set. A repeat would read the same pages, so it is not repeated: record the opt-out at Reply by hand. Where `jason suppression add` recorded the address, Jason's own register already stops Jason's own reach."
-      },
       "invalid_channel_value": {
-        "when": "The CLI answered `contact.invalid_email`, or `reply.invalid_request` naming the email field; or the person carries no value on the channel the call named, decided before any call.",
+        "when": "The CLI answered `contact.invalid_email` or `contact.invalid_linkedin_url`, or `reply.invalid_request` naming the email field; or the person carries no value on the channel the call named, or names a channel Reply looks nobody up by, decided before any call.",
         "code": "invalid_channel_value",
         "class": "validation",
         "note": "Reply will not accept the address this person carries on the channel the call named, so no contact could be made to record the opt-out on. The contact's data has to be corrected; no later attempt would be accepted either."
@@ -608,6 +774,82 @@ export const ROWS = {
         "code": "limit_reached",
         "class": "permanent",
         "note": "The account will hold no further contact, so the person who said stop could not be made there. Reply never held them under this address, so it cannot reach them there either."
+      }
+    },
+    "contact.delete": {
+      "contact_not_linked": {
+        "when": "The work item names a person and no Reply contact identifier is pinned for them. Decided before any call: a delete works by the pin alone.",
+        "code": "contact_not_linked",
+        "class": "permanent",
+        "note": "Reply has never been told about this person through this installation, so there is no contact this package could be sure is theirs, and a delete is never aimed by an address. Nothing was deleted. Look the person up at Reply, and delete the contact there if that is what is meant."
+      },
+      "contact_not_found": {
+        "when": "A first attempt, and `reply contact get` answered `contact.not_found` for the pin; or the pin is not a Reply contact number, refused without a call. On an attempt after the first, Reply holding nothing under the pin is the delete already done, and answers `already_deleted`.",
+        "code": "contact_not_found",
+        "class": "permanent",
+        "note": "The identifier pinned for this person names no contact this account holds, so nothing was deleted. It may have been deleted at Reply already, or the pin may belong to another account; look at Reply before anything else is done with this person."
+      },
+      "contact_opted_out": {
+        "when": "`reply contact get` answered the contact with `isOptedOut: true`. Nothing is deleted.",
+        "code": "contact_opted_out",
+        "class": "permanent",
+        "note": "Reply holds this person as opted out and keeps that stop on the contact itself, so deleting the contact would erase it, and the address imported again later would be reachable. Nothing was deleted. Leave the contact at Reply; Jason's own register keeps its stop either way."
+      },
+      "feature_not_included": {
+        "when": "The CLI answered `access.feature_unavailable`: Reply says this account's plan or role may not read or delete a contact.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role may not read or delete a contact. Signing in again would not change it; a role or a plan that includes it would."
+      }
+    },
+    "contact.update": {
+      "contact_not_found": {
+        "when": "The CLI answered `contact.not_found` for the pinned contact, or the pin is not a Reply contact number, refused without a call.",
+        "code": "contact_not_found",
+        "class": "permanent",
+        "note": "The identifier pinned for this person no longer resolves at Reply — the contact was deleted, or it belongs to another account — so nothing was changed. The pin has to be cleared before this person can be worked again."
+      },
+      "nobody_under_the_address": {
+        "when": "The person has no pin, and the CLI's exact lookup of the address found nobody Reply holds under it. Nothing is made: an update changes a contact Reply holds.",
+        "code": "contact_not_found",
+        "class": "permanent",
+        "note": "Reply holds nobody under this address, so there is no contact to change, and an update makes none. Enroll the person or put them on a list first — either makes the contact — then propose the update again."
+      },
+      "contact_not_unique": {
+        "when": "The person has no pin, and the CLI's exact lookup of the address answered `contact.not_unique`: more than one contact is held under it.",
+        "code": "contact_not_unique",
+        "class": "permanent",
+        "note": "Reply holds more than one contact under this address, so picking one would be guessing and nothing was changed. A person resolves the duplicate at Reply, then proposes the work again."
+      },
+      "invalid_channel_value": {
+        "when": "The person carries no value on the channel the call named, or names a channel Reply looks nobody up by. Decided before any call.",
+        "code": "invalid_channel_value",
+        "class": "validation",
+        "note": "The person has no value on the channel the call named that Reply could find them by, so nothing was asked. Name a channel they have: an email or a LinkedIn profile."
+      },
+      "field_not_found": {
+        "when": "The CLI answered `contact.field_not_found`: a custom field the arguments name is one the account has none of, whatever its case. Nothing is changed.",
+        "code": "field_not_found",
+        "class": "validation",
+        "note": "This account has no contact custom field under a name the work item gives, so nothing was changed. Name each custom field as the account names it, and propose the update again."
+      },
+      "value_refused": {
+        "when": "The CLI answered `reply.invalid_request`: Reply did not accept a value the arguments give a field, and Reply's names for the fields it refused travel in the trace.",
+        "code": "invalid_field_value",
+        "class": "validation",
+        "note": "Reply did not accept a value this work item gives a field, so nothing was changed; the attempt's trace names the fields. Correct the value and propose the update again."
+      },
+      "custom_field_named_twice": {
+        "when": "The arguments name one custom field twice: the same name, once trimmed, whatever its case. Decided before any call.",
+        "code": "invalid_field_value",
+        "class": "validation",
+        "note": "The work item names one custom field twice, so which value is meant cannot be told and nothing was asked. Name each custom field once and propose the update again."
+      },
+      "feature_not_included": {
+        "when": "The CLI answered `access.feature_unavailable`: Reply says this account's plan or role may not change a contact.",
+        "code": "feature_unavailable",
+        "class": "permanent",
+        "note": "Reply says this account's plan or role may not change a contact. Signing in again would not change it; a role or a plan that includes it would."
       }
     }
   }
@@ -662,6 +904,15 @@ export function rowOf(operation, error) {
     return own[code + ":email"];
   }
 
+  // A refusal Reply explained, by its own code and the first word of its sentence, where the operation has a row for
+  // exactly that one: Reply's code for invalid input covers more causes than any one row could name.
+  if (typeof error.reply_code === "string" && typeof error.detail === "string") {
+    const keyed = code + ":" + error.reply_code + ":" + error.detail.split(/[:\s]/)[0];
+    if (has(own, keyed)) {
+      return own[keyed];
+    }
+  }
+
   if (has(own, code)) {
     return own[code];
   }
@@ -687,18 +938,6 @@ export function codeOf(operation, key) {
   return rowFor(operation, key).code;
 }
 
-// What was seen on the one raw call, in the shape a failure is reported from. Reply's own code is read only where it
-// is a string on an object, because a 401 arrives with an empty body.
-export function observe(call, answer, row) {
-  const data = answer.data;
-  return {
-    call: call,
-    row: row,
-    status: answer.code,
-    provider_code: data !== null && typeof data === "object" && typeof data.code === "string" ? data.code : undefined,
-  };
-}
-
 // What came back, short enough to travel in a failure: a provider's answer is reported rather than interpreted
 // wherever this package has no word for it, and 200 characters is enough to recognise it.
 export function describe(value) {
@@ -718,7 +957,7 @@ export function describe(value) {
 
 // What a result of an unexpected shape may say in a failure: the identifiers and words reply-cli's results are
 // documented to carry, and nothing else, because anything else a result held could be part of a person's record.
-const EVIDENCE = ["status", "previous_status", "sequence_id", "list_id", "contact_id", "contacts", "contact_created", "sequence_active"];
+const EVIDENCE = ["status", "previous_status", "sequence_id", "list_id", "contact_id", "contacts", "contact_created", "sequence_active", "thread_id", "channel", "category_id"];
 
 export function evidence(result) {
   const kept = {};
@@ -731,23 +970,6 @@ export function evidence(result) {
   }
 
   return describe(kept);
-}
-
-// Which shared row the raw call's status belongs in.
-export function statusRow(status, call) {
-  if (status === 401 || status === 403) {
-    return "unauthorized";
-  }
-
-  if (status === 429) {
-    return "rate_limited";
-  }
-
-  if (status >= 500) {
-    return lostAnswerRow(call);
-  }
-
-  return "refusal_this_version_has_no_word_for";
 }
 
 // The one way this package reports a failure. `operation` is the canonical operation being performed; `observed`
@@ -764,6 +986,8 @@ export function fail(operation, observed, learned) {
     provider_detail: observed.provider_detail === undefined ? undefined : describe(observed.provider_detail),
     // What an answer said about this one person where it could not be read as a result. Reported, never read.
     provider_item: observed.provider_item,
+    // Reply's own reason for a message it took and could not deliver, where it recorded one.
+    provider_status_code: observed.provider_status_code,
     // What this package itself could not do, for the endings that are its own refusal.
     reason: observed.reason,
     retry_after: observed.retry_after,

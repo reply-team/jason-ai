@@ -1,0 +1,168 @@
+/* Jason UI design tokens.
+   These names move into the repo as ui/src/styles/tokens.css unchanged when implementation starts.
+   Palette: shadcn's zinc greys, one accent, four status colours. Light mode first. */
+
+:root {
+  /* Type */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --leading: 1.45;
+
+  /* Greys (zinc) */
+  --zinc-50: #fafafa;
+  --zinc-100: #f4f4f5;
+  --zinc-200: #e4e4e7;
+  --zinc-300: #d4d4d8;
+  --zinc-400: #a1a1aa;
+  --zinc-500: #71717a;
+  --zinc-600: #52525b;
+  --zinc-700: #3f3f46;
+  --zinc-800: #27272a;
+  --zinc-900: #18181b;
+
+  /* Surfaces and lines */
+  --bg: #ffffff;
+  --bg-subtle: var(--zinc-50);
+  --bg-muted: var(--zinc-100);
+  --bg-hover: var(--zinc-100);
+  --border: var(--zinc-200);
+  --border-strong: var(--zinc-300);
+
+  /* Text */
+  --text: var(--zinc-900);
+  --text-secondary: var(--zinc-600);
+  --text-muted: var(--zinc-400);
+  --text-inverse: #ffffff;
+
+  /* The one accent: where you are, and what to do next */
+  --accent: #3056d3;
+  --accent-hover: #2847b3;
+  --accent-bg: #eef2fc;
+  --accent-text: #2847b3;
+
+  /* Status: always a glyph and a word, never colour alone */
+  --success: #15803d;
+  --success-bg: #ecfdf3;
+  --danger: #b91c1c;
+  --danger-bg: #fef2f2;
+  --warning: #b45309;
+  --warning-bg: #fffbeb;
+  --running: var(--accent);
+  --running-bg: var(--accent-bg);
+  --inactive: var(--zinc-400);
+  --inactive-bg: var(--zinc-100);
+
+  /* The one primary button, and the only shadow */
+  --primary-bg: var(--zinc-900);
+  --primary-hover: var(--zinc-800);
+  --primary-text: #ffffff;
+  --shadow-dialog: 0 8px 24px rgba(24, 24, 27, .12);
+
+  /* Charts: one hue for magnitude; status colours stay reserved */
+  --chart-1: var(--accent);
+  --chart-grid: var(--zinc-200);
+
+  /* Rhythm */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-sm: 4px;
+  --radius: 6px;
+  --row-h: 36px;
+  --control-h: 28px;
+  --sidebar-w: 220px;
+  --panel-min: 420px;
+
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+
+/* Dark: the same names, darker values. Follows the system unless the page says otherwise. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c0c0e;
+    --bg-subtle: #111114;
+    --bg-muted: #1c1c21;
+    --bg-hover: #1c1c21;
+    --border: #26262b;
+    --border-strong: #3a3a42;
+    --text: #f4f4f5;
+    --text-secondary: #a1a1aa;
+    --text-muted: #6b6b76;
+    --text-inverse: #0c0c0e;
+    --accent: #7b96f0;
+    --accent-hover: #93a9f4;
+    --accent-bg: #1a2347;
+    --accent-text: #a3b6f7;
+    --success: #4ade80;  --success-bg: #0f2a1a;
+    --danger: #f87171;   --danger-bg: #3a1212;
+    --warning: #fbbf24;  --warning-bg: #3a2a08;
+    --inactive: #6b6b76; --inactive-bg: #1c1c21;
+    --primary-bg: #f4f4f5;
+    --primary-hover: #ffffff;
+    --primary-text: #0c0c0e;
+    --shadow-dialog: 0 12px 32px rgba(0, 0, 0, .6);
+    --chart-1: #6a86e8;
+    --chart-grid: #26262b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c0c0e;
+  --bg-subtle: #111114;
+  --bg-muted: #1c1c21;
+  --bg-hover: #1c1c21;
+  --border: #26262b;
+  --border-strong: #3a3a42;
+  --text: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #6b6b76;
+  --text-inverse: #0c0c0e;
+  --accent: #7b96f0;
+  --accent-hover: #93a9f4;
+  --accent-bg: #1a2347;
+  --accent-text: #a3b6f7;
+  --success: #4ade80;  --success-bg: #0f2a1a;
+  --danger: #f87171;   --danger-bg: #3a1212;
+  --warning: #fbbf24;  --warning-bg: #3a2a08;
+  --inactive: #6b6b76; --inactive-bg: #1c1c21;
+  --primary-bg: #f4f4f5;
+  --primary-hover: #ffffff;
+  --primary-text: #0c0c0e;
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, .6);
+  --chart-1: #6a86e8;
+  --chart-grid: #26262b;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  font: 400 var(--text-base) / var(--leading) var(--font-sans);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body { margin: 0; }
+
+a { color: var(--accent-text); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+:focus-visible { outline: none; box-shadow: var(--focus); }
+
+code, .mono { font-family: var(--font-mono); font-size: var(--text-sm); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}

@@ -1,0 +1,62 @@
+{
+  "operation": "approval.get",
+  "case": "pending-with-preview",
+  "request": {
+    "approval_id": "apr_1"
+  },
+  "status": 200,
+  "response": {
+    "id": "apr_1",
+    "work_item_id": "wi_1",
+    "campaign_id": "cmp_1",
+    "operation": "campaign.enroll",
+    "operation_version": 1,
+    "status": "pending",
+    "reason": "approval_required",
+    "subject_hash": "sha256:recorded-1",
+    "subject": {
+      "operation": "campaign.enroll",
+      "contact_id": "cnt_1",
+      "campaign_id": "cmp_1"
+    },
+    "preview": {
+      "intent": "Put Ada Lovelace into the campaign at the provider.",
+      "reach": {
+        "value": "act",
+        "conditional": true,
+        "detail": "bookkeeping until the campaign is live"
+      },
+      "reversibility": {
+        "value": "irreversible",
+        "conditional": true,
+        "detail": null
+      },
+      "cost": {
+        "value": "metered",
+        "conditional": true,
+        "detail": null
+      },
+      "campaign": {
+        "id": "cmp_1",
+        "name": "Autumn outreach"
+      },
+      "contact": {
+        "id": "cnt_1",
+        "name": "Ada Lovelace",
+        "channel": "email",
+        "value": "ada@example.test"
+      }
+    },
+    "plugin_id": "reply",
+    "binding_identity": "sha256:recorded-2",
+    "route_scope": "global_default",
+    "plugin_snapshot_id": "snp_1",
+    "routing_snapshot_id": "rts_1",
+    "requested_at": "2026-10-15T12:00:00.000Z",
+    "decided_at": null,
+    "decided_by": null,
+    "decision_reason": null,
+    "campaign_name": "Autumn outreach",
+    "contact_name": "Ada Lovelace"
+  }
+}

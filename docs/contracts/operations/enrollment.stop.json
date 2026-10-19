@@ -20,13 +20,13 @@
   "meter": null,
   "invariants": ["G1", "G3", "G6", "G8"],
 
-  "preflight": { "contact": "required", "channel": "from_args", "suppression": "not_applicable" },
+  "preflight": { "contact": "required", "channel": "from_args", "suppression": "not_applicable", "provider_contact": "find_only" },
   "dispatch": { "in_paused_campaign": "waits" },
   "contact_projection": {
     "fields": ["id", "first_name", "last_name", "company", "title", "time_zone"],
     "channels": "consumed"
   },
-  "precondition": "Find the provider's own contact without creating one: by `contacts[0].external_ids.contact` when that pin is present, otherwise by the value of the channel named by `args.channel`, compared exactly and without regard to case. A person the provider does not hold takes part in nothing, which is a completed stop.",
+  "precondition": "A person the provider does not hold takes part in nothing, which is a completed stop.",
   "preview": {
     "summary": "Take {/contacts/0/channels/0/value} out of the provider's campaign for Jason's campaign {/campaign/name}, reason {/args/reason/code}. Their history stays; nothing further is sent to them from that campaign.",
     "highlights": [

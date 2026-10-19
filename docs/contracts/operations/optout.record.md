@@ -23,15 +23,18 @@ reads before every write. The four facts are Jason's: the provider holds a yes o
 
 ## Finding the person
 
-1. If `contacts[0].external_ids.contact` is present, that is the provider's identifier for this person. Work by it.
-2. Otherwise look the person up by the value of the channel named by `args.channel`, compared exactly and without
-   regard to case. One contact found is the person, and its identifier comes back in `external_ids.contact`. Nobody
-   found means the provider has never held them: create the contact from that value. More than one found is
-   `contact_not_unique` — picking one would be guessing — and nothing is done.
+`preflight.provider_contact` is `find_or_create`, and for an opt-out the order is the point: the stop must land on the
+contact the provider already holds, never on a second one made for the same address, which would leave the first one
+reachable.
 
-A provider's search may match by resemblance — an address that merely contains this one — so the comparison is
-yours, and it is exact. Read the lookup to its end: a lookup you cannot finish says nothing about a second match,
-so it is refused, and never taken for nobody (which would create a second contact) or for one.
+1. If `contacts[0].external_ids.contact` is present, that is the provider's identifier for this person. Work by it.
+2. Otherwise look the person up by the value of the channel named by `args.channel`. One contact found is the person,
+   and its identifier comes back in `external_ids.contact`. Nobody found means the provider has never held them:
+   create the contact from that value. More than one found is `contact_not_unique` — picking one would be guessing —
+   and nothing is done.
+
+A lookup that cannot be read to its end is refused, never taken for nobody, which would create a second contact.
+[`docs/plugins.md`](../../plugins.md) §7, "The contact proxy rule", says how the lookup compares.
 
 ## The input you receive
 
@@ -88,10 +91,10 @@ attempt may have made is found by a read first, never created again from the per
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `required`, channel `from_args`, suppression `not_applicable` |
+| pre-flight | contact `required`, channel `from_args`, suppression `not_applicable`, provider contact `find_or_create` |
 | in a paused campaign | `runs` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
-| precondition | Find the provider's own contact before recording the opt-out: work by `contacts[0].external_ids.contact` when that pin is present, otherwise look the person up by the value of the channel named by `args.channel`, compared exactly and without regard to case, and create the contact from that value only when the provider holds nobody under it; return the provider's identifier under `external_ids.contact`. |
+| precondition | none |
 | preview a person reads | none |
 | pinned identifiers | `contact` names a contact |
 | recovery read | The contact's opt-out flag at the provider. Where setting the provider's flag is idempotent (setting it again changes nothing), a repeat worked by the contact pinned on the failure needs no read; with no pin learned, the contact the first attempt may have made is found by a read first, never created again from the person's fields. |

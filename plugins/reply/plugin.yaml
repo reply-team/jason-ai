@@ -1,6 +1,6 @@
 manifest_version: 1
 id: reply
-version: 0.3.2
+version: 0.4.0
 kind: provider
 name: Reply
 description: >-
@@ -10,7 +10,7 @@ homepage: https://reply.io
 contracts:
   protocol: [1]
   operations: [1]
-operations: [campaign.get, campaign.create, list_membership.add, campaign.enroll, enrollment.list, engagement.summarize, conversation.list, conversation.get, campaign.pause, campaign.activate, optout.record, enrollment.stop]
+operations: [campaign.get, campaign.create, list_membership.add, campaign.enroll, enrollment.list, engagement.summarize, conversation.list, conversation.get, campaign.pause, campaign.activate, optout.record, enrollment.stop, conversation.reply, conversation.classify, conversation.close, conversation.reopen, contact.update, contact.delete]
 entry:
   module: main.js
   function: invoke
@@ -21,10 +21,11 @@ capabilities:
     # account. A language runtime is never declared here — granting one would reach every program it can start.
     executables:
       - name: reply
-        # The oldest release that has the work commands every operation below runs — `reply sequence add-contact`,
-        # `reply inbox list` and the rest — with the results and the error codes this package reads, and a start
-        # that says the state it left. A reload runs the version command and refuses an older one.
-        min_version: 0.11.0
+        # The oldest release that has the work commands every operation below runs — `reply contact find`,
+        # `reply sequence create`, `reply sequence add-contact`, `reply inbox reply` and the rest — with the results and
+        # the error codes this package reads, a LinkedIn URL matched by its lowercased slug, and a start that says the
+        # state it left. This package makes no raw call. A reload runs the version command and refuses an older one.
+        min_version: 0.13.0
         version_command: ["--version"]
   # No `http`: every provider call goes through the CLI, which is what holds the credential. A package that could
   # reach the API directly would need a credential of its own, and then there would be two places one can leak

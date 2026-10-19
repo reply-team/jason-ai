@@ -1,0 +1,70 @@
+{
+  "operation": "approval.reject",
+  "case": "rejected",
+  "request": {
+    "approval_id": "apr_2",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    },
+    "reason": "not this quarter"
+  },
+  "status": 200,
+  "response": {
+    "id": "apr_2",
+    "work_item_id": "wi_2",
+    "campaign_id": "cmp_1",
+    "operation": "campaign.enroll",
+    "operation_version": 1,
+    "status": "rejected",
+    "reason": "approval_required",
+    "subject_hash": "sha256:recorded-5",
+    "subject": {
+      "operation": "campaign.enroll",
+      "contact_id": "cnt_2",
+      "campaign_id": "cmp_1"
+    },
+    "preview": {
+      "intent": "Put Grace Hopper into the campaign at the provider.",
+      "reach": {
+        "value": "act",
+        "conditional": true,
+        "detail": "bookkeeping until the campaign is live"
+      },
+      "reversibility": {
+        "value": "irreversible",
+        "conditional": true,
+        "detail": null
+      },
+      "cost": {
+        "value": "metered",
+        "conditional": true,
+        "detail": null
+      },
+      "campaign": {
+        "id": "cmp_1",
+        "name": "Autumn outreach"
+      },
+      "contact": {
+        "id": "cnt_2",
+        "name": "Grace Hopper",
+        "channel": "email",
+        "value": "grace@example.test"
+      }
+    },
+    "plugin_id": "reply",
+    "binding_identity": "sha256:recorded-6",
+    "route_scope": "global_default",
+    "plugin_snapshot_id": "snp_1",
+    "routing_snapshot_id": "rts_1",
+    "requested_at": "2026-10-15T12:00:00.000Z",
+    "decided_at": "2026-10-16T09:00:00.000Z",
+    "decided_by": {
+      "type": "human",
+      "id": "ada"
+    },
+    "decision_reason": "not this quarter",
+    "campaign_name": "Autumn outreach",
+    "contact_name": "Grace Hopper"
+  }
+}

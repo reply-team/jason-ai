@@ -162,3 +162,31 @@ jobs:
             throw "$($found.Count) link(s) leave this tree."
           }
           Write-Host "Every link in $(@($files).Count) Markdown files stays in the tree."
+
+  # From this tree alone, the npm steps the runtime's own CI runs for the UI; the two change together.
+  ui:
+    name: The published UI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Check (types, lint, format)
+        run: npm run check
+
+      - name: Unit and screen tests
+        run: npm test
+
+      - name: Build
+        run: npm run build

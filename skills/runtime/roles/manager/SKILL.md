@@ -134,11 +134,42 @@ jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role respo
 
 Neither wakes you when it ends: a read that succeeded is not a trigger. Say in your note that you are watching both,
 and decide at your next review, when what they found is there to read. A thread the line names can have moved for a
-follow-up sent into it rather than for a reply; the read is how you tell.
+follow-up sent into it rather than for a reply; the read is how you tell. Whether the provider's list moves a thread
+for a reply Jason sends is the provider's matter, and its plugin's README says which. Where it does, the line says it
+like any other: when the thread's latest message is Jason's own — a `conversation.reply` item of this campaign
+succeeded for that thread, and the line's `last_activity_at` is not after the `sent_at` its result names — nothing
+happened, and there is nothing to read or answer. Without a `sent_at` in that result, the read tells. Where it does
+not, no line comes for Jason's own reply, and nothing wakes you for it.
 
 **The read itself is not yours to redo.** A `conversation.list` item made by `system:dispatcher` that failed is the
 runtime's own read: it is tried again on its own, later each time, from its first page. Do not create one in its
 place. What its error code says about the installation is still worth knowing, and asking about.
+
+A line of this kind can also come from the provider's own record of the account, where the plugin reads its accounts'
+events: it then carries an `event_id` and names no work item or attempt, because no run of this campaign found it.
+Read it as any other. From that record, where the provider says who moved the thread, a move by the account — Jason's
+own reply among them — says no line at all, whatever the provider's list does with that reply; where it cannot say,
+the check against `sent_at` above applies to the line as it does to the inbound read's.
+
+## When a provider event woke you
+
+`trigger` is `provider_event_observed` when the provider's own record of an account said something happened that
+concerns this campaign. The line's `kind` says what: `reply_detected` — the provider detected a reply, in the `thread`
+it names where it names one; `bounce` — a message to the person bounced, `hard` or `soft` under `bounce` where the
+provider says; `invitation_accepted` — the person accepted an invitation, sent from the `account` it names. It names
+the person by `contact_id` when exactly one contact is pinned with the provider's identifier, and the stored event by
+`event_id` — never what anybody wrote. It names no work item and no attempt: it was read from the provider, not done
+by a run, so there is no item behind it to open. Read every line of the kind since your last review:
+
+```
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_event_observed --since 2026-09-18T09:00:00Z
+```
+
+Each one is a fact to plan from, and what it calls for is yours to decide inside your boundary, as with any line. A
+detected reply is read as a reply is: queue the read of its thread and the responder after it, as above. A hard bounce
+is a person that channel no longer reaches: work waiting to write to them there is work the campaign may no longer
+need. An accepted invitation is a channel that opened. Whatever you do or leave, say it in your note; where the next
+step is a person's to choose, raise one question.
 
 ## What you may decide yourself
 

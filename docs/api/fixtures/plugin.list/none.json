@@ -1,0 +1,24 @@
+{
+  "operation": "plugin.list",
+  "case": "none",
+  "request": {},
+  "status": 200,
+  "response": {
+    "snapshot": {
+      "id": "snp_1",
+      "loaded_at": "2026-10-16T09:00:00.000Z",
+      "source": "startup",
+      "plugin_count": 0
+    },
+    "routing_snapshot_id": "rts_1",
+    "plugins": [],
+    "last_reload": {
+      "at": "2026-10-16T09:00:00.000Z",
+      "source": "startup",
+      "activated": true,
+      "candidates": [],
+      "routes": []
+    },
+    "activated": true
+  }
+}

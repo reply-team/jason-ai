@@ -15,16 +15,19 @@ names it. The operation controls state at the provider, it is reversible, and it
 an idempotency key, because it writes, and because the contact it may have to create is the kind of thing that
 gets billed.
 
-## The provider-contact precondition
+## Finding the person
 
-A list holds the provider's contacts, not Jason's. So before adding anyone, **ensure the provider's own contact
-exists**:
+A list holds the provider's contacts, not Jason's, so before adding anyone the plugin finds the provider's own contact
+for the person: `preflight.provider_contact` is `find_or_create`.
 
 1. If `contacts[0].external_ids.contact` is present, that is the provider's identifier for this person. Work by it.
    Do not look the person up by address again — a pin exists precisely so that the answer stops depending on how
    the address is written.
-2. Otherwise create the contact from the value of the channel named by `args.channel`, and return the identifier
-   the provider gives you in `external_ids.contact`. The runtime will pin it, and the next call takes path 1.
+2. Otherwise look the person up by the value of the channel named by `args.channel`, and create the contact from that
+   value only when the provider holds nobody under it. Return the identifier in `external_ids.contact` either way; the
+   runtime pins it, and the next call takes path 1.
+
+[`docs/plugins.md`](../../plugins.md) §7, "The contact proxy rule", says how the lookup compares and when it is refused.
 
 ## The input you receive
 
@@ -101,10 +104,10 @@ contact creation it implies may be metered, and a second contact is a merge nobo
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `required`, channel `from_args`, suppression `checked` |
+| pre-flight | contact `required`, channel `from_args`, suppression `checked`, provider contact `find_or_create` |
 | in a paused campaign | `waits` |
 | contact projection | `id`, `first_name`, `last_name`, `company`, `title`, `time_zone`; channels: `consumed` |
-| precondition | Ensure the provider's own contact exists before adding it: work by `contacts[0].external_ids.contact` when that pin is present, otherwise create the contact from the value of the channel named by `args.channel`, and return the provider's identifier under `external_ids.contact`. |
+| precondition | none |
 | preview a person reads | none |
 | pinned identifiers | `contact` names a contact |
 | recovery read | The membership of the pinned contact in the list named by `args.list.external_id`, and the ledger entry under this idempotency key. Where the provider's add is idempotent (a second add of the same contact leaves one membership), a repeat worked by the contact pinned on the failure needs no read; with no pin learned, the contact the first attempt may have made is found by a read first, never created again from the person's fields. |

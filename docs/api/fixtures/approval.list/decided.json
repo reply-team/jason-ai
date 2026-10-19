@@ -1,0 +1,54 @@
+{
+  "operation": "approval.list",
+  "case": "decided",
+  "request": {
+    "statuses": [
+      "approved",
+      "rejected",
+      "superseded",
+      "cancelled"
+    ]
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "apr_3",
+        "work_item_id": "wi_3",
+        "campaign_id": "cmp_1",
+        "operation": "campaign.enroll",
+        "status": "approved",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-3",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": "2026-10-15T12:05:00.000Z",
+        "decided_by": {
+          "type": "human",
+          "id": "ada"
+        },
+        "campaign_name": "Autumn outreach",
+        "contact_name": "Edsger Dijkstra"
+      },
+      {
+        "id": "apr_4",
+        "work_item_id": "wi_4",
+        "campaign_id": "cmp_1",
+        "operation": "campaign.enroll",
+        "status": "superseded",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-4",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": "2026-10-15T12:05:00.000Z",
+        "decided_by": {
+          "type": "system",
+          "id": "dispatcher"
+        },
+        "campaign_name": "Autumn outreach",
+        "contact_name": "Barbara Liskov"
+      }
+    ],
+    "next_cursor": null
+  }
+}

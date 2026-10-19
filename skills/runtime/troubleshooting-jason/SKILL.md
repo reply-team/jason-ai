@@ -225,12 +225,14 @@ jason plugin reload --reason "the package was updated"
 ```
 
 **Restarting the runtime**, when the process itself is the problem rather than anything in it. What that does
-to work in flight is narrower than it sounds: a shutdown stops claiming, waits briefly for handlers, and
+to work in flight is narrower than it sounds: a shutdown stops claiming, gives handlers up to ten seconds, and
 **does not kill children that are still running** — their leases are still good, and a survivor completes
 against the next runtime. An attempt that was only **scheduled** is released back to `created` and claimed
 again; an attempt already **processing** is left to the lease and the heartbeat to decide, and a `provider_op`
 whose answer was lost that way ends **`ambiguous`**, which is state 8 and waits for a person. So a restart
 recovers the queue; it does not un-lose an answer.
+
+A restart is a stop you run yourself: ask first, as "Starting and stopping it" in `operating-the-installation` says.
 
 ```
 jason runtime restart

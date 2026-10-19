@@ -125,7 +125,7 @@ performs it in its own process, and what ran is pinned to the attempt — the pa
 the account by identity. **No provider is built in.** One arrives as a plugin, and a fresh runtime routes nothing
 anywhere until somebody writes a route: work with no route fails at the claim with `no_route`. An operation that
 needs a person's approval is parked until a person decides, and nothing runs but what they approved. **The first
-such plugin is in this repository**: [`plugins/reply/`](plugins/reply/README.md) performs all twelve published
+such plugin is in this repository**: [`plugins/reply/`](plugins/reply/README.md) performs all eighteen published
 operations against a Reply account through the Reply CLI, which owns the credential — so an operator installs that
 CLI, signs in with it, unpacks the package from the release into `~/.jason/plugins/`, grants it that one program,
 and writes the route. **The wiring check** — an empty installation brought to a routed plugin, one enrolment of
@@ -143,7 +143,7 @@ One executable, three modes: the runtime service, which owns campaign and work s
 that writes it; the CLI, a pure client of the runtime's loopback API; and the plugin host, a short-lived process in
 which a plugin's JavaScript runs, so that it never runs inside the long-lived runtime. The runtime's design and its
 source are not published. What a person, an agent or a plugin author needs from them is here:
-[docs/INSTALL.md](docs/INSTALL.md), [docs/plugins.md](docs/plugins.md), the contracts under
+[docs/INSTALL.md](docs/INSTALL.md), [docs/plugins.md](docs/plugins.md), [docs/ui.md](docs/ui.md) for the browser UI, the contracts under
 [docs/contracts/](docs/contracts/README.md), and the skills under [`skills/`](skills).
 
 ## Repository layout
@@ -154,8 +154,9 @@ source are not published. What a person, an agent or a plugin author needs from 
 | `skills/runtime/` | Skills that teach an agent to operate Jason: the interactive ones, and one per launched role |
 | `skills/business/` | Skills that teach an agent the SDR profession, independently of any provider or runtime |
 | `.claude-plugin/` | The skills marketplace: offers both packs to an agent harness by relative path. Distinct from `plugins/`, which is the plugin marketplace |
-| `docs/` | The install manual, the wiring check, the plugin author's guide and the operation contracts |
+| `docs/` | The install manual, the wiring check, the plugin author's guide, the browser UI, the operation contracts, and the Runtime API's recorded exchanges under `docs/api/` |
 | `install/` | The install scripts every release attaches, and the update feed's schema |
+| `ui/` | The browser UI the runtime serves: a Preact client of the Runtime API; `npm run package` builds it into `jason-ui.zip` |
 | `VERSION` | The runtime version this tree describes |
 
 The runtime's source is not here. Each release attaches the runtime for every platform, built from that source at the
@@ -185,8 +186,9 @@ jason update status
 
 `check` downloads and installs nothing; it asks the feed and prints the answer. `apply` performs the update —
 download, drain, stop, swap, start, health check — driven by a ledger written before each step, so a machine
-that dies half-way is finished or put back by the next run. `status` says where one stands, and reads the
-ledger without needing a runtime.
+that dies half-way is finished or put back by the next run, and it ends by redeploying the skills this machine
+recorded at the new release's tag; an update applied by a build before 0.12.0 needs one `jason skills update` after
+it. `status` says where one stands, and reads the ledger without needing a runtime.
 
 ### Can this installation start work?
 

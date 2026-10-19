@@ -10,7 +10,7 @@ user's PATH unless -NoModifyPath says otherwise. Running it again over the same 
 says so, unless a licence file is missing beside it, which it then writes.
 
     irm https://jasonharness.ai/releases/latest/download/install.ps1 | iex
-    & ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.11.0/install.ps1))) -Version 0.11.0 -NoModifyPath
+    & ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.12.0/install.ps1))) -Version 0.12.0 -NoModifyPath
 
 -Feed (or JASON_INSTALL_FEED) points it at a directory or a base URL holding the same files a release holds
 - the archives, manifest.json and checksums.txt - which is how CI runs it against the archives it has just
@@ -109,11 +109,13 @@ function Install-Jason {
 
     # A file another program holds open - a scanner reading the executable that was just run or just unpacked - can be
     # neither renamed nor removed until it lets go. Such a file is tried again for 10 seconds, every quarter of a second,
-    # as jason itself does; held means a sharing or a lock violation and nothing else, and any other refusal is thrown at
-    # once. A violation is read from the exception inside as well: Expand-Archive reports one as the method call that
-    # failed. True once the act went through, false when the file was still held at the end.
+    # as jason itself does; the 10 seconds count from the first refusal, so an act slow in itself - an unpacking on a
+    # loaded machine - does not spend them before the first pause. Held means a sharing or a lock violation and nothing
+    # else, and any other refusal is thrown at once. A violation is read from the exception inside as well: Expand-Archive
+    # reports one as the method call that failed. True once the act went through, false when the file was still held at
+    # the end.
     function Held([scriptblock] $act) {
-        $deadline = [DateTime]::UtcNow.AddSeconds(10)
+        $deadline = $null
         $violations = @(-2147024864, -2147024863)
         while ($true) {
             try {
@@ -122,7 +124,11 @@ function Install-Jason {
             } catch {
                 $inner = $_.Exception.InnerException
                 if ($violations -notcontains $_.Exception.HResult -and -not ($inner -and $violations -contains $inner.HResult)) { throw }
-                if ([DateTime]::UtcNow -ge $deadline) { return $false }
+                if ($null -eq $deadline) {
+                    $deadline = [DateTime]::UtcNow.AddSeconds(10)
+                } elseif ([DateTime]::UtcNow -ge $deadline) {
+                    return $false
+                }
                 Start-Sleep -Milliseconds 250
             }
         }

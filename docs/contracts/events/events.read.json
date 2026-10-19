@@ -1,0 +1,207 @@
+{
+  "id": "events.read",
+  "version": 1,
+  "intent": "Read what happened at a provider in one account after the point the plugin's own cursor names: a thread that moved, a reply the provider detected, an invitation accepted, a message that bounced. Identifiers, moments and the provider's own flags travel; nothing anybody wrote does.",
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:events:events.read:1:input",
+    "title": "events.read input",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["cursor", "since", "until", "limit"],
+    "properties": {
+      "cursor": {
+        "type": ["string", "null"],
+        "minLength": 1,
+        "maxLength": 2048,
+        "pattern": "^[!-~]+$",
+        "description": "Where to read from: a cursor this plugin returned with an earlier page, handed back exactly as it was returned. Null when the read starts from a moment instead."
+      },
+      "since": {
+        "type": ["string", "null"],
+        "format": "date-time",
+        "maxLength": 64,
+        "description": "Read by date instead: every event at or after this moment. Null when the read starts from a cursor."
+      },
+      "until": {
+        "type": ["string", "null"],
+        "format": "date-time",
+        "maxLength": 64,
+        "description": "With since only: every event before this moment. Null reads up to now."
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "description": "At most this many events on the page. A page may come back shorter."
+      }
+    },
+    "anyOf": [
+      {
+        "properties": {
+          "cursor": { "type": "string" },
+          "since": { "type": "null" },
+          "until": { "type": "null" }
+        }
+      },
+      {
+        "properties": {
+          "cursor": { "type": "null" },
+          "since": { "type": "string" }
+        }
+      }
+    ]
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:events:events.read:1:output",
+    "title": "events.read result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["events", "cursor", "has_more"],
+    "properties": {
+      "events": {
+        "type": "array",
+        "maxItems": 100,
+        "items": { "$ref": "#/$defs/event" },
+        "description": "The events of this page, in the provider's own order."
+      },
+      "cursor": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2048,
+        "pattern": "^[!-~]+$",
+        "description": "Where the next read starts: passed back, it yields the events after this page. The plugin's own string, which nothing else reads."
+      },
+      "has_more": {
+        "type": "boolean",
+        "description": "Whether the provider holds more events after this page, to be read now with the cursor."
+      }
+    },
+    "$defs": {
+      "identifier": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "pattern": "^[!-~]+$",
+        "description": "The provider's own identifier: printable ASCII with no space."
+      },
+      "maybe_identifier": {
+        "type": ["string", "null"],
+        "minLength": 1,
+        "maxLength": 256,
+        "pattern": "^[!-~]+$",
+        "description": "The provider's own identifier, or null where the event names none."
+      },
+      "moment": {
+        "type": "string",
+        "format": "date-time",
+        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-5][0-9]([.][0-9]{1,7})?Z$",
+        "maxLength": 64,
+        "description": "When it happened, as the provider stamps it: in UTC, written with Z and no offset, to the second or to a fraction of it of at most seven digits."
+      },
+      "channel": {
+        "type": "string",
+        "enum": ["email", "linkedin", "other"]
+      },
+      "event": {
+        "anyOf": [
+          { "$ref": "#/$defs/thread_moved" },
+          { "$ref": "#/$defs/reply_detected" },
+          { "$ref": "#/$defs/invitation_accepted" },
+          { "$ref": "#/$defs/bounce" }
+        ]
+      },
+      "thread_moved": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id", "occurred_at", "thread", "contact", "campaign", "moved_by", "channel", "unread", "has_meeting_intent"],
+        "description": "A conversation thread of the account moved.",
+        "properties": {
+          "kind": { "const": "thread_moved" },
+          "id": { "$ref": "#/$defs/maybe_identifier" },
+          "occurred_at": { "$ref": "#/$defs/moment" },
+          "thread": { "$ref": "#/$defs/identifier" },
+          "contact": { "$ref": "#/$defs/maybe_identifier" },
+          "campaign": { "$ref": "#/$defs/maybe_identifier" },
+          "moved_by": {
+            "type": ["string", "null"],
+            "enum": ["other_side", "account", "provider", null],
+            "description": "Who moved it, in the provider's own word: other_side, a message the other side wrote; account, a message sent as the account; provider, a change with no message, such as a category or the read flag; null where the provider cannot say."
+          },
+          "channel": { "$ref": "#/$defs/channel" },
+          "unread": { "type": ["boolean", "null"], "description": "Whether the provider holds the thread as unread." },
+          "has_meeting_intent": { "type": ["boolean", "null"], "description": "The provider's own judgement that the thread asks for a meeting, or null when it makes none." }
+        }
+      },
+      "reply_detected": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id", "occurred_at", "contact", "campaign", "thread", "channel"],
+        "description": "The provider decided that a person replied.",
+        "properties": {
+          "kind": { "const": "reply_detected" },
+          "id": { "$ref": "#/$defs/maybe_identifier" },
+          "occurred_at": { "$ref": "#/$defs/moment" },
+          "contact": { "$ref": "#/$defs/identifier" },
+          "campaign": { "$ref": "#/$defs/maybe_identifier" },
+          "thread": { "$ref": "#/$defs/maybe_identifier" },
+          "channel": { "$ref": "#/$defs/channel" }
+        }
+      },
+      "invitation_accepted": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id", "occurred_at", "contact", "campaign", "account"],
+        "description": "A person accepted a connection invitation the account sent.",
+        "properties": {
+          "kind": { "const": "invitation_accepted" },
+          "id": { "$ref": "#/$defs/maybe_identifier" },
+          "occurred_at": { "$ref": "#/$defs/moment" },
+          "contact": { "$ref": "#/$defs/identifier" },
+          "campaign": { "$ref": "#/$defs/maybe_identifier" },
+          "account": { "$ref": "#/$defs/maybe_identifier" }
+        }
+      },
+      "bounce": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id", "occurred_at", "contact", "campaign", "message", "bounce"],
+        "description": "A message the account sent to a person bounced.",
+        "properties": {
+          "kind": { "const": "bounce" },
+          "id": { "$ref": "#/$defs/maybe_identifier" },
+          "occurred_at": { "$ref": "#/$defs/moment" },
+          "contact": { "$ref": "#/$defs/identifier" },
+          "campaign": { "$ref": "#/$defs/maybe_identifier" },
+          "message": { "$ref": "#/$defs/maybe_identifier" },
+          "bounce": {
+            "type": ["string", "null"],
+            "enum": ["hard", "soft", null],
+            "description": "The provider's own word for the bounce, or null when it gives none."
+          }
+        }
+      }
+    }
+  },
+  "failure_codes": [
+    { "code": "events_unreachable", "class": "transient", "when": "the provider did not answer, or answered that it cannot be read for now" },
+    { "code": "events_unauthorized", "class": "permanent", "when": "the provider refused the account's credential, or the account may not read its events" },
+    { "code": "events_unsupported", "class": "permanent", "when": "the account has no feed of events to read" },
+    { "code": "events_cursor_unknown", "class": "permanent", "when": "the cursor handed back is one the provider no longer knows, or one this plugin can no longer read" }
+  ],
+  "timeout_ms": 60000,
+  "conformance": [
+    "Returns identifiers, moments and the provider's own flags, and nothing else: never a subject, a preview, a message's text or a name.",
+    "Returns a cursor with every page. Handed back, it yields the events after that page; it is the plugin's own string, and nothing else reads it.",
+    "Read by date, returns across the pages its cursors chain every event at or after since and, where until is given, before until. A provider that pages only by offset is paged newest first until the last item's moment passes since; a provider that holds less history answers what it holds and does not fail.",
+    "Reports a thread moved by other_side only for a message the other side wrote; a move by the account or by the provider is never reported as other_side.",
+    "Names a thread that moved by the identifier conversation.list returns as the thread's external_id, with occurred_at the moment the thread last moved — the moment conversation.list reports as its last_activity_at, to the millisecond — so that a move both reads find is said once.",
+    "Names, under campaign, the provider campaign a moved thread belongs to wherever the provider keeps one, by the identifier campaign.get pins, so that the runtime can leave that campaign's inbound read to the events; null is for a thread outside every provider campaign, which reaches no campaign until a contact pin can say whose it is.",
+    "Reports moved_by null only where the provider cannot say who moved a thread. Such a move wakes the campaign's manager as a reply would, so a follow-up sent into a thread that already has a reply reads as one too.",
+    "Answers events_cursor_unknown for a cursor it can no longer read, so that the runtime reads again by date.",
+    "Answers events_unreachable for a provider that did not answer or is unavailable for now, so that the runtime reads again later.",
+    "Pins nothing: an answer that carries identifiers beside its result is refused.",
+    "Keeps its credential out of the binding, out of what it logs and out of what it returns: it reads it with host.env."
+  ]
+}

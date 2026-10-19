@@ -1,0 +1,21 @@
+{
+  "operation": "conversation.close",
+  "version": 1,
+  "case": "the thread may already be closed; closing a closed thread changes nothing, so a repeat is safe",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "ambiguous",
+      "code": "provider_answer_lost",
+      "message": "The close was sent and no answer came back.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": { "duration_ms": 60000, "exec_calls": 1, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "ambiguous", "retriable": true }
+}

@@ -122,9 +122,9 @@ These are the rules both verbs keep:
   `name` are the same string. A skill whose front matter names anything else is loaded by nobody and
   reported by nobody.
 - Front matter of exactly `name`, a one-line `description`, and `metadata.status` — `draft` or
-  `verified`. `verified` means a named agent host read that exact body while driving this runtime and
-  the digest of what it read is recorded in the pack's catalog. It is a claim about evidence, and the
-  guards refuse it without one.
+  `verified`. `verified` means a named agent host read that exact text, its description and its body,
+  while driving this runtime and the digest of what it read is recorded in the pack's catalog. It is a
+  claim about evidence, and the guards refuse it without one.
 - A `README.md` beside them that links every skill — the catalog. A guard holds both halves: every skill
   linked, and every link a skill.
 - No build step and no dependency on the runtime's source.

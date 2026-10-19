@@ -1,0 +1,29 @@
+{
+  "operation": "contact.delete",
+  "version": 1,
+  "case": "the person by the address the delete consumes and the provider's identifier it destroys",
+  "input": {
+    "args": { "channel": "email" },
+    "contacts": [
+      {
+        "id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+        "channels": [{ "channel": "email", "value": "marta@example.com", "primary": true }],
+        "external_ids": { "contact": "p_88421" }
+      }
+    ],
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": {
+    "summary": "Delete the provider's contact p_88421 for marta@example.com, with the history the provider keeps for them: they leave every campaign and list there. Jason's own record of the person and its do-not-contact register stay as they are.",
+    "highlights": {
+      "/contacts/0/channels/0/value": "marta@example.com",
+      "/contacts/0/external_ids/contact": "p_88421"
+    }
+  }
+}

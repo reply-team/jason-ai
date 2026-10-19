@@ -38,7 +38,41 @@ docs/contracts/
   fixtures/<name>/preview-*.json   what a person deciding reads, rendered from an input: the summary and its highlights
   notifications/<name>.json        the delivery contract, a family of its own, embedded the same way
   notifications/<name>.md          the same contract explained, with a generated block
+  events/<name>.json               the events contract, a third family, embedded the same way
+  events/<name>.md                 the same contract explained, with a generated block
 ```
+
+## The published operations
+
+Every operation this build publishes, rendered from the documents by a test and compared whole, so the table cannot
+say what a document does not. Each value is the one the runtime reads — the dangerous reading, where a document states
+a condition beside it — and the last column is the line the operation's own page opens with.
+
+<!-- BEGIN GENERATED operations -->
+<!-- Rendered from each document and its page's title. Edit those; this table follows them. -->
+
+| Operation | Level one | Reach | Approval | After an ambiguous end | Provider contact | What it is |
+|---|---|---|---|---|---|---|
+| [`campaign.activate`](operations/campaign.activate.md) | `campaign.activate` | `act` | `confirm_once` | `after_recovery_read` | `not_used` | start a provider campaign sending |
+| [`campaign.create`](operations/campaign.create.md) | `campaign.create` | `control` | `auto` | `after_recovery_read` | `not_used` | make the provider's campaign, as an empty draft |
+| [`campaign.enroll`](operations/campaign.enroll.md) | `campaign.enroll` | `act` | `confirm_once` | `after_recovery_read` | `find_or_create` | put one person into a provider campaign |
+| [`campaign.get`](operations/campaign.get.md) | `campaign.get` | `read` | `auto` | `safe` | `not_used` | read one campaign from the provider |
+| [`campaign.pause`](operations/campaign.pause.md) | `campaign.pause` | `control` | `auto` | `safe` | `not_used` | stop a provider campaign |
+| [`contact.delete`](operations/contact.delete.md) | `contact.delete` | `control` | `confirm_once` | `after_recovery_read` | `pinned_only` | delete the provider's contact for one person |
+| [`contact.update`](operations/contact.update.md) | `contact.update` | `control` | `auto` | `after_recovery_read` | `find_only` | change a person's fields on the provider's contact for them |
+| [`conversation.classify`](operations/conversation.classify.md) | `conversation.classify` | `control` | `auto` | `safe` | `not_used` | file a thread under one of the provider's categories, with the provider's own meaning on its reserved names |
+| [`conversation.close`](operations/conversation.close.md) | `conversation.close` | `control` | `auto` | `safe` | `not_used` | set a thread aside as worked |
+| [`conversation.get`](operations/conversation.get.md) | `conversation.get` | `read` | `auto` | `safe` | `not_used` | read one thread before answering it |
+| [`conversation.list`](operations/conversation.list.md) | `conversation.list` | `read` | `auto` | `safe` | `pinned_only` | the conversation threads of a person or a campaign |
+| [`conversation.reopen`](operations/conversation.reopen.md) | `conversation.reopen` | `control` | `auto` | `safe` | `not_used` | put a thread back among those that need attention |
+| [`conversation.reply`](operations/conversation.reply.md) | `message.send` | `act` | `confirm_each` | `never` | `find_only` | answer the person on a thread, in that thread |
+| [`engagement.summarize`](operations/engagement.summarize.md) | `engagement.summarize` | `read` | `auto` | `safe` | `not_used` | the provider's counts for a campaign |
+| [`enrollment.list`](operations/enrollment.list.md) | `enrollment.list` | `read` | `auto` | `safe` | `not_used` | who is in a campaign at the provider |
+| [`enrollment.stop`](operations/enrollment.stop.md) | `enrollment.stop` | `control` | `confirm_once` | `after_recovery_read` | `find_only` | take one person out of a provider campaign |
+| [`list_membership.add`](operations/list_membership.add.md) | `list_membership.add` | `control` | `auto` | `after_recovery_read` | `find_or_create` | put one person on a provider list |
+| [`optout.record`](operations/optout.record.md) | `optout.record` | `control` | `auto` | `after_recovery_read` | `find_or_create` | record that somebody said stop |
+
+<!-- END GENERATED operations -->
 
 ## The delivery contract
 
@@ -53,6 +87,19 @@ no preflight, no repeat rule — because a delivery is not SDR work, and only it
 its timeout and its conformance list. Its fixtures live beside the operations' under
 [`fixtures/notification.send/`](fixtures/notification.send) and are run by the same tests.
 
+## The events contract
+
+A third family is published here, and it is neither a canonical operation nor a delivery:
+[`events/events.read.json`](events/events.read.md), what a provider plugin that declares `contracts.events: [1]` is
+invoked for — read what happened in one account after the point the plugin's own cursor names: a thread that moved, a
+reply the provider detected, an invitation accepted, a message that bounced. A read of an account belongs to no
+campaign, so no work item names it and no route carries it; it is under `events/` and read by a catalog of its own, for
+the same reason the delivery contract is. It has the delivery contract's fields and nothing more: its input, its
+result, four failure codes, its timeout and its conformance list. What it returns is identifiers, moments and the
+provider's own flags — every kind a closed object, with nothing anybody wrote — and it pins nothing: a read finds the
+identifiers operations pinned and writes none. Its fixtures live beside the others' under
+[`fixtures/events.read/`](fixtures/events.read) and are run by the same tests.
+
 ## What a document states
 
 The first group of fields is the **vendor-neutral contract**, copied word for word from the SDR operations contract
@@ -64,12 +111,18 @@ and `protective_floor` are the catalogue's own marks, copied from the fragment a
 value RAISES above the derivation table", the second "true for the one legitimate LOWERING: an operation whose
 non-performance is itself the harm", and `approval_reason` says why. The catalogue sets both on `optout.record`, whose
 `auto` raises nothing — the table derives `confirm_once` for an irreversible control — so that document says `true`,
-`true` because its fragment does, not because one approval is both a raise and a lowering. An operation that does
-neither states `false`, `false` and `null`. The floor is checked when the document loads: it is refused unless
+`true` because its fragment does, not because one approval is both a raise and a lowering. The catalogue raises
+`contact.delete`, which states `approval_departs: true`, `protective_floor: false` and the fragment's reason. An
+operation that does neither states `false`, `false` and `null`. The floor is checked when the document loads: it is refused unless
 `approval` is `auto`, `approval_reason` says why, `preflight.suppression` is `not_applicable` and
 `dispatch.in_paused_campaign` is `runs`, so neither the suppression register nor a paused campaign holds back an
 operation whose not running is the harm: its work starts once nothing else in its campaign is scheduled or processing,
-in its priority order. Seven of these fields — `reach`, `reversibility`, `approval`, `before_repeating`,
+in its priority order. `approval` is one of three words — `auto`, `confirm_once` or `confirm_each` — and a document
+stating any other fails to load. The two a person gives both park the work for one decision per work item, bound to the
+input it would run with; one item is one person, so `confirm_each`, a decision per person reached, asks for no more
+than that, and a document stating it names one person — `preflight.contact` is `required` and `accepts_collection` is
+`false` — and highlights `/contacts/0/channels/0/value`, where that person is reached, in its preview. Seven of these
+fields — `reach`, `reversibility`, `approval`, `before_repeating`,
 `idempotency_key`, `per_item_results` and `cost` — may be a plain value or a **conditional block** of
 `{value, conditional, detail}`, where `value` is always the *dangerous* reading. Every gate reads `value`, so a
 condition can never soften one, and `detail` is what an agent reads to decide.
@@ -78,10 +131,10 @@ The second group is Jason's own, and it is about execution:
 
 | Field | What it says |
 |---|---|
-| `preflight` | whether the work item's contact is needed (`required` / `not_used`, or `optional`: taken when the work item names one) and where the channel comes from (`from_args` / `none`); an `optional` contact never takes its channel from the arguments; and whether the suppression register refuses the work for a person whose consumed value it holds (`suppression`: `checked`, or `not_applicable` — allowed only where `reach` is `control`, for an operation that takes a person out rather than reaching them) |
+| `preflight` | whether the work item's contact is needed (`required` / `not_used`, or `optional`: taken when the work item names one) and where the channel comes from (`from_args` / `none`); an `optional` contact never takes its channel from the arguments; and whether the suppression register refuses the work for a person whose consumed value it holds (`suppression`: `checked`, or `not_applicable` — allowed only where `reach` is `control`, for an operation that takes a person out rather than reaching them); and how the plugin finds the provider's own contact for that person (`provider_contact`: `find_or_create`, `find_only`, `pinned_only` or `not_used` — [`docs/plugins.md`](../plugins.md) §7, "The contact proxy rule", is the rule), which the loader holds to what each word implies: a way that finds the person declares `external_ids.contact`, `pinned_only` declares `contact_not_linked`, and `not_used` is said exactly where `contact` is `not_used` |
 | `dispatch` | how the dispatcher treats the operation's work beyond what all work shares: `in_paused_campaign` is `waits` — the work waits with its paused campaign, as all work does — or `runs`, allowed only where `reach` is `control` and `approval` is `auto`, for an operation whose not running is the harm |
-| `contact_projection` | exactly which contact fields, and which channels, the plugin receives — `consumed`, the one channel the arguments name, or `none` — declared so that widening it is a visible change |
-| `precondition` | what must be true at the provider before the operation can act, in one sentence |
+| `contact_projection` | exactly which contact fields, and which channels, the plugin receives — `consumed`, the one channel the arguments name, or `none` — declared so that widening it is a visible change. It names exactly what the operation's implementation reads, the least of a person that reaches a plugin's process, for the fields as for the channels |
+| `precondition` | what must be true at the provider before the operation can act, beyond how its contact is found, in one sentence |
 | `preview` | what a person deciding on the operation reads first — a one-line summary rendered from the composed input, and the values in that input it highlights — or `null` where nobody is asked to decide |
 | `input_schema` | the whole composed input the plugin receives, in the dialect below |
 | `output_schema` | what a succeeded result must look like |
@@ -177,8 +230,10 @@ at most a row per channel and is not paged.
 - One item always fits. Every output string of a paged read is bounded, and the largest result the schema allows
   with one item on the page — every string at its longest, twelve bytes a character — is held under 768 KiB by a
   test.
-- There are no cursors in this version: the providers mapped first page by offset, and
-  [`divergence-from-l1.md`](divergence-from-l1.md) records where the catalogue says otherwise.
+- No canonical operation pages by a cursor: the providers mapped first page by offset, and
+  [`divergence-from-l1.md`](divergence-from-l1.md) records where the catalogue says otherwise. The events contract is
+  the one read that does: it pages by a cursor its plugin returns and nothing else reads, with a page of at most 100
+  events held to the same 768 KiB, and one event always fits.
 
 ## The schema dialect
 

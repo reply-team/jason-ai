@@ -1,0 +1,19 @@
+{
+  "operation": "events.read",
+  "version": 1,
+  "case": "a cursor with a space in it: a cursor is printable ASCII and nothing else",
+  "input": {
+    "cursor": "c 41",
+    "since": null,
+    "until": null,
+    "limit": 100
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/cursor",
+        "reason": "pattern"
+      }
+    ]
+  }
+}

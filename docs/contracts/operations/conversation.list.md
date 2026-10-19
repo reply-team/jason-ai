@@ -36,13 +36,18 @@ It reads one of two scopes:
 ```
 
 - `contacts` is there only when the work item names a person, and then it carries the person's identifier and pins
-  and nothing else — no name, no address, no channel. A read about a person works by the pin, so a person with no
-  pin fails `contact_not_linked` before anything is called: a read creates nobody.
+  and nothing else — no name, no address, no channel. A read about a person works by the pin —
+  `preflight.provider_contact` is `pinned_only` — so a person with no pin fails `contact_not_linked` before anything is
+  called: a read creates nobody.
 - Without a person, the campaign is named as in `campaign.get`: by `args.campaign.external_id` the first time, or by
   `campaign.external_ids.campaign` once it is pinned. An input naming neither a person nor a campaign is refused
   before your code runs.
 - `source` is `inbound` (threads the other side wrote into) or `all`, and it is required.
 - `since`, when present, keeps only threads that moved at or after it.
+- `thread_channel`, `email` or `linkedin`, keeps only threads on that channel; `category`, by the identifier the reads
+  report under `vendor.category.id`, keeps only threads filed under it. Both are filters on the threads, never a channel
+  the call consumes, and both are applied by the provider before it pages, so `offset` counts the threads that pass
+  them. A filter this read applied after reading could not say where the next page starts, and none is.
 
 ## What to return
 
@@ -109,7 +114,7 @@ be asked again.
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `optional`, channel `none`, suppression `checked` |
+| pre-flight | contact `optional`, channel `none`, suppression `checked`, provider contact `pinned_only` |
 | in a paused campaign | `waits` |
 | contact projection | `id`; channels: `none` |
 | precondition | none |

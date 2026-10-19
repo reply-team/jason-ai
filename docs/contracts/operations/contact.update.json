@@ -1,0 +1,234 @@
+{
+  "id": "contact.update",
+  "version": 1,
+  "l1": { "name": "contact.update", "contract_version": "2.0.0", "family": 2, "core": false },
+  "intent": "\"Change these fields on these people\"",
+
+  "reach": "control",
+  "reversibility": "compensatable",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "the current field values, and the per-item ledger under this key.",
+  "idempotency_key": "required",
+  "per_item_results": "required",
+  "accepts_collection": true,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": ["A1"],
+
+  "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "find_only" },
+  "dispatch": { "in_paused_campaign": "waits" },
+  "contact_projection": {
+    "fields": ["id"],
+    "channels": "consumed"
+  },
+  "precondition": "Every custom field the arguments name is one the provider's account defines.",
+  "preview": null,
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:contact.update:1:input",
+    "title": "contact.update input",
+    "description": "One person, the fields to change on the provider's contact for them, and one key. The values are the planner's: Jason's own record of the person is not copied to the provider by this operation.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "contacts", "campaign", "idempotency_key"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["channel"],
+        "anyOf": [{ "required": ["fields"] }, { "required": ["custom_fields"] }],
+        "description": "The fields to change, the custom fields to change, or both. A field left out stays as the provider holds it; a null clears it.",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "description": "Which of the contact's channels this operation consumes. Exactly that one channel is projected into `contacts[0].channels`."
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": false,
+            "anyOf": [{ "required": ["first_name"] }, { "required": ["last_name"] }, { "required": ["company"] }, { "required": ["title"] }],
+            "description": "The person's own fields at the provider. An address, a channel, an owner or a stop is not among them: an address is a channel, and no field clears a stop.",
+            "properties": {
+              "first_name": { "$ref": "#/$defs/value" },
+              "last_name": { "$ref": "#/$defs/value" },
+              "company": { "$ref": "#/$defs/value" },
+              "title": { "$ref": "#/$defs/value" }
+            }
+          },
+          "custom_fields": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "Custom fields, each named as the provider's account names it.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "value"],
+              "properties": {
+                "name": { "$ref": "#/$defs/custom_name" },
+                "value": { "$ref": "#/$defs/custom_value" }
+              }
+            }
+          }
+        }
+      },
+      "contacts": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "This version addresses one person per work item, in the collection shape the level-1 contract uses.",
+        "items": { "$ref": "#/$defs/contact" }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" },
+      "idempotency_key": {
+        "type": "string",
+        "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+        "description": "The work item's own identifier: stable across every attempt, which is what makes a ledger under this key answerable."
+      }
+    },
+    "$defs": {
+      "value": {
+        "type": ["string", "null"],
+        "minLength": 1,
+        "maxLength": 200,
+        "pattern": "[^\\t\\n\\v\\f\\r \\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]",
+        "description": "The value to set, holding something besides white space, or null to clear the field."
+      },
+      "custom_name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "pattern": "[^\\t\\n\\v\\f\\r \\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]",
+        "description": "The custom field's name as the provider's account names it, holding something besides white space."
+      },
+      "custom_value": {
+        "type": ["string", "null"],
+        "minLength": 1,
+        "maxLength": 1000,
+        "pattern": "[^\\t\\n\\v\\f\\r \\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]",
+        "description": "The value to set, holding something besides white space, or null to clear the field."
+      },
+      "contact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "channels", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "channels": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "description": "Only the channel the operation consumes, never the person's whole reachability.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["channel", "value", "primary"],
+              "properties": {
+                "channel": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+                "value": { "type": "string", "minLength": 1, "maxLength": 500 },
+                "primary": { "type": "boolean" }
+              }
+            }
+          },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      },
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:contact.update:1:output",
+    "title": "contact.update result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "One outcome per person. A partial success reported as a single verdict is a defect.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contact_id", "status", "external_ids"],
+          "properties": {
+            "contact_id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+            "status": { "type": "string", "enum": ["updated"] },
+            "external_ids": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["contact"],
+              "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "external_ids": {
+    "contact": {
+      "entity": "contact",
+      "description": "The provider's identifier for the contact this call changed, pinned so no later call has to match the person by address again."
+    }
+  },
+
+  "recovery_read": {
+    "reads": "With a pin learned on the failure, nothing more: the update sets each field it names outright, so a repeat worked by that contact lands on the same values. With no pin learned, the person is found again by the consumed value, as the first attempt found them, and nobody is created.",
+    "justification": "A second performance of the same update changes nothing at the provider, so the only read a repeat needs is the one that names the contact, and the pin learned on the failure makes even that one unnecessary."
+  },
+  "repeat_after_ambiguous": "after_recovery_read",
+
+  "failure_codes": [
+    { "code": "contact_not_found", "class": "permanent", "when": "The identifier pinned for this person no longer resolves at the provider, so the operation cannot act on the person it was told to act on — working by the pinned identifier is the rule, so this is reported rather than re-matched by address; or, with no pin, the provider holds nobody under the consumed value — the person is enrolled or put on a list first, then updated." },
+    { "code": "contact_not_unique", "class": "permanent", "when": "More than one provider contact carries this address, so picking one would be guessing and nothing was changed. A person resolves the duplicate at the provider, then proposes the work again." },
+    { "code": "invalid_channel_value", "class": "validation", "when": "The person carries no value the provider looks anybody up by on the channel named, so no later attempt can find them by it either." },
+    { "code": "invalid_field_value", "class": "validation", "when": "The provider refused a value the arguments give a field, or the arguments name one custom field twice, the same name whatever its case. Nothing was changed." },
+    { "code": "field_not_found", "class": "validation", "when": "A custom field the arguments name is one the provider's account defines none of, so nothing was changed. Name the field as the account names it." },
+    { "code": "feature_unavailable", "class": "permanent", "when": "The provider says the account's plan or role does not include changing a contact." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, or the plugin could not finish a lookup it needs, so nothing the operation asks for was done. Repeating it runs the same call again." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it change contacts for this account." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now and it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was written." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the fields may already have been changed. The next attempt works by the contact pinned on the failure or, with none, by the one a read finds." }
+  ],
+
+  "timeout_ms": 120000,
+
+  "conformance": [
+    "A contact pinned under `contacts[0].external_ids.contact` is worked by that identifier, and never matched again by the channel value.",
+    "A contact with no pin is looked up by the channel value first, and the identifier the provider holds them under comes back under `external_ids.contact`; a person the provider holds nobody for fails `contact_not_found`, and nobody is created.",
+    "A field the arguments leave out stays as the provider holds it, and a field given as null is cleared.",
+    "A custom field is named as the provider's account names it, and one the account defines none of fails `field_not_found` with nothing changed.",
+    "An attempt after a lost answer works by the contact pinned on the failure and, with no pin, by the contact a read finds, and sets the same values again: one crash leaves one change.",
+    "The result carries exactly one item, and its `contact_id` is the identifier the call was given."
+  ]
+}
