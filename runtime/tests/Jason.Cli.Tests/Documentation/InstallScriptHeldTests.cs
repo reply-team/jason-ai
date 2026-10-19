@@ -44,6 +44,9 @@ public sealed class InstallScriptHeldTests : IDisposable
 
     private const int LockViolation = unchecked((int)0x80070021);
 
+    /// <summary>The words the stand-in Expand-Archive refuses an unpacking in, by which a pause it caused is known.</summary>
+    private const string StoodInRefusal = "The unpacking this test stands in for was refused";
+
     /// <summary>
     /// The time the archive's executable carries. Windows PowerShell's Expand-Archive writes an entry, closes it, and then
     /// opens it again to set this time on it: a hold taken in between refuses that second open, and the script stops at
@@ -186,8 +189,10 @@ public sealed class InstallScriptHeldTests : IDisposable
     /// </summary>
     /// <remarks>
     /// <para>
-    /// "At once" is counted, not timed: the script runs with its pause stood in for by one that only writes each pause down,
-    /// and none may be written. A whole run of the script on a loaded machine takes as long as a wait would.
+    /// "At once" is counted, not timed: the script runs with its pause stood in for by one that writes each pause down with
+    /// the error its wait had caught, and none may be for this refusal. A whole run of the script on a loaded machine takes
+    /// as long as a wait would. A pause for a real hold on the machine — a scanner reading what was just unpacked — is
+    /// taken and allowed, as it is for anybody's install.
     /// </para>
     /// <para>
     /// PowerShell's words for the refusal are the system's, in the machine's language, so what is read is what stopped the
@@ -210,7 +215,8 @@ public sealed class InstallScriptHeldTests : IDisposable
             var (exit, _, stderr) = await Start(shell, pauses);
 
             Assert.False(running.HasExited, $"The program the leftover runs had ended before the script reached it, so this case was not run. The script said: {stderr}");
-            Assert.False(File.Exists(pauses), $"The script paused {(File.Exists(pauses) ? File.ReadAllLines(pauses).Length : 0)} time(s) before it refused: {stderr}");
+            var paused = Pauses(pauses);
+            Assert.True(paused.All(IsHold), $"The script paused for something other than a hold before it refused: {Said(paused)}. It said: {stderr}");
             Assert.NotEqual(0, exit);
             Assert.Contains("The script stopped on System.IO.IOException 0x800700B7.", stderr, StringComparison.Ordinal);
             Assert.DoesNotContain("held open", stderr, StringComparison.Ordinal);
@@ -393,11 +399,20 @@ public sealed class InstallScriptHeldTests : IDisposable
     /// inside as well.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The hold is stood in for rather than staged: the extractor's own gap is a moment wide, in a directory of a fresh name.
     /// An Expand-Archive of the test's own outranks the cmdlet. Its first call unpacks for real, leaving the files behind as
     /// a refused unpacking does, and then throws what the cmdlet throws: a <c>MethodInvocationException</c> around an
     /// <c>IOException</c> with <c>0x80070020</c>, in words of its own, since the script reads the code and never the
     /// message. Its later calls are the cmdlet's.
+    /// </para>
+    /// <para>
+    /// What is counted is the pauses that refusal caused, known by its own words, and not every pause: the unpacking is real,
+    /// and so is a hold on what it writes — a scanner reading an executable just written to disk is one — which the script
+    /// waits out as it should. A pause that is only written down made that wait a loop that tried again within a few
+    /// milliseconds instead of a quarter second, and on a Windows runner a hold met after the refusal lasted through all ten
+    /// seconds of it; so each pause is taken as well as written down, and the script waits a hold out as it does for anybody.
+    /// </para>
     /// </remarks>
     [Theory]
     [InlineData(Pwsh)]
@@ -408,10 +423,14 @@ public sealed class InstallScriptHeldTests : IDisposable
 
         var (exit, _, stderr) = await Start(shell, pauses, refusedUnpacks: 1);
 
-        Assert.True(exit == 0, stderr);
+        var paused = Pauses(pauses);
+        Assert.True(exit == 0, $"The install exited {exit}. It paused: {Said(paused)}. It said: {stderr}");
         Assert.Equal(_standIn, File.ReadAllBytes(Target));
-        var paused = File.Exists(pauses) ? File.ReadAllLines(pauses) : [];
-        Assert.True(paused is ["250"], $"Expected one pause of 250 ms; the script paused {paused.Length} time(s): {string.Join(", ", paused)}. It said: {stderr}");
+        var refused = paused.Where(pause => pause.Cause.Contains(StoodInRefusal, StringComparison.Ordinal)).ToList();
+        Assert.True(refused is [{ Milliseconds: 250 }], $"Expected the refused unpacking to be waited out by one pause of 250 ms; the script paused: {Said(paused)}. It said: {stderr}");
+        Assert.True(
+            paused.Except(refused).All(pause => IsHold(pause) && pause.Milliseconds == 250),
+            $"Every other pause is a real hold, waited out for 250 ms; the script paused: {Said(paused)}. It said: {stderr}");
     }
 
     /// <summary>An unpacking held for the whole wait: said in a sentence of its own, and nothing was installed.</summary>
@@ -439,6 +458,25 @@ public sealed class InstallScriptHeldTests : IDisposable
         File.WriteAllBytes(path, bytes);
         return bytes;
     }
+
+    /// <summary>A pause the script took, and the error its wait had caught when it took it: type, codes and words.</summary>
+    private sealed record Pause(int Milliseconds, string Cause);
+
+    /// <summary>The pauses written down by the run's stand-in <c>Start-Sleep</c>, in the order the script took them.</summary>
+    private static List<Pause> Pauses(string file) =>
+        File.Exists(file)
+            ? [.. File.ReadAllLines(file).Select(line => line.Split(' ', 2)).Select(parts => new Pause(int.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture), parts.Length > 1 ? parts[1] : string.Empty))]
+            : [];
+
+    /// <summary>Whether a pause was for a hold — a sharing or a lock violation, on the error or inside it — and nothing else.</summary>
+    private static bool IsHold(Pause pause)
+    {
+        var codes = pause.Cause.Split(':', 2)[0];
+        return codes.Contains($"0x{SharingViolation:X8}", StringComparison.Ordinal) || codes.Contains($"0x{LockViolation:X8}", StringComparison.Ordinal);
+    }
+
+    private static string Said(List<Pause> paused) =>
+        paused.Count == 0 ? "never" : string.Join(" | ", paused.Select(pause => $"{pause.Milliseconds} ms for {pause.Cause}"));
 
     /// <summary>Opened as a reader opens a file: reading it, and letting others read it, and nothing else.</summary>
     private static FileStream Hold(string file) => new(file, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -677,9 +715,11 @@ public sealed class InstallScriptHeldTests : IDisposable
     /// <param name="shell">Which PowerShell runs it.</param>
     /// <param name="pauses">
     /// Where to count the script's pauses, or null to run it as a file as a person's shell would. With a file, the script is
-    /// run under a <c>Start-Sleep</c> of the test's own, a function that outranks the cmdlet and writes each pause down
-    /// instead of taking it, and inside a <c>catch</c> of the test's own that writes what stopped it, in words no language
-    /// changes: the exception's type and its HResult.
+    /// run under a <c>Start-Sleep</c> of the test's own, a function that outranks the cmdlet, writes each pause down with the
+    /// error the script's wait had caught — its type, its HResult and the one inside it, and its words on one line — and then
+    /// takes it, as the cmdlet would: a pause only written down turns a real hold into a loop as fast as the machine goes.
+    /// The script runs inside a <c>catch</c> of the test's own that writes what stopped it, in words no language changes:
+    /// the exception's type and its HResult.
     /// </param>
     /// <param name="refusedUnpacks">
     /// How many of the script's unpackings are refused as held, or null for none. With a number, the script is run as with
@@ -698,7 +738,12 @@ public sealed class InstallScriptHeldTests : IDisposable
         start.CreateNoWindow = true;
         var pause = pauses is null
             ? string.Empty
-            : "function global:Start-Sleep { param([int] $Milliseconds) Add-Content -LiteralPath $env:JASON_TEST_PAUSES -Value $Milliseconds }; ";
+            : "function global:Start-Sleep { param([int] $Milliseconds) "
+                + "$caught = (Get-Variable -Name _ -Scope 1 -ErrorAction SilentlyContinue).Value; $cause = 'no error'; "
+                + "if ($caught.Exception) { $e = $caught.Exception; $cause = '{0} 0x{1:X8}' -f $e.GetType().FullName, $e.HResult; "
+                + "if ($e.InnerException) { $cause += ' inside 0x{0:X8}' -f $e.InnerException.HResult }; $cause += ': ' + ($e.Message -replace '\\s+', ' ') }; "
+                + "Add-Content -LiteralPath $env:JASON_TEST_PAUSES -Value ('{0} {1}' -f $Milliseconds, $cause); "
+                + "Microsoft.PowerShell.Utility\\Start-Sleep -Milliseconds $Milliseconds }; ";
         // The module is imported before the stand-in is defined: importing it later - which the first call of the cmdlet by
         // its full name would do - puts the module's own Expand-Archive over the stand-in.
         var unpack = refusedUnpacks is not { } refused
@@ -708,7 +753,7 @@ public sealed class InstallScriptHeldTests : IDisposable
                 + "Microsoft.PowerShell.Archive\\Expand-Archive -LiteralPath $LiteralPath -DestinationPath $DestinationPath -ErrorAction Stop; "
                 + "if ($global:refusedUnpacks -le 0) { return }; $global:refusedUnpacks--; "
                 + "$held = New-Object System.IO.IOException(('This test holds {0} open.' -f (Join-Path $DestinationPath 'jason.exe')), -2147024864); "
-                + "throw (New-Object System.Management.Automation.MethodInvocationException(('The unpacking this test stands in for was refused: {0}' -f $held.Message), $held)) }; ";
+                + "throw (New-Object System.Management.Automation.MethodInvocationException(('" + StoodInRefusal + ": {0}' -f $held.Message), $held)) }; ";
         string[] run = pauses is null && refusedUnpacks is null
             ? ["-File", script, "-InstallDir", _install, "-NoModifyPath", "-Feed", _feed]
             : ["-Command", pause + unpack

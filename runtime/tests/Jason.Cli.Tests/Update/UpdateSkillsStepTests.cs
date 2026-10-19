@@ -193,7 +193,7 @@ public class UpdateSkillsStepTests
 
     /// <summary>
     /// And any exception at all that the deployment did not name. Listing the ones that can happen has missed one twice,
-    /// so the step takes everything but a cancellation it was not asked for, and says what it was.
+    /// so the step takes everything, and says what it was.
     /// </summary>
     [Fact]
     public async Task A_step_that_meets_an_exception_nobody_named_leaves_the_update_complete()
@@ -294,6 +294,29 @@ public class UpdateSkillsStepTests
         Assert.Equal("complete", answer.Step);
         Assert.Equal(installation.To.ToString(), installation.Installed());
         Assert.Equal("skills: not updated — cancelled; run: jason skills update", Assert.Single(answer.Steps, step => step.StartsWith("skills:", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// A cancellation nobody asked for — a timeout, which .NET raises as a cancellation of its own — is one more thing the
+    /// step meets and says, not a stop: the person stopped nothing, the update is complete, and the line says what ended
+    /// the step. It used to go past the step, and an update that had completed exited 1 with no document.
+    /// </summary>
+    [Fact]
+    public async Task A_cancellation_nobody_asked_for_leaves_the_update_complete()
+    {
+        using var installation = new FakeInstallation();
+        using var dir = new TempPaths();
+        var origin = await TaggedSource.CreateAsync(dir, Ct, $"v{Before}", Tag(installation));
+        await InstallAsync(installation, ["skills", "install", "--source", origin]);
+        var env = Env(installation, new FakeProgramRunner(_ => throw new TaskCanceledException("the fetch timed out")));
+
+        var exit = await UpdateCommands.ApplyAsync(env, installation.Feed.AbsoluteUri, null, 0, human: false, Ct);
+
+        Assert.True(exit == ExitCodes.Success, $"The update exited {exit}: {installation.Out} {installation.Error}");
+        var answer = JsonSerializer.Deserialize<UpdateApplyResponse>(installation.Out.ToString(), JasonJson.Options)!;
+        Assert.Equal("complete", answer.Step);
+        Assert.Equal(installation.To.ToString(), installation.Installed());
+        Assert.Equal("skills: not updated — the fetch timed out; run: jason skills update", Assert.Single(answer.Steps, step => step.StartsWith("skills:", StringComparison.Ordinal)));
     }
 
     /// <summary>

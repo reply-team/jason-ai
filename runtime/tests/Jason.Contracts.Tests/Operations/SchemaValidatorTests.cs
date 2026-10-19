@@ -638,6 +638,20 @@ public class SchemaValidatorTests
         Assert.Equal("format", Refuses(schema, "\"2026-02-30T12:00:00Z\"").Reason);
     }
 
+    /// <summary>
+    /// The year 0000 is four digits like any other, and no date this dialect admits: it is refused by name, as an
+    /// impossible day is, where it used to throw out of the validator from every <c>date-time</c> field of every family.
+    /// </summary>
+    [Fact]
+    public void Format_date_time_refuses_the_year_zero_by_name()
+    {
+        const string schema = """{"type":"string","format":"date-time"}""";
+
+        Assert.Equal("format", Refuses(schema, "\"0000-01-01T00:00:00Z\"").Reason);
+        Accepts(schema, "\"0001-01-01T00:00:00Z\"");
+        Accepts(schema, "\"9999-12-31T23:59:59Z\"");
+    }
+
     [Fact]
     public void A_local_ref_is_resolved_against_the_documents_own_defs()
     {

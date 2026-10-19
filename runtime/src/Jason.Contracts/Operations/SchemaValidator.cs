@@ -1957,7 +1957,8 @@ public static class SchemaValidator
         var minute = int.Parse(text.AsSpan(14, 2), CultureInfo.InvariantCulture);
         var second = int.Parse(text.AsSpan(17, 2), CultureInfo.InvariantCulture);
 
-        if (month is < 1 or > 12 || day < 1 || day > DateTime.DaysInMonth(year, month) || hour > 23 || minute > 59 || second > 60)
+        // The year 0000 is four digits too, and no calendar year: asked how long its month is, the framework throws.
+        if (year < 1 || month is < 1 or > 12 || day < 1 || day > DateTime.DaysInMonth(year, month) || hour > 23 || minute > 59 || second > 60)
         {
             return false;
         }

@@ -136,10 +136,11 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             cause = "cancelled";
             outcome = new SkillsUpdateOutcome(ExitCodes.ApiError, [], NothingRecorded: false);
         }
-        catch (Exception error) when (error is not OperationCanceledException)
+        catch (Exception error)
         {
-            // Everything else, by construction rather than by name. Naming the ones that can happen here missed one twice,
-            // and each miss turned a completed update into one reported as refused.
+            // Everything else, by construction rather than by name, and a cancellation nobody here asked for with it: a timeout
+            // arrives as one. Naming the ones that can happen here missed one twice, and each miss turned a completed update
+            // into one reported as refused.
             complained.WriteLine(error.Message);
             cause = error.Message;
             outcome = new SkillsUpdateOutcome(ExitCodes.ApiError, [], NothingRecorded: false);

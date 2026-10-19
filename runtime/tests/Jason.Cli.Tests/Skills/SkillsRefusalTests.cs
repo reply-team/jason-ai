@@ -62,6 +62,53 @@ public class SkillsRefusalTests
         Assert.Contains("SECOND-AND-LONGER", await File.ReadAllTextAsync(Path.Combine(live, "SKILL.md"), Ct), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A pack with one skill refused and another moved records each as it now is on disk: the held one with the files it
+    /// had, the moved one with the files it was given.
+    /// </summary>
+    /// <remarks>
+    /// The pack's record stays the old deployment's, since one of its skills is still the old tree, but its file list has
+    /// to be the disk's. Kept whole, the moved skill's digests are the bytes it replaced, and a later deployment from a
+    /// source that changed it again reads the difference as the operator's own edit and refuses without
+    /// <c>--force</c>. A re-run of the same source cannot show that — the moved skill already matches it — so the last
+    /// run here is from a third.
+    /// </remarks>
+    [Fact]
+    public async Task A_pack_with_one_skill_refused_and_one_moved_records_each_as_it_is_on_disk()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            // As above: only Windows refuses a directory rename while a file inside is open.
+            return;
+        }
+
+        using var dir = new TempPaths();
+        await InstallAsync(dir, Source(dir, "FIRST", "researcher", "writer"));
+        var roles = dir.Paths.RoleSkillsDirectory;
+
+        using (var held = File.Open(Path.Combine(roles, "researcher", "SKILL.md"), FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            var refused = await InstallAsync(dir, Source(dir, "SECOND", "researcher", "writer"), expectSuccess: false);
+            Assert.Contains("'researcher' could not be replaced", refused.Error, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("FIRST", await File.ReadAllTextAsync(Path.Combine(roles, "researcher", "SKILL.md"), Ct), StringComparison.Ordinal);
+        Assert.Contains("SECOND", await File.ReadAllTextAsync(Path.Combine(roles, "writer", "SKILL.md"), Ct), StringComparison.Ordinal);
+        var recorded = Assert.Single(SkillsRecord.Read(roles)!.Packs).Files;
+        foreach (var role in (string[])["researcher", "writer"])
+        {
+            var onDisk = SkillsRecord.Digest(Path.Combine(roles, role, "SKILL.md"));
+            var file = Assert.Single(recorded, candidate => candidate.Path == $"{role}/SKILL.md");
+            Assert.True(file.Sha256 == onDisk, $"The record says {role}/SKILL.md is {file.Sha256}; on disk it is {onDisk}.");
+        }
+
+        var third = await InstallAsync(dir, Source(dir, "THIRD", "researcher", "writer"), expectSuccess: false);
+        Assert.True(third.Exit == ExitCodes.Success, $"The deployment after the refusal exited {third.Exit}: {third.Error}");
+        Assert.DoesNotContain("you have edited", third.Error, StringComparison.Ordinal);
+        Assert.Contains("THIRD", await File.ReadAllTextAsync(Path.Combine(roles, "researcher", "SKILL.md"), Ct), StringComparison.Ordinal);
+        Assert.Contains("THIRD", await File.ReadAllTextAsync(Path.Combine(roles, "writer", "SKILL.md"), Ct), StringComparison.Ordinal);
+    }
+
     private static string Harness(TempPaths dir) =>
         Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "harness")).FullName;
 
@@ -88,14 +135,19 @@ public class SkillsRefusalTests
         return (exit, output.ToString(), error.ToString());
     }
 
-    private static string Source(TempPaths dir, string marker)
+    /// <summary>A directory source whose roles each say <paramref name="marker"/>: the researcher, unless others are named.</summary>
+    private static string Source(TempPaths dir, string marker, params string[] roles)
     {
         var root = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, $"source-{marker}")).FullName;
-        var skill = Path.Combine(root, "skills", "runtime", "roles", "researcher");
-        Directory.CreateDirectory(skill);
-        File.WriteAllText(
-            Path.Combine(skill, "SKILL.md"),
-            $"---\nname: researcher\ndescription: one line\n---\n\n{marker}\n");
+        foreach (var role in roles is [] ? ["researcher"] : roles)
+        {
+            var skill = Path.Combine(root, "skills", "runtime", "roles", role);
+            Directory.CreateDirectory(skill);
+            File.WriteAllText(
+                Path.Combine(skill, "SKILL.md"),
+                $"---\nname: {role}\ndescription: one line\n---\n\n{marker}\n");
+        }
+
         return root;
     }
 }
