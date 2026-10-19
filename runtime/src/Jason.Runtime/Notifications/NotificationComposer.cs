@@ -15,6 +15,12 @@ public static class NotificationComposer
     /// <summary>How many campaigns a pointer names where protective work failed; the rest are counted.</summary>
     public const int MaxCampaignsNamed = 3;
 
+    /// <summary>The largest count a pointer says as a figure.</summary>
+    public const int MaxSaid = 9_999;
+
+    /// <summary>What a pointer says for a count past <see cref="MaxSaid"/>: four characters, as the longest figure is.</summary>
+    public const string PastFourDigits = "10k+";
+
     /// <summary>Where to look. Plain text: a toast shows backticks as backticks.</summary>
     public const string Look = "Ask your agent what Jason is waiting for, or run jason approval list and jason decision list.";
 
@@ -26,7 +32,10 @@ public static class NotificationComposer
         "Ask your agent what failed and what Jason is waiting for, or run jason workitem list --status failed --status expired, jason approval list and jason decision list.";
 
     /// <summary>Where to look when an account's events were not read and nothing else is said.</summary>
-    public const string LookAtGaps = "Ask your agent what Jason did not read.";
+    public const string LookAtGaps = "Ask your agent what Jason did not read, or run " + LookAtGapsCommand + ".";
+
+    /// <summary>The command that shows the accounts whose events were not read, and the spans of them nobody will read.</summary>
+    public const string LookAtGapsCommand = "jason events sources";
 
     /// <param name="eventGaps">How many accounts have a span of events nobody will read, said since the last pointer that reached anybody.</param>
     /// <exception cref="ArgumentOutOfRangeException">A count is negative, or every count is zero: nothing to say is never composed.</exception>
@@ -56,7 +65,7 @@ public static class NotificationComposer
                 parts.Add(Count(decisions, "question", "questions"));
             }
 
-            var verb = approvals + decisions == 1 ? "is" : "are";
+            var verb = (long)approvals + decisions == 1 ? "is" : "are";
             sentences.Add($"{string.Join(" and ", parts)} {verb} waiting in Jason.");
         }
 
@@ -70,7 +79,8 @@ public static class NotificationComposer
             sentences.Add($"{Count(eventGaps, "account has", "accounts have")} events Jason did not read.");
         }
 
-        var waiting = approvals + decisions > 0;
+        // Either alone, never their sum: two counts near the largest an int holds would add up to less than nothing.
+        var waiting = approvals > 0 || decisions > 0;
         var look = eventGaps > 0 ? Pointing(waiting, failures > 0)
             : failures == 0 ? Look
             : waiting ? LookAtBoth
@@ -79,13 +89,13 @@ public static class NotificationComposer
     }
 
     /// <summary>
-    /// Where to look when an account's events were not read: alone, the agent; beside other things, the agent and the
-    /// commands for those, without the questions each would ask — four things said in full would not fit the message the
-    /// delivery contract takes.
+    /// Where to look when an account's events were not read: alone, the agent and the record of the accounts; beside other
+    /// things, the agent and the command of each thing, the record last, without the questions each would ask — four
+    /// things said in full would not fit the message the delivery contract takes.
     /// </summary>
     private static string Pointing(bool waiting, bool failed)
     {
-        var commands = new List<string>(3);
+        var commands = new List<string>(4);
         if (waiting)
         {
             commands.Add("jason approval list");
@@ -97,16 +107,21 @@ public static class NotificationComposer
             commands.Add("jason workitem list --status failed --status expired");
         }
 
-        return commands.Count == 0
-            ? LookAtGaps
-            : $"Ask your agent, or run {(commands.Count == 1 ? commands[0] : $"{string.Join(", ", commands.Take(commands.Count - 1))} and {commands[^1]}")}.";
+        if (commands.Count == 0)
+        {
+            return LookAtGaps;
+        }
+
+        commands.Add(LookAtGapsCommand);
+
+        return $"Ask your agent, or run {string.Join(", ", commands.Take(commands.Count - 1))} and {commands[^1]}.";
     }
 
     /// <summary>"2 protective actions failed in Jason, in cmp_… and cmp_…." — the campaigns by public id, three at most.</summary>
     private static string Failed(FailedProtectiveWork failed)
     {
         var named = failed.Campaigns.Take(MaxCampaignsNamed).ToList();
-        var places = failed.MoreCampaigns > 0 ? $"{string.Join(", ", named)} and {failed.MoreCampaigns.ToString(CultureInfo.InvariantCulture)} more"
+        var places = failed.MoreCampaigns > 0 ? $"{string.Join(", ", named)} and {Figure(failed.MoreCampaigns)} more"
             : named.Count == 0 ? null
             : named.Count == 1 ? named[0]
             : $"{string.Join(", ", named.Take(named.Count - 1))} and {named[^1]}";
@@ -114,8 +129,15 @@ public static class NotificationComposer
         return places is null ? $"{count} failed in Jason." : $"{count} failed in Jason, in {places}.";
     }
 
-    private static string Count(int count, string one, string many) =>
-        string.Create(CultureInfo.InvariantCulture, $"{count} {(count == 1 ? one : many)}");
+    private static string Count(int count, string one, string many) => $"{Figure(count)} {(count == 1 ? one : many)}";
+
+    /// <summary>
+    /// A count as a pointer says it: as it is up to four digits, and past them as <see cref="PastFourDigits"/>, so that no
+    /// count is ever said in more than four characters and the longest pointer fits the delivery contract whatever the
+    /// counts are. A toast needs the size of it; the figure is where the pointer sends the person.
+    /// </summary>
+    private static string Figure(int count) =>
+        count > MaxSaid ? PastFourDigits : count.ToString(CultureInfo.InvariantCulture);
 }
 
 /// <summary>

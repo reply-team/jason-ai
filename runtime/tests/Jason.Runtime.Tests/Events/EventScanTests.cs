@@ -188,4 +188,147 @@ public class EventScanTests
         Assert.False(harness.Reader.Idle, "The scan handed no read to the reader.");
         Assert.NotNull(await harness.Reader.ReadNextAsync(Ct));
     }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // A span asked for again
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Keeping every account current comes first: while an account's own read is due, the scan hands that over, and a
+    /// span asked for again is read in a scan where none is.
+    /// </summary>
+    [Fact]
+    public async Task A_backfill_is_handed_over_only_when_no_account_s_own_read_is_due()
+    {
+        using var harness = Create();
+        await ScanAndReadAsync(harness);
+        var source = await SourceOfAsync(harness, "a");
+        await BackfillAsync(harness, source);
+        harness.Clock.Advance(TimeSpan.FromSeconds(Cadence));
+
+        await ScanAndReadAsync(harness);
+        await ScanAndReadAsync(harness);
+
+        Assert.Equal(
+            ["""{"cursor":"c-0","since":null,"until":null,"limit":100}""",
+             """{"cursor":null,"since":"2026-08-19T12:00:00.000Z","until":"2026-09-18T12:00:00.000Z","limit":100}"""],
+            harness.Events.Requests.Skip(1).Select(request => request.Input.ToJsonString()));
+    }
+
+    /// <summary>A source's spans are read in the order they were asked for: the oldest request first.</summary>
+    [Fact]
+    public async Task The_oldest_pending_backfill_of_a_source_goes_first()
+    {
+        using var harness = Create();
+        await ScanAndReadAsync(harness);
+        var source = await SourceOfAsync(harness, "a");
+        await BackfillAsync(harness, source, from: Noon.AddDays(-90), to: Noon.AddDays(-80));
+        await BackfillAsync(harness, source, from: Noon.AddDays(-200), to: Noon.AddDays(-190));
+
+        await ScanAndReadAsync(harness);
+
+        Assert.Equal("2026-07-20T12:00:00.000Z", (string?)harness.Events.Requests[^1].Input["since"]);
+    }
+
+    /// <summary>
+    /// A source's spans are read strictly in the order they were asked for: an older one waiting out a failure holds its
+    /// newer ones, which is also why every span still waiting is among the ten newest its record shows.
+    /// </summary>
+    [Fact]
+    public async Task A_source_s_older_span_waiting_out_a_failure_holds_its_newer_one()
+    {
+        using var harness = Create();
+        await ScanAndReadAsync(harness);
+        var source = await SourceOfAsync(harness, "a");
+        await BackfillAsync(harness, source, from: Noon.AddDays(-200), to: Noon.AddDays(-190), failures: 1, attempted: Noon.AddMinutes(-1));
+        await BackfillAsync(harness, source, from: Noon.AddDays(-90), to: Noon.AddDays(-80));
+
+        Assert.Equal(0, await harness.EventScanAsync(Ct));
+        Assert.DoesNotContain(harness.Events.Requests, request => request.Input["until"] is not null);
+    }
+
+    /// <summary>
+    /// Keeping every account current comes first, a backlog among it: while an account reads on with more, its read is due
+    /// at every scan and every span waits — the other account's own reads still go — and once it has caught up the span
+    /// is read.
+    /// </summary>
+    [Fact]
+    public async Task A_backlog_holds_every_span_until_it_is_caught_up()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Load(harness, EventsPlugin());
+        Route(harness, Bound(Reader, "a"), new Dictionary<string, Route>(StringComparer.Ordinal) { ["campaign.get"] = Bound(Reader, "b") });
+        var behind = true;
+        var page = 0;
+        harness.Events.Otherwise = (request, _) =>
+            request.Input["until"] is not null ? FakeEventsInvoker.Page("s-1", false)
+            : (string?)request.Binding!["workspace"] == "a" ? FakeEventsInvoker.Page($"c-{++page}", behind)
+            : FakeEventsInvoker.Page("c-b", false);
+        await ScanAndReadAsync(harness);
+        await ScanAndReadAsync(harness);
+        await BackfillAsync(harness, await SourceOfAsync(harness, "b"));
+        var before = harness.Events.Requests.Count;
+
+        for (var minute = 1; minute <= 20; minute++)
+        {
+            harness.Clock.Advance(TimeSpan.FromMinutes(1));
+            await ScanAndReadAsync(harness);
+        }
+
+        Assert.DoesNotContain(harness.Events.Requests, request => request.Input["until"] is not null);
+        Assert.Contains(harness.Events.Requests.Skip(before), request => (string?)request.Binding!["workspace"] == "b");
+
+        behind = false;
+        for (var scan = 0; scan < 3; scan++)
+        {
+            await ScanAndReadAsync(harness);
+        }
+
+        Assert.Contains(harness.Events.Requests, request => request.Input["until"] is not null && (string?)request.Binding!["workspace"] == "b");
+    }
+
+    /// <summary>A span whose last read failed in a way that may pass waits its doubled cadence, and another account's span goes meanwhile.</summary>
+    [Fact]
+    public async Task A_backfill_waiting_out_a_failure_lets_another_account_s_go_first()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Load(harness, EventsPlugin());
+        Route(harness, Bound(Reader, "a"), new Dictionary<string, Route>(StringComparer.Ordinal) { ["campaign.get"] = Bound(Reader, "b") });
+        await ScanAndReadAsync(harness);
+        await ScanAndReadAsync(harness);
+        await BackfillAsync(harness, await SourceOfAsync(harness, "a"), failures: 1, attempted: Noon.AddMinutes(-1));
+        await BackfillAsync(harness, await SourceOfAsync(harness, "b"));
+
+        await ScanAndReadAsync(harness);
+
+        Assert.Equal("b", (string?)harness.Events.Requests[^1].Binding!["workspace"]);
+        Assert.NotNull(harness.Events.Requests[^1].Input["until"]);
+    }
+
+    /// <summary>A span of an account no route binds now waits with its source: it is read once a route binds the account again.</summary>
+    [Fact]
+    public async Task A_backfill_of_an_account_no_route_binds_waits()
+    {
+        using var harness = Create("a");
+        await ScanAndReadAsync(harness);
+        var gone = await SourceAsync(harness, "gone", cursor: "c-7", cursorAt: Noon.AddHours(-1));
+        await BackfillAsync(harness, gone);
+
+        Assert.Equal(0, await harness.EventScanAsync(Ct));
+        Assert.Equal(EventBackfillStatus.Pending, (await BackfillRowAsync(harness, 1)).Status);
+    }
+
+    [Theory]
+    [InlineData(DispatcherState.Draining)]
+    [InlineData(DispatcherState.Stopped)]
+    public async Task A_dispatcher_that_is_not_running_hands_out_no_backfill(DispatcherState state)
+    {
+        using var harness = Create();
+        await ScanAndReadAsync(harness);
+        await BackfillAsync(harness, await SourceOfAsync(harness, "a"));
+        harness.Status.State = state;
+
+        Assert.Equal(0, await harness.EventScanAsync(Ct));
+        Assert.Null(await harness.Reader.ReadNextAsync(Ct));
+    }
 }

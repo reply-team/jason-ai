@@ -205,19 +205,56 @@ public partial class InteractiveSkillTests
     }
 
     /// <summary>
-    /// When the pointer is sent: a person waited for, and a protective action that failed. A skill that named the first
-    /// alone would have a session tell a person that a notification about failed work cannot have come from Jason.
+    /// When the pointer is sent: a person waited for, a protective action that failed, and a span of an account's events
+    /// Jason will not read. A skill that named fewer would have a session tell a person that a notification about the
+    /// others cannot have come from Jason.
     /// </summary>
     [Fact]
-    public void The_operating_skill_says_a_failed_protective_action_is_told_as_well()
+    public void The_operating_skill_says_a_failed_protective_action_and_a_span_not_read_are_told_as_well()
     {
         var skill = Flattened("operating-the-installation");
 
         Assert.Contains(
-            "When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — or when a protective action fails, it tells them once, with a pointer: how many, and where to look.",
+            "When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a protective action fails, or when it finds a span of an account's events it will not read, it tells them once, with a pointer: how many, and where to look.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "A pointer that says an account has events Jason did not read sends you to `jason events sources`, as \"The accounts whose events it reads\" says.",
             skill,
             StringComparison.Ordinal);
         Assert.DoesNotContain("it tells them once, with a pointer: how many wait, and where to look.", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An account whose events are read is a source, and its record is read, never its cursor. A span Jason did not read
+    /// is read again only on the person's yes, with their words as the reason — and the skill says what that does and does
+    /// not do, so that a session neither promises a reply was sent nor runs it on its own judgement because a gap showed.
+    /// </summary>
+    [Fact]
+    public void The_operating_skill_reads_an_account_s_record_and_reads_a_span_again_only_on_a_yes()
+    {
+        var text = File.ReadAllText(SkillPack.Find("operating-the-installation").File).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var section = SectionOf(text, "## The accounts whose events it reads");
+        var skill = Flattened("operating-the-installation");
+
+        Assert.Contains("jason events sources --human", section, StringComparison.Ordinal);
+        Assert.Contains("jason events backfill --source", section, StringComparison.Ordinal);
+        Assert.Contains("that account is a **source**", skill, StringComparison.Ordinal);
+        Assert.Contains("A source never shows its cursor, and you do not need it.", skill, StringComparison.Ordinal);
+        Assert.Contains("That column stays once a span asked for again has read it: the spans asked for again are listed below the table with how each ended, so read them before you offer to read a span again.", skill, StringComparison.Ordinal);
+        Assert.Contains("It is read only when the person asks", skill, StringComparison.Ordinal);
+        Assert.Contains("Ask first, and run it on the person's yes, with their words as the reason.", skill, StringComparison.Ordinal);
+        Assert.Contains("It reads and sends nothing, and leaves the account's own reading where it stands.", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "What it finds that a campaign was not told, and that happened after the campaign went live, wakes that campaign's manager; what happened before is kept and says nothing.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("A span reaches at most 366 days back and ends no later than now; eight may wait for one account.", skill, StringComparison.Ordinal);
+
+        // A signal is a program's, not a session's: the person runs whatever receives their provider's webhooks, and a
+        // session that signalled in a loop to see sooner would only spend the account's reads.
+        Assert.Contains("`jason events signal` is for a program the person runs to receive a provider's webhooks", skill, StringComparison.Ordinal);
+        Assert.Contains("Do not run it yourself to see sooner what an account holds.", skill, StringComparison.Ordinal);
     }
 
     /// <summary>

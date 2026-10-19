@@ -13,10 +13,14 @@ namespace Jason.Runtime.Events;
 /// </summary>
 public sealed record BoundAccount(string PluginId, string BindingIdentity, JsonObject? Binding);
 
+/// <summary>A span of an account asked for again, as a read of it names it: its row and its public id.</summary>
+public sealed record EventBackfillRef(int Id, string PublicId);
+
 /// <summary>
 /// One read of one account, as the scan hands it to the reader: which source, the account's binding as the snapshot held
-/// it, the cursor the source held — the fence the page's cursor replaces — what the read starts from, and the package and
-/// snapshots it runs under.
+/// it, the cursor the read holds — the fence the page's cursor replaces — what the read starts from, and the package and
+/// snapshots it runs under. A read of a span asked for again names the span: the cursor it holds is the span's own, and
+/// nothing of the account's own reading is touched by it. A read of the account a signal brought forward says so.
 /// </summary>
 public sealed record EventRead(
     int SourceId,
@@ -27,7 +31,9 @@ public sealed record EventRead(
     string? HeldCursor,
     EventReadPlan Plan,
     PinnedPlugin Plugin,
-    string RoutingSnapshotId);
+    string RoutingSnapshotId,
+    EventBackfillRef? Backfill = null,
+    bool Signalled = false);
 
 /// <summary>
 /// Which accounts are read: every distinct plugin and binding identity a route names — the global routes and every

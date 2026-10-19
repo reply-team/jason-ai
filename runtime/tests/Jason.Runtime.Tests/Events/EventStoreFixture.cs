@@ -117,6 +117,34 @@ internal sealed class EventStoreFixture : IDisposable
         return await Store.StoreAsync(db, source, heldCursor, page, readId, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>Stores a page under a fence the test names — a backfill's among them — through a context of its own.</summary>
+    public async Task<EventStoreResult> StoreAsync(EventSource source, EventFence fence, EventPage page, string readId = "evr_01JB6K8TQ2W9V4MZ0C3Y7H5NRD")
+    {
+        await using var db = Open();
+        return await Store.StoreAsync(db, source, fence, page, readId, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>A span of the source asked for again, waiting, with the cursor its own reading holds.</summary>
+    public async Task<EventBackfill> BackfillAsync(EventSource source, string? cursor = null, EventBackfillStatus status = EventBackfillStatus.Pending)
+    {
+        await using var db = Open();
+        var backfill = new EventBackfill
+        {
+            PublicId = PublicId.New("evb"),
+            SourceId = source.Id,
+            From = Noon.AddDays(-60),
+            To = Noon.AddDays(-30),
+            Status = status,
+            Cursor = cursor,
+            RequestedAt = Noon.AddHours(-1),
+            ActorType = ActorType.Human,
+            ActorId = "marta",
+        };
+        db.EventBackfills.Add(backfill);
+        await db.SaveChangesAsync();
+        return backfill;
+    }
+
     /// <summary>Stores a page that skips a gap, through a context of its own, as the reader will.</summary>
     public async Task<EventStoreResult> StoreAsync(EventSource source, string? heldCursor, EventPage page, EventGap gap, string readId = "evr_01JB6K8TQ2W9V4MZ0C3Y7H5NRD")
     {

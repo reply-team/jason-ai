@@ -71,6 +71,20 @@ public class EventsE2ETests
             var stored = await run.ReadsAsync(read => (int)read["new"]!["stored"]! > 0, 1);
             Assert.Equal((3, 2), ((int)stored[0]["new"]!["stored"]!, (int)stored[0]["new"]!["said"]!));
 
+            // The record of the account says it is read, healthy and holds a cursor — and never what the cursor is.
+            var sources = await Ok(run.JasonAsync("events", "sources"));
+            var source = Json(sources)["items"]!.AsArray().Single()!;
+            Assert.Equal(
+                ("fake-events", true, true, true),
+                ((string?)source["plugin"], (bool)source["bound"]!, (bool)source["has_cursor"]!, (bool)source["healthy"]!));
+            Assert.DoesNotContain(mark, sources.Output, StringComparison.Ordinal);
+            Assert.Contains((string)source["id"]!, (await Ok(run.JasonAsync("events", "sources", "--human"))).Output, StringComparison.Ordinal);
+
+            // A signal for the account is kept on it and answered with its receipt.
+            var receipt = Json(await Ok(run.JasonAsync("events", "signal", "--source", (string)source["id"]!)));
+            Assert.NotNull((string?)receipt["signaled_at"]);
+            Assert.NotNull((string?)receipt["next_read_at"]);
+
             // One more event, recorded while the runtime is stopped: the next start reads it, and only it.
             await Ok(run.JasonAsync("runtime", "stop"));
             await run.EventsAsync(
@@ -131,6 +145,63 @@ public class EventsE2ETests
             run.Stop(pids);
         }
     }
+
+    /// <summary>
+    /// A span the first read did not reach is read again on a person's request, through the shipped program: over more
+    /// than one page, every event at or after its start and before its end and none after it — the plugin keeps the end
+    /// in its own cursor — while the account's own cursor stays where its reading left it. The person's reason reaches
+    /// no log file.
+    /// </summary>
+    [Fact]
+    public async Task A_span_the_first_read_did_not_reach_is_read_again_on_request()
+    {
+        var mark = "zq" + Guid.NewGuid().ToString("N");
+        using var run = new Run("feed", mark);
+        await run.AccountAsync(prefix: "c-" + mark + "-");
+        var now = DateTime.UtcNow;
+        var from = now.AddDays(-36);
+        var to = now.AddDays(-34);
+        var old = Enumerable.Range(0, EventsInTheSpan)
+            .Select(index => Bounced($"c-old-{index}", "p-1", now.AddDays(-35).AddSeconds(index), $"e-{mark}-{index}"))
+            .Append(Bounced("c-after", "p-1", to.AddHours(1), $"e-{mark}-after"))
+            .ToArray();
+        await run.EventsAsync(old);
+        var pids = new HashSet<int>();
+        try
+        {
+            await run.StartAsync(pids);
+            await Ok(run.JasonAsync("plugin", "reload", "--reason", "installed the events plugin"));
+
+            // The first read reaches back thirty days, and finds none of them.
+            var first = await run.ReadsAsync(_ => true, 1);
+            Assert.Equal(("first_start", 0), ((string?)first[0]["new"]!["mode"], (int)first[0]["new"]!["stored"]!));
+            var before = Json(await Ok(run.JasonAsync("events", "sources")))["items"]!.AsArray().Single()!;
+
+            var asked = Json(await Ok(run.JasonAsync(
+                "events", "backfill", "--source", (string)before["id"]!, "--from", Stamp(from), "--to", Stamp(to), "--reason", "reason-" + mark)));
+            Assert.Equal("pending", (string?)asked["status"]);
+
+            var after = await run.PollAsync(
+                () => run.JasonAsync("events", "sources"),
+                page => page["items"]![0]!["backfills"]!.AsArray() is [{ } span, ..] && (string?)span["status"] == "done",
+                "the span read to its end");
+            var record = after["items"]![0]!;
+            Assert.Equal(EventsInTheSpan, (int)record["backfills"]![0]!["stored"]!);
+            Assert.Equal((string?)before["cursor_at"], (string?)record["cursor_at"]);
+            var spans = await run.ReadsAsync(read => (string?)read["new"]!["mode"] == "backfill", 1);
+            Assert.Equal((EventsInTheSpan, (string?)asked["id"]), ((int)spans[0]["new"]!["stored"]!, (string?)spans[0]["new"]!["backfill"]));
+
+            await Ok(run.JasonAsync("runtime", "stop"));
+            run.AssertTheMarkStayedAtTheProvider(campaign: null);
+        }
+        finally
+        {
+            run.Stop(pids);
+        }
+    }
+
+    /// <summary>More than a page's hundred, so the span is read over two pages and the second is asked for by the plugin's own cursor.</summary>
+    private const int EventsInTheSpan = 101;
 
     private static JsonObject Moved(string thread, string campaign, DateTime at, string id) => new()
     {

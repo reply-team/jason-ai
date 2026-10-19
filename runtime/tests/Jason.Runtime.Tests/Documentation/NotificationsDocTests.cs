@@ -42,6 +42,14 @@ public sealed partial class NotificationsDocTests
     public void The_page_shows_where_a_pointer_about_unread_events_sends_a_person() =>
         Assert.Contains(Jason.Runtime.Notifications.NotificationComposer.Compose(0, 0, eventGaps: 1).Text, Page(), StringComparison.Ordinal);
 
+    /// <summary>How a count past four digits is said, as the composer says it.</summary>
+    [Fact]
+    public void The_page_says_how_a_count_past_four_digits_is_said() =>
+        Assert.Contains(
+            $"A count past {Jason.Runtime.Notifications.NotificationComposer.MaxSaid.ToString(CultureInfo.InvariantCulture)} is said as \"{Jason.Runtime.Notifications.NotificationComposer.PastFourDigits}\", so the longest pointer fits whatever the counts are",
+            Page(),
+            StringComparison.Ordinal);
+
     /// <summary>The settings table is the code's own: every name the section binds, with its default.</summary>
     [Fact]
     public void The_settings_table_prints_the_settings_this_build_has_with_their_defaults()

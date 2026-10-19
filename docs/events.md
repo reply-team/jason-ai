@@ -8,8 +8,9 @@ which wakes its manager like a failed item or an answered question does ([campai
 Nothing here reads meaning. An event is identifiers, moments and the provider's own flags; which campaigns it concerns
 is decided by the identifiers the campaigns' own operations pinned, and what it calls for is the manager's.
 
-This page is the contract for reading an account, the events store and the lines it writes. What a plugin author
-implements is [`events.read`](contracts/events/events.read.md).
+This page is the contract for reading an account, the events store and the lines it writes, a span read again on a
+person's request, and the record of the accounts. What a plugin author implements is
+[`events.read`](contracts/events/events.read.md).
 
 ## 1. The contract
 
@@ -141,7 +142,16 @@ that has been due for longer, so one account's backlog takes turns with the othe
 
 **When.** A source this runtime has not read since it started is read at once — a start catches every account up from
 its cursor — and so is one never read. After that, `Dispatcher:EventsCadenceSeconds` after the last read started,
-doubled for each read in a row that failed, at most a day.
+doubled for each read in a row that failed, at most a day. A read that is due starts when the reader is free: one under
+way — another account's, or a span's asked for again — ends first.
+
+**Sooner, on a signal.** `events.signal`, and `jason events signal` at the command line, is a nudge from whatever program
+receives a provider's webhooks: it names the account's source and nothing else — no actor, no reason, nothing a webhook
+carried. The account's next read is then due at the next scan, never sooner than 60 seconds after its last read
+started, whatever it was waiting for; that read answers every signal before it, so a burst of webhooks is one read. A
+signal writes no line of its own: its moment is kept on the source, answered as `signaled_at` in the record (section 7)
+and in the signal's own receipt with when the next read is due, and the account's next read says `signaled` in its
+line, where it writes one: a signal had come since the last read started.
 
 **From where.**
 
@@ -172,9 +182,10 @@ it came with. Such a page stores nothing, and the cursor stays where it was.
 **What is recorded.** The source keeps when its last read started and ended, when the last read that succeeded started,
 and how many reads in a row failed, with the last one's code and class. Each read that stored something, failed, or read
 by date writes one `events_read` line naming no campaign: the source, the plugin, the binding identity, how it read, the
-pages, how many events it stored and found already held, how many lines it said, how it ended, and the package and the
-snapshots it ran under — never a cursor, a binding or an event. A read from a cursor that found nothing writes none. The
-log carries the source's id, codes, classes and counts.
+pages, how many events it stored and found already held, how many lines it said, how it ended, the package and the
+snapshots it ran under, and `signaled`, whether a signal had come since the last read started — never a cursor, a
+binding or an event. A read from a cursor that found nothing writes none, so a signal answered by such a read leaves
+only its moment on the source. The log carries the source's id, codes, classes and counts.
 
 **Beside the inbound read.** While a plugin's account is read here, the inbound read leaves the campaigns routed to it —
 but only a campaign an event would reach by section 3's rule, only while that account's last read that succeeded started
@@ -190,9 +201,50 @@ within the shorter of two cadences and `Inbound:LookbackSeconds`, and never befo
 It applies at the next scan, without a restart. **What it costs:** one read per bound account per cadence, 144 a day at
 the default, most of them one child that finds nothing and writes no line.
 
-## 6. Not here yet
+## 6. Reading a span again
 
-- **Reading a range again, a record of the sources, a signal.** No operation of the Runtime API asks for a range of an
-  account to be read again, lists the sources and their reads, or brings a read forward.
+What a gap leaves unread, or any other span of an account, is read again only when a person asks:
+`events.backfill` with the account's source, `from` and `to` — every event at or after `from` and before `to`, to the
+millisecond — and `jason events backfill` at the command line. Each bound is refused by its own name: `from` must come
+before `to` (`not_after_from`), `to` no later than now (`in_the_future`), and `from` at most 366 days back (`too_old`).
+The same span asked for again while it waits is the one already waiting. At most 8 spans of one account wait at once,
+and a ninth is refused as `event_backfill_limit` until one ends; an account no source has is `event_source_not_found`,
+and one no route binds now is refused as `event_source_unbound`. The request is said once, as an
+`events_backfill_requested` line naming no campaign, with who asked and their reason.
+
+**When it is read.** In a scan where no account's own read is due, the reader is handed the waiting span asked for
+longest ago of an account a route binds — keeping every account current comes first. A span waits while any account's
+own read is due, a read that stopped with more among them, so an account with a backlog holds every span until it has
+caught up. A span is read from its start to its end, then on from its own cursor, whose chain the plugin keeps before
+`to`; up to 20 pages a read, and a span with more waits on from where its last page landed.
+
+**What it never touches.** A span's pages move the span's own cursor and never the account's: not the cursor, not when it
+was stored, and none of what says when the account is read next or whether it is healthy. It says no gap. What it finds
+lands on the store's keys, so an event the account's own reading stored is stored once, and a line a campaign was told
+already is not told again; an event that happened before a campaign went live is kept and says nothing (section 4).
+
+**How it ends.** Read to its end, a span is `done`. An answer repeating cannot change ends it `failed`, with its code and
+class, so that a span that could never succeed does not hold its place: a `permanent` or a `validation` failure, or an
+answer outside the contract. A cursor of its own the plugin forgot sends it back to its start, at once — while that
+finds something new: forgotten again with nothing new stored since the last start, it is a failure that may pass, so a
+plugin that forgets every cursor costs a doubling wait rather than a read at every scan. Any other failure counts on the
+span and waits as an account's does, the cadence doubled for each failure in a row, at most a day. Each read of a span
+writes its `events_read` line, with `mode` `backfill`, the span's id and where it stands after the read.
+
+**What it costs:** one child a page, a hundred events a page, read in scans when nothing else is due.
+
+## 7. The record of the accounts
+
+`events.sources`, and `jason events sources` at the command line, lists every account that has a source, a page at a
+time in the order each was first bound: its plugin, its binding identity and the binding as the active route snapshot
+holds it, whether a route binds it now, whether it holds a cursor and when that was stored — never the cursor — when its
+last read started and ended and when the last one that succeeded started, how many reads in a row failed and how the last
+one did, whether it is healthy by the inbound read's own question (section 5), when its own reading is next due and when
+it was last signalled, the latest span its own reading skipped — it stays there once a span asked for again has read
+it — and its ten newest spans asked for again with where each stands.
+
+## 8. Not here yet
+
 - **A campaign without a provider campaign.** An event that names a person and no provider campaign concerns nobody.
 - **Reading the store.** No operation of the Runtime API lists stored events; a manager reads the lines they say.
+- **Calling a span off.** A span asked for again ends by being read or by failing; nothing withdraws it.

@@ -34,7 +34,7 @@ public sealed class EventGapNotificationTests
         var line = await Sender(harness, toast).SendAsync(request, Ct);
 
         Assert.Equal(1, line!.EventGaps);
-        Assert.Equal("1 account has events Jason did not read. Ask your agent what Jason did not read.", Assert.Single(toast.Messages).Text);
+        Assert.Equal("1 account has events Jason did not read. Ask your agent what Jason did not read, or run jason events sources.", Assert.Single(toast.Messages).Text);
         Assert.Equal(1, (await LastLineAsync(harness))["counts"]!["event_gaps"]!.GetValue<int>());
     }
 
@@ -112,7 +112,7 @@ public sealed class EventGapNotificationTests
         Assert.Equal((2, 1, 1), (line!.Approvals, line.ProtectiveFailures, line.EventGaps));
         Assert.Equal(
             $"2 approvals are waiting in Jason. 1 protective action failed in Jason, in {campaign}. 1 account has events Jason did not read. "
-                + "Ask your agent, or run jason approval list, jason decision list and jason workitem list --status failed --status expired.",
+                + "Ask your agent, or run jason approval list, jason decision list, jason workitem list --status failed --status expired and jason events sources.",
             Assert.Single(toast.Messages).Text);
     }
 

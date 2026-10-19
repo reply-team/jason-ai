@@ -1,3 +1,5 @@
+using Jason.Contracts.Api;
+using Jason.Runtime.Events;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -163,6 +165,59 @@ public class EventStoreTests
         var stored = await db.EventSources.SingleAsync(Ct);
         Assert.Equal("c-1", stored.Cursor);
         Assert.Equal(Noon, stored.CursorAt);
+    }
+
+    /// <summary>
+    /// A page of a span asked for again moves the span's own cursor and counts on the span, and leaves the account's
+    /// cursor and when it was stored exactly as they were: the account's own reading starts where it stood. What the
+    /// account's reading already stored is found held, and stored once.
+    /// </summary>
+    [Fact]
+    public async Task A_backfill_page_moves_its_own_cursor_and_never_the_source_s()
+    {
+        using var store = new EventStoreFixture();
+        var source = await store.SourceAsync(cursor: "c-41");
+        await store.StoreAsync(source, "c-41", Page("c-42", Bounced(contact: "c_1")));
+        var backfill = await store.BackfillAsync(source);
+        store.Clock.Advance(TimeSpan.FromMinutes(10));
+
+        var first = await store.StoreAsync(source, EventFence.OfBackfill(backfill.Id, null), Page("b-1", Bounced(contact: "c_2", at: Noon.AddDays(-40)), Bounced(contact: "c_3", at: Noon.AddDays(-40))));
+        var second = await store.StoreAsync(source, EventFence.OfBackfill(backfill.Id, "b-1"), Page("b-2", Bounced(contact: "c_1"), Bounced(contact: "c_4", at: Noon.AddDays(-35))));
+
+        Assert.Equal(new EventStoreResult(2, 0, 0, false), first);
+        Assert.Equal(new EventStoreResult(1, 1, 0, false), second);
+        await using var db = store.Open();
+        var account = await db.EventSources.AsNoTracking().SingleAsync(Ct);
+        Assert.True(
+            (account.Cursor, account.CursorAt) == ("c-42", Noon),
+            $"The account's cursor is {account.Cursor} stored at {account.CursorAt:O}; a span's pages moved it.");
+        var span = await db.EventBackfills.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(("b-2", 3, 1), (span.Cursor, span.Stored, span.Duplicates));
+        Assert.Equal(4, await db.Events.CountAsync(Ct));
+    }
+
+    /// <summary>
+    /// A span's page lands only from where the span's reading stood, and only while the span waits: one that finds its
+    /// cursor moved, or the span ended, stores nothing and moves nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("b-0", EventBackfillStatus.Pending)]
+    [InlineData("b-1", EventBackfillStatus.Done)]
+    [InlineData("b-1", EventBackfillStatus.Failed)]
+    public async Task A_backfill_page_whose_span_moved_on_stores_nothing(string held, EventBackfillStatus status)
+    {
+        using var store = new EventStoreFixture();
+        var source = await store.SourceAsync(cursor: "c-41");
+        var backfill = await store.BackfillAsync(source, cursor: "b-1", status: status);
+
+        var result = await store.StoreAsync(source, EventFence.OfBackfill(backfill.Id, held), Page("b-2", Bounced()));
+
+        Assert.Equal(new EventStoreResult(0, 0, 0, true), result);
+        await using var db = store.Open();
+        Assert.Equal(0, await db.Events.CountAsync(Ct));
+        var span = await db.EventBackfills.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(("b-1", 0), (span.Cursor, span.Stored));
+        Assert.Equal("c-41", (await db.EventSources.AsNoTracking().SingleAsync(Ct)).Cursor);
     }
 
     /// <summary>Refuses the write that adds the page's attributions: the second half of a page, after its events.</summary>

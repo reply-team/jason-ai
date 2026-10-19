@@ -50,6 +50,8 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
 
     public DbSet<EventAttribution> EventAttributions => Set<EventAttribution>();
 
+    public DbSet<EventBackfill> EventBackfills => Set<EventBackfill>();
+
     /// <summary>
     /// The one connection string for a database file. Spelled once because the provider pools connections per
     /// connection string: anything that wants to release a file's pooled connections must name it exactly.
@@ -108,6 +110,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
         configurationBuilder.Properties<RouteScope>().HaveConversion<SnakeCaseEnumConverter<RouteScope>>().HaveMaxLength(32);
         configurationBuilder.Properties<AgentHostKind>().HaveConversion<SnakeCaseEnumConverter<AgentHostKind>>().HaveMaxLength(32);
         configurationBuilder.Properties<LineageState>().HaveConversion<SnakeCaseEnumConverter<LineageState>>().HaveMaxLength(32);
+        configurationBuilder.Properties<EventBackfillStatus>().HaveConversion<SnakeCaseEnumConverter<EventBackfillStatus>>().HaveMaxLength(32);
         configurationBuilder.Properties<JsonObject>().HaveConversion<JsonObjectConverter, JsonObjectComparer>();
         configurationBuilder.Properties<JsonArray>().HaveConversion<JsonArrayConverter, JsonArrayComparer>();
         configurationBuilder.Properties<JsonNode>().HaveConversion<JsonNodeConverter, JsonNodeComparer>();
@@ -600,6 +603,36 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             attribution.HasIndex(a => new { a.CampaignId, a.EventId });
             attribution.HasOne(a => a.Event).WithMany().HasForeignKey(a => a.EventId).OnDelete(DeleteBehavior.Restrict);
             attribution.HasOne(a => a.Campaign).WithMany().HasForeignKey(a => a.CampaignId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<EventBackfill>(backfill =>
+        {
+            backfill.ToTable("event_backfills");
+            backfill.HasKey(b => b.Id);
+            backfill.Property(b => b.PublicId).HasMaxLength(40);
+            backfill.HasIndex(b => b.PublicId).IsUnique();
+
+            // The span's two ends are named for what they bound: "from" and "to" are words of the SQL they would be read in.
+            backfill.Property(b => b.From).HasColumnName("range_from");
+            backfill.Property(b => b.To).HasColumnName("range_to");
+            backfill.Property(b => b.Cursor).HasMaxLength(2048);
+            backfill.Property(b => b.Failures).HasDefaultValue(0);
+            backfill.Property(b => b.ActorId).HasMaxLength(100);
+            backfill.Property(b => b.Reason).HasMaxLength(2000);
+            backfill.Property(b => b.Stored).HasDefaultValue(0);
+            backfill.Property(b => b.Duplicates).HasDefaultValue(0);
+            backfill.Property(b => b.LastCode).HasMaxLength(64);
+            backfill.Property(b => b.LastClass).HasMaxLength(16);
+
+            // A source's waiting spans are read oldest first and counted against a bound, by the source.
+            backfill.HasIndex(b => new { b.SourceId, b.Status });
+
+            // A span waits once: asked for again while it waits, the request is the one already waiting, and the database
+            // is what says so. Once it has ended, the same span may be asked for again.
+            backfill.HasIndex(b => new { b.SourceId, b.From, b.To }, "ix_event_backfills_one_pending_range")
+                .IsUnique()
+                .HasFilter("status = 'pending'");
+            backfill.HasOne(b => b.Source).WithMany().HasForeignKey(b => b.SourceId).OnDelete(DeleteBehavior.Restrict);
         });
 
         foreach (var entity in modelBuilder.Model.GetEntityTypes())

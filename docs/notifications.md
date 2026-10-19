@@ -73,17 +73,18 @@ And where an account's events were not read:
 ```text
 Jason
 1 account has events Jason did not read.
-Ask your agent what Jason did not read.
+Ask your agent what Jason did not read, or run jason events sources.
 ```
 
 The title; how many approvals and questions are waiting **at the moment it is sent** — counted then, so a burst
 answered before it was said says nothing at all; how many protective actions failed, and how many accounts have events
 Jason did not read, **since the last notification that reached anybody** — counted from that one's line, so a
 notification that reached nobody leaves them for the next; and where to look. Said beside anything else, an account
-whose events were not read makes where to look the commands of each thing alone — "Ask your agent, or run jason approval
-list, jason decision list and jason workitem list --status failed --status expired." — so that four things said at once
-still fit the message the delivery contract takes. Past three campaigns, the rest are counted: "… in cmp_…, cmp_…,
-cmp_… and 2 more." That is every field.
+whose events were not read makes where to look the commands of each thing alone, the record of the accounts last — "Ask
+your agent, or run jason approval list, jason decision list, jason workitem list --status failed --status expired and
+jason events sources." — so that four things said at once still fit the message the delivery contract takes. Past three
+campaigns, the rest are counted: "… in cmp_…, cmp_…, cmp_… and 2 more." A count past 9999 is said as "10k+", so the
+longest pointer fits whatever the counts are; the line keeps the counts themselves. That is every field.
 
 **What never travels:** the campaign's name, a contact's name or address, what an approval is about or its preview, a
 question's words or its options, the error a failed action ended with, the operation and its arguments, and any id of a

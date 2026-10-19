@@ -45,27 +45,42 @@ function campaignGet(input, context) {
   };
 }
 
-// A provider with a feed: the cursor is its position, handed back exactly as it came.
+// A provider with a feed: the cursor is its position, handed back exactly as it came. A read that ends at a moment keeps
+// that moment in its own cursor, "r|<until>|<position>", so that the pages its cursors chain stay before it.
 function fromFeed(input, context) {
-  return {
-    result: cli(context, ["events", "feed"], { after: input.cursor, since: input.since, until: input.until, limit: input.limit }),
-  };
+  let after = input.cursor;
+  let until = input.until;
+  if (after && after.startsWith("r|")) {
+    const bar = after.indexOf("|", 2);
+    until = after.slice(2, bar);
+    after = after.slice(bar + 1);
+  }
+
+  const page = cli(context, ["events", "feed"], { after: after, since: input.since, until: until, limit: input.limit });
+  if (until) {
+    page.cursor = "r|" + until + "|" + page.cursor;
+  }
+
+  return { result: page };
 }
 
-// A provider with only a list newest first by offset. The cursor is "o|<offset>|<reads back to>|<newest seen>".
+// A provider with only a list newest first by offset. The cursor is "o|<offset>|<reads back to>|<newest seen>", and
+// "|<until>" after it for a read that ends at a moment.
 function byOffset(input, context) {
   let skip = 0;
   let low = input.since;
   let high = input.since;
+  let until = input.until;
   if (input.cursor) {
     const parts = input.cursor.split("|");
-    if (parts.length !== 4 || parts[0] !== "o") {
+    if ((parts.length !== 4 && parts.length !== 5) || parts[0] !== "o") {
       throw host.fail({ class: "permanent", code: "events_cursor_unknown", message: "This plugin did not write that cursor." });
     }
 
     skip = Number(parts[1]);
     low = parts[2];
     high = parts[3];
+    until = parts[4];
   }
 
   const page = cli(context, ["events", "list"], { top: input.limit, skip: skip });
@@ -86,16 +101,17 @@ function byOffset(input, context) {
       break;
     }
 
-    if (!input.until || at < Date.parse(input.until)) {
+    if (!until || at < Date.parse(until)) {
       kept.push(event);
     }
   }
 
+  const bounded = until ? [until] : [];
   if (page.items.length === input.limit && !passed) {
-    return { result: { events: kept, cursor: ["o", skip + input.limit, low, newest].join("|"), has_more: true } };
+    return { result: { events: kept, cursor: ["o", skip + input.limit, low, newest, ...bounded].join("|"), has_more: true } };
   }
 
-  return { result: { events: kept, cursor: ["o", 0, newest, newest].join("|"), has_more: false } };
+  return { result: { events: kept, cursor: ["o", 0, newest, newest, ...bounded].join("|"), has_more: false } };
 }
 
 export function invoke(operation, input, context) {

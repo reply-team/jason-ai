@@ -29,8 +29,8 @@ description that promises everything matches nothing.
   notification brought the person — presented in their own words and recorded as their decision.
 - [`operating-the-installation`](operating-the-installation/SKILL.md) — **draft** until a host reads its new text.
   The installation itself: whether the runtime is up, starting and stopping it, having it start at logon, opening
-  the browser UI and unpairing a browser (`jason ui`), the
-  plugins and routes it has, the hosts it can launch, whether notifications reach the person and turning them
+  the browser UI and unpairing a browser (`jason ui`), the plugins and routes it has, the accounts whose events it reads
+  and reading a span of one again, the hosts it can launch, whether notifications reach the person and turning them
   off, whether a newer version exists, and installing it or taking it off again.
 - [`troubleshooting-jason`](troubleshooting-jason/SKILL.md) — **draft** until a host reads its new text. Why
   work stopped: the runtime, the work item's error code and the chronicle; the states a person needs told

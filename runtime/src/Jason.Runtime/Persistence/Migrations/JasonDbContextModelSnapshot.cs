@@ -742,6 +742,116 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.ToTable("event_attributions", (string)null);
                 });
 
+            modelBuilder.Entity("Jason.Runtime.Persistence.EventBackfill", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActorId")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("actor_id");
+
+                    b.Property<string>("ActorType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("actor_type");
+
+                    b.Property<DateTime?>("AttemptedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("attempted_at");
+
+                    b.Property<string>("Cursor")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("cursor");
+
+                    b.Property<int>("Duplicates")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0)
+                        .HasColumnName("duplicates");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ended_at");
+
+                    b.Property<int>("Failures")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0)
+                        .HasColumnName("failures");
+
+                    b.Property<DateTime>("From")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("range_from");
+
+                    b.Property<string>("LastClass")
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_class");
+
+                    b.Property<string>("LastCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_code");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("public_id");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("requested_at");
+
+                    b.Property<int>("SourceId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("source_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
+
+                    b.Property<int>("Stored")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0)
+                        .HasColumnName("stored");
+
+                    b.Property<DateTime>("To")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("range_to");
+
+                    b.HasKey("Id")
+                        .HasName("pk_event_backfills");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_event_backfills_public_id");
+
+                    b.HasIndex("SourceId", "Status")
+                        .HasDatabaseName("ix_event_backfills_source_id_status");
+
+                    b.HasIndex(new[] { "SourceId", "From", "To" }, "ix_event_backfills_one_pending_range")
+                        .IsUnique()
+                        .HasDatabaseName("ix_event_backfills_one_pending_range")
+                        .HasFilter("status = 'pending'");
+
+                    b.ToTable("event_backfills", (string)null);
+                });
+
             modelBuilder.Entity("Jason.Runtime.Persistence.EventSource", b =>
                 {
                     b.Property<int>("Id")
@@ -805,6 +915,10 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Property<DateTime?>("ReadStartedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("read_started_at");
+
+                    b.Property<DateTime?>("SignalAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("signal_at");
 
                     b.Property<DateTime?>("SucceededAt")
                         .HasColumnType("TEXT")
@@ -1926,6 +2040,18 @@ namespace Jason.Runtime.Persistence.Migrations
                     b.Navigation("Campaign");
 
                     b.Navigation("Event");
+                });
+
+            modelBuilder.Entity("Jason.Runtime.Persistence.EventBackfill", b =>
+                {
+                    b.HasOne("Jason.Runtime.Persistence.EventSource", "Source")
+                        .WithMany()
+                        .HasForeignKey("SourceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_event_backfills_event_sources_source_id");
+
+                    b.Navigation("Source");
                 });
 
             modelBuilder.Entity("Jason.Runtime.Persistence.ExecutionProfileRevision", b =>

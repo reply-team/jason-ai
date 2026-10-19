@@ -68,6 +68,37 @@ public partial class EventsDocTests
         Assert.DoesNotContain("two cadences are well inside the look-back", inbound, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The sections on a span read again and on the record of the accounts, held to the bounds, the codes, the line and the
+    /// numbers the service decides them by: a page that drifted would have a person ask for a span the runtime refuses, or
+    /// read a record that does not say what it says.
+    /// </summary>
+    [Fact]
+    public void The_span_and_the_record_sections_state_their_bounds_and_codes_by_the_service_s_own_numbers()
+    {
+        var page = Flattened(Read("events.md"));
+
+        Assert.Contains($"`from` at most {EventsService.BackfillDays} days back (`too_old`)", page, StringComparison.Ordinal);
+        Assert.Contains("`from` must come before `to` (`not_after_from`), `to` no later than now (`in_the_future`)", page, StringComparison.Ordinal);
+        Assert.Contains($"At most {EventsService.MaxPending} spans of one account wait at once", page, StringComparison.Ordinal);
+        Assert.Contains("`event_backfill_limit`", page, StringComparison.Ordinal);
+        Assert.Contains("`event_source_not_found`", page, StringComparison.Ordinal);
+        Assert.Contains("`event_source_unbound`", page, StringComparison.Ordinal);
+        Assert.Contains($"`{JournalKinds.EventsBackfillRequested}`", page, StringComparison.Ordinal);
+        Assert.Contains($"with `mode` `{EventSchedule.Word(EventReadMode.Backfill)}`", page, StringComparison.Ordinal);
+        Assert.Contains($"up to {EventSchedule.PagesPerRead} pages a read", page, StringComparison.Ordinal);
+        Assert.Contains("its ten newest spans asked for again", page, StringComparison.Ordinal);
+        Assert.Contains("forgotten again with nothing new stored since the last start, it is a failure that may pass", page, StringComparison.Ordinal);
+        Assert.Equal(10, EventsService.RecentBackfills);
+        Assert.DoesNotContain("Reading a range again, a record of the sources", page, StringComparison.Ordinal);
+        Assert.Contains($"never sooner than {EventSchedule.SignalFloorSeconds} seconds after its last read started", page, StringComparison.Ordinal);
+        Assert.Contains("and `signaled`, whether a signal had come since the last read started", page, StringComparison.Ordinal);
+        Assert.Contains("A span waits while any account's own read is due, a read that stopped with more among them", page, StringComparison.Ordinal);
+        Assert.Contains("the latest span its own reading skipped — it stays there once a span asked for again has read it", page, StringComparison.Ordinal);
+        Assert.Contains("no actor, no reason, nothing a webhook carried", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("No operation of the Runtime API brings an account's next read forward", page, StringComparison.Ordinal);
+    }
+
     /// <summary>The contracts' package says there is a third family, and that the events read is the one read that pages by a cursor.</summary>
     [Fact]
     public void The_contracts_readme_names_the_third_family_and_the_cursor()

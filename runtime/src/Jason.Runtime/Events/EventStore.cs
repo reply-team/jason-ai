@@ -12,6 +12,36 @@ namespace Jason.Runtime.Events;
 public sealed record EventStoreResult(int Stored, int Duplicates, int Said, bool Moved);
 
 /// <summary>
+/// Whose cursor a page moves, and from where — the fencing token of a read. The account's own reading moves the source's
+/// cursor, and may say a gap with its page; a span asked for again moves the span's own cursor and counts on the span,
+/// only while the span waits, and never touches the source's. One or the other: a page never moves both.
+/// </summary>
+public readonly record struct EventFence
+{
+    private EventFence(int? backfillId, string? held, EventGap? gap)
+    {
+        BackfillId = backfillId;
+        Held = held;
+        Gap = gap;
+    }
+
+    /// <summary>The span whose cursor the page moves; null for the account's own reading.</summary>
+    public int? BackfillId { get; }
+
+    /// <summary>The cursor the read found: the page's cursor replaces it only if it still stands.</summary>
+    public string? Held { get; }
+
+    /// <summary>A span nobody will read, said with this page: the account's own reading's alone.</summary>
+    public EventGap? Gap { get; }
+
+    /// <summary>The account's own reading, from the cursor the source held when the read was handed out.</summary>
+    public static EventFence OfSource(string? held, EventGap? gap = null) => new(null, held, gap);
+
+    /// <summary>A span asked for again, from the cursor its own reading held.</summary>
+    public static EventFence OfBackfill(int backfillId, string? held) => new(backfillId, held, null);
+}
+
+/// <summary>
 /// Stores one page a read of events returned, whole or not at all: the events the store does not hold yet, which
 /// campaigns each concerns, the lines that tell those campaigns, and the cursor the page returned — in one transaction,
 /// so the cursor moves only with the page it ends and a page that does not land leaves the cursor where it was.
@@ -68,13 +98,26 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
     /// this page's transaction, once under its key, so a page that does not land says nothing and a read tried again says
     /// nothing twice. An empty page that lands says it too: the cursor it returns starts every read after it.
     /// </summary>
-    public async Task<EventStoreResult> StoreAsync(
+    public Task<EventStoreResult> StoreAsync(
         JasonDbContext db,
         EventSource source,
         string? heldCursor,
         EventPage page,
         string readId,
         EventGap? gap,
+        CancellationToken ct) => StoreAsync(db, source, EventFence.OfSource(heldCursor, gap), page, readId, ct);
+
+    /// <summary>
+    /// The same, under the fence the read holds: the account's own cursor, or a span's. A span's page moves the span's
+    /// cursor and adds what it stored and found held to the span's counts, in this page's transaction, only while the span
+    /// waits; the source's cursor, and when it was stored, stay as they were.
+    /// </summary>
+    public async Task<EventStoreResult> StoreAsync(
+        JasonDbContext db,
+        EventSource source,
+        EventFence fence,
+        EventPage page,
+        string readId,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
@@ -158,7 +201,7 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
             }
         }
 
-        if (gap is not null)
+        if (fence.Gap is { } gap)
         {
             var key = gap.Key(source.PublicId);
             var gapSaid = await db.Journal.AsNoTracking().AnyAsync(entry => entry.Kind == JournalKinds.EventsGapObserved && entry.Key == key, ct).ConfigureAwait(false);
@@ -177,14 +220,9 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
         // The cursor moves with the page it ends, and only from where the read found it.
-        var advanced = await db.EventSources
-            .Where(row => row.Id == source.Id && row.Cursor == heldCursor)
-            .ExecuteUpdateAsync(
-                set => set
-                    .SetProperty(row => row.Cursor, page.Cursor)
-                    .SetProperty(row => row.CursorAt, now),
-                ct)
-            .ConfigureAwait(false);
+        var stored = fresh.Count;
+        var duplicates = page.Events.Count - fresh.Count;
+        var advanced = await AdvanceAsync(db, source.Id, fence, page.Cursor, stored, duplicates, now, ct).ConfigureAwait(false);
         if (advanced == 0)
         {
             await transaction.RollbackAsync(ct).ConfigureAwait(false);
@@ -193,7 +231,35 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
         }
 
         await transaction.CommitAsync(ct).ConfigureAwait(false);
-        return new EventStoreResult(fresh.Count, page.Events.Count - fresh.Count, lines, Moved: false);
+        return new EventStoreResult(stored, duplicates, lines, Moved: false);
+    }
+
+    /// <summary>
+    /// The one guarded update a page's cursor moves by: the source's, or the waiting span's — never both, and only from
+    /// the cursor the fence holds. None moved is another writer having been first, and the page is rolled back.
+    /// </summary>
+    private static Task<int> AdvanceAsync(JasonDbContext db, int sourceId, EventFence fence, string cursor, int stored, int duplicates, DateTime now, CancellationToken ct)
+    {
+        var held = fence.Held;
+        if (fence.BackfillId is { } backfillId)
+        {
+            return db.EventBackfills
+                .Where(row => row.Id == backfillId && row.Cursor == held && row.Status == EventBackfillStatus.Pending)
+                .ExecuteUpdateAsync(
+                    set => set
+                        .SetProperty(row => row.Cursor, cursor)
+                        .SetProperty(row => row.Stored, row => row.Stored + stored)
+                        .SetProperty(row => row.Duplicates, row => row.Duplicates + duplicates),
+                    ct);
+        }
+
+        return db.EventSources
+            .Where(row => row.Id == sourceId && row.Cursor == held)
+            .ExecuteUpdateAsync(
+                set => set
+                    .SetProperty(row => row.Cursor, cursor)
+                    .SetProperty(row => row.CursorAt, now),
+                ct);
     }
 
     /// <summary>

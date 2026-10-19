@@ -7,8 +7,10 @@ namespace Jason.Runtime.Tests.Events;
 
 /// <summary>
 /// One rule says which campaign an event naming a provider campaign reaches: the store attributes by it, and the inbound
-/// read leaves a campaign to the events only where it holds. Held here on the same pins both ways, so the two cannot come
-/// to disagree.
+/// read leaves a campaign to the events only where it holds. This proves the two agree, on the same pins both ways; it
+/// does not prove the rule itself, which both could get wrong alike — what holds that an archived holder keeps no live one
+/// from the events is the skip's own test,
+/// <c>InboundSyncSkipTests.An_archived_campaign_holding_the_same_provider_campaign_does_not_keep_a_live_one_from_the_events</c>.
 /// </summary>
 public class CampaignPinRuleTests
 {

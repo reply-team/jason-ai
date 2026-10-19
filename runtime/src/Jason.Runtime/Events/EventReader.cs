@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
+using Jason.Contracts.Api;
 using Jason.Contracts.Events;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
@@ -204,8 +205,17 @@ public sealed class EventReader : BackgroundService
         ArgumentNullException.ThrowIfNull(read);
         var readId = PublicId.New("evr");
         var started = _clock.GetUtcNow().UtcDateTime;
-        _read.TryAdd(read.SourceId, true);
-        await OnRowAsync(read, row => row.SetProperty(source => source.ReadStartedAt, started).SetProperty(source => source.More, false), ct).ConfigureAwait(false);
+        if (read.Backfill is { } backfill)
+        {
+            // A span asked for again is not the account's own reading: what says when the account is read next, and
+            // whether it is healthy, stays as that reading left it.
+            await OnBackfillAsync(backfill, row => row.SetProperty(span => span.AttemptedAt, started), ct).ConfigureAwait(false);
+        }
+        else
+        {
+            _read.TryAdd(read.SourceId, true);
+            await OnRowAsync(read, row => row.SetProperty(source => source.ReadStartedAt, started).SetProperty(source => source.More, false), ct).ConfigureAwait(false);
+        }
 
         var held = read.HeldCursor;
         var input = read.Plan.Input;
@@ -373,14 +383,27 @@ public sealed class EventReader : BackgroundService
         await using var scope = _scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
         var source = new EventSource { Id = read.SourceId, PublicId = read.SourcePublicId, PluginId = read.PluginId, BindingIdentity = read.BindingIdentity };
-        return await scope.ServiceProvider.GetRequiredService<EventStore>().StoreAsync(db, source, held, page, readId, gap, ct).ConfigureAwait(false);
+        var fence = read.Backfill is { } backfill ? EventFence.OfBackfill(backfill.Id, held) : EventFence.OfSource(held, gap);
+        return await scope.ServiceProvider.GetRequiredService<EventStore>().StoreAsync(db, source, fence, page, readId, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Clears a cursor the plugin no longer knows, where it still stands; when it was stored is kept, as where the next read starts from.</summary>
+    /// <summary>
+    /// Clears a cursor the plugin no longer knows, where it still stands: the account's, whose stored moment is kept as
+    /// where the next read starts from, or a span's, which is then read again from its start.
+    /// </summary>
     private async Task ForgetAsync(EventRead read, string? held, CancellationToken ct)
     {
         await using var scope = _scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        if (read.Backfill is { } backfill)
+        {
+            await db.EventBackfills
+                .Where(span => span.Id == backfill.Id && span.Cursor == held)
+                .ExecuteUpdateAsync(set => set.SetProperty(span => span.Cursor, (string?)null), ct)
+                .ConfigureAwait(false);
+            return;
+        }
+
         await db.EventSources
             .Where(source => source.Id == read.SourceId && source.Cursor == held)
             .ExecuteUpdateAsync(set => set.SetProperty(source => source.Cursor, (string?)null), ct)
@@ -399,7 +422,12 @@ public sealed class EventReader : BackgroundService
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var row = db.EventSources.Where(source => source.Id == read.SourceId);
-        if (end.Outcome == EventReadReport.Failed)
+        EventBackfillStatus? span = null;
+        if (read.Backfill is { } backfill)
+        {
+            span = await EndBackfillAsync(db, backfill, ended, end, ct).ConfigureAwait(false);
+        }
+        else if (end.Outcome == EventReadReport.Failed)
         {
             var word = Word(end.Class);
             await row.ExecuteUpdateAsync(
@@ -432,34 +460,125 @@ public sealed class EventReader : BackgroundService
 
         if (end.Stored > 0 || end.Outcome != EventReadReport.Succeeded || read.Plan.Mode != EventReadMode.Cursor)
         {
-            scope.ServiceProvider.GetRequiredService<JournalWriter>().Append(
-                db,
-                Actors.Dispatcher,
-                JournalKinds.EventsRead,
-                campaign: null,
-                updated: new JsonObject
-                {
-                    ["read_id"] = readId,
-                    ["source"] = read.SourcePublicId,
-                    ["plugin"] = read.PluginId,
-                    ["binding_identity"] = read.BindingIdentity,
-                    ["mode"] = read.Plan.ModeWord,
-                    ["pages"] = end.Pages,
-                    ["stored"] = end.Stored,
-                    ["duplicates"] = end.Duplicates,
-                    ["said"] = end.Said,
-                    ["outcome"] = end.Outcome,
-                    ["code"] = end.Code,
-                    ["class"] = end.Class is { } failure ? Word(failure) : null,
-                    ["plugin_version"] = read.Plugin.Plugin.Manifest.Version,
-                    ["plugin_digest"] = read.Plugin.Plugin.Digest,
-                    ["plugin_snapshot_id"] = read.Plugin.SnapshotId,
-                    ["routing_snapshot_id"] = read.RoutingSnapshotId,
-                });
+            var line = new JsonObject
+            {
+                ["read_id"] = readId,
+                ["source"] = read.SourcePublicId,
+                ["plugin"] = read.PluginId,
+                ["binding_identity"] = read.BindingIdentity,
+                ["mode"] = read.Plan.ModeWord,
+                ["pages"] = end.Pages,
+                ["stored"] = end.Stored,
+                ["duplicates"] = end.Duplicates,
+                ["said"] = end.Said,
+                ["outcome"] = end.Outcome,
+                ["code"] = end.Code,
+                ["class"] = end.Class is { } failure ? Word(failure) : null,
+                ["plugin_version"] = read.Plugin.Plugin.Manifest.Version,
+                ["plugin_digest"] = read.Plugin.Plugin.Digest,
+                ["plugin_snapshot_id"] = read.Plugin.SnapshotId,
+                ["routing_snapshot_id"] = read.RoutingSnapshotId,
+                ["signaled"] = read.Signalled,
+            };
+            if (read.Backfill is { } asked && span is { } status)
+            {
+                line["backfill"] = asked.PublicId;
+                line["backfill_status"] = SnakeCaseEnumConverter<EventBackfillStatus>.Format(status);
+            }
+
+            scope.ServiceProvider.GetRequiredService<JournalWriter>().Append(db, Actors.Dispatcher, JournalKinds.EventsRead, campaign: null, updated: line);
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
         }
 
         await transaction.CommitAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// What a span's row keeps of a read of it, and where the span stands after it. Read to its end, it is done. An answer
+    /// repeating cannot change ends it failed, with its code and class, so that a span that could never succeed does not
+    /// hold its place for ever. A cursor of its own the plugin forgot sends it back to its start, at once. Anything else
+    /// that failed counts on the span and doubles its wait. A read that stopped with more, or that another writer
+    /// overtook, leaves it waiting where its last page landed.
+    /// </summary>
+    private static async Task<EventBackfillStatus> EndBackfillAsync(JasonDbContext db, EventBackfillRef backfill, DateTime ended, EventReadReport end, CancellationToken ct)
+    {
+        var row = db.EventBackfills.Where(span => span.Id == backfill.Id && span.Status == EventBackfillStatus.Pending);
+
+        // Sent back to its start by a cursor the plugin forgot, and nothing new stored since: this read found nothing it
+        // had not stored before. Starting again is free only while it does, or a plugin that forgets every cursor would
+        // have the span read from its start at every idle scan, for ever.
+        var startedAgain = await row.Select(span => span.LastCode).FirstOrDefaultAsync(ct).ConfigureAwait(false) == CursorUnknown;
+        var stale = startedAgain && end.Stored == 0;
+        if (end.Outcome == EventReadReport.Failed)
+        {
+            var code = end.Code!;
+            var word = Word(end.Class);
+            if (end.More)
+            {
+                // A second forgetting with nothing new since the last start again is a failure that may pass: it doubles
+                // the wait and keeps the span's place. The first, or one after something new, starts it again at once.
+                await row.ExecuteUpdateAsync(
+                    set => set
+                        .SetProperty(span => span.Failures, span => stale ? span.Failures + 1 : 0)
+                        .SetProperty(span => span.LastCode, code)
+                        .SetProperty(span => span.LastClass, word),
+                    ct).ConfigureAwait(false);
+                return EventBackfillStatus.Pending;
+            }
+
+            if (EventSchedule.EndsABackfill(code, end.Class!.Value))
+            {
+                await row.ExecuteUpdateAsync(
+                    set => set
+                        .SetProperty(span => span.Status, EventBackfillStatus.Failed)
+                        .SetProperty(span => span.EndedAt, ended)
+                        .SetProperty(span => span.LastCode, code)
+                        .SetProperty(span => span.LastClass, word),
+                    ct).ConfigureAwait(false);
+                return EventBackfillStatus.Failed;
+            }
+
+            await row.ExecuteUpdateAsync(
+                set => set
+                    .SetProperty(span => span.Failures, span => span.Failures + 1)
+                    .SetProperty(span => span.LastCode, code)
+                    .SetProperty(span => span.LastClass, word),
+                ct).ConfigureAwait(false);
+            return EventBackfillStatus.Pending;
+        }
+
+        if (end.Outcome == EventReadReport.Succeeded)
+        {
+            var done = !end.More;
+            if (!done && stale)
+            {
+                // Twenty pages again of what it had stored before it was sent back: it still owes the first new event, so
+                // the failures it is counting stay counted.
+                return EventBackfillStatus.Pending;
+            }
+
+            await row.ExecuteUpdateAsync(
+                set => set
+                    .SetProperty(span => span.Status, done ? EventBackfillStatus.Done : EventBackfillStatus.Pending)
+                    .SetProperty(span => span.EndedAt, done ? ended : (DateTime?)null)
+                    .SetProperty(span => span.Failures, 0)
+                    .SetProperty(span => span.LastCode, (string?)null)
+                    .SetProperty(span => span.LastClass, (string?)null),
+                ct).ConfigureAwait(false);
+            return done ? EventBackfillStatus.Done : EventBackfillStatus.Pending;
+        }
+
+        return EventBackfillStatus.Pending;
+    }
+
+    private async Task OnBackfillAsync(
+        EventBackfillRef backfill,
+        Action<Microsoft.EntityFrameworkCore.Query.UpdateSettersBuilder<EventBackfill>> set,
+        CancellationToken ct)
+    {
+        await using var scope = _scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        await db.EventBackfills.Where(span => span.Id == backfill.Id).ExecuteUpdateAsync(set, ct).ConfigureAwait(false);
     }
 
     private async Task OnRowAsync(

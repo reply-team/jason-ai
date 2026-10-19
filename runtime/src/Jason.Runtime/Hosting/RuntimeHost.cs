@@ -373,7 +373,7 @@ public static class RuntimeHost
         builder.Services.AddScoped<AttemptOutcomes>();
         builder.Services.AddScoped<ProviderOutcomeRecorder>();
         builder.Services.AddSystemModule().AddCampaignModule().AddContactModule();
-        builder.Services.AddWorkItemModule().AddExecutorModule().AddRoleModule().AddPluginModule().AddRoutingModule().AddDispatcherModule().AddNotificationsModule().AddCommandModule().AddUiModule();
+        builder.Services.AddWorkItemModule().AddExecutorModule().AddRoleModule().AddPluginModule().AddRoutingModule().AddDispatcherModule().AddEventsModule().AddNotificationsModule().AddCommandModule().AddUiModule();
         builder.Services.AddApprovalModule().AddDecisionModule().AddReportModule().AddProfileModule().AddRoleNoteModule();
         builder.Services.AddUpdateModule(options.FeedHandler);
 
@@ -414,6 +414,7 @@ public static class RuntimeHost
         app.MapRoleNoteOperations();
         app.MapPluginOperations();
         app.MapRouteOperations();
+        app.MapEventsOperations();
         app.MapUiOperations();
         app.MapUi();
 

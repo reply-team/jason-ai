@@ -213,5 +213,19 @@ public static class DomainErrors
 
     public static NotFoundException ReportNotFound(string id) => new("report_not_found", $"No report with id '{id}'.");
 
+    public static NotFoundException EventSourceNotFound(string id) =>
+        new("event_source_not_found", $"No account whose events are read has id '{id}'; `jason events sources` lists them.");
+
+    /// <summary>
+    /// The account is not read now: no route binds it at a plugin that reads events here. Nothing it is asked for could
+    /// happen until one does, so it is refused rather than kept waiting unseen.
+    /// </summary>
+    public static ConflictException EventSourceUnbound(string id) =>
+        new("event_source_unbound", $"No route binds account '{id}' at a plugin that reads events here now, so it is not read; route it again first.");
+
+    /// <summary>As many spans of one account wait already as one account may have waiting: one has to end before another is asked for.</summary>
+    public static ConflictException EventBackfillLimit(string id, int limit) =>
+        new("event_backfill_limit", string.Create(CultureInfo.InvariantCulture, $"Account '{id}' already has {limit} spans waiting to be read again; one has to end before another is asked for."));
+
     public static ValidationException Required(string field) => new([new ErrorDetail(field, "required", $"{field} is required.")]);
 }

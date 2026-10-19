@@ -59,4 +59,10 @@ public sealed class EventSource
 
     /// <summary>Whether the last read stopped with more to read now — at the most pages a read takes — so the next is due at once.</summary>
     public bool More { get; set; }
+
+    /// <summary>
+    /// When somebody last asked for this account to be read sooner, on the runtime's clock; null before anyone has. A
+    /// signal after the last read started brings the next forward, never to within a minute of that start.
+    /// </summary>
+    public DateTime? SignalAt { get; set; }
 }

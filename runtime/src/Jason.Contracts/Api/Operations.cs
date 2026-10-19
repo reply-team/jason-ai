@@ -98,5 +98,9 @@ public static class Operations
     public const string SuppressionRemove = "suppression.remove";
     public const string SuppressionList = "suppression.list";
 
+    public const string EventsSources = "events.sources";
+    public const string EventsBackfill = "events.backfill";
+    public const string EventsSignal = "events.signal";
+
     public static string Route(string operation) => $"/{ApiVersion.Current}/{operation}";
 }

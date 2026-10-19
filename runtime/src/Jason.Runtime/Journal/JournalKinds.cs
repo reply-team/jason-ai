@@ -145,6 +145,12 @@ public static partial class JournalKinds
     /// </summary>
     public const string EventsGapObserved = "events_gap_observed";
 
+    /// <summary>
+    /// A person asked for a span of an account's events to be read again: the request, the source, the plugin, the binding
+    /// identity and the span, with who asked and their reason. It names no campaign; what the read finds says its own lines.
+    /// </summary>
+    public const string EventsBackfillRequested = "events_backfill_requested";
+
     public static IReadOnlySet<string> Reserved { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         CampaignCreated,
@@ -197,6 +203,7 @@ public static partial class JournalKinds
         ProviderEventObserved,
         EventsRead,
         EventsGapObserved,
+        EventsBackfillRequested,
     };
 
     public static bool IsWellFormed(string kind) => kind is not null && WellFormed().IsMatch(kind);

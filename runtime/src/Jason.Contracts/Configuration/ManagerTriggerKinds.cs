@@ -31,6 +31,6 @@ public static class ManagerTriggerKinds
         "decision_raised", "decision_answered", "decision_cancelled",
         "notification_sent",
         "inbound_reply_observed", "provider_event_observed",
-        "events_read", "events_gap_observed",
+        "events_read", "events_gap_observed", "events_backfill_requested",
     }.ToFrozenSet(StringComparer.Ordinal);
 }

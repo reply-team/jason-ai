@@ -13,8 +13,9 @@ namespace Jason.Runtime.Events;
 /// <summary>
 /// The step of a scan that keeps the accounts' events read, between the lease enforcer and the inbound read: it finds
 /// the accounts the routes bind at plugins that read their events, gives each its source the first time it is bound,
-/// and hands the reader the most overdue read — one at most, and only when the reader is idle. It reads two snapshots,
-/// the sources' rows and the clock; it never invokes a plugin and never waits for a read.
+/// and hands the reader the most overdue read — one at most, and only when the reader is idle. In a scan where no
+/// account's own read is due, it hands over a span a person asked for again instead. It reads two snapshots, the sources'
+/// and the spans' rows and the clock; it never invokes a plugin and never waits for a read.
 /// </summary>
 /// <remarks>
 /// A draining dispatcher hands out no new read: a drain waits for the work in flight to end, and a read started now would
@@ -49,25 +50,69 @@ public sealed class EventScan(
             return 0;
         }
 
-        var due = EventSchedule.MostOverdueFirst(sources.Values, source => reader.HasRead(source.Id), settings.Current.EventsCadenceSeconds, now);
-        if (due.Count == 0)
+        var cadence = settings.Current.EventsCadenceSeconds;
+        var due = EventSchedule.MostOverdueFirst(sources.Values, source => reader.HasRead(source.Id), cadence, now);
+        EventRead read;
+        if (due.Count > 0)
+        {
+            var source = due[0];
+            read = Read(source, source.Cursor, EventSchedule.Plan(source, now), backfill: null) with { Signalled = EventSchedule.Signalled(source) };
+        }
+        else if (await NextBackfillAsync(db, sources.Values, cadence, now, ct).ConfigureAwait(false) is { } backfill)
+        {
+            // Every account is current: a span asked for again is read now, from where its own reading stands.
+            var source = sources.Values.First(entry => entry.Id == backfill.SourceId);
+            read = Read(source, backfill.Cursor, EventSchedule.Plan(backfill), new EventBackfillRef(backfill.Id, backfill.PublicId));
+        }
+        else
         {
             return 0;
         }
 
-        var source = due[0];
-        var account = bound.First(entry => entry.PluginId == source.PluginId && entry.BindingIdentity == source.BindingIdentity);
-        var read = new EventRead(
-            source.Id,
-            source.PublicId,
-            source.PluginId,
-            source.BindingIdentity,
-            account.Binding,
-            source.Cursor,
-            EventSchedule.Plan(source, now),
-            new PinnedPlugin(pluginSnapshot.Find(source.PluginId)!, pluginSnapshot.Id),
-            routeSnapshot.Id);
         return reader.TryHandOver(read) ? 1 : 0;
+
+        EventRead Read(EventSource source, string? held, EventReadPlan plan, EventBackfillRef? backfill)
+        {
+            var account = bound.First(entry => entry.PluginId == source.PluginId && entry.BindingIdentity == source.BindingIdentity);
+            return new EventRead(
+                source.Id,
+                source.PublicId,
+                source.PluginId,
+                source.BindingIdentity,
+                account.Binding,
+                held,
+                plan,
+                new PinnedPlugin(pluginSnapshot.Find(source.PluginId)!, pluginSnapshot.Id),
+                routeSnapshot.Id,
+                backfill);
+        }
+    }
+
+    /// <summary>
+    /// The span to read next, in a scan where no account's own read is due: of each bound account, the span asked for
+    /// longest ago that still waits, if its own wait has passed — the oldest request of those first. An account no route
+    /// binds is not among the sources, so its spans wait with it.
+    /// </summary>
+    private static async Task<EventBackfill?> NextBackfillAsync(
+        JasonDbContext db,
+        IEnumerable<EventSource> sources,
+        int cadenceSeconds,
+        DateTime now,
+        CancellationToken ct)
+    {
+        var ids = sources.Select(source => source.Id).ToList();
+        var waiting = await db.EventBackfills
+            .AsNoTracking()
+            .Where(backfill => ids.Contains(backfill.SourceId) && backfill.Status == EventBackfillStatus.Pending)
+            .OrderBy(backfill => backfill.Id)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return waiting
+            .GroupBy(backfill => backfill.SourceId)
+            .Select(spans => spans.First())
+            .Where(backfill => now >= EventSchedule.BackfillDueAt(backfill, cadenceSeconds))
+            .OrderBy(backfill => backfill.Id)
+            .FirstOrDefault();
     }
 
     /// <summary>

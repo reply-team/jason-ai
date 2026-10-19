@@ -93,6 +93,51 @@ internal static class EventsBed
         return source;
     }
 
+    /// <summary>A span of a source asked for again, as the database holds it: by default the sixty to thirty days before noon, waiting.</summary>
+    public static async Task<EventBackfill> BackfillAsync(
+        DispatchHarness harness,
+        EventSource source,
+        DateTime? from = null,
+        DateTime? to = null,
+        string? cursor = null,
+        int failures = 0,
+        DateTime? attempted = null,
+        EventBackfillStatus status = EventBackfillStatus.Pending)
+    {
+        await using var db = harness.Open();
+        var backfill = new EventBackfill
+        {
+            PublicId = PublicId.New("evb"),
+            SourceId = source.Id,
+            From = from ?? Noon.AddDays(-60),
+            To = to ?? Noon.AddDays(-30),
+            Status = status,
+            Cursor = cursor,
+            Failures = failures,
+            AttemptedAt = attempted,
+            RequestedAt = Noon.AddHours(-1),
+            ActorType = ActorType.Human,
+            ActorId = "marta",
+            Reason = "the weeks nobody read",
+        };
+        db.EventBackfills.Add(backfill);
+        await db.SaveChangesAsync(Ct);
+        return backfill;
+    }
+
+    public static async Task<EventBackfill> BackfillRowAsync(DispatchHarness harness, int backfillId)
+    {
+        await using var db = harness.Open();
+        return await db.EventBackfills.AsNoTracking().SingleAsync(backfill => backfill.Id == backfillId, Ct);
+    }
+
+    /// <summary>The source of an account, once a scan has given it one.</summary>
+    public static async Task<EventSource> SourceOfAsync(DispatchHarness harness, string account)
+    {
+        await using var db = harness.Open();
+        return await db.EventSources.AsNoTracking().SingleAsync(source => source.BindingIdentity == "sha256:" + account, Ct);
+    }
+
     public static async Task<EventSource> RowAsync(DispatchHarness harness, int sourceId)
     {
         await using var db = harness.Open();

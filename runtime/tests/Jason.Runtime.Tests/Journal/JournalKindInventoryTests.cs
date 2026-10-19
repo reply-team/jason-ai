@@ -83,6 +83,7 @@ public sealed class JournalKindInventoryTests
         JournalKinds.DecisionCancelled,
         JournalKinds.EventsRead,
         JournalKinds.EventsGapObserved,
+        JournalKinds.EventsBackfillRequested,
     };
 
     /// <summary>

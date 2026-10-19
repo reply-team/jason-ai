@@ -204,3 +204,14 @@ public enum ReportDedupMatch
     Key,
     Content,
 }
+
+/// <summary>
+/// Where a person's request to read a span of an account's events again stands. <c>Pending</c> until its span has been
+/// read to the end; <c>failed</c> when a read of it ended in an answer that repeating cannot change.
+/// </summary>
+public enum EventBackfillStatus
+{
+    Pending,
+    Done,
+    Failed,
+}

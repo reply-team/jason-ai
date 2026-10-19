@@ -16,6 +16,9 @@ public class EventReadsSchemaTests
 {
     private const string PreviousMigration = "20261018190303_EventStore";
 
+    /// <summary>The migration these columns arrived in: an upgrade is read at it, so a later migration's columns are a later test's.</summary>
+    private const string ThisMigration = "20261018230454_EventReads";
+
     private const string GapIndex = "ix_journal_kind_key_gaps";
 
     /// <summary>
@@ -42,7 +45,7 @@ public class EventReadsSchemaTests
 
         using (var db = new JasonDbContext(options))
         {
-            db.Database.Migrate();
+            db.GetInfrastructure().GetRequiredService<IMigrator>().Migrate(ThisMigration);
         }
 
         Assert.Equal(

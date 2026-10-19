@@ -27,7 +27,8 @@
         "20261016181342_UiTokens",
         "20261018190303_EventStore",
         "20261018230454_EventReads",
-        "20261019053859_LinkedInSlugKeys"
+        "20261019053859_LinkedInSlugKeys",
+        "20261019060108_EventBackfills"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -45,7 +46,8 @@
         "20261016181342_UiTokens",
         "20261018190303_EventStore",
         "20261018230454_EventReads",
-        "20261019053859_LinkedInSlugKeys"
+        "20261019053859_LinkedInSlugKeys",
+        "20261019060108_EventBackfills"
       ],
       "backup_file": null
     },

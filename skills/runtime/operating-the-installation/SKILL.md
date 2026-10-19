@@ -1,6 +1,6 @@
 ---
 name: operating-the-installation
-description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, opening the browser UI or unpairing a browser, and installing Jason or taking it off again.
+description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which accounts' events it reads and reading a span of one again, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, opening the browser UI or unpairing a browser, and installing Jason or taking it off again.
 metadata:
   status: draft
 ---
@@ -157,10 +157,12 @@ the runtime by hand.
 
 ## Notifications
 
-When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — or when a
-protective action fails, it tells them once, with a pointer: how many, and where to look. The toast, the operating
-system's own notification, is on by default and needs nothing set up; `jason runtime status --human` says on its
-`Notify:` line what each channel did last.
+When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a
+protective action fails, or when it finds a span of an account's events it will not read, it tells them once, with a
+pointer: how many, and where to look. A pointer that says an account has events Jason did not read sends you to
+`jason events sources`, as "The accounts whose events it reads" says. The toast, the operating system's own
+notification, is on by default and needs nothing set up; `jason runtime status --human` says on its `Notify:` line what
+each channel did last.
 `Notifications:Enabled` set to `false` in `~/.jason/config/settings.json` turns all of it off, and
 `Notifications:Toast` set to `false` turns off the toast alone. `docs/notifications.md` says when a burst is said, and
 what a pointer never carries.
@@ -221,6 +223,38 @@ before promising work: for *this* campaign and *this* operation, which plugin wo
 would. No provider ships configured, so nothing routed is the normal state of a fresh installation rather than a
 fault — **writing a route is an operator's explicit act**. If the answer is that nothing is routed, say so
 plainly instead of submitting work that will fail.
+
+## The accounts whose events it reads
+
+```
+jason events sources --human
+```
+
+A plugin that reads its accounts' events — `jason plugin list` shows `events` beside its operations — has every account a
+route binds read on the runtime's own cadence: that account is a **source**. `jason events sources` is their record:
+whether a route binds the account now, its last read and how it ended, whether it is healthy — while it is, the inbound
+read leaves the campaigns it serves to it — when it is read next, and, under `NOT READ`, the latest span its own reading
+skipped. That column stays once a span asked for again has read it: the spans asked for again are listed below the
+table with how each ended, so read them before you offer to read a span again. A source never shows its cursor, and you
+do not need it.
+
+A span not read is what an account was not read for longer than the thirty days a read reaches back: the runtime was off,
+or no route bound the account. Jason says it once, in a notification and in the source's record. It is read only when
+the person asks:
+
+```
+jason events backfill --source evs_01K7QN0000000000000000000A --from 2026-08-01T00:00:00Z --to 2026-09-01T00:00:00Z --reason "read the weeks the runtime was off"
+```
+
+Ask first, and run it on the person's yes, with their words as the reason. It reads and sends nothing, and leaves the
+account's own reading where it stands. What it finds that a campaign was not told, and that happened after the campaign
+went live, wakes that campaign's manager; what happened before is kept and says nothing. A span reaches at most 366
+days back and ends no later than now; eight may wait for one account. Each span asked for is listed under its source in
+`jason events sources`, with how it ended.
+
+`jason events signal` is for a program the person runs to receive a provider's webhooks: it has the account read at the
+next scan, never within a minute of its last read, and carries nothing of what the webhook said. Do not run it yourself
+to see sooner what an account holds.
 
 ## The agent hosts it can launch
 

@@ -143,8 +143,11 @@ covered here.
   handler slot — for every account a route binds, on `Dispatcher:EventsCadenceSeconds`, thirty days deep, a span older
   than that said once as `events_gap_observed`; inbound sync skips a campaign routed to such a plugin only where an
   event would reach it by the campaign-pin rule — one function, which the store attributes by — and only while that
-  account's last read that succeeded started within the shorter of two cadences and the look-back. `docs/events.md` is
-  the contract.
+  account's last read that succeeded started within the shorter of two cadences and the look-back. A person may ask for a
+  span of an account to be read again (`events.backfill`: at most 366 days back, eight waiting an account), read only in
+  a scan where every account is current, by a cursor of its own that never moves the account's; `events.signal` names an
+  account and nothing else and brings its next read forward, never within a minute of the last; `events.sources` is the
+  accounts' record and never answers a cursor. `docs/events.md` is the contract.
 - Notifications: a parked approval, a raised question, failed protective work and an account whose events were not
   read are notified as a pointer —
   counts and where to look — by a scan step after the dispatch, delivered off the scan and recorded in a reserved `notification_sent` line.

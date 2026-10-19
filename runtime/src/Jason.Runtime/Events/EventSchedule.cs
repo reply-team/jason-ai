@@ -21,6 +21,9 @@ public enum EventReadMode
 
     /// <summary>The plugin no longer knew the cursor: by date, from a day before the cursor was stored.</summary>
     ForgottenCursor,
+
+    /// <summary>A span a person asked for again: from its start to its end, then on from its own cursor, never the account's.</summary>
+    Backfill,
 }
 
 /// <summary>
@@ -61,12 +64,16 @@ public static class EventSchedule
     /// <summary>How long a cursor the plugin no longer knows is read back past, by date: a day before it was stored.</summary>
     public static readonly TimeSpan ForgottenCursorLookback = TimeSpan.FromDays(1);
 
+    /// <summary>How soon after a read started a signal can bring the next forward: a minute, so a burst of webhooks is one read.</summary>
+    public const int SignalFloorSeconds = 60;
+
     /// <summary>
     /// When the source's next read is due. At once when this process has not read it yet — a start catches every account
     /// up from its cursor — and when it has never been read. A read that stopped with more to read is due when it ended:
     /// at once, but behind an account that has been due for longer, so one account's backlog takes turns with the others
     /// rather than holding the reader. Otherwise a cadence after the last read started, doubled for each failure in a row
-    /// and never more than a day; a permanent or a validation failure waits the day.
+    /// and never more than a day; a permanent or a validation failure waits the day. A signal since the last read started
+    /// brings it to the moment the signal came, never to within a minute of that start, whatever the wait was.
     /// </summary>
     public static DateTime DueAt(EventSource source, bool readByThisProcess, int cadenceSeconds)
     {
@@ -81,14 +88,36 @@ public static class EventSchedule
             return source.ReadEndedAt ?? started;
         }
 
+        DateTime due;
         if (source.Failures > 0 && FinalClass(source.LastClass))
         {
-            return started.AddSeconds(MaximumWaitSeconds);
+            due = started.AddSeconds(MaximumWaitSeconds);
+        }
+        else
+        {
+            // Doubling past the cap only overflows: thirty-two doublings of a minute are far beyond a day.
+            var wait = Math.Min(cadenceSeconds * Math.Pow(2, Math.Clamp(source.Failures, 0, 32)), MaximumWaitSeconds);
+            due = started.AddSeconds(wait);
         }
 
-        // Doubling past the cap only overflows: thirty-two doublings of a minute are far beyond a day.
-        var wait = Math.Min(cadenceSeconds * Math.Pow(2, Math.Clamp(source.Failures, 0, 32)), MaximumWaitSeconds);
-        return started.AddSeconds(wait);
+        if (Signalled(source) && source.SignalAt is { } signal)
+        {
+            var floor = started.AddSeconds(SignalFloorSeconds);
+            var signalled = signal > floor ? signal : floor;
+            return signalled < due ? signalled : due;
+        }
+
+        return due;
+    }
+
+    /// <summary>
+    /// Whether somebody asked for the account to be read sooner since its last read started — a signal that read has not
+    /// answered yet. The read it brings forward says so in its line.
+    /// </summary>
+    public static bool Signalled(EventSource source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return source.SignalAt is { } signal && (source.ReadStartedAt is not { } started || signal > started);
     }
 
     public static bool IsDue(EventSource source, bool readByThisProcess, int cadenceSeconds, DateTime now) =>
@@ -145,6 +174,50 @@ public static class EventSchedule
         return new EventReadPlan(EventReadMode.FirstStart, Input(cursor: null, depth), Gap: null);
     }
 
+    /// <summary>
+    /// What the next read of a span asked for again starts from: its start and its end, to the millisecond, before any
+    /// page of it has landed; then its own cursor, whose chain the plugin keeps within the span. Never the account's
+    /// cursor, and never a gap: a span says nothing about what the account's own reading reached.
+    /// </summary>
+    public static EventReadPlan Plan(EventBackfill backfill)
+    {
+        ArgumentNullException.ThrowIfNull(backfill);
+        var input = backfill.Cursor is { } cursor
+            ? Next(cursor)
+            : new JsonObject
+            {
+                ["cursor"] = null,
+                ["since"] = Instant(backfill.From),
+                ["until"] = Instant(backfill.To),
+                ["limit"] = PageSize,
+            };
+        return new EventReadPlan(EventReadMode.Backfill, input, Gap: null);
+    }
+
+    /// <summary>
+    /// When a span's next read is due — once no account's own read is: at once, unless its last read ended in a failure
+    /// that may pass, when it waits the account's doubling from when that read started, never more than a day.
+    /// </summary>
+    public static DateTime BackfillDueAt(EventBackfill backfill, int cadenceSeconds)
+    {
+        ArgumentNullException.ThrowIfNull(backfill);
+        if (backfill.Failures == 0)
+        {
+            return DateTime.MinValue;
+        }
+
+        var wait = Math.Min(cadenceSeconds * Math.Pow(2, Math.Clamp(backfill.Failures, 0, 32)), MaximumWaitSeconds);
+        return (backfill.AttemptedAt ?? backfill.RequestedAt).AddSeconds(wait);
+    }
+
+    /// <summary>
+    /// Whether a read's end ends the span it read: an answer that repeating cannot change — a permanent or a validation
+    /// failure, or an answer outside the contract, which for one span is the same answer each time. Anything that may pass
+    /// leaves it waiting; with no way to call a span off, one that could never succeed must not hold its place for ever.
+    /// </summary>
+    public static bool EndsABackfill(string code, FailureClass failureClass) =>
+        failureClass is FailureClass.Permanent or FailureClass.Validation || string.Equals(code, EventReader.ResultInvalid, StringComparison.Ordinal);
+
     /// <summary>The input of a page read from a cursor: the next page of a read, after the first.</summary>
     public static JsonObject Next(string cursor)
     {
@@ -173,6 +246,7 @@ public static class EventSchedule
         EventReadMode.FirstStart => "first_start",
         EventReadMode.Gap => "gap",
         EventReadMode.ForgottenCursor => "forgotten_cursor",
+        EventReadMode.Backfill => "backfill",
         _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "No such mode."),
     };
 
@@ -187,6 +261,9 @@ public static class EventSchedule
         ["until"] = null,
         ["limit"] = PageSize,
     };
+
+    /// <summary>A moment as the runtime writes every timestamp: UTC, to the millisecond.</summary>
+    private static string Instant(DateTime moment) => InboundSync.Instant(new DateTimeOffset(DateTime.SpecifyKind(moment, DateTimeKind.Utc)));
 
     /// <summary>A moment to the second, rounded down, so a read never starts later than it says.</summary>
     private static DateTime Second(DateTime moment) =>

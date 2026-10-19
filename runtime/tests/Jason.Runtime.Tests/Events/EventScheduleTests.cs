@@ -1,3 +1,4 @@
+using Jason.Contracts.Plugins;
 using Jason.Runtime.Events;
 using Jason.Runtime.Persistence;
 
@@ -223,6 +224,137 @@ public class EventScheduleTests
         Assert.True(EventSchedule.IsHealthy(source, cadence, lookback, Now.AddMinutes(20)), "Not healthy twenty minutes on, at the defaults.");
         Assert.False(EventSchedule.IsHealthy(source, cadence, lookback, Now.AddMinutes(20).AddSeconds(1)), "Healthy past twenty minutes, at the defaults.");
     }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // A signal
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /// <summary>A signal after the last read started brings the next read to the moment it came, once a minute has passed since that start.</summary>
+    [Fact]
+    public void A_signal_after_the_last_start_is_due_when_it_came()
+    {
+        var source = Source(started: Now);
+        source.SignalAt = Now.AddMinutes(5);
+
+        Assert.Equal(Now.AddMinutes(5), EventSchedule.DueAt(source, readByThisProcess: true, Cadence));
+        Assert.True(EventSchedule.Signalled(source), "A signal after the last start does not count as one.");
+    }
+
+    /// <summary>However soon a signal comes after a read started, the next is not due within a minute of that start: a burst of webhooks is one read.</summary>
+    [Fact]
+    public void A_signal_is_not_honoured_within_sixty_seconds_of_the_last_start()
+    {
+        var source = Source(started: Now);
+        source.SignalAt = Now.AddSeconds(10);
+
+        Assert.Equal(Now.AddSeconds(EventSchedule.SignalFloorSeconds), EventSchedule.DueAt(source, readByThisProcess: true, Cadence));
+        Assert.False(EventSchedule.IsDue(source, readByThisProcess: true, Cadence, Now.AddSeconds(59)), "Due 59 s after the read started.");
+        Assert.True(EventSchedule.IsDue(source, readByThisProcess: true, Cadence, Now.AddSeconds(60)), "Not due 60 s after the read started.");
+    }
+
+    /// <summary>A signal that came before the last read started was answered by that read: the next waits its cadence.</summary>
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    public void A_signal_before_the_last_start_is_spent(int secondsAfterTheStart)
+    {
+        var source = Source(started: Now);
+        source.SignalAt = Now.AddSeconds(secondsAfterTheStart);
+
+        Assert.Equal(Now.AddSeconds(Cadence), EventSchedule.DueAt(source, readByThisProcess: true, Cadence));
+        Assert.False(EventSchedule.Signalled(source), "A signal the last read answered still counts as one.");
+    }
+
+    /// <summary>A signal brings forward an account that is waiting out a failure too, still never within a minute of its last start.</summary>
+    [Fact]
+    public void A_signal_brings_an_account_waiting_out_a_failure_forward()
+    {
+        var source = Source(started: Now, failures: 1, failedAs: "permanent");
+        source.SignalAt = Now.AddMinutes(30);
+
+        Assert.Equal(Now.AddMinutes(30), EventSchedule.DueAt(source, readByThisProcess: true, Cadence));
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // A span asked for again
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A span is read from its start to its end as it was asked for, to the millisecond, and then on from its own cursor —
+    /// whose chain the plugin keeps within the span — never from the account's.
+    /// </summary>
+    [Fact]
+    public void A_backfill_reads_its_span_then_its_own_cursor()
+    {
+        var span = Backfill(from: new DateTime(2026, 8, 1, 9, 30, 0, 250, DateTimeKind.Utc), to: new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var first = EventSchedule.Plan(span);
+        span.Cursor = "b-7";
+        var next = EventSchedule.Plan(span);
+
+        Assert.Equal((EventReadMode.Backfill, "backfill"), (first.Mode, first.ModeWord));
+        Assert.Equal("""{"cursor":null,"since":"2026-08-01T09:30:00.250Z","until":"2026-09-01T00:00:00.000Z","limit":100}""", first.Input.ToJsonString());
+        Assert.Equal("""{"cursor":"b-7","since":null,"until":null,"limit":100}""", next.Input.ToJsonString());
+        Assert.Null(first.Gap);
+        Assert.Null(next.Gap);
+    }
+
+    [Fact]
+    public void A_backfill_with_no_failure_is_due_at_once()
+    {
+        var span = Backfill(attempted: Now);
+
+        Assert.Equal(DateTime.MinValue, EventSchedule.BackfillDueAt(span, Cadence));
+    }
+
+    /// <summary>A failure that may pass doubles a span's wait from when its last read started, as it doubles an account's, and never past a day.</summary>
+    [Theory]
+    [InlineData(1, 1_200)]
+    [InlineData(3, 4_800)]
+    [InlineData(8, 86_400)]
+    [InlineData(40, 86_400)]
+    public void A_backfill_that_failed_waits_the_doubled_cadence_from_its_last_read(int failures, int wait)
+    {
+        var span = Backfill(attempted: Now, failures: failures);
+
+        Assert.Equal(Now.AddSeconds(wait), EventSchedule.BackfillDueAt(span, Cadence));
+    }
+
+    /// <summary>
+    /// What ends a span: an answer repeating cannot change — a permanent or a validation failure, or an answer outside the
+    /// contract, which is ambiguous for an account's own reading but the same answer each time for one span. Anything that
+    /// may pass is tried again.
+    /// </summary>
+    [Theory]
+    [InlineData("events_unauthorized", FailureClass.Permanent, true)]
+    [InlineData("events_unsupported", FailureClass.Permanent, true)]
+    [InlineData("input_invalid", FailureClass.Validation, true)]
+    [InlineData("result_invalid", FailureClass.Ambiguous, true)]
+    [InlineData("events_unreachable", FailureClass.Transient, false)]
+    [InlineData("validation_timed_out", FailureClass.Transient, false)]
+    [InlineData("events_not_stored", FailureClass.Ambiguous, false)]
+    [InlineData("plugin_timeout", FailureClass.Ambiguous, false)]
+    public void A_backfill_ends_only_on_an_answer_repeating_cannot_change(string code, FailureClass failureClass, bool ends)
+    {
+        Assert.True(
+            EventSchedule.EndsABackfill(code, failureClass) == ends,
+            $"{code} ({failureClass}) {(ends ? "leaves the span waiting" : "ends the span")}.");
+    }
+
+    private static EventBackfill Backfill(DateTime? from = null, DateTime? to = null, DateTime? attempted = null, int failures = 0) =>
+        new()
+        {
+            Id = 1,
+            PublicId = "evb_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+            SourceId = 1,
+            From = from ?? Now.AddDays(-60),
+            To = to ?? Now.AddDays(-30),
+            Status = Jason.Contracts.Api.EventBackfillStatus.Pending,
+            RequestedAt = Now.AddHours(-1),
+            AttemptedAt = attempted,
+            Failures = failures,
+            ActorType = Jason.Contracts.Api.ActorType.Human,
+        };
 
     private static EventSource Source(
         DateTime? started = null,
