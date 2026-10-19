@@ -284,6 +284,41 @@ public class ReplyPackageTests
             words => Assert.Contains(words, section, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Jason always asks Reply for a LinkedIn profile by its lowercased slug, and whether Reply's lookup ignores the slug's
+    /// case is not known. What an operator is owed is that limit and what follows from it, where the README says what the
+    /// package cannot do and in the release that brought the slug: a person Reply holds under a mixed-case profile link is
+    /// not found, a second contact is created, and the opt-out lands on that one.
+    /// </summary>
+    [Fact]
+    public void The_readme_and_the_changelog_say_a_mixed_case_profile_link_may_not_be_found()
+    {
+        var readme = File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")).ReplaceLineEndings("\n");
+        var start = readme.IndexOf("## What it cannot do", StringComparison.Ordinal);
+        Assert.True(start >= 0, "The README has no section on what the package cannot do.");
+        var section = Flat(readme[start..readme.IndexOf("\n## ", start + 1, StringComparison.Ordinal)]);
+        var entry = Flat(ChangelogSection(0));
+
+        Assert.All(
+            new[]
+            {
+                "Jason always asks Reply for a LinkedIn profile by its lowercased slug.",
+                "Whether Reply's lookup ignores the slug's case is not verified.",
+                "a person Reply holds under a mixed-case profile link is not found", "creates a second contact",
+                "`optout.record` lands on that one",
+            },
+            words => Assert.Contains(words, section, StringComparison.Ordinal));
+        Assert.DoesNotContain("not checked against a live account", section, StringComparison.Ordinal);
+        Assert.All(
+            new[]
+            {
+                "whether Reply's lookup ignores the slug's case is not verified",
+                "a person Reply holds under a mixed-case profile link is not found", "creates a second contact",
+                "`optout.record` lands on that one",
+            },
+            words => Assert.Contains(words, entry, StringComparison.Ordinal));
+    }
+
     [Fact]
     public void The_changelog_opens_with_0_4_0_and_the_four_inbox_operations_it_adds()
     {

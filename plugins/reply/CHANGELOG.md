@@ -26,6 +26,9 @@ absorbed by a release of this package alone.
   `provider_call_failed`, and nothing is made.
 - A person reached by LinkedIn URL is looked up, imported and compared by its lowercased slug: on linkedin.com the
   path's case does not count. Reply is given the URL in that form, as Jason now keys it.
+- The README states the limit that comes with it: whether Reply's lookup ignores the slug's case is not verified. If it
+  does not, a person Reply holds under a mixed-case profile link is not found: a list add or an enrolment creates a
+  second contact, and `optout.record` lands on that one.
 - `conversation.reply` answers the person on a thread, in that thread, with `reply inbox reply`: the text goes on stdin,
   Reply sends on the thread's own channel from the identity that owns it, and nobody else can be put on it. The thread
   is read first with `reply inbox get`, one message long, and nothing is sent unless the thread is on the channel the

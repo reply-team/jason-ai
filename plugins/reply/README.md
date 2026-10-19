@@ -584,10 +584,10 @@ fails `contact_not_found` rather than finding them by address again.
   already, a flag set again changes nothing, and it answers a pause of a paused sequence as a pause. So this package
   answers `added`, `recorded` or `paused`, and the effect at Reply is the same either way.
 - **A person without a first name.** Reply requires a first name; see [Contacts at Reply](#contacts-at-reply) above.
-- **Whether Reply's lookup by LinkedIn URL ignores the case of a slug is not checked against a live account.** Jason
-  hands the plugin the lowercased slug, and the CLI asks Reply for it in that form and then as given, so a contact
-  somebody typed at Reply under a mixed-case slug is found only where Reply's own lookup ignores the case; where it does
-  not, a list add or an enrolment imports a second contact for that person.
+- **Jason always asks Reply for a LinkedIn profile by its lowercased slug.** Whether Reply's lookup ignores the slug's
+  case is not verified. If it does not, a person Reply holds under a mixed-case profile link is not found: a list add or
+  an enrolment creates a second contact, and `optout.record` lands on that one — made for it if need be — while the
+  contact Reply held is untouched.
 - **`conversation.list` with `source: all` reads Reply's inbox and its sent threads, and merges them.** Reply's thread
   filter has no value for "every thread": its inbox holds the threads with an inbound message, and `sent` the threads
   whose latest message is outbound. The package reads both from the first thread, a hundred at a time, merges them by
