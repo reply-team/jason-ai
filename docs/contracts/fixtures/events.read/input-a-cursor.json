@@ -1,0 +1,12 @@
+{
+  "operation": "events.read",
+  "version": 1,
+  "case": "a read from where the last page ended: the cursor the plugin returned, handed back as it was",
+  "input": {
+    "cursor": "c-41",
+    "since": null,
+    "until": null,
+    "limit": 100
+  },
+  "expect": "valid"
+}

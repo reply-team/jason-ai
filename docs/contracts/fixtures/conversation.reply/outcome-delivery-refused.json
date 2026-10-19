@@ -1,0 +1,21 @@
+{
+  "operation": "conversation.reply",
+  "version": 1,
+  "case": "the provider took the reply and could not deliver it; its own reason travels in the details",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "permanent",
+      "code": "delivery_refused",
+      "message": "The provider could not deliver the reply, and says it did not go out.",
+      "details": { "provider_status_code": "dailyLimitExceeded" },
+      "external_ids": { "contact": "p_88421" }
+    },
+    "diagnostics": { "duration_ms": 900, "exec_calls": 2, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "permanent", "retriable": false, "pinned": { "contact": "p_88421" } }
+}

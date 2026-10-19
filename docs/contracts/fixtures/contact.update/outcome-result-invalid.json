@@ -1,0 +1,28 @@
+{
+  "operation": "contact.update",
+  "version": 1,
+  "case": "a status outside the operation's own vocabulary, which nobody downstream could reason over",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "contact_id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+          "status": "changed",
+          "external_ids": { "contact": "p_88421" }
+        }
+      ]
+    },
+    "external_ids": { "contact": "p_88421" },
+    "error": null,
+    "diagnostics": { "duration_ms": 640, "exec_calls": 1, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": {
+    "status": "result_invalid",
+    "class": "ambiguous",
+    "retriable": false,
+    "invalid": [{ "pointer": "/items/0/status", "reason": "enum" }]
+  }
+}

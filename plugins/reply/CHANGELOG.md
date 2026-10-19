@@ -3,6 +3,65 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.4.0
+
+- Four inbox operations, each through the Reply CLI command made for it. The package needs reply-cli 0.13.0 or newer.
+- `contact.update` changes a person's fields and custom fields on Reply's contact for them with `reply contact update`,
+  the values on stdin: a null clears a field, one left out stays, and a custom field is named as the account names it,
+  an unknown name refused with nothing changed. The person is found by the pin or by `reply contact find`, and nobody is
+  made: a person Reply holds nobody for is `contact_not_found`, and is enrolled or put on a list first.
+- `contact.delete` deletes Reply's contact for a person, by the pin alone and once a person approves it: `reply contact
+  get` first, then `reply contact delete`. A contact Reply holds as opted out is refused — Reply keeps that stop on the
+  contact — and one it no longer holds is `contact_not_found` on a first attempt and `already_deleted` on any later attempt, since an earlier one may have deleted it.
+  Nothing is pinned, and Jason's own record of the person and its register are not touched.
+- Every operation about a person finds Reply's contact for them before it writes anything, the way its document's
+  `preflight.provider_contact` says: by the pin, or else with `reply contact find`, Reply's exact lookup by email or by
+  LinkedIn URL, read to its end. A person Reply holds is named by that identifier — also one who has a first name, whom
+  `list_membership.add` and `campaign.enroll` imported before — so nothing Jason holds is written to their record. Only
+  the list add, the enrolment and the opt-out import a person Reply holds nobody for; the stop creates nobody. Two
+  contacts under one address are `contact_not_unique` for the list add and the enrolment too, which declare the code
+  now, and a lookup the CLI could not read to its end is asked again. The package's own contact search is gone.
+- `campaign.create` runs `reply sequence list` and `reply sequence create`, with the name on stdin, so the package
+  makes no raw call at all. More than twenty thousand sequences whose names contain the name is still
+  `provider_call_failed`, and nothing is made.
+- A person reached by LinkedIn URL is looked up, imported and compared by its lowercased slug: on linkedin.com the
+  path's case does not count. Reply is given the URL in that form, as Jason now keys it.
+- The README states the limit that comes with it: whether Reply's lookup ignores the slug's case is not verified. If it
+  does not, a person Reply holds under a mixed-case profile link is not found: a list add or an enrolment creates a
+  second contact, and `optout.record` lands on that one.
+- `conversation.reply` answers the person on a thread, in that thread, with `reply inbox reply`: the text goes on stdin,
+  Reply sends on the thread's own channel from the identity that owns it, and nobody else can be put on it. The thread
+  is read first with `reply inbox get`, one message long, and nothing is sent unless the thread is on the channel the
+  work item names and its person is the work item's — the contact pinned for them where there is a pin, and in every
+  case the one whose address, or LinkedIn profile, is the channel's value, compared as Jason keys the value for its
+  suppression register: an address whatever its case, a profile link by its scheme and host whatever their case, with
+  a default port, a user name, a fragment and one trailing slash dropped, its query exactly, and its path whatever its
+  case on linkedin.com and its subdomains and exactly on any other host. Nobody is created: the thread's person is
+  pinned once found. A reply costs three requests to Reply before its send: two for `reply inbox get`, and one more read of the
+  thread inside `reply inbox reply`. A text carrying `{{` is refused,
+  `message_invalid`, because Reply renders it as a placeholder of its own; Reply's own refusal of a text it could not
+  render — `reply.refused` with its `inboxThread.invalidInput` and a sentence starting `RenderingFail` — is
+  `message_invalid` too, and every other refusal of the send stays `provider_call_failed`. A reply Reply took and could
+  not deliver is `delivery_refused`, with Reply's reason in the trace. A reply whose answer was lost is never repeated:
+  the operation's contract says `never`, and the work item stops for a person.
+- What a reply answers: `sent_at` is null, because Reply's send answer stamps the account's local time as UTC; the
+  message's own date, which `conversation.get` returns, is the moment. Reply gives no identifier on email, so
+  `message.external_id` is null there. What goes out is the text followed by Reply's own quote of the thread's earlier
+  messages, and the approval shows the text only.
+- `conversation.classify` files a thread under one of the account's inbox categories, by Reply's identifier for it or
+  by its name, matched in this package against `reply inbox categories` and never put on a command line, or takes it
+  out of its category; `reply inbox categorize` sets it outright. Reply's reserved Do not contact is refused,
+  `category_opts_out`, by identifier or by name, before anything is filed: filing there opts the person out in every
+  sequence, and clearing it undoes nothing. Stopping a person is `optout.record`'s path. The README says what Reply does
+  on its other reserved names — events, a connected CRM, its own re-engagement — and that a campaign that must own every
+  send files under categories of its own.
+- `conversation.close` and `conversation.reopen` mark the thread read and unread with `reply inbox mark-read` and
+  `reply inbox mark-unread`: Reply has no closed state, and read is how its inbox shows a thread as worked.
+- `conversation.list` takes `thread_channel` and `category`, passed to every `reply inbox list` it makes as `--channel`
+  and `--category-id`, so Reply filters before it pages. A category identifier that is not a Reply number asks nothing.
+- A reply Jason sends leaves the thread where it was in Reply's list, which keeps its last activity at the person's
+  latest message, so inbound sync says nothing for it: a reply Jason sends does not wake the manager at all.
+
 ## 0.3.2
 
 - `campaign.create` makes the sequence a Jason campaign works with, so nobody has to make it at Reply by hand first. It

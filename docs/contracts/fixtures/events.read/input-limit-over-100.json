@@ -1,0 +1,19 @@
+{
+  "operation": "events.read",
+  "version": 1,
+  "case": "a page larger than the contract allows",
+  "input": {
+    "cursor": "c-41",
+    "since": null,
+    "until": null,
+    "limit": 101
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "/limit",
+        "reason": "maximum"
+      }
+    ]
+  }
+}

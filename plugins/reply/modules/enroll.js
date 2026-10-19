@@ -1,8 +1,9 @@
 // `campaign.enroll`: put one person into a Reply sequence, which is what a campaign is at this provider.
 //
-// One command, `reply sequence add-contact`. It imports the person when they are given by their fields, reads whether
-// they already take part — a person already in the sequence is never moved or re-added, and nothing is written for
-// them — and adds them; Reply itself refuses a person its opt-out register holds. An enrollment into a live campaign
+// The person is found first — by the pin, or by `reply contact find`, Reply's exact lookup of the address (contacts.js)
+// — and then one command, `reply sequence add-contact`, which imports them only when Reply holds nobody under the
+// address, reads whether they already take part — a person already in the sequence is never moved or re-added, and
+// nothing is written for them — and adds them; Reply itself refuses a person its opt-out register holds. An enrollment into a live campaign
 // **is a send**, so what this package decides is what the CLI cannot know: whether a person already taking part is
 // the answer the caller asked for (`collision: skip`) or a refusal (`refuse`), and that a repeated attempt, which may
 // be meeting its own lost write, answers `already_enrolled` whatever the policy.

@@ -1,0 +1,141 @@
+{
+  "id": "conversation.reopen",
+  "version": 1,
+  "l1": { "name": "conversation.reopen", "contract_version": "2.0.0", "family": 9, "core": false },
+  "intent": "\"I closed that too early — put it back in the queue\"",
+
+  "reach": "control",
+  "reversibility": "reversible",
+  "approval": "auto",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "the thread's state; reopening an open thread is a no-op.",
+  "idempotency_key": "required",
+  "per_item_results": "required",
+  "accepts_collection": false,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": [],
+
+  "preflight": { "contact": "not_used", "channel": "none", "suppression": "checked", "provider_contact": "not_used" },
+  "dispatch": { "in_paused_campaign": "waits" },
+  "contact_projection": null,
+  "precondition": "none",
+  "preview": null,
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:conversation.reopen:1:input",
+    "title": "conversation.reopen input",
+    "description": "One thread, put back among those that need attention. The thread names itself; the campaign is the work item's, carried for context.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "campaign", "idempotency_key"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["thread"],
+        "properties": {
+          "thread": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["external_id"],
+            "properties": {
+              "external_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The provider's identifier for the thread, as `conversation.list` returned it."
+              }
+            }
+          }
+        }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" },
+      "idempotency_key": {
+        "type": "string",
+        "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+        "description": "The work item's own identifier, stable across every attempt."
+      }
+    },
+    "$defs": {
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it, so another provider's identifier is never visible here."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:conversation.reopen:1:output",
+    "title": "conversation.reopen result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "One outcome for the one thread.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["thread_external_id", "status"],
+          "properties": {
+            "thread_external_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "description": "The thread this call reopened."
+            },
+            "status": {
+              "const": "reopened",
+              "description": "The thread is open again now, whether or not it was closed before: the provider does not say."
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "external_ids": {},
+
+  "recovery_read": null,
+  "repeat_after_ambiguous": "safe",
+
+  "failure_codes": [
+    { "code": "conversation_not_found", "class": "permanent", "when": "The provider holds no thread under this identifier, or not one this account may see. Nothing was changed." },
+    { "code": "feature_unavailable", "class": "permanent", "when": "The provider account's plan or role does not include this capability, so no call by this account can perform it." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it change this account's threads." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now and it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was written." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the thread may already be open again. Reopening an open thread changes nothing, so the next attempt simply asks again." }
+  ],
+
+  "timeout_ms": 60000,
+
+  "conformance": [
+    "The thread is open again whatever its state was, and a second performance leaves it as the first did, which is what makes a repeat after a lost answer safe.",
+    "Reopening a thread changes nothing about the person, their participation or the suppression register.",
+    "Nothing is pinned."
+  ]
+}

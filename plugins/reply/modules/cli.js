@@ -1,7 +1,8 @@
 // The only place in this package where a command line is built.
 //
-// One place, so that "a person's data never travels as an argument" and "these flags never appear" are properties of
-// the package rather than of whoever wrote the newest module. The `exec` diagnostic records every argument, and the
+// One place, so that "a person's data never travels as an argument", "these flags never appear" and "no raw call is
+// ever made" are properties of the package rather than of whoever wrote the newest module: every line built here is a
+// work command, `reply <noun> <verb>`, and every request has a command made for it. The `exec` diagnostic records every argument, and the
 // runtime's logs may never hold contact data, so a person goes on stdin and nowhere else. A test on the runtime side
 // reads the argument vector out of the stand-in's call log and holds it to exactly the shapes built here.
 //
@@ -76,23 +77,6 @@ export function commandArgs(context, command, operands, flags) {
 }
 
 /**
- * The whole argument vector of the one raw call: `--json -q [--profile P] [--team-id T] api <path> [--method M]
- * [--body -]`. The body itself goes on stdin: it carries a person's address, and arguments are written to the log.
- */
-export function apiArgs(context, method, path, hasBody) {
-  const line = prefix(context).concat(["api", path]);
-  if (method !== "GET") {
-    line.push("--method", method);
-  }
-
-  if (hasBody) {
-    line.push("--body", "-");
-  }
-
-  return line;
-}
-
-/**
  * How long one call may run: what is left of the invocation's budget, less what this package keeps back to answer
  * for itself if the call is cut off. The invocation's own deadline is read from the context, so a call made late in
  * an invocation is given what that invocation has left rather than what it started with. Without a deadline to
@@ -129,30 +113,17 @@ function exec(context, args, stdin) {
 
 /**
  * One reply-cli work command: its result object when it exits 0, and `host.fail` with the row the table decides for
- * every other ending. `request` is `{ operation, command, operands, flags, stdin, learned, pins }`: the canonical
- * operation the command serves, the command's two words, its ids, its flags, the person for stdin, and what this
- * package already knows Reply calls our entities — which travels out with a failure, joined by whatever the CLI says it
- * had learned before it failed. `pins: false` keeps what the CLI learned out of the failure, for a command that names
- * something which is not ours yet.
+ * every other ending. `request` is `{ operation, command, operands, flags, stdin, learned, pins, missing }`: the
+ * canonical operation the command serves, the command's two words, its ids, its flags, the person for stdin, and what
+ * this package already knows Reply calls our entities — which travels out with a failure, joined by whatever the CLI
+ * says it had learned before it failed. `pins: false` keeps what the CLI learned out of the failure, for a command that
+ * names something which is not ours yet, or for an operation that pins nothing. `missing` is the CLI's code for an id
+ * Reply holds nothing under, where the caller answers that itself: the command then answers null instead of failing.
  */
 export function run(context, request) {
   const stdin = request.stdin === undefined || request.stdin === null ? undefined : JSON.stringify(request.stdin);
   const answer = exec(context, commandArgs(context, request.command, request.operands || [], request.flags || []), stdin);
   return ended(answer, request);
-}
-
-/**
- * The raw call this package still makes, `reply api`, where reply-cli has no command for the request: the contact
- * search a list add, an enrolment or an opt-out makes for a person with no pin and no first name, and the list and the
- * create of sequences `campaign.create` makes. The answer is `{ code, data }` — Reply's own status and its body,
- * whatever that status was — and every ending without one throws `host.fail`. The table knows the call as
- * `api <METHOD> <path without its query>`, which is how its read/write mark is found.
- */
-export function call(context, method, path, body, learned, operation) {
-  const hasBody = body !== undefined && body !== null;
-  const named = "api " + method + " " + String(path).split("?")[0];
-  const answer = exec(context, apiArgs(context, method, path, hasBody), hasBody ? JSON.stringify(body) : undefined);
-  return answered(answer, named, learned, operation);
 }
 
 // The endings that come before anything the program printed can be read. A timeout is read first, because a process
@@ -201,6 +172,10 @@ function ended(answer, request) {
   }
 
   const said = verdict(answer.stderr);
+  if (answer.exit_code === FAILED && said !== null && typeof request.missing === "string" && said.code === request.missing) {
+    return null;
+  }
+
   if (said !== null) {
     observed.cli_code = said.code;
     observed.status = said.status;
@@ -210,6 +185,7 @@ function ended(answer, request) {
     if (said.details !== null && typeof said.details === "object") {
       observed.expected = said.details.expected;
       observed.actual = said.details.actual;
+      observed.provider_status_code = typeof said.details.status_code === "string" ? said.details.status_code : undefined;
     }
   }
 
@@ -226,32 +202,6 @@ function ended(answer, request) {
   }
 
   fail(operation, observed, request.pins === false ? request.learned : learnedWith(request.learned, said, operation, observed.row));
-}
-
-// Every ending of the raw call. `reply api` prints `{code, data}` for any status Reply answered, with exit 0 or 1, and
-// that is the answer whatever the status. An ending without it is the CLI's own: a refusal before sending (exit 2),
-// Reply not reached (exit 1), or a write whose outcome is unknown (exit 3) — which the CLI says of any POST, this
-// search included, and which the table's mark for this call reads as the read it is.
-function answered(answer, named, learned, operation) {
-  const observed = failIfUnread(answer, named, operation, learned);
-
-  const envelope = envelopeOf(answer.stdout);
-  if (envelope !== null) {
-    return envelope;
-  }
-
-  const said = verdict(answer.stderr);
-  if (said !== null) {
-    observed.cli_code = said.code;
-  }
-
-  if (answer.exit_code === REFUSED_THE_CALL) {
-    observed.row = said === null ? "call_refused_before_it_was_sent" : rowOf(operation, said);
-  } else {
-    observed.row = lostAnswerRow(named);
-  }
-
-  fail(operation, observed, learned);
 }
 
 // What a failure carries out: what this package knew, joined by the ids the CLI had learned — the contact it created
@@ -312,16 +262,6 @@ function verdict(stderr) {
 function resultOf(stdout) {
   const parsed = jsonOf(stdout);
   return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
-}
-
-// The raw call's envelope: a status and the body Reply answered with, for any status. Anything else is not an answer.
-function envelopeOf(stdout) {
-  const parsed = jsonOf(stdout);
-  if (parsed === null || typeof parsed !== "object" || typeof parsed.code !== "number") {
-    return null;
-  }
-
-  return { code: parsed.code, data: parsed.data === undefined ? null : parsed.data };
 }
 
 function jsonOf(stdout) {

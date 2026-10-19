@@ -1,0 +1,21 @@
+{
+  "operation": "conversation.reply",
+  "version": 1,
+  "case": "the text carries {{firstName}}, which the provider could fill in for itself, so what would go out is not what a person approved: nothing is sent",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "validation",
+      "code": "message_invalid",
+      "message": "The text carries a double opening brace, which the provider may read as a placeholder of its own, so nothing was sent.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": { "duration_ms": 120, "exec_calls": 0, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "validation", "retriable": false }
+}

@@ -20,7 +20,7 @@
   "meter": null,
   "invariants": ["H10"],
 
-  "preflight": { "contact": "optional", "channel": "none", "suppression": "checked" },
+  "preflight": { "contact": "optional", "channel": "none", "suppression": "checked", "provider_contact": "pinned_only" },
   "dispatch": { "in_paused_campaign": "waits" },
   "contact_projection": { "fields": ["id"], "channels": "none" },
   "precondition": "none",
@@ -75,6 +75,20 @@
             "type": "string",
             "enum": ["inbound", "all"],
             "description": "`inbound`: only threads the other side wrote into. `all`: every thread. Required, because which of the two a caller meant is not something to guess."
+          },
+          "thread_channel": {
+            "type": "string",
+            "enum": ["email", "linkedin"],
+            "description": "Only threads on this channel, in the words a thread's own `channel` is said in. A filter on the threads, never a channel the call consumes: a list reaches nobody."
+          },
+          "category": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["external_id"],
+            "description": "Only threads filed under this category of the provider's, by the identifier the reads report under `vendor.category.id`.",
+            "properties": {
+              "external_id": { "type": "string", "minLength": 1, "maxLength": 64 }
+            }
           }
         }
       },
@@ -276,6 +290,7 @@
     "The next page starts at `offset` plus the number of items this page returned, never at `offset + limit`.",
     "Threads come most recent activity first, which `vendor.ordering` states. The order is not a queue of what to answer: what needs answering first is a judgement this read does not make.",
     "With a person, the page is that person's threads across the account, and the campaign is context only; without one, it is the campaign's threads.",
+    "`thread_channel` and `category` keep only the threads on that channel and filed under that category, and the provider applies them before it pages, so `offset` counts the threads that pass them.",
     "A person with no provider identifier pinned fails `contact_not_linked`, and nothing is called: a read creates nobody.",
     "A preview is at most 500 characters, cut where a character ends.",
     "No address appears anywhere in the result: a thread's person is their identifier and the name the provider shows.",

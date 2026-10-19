@@ -1,0 +1,16 @@
+{
+  "operation": "conversation.classify",
+  "version": 1,
+  "case": "a thread filed under the category the reads reported under vendor.category.id",
+  "input": {
+    "args": { "thread": { "external_id": "t_99812" }, "category": { "external_id": "3" } },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": "valid"
+}

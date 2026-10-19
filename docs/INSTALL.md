@@ -112,14 +112,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://jasonharness.ai/releases/download/v0.11.0/install.sh | sh -s -- --version 0.11.0
+curl -fsSL https://jasonharness.ai/releases/download/v0.12.0/install.sh | sh -s -- --version 0.12.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.11.0/install.ps1))) -Version 0.11.0
+& ([scriptblock]::Create((irm https://jasonharness.ai/releases/download/v0.12.0/install.ps1))) -Version 0.12.0
 ```
 
-These install 0.11.0 with 0.11.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.12.0 with 0.12.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
@@ -269,7 +269,10 @@ from another. A deployment made at the tag of the build that installed it moves 
 made with `--ref` stays at its ref, a directory is read where it stands, and a development build keeps the ref the
 record names, because the tag its own version names is not published yet.
 
-After `jason update apply`, run `jason status`: role skills a default install took at another release's tag fail
+`jason update apply` ends by running `jason skills update` at the new release's tag; an update applied by a build
+before 0.12.0 needs one `jason skills update` after it. A package manager's upgrade does not run
+`jason update apply`, so `jason skills update` follows it. Either way, `jason status` is the check: role skills a
+default install took at another release's tag fail
 `role_skills`, and the repair it prints moves them to the runtime's own tag. That repair is
 `jason skills install --roles-only`, with the `--source` they came from when it was not this repository. A
 deployment made with `--ref` stays where it is and passes, in the runtime's own root and in an agent's, and so does

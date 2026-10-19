@@ -1,0 +1,119 @@
+{
+  "operation": "system.info",
+  "case": "with-ui",
+  "request": {},
+  "status": 200,
+  "response": {
+    "runtime_version": "0.0.0-recorded",
+    "api_version": "v1",
+    "instance_id": "rt_1",
+    "pid": 4242,
+    "started_at": "2026-10-16T09:00:00.000Z",
+    "data_dir": "<data>",
+    "database": {
+      "applied_migrations": [
+        "20260913233702_InitialCreate",
+        "20260914051837_CampaignsContactsJournal",
+        "20260914104855_WorkItemsAttemptsRoles",
+        "20260915234613_RoutingProvenanceExternalIds",
+        "20260917063114_Approvals",
+        "20260917203003_Reports",
+        "20260918040001_ExecutionProfiles",
+        "20260918074712_RoleNotes",
+        "20260919040652_CampaignManagerLoop",
+        "20260919064112_ManagerEscalation",
+        "20261005204228_IdempotencyKeys",
+        "20261006011312_InboundSync",
+        "20261016181342_UiTokens",
+        "20261018190303_EventStore",
+        "20261018230454_EventReads",
+        "20261019053859_LinkedInSlugKeys",
+        "20261019060108_EventBackfills"
+      ],
+      "newly_applied": [
+        "20260913233702_InitialCreate",
+        "20260914051837_CampaignsContactsJournal",
+        "20260914104855_WorkItemsAttemptsRoles",
+        "20260915234613_RoutingProvenanceExternalIds",
+        "20260917063114_Approvals",
+        "20260917203003_Reports",
+        "20260918040001_ExecutionProfiles",
+        "20260918074712_RoleNotes",
+        "20260919040652_CampaignManagerLoop",
+        "20260919064112_ManagerEscalation",
+        "20261005204228_IdempotencyKeys",
+        "20261006011312_InboundSync",
+        "20261016181342_UiTokens",
+        "20261018190303_EventStore",
+        "20261018230454_EventReads",
+        "20261019053859_LinkedInSlugKeys",
+        "20261019060108_EventBackfills"
+      ],
+      "backup_file": null
+    },
+    "dispatcher": {
+      "state": "disabled",
+      "tick_seconds": 10,
+      "max_parallel": 4,
+      "running_attempts": 0,
+      "last_scan_at": null,
+      "scans": 0,
+      "summons": 0
+    },
+    "plugins": {
+      "active_count": 0,
+      "snapshot_id": "snp_1",
+      "loaded_at": "2026-10-16T09:00:00.000Z",
+      "last_reload_activated": true
+    },
+    "routes": {
+      "snapshot_id": "rts_1",
+      "activated_at": "2026-10-16T09:00:00.000Z",
+      "global_default_plugin": null,
+      "global_override_count": 0,
+      "campaign_route_count": 0
+    },
+    "update": null,
+    "skills": {
+      "role_skills_directory": "<data>/skills/roles",
+      "max_skill_bytes": 1048576,
+      "roles": [],
+      "problem": null,
+      "problem_code": null,
+      "problem_exception": null
+    },
+    "notifications": {
+      "enabled": false,
+      "channels": [
+        {
+          "channel": "toast",
+          "kind": "toast",
+          "on": false,
+          "outcome": null,
+          "reason": null,
+          "code": null,
+          "class": null,
+          "detail": null,
+          "at": null,
+          "presence": "available",
+          "presence_detail": null
+        }
+      ],
+      "last_notification_id": null,
+      "last_at": null
+    },
+    "listening": {
+      "port": 52766,
+      "configured_port": 52766
+    },
+    "ui": {
+      "source": "default",
+      "directory": "<data>/ui/default",
+      "version": "0.10.0",
+      "api_version": "v1",
+      "api_version_matches": true,
+      "digest": "sha256:recorded-1",
+      "problem": null
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "operation": "ui.tokens",
+  "case": "two",
+  "request": {},
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "uit_1",
+        "issued_to": "ada",
+        "issued_at": "2026-10-16T09:00:00.000Z",
+        "last_used_at": null
+      },
+      {
+        "id": "uit_2",
+        "issued_to": "ada",
+        "issued_at": "2026-10-16T09:00:00.000Z",
+        "last_used_at": null
+      }
+    ]
+  }
+}

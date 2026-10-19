@@ -1,14 +1,13 @@
 // `optout.record`: "they said stop", recorded at the provider — the catalogue's protective floor, which runs without
 // anybody approving it because waiting for permission to stop is the harm.
 //
-// One command, `reply contact opt-out`. It finds the person — by the pin, or by the address, exactly and whatever its
-// case — and makes a contact only when Reply holds nobody under it, because an opt-out recorded on a second contact
-// leaves the person Reply already holds still reachable. Then it sets Reply's flag, which is only ever set. Setting a
-// flag that is set already changes nothing, so the answer is `recorded` either way, and a repeat after a lost answer
-// simply runs the command again.
+// The person is found first — by the pin, or by `reply contact find`, Reply's exact lookup of the address (contacts.js)
+// — and then one command, `reply contact opt-out`, makes a contact only when Reply holds nobody under the address,
+// because an opt-out recorded on a second contact leaves the person Reply already holds still reachable, and sets
+// Reply's flag, which is only ever set. Setting a flag that is set already changes nothing, so the answer is `recorded`
+// either way, and a repeat after a lost answer simply runs the command again.
 //
-// A person with no pin and no first name is looked up by this package first, exactly as a list add does, and imported
-// under a derived first name only when Reply holds nobody under the address (contacts.js). The route's
+// A person Reply holds nobody for and who has no first name is imported under a derived one (contacts.js). The route's
 // `derive_first_name: false` does not apply here: an opt-out greets nobody, and refusing it would leave the person
 // unflagged at Reply.
 //

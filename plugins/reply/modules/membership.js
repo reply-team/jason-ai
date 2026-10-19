@@ -1,8 +1,9 @@
 // `list_membership.add`: put one person on one of the account's contact lists.
 //
-// One command, `reply contact-list add-contact`, which imports the person when they are given by their fields and adds
-// them. Reply keeps one membership however often a person is added, so a repeat after a lost answer simply runs the
-// command again. A person Reply holds as opted out is refused rather than added — Jason's own rule, not Reply's: a
+// The person is found first — by the pin, or by `reply contact find`, Reply's exact lookup of the address (contacts.js)
+// — and then one command, `reply contact-list add-contact`, which imports them only when Reply holds nobody under the
+// address, and adds them. Reply keeps one membership however often a person is added, so a repeat after a lost answer
+// simply runs the command again. A person Reply holds as opted out is refused rather than added — Jason's own rule, not Reply's: a
 // list is an outreach audience, and a Reply list may otherwise hold opted-out people.
 //
 // The answer's vocabulary is the output schema's, which is closed: `added`, one item naming the contact the call was

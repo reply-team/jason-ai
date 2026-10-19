@@ -1,0 +1,12 @@
+{
+  "operation": "events.read",
+  "version": 1,
+  "case": "a first start, with no cursor yet: everything since a moment thirty days before",
+  "input": {
+    "cursor": null,
+    "since": "2026-09-01T09:00:00Z",
+    "until": null,
+    "limit": 100
+  },
+  "expect": "valid"
+}

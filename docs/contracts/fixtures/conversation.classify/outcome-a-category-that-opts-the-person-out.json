@@ -1,0 +1,21 @@
+{
+  "operation": "conversation.classify",
+  "version": 1,
+  "case": "the category named is one whose filing would opt the person out at the provider, which taking the thread out of it again would not undo; nothing was filed, because stopping a person is optout.record's path",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "failed",
+    "result": null,
+    "external_ids": null,
+    "error": {
+      "class": "validation",
+      "code": "category_opts_out",
+      "message": "Filing a thread under the provider's Do not contact opts the person out of every campaign there, so nothing was filed. Record the stop with optout.record instead.",
+      "details": null,
+      "external_ids": null
+    },
+    "diagnostics": { "duration_ms": 400, "exec_calls": 1, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "failed", "class": "validation", "retriable": false }
+}

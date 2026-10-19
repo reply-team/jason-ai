@@ -92,7 +92,7 @@ every document spells them.
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `not_used`, channel `none`, suppression `checked` |
+| pre-flight | contact `not_used`, channel `none`, suppression `checked`, provider contact `not_used` |
 | in a paused campaign | `waits` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | The campaign exists at the provider and is not archived, and the provider's enrolled count equals `args.expected.enrolled`. |

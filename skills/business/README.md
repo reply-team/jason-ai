@@ -16,10 +16,10 @@ cadences — this pack changes when the profession's practice does, not when Jas
 ## Status
 
 Every skill here is **`draft`**, and that is a statement about evidence rather than about quality. In this
-repository `verified` means a named agent host read that exact body while driving this runtime, and the
-digest of what it read is recorded. No host has done that with these texts yet. The knowledge itself was
-written and reviewed elsewhere over a year; what has not been tested is how it reads beside a runtime that
-owns campaign state, and that is what a reading would establish.
+repository `verified` means a named agent host read that exact text, its description and its body, while
+driving this runtime, and the digest of what it read is recorded. No host has done that with these texts yet.
+The knowledge itself was written and reviewed elsewhere over a year; what has not been tested is how it reads
+beside a runtime that owns campaign state, and that is what a reading would establish.
 
 ## The skills
 

@@ -1,0 +1,19 @@
+{
+  "operation": "events.read",
+  "version": 1,
+  "case": "a cursor and a moment at once: which of the two the read starts from is not something to guess",
+  "input": {
+    "cursor": "c-41",
+    "since": "2026-09-01T09:00:00Z",
+    "until": null,
+    "limit": 100
+  },
+  "expect": {
+    "invalid": [
+      {
+        "pointer": "",
+        "reason": "any_of"
+      }
+    ]
+  }
+}

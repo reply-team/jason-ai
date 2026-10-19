@@ -73,6 +73,7 @@ homepage: https://example.com    # optional; absolute https URL
 contracts:
   protocol: [1]                  # required; plugin-host protocol versions this plugin speaks
   operations: [1]                # required for a provider; canonical-operation contract versions
+  events: [1]                    # optional, a provider only: the events contract versions it reads accounts by
 operations: [echo.run, exec.run] # required non-empty for a provider; absent/empty for notification
 entry:                           # optional; defaults to main.js / invoke
   module: main.js
@@ -111,6 +112,7 @@ binding:                         # optional; a schema, in the published dialect,
 | `homepage` | optional; absolute `https` URL | `field_invalid` |
 | `contracts.protocol` | required non-empty list of whole numbers; must include `1` | `field_required`, `field_invalid`, `contract_unsupported` |
 | `contracts.operations` | required for a provider, optional for a notification; must include `1` | `field_required`, `field_invalid`, `contract_unsupported` |
+| `contracts.events` | optional, and only on a provider; when present, must include `1` | `field_invalid`, `contract_unsupported`, `events_not_allowed` |
 | `operations` | required non-empty for a provider; each `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$` — at least one dot — and unique | `field_required`, `field_invalid`, `operation_invalid`, `operation_duplicate` |
 | `operations` on a `notification` | must be absent or empty | `operations_not_allowed` |
 | `entry.module` | `.js` or `.mjs`, relative, no `..` segments, inside the package, must exist | `field_invalid`, `entry_module_outside_package`, `entry_module_missing` |
@@ -550,8 +552,8 @@ The second group is about executing it, and it is the half you implement:
 
 | Field | What it asks of you |
 |---|---|
-| `preflight`, `contact_projection` | what you are handed: whether a contact comes with the call, and exactly which of its fields and channels |
-| `precondition` | what must be true at the provider before you may act — for a write about a person, that the provider's own contact is found, and for some writes made where it is missing |
+| `preflight`, `contact_projection` | what you are handed: whether a contact comes with the call, and exactly which of its fields and channels; and, under `preflight.provider_contact`, how you find the provider's own contact for that person — the contact proxy rule below |
+| `precondition` | what must be true at the provider before you may act, beyond how its contact is found |
 | `input_schema` | the whole input you receive, already valid by the time it reaches you |
 | `output_schema` | what a succeeded `result` must look like |
 | `external_ids` | the kinds of provider identifier you may return, and what each one identifies |
@@ -614,25 +616,51 @@ The runtime composes it from the work item; a plugin never sees a work item's co
 - Every `external_ids` object is filtered to **your own** pins — identifiers your plugin returned
   before. Another plugin's identifier for the same person is never visible to you.
 
-### The provider-contact precondition
+### The contact proxy rule
 
-A provider's list or campaign holds the *provider's* contacts, not Jason's, so every write about a person
-states how the provider's contact is found. When `contacts[0].external_ids.contact` is present it is the
-provider's identifier for this person and you work by it, whatever the operation. When it is absent, each
-document's `precondition` says what to do, and they differ on purpose:
+A provider's list or campaign holds the *provider's* contacts, not Jason's, so an operation about a person has you find
+the provider's own contact for them. How is data, not prose: each document says it under `preflight.provider_contact`,
+in one of four words, and the rule below is the same for every one of them.
 
-- `list_membership.add` and `campaign.enroll` create the contact from the value of the channel named by
-  `args.channel` when the provider holds nobody under it, and return the identifier the provider gave you.
-- `optout.record` looks the person up by that value first, compared exactly, and creates the contact only
-  when the lookup, read to its end, finds nobody — an opt-out must land on the person the provider already
-  holds, never on a second contact made for them.
-- `enrollment.stop` never creates anybody: a person the provider does not hold takes part in nothing, which
-  is a completed stop.
-- A write about a campaign — `campaign.create`, `campaign.pause`, `campaign.activate` — names no person, and has no
-  contact to find.
+| `preflight.provider_contact` | What you do for a person carrying no pin of yours | Published today |
+|---|---|---|
+| `find_or_create` | Look the person up by the value of the channel `args.channel` names, and create the contact from that value only when the provider holds nobody under it. | `campaign.enroll`, `list_membership.add`, `optout.record` |
+| `find_only` | Find the person — by that value, or through what the operation names — and create nobody. | `enrollment.stop`, `contact.update`; `conversation.reply`, through its thread |
+| `pinned_only` | Work by the pin alone: a person with none fails `contact_not_linked` before anything is called. | `conversation.list`, `contact.delete` |
+| `not_used` | The operation names nobody, so there is nobody to find. | every other operation |
 
-Once a pin exists nobody matches that person by address again, which is what stops two spellings of one
-address becoming two people.
+The loader holds each word to what it implies, so a document cannot say one thing and declare another: a way that
+finds the person declares `external_ids.contact`, `pinned_only` declares `contact_not_linked`, and `not_used` is said
+of exactly the documents whose `preflight.contact` is `not_used`. A document's `precondition` says only what its word
+does not.
+
+The rule has four parts.
+
+1. **The plugin owns the binding.** With no pin, find the provider's contact by the consumed channel's value, compared
+   the way the runtime keys that value — an email address without regard to case, a LinkedIn URL by its lowercased
+   slug — and read the lookup to its end. A provider's search may match by resemblance, so the comparison is yours; and
+   a lookup you cannot finish says nothing about a second match, so it is refused, never taken for nobody or for one.
+   More than one match is `contact_not_unique`, and nothing is done. Create only where the word is `find_or_create`,
+   and return the provider's identifier under `external_ids.contact` — on `error.external_ids` too, when the call
+   fails after you learned it. The runtime never guesses one.
+2. **A pin is worked by, and never overwritten.** Once `contacts[0].external_ids.contact` is present it is the
+   provider's identifier for this person, whatever the operation, and nobody matches the person by address again — which
+   is what stops two spellings of one address becoming two people. If the provider answers with another identifier,
+   return the one it answered: the runtime records it beside the pin as a divergence, keeps the pin, and the attempt
+   still succeeds.
+3. **Deleting a Jason contact never deletes the provider's.** A provider's contact is deleted only by an operation whose
+   whole purpose that is — `contact.delete`, approved by a person, by the pin — never as a side effect of another, and
+   never because the person went away in Jason. Nor does deleting the provider's contact change Jason's: the person,
+   their pins and the do-not-contact register stay as they were.
+4. **Fields and lists travel with the operation that needs them.** You send what the operation's `contact_projection`
+   and its arguments hand you — the fields `contact.update` sets, for one — when the operation runs. Nothing is copied to the provider in the background, and the runtime keeps no
+   copy of the provider's contact.
+
+Values written before a LinkedIn URL was keyed by its lowercased slug are rewritten to that key when the runtime
+starts, before anything is claimed, so the value you are handed is already in that form. Two spellings of one person
+on the register become that person's one stop, the earliest, with its reason: a stop is never lost by the collapse.
+A contact's two channels that become one value are kept as one, the primary where one of them is. The journal keeps every line it had, and the rewrite
+adds none.
 
 ### Repeating after a lost answer
 
@@ -746,7 +774,8 @@ every operation's plugin is held to, and the runtime enforces each of them:
    happened.
 3. **Answer in the operation's own vocabulary**, so that a result satisfies its output schema. An
    answer that does not is `result_invalid`, is never repeated, and is kept on the attempt.
-4. **Work by a pin when you are given one**, and never match that person by address again.
+4. **Find the person as the contact proxy rule says**: work by a pin when you are given one, and otherwise find or
+   create exactly as the document's `preflight.provider_contact` says.
 5. **Carry the provider's own refusal back, in the runtime's vocabulary.** A provider may know something
    the runtime cannot: a person suppressed at the provider between the moment the work was claimed and
    the moment you act on it is the ordinary case. Your job is not to re-check anything the runtime
@@ -764,7 +793,7 @@ recorded rather than the one it disputes.
 
 ### The worked example
 
-`plugins/reply/` is the one to read: a marketplace package that implements all twelve published
+`plugins/reply/` is the one to read: a marketplace package that implements all eighteen published
 operations against a real provider by driving that provider's own command-line program. Its README
 says what each operation maps onto, what the provider will not answer, and which of its claims were
 checked against a live account; its `modules/errors.js` is the whole error table written as data, so
@@ -791,9 +820,10 @@ the user's reputation rather than a retry budget.
 
 What may be done about an ambiguous end is a property of the operation, and every published contract
 states it as `repeat_after_ambiguous`: `safe` for a read, which may simply be asked again, and for a
-reversible control that costs nothing, whose second performance changes nothing — pausing a paused campaign;
-`after_recovery_read` for a write that declares the reading which settles the question; `never` where
-nothing can settle it — and an item that ends that way waits for a human or a manager role. The
+reversible control that costs nothing, whose second performance changes nothing — pausing a paused campaign,
+closing a closed thread; `after_recovery_read` for a write that declares the reading which settles the question;
+`never` where nothing can settle it — `conversation.reply`, a send no read tells apart from another — and an item
+that ends that way waits for a human or a manager role. The
 runtime reads that field and nothing else when it decides; your half is to make the permission true:
 when you are handed an attempt number above 1, perform the declared recovery read before you write
 anything (§7). One exception belongs to neither of you: an answer that arrived and does not satisfy
@@ -1162,3 +1192,52 @@ code and class, or `not_attempted` with `unavailable`, `not_declared` or `bindin
 **Testing it.** A loopback server stands in for the service: grant `127.0.0.1:<port>`, put that host in a copy of the
 manifest, and invoke the package through the plugin host the way §12 describes, with an input like the one above. The
 ntfy package's own tests are this, end to end.
+
+## 15. Writing an events plugin
+
+An events plugin is a provider plugin that also reads what happened in its accounts: a thread that moved, a reply the
+provider detected, an invitation accepted, a message that bounced. It is invoked for the events contract
+[`events.read`](contracts/events/events.read.md) by the runtime itself, once for each page of a read, with the binding
+of the account it reads; no work item names it and no route carries it. A read belongs to no campaign, and the
+runtime finds the campaigns an event concerns by the identifiers your operations pinned.
+
+**The manifest.** `kind: provider`, its `operations` as ever, and the events contract version it speaks:
+
+```yaml
+contracts:
+  protocol: [1]
+  operations: [1]
+  events: [1]              # the events contract events.read, version 1
+```
+
+**What it is handed.** `operation` is `events.read`; `input` is `{ cursor, since, until, limit }`, every field present:
+a cursor your plugin returned with an earlier page, or a moment to read from by date, with `until` the end of a range
+or `null`; `limit` is at most 100. `context.binding` is the route's binding, and the context names no campaign, work
+item or attempt.
+
+**What it answers.** `{ result: { events, cursor, has_more } }`: the events of the page in the provider's order, a
+cursor to read on from — always, even when the page is empty — and whether more follow now. Every event is one of four
+closed kinds of identifiers, moments and the provider's own flags; a subject, a preview or a name is refused with the
+whole page. The cursor is yours: 1 to 2048 printable ASCII characters with no space, which the runtime stores and hands
+back unchanged and never reads. Say who moved a thread with `moved_by` — `other_side`, `account`, `provider`, or
+`null` only where the provider cannot say — because only a move by the other side reads as a reply, and Jason's own
+replies, categories and read flags move threads too. Name a thread that moved as `conversation.list` names it — its
+`thread` the thread's `external_id` there, its `occurred_at` the moment the thread last moved, which `conversation.list`
+reports as `last_activity_at`, to the millisecond — so that a move both reads find is said once. Name under `campaign`
+the provider campaign a moved thread belongs to wherever the provider keeps one, by the identifier `campaign.get` pins,
+and `null` only for a thread outside every provider campaign: the runtime leaves a campaign's inbound read to your
+plugin on the strength of that, so a plugin that names no campaign on a move silences the campaigns it serves. Return
+no `external_ids`: a read pins nothing.
+
+**Reading by date.** With `since`, return across the pages your cursors chain every event at or after it (and before
+`until`); page a provider that pages only by offset newest first until the last item's moment passes `since`, and
+answer what a provider holds when it holds less.
+
+**Failures,** thrown with `host.fail`: `events_unreachable` (transient), `events_unauthorized`, `events_unsupported`
+and `events_cursor_unknown` (permanent) — the last for a cursor your plugin can no longer read, after which the runtime
+reads by date.
+
+**How the runtime reads.** Every account a route binds at a provider that declares the contract is read on the
+installation's cadence, `Dispatcher:EventsCadenceSeconds` — ten minutes unless set otherwise — and at once when the
+runtime starts: up to twenty pages a read, one child each, the first read of an account reaching thirty days back. The
+fixtures under [`contracts/fixtures/events.read/`](contracts/fixtures/events.read/) are what to check a plugin against.

@@ -1,0 +1,119 @@
+@import '@fontsource-variable/inter';
+@import './tokens.css';
+@import './components.css';
+
+/* The bundled Inter registers as "Inter Variable"; tokens.css stays byte-identical to the design source. */
+:root {
+    --font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
+}
+
+.content {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.content > .main {
+    flex: 1;
+}
+.pair-again {
+    max-width: 520px;
+    margin: 18vh auto 0;
+    padding: 0 var(--space-5);
+}
+.pair-again h1 {
+    font-size: var(--text-xl);
+    font-weight: 600;
+    margin: var(--space-6) 0 var(--space-2);
+    letter-spacing: -0.015em;
+}
+.pair-again p {
+    color: var(--text-secondary);
+    font-size: var(--text-md);
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+}
+.select select {
+    border: 0;
+    background: transparent;
+    font: inherit;
+    color: inherit;
+}
+.option {
+    text-align: left;
+    background: var(--bg);
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+
+.sys {
+    padding: var(--space-4) var(--space-5) var(--space-8);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4);
+    max-width: 1120px;
+}
+.card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: var(--space-4) var(--space-5);
+    min-width: 0;
+}
+.card.wide {
+    grid-column: 1 / -1;
+}
+.card h2 {
+    margin: 0 0 var(--space-3);
+    font-size: var(--text-md);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+.card h2 .hint {
+    font-weight: 400;
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+}
+.card .facts {
+    grid-template-columns: 150px 1fr;
+}
+.card .empty {
+    padding: 0;
+}
+.tbl {
+    width: 100%;
+    border-collapse: collapse;
+}
+.tbl th {
+    text-align: left;
+    font-weight: 500;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    padding: 6px 8px 6px 0;
+    border-bottom: 1px solid var(--border);
+}
+.tbl td {
+    padding: 7px 8px 7px 0;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+}
+.tbl tr:last-child td {
+    border-bottom: 0;
+}
+.tbl td.r {
+    text-align: right;
+    white-space: nowrap;
+}
+@media (max-width: 960px) {
+    .sys {
+        grid-template-columns: 1fr;
+    }
+}

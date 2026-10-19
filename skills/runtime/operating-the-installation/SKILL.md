@@ -1,6 +1,6 @@
 ---
 name: operating-the-installation
-description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, and installing Jason or taking it off again.
+description: Use when a person asks about the Jason installation itself rather than about campaign work - whether the runtime is up, starting and stopping it, having it start at logon, which plugins and routes exist, which accounts' events it reads and reading a span of one again, which agent hosts are registered, whether notifications reach the person and turning them off, whether a newer version has been released, opening the browser UI or unpairing a browser, and installing Jason or taking it off again.
 metadata:
   status: draft
 ---
@@ -34,6 +34,28 @@ running, not a runtime that is broken; start it. If it answers but reports a dat
 something is running under a different `JASON_DATA_DIR` than the one you are typing against, and the two will
 disagree about everything else you ask.
 
+## Showing the person the UI
+
+```
+jason ui open
+jason ui open --no-open
+jason ui tokens
+jason ui revoke <token-id>
+```
+
+`jason ui open` answers with a link into the browser UI and opens it in the person's default browser; `--no-open`
+prints the link alone, which is what you want from a session: hand the person the `url` and say it works once, within
+a minute. After that pairing, a bookmark of the page keeps working. `--approval <id>` and `--question <id>` open on one
+item.
+
+If it fails with `ui_not_installed`, no UI build is in place: the message names `ui/default` and
+`ui/custom`. No release installs a build, so say that none is in place, and that one is made from `ui/` as its README
+says and unzipped into `ui/custom`; do not fetch or build anything yourself.
+
+`jason ui tokens` lists the paired browsers; `jason ui revoke <token-id>` unpairs one, `--all` every one. Revoke when
+the person says a browser should no longer have access. `jason status`'s `ui_module` check says which build is served
+and never decides readiness.
+
 ## Starting and stopping it
 
 ```
@@ -46,7 +68,13 @@ jason runtime restart
 which may be one that was already running, because starting a second runtime on the same data directory is not
 something it will do. `jason runtime stop` asks that instance to shut down and returns only once it is gone, so
 when the command comes back the process is really finished rather than on its way out. `jason runtime restart`
-is the two in order.
+is the two in order, so it is a stop as well: the next paragraph holds for it.
+
+**Ask before any stop you run yourself.** Before you run `jason runtime stop` or `jason runtime restart`, whatever
+brought you to it, ask the person in words, say what a stop does, and run it only on their yes. That holds when the
+restart was their own request, and when the runtime looks idle: work can be claimed between the status you read and
+the stop. What a stop does: new work stops being claimed, what is in flight gets up to ten seconds to finish, nothing
+is cancelled, and a provider operation already under way may still act, ending at its own lease.
 
 `jason runtime run` keeps the runtime in the **foreground** instead, and it is **not** the normal way to run
 it — the normal way is `jason runtime start`. You would type `run` when something else owns the process: your
@@ -110,10 +138,8 @@ that runs anything else.
 Only when `jason status` says the runtime runs in session 0, or the person tells you 0.1.0 had autostart enabled,
 is the runtime that 0.1.0's task started likely to be holding the data directory. If `enable` or `disable` answers
 `ERROR: Access is denied.`, follow its message first, as below. After `enable` or `disable` once, `jason runtime stop`
-once ends it, but ask before you run `jason runtime stop`: it stops the runtime claiming new work and gives what is in
-flight up to ten seconds to finish; it cancels nothing, and a provider operation already under way may still act,
-ending at its own lease. Then `jason runtime start` starts the runtime this version runs, or the person signs in again
-with autostart enabled.
+once ends it; ask first, as "Starting and stopping it" says. Then `jason runtime start` starts the runtime this
+version runs, or the person signs in again with autostart enabled.
 
 **If `enable` or `disable` answers `ERROR: Access is denied.`**, read the rest of its message to the person. It
 names the task and the likely case: that task was registered from an elevated prompt — by an earlier version of
@@ -131,10 +157,12 @@ the runtime by hand.
 
 ## Notifications
 
-When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — or when a
-protective action fails, it tells them once, with a pointer: how many, and where to look. The toast, the operating
-system's own notification, is on by default and needs nothing set up; `jason runtime status --human` says on its
-`Notify:` line what each channel did last.
+When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a
+protective action fails, or when it finds a span of an account's events it will not read, it tells them once, with a
+pointer: how many, and where to look. A pointer that says an account has events Jason did not read sends you to
+`jason events sources`, as "The accounts whose events it reads" says. The toast, the operating system's own
+notification, is on by default and needs nothing set up; `jason runtime status --human` says on its `Notify:` line what
+each channel did last.
 `Notifications:Enabled` set to `false` in `~/.jason/config/settings.json` turns all of it off, and
 `Notifications:Toast` set to `false` turns off the toast alone. `docs/notifications.md` says when a burst is said, and
 what a pointer never carries.
@@ -152,8 +180,8 @@ rather than guessing. Its states mean:
 - **`absent`, no desktop** — a machine with no session bus or no notification program shows no toast by design; a
   plugin still reaches them, if they want one.
 - **`failed`, session 0** — the runtime has no desktop: a service or an SSH session runs there, and so does the runtime
-  0.1.0's logon task started. For that one, the check names the acts that end it, in order; ask before you run
-  `jason runtime stop`.
+  0.1.0's logon task started. For that one, the check names the acts that end it, in order; for its
+  `jason runtime stop`, ask first, as "Starting and stopping it" says.
 - **`failed`, a channel or a plugin** — the fact names the code or the reason; a plugin that was not attempted is a
   settings or grant problem the plugin's README explains.
 
@@ -196,6 +224,38 @@ would. No provider ships configured, so nothing routed is the normal state of a 
 fault — **writing a route is an operator's explicit act**. If the answer is that nothing is routed, say so
 plainly instead of submitting work that will fail.
 
+## The accounts whose events it reads
+
+```
+jason events sources --human
+```
+
+A plugin that reads its accounts' events — `jason plugin list` shows `events` beside its operations — has every account a
+route binds read on the runtime's own cadence: that account is a **source**. `jason events sources` is their record:
+whether a route binds the account now, its last read and how it ended, whether it is healthy — while it is, the inbound
+read leaves the campaigns it serves to it — when it is read next, and, under `NOT READ`, the latest span its own reading
+skipped. That column stays once a span asked for again has read it: the spans asked for again are listed below the
+table with how each ended, so read them before you offer to read a span again. A source never shows its cursor, and you
+do not need it.
+
+A span not read is what an account was not read for longer than the thirty days a read reaches back: the runtime was off,
+or no route bound the account. Jason says it once, in a notification and in the source's record. It is read only when
+the person asks:
+
+```
+jason events backfill --source evs_01K7QN0000000000000000000A --from 2026-08-01T00:00:00Z --to 2026-09-01T00:00:00Z --reason "read the weeks the runtime was off"
+```
+
+Ask first, and run it on the person's yes, with their words as the reason. It reads and sends nothing, and leaves the
+account's own reading where it stands. What it finds that a campaign was not told, and that happened after the campaign
+went live, wakes that campaign's manager; what happened before is kept and says nothing. A span reaches at most 366
+days back and ends no later than now; eight may wait for one account. Each span asked for is listed under its source in
+`jason events sources`, with how it ended.
+
+`jason events signal` is for a program the person runs to receive a provider's webhooks: it has the account read at the
+next scan, never within a minute of its last read, and carries nothing of what the webhook said. Do not run it yourself
+to see sooner what an account holds.
+
 ## The agent hosts it can launch
 
 ```
@@ -230,7 +290,10 @@ recorded; it needs no runtime either.
 
 After an update, `jason status` says whether the role skills still belong to this build: role skills a default
 install took at another release's tag fail its `role_skills` check, which names both tags, and its repair is the
-line it prints.
+line it prints. From 0.12.0 on, `jason update apply` redeploys the skills this installation recorded as its last
+step, once the update is complete; if that step's line says it could not, the update still stands and the fix is
+the line it names. An update applied by a build before 0.12.0 has no such step, so it needs one
+`jason skills update` after it.
 
 **Installed by a package manager.** Where Homebrew or winget installed Jason, `jason update check` names the
 manager's own upgrade, and `jason update apply` refuses the installation. The manager's upgrade is typed as three
@@ -243,10 +306,12 @@ winget upgrade Reply.Jason
 jason runtime start
 ```
 
-with `brew upgrade jason` in the middle under Homebrew. Ask before you run `jason runtime stop`: nothing new is claimed
-from then on, what is in flight finishes or ends at its own lease, and a stop does not take back a send already under
-way. On Windows winget cannot replace the executable while the runtime runs: it answers Access is denied and keeps the
-old version. Under Homebrew the upgrade removes the previous version's keg by default (unless
+with `brew upgrade jason` in the middle under Homebrew. If you run the stop, ask first, as "Starting and stopping it"
+says; if the person types the lines, tell them what it does all the same. What a stop does: new work stops being
+claimed, what is in flight gets up to ten seconds to finish, nothing is cancelled, and a provider operation already
+under way may still act, ending at its own lease. On Windows winget cannot replace the executable while the
+runtime runs: it answers Access is denied and keeps the old version. Under Homebrew the upgrade removes the
+previous version's keg by default (unless
 `HOMEBREW_NO_INSTALL_CLEANUP` is set), and a running runtime starts every plugin host from its own executable's
 path, which is then gone: work after the upgrade fails until the runtime restarts, which `jason status`'s
 `runtime_version` names.
@@ -294,6 +359,11 @@ walk, begins with an invitation to tell you about their first campaign in their 
 voice note, or one of a few examples you offer to start from. What they tell you becomes the campaign's context when
 the campaign is created (`managed-campaign-work`), and the work is planned with the `campaign-planning` skill and
 worked by Jason's roles.
+
+The provider's own web app is no step of any Jason flow. A person opens it by a link for four things only —
+connecting a LinkedIn account, connecting a mailbox by single sign-on, signing in, and creating the first API key —
+and each is theirs to do: say what it is for, and wait until they say it is done. Never send them there for the work
+itself.
 
 ## Taking it off again
 

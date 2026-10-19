@@ -1,0 +1,177 @@
+{
+  "id": "contact.delete",
+  "version": 1,
+  "l1": { "name": "contact.delete", "contract_version": "2.0.0", "family": 2, "core": false },
+  "intent": "\"Take this person out of the working database\"",
+
+  "reach": "control",
+  "reversibility": {
+    "value": "irreversible",
+    "conditional": true,
+    "detail": "compensatable inside the account's restore window; irreversible after it."
+  },
+  "approval": "confirm_once",
+  "approval_artefact": null,
+  "approval_departs": true,
+  "protective_floor": false,
+  "approval_reason": "raised: it destroys working history other operations key on.",
+  "before_repeating": "the record's presence and its restore eligibility",
+  "idempotency_key": "required",
+  "per_item_results": "required",
+  "accepts_collection": true,
+  "cost": "none",
+  "cost_basis": null,
+  "meter": null,
+  "invariants": ["B12"],
+
+  "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "pinned_only" },
+  "dispatch": { "in_paused_campaign": "waits" },
+  "contact_projection": {
+    "fields": ["id"],
+    "channels": "consumed"
+  },
+  "precondition": "The provider does not hold the person as opted out, because deleting them would erase its only record of that stop.",
+  "preview": {
+    "summary": "Delete the provider's contact {/contacts/0/external_ids/contact} for {/contacts/0/channels/0/value}, with the history the provider keeps for them: they leave every campaign and list there. Jason's own record of the person and its do-not-contact register stay as they are.",
+    "highlights": ["/contacts/0/channels/0/value", "/contacts/0/external_ids/contact"]
+  },
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:contact.delete:1:input",
+    "title": "contact.delete input",
+    "description": "One person, the channel they are reached on, and one key. The provider's contact is named by the identifier Jason pinned for this plugin and by nothing the arguments say.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "contacts", "campaign", "idempotency_key"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["channel"],
+        "properties": {
+          "channel": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "description": "Which of the contact's channels this operation consumes: the value the suppression register is asked about, and the one the preview names the person by. Exactly that one channel is projected into `contacts[0].channels`."
+          }
+        }
+      },
+      "contacts": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "This version addresses one person per work item, in the collection shape the level-1 contract uses.",
+        "items": { "$ref": "#/$defs/contact" }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" },
+      "idempotency_key": {
+        "type": "string",
+        "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+        "description": "The work item's own identifier: stable across every attempt, which is what makes a ledger under this key answerable."
+      }
+    },
+    "$defs": {
+      "contact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "channels", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "channels": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "description": "Only the channel the operation consumes, never the person's whole reachability.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["channel", "value", "primary"],
+              "properties": {
+                "channel": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+                "value": { "type": "string", "minLength": 1, "maxLength": 500 },
+                "primary": { "type": "boolean" }
+              }
+            }
+          },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      },
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:contact.delete:1:output",
+    "title": "contact.delete result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "One outcome per person. A partial success reported as a single verdict is a defect.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contact_id", "status"],
+          "properties": {
+            "contact_id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+            "status": { "type": "string", "enum": ["deleted", "already_deleted"] }
+          }
+        }
+      }
+    }
+  },
+
+  "external_ids": {},
+
+  "recovery_read": {
+    "reads": "Whether the provider still holds a contact under the pin, and whether it holds them as opted out: a contact it no longer holds is the delete already done.",
+    "justification": "A delete whose answer was lost may already have deleted. One read settles it, and the same read is the one that keeps the record of an opted-out person from being erased."
+  },
+  "repeat_after_ambiguous": "after_recovery_read",
+
+  "failure_codes": [
+    { "code": "contact_not_linked", "class": "permanent", "when": "No provider identifier is pinned for this person. A delete works by the pin alone, so nobody is matched by an address to be destroyed, and nothing is asked of the provider." },
+    { "code": "contact_opted_out", "class": "permanent", "when": "The provider holds the person as opted out. Deleting the contact would erase the provider's only record of that stop, so nothing was deleted." },
+    { "code": "contact_not_found", "class": "permanent", "when": "On a first attempt, the identifier pinned for this person names no contact the provider holds, so there is nobody this call can be sure it would delete. On an attempt after the first the same reading answers `already_deleted`: an earlier attempt may be the one that deleted the contact, and nothing tells the plugin which earlier attempts reached the delete." },
+    { "code": "feature_unavailable", "class": "permanent", "when": "The provider says the account's plan or role does not include deleting a contact." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was done. Repeating it runs the same call again." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it read or delete contacts for this account." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the call for now and it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was deleted." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the contact may already be deleted. The next attempt reads whether the provider still holds it before it deletes anything." }
+  ],
+
+  "timeout_ms": 60000,
+
+  "conformance": [
+    "A contact is worked by `contacts[0].external_ids.contact` alone: with no pin the operation fails `contact_not_linked` before the provider is asked anything, and nobody is looked up by the channel value.",
+    "The contact is read by the pin before anything is deleted, and one the provider holds as opted out fails `contact_opted_out` and is not deleted.",
+    "A pin the provider does not hold fails `contact_not_found` on a first attempt and answers `already_deleted` on any later attempt, since an earlier attempt may have deleted the contact, as does a delete the provider answers as missing after the read found it.",
+    "The call deletes the pinned contact and names nothing else: no other contact, list or campaign of the provider's is changed by it.",
+    "The result carries exactly one item, and its `contact_id` is the identifier the call was given. It pins nothing: the identifier it worked by names nobody afterwards."
+  ]
+}

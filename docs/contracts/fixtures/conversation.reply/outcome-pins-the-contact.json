@@ -1,0 +1,26 @@
+{
+  "operation": "conversation.reply",
+  "version": 1,
+  "case": "the person found through the thread, nobody created, and the thread's person pinned",
+  "outcome": {
+    "protocol_version": 1,
+    "invocation_id": "pin_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+    "status": "succeeded",
+    "result": {
+      "items": [
+        {
+          "contact_id": "cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD",
+          "status": "sent",
+          "thread_external_id": "t_99812",
+          "channel": "email",
+          "message": { "external_id": null, "sent_at": null },
+          "external_ids": { "contact": "p_52317" }
+        }
+      ]
+    },
+    "external_ids": { "contact": "p_52317" },
+    "error": null,
+    "diagnostics": { "duration_ms": 640, "exec_calls": 2, "http_calls": 0, "log_lines": 0 }
+  },
+  "expect": { "status": "succeeded", "retriable": false, "pinned": { "contact": "p_52317" } }
+}

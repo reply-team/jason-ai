@@ -108,7 +108,7 @@ history in one answer, and a history longer than this installation lets a plugin
 
 | What Jason adds | Value |
 |---|---|
-| pre-flight | contact `not_used`, channel `none`, suppression `checked` |
+| pre-flight | contact `not_used`, channel `none`, suppression `checked`, provider contact `not_used` |
 | in a paused campaign | `waits` |
 | contact projection | none — this operation never receives the work item's contact |
 | precondition | none |

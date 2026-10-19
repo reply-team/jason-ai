@@ -1,0 +1,16 @@
+{
+  "operation": "conversation.classify",
+  "version": 1,
+  "case": "a category object that names neither an identifier nor a name",
+  "input": {
+    "args": { "thread": { "external_id": "t_99812" }, "category": {} },
+    "campaign": {
+      "id": "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRE",
+      "name": "Q3 LatAm founders",
+      "status": "active",
+      "external_ids": { "campaign": "c_7714" }
+    },
+    "idempotency_key": "wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRF"
+  },
+  "expect": { "invalid": [{ "pointer": "/args/category", "reason": "any_of" }] }
+}

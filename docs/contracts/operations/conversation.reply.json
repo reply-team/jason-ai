@@ -1,0 +1,253 @@
+{
+  "id": "conversation.reply",
+  "version": 1,
+  "l1": { "name": "message.send", "contract_version": "2.0.0", "family": 7, "core": true },
+  "intent": "\"Send this message to this person\" — one person, one channel per call, with that channel's own required elements and cost",
+
+  "reach": "act",
+  "reversibility": "irreversible",
+  "approval": "confirm_each",
+  "approval_artefact": null,
+  "approval_departs": false,
+  "protective_floor": false,
+  "approval_reason": null,
+  "before_repeating": "read first: no send recorded for this person on this thread or step in the window — a timed-out send may already have succeeded.",
+  "idempotency_key": "required",
+  "per_item_results": "not_applicable",
+  "accepts_collection": false,
+  "cost": {
+    "value": "metered",
+    "conditional": true,
+    "detail": "metered against the message allowance on channels that meter sending; `none` on channels that do not."
+  },
+  "cost_basis": "per message, on channels that meter sending",
+  "meter": "message",
+  "invariants": ["A5", "A7", "A14", "A21", "A22", "H4", "H5"],
+
+  "preflight": { "contact": "required", "channel": "from_args", "suppression": "checked", "provider_contact": "find_only" },
+  "dispatch": { "in_paused_campaign": "waits" },
+  "contact_projection": { "fields": ["id"], "channels": "consumed" },
+  "precondition": "The thread's person is this person: the one pinned, where there is a pin, and in every case the one whose address on the channel named by `args.channel` is that channel's value as the runtime keys it for its suppression register; otherwise nothing is sent.",
+  "preview": {
+    "summary": "Reply in the provider's thread {/args/thread/external_id} to {/contacts/0/channels/0/value} by {/args/channel}, from the account that owns the thread and to nobody else: {/args/body}",
+    "highlights": ["/contacts/0/channels/0/value", "/args/channel", "/args/thread", "/args/reply_to_message", "/args/body"]
+  },
+
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:conversation.reply:1:input",
+    "title": "conversation.reply input",
+    "description": "One reply, in one existing thread, to the person on it: the thread fixes who is reached and from which identity, so no recipient and no sender is named.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["args", "contacts", "campaign", "idempotency_key"],
+    "properties": {
+      "args": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["channel", "thread", "body"],
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": ["email", "linkedin"],
+            "description": "Which of the contact's channels the reply consumes, and the channel the thread has to be on. Exactly that one channel is projected into `contacts[0].channels`."
+          },
+          "thread": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["external_id"],
+            "properties": {
+              "external_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The provider's identifier for the thread, as `conversation.list` returned it."
+              }
+            }
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 12000,
+            "pattern": "[^\\t\\n\\v\\f\\r \\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]",
+            "description": "The reply's text, exactly as the person approving it reads it: something other than white space, at most 12000 characters on email, the most `conversation.get` reads back of one message, and at most 8000 on LinkedIn, the most a LinkedIn message holds."
+          },
+          "reply_to_message": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["external_id"],
+            "description": "The message of an email thread this reply answers, by the identifier `conversation.get` returned for it. Without it the reply answers the thread's latest message. Email only.",
+            "properties": {
+              "external_id": { "type": "string", "minLength": 1, "maxLength": 998 }
+            }
+          }
+        },
+        "anyOf": [
+          { "type": "object", "required": ["channel"], "properties": { "channel": { "const": "email" } } },
+          {
+            "type": "object",
+            "required": ["channel"],
+            "properties": { "channel": { "const": "linkedin" }, "body": { "maxLength": 8000 } },
+            "not": { "type": "object", "required": ["reply_to_message"] }
+          }
+        ]
+      },
+      "contacts": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "The person the reply is for, who has to be the person on the thread.",
+        "items": { "$ref": "#/$defs/contact" }
+      },
+      "campaign": { "$ref": "#/$defs/campaign" },
+      "idempotency_key": {
+        "type": "string",
+        "pattern": "^wi_[0-9A-HJKMNP-TV-Z]{26}$",
+        "description": "The work item's own identifier, stable across every attempt."
+      }
+    },
+    "$defs": {
+      "contact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "channels", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "channels": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "description": "Only the channel the reply consumes, never the person's whole reachability.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["channel", "value", "primary"],
+              "properties": {
+                "channel": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+                "value": { "type": "string", "minLength": 1, "maxLength": 500 },
+                "primary": { "type": "boolean" }
+              }
+            }
+          },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+          }
+        }
+      },
+      "campaign": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "external_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cmp_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "status": { "type": "string", "enum": ["draft", "active", "paused", "archived"] },
+          "external_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "campaign": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "description": "Only this plugin's own pins reach it. The reply names no campaign: the thread is the provider's, wherever it began."
+          }
+        }
+      }
+    }
+  },
+
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:jason:operation:conversation.reply:1:output",
+    "title": "conversation.reply result",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["items"],
+    "properties": {
+      "items": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "description": "One outcome for the one reply sent.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contact_id", "status", "thread_external_id", "channel", "message"],
+          "properties": {
+            "contact_id": { "type": "string", "pattern": "^cnt_[0-9A-HJKMNP-TV-Z]{26}$" },
+            "status": {
+              "const": "sent",
+              "description": "The provider took the reply. A refusal, before sending or after, is a failed outcome with its class."
+            },
+            "thread_external_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "description": "The thread the reply was sent in."
+            },
+            "channel": { "type": "string", "enum": ["email", "linkedin"] },
+            "message": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["external_id", "sent_at"],
+              "properties": {
+                "external_id": {
+                  "type": ["string", "null"],
+                  "maxLength": 998,
+                  "description": "The provider's identifier for the message sent, or null when it gives none."
+                },
+                "sent_at": {
+                  "type": ["string", "null"],
+                  "format": "date-time",
+                  "maxLength": 64,
+                  "description": "When the provider says the message was sent, in UTC, or null when it says nothing."
+                }
+              }
+            },
+            "external_ids": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": { "contact": { "type": "string", "minLength": 1, "maxLength": 256 } }
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "external_ids": {
+    "contact": {
+      "entity": "contact",
+      "description": "The provider's identifier for the thread's person, found through the thread rather than by address and pinned so no later call has to match them again. Nobody is created to find it."
+    }
+  },
+
+  "recovery_read": null,
+  "repeat_after_ambiguous": "never",
+
+  "failure_codes": [
+    { "code": "conversation_not_found", "class": "permanent", "when": "The provider holds no thread under this identifier, or not one this account may see. Nothing was sent." },
+    { "code": "channel_mismatch", "class": "validation", "when": "The thread is on another channel than the one `args.channel` names, or on one no reply can be sent on. Nothing was sent." },
+    { "code": "thread_contact_mismatch", "class": "validation", "when": "The thread is not this person's: its person is not the one pinned, its address on the channel the call names is not that channel's value, or it names nobody the provider still holds. Nothing was sent." },
+    { "code": "message_invalid", "class": "validation", "when": "The text carries something the provider would read as markup of its own — a placeholder it fills in for each person — so what would go out is not the text a person approved. Nothing was sent." },
+    { "code": "suppressed", "class": "permanent", "when": "The provider's own suppression register holds this person, so nothing was sent." },
+    { "code": "delivery_refused", "class": "permanent", "when": "The provider took the reply and says it could not deliver it, so it did not go out; the provider's own reason travels in the details." },
+    { "code": "feature_unavailable", "class": "permanent", "when": "The provider account's plan or role does not include this capability, so no call by this account can perform it." },
+    { "code": "provider_call_failed", "class": "permanent", "when": "The vendor tool refused the call or never started, so nothing the operation asks for was ever attempted. Repeating it runs the same broken call." },
+    { "code": "unauthorized", "class": "permanent", "when": "The plugin's own credential does not let it reply in this account's threads." },
+    { "code": "rate_limited", "class": "transient", "when": "The provider refused the reply for now, and nothing was sent; it may be attempted again." },
+    { "code": "provider_unavailable", "class": "transient", "when": "The provider could not be reached, or answered with a failure on its own side, before anything was sent — the read of the thread included." },
+    { "code": "provider_answer_lost", "class": "ambiguous", "when": "The provider was called and no answer arrived, so the reply may already have gone. No read tells this work item's send from another one to the same person, so the item stops for a person to look at the thread." }
+  ],
+
+  "timeout_ms": 120000,
+
+  "conformance": [
+    "The reply goes to the thread's own person, on the thread's own channel, from the identity that owns the thread; no other recipient can be named.",
+    "Nothing is sent unless the thread's person is this person: the pinned identifier where there is one, and in every case the thread's address on `args.channel` the same value as that channel's under the key the runtime gives it for its suppression register: an email address without regard to case; a profile link by its scheme and host without regard to case, a default port, a user name, a fragment and one trailing slash dropped, its query exactly, and its path without regard to case on linkedin.com and its subdomains and exactly on any other host. Two values the register keys apart are two people. A mismatch fails `thread_contact_mismatch` before anything is sent.",
+    "A thread on another channel than `args.channel` fails `channel_mismatch` before anything is sent.",
+    "Nobody is created at the provider: the person is found through the thread, and their identifier is returned under `external_ids.contact` — on a failure too, once the thread's person was found to be this one, and never when it was not.",
+    "The text goes out exactly as approved: one the provider would read as a placeholder of its own fails `message_invalid` before anything is sent.",
+    "An attempt sends at most once. One that may have sent and lost its answer fails `provider_answer_lost` and is never repeated.",
+    "A reply the provider took and could not deliver fails `delivery_refused`, with the provider's own reason in the details."
+  ]
+}

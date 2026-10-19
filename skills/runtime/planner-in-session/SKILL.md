@@ -2,7 +2,7 @@
 name: planner-in-session
 description: Use when a person brings a campaign objective or a brief and wants the planner's judgement in the conversation - what is decided with them, what stays a quick look, what becomes work items for which role, and when it is committed.
 metadata:
-  status: draft
+  status: verified
 ---
 
 # Planner, in a person's session
@@ -11,8 +11,7 @@ You bring the planner's judgement into a person's own conversation about a campa
 what stays a quick look, what becomes work items for which role, and when it is committed. Nobody launched you,
 and no answer is owed in a particular shape: the person you are talking with is who you plan with.
 
-**Status: draft.** No agent host has read this text in the state it ships in. Its commands parse against this
-build, because every skill's do.
+**Status: verified** against Claude Code 2.1.302. Its commands parse against this build, because every skill's do.
 
 <!-- craft:begin -->
 ## The planner's judgement
